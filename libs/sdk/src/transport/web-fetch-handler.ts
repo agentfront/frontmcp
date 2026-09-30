@@ -51,8 +51,16 @@ function isCloudflareWorkersRuntime(request: Request): boolean {
   return typeof cloudflareProperties === 'object' && cloudflareProperties !== null;
 }
 
+/**
+ * Peer addresses of requests that were re-buffered by the body limit. A rebuilt `Request` has no
+ * connection context (Bun's `requestIP` looks the peer up from the original), so the address is
+ * resolved before the swap and carried here.
+ */
+const carriedPeerAddresses = new WeakMap<Request, string | undefined>();
+
 /** The platform's peer address, the web-fetch analog of `req.socket.remoteAddress` (GHSA-p3qf-fcwm-35x4). */
 function resolvePeerAddress(request: Request, ctx: FetchHandlerCtx | undefined): string | undefined {
+  if (carriedPeerAddresses.has(request)) return carriedPeerAddresses.get(request);
   if (typeof ctx?.requestIP === 'function') return ctx.requestIP(request)?.address;
   if (typeof ctx?.remoteAddr?.hostname === 'string') return ctx.remoteAddr.hostname;
   // Cloudflare's edge overwrites this header on every request into a Worker; elsewhere a caller wrote it.
@@ -274,7 +282,7 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
 
     // Body size limit (`http.bodyLimit`) — enforced before routing, like the
     // Express body parsers, so an oversized body is never buffered.
-    const limited = await enforceBodyLimit(request, bodyLimit);
+    const limited = await enforceBodyLimit(request, bodyLimit, ctx);
     if (limited instanceof Response) return withCors(limited, request);
     request = limited;
 
@@ -367,12 +375,16 @@ function payloadTooLarge(limit: number, length?: number): Response {
 
 /**
  * Enforce `http.bodyLimit` on a Web `Request`. A declared `content-length` over
- * the limit is refused without reading anything; a body with no declared length
- * is read through a byte counter and refused as soon as it crosses the limit.
- * Returns the request to continue with (re-buffered when it had to be read), or
- * a 413 `Response`.
+ * the limit is refused without reading anything. Every other body is read through
+ * a byte counter and refused as soon as it crosses the limit: the declared length
+ * is only a claim, and a `Request` can carry a larger body than its header says.
+ * Returns the request to continue with (re-buffered), or a 413 `Response`.
  */
-async function enforceBodyLimit(request: Request, limit: number): Promise<Request | Response> {
+async function enforceBodyLimit(
+  request: Request,
+  limit: number,
+  ctx: FetchHandlerCtx | undefined,
+): Promise<Request | Response> {
   const method = request.method.toUpperCase();
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || !request.body) return request;
 
@@ -380,9 +392,9 @@ async function enforceBodyLimit(request: Request, limit: number): Promise<Reques
   if (declared !== null) {
     const length = Number(declared);
     if (Number.isFinite(length) && length > limit) return payloadTooLarge(limit, length);
-    return request;
   }
 
+  const peerAddress = resolvePeerAddress(request, ctx);
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -402,7 +414,9 @@ async function enforceBodyLimit(request: Request, limit: number): Promise<Reques
     buffered.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new Request(request.url, { method: request.method, headers: request.headers, body: buffered });
+  const rebuilt = new Request(request.url, { method: request.method, headers: request.headers, body: buffered });
+  carriedPeerAddresses.set(rebuilt, peerAddress);
+  return rebuilt;
 }
 
 /**

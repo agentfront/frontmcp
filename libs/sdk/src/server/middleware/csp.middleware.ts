@@ -126,9 +126,10 @@ function readCustomHeadersFromEnv(): Record<string, string> | undefined {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined;
-    const custom: Record<string, string> = {};
-    for (const [k, v] of Object.entries(parsed)) if (typeof v === 'string') custom[k] = v;
-    return custom;
+    // fromEntries defines own properties, so a "__proto__" key cannot rewrite the prototype.
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    );
   } catch {
     return undefined;
   }

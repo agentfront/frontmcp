@@ -53,6 +53,15 @@ describe('task-store.factory', () => {
       await expect(createTaskStore({})).rejects.toBeInstanceOf(TaskStoreNotSupportedError);
     });
 
+    it.each([{}, { type: 'auto' as const }])(
+      'rejects the ambient KV_REST_API_URL when storage is %j (auto-detection would pick Vercel KV)',
+      async (storage) => {
+        process.env['KV_REST_API_URL'] = 'https://kv.example.invalid';
+        await expect(createTaskStore({ storage })).rejects.toBeInstanceOf(TaskStoreNotSupportedError);
+        expect(resolvesToVercelKvTaskBackend(undefined, storage)).toBe(true);
+      },
+    );
+
     it('ignores the ambient KV_REST_API_URL when a backend is explicitly configured', async () => {
       process.env['KV_REST_API_URL'] = 'https://kv.example.invalid';
       const { type } = await createTaskStore({ storage: { type: 'memory' } });

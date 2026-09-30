@@ -13,7 +13,7 @@ import { SqliteKvStore } from '../sqlite-kv.store';
 
 const HOLD_MS = 700;
 
-function holdWriteLock(dbPath: string): Promise<{ done: Promise<void> }> {
+function holdWriteLock(dbPath: string): Promise<{ done: Promise<void>; lockedAt: number }> {
   const child = spawn(
     process.execPath,
     [
@@ -25,7 +25,7 @@ function holdWriteLock(dbPath: string): Promise<{ done: Promise<void> }> {
       db.exec('CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, expires_at INTEGER)');
       db.exec('BEGIN IMMEDIATE');
       db.prepare("INSERT OR REPLACE INTO kv (key, value) VALUES ('held', 'x')").run();
-      process.stdout.write('locked\\n');
+      process.stdout.write('locked ' + Date.now() + '\\n');
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ${HOLD_MS});
       db.exec('COMMIT');
       db.close();
@@ -42,7 +42,8 @@ function holdWriteLock(dbPath: string): Promise<{ done: Promise<void> }> {
   });
   return new Promise((resolve, reject) => {
     child.stdout.on('data', (chunk: Buffer) => {
-      if (chunk.toString().includes('locked')) resolve({ done });
+      const match = /locked (\d+)/.exec(chunk.toString());
+      if (match) resolve({ done, lockedAt: Number(match[1]) });
     });
     done.catch(reject);
   });
@@ -59,11 +60,11 @@ describe('SQLite multi-process access (#646)', () => {
     const dbPath = path.join(dir, 'shared.sqlite');
     const holder = await holdWriteLock(dbPath);
 
-    const started = Date.now();
     const store = new SqliteKvStore({ path: dbPath, ttlCleanupIntervalMs: 0, walMode: true });
     try {
       store.set('mine', 'y');
-      expect(Date.now() - started).toBeGreaterThanOrEqual(HOLD_MS / 2);
+      // Measured from when the child took the lock, so a slow parent cannot skew it
+      expect(Date.now() - holder.lockedAt).toBeGreaterThanOrEqual(HOLD_MS / 2);
       expect(store.get('mine')).toBe('y');
     } finally {
       store.close();

@@ -123,6 +123,16 @@ describe('web-fetch handler: http.bodyLimit', () => {
     expect(res.status).toBe(413);
   });
 
+  it('counts the bytes actually sent when content-length understates the body', async () => {
+    const request = new Request('https://worker.example.com/mcp', {
+      method: 'POST',
+      headers: { ...MCP_HEADERS, 'content-length': '10' },
+      body: JSON.stringify({ ...INITIALIZE, pad: 'x'.repeat(2048) }),
+    });
+    const res = await handler(request);
+    expect(res.status).toBe(413);
+  });
+
   it('accepts a body under the limit', async () => {
     const res = await handler(post(JSON.stringify(INITIALIZE)));
     expect(res.status).toBe(200);

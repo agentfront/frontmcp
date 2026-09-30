@@ -40,7 +40,7 @@ export function findMisconfiguration(error: unknown): { code: string; remedy: st
   let current: unknown = error;
   for (let depth = 0; current instanceof Error && depth < 5; depth++) {
     const code = (current as { code?: unknown }).code;
-    if (typeof code === 'string' && MISCONFIGURATION_REMEDIES[code]) {
+    if (typeof code === 'string' && Object.prototype.hasOwnProperty.call(MISCONFIGURATION_REMEDIES, code)) {
       return { code, remedy: MISCONFIGURATION_REMEDIES[code] };
     }
     // The config itself failed validation (the server's schema, not the request's).

@@ -27,6 +27,14 @@ describe('misconfiguration classification (#646)', () => {
     expect(findMisconfiguration(err)?.code).toBe('CONFIG_INVALID');
   });
 
+  it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(
+    'does not treat the inherited key %s as a misconfiguration code',
+    (code) => {
+      const err = Object.assign(new Error('boom'), { code });
+      expect(findMisconfiguration(err)).toBeUndefined();
+    },
+  );
+
   it('ignores ordinary errors and never echoes the message', () => {
     expect(findMisconfiguration(new Error('secret=abc'))).toBeUndefined();
     expect(findMisconfiguration('nope')).toBeUndefined();

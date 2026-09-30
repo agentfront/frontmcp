@@ -959,6 +959,7 @@ export class TransportService {
   }
 
   private evictLocal(key: TransportKey): void {
+    this.lastTtlRefreshAt.delete(key.sessionId);
     const typeBucket = this.byType.get(key.type);
     if (!typeBucket) return;
     const tokenBucket = typeBucket.get(key.tokenHash);

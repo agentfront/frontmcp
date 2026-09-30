@@ -1512,6 +1512,19 @@ describe('TransportService - Redis HA behaviour (#646)', () => {
       expect(mockRedisSessionStore.get).toHaveBeenCalledTimes(2);
     });
 
+    it("forgets a session's refresh time when the session ends", async () => {
+      const svc = await withSession({ redis: { host: 'localhost' } });
+      await svc.getTransporter('streamable-http', 'tok', 'sess-ttl');
+      const refreshTimes = (svc as unknown as { lastTtlRefreshAt: Map<string, number> }).lastTtlRefreshAt;
+      expect(refreshTimes.has('sess-ttl')).toBe(true);
+
+      const { LocalTransporter } = jest.requireMock('../transport.local') as { LocalTransporter: jest.Mock };
+      const onDispose = LocalTransporter.mock.calls[LocalTransporter.mock.calls.length - 1][3] as () => void;
+      onDispose();
+
+      expect(refreshTimes.has('sess-ttl')).toBe(false);
+    });
+
     it('does not throw when the refresh fails', async () => {
       const svc = await withSession({ redis: { host: 'localhost' } });
       mockRedisSessionStore.get.mockRejectedValueOnce(new Error('redis down'));

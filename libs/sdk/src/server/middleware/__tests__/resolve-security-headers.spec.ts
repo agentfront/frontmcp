@@ -106,6 +106,14 @@ describe('resolveSecurityHeaders', () => {
     expect(headers['X-A']).toBe('2');
   });
 
+  it('keeps a "__proto__" key from FRONTMCP_HEADERS_CUSTOM as data instead of rewriting a prototype', () => {
+    process.env['FRONTMCP_HEADERS_CUSTOM'] = '{"__proto__":"polluted","X-A":"1"}';
+    const headers = resolveSecurityHeaders();
+    expect(headers['X-A']).toBe('1');
+    expect(Object.getPrototypeOf(headers)).toBe(Object.prototype);
+    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
+  });
+
   it('ignores malformed FRONTMCP_HEADERS_CUSTOM', () => {
     process.env['FRONTMCP_HEADERS_CUSTOM'] = '{not json';
     expect(resolveSecurityHeaders()['X-Content-Type-Options']).toBe('nosniff');
