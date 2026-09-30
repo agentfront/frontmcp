@@ -7,7 +7,7 @@
 
 import type Database from 'better-sqlite3';
 
-import { openDatabase } from './open-database';
+import { openDatabase, withBusyRetry } from './open-database';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 /**
@@ -69,16 +69,15 @@ export class SqliteEventStore implements EventStoreInterface {
 
   constructor(options: SqliteEventStoreOptions) {
     // Resolve better-sqlite3 (ESM-safe) and ensure the parent dir exists.
-    this.db = openDatabase(options.path, 'SqliteEventStore');
-
-    if (options.walMode !== false) {
-      this.db.pragma('journal_mode = WAL');
-    }
+    this.db = openDatabase(options.path, 'SqliteEventStore', {
+      busyTimeoutMs: options.busyTimeoutMs,
+      walMode: options.walMode !== false,
+    });
 
     this.maxEvents = options.maxEvents ?? 10000;
     this.ttlMs = options.ttlMs ?? 300000;
 
-    this.initSchema();
+    withBusyRetry(() => this.initSchema());
     this.prepareStatements();
 
     // Periodic cleanup of expired events

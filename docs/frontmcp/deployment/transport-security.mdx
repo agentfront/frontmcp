@@ -46,7 +46,7 @@ Enable strict security mode for production:
 | `security.strict`                                | boolean                           | `false`      | Enable all security features at once |
 | `security.bindAddress`                           | `'loopback'` \| `'all'` \| string | `'loopback'` | Network bind address                 |
 | `security.dnsRebindingProtection.enabled`        | boolean                           | `true`       | Validate Host and Origin headers     |
-| `security.dnsRebindingProtection.allowedHosts`   | string[]                          | *derived*    | Allowed Host header values           |
+| `security.dnsRebindingProtection.allowedHosts`   | string[]                          | _derived_    | Allowed Host header values           |
 | `security.dnsRebindingProtection.allowedOrigins` | string[]                          | ---          | Allowed Origin header values         |
 
 ## CORS Configuration
@@ -188,7 +188,7 @@ FRONTMCP_ALLOWED_HOSTS=api.example.com,api.example.com:8443
 
 ### Unix-socket servers
 
-A server bound to `socketPath` has no TCP host: the socket's filesystem permissions are the boundary, and clients send an arbitrary placeholder `Host`. The *derived* allow-list is skipped there and needs no configuration — a rebound browser cannot reach a unix socket at all.
+A server bound to `socketPath` has no TCP host: the socket's filesystem permissions are the boundary, and clients send an arbitrary placeholder `Host`. The _derived_ allow-list is skipped there and needs no configuration — a rebound browser cannot reach a unix socket at all.
 
 An **explicit** `allowedHosts` / `allowedOrigins` (or `FRONTMCP_ALLOWED_HOSTS`) still applies to a socket server, because it is configuration rather than a guess. Since a socket client's `Host` is a placeholder, setting one there will reject every request — leave it unset.
 
@@ -231,6 +231,8 @@ class Server {}
 | ----------------- | ------------------ | ------------------------- | ------------------------------------------------------------------------------- |
 | `bodyLimit`       | `number \| string` | `'4mb'`                   | Accepts bytes (number) or body-parser strings (`'4mb'`, `'500kb'`, `'2gb'`, …). |
 | `urlencodedLimit` | `number \| string` | falls back to `bodyLimit` | Independent override for `application/x-www-form-urlencoded` bodies.            |
+
+The fetch handler used on Cloudflare Workers, Vercel Edge and Deno enforces the same `bodyLimit`. It rejects a request whose `Content-Length` is over the limit without reading it, and stops reading a chunked body once it passes the limit. `urlencodedLimit` applies only to the Express host.
 
 When a request exceeds the configured limit, the adapter returns HTTP 413
 with a structured JSON-RPC envelope:

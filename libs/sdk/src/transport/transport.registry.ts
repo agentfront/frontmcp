@@ -25,6 +25,10 @@ import {
   type TransportTypeBucket,
 } from './transport.types';
 
+/** Backoff bounds for reconnecting a session store that was unreachable at startup. */
+const SESSION_STORE_RETRY_BASE_MS = 1000;
+const SESSION_STORE_RETRY_MAX_MS = 30000;
+
 export class TransportService {
   readonly ready: Promise<void>;
   private readonly byType: TransportRegistryBucket = new Map();
@@ -95,7 +99,31 @@ export class TransportService {
    * Returns undefined if persistence is disabled or not configured.
    */
   private getDefaultTtlMs(): number | undefined {
+    if (this.resolvedTtlMs !== undefined) return this.resolvedTtlMs;
     return typeof this.persistenceConfig === 'object' ? this.persistenceConfig?.defaultTtlMs : undefined;
+  }
+
+  /**
+   * TTL resolved from `persistence.defaultTtlMs`, then `persistence.redis.defaultTtlMs`, then 1 hour.
+   * Set only when a persistence backend is configured.
+   */
+  private resolvedTtlMs: number | undefined;
+
+  /** Store config kept after a successful create so a failed ping can be retried. */
+  private storeRetryConfig?: SessionStoreFactoryOptions;
+  private storeRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  private storeRetryAttempt = 0;
+  private destroyed = false;
+
+  /** Last time a request refreshed the stored session's TTL, by session id. */
+  private readonly lastTtlRefreshAt = new Map<string, number>();
+
+  /**
+   * Redis key prefix under which session records are stored.
+   * The session store appends `session:` to the transport key prefix.
+   */
+  getSessionKeyPrefix(): string {
+    return `${this.transportKeyPrefix}session:`;
   }
 
   constructor(scope: Scope, persistenceConfig?: false | TransportPersistenceConfigInput, bus?: TransportBus) {
@@ -116,10 +144,11 @@ export class TransportService {
       // SQLite keys are managed by SqliteKvStore via keyPrefix; reuse the
       // same transport-namespace convention Redis uses.
       this.transportKeyPrefix = 'mcp:transport:';
+      this.resolvedTtlMs = persistenceConfig.defaultTtlMs ?? 3600000;
       this.pendingStoreConfig = {
         sqlite: sqliteConfig,
         keyPrefix: this.transportKeyPrefix,
-        defaultTtlMs: persistenceConfig.defaultTtlMs ?? 3600000,
+        defaultTtlMs: this.resolvedTtlMs,
       };
 
       this.scope.logger.info('[TransportService] sqlite session store will be initialized for transport persistence');
@@ -134,10 +163,12 @@ export class TransportService {
       // Override keyPrefix for transport persistence (separate from auth sessions)
       // Cast to RedisOptions since we're modifying the config
       this.transportKeyPrefix = redisConfig.keyPrefix ?? 'mcp:transport:';
+      this.resolvedTtlMs =
+        persistenceConfig.defaultTtlMs ?? (redisConfig as { defaultTtlMs?: number }).defaultTtlMs ?? 3600000;
       this.pendingStoreConfig = {
         ...redisConfig,
         keyPrefix: this.transportKeyPrefix,
-        defaultTtlMs: persistenceConfig.defaultTtlMs ?? 3600000, // 1 hour default
+        defaultTtlMs: this.resolvedTtlMs,
       } as RedisOptions;
 
       this.scope.logger.info(
@@ -145,49 +176,15 @@ export class TransportService {
       );
     }
 
+    this.storeRetryConfig = this.pendingStoreConfig;
     this.ready = this.initialize();
   }
 
   private async initialize() {
-    // Create session store if configuration is pending
     if (this.pendingStoreConfig) {
-      try {
-        const store = await createSessionStore(this.pendingStoreConfig, this.scope.logger.child('SessionStore'));
-        // Cast to our extended type. Redis / VercelKV stores expose
-        // `ping` + `disconnect`; the SQLite store exposes `close`. The
-        // `destroy()` path below selects the right teardown method by
-        // probing for both.
-        this.sessionStore = store as SessionStore & {
-          ping?: () => Promise<boolean>;
-          disconnect?: () => Promise<void>;
-          close?: () => void | Promise<void>;
-        };
-        this.pendingStoreConfig = undefined;
-      } catch (error) {
-        const err = error as Error & { cause?: Error };
-        this.scope.logger.error('[TransportService] Failed to create session store - session persistence disabled', {
-          error: err.message,
-          cause: err.cause?.message,
-        });
-      }
-    }
-
-    // Validate connection if session store is configured
-    if (this.sessionStore) {
-      const isConnected = this.sessionStore.ping ? await this.sessionStore.ping() : true;
-      if (!isConnected) {
-        const providerType = this.backendKind ?? 'redis';
-        this.scope.logger.error(
-          `[TransportService] Failed to connect to ${providerType} - session persistence disabled`,
-        );
-        // Use the same teardown path as `destroy()` so SQLite stores
-        // close their file handles instead of leaking them — the
-        // ping-failure path previously only called `disconnect()`,
-        // which SQLite stores don't implement.
-        await this.teardownSessionStore().catch(() => void 0);
-      } else {
-        this.scope.logger.info('[TransportService] Session store connection validated successfully');
-      }
+      const connected = await this.connectSessionStore();
+      // SQLite is a local file: a failure there does not heal by waiting.
+      if (!connected && this.backendKind !== 'sqlite') this.scheduleSessionStoreRetry();
     }
 
     await this.scope.registryFlows(
@@ -198,7 +195,86 @@ export class TransportService {
     );
   }
 
+  /**
+   * Create the session store and validate the connection.
+   * Returns true when the store is usable; on failure the store is left undefined.
+   */
+  private async connectSessionStore(): Promise<boolean> {
+    const storeConfig = this.pendingStoreConfig ?? this.storeRetryConfig;
+    if (!storeConfig) return false;
+
+    try {
+      const store = await createSessionStore(storeConfig, this.scope.logger.child('SessionStore'));
+      // Cast to our extended type. Redis / VercelKV stores expose
+      // `ping` + `disconnect`; the SQLite store exposes `close`. The
+      // `destroy()` path below selects the right teardown method by
+      // probing for both.
+      this.sessionStore = store as SessionStore & {
+        ping?: () => Promise<boolean>;
+        disconnect?: () => Promise<void>;
+        close?: () => void | Promise<void>;
+      };
+      this.pendingStoreConfig = undefined;
+    } catch (error) {
+      const err = error as Error & { cause?: Error };
+      this.scope.logger.error('[TransportService] Failed to create session store - session persistence disabled', {
+        error: err.message,
+        cause: err.cause?.message,
+      });
+      return false;
+    }
+
+    const isConnected = this.sessionStore?.ping ? await this.sessionStore.ping() : true;
+    if (!isConnected) {
+      const providerType = this.backendKind ?? 'redis';
+      this.scope.logger.error(`[TransportService] Failed to connect to ${providerType} - session persistence disabled`);
+      // Use the same teardown path as `destroy()` so SQLite stores
+      // close their file handles instead of leaking them.
+      await this.teardownSessionStore().catch(() => void 0);
+      return false;
+    }
+
+    this.scope.logger.info('[TransportService] Session store connection validated successfully');
+    return true;
+  }
+
+  /**
+   * Retry the session store with exponential backoff (1s doubling to 30s) so a Redis that
+   * was down at startup is picked up when it comes back, and `/readyz` turns healthy.
+   */
+  private scheduleSessionStoreRetry(): void {
+    if (this.destroyed || this.storeRetryTimer) return;
+    const delay = Math.min(SESSION_STORE_RETRY_MAX_MS, SESSION_STORE_RETRY_BASE_MS * 2 ** this.storeRetryAttempt);
+    this.storeRetryAttempt++;
+    this.storeRetryTimer = setTimeout(() => {
+      this.storeRetryTimer = undefined;
+      void this.retrySessionStore();
+    }, delay);
+    this.storeRetryTimer.unref?.();
+  }
+
+  private async retrySessionStore(): Promise<void> {
+    if (this.destroyed || this.sessionStore) return;
+    const connected = await this.connectSessionStore().catch(() => false);
+    if (this.destroyed) {
+      await this.teardownSessionStore().catch(() => void 0);
+      return;
+    }
+    if (connected) {
+      this.storeRetryAttempt = 0;
+      this.scope.logger.info('[TransportService] Session store recovered after startup failure');
+      return;
+    }
+    this.scheduleSessionStoreRetry();
+  }
+
   async destroy() {
+    this.destroyed = true;
+    if (this.storeRetryTimer) {
+      clearTimeout(this.storeRetryTimer);
+      this.storeRetryTimer = undefined;
+    }
+    this.lastTtlRefreshAt.clear();
     await this.teardownSessionStore();
   }
 
@@ -267,12 +343,38 @@ export class TransportService {
     return this.backendKind;
   }
 
+  /**
+   * Slide the stored session's TTL while this instance is serving it. Redis and Vercel KV
+   * session stores extend the TTL on read, so a plain `get` is enough. Throttled per session
+   * to a quarter of the TTL, fire-and-forget.
+   */
+  private refreshStoredSessionTtl(sessionId: string): void {
+    const store = this.sessionStore;
+    const ttlMs = this.getDefaultTtlMs();
+    if (!store || !ttlMs || (this.backendKind !== 'redis' && this.backendKind !== 'vercel-kv')) return;
+
+    const now = Date.now();
+    const last = this.lastTtlRefreshAt.get(sessionId);
+    if (last !== undefined && now - last < Math.max(1000, Math.floor(ttlMs / 4))) return;
+    this.lastTtlRefreshAt.set(sessionId, now);
+
+    store.get(sessionId).catch((err) => {
+      this.scope.logger.warn('[TransportService] Failed to refresh session TTL', {
+        sessionId: sessionId.slice(0, 20),
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
   async getTransporter(type: TransportType, token: string, sessionId: string): Promise<Transporter | undefined> {
     const key = this.keyOf(type, token, sessionId);
 
     // 1. Check local in-memory cache first
     const local = this.lookupLocal(key);
-    if (local) return local;
+    if (local) {
+      this.refreshStoredSessionTtl(sessionId);
+      return local;
+    }
 
     // 2. Check distributed bus (if enabled)
     if (this.distributed && this.bus) {
@@ -417,7 +519,7 @@ export class TransportService {
     // HA: If session belongs to a different node, attempt atomic takeover
     const currentNodeId = getMachineId();
     if (this.scope.haManager && storedSession.session.nodeId && storedSession.session.nodeId !== currentNodeId) {
-      const sessionKey = `${this.transportKeyPrefix}${sessionId}`;
+      const sessionKey = `${this.getSessionKeyPrefix()}${sessionId}`;
       const result = await this.scope.haManager.attemptTakeover(sessionKey, storedSession.session.nodeId);
       if (!result.claimed) {
         this.scope.logger.debug('[HA] Session already claimed by another pod', { sessionId: sessionId.slice(0, 20) });

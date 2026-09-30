@@ -20,8 +20,11 @@ import { type HttpOutput } from '../common/schemas/http-output.schema';
 import { ServerRequestTokens } from '../common/tokens/server.tokens';
 import { type CorsOptions } from '../common/types/options/http/interfaces';
 import { normalizeEntryPrefix, resolveEntryPath } from '../common/utils/path.utils';
-import { PublicMcpError } from '../errors';
+import { PayloadTooLargeError, PublicMcpError } from '../errors';
+import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
+import { isReadyzEnabled } from '../health/health.routes';
 import { type Scope } from '../scope/scope.instance';
+import { resolveSecurityHeaders } from '../server/middleware/csp.middleware';
 import { compileHostValidation, validateHostHeaders } from '../server/security/host-validation';
 import { renderHttpOutputToWebResponse } from './web-response.renderer';
 import { type WebStandardMcpPair } from './web-standard-mcp';
@@ -160,7 +163,15 @@ export interface CreateWebFetchHandlerOptions {
  */
 export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandlerOptions = {}): WebFetchHandler {
   const httpConfig = scope.metadata.http;
-  const healthPaths = new Set(options.healthPaths ?? ['/healthz', '/readyz']);
+  const healthConfig = scope.metadata.health ?? {};
+  // `health.enabled: false` turns the probes off entirely; an explicit
+  // `options.healthPaths` keeps the legacy static-`ok` behaviour for those paths.
+  const healthEnabled = healthConfig.enabled !== false;
+  const healthzPath = healthConfig.healthzPath ?? '/healthz';
+  const readyzPath = healthConfig.readyzPath ?? '/readyz';
+  const readyzEnabled = isReadyzEnabled(healthConfig);
+  const bodyLimit = parseByteLimit(httpConfig?.bodyLimit);
+  const securityHeaders = resolveSecurityHeaders(httpConfig?.securityHeaders);
   // Normalize a path: ensure a leading slash, drop a trailing slash (keeping
   // root as `/`). So `/mcp`, `/mcp/`, and a configured `mcp` all compare equal.
   const normalizePath = (p: string): string => {
@@ -233,7 +244,15 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   };
 
-  return async function handle(request: Request, ctx?: FetchHandlerCtx, env?: unknown): Promise<Response> {
+  /** Merge the resolved security headers into a response without overriding ones the flow already set. */
+  const withSecurityHeaders = (response: Response): Response => {
+    const headers = new Headers(response.headers);
+    for (const [k, v] of Object.entries(securityHeaders)) if (!headers.has(k)) headers.set(k, v);
+    headers.delete('x-powered-by');
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  };
+
+  const handleRequest = async (request: Request, ctx?: FetchHandlerCtx, env?: unknown): Promise<Response> => {
     const url = new URL(request.url);
 
     // Host validation runs FIRST, before CORS preflight, health probes and any
@@ -253,20 +272,42 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
       }
     }
 
+    // Body size limit (`http.bodyLimit`) — enforced before routing, like the
+    // Express body parsers, so an oversized body is never buffered.
+    const limited = await enforceBodyLimit(request, bodyLimit);
+    if (limited instanceof Response) return withCors(limited, request);
+    request = limited;
+
     // CORS preflight — answer OPTIONS directly (transport-adapter concern).
     if (corsEnabled && request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeadersFor(request) });
     }
 
     // Liveness/readiness — cheap, no MCP server spin-up.
-    if (healthPaths.has(url.pathname)) {
-      return withCors(
-        Response.json(
-          { status: 'ok', server: scope.metadata.info, transport: 'web-fetch' },
-          { headers: { 'Cache-Control': 'no-store' } },
-        ),
-        request,
-      );
+    if (options.healthPaths ? options.healthPaths.includes(url.pathname) : healthEnabled) {
+      const isReadyz = !options.healthPaths && url.pathname === readyzPath && readyzEnabled;
+      const isHealthz = options.healthPaths
+        ? url.pathname !== '/readyz'
+        : url.pathname === healthzPath || url.pathname === '/health';
+      if (isReadyz && scope.healthService) {
+        const readiness = await scope.healthService.getReadyz();
+        return withCors(
+          Response.json(
+            { ...readiness, transport: 'web-fetch' },
+            { status: readiness.status === 'ready' ? 200 : 503, headers: { 'Cache-Control': 'no-store' } },
+          ),
+          request,
+        );
+      }
+      if (isHealthz || isReadyz || options.healthPaths) {
+        return withCors(
+          Response.json(
+            { status: 'ok', server: scope.metadata.info, transport: 'web-fetch' },
+            { headers: { 'Cache-Control': 'no-store' } },
+          ),
+          request,
+        );
+      }
     }
 
     // MCP is served only at the configured entry path(s). Everything else is
@@ -300,6 +341,68 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
     // `next`/`handled`/no-output means no MCP handler claimed the request.
     return withCors(rendered ?? Response.json({ error: 'Not Found' }, { status: 404 }), request);
   };
+
+  return async function handle(request: Request, ctx?: FetchHandlerCtx, env?: unknown): Promise<Response> {
+    return withSecurityHeaders(await handleRequest(request, ctx, env));
+  };
+}
+
+const DEFAULT_BODY_LIMIT_BYTES = 4 * 1024 * 1024;
+const BYTE_UNITS: Record<string, number> = { b: 1, kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3 };
+
+/** Parse `http.bodyLimit` (`'4mb'`, `'512kb'`, or a byte count) the way `bytes`/body-parser does. */
+function parseByteLimit(limit: number | string | undefined): number {
+  if (typeof limit === 'number' && Number.isFinite(limit) && limit >= 0) return limit;
+  if (typeof limit === 'string') {
+    const match = /^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)?$/i.exec(limit.trim());
+    if (match) return Math.floor(Number(match[1]) * BYTE_UNITS[(match[2] ?? 'b').toLowerCase()]);
+  }
+  return DEFAULT_BODY_LIMIT_BYTES;
+}
+
+function payloadTooLarge(limit: number, length?: number): Response {
+  const error = new PayloadTooLargeError(limit, length);
+  return Response.json({ jsonrpc: '2.0', error: error.toJsonRpcError(), id: null }, { status: 413 });
+}
+
+/**
+ * Enforce `http.bodyLimit` on a Web `Request`. A declared `content-length` over
+ * the limit is refused without reading anything; a body with no declared length
+ * is read through a byte counter and refused as soon as it crosses the limit.
+ * Returns the request to continue with (re-buffered when it had to be read), or
+ * a 413 `Response`.
+ */
+async function enforceBodyLimit(request: Request, limit: number): Promise<Request | Response> {
+  const method = request.method.toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || !request.body) return request;
+
+  const declared = request.headers.get('content-length');
+  if (declared !== null) {
+    const length = Number(declared);
+    if (Number.isFinite(length) && length > limit) return payloadTooLarge(limit, length);
+    return request;
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel().catch(() => undefined);
+      return payloadTooLarge(limit, total);
+    }
+    chunks.push(value);
+  }
+  const buffered = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffered.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new Request(request.url, { method: request.method, headers: request.headers, body: buffered });
 }
 
 /**
@@ -451,34 +554,6 @@ async function toServerRequest(
 }
 
 /**
- * Error codes that mean "the deployment is misconfigured", not "something went
- * wrong handling this request". They name a missing setting and nothing about
- * the request, the user, or any secret's value, so echoing the code is safe and
- * saves the operator a `wrangler tail` against live traffic (#546).
- */
-const MISCONFIGURATION_REMEDIES: Record<string, string> = {
-  SESSION_SECRET_REQUIRED:
-    'Set MCP_SESSION_SECRET in the deployment environment (e.g. `wrangler secret put MCP_SESSION_SECRET`). ' +
-    'Session IDs are encrypted with it, and production refuses the development machine-id fallback.',
-  JWT_SECRET_INVALID:
-    'JWT_SECRET is present but too weak: HS256 requires at least 32 bytes (RFC 7518). ' +
-    'Replace it with `openssl rand -hex 32`.',
-  JWT_SECRET_REQUIRED:
-    'Set JWT_SECRET in the deployment environment (e.g. `wrangler secret put JWT_SECRET`). ' +
-    'Tokens are signed with it; production refuses the random per-process fallback because tokens would ' +
-    'not survive a restart or verify across instances.',
-  // The startup checks: a server whose entries ask for protection nothing gives them does not start.
-  UNENFORCED_METADATA:
-    'An entry declares a field only a plugin enforces (approval, featureFlag, ...) and no installed plugin that ' +
-    'enforces it reaches the entry, so the server refuses to start. Install the plugin or remove the field; ' +
-    'the server log names the entries.',
-  AUTH_CONFIGURATION_ERROR:
-    'The auth or authorities configuration is invalid (for example, entries declare authorities and the server ' +
-    'has no authorities option, or a rule checks nothing), so the server refuses to start. The server log names ' +
-    'the entries.',
-};
-
-/**
  * Render a recognized configuration fault as a Web `Response`, or `undefined`
  * when the error is not one.
  *
@@ -492,33 +567,8 @@ const MISCONFIGURATION_REMEDIES: Record<string, string> = {
 export function misconfigurationResponse(error: unknown): Response | undefined {
   const misconfiguration = findMisconfiguration(error);
   if (!misconfiguration) return undefined;
-  return Response.json(
-    { error: 'server_misconfigured', code: misconfiguration.code, message: misconfiguration.remedy },
-    { status: 500 },
-  );
+  return Response.json(misconfigurationBody(misconfiguration), { status: 500 });
 }
-
-/**
- * Recognize an error that carries one of the codes above, however deeply it is
- * wrapped. The message is never echoed — only the fixed code and remedy are.
- */
-function findMisconfiguration(error: unknown): { code: string; remedy: string } | undefined {
-  let current: unknown = error;
-  for (let depth = 0; current instanceof Error && depth < 5; depth++) {
-    const code = (current as { code?: unknown }).code;
-    if (typeof code === 'string' && MISCONFIGURATION_REMEDIES[code]) {
-      return { code, remedy: MISCONFIGURATION_REMEDIES[code] };
-    }
-    // The config itself failed validation (the server's schema, not the request's).
-    if (current.name === 'ZodError') return { code: 'CONFIG_INVALID', remedy: CONFIG_INVALID_REMEDY };
-    current = (current as { cause?: unknown }).cause;
-  }
-  return undefined;
-}
-
-const CONFIG_INVALID_REMEDY =
-  'The FrontMCP configuration failed validation, so the server refuses to start. The server log names the ' +
-  'invalid fields.';
 
 /** The first retry of a failed deferred server build waits this long; each failure doubles it. */
 const STARTUP_RETRY_MIN_MS = 1_000;
@@ -623,7 +673,7 @@ function flowErrorToHttpOutput(error: unknown): HttpOutput | undefined {
       kind: 'json',
       status: 500,
       contentType: 'application/json; charset=utf-8',
-      body: { error: 'server_misconfigured', code: misconfiguration.code, message: misconfiguration.remedy },
+      body: misconfigurationBody(misconfiguration),
     };
   }
 

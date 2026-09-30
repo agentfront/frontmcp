@@ -565,7 +565,7 @@ describe('TransportService', () => {
         expect.objectContaining({
           session: expect.objectContaining({ id: 'redis-lifecycle' }),
         }),
-        undefined, // defaultTtlMs not configured in this test
+        3600000, // one-hour default when a backend is configured without a TTL
       );
 
       mockRedisSessionStore.set.mockClear();
@@ -1374,6 +1374,205 @@ describe('TransportService', () => {
         // This test verifies the structure is preserved
         expect(storedSession.transportState.lastEventId).toBe(150);
       });
+    });
+  });
+});
+
+describe('TransportService - Redis HA behaviour (#646)', () => {
+  let service: TransportService | undefined;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRedisSessionStore.ping.mockResolvedValue(true);
+    mockRedisSessionStore.get.mockResolvedValue(null);
+    mockRedisSessionStore.exists.mockResolvedValue(false);
+  });
+
+  afterEach(async () => {
+    jest.useRealTimers();
+    await service?.destroy();
+    service = undefined;
+  });
+
+  describe('session TTL resolution', () => {
+    const ttlOf = (svc: TransportService) =>
+      (svc as unknown as { getDefaultTtlMs(): number | undefined }).getDefaultTtlMs();
+
+    it('prefers persistence.defaultTtlMs over redis.defaultTtlMs', async () => {
+      service = new TransportService(
+        mockScope as never,
+        {
+          defaultTtlMs: 111000,
+          redis: { host: 'localhost', defaultTtlMs: 222000 },
+        } as never,
+      );
+      await service.ready;
+      expect(ttlOf(service)).toBe(111000);
+    });
+
+    it('falls back to redis.defaultTtlMs', async () => {
+      service = new TransportService(
+        mockScope as never,
+        {
+          redis: { host: 'localhost', defaultTtlMs: 222000 },
+        } as never,
+      );
+      await service.ready;
+      expect(ttlOf(service)).toBe(222000);
+    });
+
+    it('falls back to one hour when neither is set', async () => {
+      service = new TransportService(mockScope as never, { redis: { host: 'localhost' } } as never);
+      await service.ready;
+      expect(ttlOf(service)).toBe(3600000);
+    });
+
+    it('is undefined without a persistence backend', async () => {
+      service = new TransportService(mockScope as never);
+      await service.ready;
+      expect(ttlOf(service)).toBeUndefined();
+    });
+  });
+
+  describe('getSessionKeyPrefix', () => {
+    it('includes the session: segment the store appends', async () => {
+      service = new TransportService(
+        mockScope as never,
+        {
+          redis: { host: 'localhost', keyPrefix: 'myapp:' },
+        } as never,
+      );
+      await service.ready;
+      expect(service.getSessionKeyPrefix()).toBe('myapp:session:');
+    });
+
+    it('defaults to the transport namespace', async () => {
+      service = new TransportService(mockScope as never);
+      await service.ready;
+      expect(service.getSessionKeyPrefix()).toBe('mcp:transport:session:');
+    });
+  });
+
+  describe('HA takeover key', () => {
+    it('uses the stored session key including session:', async () => {
+      const attemptTakeover = jest.fn().mockResolvedValue({ success: false });
+      const scope = { ...mockScope, haManager: { attemptTakeover } };
+      service = new TransportService(
+        scope as never,
+        {
+          redis: { host: 'localhost', keyPrefix: 'myapp:' },
+        } as never,
+      );
+      await service.ready;
+
+      const tokenHash = createHash('sha256').update('tok', 'utf8').digest('hex');
+      const storedSession = {
+        session: {
+          id: 'sess-1',
+          authorizationId: tokenHash,
+          protocol: 'streamable-http',
+          createdAt: Date.now(),
+          nodeId: 'other-node',
+        },
+        authorizationId: tokenHash,
+        createdAt: Date.now(),
+        lastAccessedAt: Date.now(),
+      };
+
+      await service
+        .recreateTransporter('streamable-http', 'tok', 'sess-1', storedSession as never, mockResponse as never)
+        .catch(() => undefined);
+
+      const keys = attemptTakeover.mock.calls.map((c) => c[0]);
+      expect(keys.length).toBeGreaterThan(0);
+      for (const key of keys) expect(key).toBe('myapp:session:sess-1');
+    });
+  });
+
+  describe('TTL refresh while serving a session', () => {
+    async function withSession(config: Record<string, unknown>) {
+      service = new TransportService(mockScope as never, config as never);
+      await service.ready;
+      await service.createTransporter('streamable-http', 'tok', 'sess-ttl', mockResponse as never);
+      mockRedisSessionStore.get.mockClear();
+      return service;
+    }
+
+    it('reads the stored session (sliding TTL) at most once per quarter TTL', async () => {
+      jest.useFakeTimers({ now: 1_000_000 });
+      const svc = await withSession({ redis: { host: 'localhost' }, defaultTtlMs: 40000 });
+
+      await svc.getTransporter('streamable-http', 'tok', 'sess-ttl');
+      await svc.getTransporter('streamable-http', 'tok', 'sess-ttl');
+      expect(mockRedisSessionStore.get).toHaveBeenCalledTimes(1);
+      expect(mockRedisSessionStore.get).toHaveBeenCalledWith('sess-ttl');
+
+      jest.setSystemTime(1_000_000 + 10_001);
+      await svc.getTransporter('streamable-http', 'tok', 'sess-ttl');
+      expect(mockRedisSessionStore.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not throw when the refresh fails', async () => {
+      const svc = await withSession({ redis: { host: 'localhost' } });
+      mockRedisSessionStore.get.mockRejectedValueOnce(new Error('redis down'));
+      await expect(svc.getTransporter('streamable-http', 'tok', 'sess-ttl')).resolves.toBeDefined();
+    });
+
+    it('does nothing without a persistence backend', async () => {
+      service = new TransportService(mockScope as never);
+      await service.ready;
+      await service.createTransporter('streamable-http', 'tok', 'sess-ttl', mockResponse as never);
+      await service.getTransporter('streamable-http', 'tok', 'sess-ttl');
+      expect(mockRedisSessionStore.get).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('startup retry', () => {
+    it('recovers the session store after Redis was down at startup', async () => {
+      jest.useFakeTimers();
+      mockRedisSessionStore.ping.mockResolvedValueOnce(false).mockResolvedValue(true);
+      service = new TransportService(mockScope as never, { redis: { host: 'localhost' } } as never);
+      await service.ready;
+      expect((service as unknown as { sessionStore?: unknown }).sessionStore).toBeUndefined();
+
+      await jest.advanceTimersByTimeAsync(1000);
+
+      expect((service as unknown as { sessionStore?: unknown }).sessionStore).toBeDefined();
+    });
+
+    it('backs off exponentially while Redis stays down', async () => {
+      jest.useFakeTimers();
+      mockRedisSessionStore.ping.mockResolvedValue(false);
+      service = new TransportService(mockScope as never, { redis: { host: 'localhost' } } as never);
+      await service.ready;
+      expect(mockRedisSessionStore.ping).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(mockRedisSessionStore.ping).toHaveBeenCalledTimes(2);
+      await jest.advanceTimersByTimeAsync(1999);
+      expect(mockRedisSessionStore.ping).toHaveBeenCalledTimes(2);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(mockRedisSessionStore.ping).toHaveBeenCalledTimes(3);
+    });
+
+    it('stops retrying after destroy()', async () => {
+      jest.useFakeTimers();
+      mockRedisSessionStore.ping.mockResolvedValue(false);
+      service = new TransportService(mockScope as never, { redis: { host: 'localhost' } } as never);
+      await service.ready;
+      await service.destroy();
+      mockRedisSessionStore.ping.mockClear();
+
+      await jest.advanceTimersByTimeAsync(60000);
+      expect(mockRedisSessionStore.ping).not.toHaveBeenCalled();
+    });
+
+    it('does not retry when no backend is configured', async () => {
+      jest.useFakeTimers();
+      service = new TransportService(mockScope as never);
+      await service.ready;
+      await jest.advanceTimersByTimeAsync(60000);
+      expect(mockRedisSessionStore.ping).not.toHaveBeenCalled();
     });
   });
 });

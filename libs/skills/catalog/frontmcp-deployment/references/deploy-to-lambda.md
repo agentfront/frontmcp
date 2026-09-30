@@ -318,14 +318,15 @@ Lambda cold starts occur when a new execution environment is initialized. Strate
 
 ## Troubleshooting
 
-| Problem                              | Cause                                                           | Solution                                                                                                  |
-| ------------------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Timeout errors                       | Function timeout too low or waiting on unreachable resource     | Increase `Timeout` in the SAM template; verify network connectivity to dependencies                       |
-| 502 Bad Gateway                      | Handler path mismatch, missing env vars, or unhandled exception | Check CloudWatch Logs; confirm `Handler: handler.handler` and `CodeUri: dist/lambda/`                     |
-| `Cannot find module @codegenie/...`  | Peer dep not installed locally or in Layer                      | `npm install @codegenie/serverless-express` (the build's `validate` hook checks for it)                   |
-| Cold starts too slow                 | Low memory, x86 architecture, or large bundle                   | Increase memory to 512+ MB, use `arm64`, or enable provisioned concurrency                                |
-| Redis connection refused from Lambda | Lambda not in the same VPC as ElastiCache                       | Place the Lambda in the ElastiCache VPC with appropriate security group rules                             |
-| `sam deploy` fails with IAM error    | Insufficient permissions for CloudFormation stack creation      | Ensure the deploying IAM user/role has `cloudformation:*`, `lambda:*`, `apigateway:*`, and `iam:PassRole` |
+| Problem                              | Cause                                                                                | Solution                                                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Timeout errors                       | Function timeout too low or waiting on unreachable resource                          | Increase `Timeout` in the SAM template; verify network connectivity to dependencies                            |
+| 502 Bad Gateway                      | Handler path mismatch, missing env vars, or unhandled exception                      | Check CloudWatch Logs; confirm `Handler: handler.handler` and `CodeUri: dist/lambda/`                          |
+| `Cannot find module @codegenie/...`  | Peer dep not installed locally or in Layer                                           | `npm install @codegenie/serverless-express` (the build's `validate` hook checks for it)                        |
+| Cold starts too slow                 | Low memory, x86 architecture, or large bundle                                        | Increase memory to 512+ MB, use `arm64`, or enable provisioned concurrency                                     |
+| Redis connection refused from Lambda | Lambda not in the same VPC as ElastiCache                                            | Place the Lambda in the ElastiCache VPC with appropriate security group rules                                  |
+| 500 `server_misconfigured`           | A required secret is missing (`SESSION_SECRET_REQUIRED`, `JWT_SECRET_REQUIRED`, ...) | The response body names the `code` and the remedy; set the variable in the function's environment and redeploy |
+| `sam deploy` fails with IAM error    | Insufficient permissions for CloudFormation stack creation                           | Ensure the deploying IAM user/role has `cloudformation:*`, `lambda:*`, `apigateway:*`, and `iam:PassRole`      |
 
 ## Examples
 

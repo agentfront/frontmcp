@@ -85,9 +85,23 @@ describe('auditSecurityDefaults()', () => {
   });
 
   describe('DNS rebinding audit', () => {
-    it('warns when DNS rebinding protection is disabled', () => {
-      const findings = auditSecurityDefaults({}, true);
+    it('warns only when DNS rebinding protection is explicitly disabled', () => {
+      const findings = auditSecurityDefaults({ security: { dnsRebindingProtection: { enabled: false } } }, true);
       expect(findings).toContainEqual(expect.objectContaining({ code: 'DNS_REBINDING_UNPROTECTED', level: 'warn' }));
+    });
+
+    it('does not warn while host checks are enforced by default (#646)', () => {
+      const findings = auditSecurityDefaults({}, true);
+      expect(findings.find((f) => f.code === 'DNS_REBINDING_UNPROTECTED')).toBeUndefined();
+      expect(findings).toContainEqual(expect.objectContaining({ code: 'DNS_REBINDING_PROTECTED', level: 'info' }));
+    });
+
+    it('does not warn when an allow-list is configured without an explicit enabled flag', () => {
+      const findings = auditSecurityDefaults(
+        { security: { dnsRebindingProtection: { allowedHosts: ['api.example.com'] } } },
+        true,
+      );
+      expect(findings.find((f) => f.code === 'DNS_REBINDING_UNPROTECTED')).toBeUndefined();
     });
 
     it('info when DNS rebinding protection is enabled', () => {

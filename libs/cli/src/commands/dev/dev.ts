@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
 
 import { resolveConfig } from '../../config';
+import { pickServerDefaults, securityHeadersEnv } from '../../config/security-headers-env';
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
 import { loadDevEnv } from '../../shared/env';
@@ -91,9 +92,11 @@ export function buildDevChildEnv(params: {
   baseEnv: NodeJS.ProcessEnv;
   port: number;
   configHttpPath?: string;
+  securityHeadersEnv?: Record<string, string>;
 }): NodeJS.ProcessEnv {
-  const { effectiveEnv, baseEnv, port, configHttpPath } = params;
+  const { effectiveEnv, baseEnv, port, configHttpPath, securityHeadersEnv } = params;
   return {
+    ...securityHeadersEnv,
     ...effectiveEnv,
     ...baseEnv,
     PORT: String(port),
@@ -197,6 +200,7 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
     baseEnv: process.env,
     port,
     configHttpPath,
+    securityHeadersEnv: securityHeadersEnv(pickServerDefaults(cfg)),
   });
   const app = spawn(npxCmd, ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
     stdio: 'inherit',

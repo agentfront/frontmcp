@@ -149,7 +149,7 @@ For session storage, use Upstash Redis (HTTP) via `redis: { provider: 'vercel-kv
 
 ### Secrets, vars and `process.env`
 
-Worker bindings arrive as an argument to `fetch`, not as environment variables. The generated entry copies every **string** binding into `process.env` on the first request (existing values are never overwritten), so ordinary `process.env.MY_API_KEY` reads behave the same on Workers as under `frontmcp dev`. Non-string bindings (KV, D1, R2, Durable Objects) stay on `env`, which the entry forwards to the handler along with `ctx`.
+Worker bindings arrive as an argument to `fetch`, not as environment variables. The generated entry copies every **string** binding into `process.env` on the first request (existing values are never overwritten), so ordinary `process.env.MY_API_KEY` reads behave the same on Workers as under `frontmcp dev`. Non-string bindings (KV, D1, R2, Durable Objects) stay on `env`, which the entry forwards to the handler along with `ctx`. Inside a tool, resource, prompt or agent, read them with `this.workerEnv` (e.g. `this.workerEnv?.MY_KV as KVNamespace | undefined`) — it is the request's Worker `env`, read-only, and `undefined` outside a Worker request. `NODE_ENV = "production"` set in `wrangler.toml` `[vars]` is read live by the runtime context, so production mode takes effect even though the value reaches `process.env` only on the first request.
 
 A value read at module-eval time — inside the `@FrontMcp({...})` argument itself — is still `undefined`, because the copy happens on the first request. Read configuration inside `execute()` / `read()`, or rely on `nodejs_compat_populate_process_env` (emitted by default), which populates `process.env` before your module evaluates.
 

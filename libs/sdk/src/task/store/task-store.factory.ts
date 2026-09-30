@@ -80,6 +80,17 @@ function detectStorageType(
   return 'memory';
 }
 
+/**
+ * True when the task backend would resolve to Vercel KV (no pub/sub, so unusable
+ * for tasks): an explicit `provider: 'vercel-kv'`, or — with no explicit backend —
+ * the ambient `KV_REST_API_URL` Vercel injects.
+ */
+export function resolvesToVercelKvTaskBackend(redis?: RedisOptionsInput, storage?: StorageConfig): boolean {
+  if (storage) return storage.type === 'vercel-kv';
+  if (redis) return 'provider' in redis && redis.provider === 'vercel-kv';
+  return Boolean(getEnv('KV_REST_API_URL'));
+}
+
 export async function createTaskStore(options: TaskStoreOptions = {}): Promise<TaskStoreResult> {
   const { storage: storageConfig, redis, keyPrefix = 'mcp:task:', logger, isEdgeRuntime = false, sqlite } = options;
 
@@ -144,7 +155,10 @@ export async function createTaskStore(options: TaskStoreOptions = {}): Promise<T
     }
   }
 
-  if (finalStorageConfig?.type === 'vercel-kv' || getEnv('KV_REST_API_URL')) {
+  // The ambient `KV_REST_API_URL` only selects Vercel KV when nothing else was
+  // configured — an explicit backend (e.g. a real Redis) must not be shadowed.
+  const explicitBackend = Boolean(storageConfig || redis);
+  if (finalStorageConfig?.type === 'vercel-kv' || (!explicitBackend && getEnv('KV_REST_API_URL'))) {
     throw new TaskStoreNotSupportedError(
       'Vercel KV is not supported for task stores (pub/sub required). Use Redis or Upstash.',
     );

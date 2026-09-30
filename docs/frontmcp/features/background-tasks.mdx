@@ -306,6 +306,9 @@ For truly cross-process blocking across a fleet, use Redis/Upstash.
 
 <Warning>
   Vercel KV is **not supported** for the task store — it lacks pub/sub, which is required for cross-node cancel signalling and for `tasks/result` to unblock on a different node than the one that finished the work.
+
+A server configured with `redis: { provider: 'vercel-kv' }` (or one that only has the ambient `KV_REST_API_URL` set) still **starts**: tasks are skipped with a `[tasks]` warning in the startup log, and every other feature keeps using the KV store. Only an explicit `tasks: { enabled: true }` keeps the hard `TaskStoreNotSupportedError`, so a deliberate request for tasks is never silently dropped. To use tasks on Vercel, point them at a pub/sub-capable backend with `tasks: { redis: { ... } }` or `tasks: { sqlite: { ... } }`; an explicit backend also ignores the ambient `KV_REST_API_URL`.
+
 </Warning>
 
 ## `@FrontMcp` configuration reference

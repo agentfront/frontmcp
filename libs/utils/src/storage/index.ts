@@ -25,6 +25,10 @@ export type {
 // Factory
 export { createStorage, createMemoryStorage, getDetectedStorageType } from './factory';
 
+// Redis client helpers
+export { attachRedisErrorListener, DEFAULT_REDIS_ERROR_LOG_INTERVAL_MS } from './redis-error-listener';
+export type { RedisErrorListenerOptions, ErrorEmitterClient } from './redis-error-listener';
+
 // Namespace utilities
 export {
   NamespacedStorageImpl,
@@ -67,13 +71,19 @@ export {
   BaseStorageAdapter,
   MemoryStorageAdapter,
   RedisStorageAdapter,
+  createRedisClient,
   VercelKvStorageAdapter,
   UpstashStorageAdapter,
   FileSystemStorageAdapter,
   LocalStorageAdapter,
   IndexedDBStorageAdapter,
 } from './adapters';
-export type { FileSystemAdapterOptions, LocalStorageAdapterOptions, IndexedDBAdapterOptions } from './adapters';
+export type {
+  CreateRedisClientOptions,
+  FileSystemAdapterOptions,
+  LocalStorageAdapterOptions,
+  IndexedDBAdapterOptions,
+} from './adapters';
 
 // Utilities (for advanced use)
 export { globToRegex, matchesPattern, validatePattern, escapeGlob } from './utils/pattern';

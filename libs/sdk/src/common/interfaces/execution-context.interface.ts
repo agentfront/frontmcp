@@ -308,6 +308,25 @@ export abstract class ExecutionContextBase<Out = unknown> {
     return this.providers.get(ConfigService as unknown as Token<ConfigService>);
   }
 
+  // ---- Platform bindings ----
+
+  /**
+   * The hosting platform's bindings for the current request — on a Cloudflare Worker, the `env`
+   * object holding KV namespaces, D1 databases, R2 buckets, Durable Object namespaces, `[vars]`
+   * and secrets. `undefined` on Node/Express, where no such object exists.
+   *
+   * Only string bindings are mirrored into `process.env`; use this for the rest.
+   *
+   * @example
+   * ```typescript
+   * const kv = this.workerEnv?.['MY_KV'] as KVNamespace | undefined;
+   * ```
+   */
+  get workerEnv(): Readonly<Record<string, unknown>> | undefined {
+    const env = this.tryGetContext()?.platformEnv;
+    return env !== null && typeof env === 'object' ? (env as Readonly<Record<string, unknown>>) : undefined;
+  }
+
   // ---- Runtime context helpers ----
 
   /**

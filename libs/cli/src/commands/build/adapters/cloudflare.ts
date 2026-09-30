@@ -1,5 +1,6 @@
 import type { CloudflareDeployment, DeploymentTarget } from '../../../config/frontmcp-config.types';
 import type { AdapterBuildContext, AdapterTemplate } from '../types';
+import { securityHeadersEnvSetupLines } from '../../../config/security-headers-env';
 import { mergeWranglerToml, renderWranglerToml, type ManagedWranglerFields } from './wrangler-toml';
 
 /**
@@ -98,7 +99,7 @@ export const cloudflareAdapter: AdapterTemplate = {
 process.env.FRONTMCP_SERVERLESS = '1';
 process.env.FRONTMCP_DEPLOYMENT_MODE = 'serverless';
 process.env.FRONTMCP_WORKER = '1';
-${entryPathLine}`;
+${entryPathLine}${securityHeadersEnvSetupLines(context?.securityHeadersEnv ?? {})}`;
   },
 
   // #536 — `[vars]` and `wrangler secret put` values arrive as the second

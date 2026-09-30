@@ -23,6 +23,7 @@ import {
 } from '../common';
 import { FRONTMCP_CONTEXT, FrontMcpContextStorage } from '../context';
 import { InternalMcpError, PublicMcpError, RequestContextNotAvailableError } from '../errors';
+import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
 import type HookRegistry from '../hooks/hook.registry';
 import type ProviderRegistry from '../provider/provider.registry';
 import { writeHttpResponse } from '../server/server.validation';
@@ -111,6 +112,18 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
               case 'respond':
                 return writeHttpResponse(response, e.output as any);
             }
+          }
+          // A deployment that is merely missing a secret (MCP_SESSION_SECRET,
+          // JWT_SECRET) answers the same structured `server_misconfigured` body on
+          // every adapter, not a bare 500 (#546, #646).
+          const misconfiguration = findMisconfiguration(e);
+          if (misconfiguration) {
+            this.logger.error('Server misconfigured', { flow: this.name, code: misconfiguration.code });
+            return writeHttpResponse(response, {
+              kind: 'json',
+              status: 500,
+              body: misconfigurationBody(misconfiguration),
+            });
           }
           // Public MCP errors carry a client-safe status + message (e.g. a 401
           // from ensureAuthInfo when a verified token's session can't be

@@ -14,10 +14,11 @@ import {
   type FlowRunOptions,
 } from '../../common';
 import { TransportServiceNotAvailableError } from '../../errors';
+import { applyMachineIdHeader } from '../../ha/ha-headers';
 import { STATELESS_SESSION_ID } from '../transport.types';
 
 export const plan = {
-  pre: ['parseInput', 'router'],
+  pre: ['applyNodeHeaders', 'parseInput', 'router'],
   execute: ['handleRequest'],
   post: [],
   finalize: ['cleanup'],
@@ -53,6 +54,11 @@ declare global {
 })
 export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
   name = name;
+
+  @Stage('applyNodeHeaders')
+  async applyNodeHeaders() {
+    applyMachineIdHeader(this.rawInput.response);
+  }
 
   @Stage('parseInput')
   async parseInput() {

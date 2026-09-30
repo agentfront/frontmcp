@@ -2,7 +2,7 @@ import 'reflect-metadata';
 
 import { createGuardManager, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
-import { getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
+import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
 
 import AgentRegistry from '../agent/agent.registry';
 import CallAgentFlow from '../agent/flows/call-agent.flow';
@@ -72,6 +72,7 @@ import {
   CliTaskRunner,
   createTaskStore,
   InProcessTaskRunner,
+  resolvesToVercelKvTaskBackend,
   TaskNotifier,
   TaskRegistry,
   TasksCancelFlow,
@@ -119,6 +120,8 @@ export class Scope extends ScopeEntry {
   transportService: TransportService; // TODO: migrate transport service to transport.registry
   notificationService: NotificationService;
   declare haManager?: HaManager;
+  /** ioredis client owned by the HA manager and transport bus; closed in shutdown(). */
+  private haRedisClient?: { quit(): Promise<unknown>; disconnect(): void };
   private toolUIRegistry: ToolUIRegistry;
   private authUiRegistry?: AuthUiRegistry;
   readonly entryPath: string;
@@ -236,7 +239,7 @@ export class Scope extends ScopeEntry {
     const isDistributed = getRuntimeContext().deployment === 'distributed';
     if (isDistributed && this.metadata.redis && !this.cliMode) {
       try {
-        const haRedis = this.metadata.redis;
+        const haRedis = this.createHaRedisClient();
         this.haManager = HaManager.create({
           redis: haRedis as never,
           nodeId: getMachineId(),
@@ -246,13 +249,15 @@ export class Scope extends ScopeEntry {
         this.logger.info('[HA] Manager started for distributed deployment');
       } catch (err) {
         this.logger.warn('[HA] Failed to start HA manager — running without HA', { error: err });
+        this.haManager = undefined;
+        await this.closeHaRedisClient();
       }
     }
 
     // Transport bus (distributed mode only — requires HA Manager + Redis)
     let transportBus: InstanceType<typeof RedisTransportBus> | undefined;
-    if (this.haManager && isDistributed && this.metadata.redis) {
-      transportBus = new RedisTransportBus(this.metadata.redis as never, getMachineId(), {
+    if (this.haManager && this.haRedisClient && isDistributed) {
+      transportBus = new RedisTransportBus(this.haRedisClient as never, getMachineId(), {
         logger: this.logger,
       });
       this.logger.info('[HA] Transport bus created for distributed session routing');
@@ -279,14 +284,9 @@ export class Scope extends ScopeEntry {
     warnIfRequestStateKeyNotShared({ logger: this.logger, metadata: this.metadata });
 
     // Orphan session scanner (distributed mode only — scans for dead-pod sessions)
-    if (this.haManager && isDistributed) {
-      const persistCfg = transportConfig?.persistence;
-      const resolvedPrefix =
-        persistCfg && typeof persistCfg === 'object' && persistCfg.redis?.keyPrefix
-          ? persistCfg.redis.keyPrefix
-          : 'mcp:transport:';
+    if (this.haManager && isDistributed && this.transportService.getBackendKind() === 'redis') {
       this.haManager.startOrphanScanner({
-        sessionKeyPrefix: resolvedPrefix,
+        sessionKeyPrefix: this.transportService.getSessionKeyPrefix(),
         onOrphan: (sessionId, previousNodeId) => {
           this.logger.info(
             `[HA] Orphaned session ${sessionId.slice(0, 20)} from ${previousNodeId} — available for recreation`,
@@ -385,8 +385,26 @@ export class Scope extends ScopeEntry {
       );
     }
 
+    // Vercel KV has no pub/sub, so it cannot back tasks. Unless tasks were
+    // explicitly requested, skip them instead of crashing startup (#646).
+    const tasksUnavailableOnVercelKv =
+      !tasksExplicitlyEnabled &&
+      !tasksConfig?.sqlite &&
+      !this.metadata.sqlite &&
+      resolvesToVercelKvTaskBackend(tasksConfig?.redis ?? this.metadata.redis);
+    if (tasksUnavailableOnVercelKv && !tasksExplicitlyDisabled) {
+      this.logger.warn(
+        '[tasks] Background tasks are disabled: Vercel KV has no pub/sub, which task results and ' +
+          'cancellation require. Serving without tasks. Configure `tasks.redis` with Redis or Upstash ' +
+          'to enable them.',
+      );
+    }
+
     const shouldInitTasks =
-      !tasksExplicitlyDisabled && !tasksUnavailableOnEdge && (!this.cliMode || tasksEnabledForCli || isTaskWorker);
+      !tasksExplicitlyDisabled &&
+      !tasksUnavailableOnEdge &&
+      !tasksUnavailableOnVercelKv &&
+      (!this.cliMode || tasksEnabledForCli || isTaskWorker);
 
     const tasksPromise = shouldInitTasks
       ? (async () => {
@@ -1766,6 +1784,35 @@ export class Scope extends ScopeEntry {
   }
 
   /**
+   * Build the ioredis client shared by the HA manager and the transport bus from `metadata.redis`.
+   * The client reconnects on its own and has a permanent, rate-limited 'error' listener.
+   */
+  private createHaRedisClient(): NonNullable<typeof this.haRedisClient> {
+    const redis = this.metadata.redis as
+      | { provider?: string; url?: string; host?: string; port?: number; password?: string; db?: number; tls?: boolean }
+      | undefined;
+    if (!redis || redis.provider === 'vercel-kv') {
+      throw new Error('Distributed HA requires a TCP Redis (ioredis); Vercel KV over REST has no Lua/pub-sub support');
+    }
+    const client = createRedisClient({ ...redis, label: 'ha', logger: this.logger }) as never as NonNullable<
+      typeof this.haRedisClient
+    >;
+    this.haRedisClient = client;
+    return client;
+  }
+
+  private async closeHaRedisClient(): Promise<void> {
+    const client = this.haRedisClient;
+    if (!client) return;
+    this.haRedisClient = undefined;
+    try {
+      await client.quit();
+    } catch {
+      client.disconnect();
+    }
+  }
+
+  /**
    * Shut down the scope and release resources.
    * Disconnects channel service connectors, unsubscribes event handlers,
    * and clears the channel event bus.
@@ -1778,6 +1825,7 @@ export class Scope extends ScopeEntry {
         this.logger.error('[HA] Manager shutdown failed', { error: err });
       }
     }
+    await this.closeHaRedisClient();
     if (this._channelTeardown) {
       try {
         await this._channelTeardown();

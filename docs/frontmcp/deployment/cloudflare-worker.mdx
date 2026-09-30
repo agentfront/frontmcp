@@ -148,7 +148,21 @@ Worker bindings arrive as an argument to `fetch`, not as environment variables. 
 const sid = process.env.TWILIO_ACCOUNT_SID; // set via `wrangler secret put`
 ```
 
-Non-string bindings (KV, D1, R2, Durable Objects) are objects and stay on `env`, which the entry forwards to the handler.
+Non-string bindings (KV, D1, R2, Durable Objects) are objects and stay on `env`, which the entry forwards to the handler. Inside a tool, resource, prompt or agent, read them with `this.workerEnv`:
+
+```ts
+@Tool({ name: 'cache_get' })
+class CacheGet extends ToolContext {
+  async execute({ key }: { key: string }) {
+    const kv = this.workerEnv?.MY_KV as KVNamespace | undefined; // undefined outside a Worker request
+    return kv?.get(key);
+  }
+}
+```
+
+`workerEnv` is the Worker `env` of the request being served (read-only), and `undefined` on Node, stdio and other non-Worker runtimes.
+
+`NODE_ENV` is read live, so a `NODE_ENV = "production"` entry in `wrangler.toml` `[vars]` takes effect for the runtime context even though it only reaches `process.env` on the first request.
 
 <Warning>
 The copy happens on the **first request**, so a value read at module-eval time — inside the `@FrontMcp({...})` argument itself — is still `undefined`. Read configuration inside `execute()` / `read()`, or rely on `nodejs_compat_populate_process_env` (the build emits it by default), which populates `process.env` before your module evaluates.

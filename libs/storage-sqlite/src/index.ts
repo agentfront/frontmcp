@@ -7,7 +7,8 @@
 
 export { SqliteKvStore } from './sqlite-kv.store';
 export { SqliteStorageAdapter } from './sqlite-storage.adapter';
-export { openDatabase } from './open-database';
+export { openDatabase, withBusyRetry } from './open-database';
+export type { OpenDatabaseOptions, BusyRetryOptions } from './open-database';
 export { loadBetterSqlite3 } from './better-sqlite3-loader';
 export { SqliteSessionStore } from './sqlite-session.store';
 export type { SqliteSessionStoreOptions, SessionStoreInterface, StoredSessionData } from './sqlite-session.store';
@@ -26,6 +27,6 @@ export type {
 } from './sqlite-task.store';
 export { SqliteEventStore } from './sqlite-event.store';
 export type { SqliteEventStoreOptions, EventStoreInterface } from './sqlite-event.store';
-export { deriveEncryptionKey, encryptValue, decryptValue } from './encryption';
+export { deriveEncryptionKey, encryptValue, decryptValue, SqliteDecryptionError } from './encryption';
 export { sqliteStorageOptionsSchema } from './sqlite.options';
 export type { SqliteStorageOptions, SqliteStorageOptionsInput, SqliteStorageOptionsParsed } from './sqlite.options';
