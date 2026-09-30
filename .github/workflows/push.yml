@@ -179,9 +179,9 @@ jobs:
           echo "Created $CHUNK_COUNT chunks of up to $CHUNK_SIZE projects each"
           echo "chunks=$CHUNKS" >> $GITHUB_OUTPUT
 
-  # Discover unit-test projects and split them into 5 chunks so the unit suite
-  # runs as 5 parallel jobs (faster wall-clock, and bounds per-job memory — the
-  # SDK coverage run is heap-heavy). Mirrors the discover-e2e pattern.
+  # Discover unit-test projects and split them into balanced chunks so the unit
+  # suite runs as parallel jobs (faster wall-clock, and bounds per-job memory — the
+  # SDK coverage run is heap-heavy). sdk is sharded; see the chunking step below.
   discover-unit:
     name: "Discover Unit Projects"
     needs: setup
@@ -199,7 +199,7 @@ jobs:
         with:
           node-version: ${{ needs.setup.outputs.node-version }}
 
-      - name: Discover unit projects and create 5 chunks
+      - name: Discover unit projects and create chunks
         id: discover
         run: |
           PROJECTS_JSON=$(npx nx show projects --withTarget test --json 2>/dev/null | jq -c '[.[] | select(startswith("demo-e2e-") | not)] | sort' || echo "[]")
@@ -208,24 +208,26 @@ jobs:
             exit 1
           fi
           echo "Found $(echo "$PROJECTS_JSON" | jq 'length') unit-test projects"
-          # 5 chunks: the two heaviest projects (sdk, auth) run alone, each in its own
-          # chunk, and the rest are split round-robin (sorted -> deterministic) over the
-          # other three. A plain round-robin by index put sdk and auth in one chunk,
-          # which outgrew the job timeout.
-          CHUNKS=$(echo "$PROJECTS_JSON" | jq -c --argjson heavy '["sdk","auth"]' '
-            [.[] | select(. as $p | $heavy | index($p))] as $solo_names
-            | [.[] | select(. as $p | $heavy | index($p) | not)] as $rest
-            | ($solo_names | map([.])) as $solo
-            | (5 - ($solo | length)) as $n
-            | ($rest | to_entries | group_by(.key % $n) | map(map(.value))) as $groups
-            | ($solo + $groups) | to_entries | map({ index: .key, projects: .value })')
+          # sdk dominates the unit suite (about 14 minutes with coverage on a runner, against 2-4
+          # for everything else), so it is split with jest --shard into 4 parallel chunks. auth
+          # runs alone, and the remaining projects are split round-robin (sorted ->
+          # deterministic) over 3 chunks. Each chunk has `projects` and, for a sharded project,
+          # `shard` ("i/N"); `index` keeps artifact names unique.
+          CHUNKS=$(echo "$PROJECTS_JSON" | jq -c --argjson shards 4 --argjson groups 3 '
+            (if index("sdk") then [range(1; $shards + 1)] | map({ projects: ["sdk"], shard: "\(.)/\($shards)" }) else [] end) as $sdk
+            | ([.[] | select(. == "auth")] | map({ projects: [.], shard: "" })) as $auth
+            | [.[] | select(. != "sdk" and . != "auth")] as $rest
+            | ($rest | to_entries | group_by(.key % $groups) | map({ projects: map(.value), shard: "" })) as $others
+            | ($sdk + $auth + $others) | to_entries | map(.value + { index: .key })')
           echo "Created $(echo "$CHUNKS" | jq 'length') chunks"
           echo "chunks=$CHUNKS" >> "$GITHUB_OUTPUT"
 
-  # Unit tests — runs as a 5-way matrix over the discovered chunks. Coverage
-  # runs on every push and PR; each project's jest.config has its own
-  # coverageThreshold and a failing threshold fails its chunk. The per-chunk
-  # coverage artifacts are merged in the `coverage` job below.
+  # Unit tests — runs as a matrix over the discovered chunks. Coverage runs on
+  # every push and PR; each project's jest.config has its own coverageThreshold
+  # and a failing threshold fails its chunk. A sharded project (sdk) writes each
+  # shard to its own coverage directory with the per-shard threshold off, because
+  # one shard sees only part of the suite; the merged check in the `coverage` job
+  # enforces the threshold over all shards.
   unit-tests:
     name: "Unit Tests (chunk ${{ matrix.chunk.index }})"
     needs: [setup, build, discover-unit]
@@ -260,7 +262,18 @@ jobs:
         uses: nrwl/nx-set-shas@v5
 
       - name: Run unit tests with coverage (chunk ${{ matrix.chunk.index }})
-        run: npx nx run-many -t test --projects="${{ join(matrix.chunk.projects, ',') }}" --coverage
+        env:
+          PROJECTS: ${{ join(matrix.chunk.projects, ',') }}
+          SHARD: ${{ matrix.chunk.shard }}
+        run: |
+          if [ -n "$SHARD" ]; then
+            # --skip-nx-cache: a cache hit would restore only the project's default coverage
+            # directory, not this shard's. Shards are libs/<project>, hence the ../../ path.
+            npx nx run "${PROJECTS}:test" --skip-nx-cache --coverage --shard="$SHARD" \
+              --coverageDirectory="../../coverage/unit/${PROJECTS}-shard-${SHARD%%/*}" '--coverageThreshold={}'
+          else
+            npx nx run-many -t test --projects="$PROJECTS" --coverage
+          fi
 
       - name: Upload unit coverage artifacts
         if: always()
