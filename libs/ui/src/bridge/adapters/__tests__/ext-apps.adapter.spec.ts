@@ -179,30 +179,52 @@ describe('ExtAppsAdapter', () => {
     });
 
     describe('setSize', () => {
+      const sizeNotification = (params: Record<string, number>) => ({
+        jsonrpc: '2.0',
+        method: 'ui/notifications/size-changed',
+        params,
+      });
+
+      afterEach(() => jest.restoreAllMocks());
+
       it('reports the size with the standard size-changed notification, not a ui/setSize request', async () => {
         const postMessage = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => undefined);
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._trustedOrigin = 'https://host.example';
 
         await adapterWithConfig.setSize({ width: 320, height: 480, aspectRatio: 1.5 });
 
         expect(postMessage).toHaveBeenCalledTimes(1);
-        expect(postMessage).toHaveBeenCalledWith(
-          { jsonrpc: '2.0', method: 'ui/notifications/size-changed', params: { width: 320, height: 480 } },
-          expect.any(String),
-        );
-        postMessage.mockRestore();
+        expect(postMessage).toHaveBeenCalledWith(sizeNotification({ width: 320, height: 480 }), 'https://host.example');
       });
 
       it('leaves out a dimension that was not given', async () => {
         const postMessage = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => undefined);
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._trustedOrigin = 'https://host.example';
 
         await adapterWithConfig.setSize({ height: 200 });
 
-        expect(postMessage.mock.calls[0][0]).toEqual({
-          jsonrpc: '2.0',
-          method: 'ui/notifications/size-changed',
-          params: { height: 200 },
+        expect(postMessage.mock.calls[0][0]).toEqual(sizeNotification({ height: 200 }));
+      });
+
+      it('targets the first configured trusted origin before the handshake has pinned one', async () => {
+        const postMessage = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => undefined);
+        const configured = new ExtAppsAdapter({
+          options: { trustedOrigins: ['https://claude.ai', 'https://other.example'] },
         });
-        postMessage.mockRestore();
+
+        await configured.setSize({ height: 200 });
+
+        expect(postMessage).toHaveBeenCalledWith(sizeNotification({ height: 200 }), 'https://claude.ai');
+      });
+
+      it('never broadcasts to "*" when no host origin is known', async () => {
+        const postMessage = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => undefined);
+
+        await expect(adapterWithConfig.setSize({ height: 200 })).rejects.toThrow(/no trusted origin/i);
+
+        expect(postMessage).not.toHaveBeenCalled();
       });
     });
 

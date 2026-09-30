@@ -514,14 +514,24 @@ export class ExtAppsAdapter extends BaseAdapter {
 
   /**
    * Send a JSON-RPC notification (no response expected).
+   *
+   * Unlike the handshake request, a notification is never broadcast with `'*'`:
+   * it goes to the pinned host origin or the first configured trusted origin,
+   * and is refused when neither exists.
    */
   private _sendNotification(method: string, params?: unknown): void {
+    const targetOrigin = this._trustedOrigin || this._config.options?.trustedOrigins?.[0];
+    if (!targetOrigin) {
+      throw new Error('Cannot send notification: no trusted origin established');
+    }
+    if (typeof window === 'undefined') return;
+
     const notification: JsonRpcNotification = {
       jsonrpc: '2.0',
       method,
       params,
     };
-    this._postMessage(notification);
+    window.parent.postMessage(notification, targetOrigin);
   }
 
   /**
