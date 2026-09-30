@@ -145,43 +145,26 @@ export function handleUIResourceRead(
   // Get the platform-appropriate MIME type
   const mimeType = getUIResourceMimeType(platformType);
 
-  // Try static widget URI (ui://widget/{toolName}.html)
-  // This is used by OpenAI at discovery time
-  const widgetParsed = parseWidgetUri(uri);
+  // A custom `ui.resourceUri` is advertised verbatim by tools/list, so resolve it back to its tool.
+  // Otherwise the standard `ui://widget/{toolName}.html` form.
+  const customTool = registry.resolveCustomUri(uri);
+  const widgetParsed = customTool ? { toolName: customTool } : parseWidgetUri(uri);
   if (widgetParsed) {
+    // Only tools that declared a UI have a widget. Anything else is not a resource, rather than
+    // a placeholder for a tool that does not exist.
+    if (!registry.hasTool(widgetParsed.toolName)) {
+      return { handled: true, error: `No UI widget is registered for ${uri}` };
+    }
+
     // Per-resource `_meta` (CSP / permissions). Claude only honors CSP
     // declared on the resource content item, not on the tool's
     // `_meta.ui.csp` — see issue #455.
     const resourceMeta = buildResourceMetaForWidget(registry, widgetParsed.toolName);
 
-    // Check for pre-compiled static widget from the developer's template
-    // Static widgets are compiled at server startup for tools with servingMode: 'static'
-    const cachedWidget = registry.getStaticWidget(widgetParsed.toolName);
-    if (cachedWidget) {
-      // Return the developer's actual template (SSR'd React/MDX component)
-      // This template includes the FrontMCP Bridge for runtime data access
-      return {
-        handled: true,
-        result: {
-          contents: [
-            {
-              uri,
-              mimeType,
-              text: cachedWidget,
-              ...(resourceMeta ? { _meta: resourceMeta } : {}),
-            },
-          ],
-        },
-      };
-    }
-
-    // Fallback to dynamic placeholder widget if no pre-compiled template.
-    // This is returned when the tool doesn't have a UI template configured
-    // or uses a different serving mode.
-    //
-    // OpenAI caches widget HTML from outputTemplate URI, so we must return
-    // a template that reads from window.openai.toolOutput at runtime.
-    const html = generatePlaceholderWidget(widgetParsed.toolName);
+    // The developer's compiled template (includes the FrontMCP Bridge for runtime data access),
+    // or, when none was pre-compiled, a placeholder that reads `window.openai.toolOutput` at
+    // runtime — OpenAI caches this HTML, so it must not embed data.
+    const html = registry.getStaticWidget(widgetParsed.toolName) ?? generatePlaceholderWidget(widgetParsed.toolName);
 
     return {
       handled: true,

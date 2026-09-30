@@ -1240,7 +1240,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('applyUI')
   async applyUI() {
     this.logger.verbose('applyUI:start');
-    const { tool, rawOutput, input } = this.state;
+    const { tool, rawOutput: executeOutput, input } = this.state;
+    const rawOutput = declaredOutput(tool, executeOutput);
 
     // Skip UI for agent tool calls (structured data only)
     const ctx = this.input.ctx;
@@ -1541,6 +1542,23 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.respond(result);
     this.logger.verbose('finalize:done');
   }
+}
+
+/**
+ * The part of `execute()`'s output the tool declared in its `outputSchema`. Everything the UI
+ * renders or echoes (widget data, text content, structuredContent) must be built from this, never
+ * from the raw value, or fields the schema leaves out would reach the client through the UI path.
+ */
+function declaredOutput(
+  tool: Pick<ToolEntry, 'outputSchema' | 'safeParseOutput'> | undefined,
+  output: unknown,
+): unknown {
+  if (!tool?.outputSchema || typeof output !== 'object' || output === null || Array.isArray(output)) return output;
+  if (Array.isArray((output as Record<string, unknown>)['content'])) return output;
+  const parsed = tool.safeParseOutput(output);
+  if (!parsed.success) return output;
+  const structured = parsed.data.structuredContent;
+  return typeof structured === 'object' && structured !== null && !Array.isArray(structured) ? structured : output;
 }
 
 /**

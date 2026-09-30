@@ -509,6 +509,7 @@ export interface FrontMcpBridgeInterface {
   // Delegate methods to active adapter
   getTheme(): 'light' | 'dark';
   getDisplayMode(): DisplayMode;
+  getHostContext(): HostContext;
   getToolInput(): Record<string, unknown>;
   getToolOutput(): unknown;
   getStructuredContent<T = unknown>(): T | null;

@@ -21,15 +21,16 @@
  * @module @frontmcp/ui/react/hooks
  */
 
-import { createContext, useContext, useEffect, useState, useMemo, type ReactNode } from 'react';
-import type {
-  FrontMcpBridgeInterface,
-  BridgeConfig,
-  AdapterCapabilities,
-  HostContext,
-  DisplayMode,
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+
+import {
+  FrontMcpBridge,
+  type AdapterCapabilities,
+  type BridgeConfig,
+  type DisplayMode,
+  type FrontMcpBridgeInterface,
+  type HostContext,
 } from '../../bridge';
-import { FrontMcpBridge } from '../../bridge';
 
 // ============================================
 // Types
@@ -51,6 +52,8 @@ export interface McpBridgeContextValue {
   adapterId: string | undefined;
   /** Current adapter capabilities */
   capabilities: AdapterCapabilities | undefined;
+  /** Bumps when a shared bridge finishes its handshake, so hooks re-read host state */
+  revision: number;
 }
 
 /**
@@ -106,6 +109,7 @@ export function McpBridgeProvider({ children, config, onReady, onError }: McpBri
   const [bridge, setBridge] = useState<FrontMcpBridgeInterface | null>(hasExisting ? existingBridge : null);
   const [loading, setLoading] = useState(!hasExisting);
   const [error, setError] = useState<Error | null>(null);
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     if (hasExisting) {
@@ -116,8 +120,10 @@ export function McpBridgeProvider({ children, config, onReady, onError }: McpBri
       } else {
         const handler = () => {
           onReady?.(existingBridge as FrontMcpBridgeInterface);
-          // Force re-render so hooks see updated capabilities
+          // The shared bridge is the same object, so bump the revision to make
+          // the context (capabilities, theme, host context) re-read.
           setBridge(existingBridge as FrontMcpBridgeInterface);
+          setRevision((r) => r + 1);
         };
         window.addEventListener('bridge:ready', handler, { once: true });
         return () => window.removeEventListener('bridge:ready', handler);
@@ -167,8 +173,9 @@ export function McpBridgeProvider({ children, config, onReady, onError }: McpBri
       ready: !loading && !error && bridge !== null,
       adapterId: bridge?.adapterId,
       capabilities: bridge?.capabilities,
+      revision,
     }),
-    [bridge, loading, error],
+    [bridge, loading, error, revision],
   );
 
   return <McpBridgeContext.Provider value={contextValue}>{children}</McpBridgeContext.Provider>;
@@ -190,6 +197,7 @@ const SSR_DEFAULT_CONTEXT: McpBridgeContextValue = {
   ready: false,
   adapterId: undefined,
   capabilities: undefined,
+  revision: 0,
 };
 
 /**
@@ -258,7 +266,7 @@ export function useMcpBridge(): FrontMcpBridgeInterface | null {
  * ```
  */
 export function useTheme(): 'light' | 'dark' {
-  const { bridge, ready } = useMcpBridgeContext();
+  const { bridge, ready, revision } = useMcpBridgeContext();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
@@ -275,7 +283,7 @@ export function useTheme(): 'light' | 'dark' {
     });
 
     return unsubscribe;
-  }, [bridge, ready]);
+  }, [bridge, ready, revision]);
 
   return theme;
 }
@@ -293,7 +301,7 @@ export function useTheme(): 'light' | 'dark' {
  * ```
  */
 export function useDisplayMode(): DisplayMode {
-  const { bridge, ready } = useMcpBridgeContext();
+  const { bridge, ready, revision } = useMcpBridgeContext();
   const [displayMode, setDisplayMode] = useState<DisplayMode>('inline');
 
   useEffect(() => {
@@ -310,7 +318,7 @@ export function useDisplayMode(): DisplayMode {
     });
 
     return unsubscribe;
-  }, [bridge, ready]);
+  }, [bridge, ready, revision]);
 
   return displayMode;
 }
@@ -333,25 +341,28 @@ export function useDisplayMode(): DisplayMode {
  * ```
  */
 export function useHostContext(): HostContext | null {
-  const { bridge, ready } = useMcpBridgeContext();
+  const { bridge, ready, revision } = useMcpBridgeContext();
   const [context, setContext] = useState<HostContext | null>(null);
 
   useEffect(() => {
     if (!ready || !bridge) return;
 
     // Get initial context
+    // The shared IIFE bridge exposes getHostContext() but no getAdapter().
     const adapter = bridge.getAdapter?.();
     if (adapter) {
       setContext(adapter.getHostContext());
+    } else if (typeof bridge.getHostContext === 'function') {
+      setContext({ ...bridge.getHostContext() });
     }
 
     // Subscribe to changes
     const unsubscribe = bridge.onContextChange((changes) => {
-      setContext((prev) => (prev ? { ...prev, ...changes } : null));
+      setContext((prev) => ({ ...(prev ?? {}), ...changes }) as HostContext);
     });
 
     return unsubscribe;
-  }, [bridge, ready]);
+  }, [bridge, ready, revision]);
 
   return context;
 }

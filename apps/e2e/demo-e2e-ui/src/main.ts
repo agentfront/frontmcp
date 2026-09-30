@@ -1,13 +1,21 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { WidgetsApp } from './apps/widgets';
 
 const port = parseInt(process.env['PORT'] ?? '3107', 10);
+const extApps =
+  process.env['EXT_APPS_MODE'] === 'disabled'
+    ? { enabled: false }
+    : process.env['EXT_APPS_MODE'] === 'all-capabilities'
+      ? { hostCapabilities: { openLink: true, modelContextUpdate: true, widgetTools: true } }
+      : undefined;
 
 @FrontMcp({
   info: { name: 'Demo E2E UI', version: '0.1.0' },
   apps: [WidgetsApp],
   logging: { level: LogLevel.Warn },
   http: { port },
+  extApps,
   auth: {
     mode: 'public',
     sessionTtl: 3600,

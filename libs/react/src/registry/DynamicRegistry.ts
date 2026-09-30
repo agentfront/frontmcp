@@ -10,7 +10,7 @@
  * useSyncExternalStore compatibility.
  */
 
-import type { DynamicToolDef, DynamicResourceDef } from '../types';
+import type { DynamicResourceDef, DynamicToolDef } from '../types';
 
 type Listener = () => void;
 
@@ -20,6 +20,7 @@ export class DynamicRegistry {
   private toolRefCounts = new Map<string, number>();
   private resourceRefCounts = new Map<string, number>();
   private listeners = new Set<Listener>();
+  private resourceListeners = new Set<(uri: string) => void>();
   private version = 0;
 
   /**
@@ -104,7 +105,18 @@ export class DynamicRegistry {
     if (existing) {
       existing.read = read;
       this.notify();
+      this.resourceListeners.forEach((l) => {
+        l(uri);
+      });
     }
+  }
+
+  /** Listen for changes to a dynamic resource's content (the in-page `resources/updated`). */
+  onResourceUpdated(listener: (uri: string) => void): () => void {
+    this.resourceListeners.add(listener);
+    return () => {
+      this.resourceListeners.delete(listener);
+    };
   }
 
   getTools(): DynamicToolDef[] {

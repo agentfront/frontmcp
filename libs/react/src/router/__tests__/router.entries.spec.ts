@@ -1,52 +1,44 @@
+/** @jest-environment node */
+import { create } from '@frontmcp/sdk';
+
+import { setLocation, setNavigate } from '../router-bridge';
 import { createRouterEntries } from '../router.entries';
-import { NavigateTool } from '../navigate.tool';
-import { GoBackTool } from '../go-back.tool';
-import { CurrentRouteResource } from '../current-route.resource';
 
 describe('createRouterEntries', () => {
-  it('returns NavigateTool and GoBackTool in tools array', () => {
-    const { tools } = createRouterEntries();
-
+  it('returns two tools and one resource', () => {
+    const { tools, resources } = createRouterEntries();
     expect(tools).toHaveLength(2);
-    expect(tools[0]).toBe(NavigateTool);
-    expect(tools[1]).toBe(GoBackTool);
-  });
-
-  it('returns CurrentRouteResource in resources array', () => {
-    const { resources } = createRouterEntries();
-
     expect(resources).toHaveLength(1);
-    expect(resources[0]).toBe(CurrentRouteResource);
   });
 
   it('returns a new object on each call', () => {
-    const entries1 = createRouterEntries();
-    const entries2 = createRouterEntries();
-
-    expect(entries1).not.toBe(entries2);
-    expect(entries1.tools).not.toBe(entries2.tools);
-    expect(entries1.resources).not.toBe(entries2.resources);
+    const a = createRouterEntries();
+    const b = createRouterEntries();
+    expect(a).not.toBe(b);
+    expect(a.tools).not.toBe(b.tools);
   });
 
-  it('returned entries have expected shape', () => {
-    const entries = createRouterEntries();
+  it('entries are accepted by create() and work end to end', async () => {
+    const navigate = jest.fn();
+    setNavigate(navigate);
+    setLocation({ pathname: '/a', search: '?q=1', hash: '#h' } as never);
+    const { tools, resources } = createRouterEntries();
+    const server = await create({ info: { name: 'router-entries', version: '1.0.0' }, tools, resources });
+    try {
+      const listed = await server.listTools();
+      expect(listed.tools.map((t) => t.name).sort()).toEqual(['go_back', 'navigate']);
 
-    expect(entries).toHaveProperty('tools');
-    expect(entries).toHaveProperty('resources');
-    expect(Array.isArray(entries.tools)).toBe(true);
-    expect(Array.isArray(entries.resources)).toBe(true);
-  });
+      await server.callTool('navigate', { path: '/next', replace: true });
+      expect(navigate).toHaveBeenCalledWith('/next', { replace: true });
 
-  it('tools have correct toolName properties', () => {
-    const { tools } = createRouterEntries();
+      await server.callTool('go_back', {});
+      expect(navigate).toHaveBeenCalledWith(-1);
 
-    expect(tools[0].toolName).toBe('navigate');
-    expect(tools[1].toolName).toBe('go_back');
-  });
-
-  it('resource has correct uri property', () => {
-    const { resources } = createRouterEntries();
-
-    expect(resources[0].uri).toBe('route://current');
+      const res = await server.readResource('route://current');
+      const text = (res.contents[0] as { text: string }).text;
+      expect(JSON.parse(text).href).toBe('/a?q=1#h');
+    } finally {
+      await server.dispose();
+    }
   });
 });

@@ -1,7 +1,7 @@
 ---
 title: Building Tool UI
 slug: guides/building-tool-ui
-description: Create rich HTML widgets for tool outputs using @frontmcp/ui components
+description: Create rich widgets for tool outputs using @frontmcp/ui components
 icon: palette
 keywords: ['frontmcp', 'mcp', 'model context protocol', 'guide', 'tutorial', 'how-to', 'tool ui', 'ui resources', 'typescript']
 ---
@@ -16,7 +16,7 @@ FrontMCP tools can render rich HTML widgets for display in OpenAI Apps, Claude A
 
 ## What You'll Build
 
-A weather tool that displays temperature, conditions, and other data in a styled card with badges and description lists.
+A weather tool that displays temperature, conditions, and other data in a styled card with a badge.
 
 ---
 
@@ -75,17 +75,52 @@ The widget file is read when the tool is called, from where the **compiled** too
 
 ## Step 2: Create a Tool with UI Template
 
-The `ui` property in the `@Tool` decorator lets you define a template function that renders HTML:
+Point `ui.template` at a `.tsx` widget file. The widget is a React component that receives the tool's `output` (and `loading`) and is built from the `@frontmcp/ui/components` library.
 
-```typescript
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, descriptionList, badge } from '@frontmcp/ui';
-import { z } from '@frontmcp/sdk';
+```tsx weather.widget.tsx
+import { Badge, Card } from '@frontmcp/ui/components';
 
-const inputSchema = {
-  location: z.string().describe('City name or location'),
-  units: z.enum(['celsius', 'fahrenheit']).optional().describe('Temperature units'),
-};
+interface WeatherOutput {
+  location: string;
+  temperature: number;
+  units: 'celsius' | 'fahrenheit';
+  conditions: string;
+  humidity: number;
+  windSpeed: number;
+}
+
+export default function WeatherWidget({ output, loading }: { output: WeatherOutput | null; loading?: boolean }) {
+  if (loading || !output) {
+    return <Card title="Weather" subtitle="Loading..." />;
+  }
+
+  const symbol = output.units === 'celsius' ? '°C' : '°F';
+
+  return (
+    <Card title={output.location} subtitle="Current Weather" elevation={2}>
+      <div style={{ textAlign: 'center', padding: '16px 0' }}>
+        <div style={{ fontSize: '3rem' }}>
+          {output.temperature}
+          {symbol}
+        </div>
+        <Badge variant={output.conditions === 'sunny' ? 'success' : 'default'}>{output.conditions}</Badge>
+      </div>
+      <dl>
+        <dt>Humidity</dt>
+        <dd>{output.humidity}%</dd>
+        <dt>Wind speed</dt>
+        <dd>{output.windSpeed} km/h</dd>
+      </dl>
+    </Card>
+  );
+}
+```
+
+```typescript weather.tool.ts
+import { fileURLToPath } from 'node:url';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
+const widgetPath = fileURLToPath(new URL('./weather.widget.tsx', import.meta.url));
 
 const outputSchema = z.object({
   location: z.string(),
@@ -99,52 +134,14 @@ const outputSchema = z.object({
 @Tool({
   name: 'get_weather',
   description: 'Get current weather for a location',
-  inputSchema,
+  inputSchema: {
+    location: z.string().describe('City name or location'),
+    units: z.enum(['celsius', 'fahrenheit']).optional().describe('Temperature units'),
+  },
   outputSchema,
   ui: {
-    widgetDescription: 'Displays current weather conditions',
-    displayMode: 'inline',
     servingMode: 'static',
-    template: (ctx) => {
-      const { output, helpers } = ctx;
-      const tempSymbol = output.units === 'celsius' ? '°C' : '°F';
-
-      // Build weather details using descriptionList component
-      const weatherDetails = descriptionList(
-        [
-          { term: 'Humidity', description: `${output.humidity}%` },
-          { term: 'Wind Speed', description: `${output.windSpeed} km/h` },
-        ],
-        { layout: 'grid', className: 'mt-4' }
-      );
-
-      // Build condition badge
-      const conditionBadge = badge(helpers.escapeHtml(output.conditions), {
-        variant: output.conditions === 'sunny' ? 'success' : 'secondary',
-        size: 'md',
-      });
-
-      // Main content
-      const content = `
-        <div class="text-center py-6">
-          <div class="text-5xl font-light mb-2">
-            ${output.temperature}${tempSymbol}
-          </div>
-          <div class="flex justify-center">
-            ${conditionBadge}
-          </div>
-        </div>
-        ${weatherDetails}
-      `;
-
-      // Wrap in card component
-      return card(content, {
-        title: helpers.escapeHtml(output.location),
-        subtitle: 'Current Weather',
-        variant: 'elevated',
-        size: 'md',
-      });
-    },
+    template: { file: widgetPath },
   },
 })
 export default class GetWeatherTool extends ToolContext {
@@ -159,6 +156,30 @@ export default class GetWeatherTool extends ToolContext {
       windSpeed: 10,
     };
   }
+}
+```
+
+<Info>
+**`@frontmcp/ui` has no `card()`, `badge()`, `descriptionList()`, `button()`, `form()` or `input()` functions.** It is a React library: the components live at `@frontmcp/ui/components` (`Card`, `Badge`, `Button`, `Alert`, `Avatar`, `Modal`, `Table`, `TextField`, `Select`, `List`, `Loader`) and the bridge hooks at `@frontmcp/ui/react`. Older examples that import those lower-case helpers from `@frontmcp/ui` do not compile.
+</Info>
+
+### Inline HTML alternative
+
+For a one-off widget with no React, return markup from the template function. Build it with the `html` tagged template so every interpolated value is escaped:
+
+```typescript
+import { type TemplateContext } from '@frontmcp/sdk';
+
+ui: {
+  template: (ctx: TemplateContext<{ location: string }, WeatherOutput>) => {
+    const { html } = ctx.helpers;
+    return html`
+      <div class="weather">
+        <h2>${ctx.output.location}</h2>
+        <p>${ctx.output.temperature}° — ${ctx.output.conditions}</p>
+      </div>
+    `;
+  },
 }
 ```
 
@@ -182,9 +203,8 @@ export default class GetWeatherTool extends ToolContext {
   - `auto` - Auto-select per host (OpenAI / Claude / unknown)
   - `inline` - Embedded in tool response `_meta['ui/html']` (works everywhere)
   - `static` - Pre-compiled at startup; client fetches `ui://widget/{toolName}.html` via `resources/read`
-  - `hybrid` - Shell pre-compiled; component code + data delivered per call in `_meta['ui/component']`
-  - `direct-url` - Served from an HTTP path on the MCP server (`directPath`)
-  - `custom-url` - Served from an external URL (`customWidgetUrl`, supports a `{token}` placeholder)
+  - `hybrid` - Shell pre-compiled at startup; each call carries only a **reference** in `_meta['ui/component']` (`{ type, hash, toolName }`) — no component code and no data. The widget is still rendered from its `ui://` resource
+  - `direct-url` / `custom-url` - **Not implemented.** Accepted by the schema, but the widget is served inline, as with `inline`; startup logs a warning
 </ParamField>
 
 <Note>
@@ -206,80 +226,49 @@ The tool name in the URI is percent-encoded, as `tools/list` advertises it: a na
 
 ## Available UI Components
 
-### Card
+Widgets use the React components from `@frontmcp/ui/components`:
 
-Wrap content in a styled container:
+```tsx
+import { Alert, Badge, Button, Card, Table, TextField } from '@frontmcp/ui/components';
 
-```typescript
-import { card } from '@frontmcp/ui';
-
-card('<p>Card content</p>', {
-  title: 'Card Title',
-  subtitle: 'Optional subtitle',
-  variant: 'elevated',  // 'default' | 'elevated' | 'outlined'
-  size: 'md',           // 'sm' | 'md' | 'lg'
-});
+<Card title="Order 1042" subtitle="Placed today" elevation={2}>
+  <Badge variant="success">Paid</Badge>
+  <Alert severity="info">Ships in 2 days</Alert>
+  <TextField label="Note" name="note" />
+  <Button variant="primary" onClick={() => {}}>Reorder</Button>
+</Card>
 ```
 
-### Badge
+The full set is `Alert`, `Avatar`, `Badge`, `Button`, `Card`, `List`, `Loader`, `Modal`, `Select`, `Table` and `TextField`. Each has an exported `<Name>Props` type.
 
-Display status or category labels:
+### Widget hooks
 
-```typescript
-import { badge } from '@frontmcp/ui';
+`@frontmcp/ui/react` gives a widget access to the host through the MCP bridge: `McpBridgeProvider` (added for you around a `.tsx` FileSource widget), `useToolInput`, `useToolOutput`, `useStructuredContent`, `useCallTool`, `useTheme`, `useDisplayMode`, `useHostContext`, `useSendMessage` and `useOpenLink`.
 
-badge('Active', {
-  variant: 'success',  // 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info'
-  size: 'md',          // 'sm' | 'md' | 'lg'
-});
+`useCallTool` returns a **tuple** `[call, state, reset]`, not an object. `state` is `{ data, loading, error, called }`:
+
+```tsx
+import { useCallTool } from '@frontmcp/ui/react';
+
+function Refresh() {
+  const [getWeather, { data, loading, error }, reset] = useCallTool<{ location: string }, { temperature: number }>(
+    'get_weather',
+  );
+
+  return (
+    <div>
+      <button disabled={loading} onClick={() => getWeather({ location: 'NYC' })}>
+        Refresh
+      </button>
+      {error && <p role="alert">{String(error)}</p>}
+      {data && <p>{data.temperature}°</p>}
+      <button onClick={reset}>Clear</button>
+    </div>
+  );
+}
 ```
 
-### Description List
-
-Show key-value pairs:
-
-```typescript
-import { descriptionList } from '@frontmcp/ui';
-
-descriptionList([
-  { term: 'Status', description: 'Active' },
-  { term: 'Created', description: '2024-01-15' },
-  { term: 'Owner', description: 'john@example.com' },
-], {
-  layout: 'grid',      // 'stacked' | 'grid' | 'inline'
-  className: 'mt-4',
-});
-```
-
-### Button
-
-Create styled buttons:
-
-```typescript
-import { button } from '@frontmcp/ui';
-
-button('Submit', {
-  variant: 'primary',  // 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger'
-  type: 'submit',      // 'button' | 'submit' | 'reset'
-});
-```
-
-### Form and Input
-
-Build forms with validation:
-
-```typescript
-import { form, input, button } from '@frontmcp/ui';
-
-form(`
-  ${input({ name: 'email', label: 'Email', type: 'email', required: true })}
-  ${input({ name: 'message', label: 'Message', type: 'textarea' })}
-  ${button('Send', { type: 'submit', variant: 'primary' })}
-`, {
-  action: '/api/contact',
-  method: 'post',
-});
-```
+Whether the host lets a widget call tools is the host's decision; the `widgetAccessible` option has no effect yet (see [Options that have no effect yet](#options-that-have-no-effect-yet)).
 
 ---
 
@@ -376,10 +365,40 @@ Other results are always escaped: plain text is shown as text, an object as JSON
 
 ## Practical Example: Expense Summary
 
-```typescript
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, descriptionList, badge } from '@frontmcp/ui';
-import { z } from '@frontmcp/sdk';
+```tsx expense.widget.tsx
+import { Badge, Card } from '@frontmcp/ui/components';
+
+type Status = 'under_budget' | 'at_budget' | 'over_budget';
+const variants = { under_budget: 'success', at_budget: 'warning', over_budget: 'error' } as const;
+
+export default function ExpenseWidget({
+  output,
+}: {
+  output: { userName: string; totalExpenses: number; pendingCount: number; approvedCount: number; status: Status } | null;
+}) {
+  if (!output) return <Card title="Expenses" subtitle="Loading..." />;
+
+  return (
+    <Card title={output.userName} elevation={2}>
+      <Badge variant={variants[output.status]}>{output.status.replace('_', ' ').toUpperCase()}</Badge>
+      <dl>
+        <dt>Total</dt>
+        <dd>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(output.totalExpenses)}</dd>
+        <dt>Pending</dt>
+        <dd>{output.pendingCount}</dd>
+        <dt>Approved</dt>
+        <dd>{output.approvedCount}</dd>
+      </dl>
+    </Card>
+  );
+}
+```
+
+```typescript expense.tool.ts
+import { fileURLToPath } from 'node:url';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
+const widgetPath = fileURLToPath(new URL('./expense.widget.tsx', import.meta.url));
 
 @Tool({
   name: 'expense_summary',
@@ -392,42 +411,7 @@ import { z } from '@frontmcp/sdk';
     approvedCount: z.number(),
     status: z.enum(['under_budget', 'at_budget', 'over_budget']),
   }),
-  ui: {
-    widgetDescription: 'Expense summary dashboard',
-    displayMode: 'inline',
-    servingMode: 'static',
-    template: (ctx) => {
-      const { output, helpers } = ctx;
-
-      const statusColors = {
-        under_budget: 'success',
-        at_budget: 'warning',
-        over_budget: 'error',
-      };
-
-      const statusBadge = badge(
-        output.status.replace('_', ' ').toUpperCase(),
-        { variant: statusColors[output.status], size: 'lg' }
-      );
-
-      const details = descriptionList([
-        { term: 'Total', description: helpers.formatCurrency(output.totalExpenses, 'USD') },
-        { term: 'Pending', description: String(output.pendingCount) },
-        { term: 'Approved', description: String(output.approvedCount) },
-      ], { layout: 'grid' });
-
-      return card(`
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="text-lg font-semibold">${helpers.escapeHtml(output.userName)}</h3>
-          ${statusBadge}
-        </div>
-        ${details}
-      `, {
-        variant: 'elevated',
-        size: 'md',
-      });
-    },
-  },
+  ui: { servingMode: 'static', template: { file: widgetPath } },
 })
 export default class ExpenseSummaryTool extends ToolContext {
   async execute(input: { userId: string }) {
@@ -442,6 +426,29 @@ export default class ExpenseSummaryTool extends ToolContext {
   }
 }
 ```
+
+---
+
+## Markdown and MDX strings
+
+A string template that does not contain both `<` and `>` is treated as **Markdown** and converted to HTML on the server. The converter supports headings, paragraphs, fenced code, bullet and numbered lists, and inline bold, italic, code and links. Raw HTML in the Markdown is escaped, and a link is kept only when its target starts with `http:`, `https:`, `mailto:`, `/` or `#` — otherwise only the link text is kept.
+
+A string that contains both `<` and `>` is treated as **HTML** and used as written. **MDX is not compiled**: JSX tags in a string reach the client as HTML, `{output.field}` expressions are not evaluated, and `mdxComponents` is ignored. For anything interactive, use a `.tsx` FileSource widget.
+
+## Sanitization
+
+- Markup you author (a template function's literal parts, an HTML string, a `.tsx` file) is trusted and is not sanitized.
+- Values interpolated into `` html`…` `` are escaped. Values returned as plain strings from a template function are escaped only with `escapeStringResults: true` (see above).
+- Markdown strings are always escaped as described in the previous section.
+- Tool output shown by a `.tsx` widget is rendered by React, which escapes text nodes.
+
+## Options that have no effect yet
+
+These `ui` options pass schema validation but nothing reads them, so setting one changes nothing. Startup logs a single warning per tool that lists them:
+
+`widgetDescription`, `widgetAccessible`, `displayMode`, `prefersBorder`, `sandboxDomain`, `contentSecurity`, `hydrate`, `runtimeOptions`, `mdxComponents`, `bundlingMode`, `uiType`, `htmlResponsePrefix`.
+
+`servingMode: 'direct-url'` and `'custom-url'` are also not implemented (the widget is served inline), and `'hybrid'` sends only a reference (see [UI Configuration Options](#ui-configuration-options)). There is no dual HTML payload for Claude: the tool result carries no extra HTML text block, so `htmlResponsePrefix` does nothing.
 
 ---
 
@@ -464,7 +471,7 @@ The widget page follows the host's theme. When an MCP Apps host sends `theme: 'l
 
 Different MCP hosts have different capabilities and network policies:
 
-- **OpenAI Apps SDK** — any CDN reachable; widget URI surfaces under `_meta['openai/outputTemplate']`
+- **OpenAI Apps SDK** — any CDN reachable; the widget is advertised like on every other host, through `_meta.ui.resourceUri` on the tool. FrontMCP does not emit `_meta['openai/outputTemplate']`
 - **Claude (MCP-UI)** — **only `cdnjs.cloudflare.com` is reachable**; prefer `resourceMode: 'inline'` so the widget shell is self-contained, and pin any `externals` to cdnjs URLs via `dependencies`
 - **MCP Inspector** — useful for local development; honors `servingMode: 'static'`
 - **Gemini / unknown hosts** — `ui` is ignored; the tool returns JSON only
