@@ -55,6 +55,27 @@ test('basic token creation', async ({ mcp, auth }) => {
 | `claims`    | `Record<string, unknown>` | No       | Additional custom claims                  |
 | `expiresIn` | `number`                  | No       | Token lifetime in seconds (default: 3600) |
 
+The default issuer is `https://test.frontmcp.local` and the default audience is `frontmcp-test`. Override them with `new TestTokenFactory({ issuer, audience })`.
+
+`expiresIn` is measured from now and rounded up to a whole second, so `expiresIn: 1` gives a token that is valid for at least one full second and cannot expire before its first use.
+
+### Authenticating the client
+
+`mcp.authenticate(token)` opens a new session for the token and **rejects** when the server refuses it, so an expired or badly signed token fails right there. After a rejection the client keeps its previous identity and session. On a client that is not connected yet it only stores the token for the next `connect()`.
+
+```ts
+test('server refuses a bad token', async ({ mcp, auth }) => {
+  const good = await auth.createToken({ sub: 'user-1' });
+  await mcp.authenticate(good);
+
+  await expect(mcp.authenticate(auth.createInvalidToken({ sub: 'user-1' }))).rejects.toThrow();
+  // still authenticated as user-1
+  await mcp.tools.list();
+});
+```
+
+Tools read the scopes of the authenticated token through `this.auth` (for example `this.auth.scopes`), including in a server started by `test.use()`.
+
 ### Custom Claims
 
 Add any custom claims your server needs:

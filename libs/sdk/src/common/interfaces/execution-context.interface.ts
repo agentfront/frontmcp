@@ -93,8 +93,20 @@ export abstract class ExecutionContextBase<Out = unknown> {
 
     const rawAuth = require('@frontmcp/auth');
     const auth = (rawAuth.default ?? rawAuth) as typeof import('@frontmcp/auth');
-    this._authContext = auth.buildAuthContext(this._authInfo, this.scope.metadata.authorities?.claimsMapping);
+    // The request context is the source of truth (it is populated as the request is authenticated);
+    // the constructor's copy only fills what the request context does not carry.
+    this._authContext = auth.buildAuthContext(this.resolveAuthSource(), this.scope.metadata.authorities?.claimsMapping);
     return this._authContext;
+  }
+
+  private resolveAuthSource(): Partial<AuthInfo> {
+    const fromContext = this.tryGetContext()?.authInfo;
+    if (!fromContext) return this._authInfo;
+    const merged: Record<string, unknown> = { ...this._authInfo };
+    for (const [key, value] of Object.entries(fromContext)) {
+      if (value !== undefined) merged[key] = value;
+    }
+    return merged as Partial<AuthInfo>;
   }
 
   /**

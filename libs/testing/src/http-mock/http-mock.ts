@@ -2,8 +2,10 @@
  * @file http-mock.ts
  * @description HTTP request mocking implementation for offline MCP server testing
  *
- * This module intercepts fetch() and XMLHttpRequest calls, allowing tools to be
- * tested without making real HTTP requests.
+ * This module patches `globalThis.fetch` in the CURRENT process only. It does not
+ * intercept XMLHttpRequest or `node:http`/`node:https`, and it cannot see requests made
+ * by a server running in another process (the default `TestServer`); use it with an
+ * in-process server (direct mode) or for code that runs in the test process.
  *
  * @example
  * ```typescript
@@ -35,14 +37,15 @@
  */
 
 import type {
-  HttpMethod,
-  HttpRequestMatcher,
-  HttpMockResponse,
-  HttpMockDefinition,
-  HttpRequestInfo,
-  HttpMockHandle,
   HttpInterceptor,
+  HttpMethod,
+  HttpMockDefinition,
+  HttpMockHandle,
   HttpMockManager,
+  HttpMockOptions,
+  HttpMockResponse,
+  HttpRequestInfo,
+  HttpRequestMatcher,
 } from './http-mock.types';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -106,38 +109,68 @@ class HttpInterceptorImpl implements HttpInterceptor {
     };
   }
 
-  get(url: string | RegExp, response: HttpMockResponse | Record<string, unknown>): HttpMockHandle {
+  get(
+    url: string | RegExp,
+    response: HttpMockResponse | Record<string, unknown>,
+    options?: HttpMockOptions,
+  ): HttpMockHandle {
     return this.mock({
-      match: { url, method: 'GET' },
+      match: { url, method: 'GET', ...options?.match },
       response: normalizeResponse(response),
+      ...(options?.times !== undefined && { times: options.times }),
+      ...(options?.name !== undefined && { name: options.name }),
     });
   }
 
-  post(url: string | RegExp, response: HttpMockResponse | Record<string, unknown>): HttpMockHandle {
+  post(
+    url: string | RegExp,
+    response: HttpMockResponse | Record<string, unknown>,
+    options?: HttpMockOptions,
+  ): HttpMockHandle {
     return this.mock({
-      match: { url, method: 'POST' },
+      match: { url, method: 'POST', ...options?.match },
       response: normalizeResponse(response),
+      ...(options?.times !== undefined && { times: options.times }),
+      ...(options?.name !== undefined && { name: options.name }),
     });
   }
 
-  put(url: string | RegExp, response: HttpMockResponse | Record<string, unknown>): HttpMockHandle {
+  put(
+    url: string | RegExp,
+    response: HttpMockResponse | Record<string, unknown>,
+    options?: HttpMockOptions,
+  ): HttpMockHandle {
     return this.mock({
-      match: { url, method: 'PUT' },
+      match: { url, method: 'PUT', ...options?.match },
       response: normalizeResponse(response),
+      ...(options?.times !== undefined && { times: options.times }),
+      ...(options?.name !== undefined && { name: options.name }),
     });
   }
 
-  delete(url: string | RegExp, response: HttpMockResponse | Record<string, unknown>): HttpMockHandle {
+  delete(
+    url: string | RegExp,
+    response: HttpMockResponse | Record<string, unknown>,
+    options?: HttpMockOptions,
+  ): HttpMockHandle {
     return this.mock({
-      match: { url, method: 'DELETE' },
+      match: { url, method: 'DELETE', ...options?.match },
       response: normalizeResponse(response),
+      ...(options?.times !== undefined && { times: options.times }),
+      ...(options?.name !== undefined && { name: options.name }),
     });
   }
 
-  any(url: string | RegExp, response: HttpMockResponse | Record<string, unknown>): HttpMockHandle {
+  any(
+    url: string | RegExp,
+    response: HttpMockResponse | Record<string, unknown>,
+    options?: HttpMockOptions,
+  ): HttpMockHandle {
     return this.mock({
-      match: { url },
+      match: { url, ...options?.match },
       response: normalizeResponse(response),
+      ...(options?.times !== undefined && { times: options.times }),
+      ...(options?.name !== undefined && { name: options.name }),
     });
   }
 
@@ -173,6 +206,9 @@ class HttpInterceptorImpl implements HttpInterceptor {
     const index = activeInterceptors.indexOf(this);
     if (index !== -1) {
       activeInterceptors.splice(index, 1);
+    }
+    if (activeInterceptors.length === 0) {
+      httpMock.disable();
     }
   }
 
@@ -312,48 +348,53 @@ class HttpInterceptorImpl implements HttpInterceptor {
 // ═══════════════════════════════════════════════════════════════════
 
 async function interceptedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  // Build request info
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-  const method = ((init?.method ?? 'GET') as HttpMethod).toUpperCase() as HttpMethod;
+  const request = typeof Request !== 'undefined' && input instanceof Request ? input : undefined;
+  const url =
+    typeof input === 'string' ? input : input instanceof URL ? input.toString() : (request?.url ?? String(input));
+  const method = ((init?.method ?? request?.method ?? 'GET') as HttpMethod).toUpperCase() as HttpMethod;
 
-  // Parse headers
   const headers: Record<string, string> = {};
-  if (init?.headers) {
-    if (init.headers instanceof Headers) {
-      init.headers.forEach((value, key) => {
+  const collectHeaders = (source: HeadersInit | undefined): void => {
+    if (!source) return;
+    if (source instanceof Headers) {
+      source.forEach((value, key) => {
         headers[key.toLowerCase()] = value;
       });
-    } else if (Array.isArray(init.headers)) {
-      for (const [key, value] of init.headers) {
+    } else if (Array.isArray(source)) {
+      for (const [key, value] of source) {
         headers[key.toLowerCase()] = value;
       }
     } else {
-      for (const [key, value] of Object.entries(init.headers)) {
+      for (const [key, value] of Object.entries(source)) {
         headers[key.toLowerCase()] = value;
       }
     }
-  }
+  };
+  collectHeaders(request?.headers);
+  collectHeaders(init?.headers);
 
-  // Parse body
   let body: unknown;
   let rawBody: string | undefined;
-  if (init?.body) {
-    if (typeof init.body === 'string') {
-      rawBody = init.body;
-      try {
-        body = JSON.parse(init.body);
-      } catch {
-        body = init.body;
-      }
-    } else if (init.body instanceof ArrayBuffer || init.body instanceof Uint8Array) {
-      rawBody = new TextDecoder().decode(init.body);
+  let bodySource: BodyInit | null | undefined = init?.body;
+  if (bodySource === undefined && request && request.body !== null) {
+    bodySource = await request.clone().text();
+  }
+  if (bodySource) {
+    if (typeof bodySource === 'string') {
+      rawBody = bodySource;
+    } else if (bodySource instanceof ArrayBuffer || ArrayBuffer.isView(bodySource)) {
+      rawBody = new TextDecoder().decode(bodySource);
+    } else if (bodySource instanceof URLSearchParams) {
+      rawBody = bodySource.toString();
+    }
+    if (rawBody !== undefined) {
       try {
         body = JSON.parse(rawBody);
       } catch {
         body = rawBody;
       }
     } else {
-      body = init.body;
+      body = bodySource;
     }
   }
 
@@ -397,9 +438,20 @@ async function interceptedFetch(input: RequestInfo | URL, init?: RequestInit): P
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════
 
+const RESPONSE_KEYS = new Set(['status', 'statusText', 'headers', 'body', 'delay']);
+
+function isResponseDescriptor(value: Record<string, unknown>): boolean {
+  const keys = Object.keys(value);
+  if (keys.length === 0 || !keys.every((key) => RESPONSE_KEYS.has(key))) return false;
+  if ('status' in value) {
+    const status = value['status'];
+    if (typeof status !== 'number' || !Number.isInteger(status) || status < 200 || status > 599) return false;
+  }
+  return true;
+}
+
 function normalizeResponse(response: HttpMockResponse | Record<string, unknown>): HttpMockResponse {
-  // If it looks like a plain object (response body), wrap it
-  if (!('status' in response) && !('body' in response) && !('headers' in response)) {
+  if (Array.isArray(response) || !isResponseDescriptor(response as Record<string, unknown>)) {
     return { body: response as Record<string, unknown> };
   }
   return response as HttpMockResponse;

@@ -12,7 +12,9 @@
  * <!-- PERF_BASELINE_END -->
  */
 
-import type { PerfBaseline, TestBaseline, MetricBaseline, PerfMeasurement } from './types';
+import { ensureDir, fileExists, readFile, writeFile } from '@frontmcp/utils';
+
+import type { MetricBaseline, PerfBaseline, PerfMeasurement, TestBaseline } from './types';
 
 // ═══════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -42,7 +44,6 @@ export class BaselineStore {
    */
   async load(): Promise<PerfBaseline | null> {
     try {
-      const { readFile, fileExists } = await import('@frontmcp/utils');
       if (!(await fileExists(this.baselinePath))) {
         return null;
       }
@@ -58,7 +59,6 @@ export class BaselineStore {
    * Save baseline to local file.
    */
   async save(baseline: PerfBaseline): Promise<void> {
-    const { writeFile, ensureDir } = await import('@frontmcp/utils');
     const dir = this.baselinePath.substring(0, this.baselinePath.lastIndexOf('/'));
     await ensureDir(dir);
     await writeFile(this.baselinePath, JSON.stringify(baseline, null, 2));
