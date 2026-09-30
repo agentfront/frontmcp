@@ -368,12 +368,38 @@ function __applyHostTheme(theme) {
   } catch (e) {}
 }
 
+function extractToolOutput(params) {
+  // A host sends a CallToolResult: prefer structuredContent, then parsed text, then the raw content.
+  if (!params) return undefined;
+  if (params.structuredContent !== undefined && params.structuredContent !== null) return params.structuredContent;
+  var content = params.content;
+  if (Array.isArray(content)) {
+    for (var i = 0; i < content.length; i++) {
+      var item = content[i];
+      if (item && item.type === 'text' && typeof item.text === 'string') {
+        try { return JSON.parse(item.text); } catch (e) { return item.text; }
+      }
+    }
+  }
+  return content;
+}
+
 function readInjectedData() {
   var data = { toolInput: {}, toolOutput: undefined, structuredContent: undefined };
   if (typeof window !== 'undefined') {
     if (window.__mcpToolInput) data.toolInput = window.__mcpToolInput;
     if (window.__mcpToolOutput) data.toolOutput = window.__mcpToolOutput;
     if (window.__mcpStructuredContent) data.structuredContent = window.__mcpStructuredContent;
+    // The OpenAI Apps SDK hands the widget its data as window.openai.toolInput / toolOutput
+    // (toolOutput is the tool's structuredContent).
+    var oa = window.openai;
+    if (oa && typeof oa === 'object') {
+      if (oa.toolInput && !window.__mcpToolInput) data.toolInput = oa.toolInput;
+      if (oa.toolOutput !== undefined && oa.toolOutput !== null) {
+        if (data.toolOutput === undefined) data.toolOutput = oa.toolOutput;
+        if (data.structuredContent === undefined) data.structuredContent = oa.toolOutput;
+      }
+    }
   }
   return data;
 }
@@ -430,7 +456,24 @@ var OpenAIAdapter = {
     if (sdk.displayMode) {
       context.hostContext.displayMode = sdk.displayMode;
     }
-    // Note: OpenAI SDK does not have an onContextChange equivalent
+    // The Apps SDK re-dispatches the changed globals in an 'openai:set_globals' event.
+    window.addEventListener('openai:set_globals', function(event) {
+      var globals = (event && event.detail && event.detail.globals) || window.openai || {};
+      if (globals.toolInput !== undefined && globals.toolInput !== null) {
+        context.toolInput = globals.toolInput;
+        window.dispatchEvent(new CustomEvent('tool:input', { detail: { arguments: context.toolInput } }));
+      }
+      if (globals.toolOutput !== undefined && globals.toolOutput !== null) {
+        context.structuredContent = globals.toolOutput;
+        context.notifyToolResult(globals.toolOutput);
+      }
+      if (globals.theme && globals.theme !== context.hostContext.theme) {
+        context.notifyContextChange({ theme: globals.theme });
+      }
+      if (globals.displayMode && globals.displayMode !== context.hostContext.displayMode) {
+        context.notifyContextChange({ displayMode: globals.displayMode });
+      }
+    });
     return Promise.resolve();
   },
   callTool: function(context, name, args) {
@@ -582,9 +625,10 @@ var ExtAppsAdapter = {
         window.dispatchEvent(new CustomEvent('tool:input-partial', { detail: { arguments: context.toolInput } }));
         break;
       case 'ui/notifications/tool-result':
-        context.toolOutput = params.content;
+        var resultOutput = extractToolOutput(params);
+        context.toolOutput = resultOutput;
         context.structuredContent = params.structuredContent;
-        context.notifyToolResult(params.content);
+        context.notifyToolResult(resultOutput);
         window.dispatchEvent(new CustomEvent('tool:result', { detail: params }));
         break;
       case 'ui/notifications/host-context-changed':
@@ -1385,21 +1429,32 @@ FrontMcpBridge.prototype._setupDataToolCallHandler = function() {
 const MAX_MINIFY_CODE_LENGTH = 500000;
 
 /**
- * Simple JS minification (removes extra whitespace and newlines).
+ * Simple JS minification: drops indentation, blank lines and whole-line comments.
  */
 function minifyJS(code: string): string {
-  // Guard against ReDoS on large inputs
+  // Guard against oversized inputs
   if (code.length > MAX_MINIFY_CODE_LENGTH) {
     return code;
   }
 
-  return code
-    .replace(/\/\*[\s\S]*?\*\//g, '') // Remove block comments
-    .replace(/(^|[^:])\/\/.*$/gm, '$1') // Remove line comments (but not :// in URLs)
-    .replace(/\s+/g, ' ') // Collapse whitespace
-    .replace(/\s*([{};,:()[\]])\s*/g, '$1') // Remove space around punctuation
-    .replace(/;\}/g, '}') // Remove trailing semicolons before }
-    .trim();
+  // Line-based on purpose: string literals (messages, selectors, URLs) must reach the page
+  // unchanged, and line breaks are kept so automatic semicolon insertion behaves as written.
+  const out: string[] = [];
+  let inBlockComment = false;
+  for (const raw of code.split('\n')) {
+    const line = raw.trim();
+    if (inBlockComment) {
+      if (line.includes('*/')) inBlockComment = false;
+      continue;
+    }
+    if (line === '' || line.startsWith('//')) continue;
+    if (line.startsWith('/*')) {
+      if (!line.includes('*/')) inBlockComment = true;
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join('\n');
 }
 
 /**

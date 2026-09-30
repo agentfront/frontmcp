@@ -38,6 +38,19 @@ describe('MCP Apps Platform Detection', () => {
       expect(hasMcpAppsExtension(capabilities)).toBe(true);
     });
 
+    it('should return true when the extension is declared under capabilities.extensions', () => {
+      const capabilities: ClientCapabilities = {
+        extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } },
+      };
+      expect(hasMcpAppsExtension(capabilities)).toBe(true);
+      expect(detectPlatformFromCapabilities(capabilities)).toBe('ext-apps');
+    });
+
+    it('should return false when capabilities.extensions has no MCP Apps entry', () => {
+      const capabilities: ClientCapabilities = { extensions: { 'some-other-extension': {} } };
+      expect(hasMcpAppsExtension(capabilities)).toBe(false);
+    });
+
     it('should return false when extension is not present', () => {
       const capabilities: ClientCapabilities = {
         experimental: {

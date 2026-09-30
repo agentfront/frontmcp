@@ -86,6 +86,8 @@ export class ToolUIRegistry {
   private widgets = new Map<string, string>();
   private manifests = new Map<string, Record<string, unknown>>();
   private resourceMeta = new Map<string, UIResourceMeta>();
+  private uiTools = new Set<string>();
+  private customUris = new Map<string, string>();
   private resolver?: ImportResolver;
   private readonly options: ToolUIRegistryOptions;
 
@@ -103,6 +105,31 @@ export class ToolUIRegistry {
       escapeStringResults: typeof toolSetting === 'boolean' ? toolSetting : this.options.escapeStringResults,
       logger: this.options.logger,
     };
+  }
+
+  /**
+   * Record that `toolName` has a UI, and the custom `ui.resourceUri` it advertises (if any).
+   * `tools/list` advertises that URI verbatim, so `resources/read` must resolve it back to the
+   * tool; and only registered tools may be served a placeholder widget.
+   */
+  registerTool(toolName: string, resourceUri?: string): void {
+    this.uiTools.add(toolName);
+    if (resourceUri) this.customUris.set(resourceUri, toolName);
+  }
+
+  /** The tool that advertised `uri` as its custom `ui.resourceUri`. */
+  resolveCustomUri(uri: string): string | undefined {
+    return this.customUris.get(uri);
+  }
+
+  /**
+   * Whether `name` (or its app-qualified form `app:name`) is a tool with a UI.
+   */
+  hasTool(name: string): boolean {
+    const known = (n: string) => this.uiTools.has(n) || this.widgets.has(n) || this.resourceMeta.has(n);
+    if (known(name)) return true;
+    const sep = name.indexOf(':');
+    return sep > 0 && known(name.slice(sep + 1));
   }
 
   getStaticWidget(name: string): string | undefined {
@@ -141,15 +168,19 @@ export class ToolUIRegistry {
     // override on options so tests / programmatic callers can pass it directly.
     const resourceMode = (uiConfig?.['resourceMode'] ?? options['resourceMode']) as 'cdn' | 'inline' | undefined;
 
-    if (!toolName || !template) return;
+    if (!toolName) return;
 
     // Persist per-tool resource metadata (CSP / permissions) BEFORE render so
     // `handleUIResourceRead` returns the right `_meta.ui.csp` even if the
     // render fails (graceful degradation) and on re-compile when the user
     // removes a previously-set csp/permissions field (we explicitly delete in
     // that case so stale meta doesn't leak forward). Claude only honors CSP
-    // declared on the resource, not on the tool — #455.
+    // declared on the resource, not on the tool — #455. It also runs when
+    // there is no template to render yet (inline tools compile their shell
+    // without one), so the widget resource carries its `_meta` from startup.
     this.updateResourceMetaFromConfig(toolName, uiConfig);
+
+    if (!template) return;
 
     const result = renderToolTemplate({
       toolName,
@@ -159,6 +190,7 @@ export class ToolUIRegistry {
       resolver: this.resolver,
       resourceMode,
       sizing: extractSizing(uiConfig),
+      csp: uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined,
       ...this.stringResultOptions(uiConfig),
     });
 
@@ -255,6 +287,7 @@ export class ToolUIRegistry {
       resolver: this.resolver,
       resourceMode,
       sizing: extractSizing(uiConfig),
+      csp: uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined,
       ...this.stringResultOptions(uiConfig),
     });
 

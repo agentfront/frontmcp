@@ -34,6 +34,8 @@ const [callTool, state, reset] = useCallTool<InputType, OutputType>(toolName, op
 | `[1]` | `ToolState<TOutput>`                         | `{ data, loading, error, called }` |
 | `[2]` | `() => void`                                 | Reset state                        |
 
+`data` holds the full MCP `CallToolResult` (`content`, optional `structuredContent`, optional `isError`). Tool-side failures resolve with `isError: true` inside `data`; `error` is only set when the call throws, for example when the client is not connected.
+
 ### Example
 
 ```tsx
@@ -45,7 +47,8 @@ function SearchTool() {
       <button onClick={() => search({ query: 'react' })}>Search</button>
       <button onClick={reset}>Reset</button>
       {loading && <p>Searching...</p>}
-      {data && <pre>{JSON.stringify(data, null, 2)}</pre>}
+      {data?.isError && <p>The tool reported an error</p>}
+      {data && <pre>{JSON.stringify(data.structuredContent ?? data.content, null, 2)}</pre>}
     </div>
   );
 }
@@ -192,7 +195,7 @@ Low-level hook to access a raw `ServerEntry` from the registry.
 const entry: ServerEntry | undefined = useServer(name?);
 ```
 
-Uses `useSyncExternalStore` for tear-free reads.
+Uses `useSyncExternalStore` for tear-free reads. Without a name it reads the server the enclosing `FrontMcpProvider` was given (its `name`, `"default"` unless set).
 
 ---
 

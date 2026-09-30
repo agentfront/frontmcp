@@ -28,6 +28,9 @@ export interface BridgeGlobal {
   onContextChange(callback: (changes: Record<string, unknown>) => void): () => void;
   getTheme(): string;
   getHostContext(): Record<string, unknown>;
+  getToolOutput(): unknown;
+  getStructuredContent(): unknown;
+  onToolResult(callback: (result: unknown) => void): () => void;
 }
 
 /** Box returned by the stubbed `getBoundingClientRect` for one element. */
@@ -49,7 +52,7 @@ export interface StubLayout {
   root?: StubBox;
 }
 
-interface FrameWindow extends Window {
+export interface FrameWindow extends Window {
   eval(code: string): unknown;
   HTMLElement: typeof HTMLElement;
   MessageEvent: typeof MessageEvent;
@@ -68,6 +71,8 @@ export interface BridgeFrameOptions {
   /** Markup appended to the frame's `<head>` before the bridge runs. */
   headHtml?: string;
   minify?: boolean;
+  /** Runs on the frame window just before the bridge IIFE, e.g. to define `window.openai`. */
+  beforeBridge?: (win: FrameWindow) => void;
 }
 
 export interface BridgeFrame {
@@ -228,6 +233,7 @@ export function createBridgeFrame(options: BridgeFrameOptions = {}): BridgeFrame
     get: () => frame.layout.bodyScrollHeight,
   });
 
+  options.beforeBridge?.(win);
   win.eval(generateBridgeIIFE({ minify: options.minify ?? true }));
   return frame;
 }

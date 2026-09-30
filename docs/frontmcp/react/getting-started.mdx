@@ -62,7 +62,8 @@ export function Dashboard() {
       <button onClick={() => callTool({ name: 'Alice' })} disabled={loading}>
         {loading ? 'Calling...' : 'Greet'}
       </button>
-      {data && <pre>{JSON.stringify(data, null, 2)}</pre>}
+      {data?.isError && <p style={{ color: 'red' }}>The tool reported an error</p>}
+      {data && <pre>{JSON.stringify(data.structuredContent ?? data.content, null, 2)}</pre>}
       {error && <p style={{ color: 'red' }}>{error.message}</p>}
     </div>
   );
