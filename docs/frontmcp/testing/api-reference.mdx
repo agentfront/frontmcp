@@ -45,16 +45,16 @@ Configure fixtures for a test file.
 test.use(options: TestOptions): void
 ```
 
-| Option           | Type                                     | Default             | Description                          |
-| ---------------- | ---------------------------------------- | ------------------- | ------------------------------------ |
-| `server`         | `string`                                 | —                   | Path to server entry file (required) |
-| `port`           | `number`                                 | Auto                | Port to run server on                |
-| `transport`      | `'sse' \| 'streamable-http'`             | `'streamable-http'` | Transport protocol                   |
-| `auth`           | `AuthOptions`                            | —                   | Authentication configuration         |
-| `logLevel`       | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'`            | Server log level                     |
-| `env`            | `Record<string, string>`                 | —                   | Environment variables                |
-| `startupTimeout` | `number`                                 | `30000`             | Startup timeout in ms                |
-| `baseUrl`        | `string`                                 | —                   | Connect to existing server           |
+| Option           | Type                                     | Default             | Description                                 |
+| ---------------- | ---------------------------------------- | ------------------- | ------------------------------------------- |
+| `server`         | `string`                                 | —                   | Path to server entry file (required)        |
+| `port`           | `number`                                 | Auto                | Port to run server on (`0` = any free port) |
+| `transport`      | `'sse' \| 'streamable-http'`             | `'streamable-http'` | Transport protocol                          |
+| `auth`           | `AuthOptions`                            | —                   | Authentication configuration                |
+| `logLevel`       | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'`            | Server log level                            |
+| `env`            | `Record<string, string>`                 | —                   | Environment variables                       |
+| `startupTimeout` | `number`                                 | `30000`             | Startup timeout in ms                       |
+| `baseUrl`        | `string`                                 | —                   | Connect to existing server                  |
 
 ---
 
@@ -264,6 +264,8 @@ Authenticate the client with a JWT token.
 ```ts
 mcp.authenticate(token: string): Promise<void>
 ```
+
+When the client is connected, `authenticate()` opens a **new session** with the token (the previous session belonged to the previous identity) and **rejects** if the server refuses it, for example because the token is expired or badly signed. On rejection the client keeps its previous identity and session. On a client that is not connected yet, it only stores the token and the next `connect()` uses it. The token is kept in the client config, so `reconnect()` keeps using it. HTTP `401` and `403` answers are never retried.
 
 #### disconnect
 
@@ -916,8 +918,8 @@ const factory = new TestTokenFactory(options?: TokenFactoryOptions);
 
 ```ts
 interface TokenFactoryOptions {
-  issuer?: string;                            // Token issuer (default: 'https://test-issuer.local')
-  audience?: string;                          // Token audience (default: 'test-audience')
+  issuer?: string;                            // Token issuer (default: 'https://test.frontmcp.local')
+  audience?: string;                          // Token audience (default: 'frontmcp-test')
   expiresInSeconds?: number;                  // Default token lifetime (default: 3600)
 }
 ```

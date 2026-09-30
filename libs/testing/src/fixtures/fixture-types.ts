@@ -27,13 +27,18 @@ export interface TestConfig {
    * @example 'demo-e2e-public' - Uses ports 50000-50009
    */
   project?: string;
-  /** Port to run server on (default: auto-select from project range or dynamic) */
+  /** Port to run server on (default, or `0`: auto-select a free port from the project range) */
   port?: number;
   /** Transport type (default: 'streamable-http') */
   transport?: 'sse' | 'streamable-http';
-  /** Auth configuration for the server */
+  /**
+   * Describes the auth mode of the server under test. The server entry file decides its own auth, so
+   * this does not reconfigure it; the fixture uses it to (1) keep the `mcp` client anonymous when
+   * `mode` is `'public'` (unless `publicMode` says otherwise) and (2) pass it to the server process as
+   * `FRONTMCP_TEST_AUTH_MODE` / `FRONTMCP_TEST_AUTH_TYPE`, which the entry file can read.
+   */
   auth?: {
-    mode?: 'public' | 'orchestrated';
+    mode?: 'public' | 'orchestrated' | 'local' | 'remote' | 'transparent';
     type?: 'local' | 'remote';
   };
   /**
@@ -156,6 +161,7 @@ export interface ServerFixture {
   info: {
     baseUrl: string;
     port: number;
+    /** The server process (the one listening on `port`, when it can be found; else its shell) */
     pid?: number;
   };
 
@@ -216,7 +222,10 @@ export type TestFn = (fixtures: TestFixtures) => Promise<void> | void;
 export interface TestWithFixtures {
   (name: string, fn: TestFn): void;
 
-  /** Configure fixtures for this test file/suite */
+  /**
+   * Configure fixtures. At file level it applies to the whole file; inside a `test.describe` it applies
+   * to that block only (and blocks nested in it), inheriting the outer configuration.
+   */
   use(config: TestConfig): void;
 
   /** Create a describe block */
@@ -254,4 +263,18 @@ export interface TestWithFixtures {
 
   /** Mark test as todo (not implemented) */
   todo(name: string): void;
+
+  /**
+   * Parameterized test. Each row is passed after the fixtures; titles support Jest's
+   * `%s` / `%d` / `$key` placeholders.
+   *
+   * @example
+   * test.each([['add', 1, 2, 3], ['sub', 3, 1, 2]])('%s', async ({ mcp }, tool, a, b, expected) => { ... });
+   */
+  each<Row extends readonly unknown[]>(
+    table: ReadonlyArray<Row>,
+  ): (name: string, fn: (fixtures: TestFixtures, ...row: Row) => Promise<void> | void) => void;
+  each<Value>(
+    table: ReadonlyArray<Value>,
+  ): (name: string, fn: (fixtures: TestFixtures, value: Value) => Promise<void> | void) => void;
 }

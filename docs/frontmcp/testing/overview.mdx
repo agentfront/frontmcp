@@ -60,7 +60,7 @@ does this for `jose` (pulled in transitively by `@frontmcp/sdk`), and its
 pnpm, which installs into a symlinked store at
 `node_modules/.pnpm/<name>@<version>/node_modules/<name>`.
 
-If one of *your* dependencies ships ESM-only, add it to `test.esmPackages` in
+If one of _your_ dependencies ships ESM-only, add it to `test.esmPackages` in
 `frontmcp.config.ts` rather than hand-writing a whole Jest config:
 
 ```ts title="frontmcp.config.ts"
@@ -216,6 +216,10 @@ test('mock tool response', async ({ mcp }) => {
 ```
 
 ---
+
+## Using the package outside Jest
+
+`@frontmcp/testing` can be imported from a plain Node script (for example to mint tokens with `TestTokenFactory` or run `MockOAuthServer`). Jest-only pieces such as `expect` and `perfTest` resolve `@jest/globals` lazily and throw a clear error only when used outside Jest. The Playwright helpers are placeholders (status `planned`) and throw "not yet implemented" when called.
 
 ## Test Configuration
 

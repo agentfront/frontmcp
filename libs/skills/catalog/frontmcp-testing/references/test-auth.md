@@ -94,6 +94,14 @@ describe('Authenticated Server', () => {
 });
 ```
 
+## Token semantics
+
+- Default issuer `https://test.frontmcp.local`, default audience `frontmcp-test` (override with `new TestTokenFactory({ issuer, audience })`).
+- `expiresIn` is counted from now and rounded up to whole seconds, so `expiresIn: 1` is valid for at least one second. `createAnonymousToken(expiresIn?)` takes a lifetime too.
+- `await mcp.authenticate(token)` opens a new session for the token and **rejects** if the server refuses it (expired, bad signature); the client then keeps its previous identity. On an unconnected client it only stores the token. 401/403 are never retried.
+- Tools read token scopes through `this.auth` (e.g. `this.auth.scopes`).
+- Access tokens from `MockOAuthServer` carry the granted `scope` claim and `exp = accessTokenTtlSeconds`, also after a refresh.
+
 ## Mock OAuth / OIDC server
 
 `MockOAuthServer` serves JWKS, OAuth metadata, authorization, token, and userinfo endpoints. Construct it with a `TestTokenFactory`, call `.start()` to bind a port, and configure your MCP server to point at the returned `info.issuer` / `info.jwksUrl`.

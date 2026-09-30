@@ -86,6 +86,18 @@ export interface HttpMockHandle {
 }
 
 /**
+ * Optional third argument of the convenience helpers (`get`, `post`, ...).
+ */
+export interface HttpMockOptions {
+  /** Number of times the mock may be used (default: Infinity) */
+  times?: number;
+  /** Name for debugging/tracking */
+  name?: string;
+  /** Extra matcher constraints (headers, body, method) merged into the helper's matcher */
+  match?: Partial<Omit<HttpRequestMatcher, 'url'>>;
+}
+
+/**
  * HTTP interceptor - controls when mocks are active
  */
 export interface HttpInterceptor {
@@ -93,19 +105,39 @@ export interface HttpInterceptor {
   mock(definition: HttpMockDefinition): HttpMockHandle;
 
   /** Convenience: mock a GET request */
-  get(url: string | RegExp, response: HttpMockResponse | Record<string, unknown>): HttpMockHandle;
+  get(
+    url: string | RegExp,
+    response: HttpMockResponse | Record<string, unknown>,
+    options?: HttpMockOptions,
+  ): HttpMockHandle;
 
   /** Convenience: mock a POST request */
-  post(url: string | RegExp, response: HttpMockResponse | Record<string, unknown>): HttpMockHandle;
+  post(
+    url: string | RegExp,
+    response: HttpMockResponse | Record<string, unknown>,
+    options?: HttpMockOptions,
+  ): HttpMockHandle;
 
   /** Convenience: mock a PUT request */
-  put(url: string | RegExp, response: HttpMockResponse | Record<string, unknown>): HttpMockHandle;
+  put(
+    url: string | RegExp,
+    response: HttpMockResponse | Record<string, unknown>,
+    options?: HttpMockOptions,
+  ): HttpMockHandle;
 
   /** Convenience: mock a DELETE request */
-  delete(url: string | RegExp, response: HttpMockResponse | Record<string, unknown>): HttpMockHandle;
+  delete(
+    url: string | RegExp,
+    response: HttpMockResponse | Record<string, unknown>,
+    options?: HttpMockOptions,
+  ): HttpMockHandle;
 
   /** Convenience: mock any method */
-  any(url: string | RegExp, response: HttpMockResponse | Record<string, unknown>): HttpMockHandle;
+  any(
+    url: string | RegExp,
+    response: HttpMockResponse | Record<string, unknown>,
+    options?: HttpMockOptions,
+  ): HttpMockHandle;
 
   /** Clear all mocks in this scope */
   clear(): void;
@@ -122,7 +154,7 @@ export interface HttpInterceptor {
   /** Enable passthrough for unmatched requests (default: false, throws error) */
   allowPassthrough(allow: boolean): void;
 
-  /** Restore original fetch/XHR */
+  /** Restore the original `fetch` once no interceptor remains active */
   restore(): void;
 }
 
