@@ -128,6 +128,11 @@ declare global {
   }
 }
 
+/** The InvalidOutputError that parsing raised, which names the field that did not match, else a bare one. */
+function invalidOutputFrom(outputError: unknown): InvalidOutputError {
+  return outputError instanceof InvalidOutputError ? outputError : new InvalidOutputError();
+}
+
 const name = 'agents:call-agent' as const;
 const { Stage } = FlowHooksOf<'agents:call-agent'>(name);
 
@@ -628,7 +633,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     // a flow's own control signal, and its outcome is published when it is.
     if (executionError instanceof ElicitationFallbackRequired || executionError instanceof FlowControl) return;
 
-    const failure = executionError ?? (outputError !== undefined ? new InvalidOutputError() : undefined);
+    const failure = executionError ?? (outputError !== undefined ? invalidOutputFrom(outputError) : undefined);
     const failed = failure !== undefined;
     const requestId = this.tryGetContext()?.requestId;
     const sessionId = typeof authInfo?.sessionId === 'string' && authInfo.sessionId ? authInfo.sessionId : undefined;
@@ -679,7 +684,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
         agent: agent.metadata.name,
         errors: outputError,
       });
-      throw new InvalidOutputError();
+      throw invalidOutputFrom(outputError);
     }
 
     const result = parsedOutput;
