@@ -1,5 +1,6 @@
+import { readJson, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, readJson } from '@nx/devkit';
+
 import { uiPageGenerator } from './ui-page';
 
 describe('ui-page generator', () => {
@@ -106,7 +107,9 @@ describe('ui-page generator', () => {
   it('should not crash when project.json is missing', async () => {
     tree.delete('ui/pages/project.json');
 
-    await expect(uiPageGenerator(tree, { name: 'AdminDashboard', skipFormat: true })).resolves.toBeUndefined();
+    await expect(uiPageGenerator(tree, { name: 'AdminDashboard', skipFormat: true })).resolves.toEqual(
+      expect.any(Function),
+    );
 
     expect(tree.exists('ui/pages/src/AdminDashboard/AdminDashboard.tsx')).toBe(true);
   });
@@ -114,7 +117,9 @@ describe('ui-page generator', () => {
   it('should not crash when tsconfig.base.json is missing', async () => {
     tree.delete('tsconfig.base.json');
 
-    await expect(uiPageGenerator(tree, { name: 'AdminDashboard', skipFormat: true })).resolves.toBeUndefined();
+    await expect(uiPageGenerator(tree, { name: 'AdminDashboard', skipFormat: true })).resolves.toEqual(
+      expect.any(Function),
+    );
 
     expect(tree.exists('ui/pages/src/AdminDashboard/AdminDashboard.tsx')).toBe(true);
   });

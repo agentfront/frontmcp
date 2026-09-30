@@ -1,6 +1,7 @@
-import { readJsonFile } from '@nx/devkit';
-import { join } from 'path';
 import { existsSync } from 'fs';
+import { join } from 'path';
+
+import { readJsonFile } from '@nx/devkit';
 
 let cachedVersion: string | undefined;
 
@@ -46,6 +47,18 @@ export function getFrontmcpDevDependencies(): Record<string, string> {
   };
 }
 
+/** What `frontmcp test` and the generated `jest.config.cjs` need in the workspace. */
+export function getJestDevDependencies(): Record<string, string> {
+  return {
+    '@swc/core': '~1.15.8',
+    '@swc/helpers': '~0.5.18',
+    '@swc/jest': '~0.2.39',
+    '@types/jest': '^30.0.0',
+    '@types/node': '^24.0.0',
+    jest: '^30.0.2',
+  };
+}
+
 const NX_VERSION = '22.6.4';
 
 export function getNxVersion(): string {
@@ -66,9 +79,9 @@ export function getNxDependencies(): Record<string, string> {
 export function getNxDevDependencies(): Record<string, string> {
   return {
     '@nx/workspace': NX_VERSION,
-    '@swc-node/register': '~1.9.1',
-    '@swc/core': '~1.5.7',
-    '@swc/helpers': '~0.5.11',
+    '@swc-node/register': '~1.11.1',
+    '@swc/core': '~1.15.8',
+    '@swc/helpers': '~0.5.18',
     '@swc/jest': '~0.2.39',
     '@types/jest': '^30.0.0',
     '@types/node': '^24.0.0',

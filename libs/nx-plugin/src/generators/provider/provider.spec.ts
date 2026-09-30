@@ -1,5 +1,6 @@
+import { addProjectConfiguration, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, addProjectConfiguration } from '@nx/devkit';
+
 import { providerGenerator } from './provider';
 
 describe('provider generator', () => {
@@ -24,21 +25,22 @@ describe('provider generator', () => {
     await providerGenerator(tree, { name: 'database', project: 'my-app', skipFormat: true });
 
     const content = tree.read('apps/my-app/src/providers/database.provider.ts', 'utf-8');
-    expect(content).toContain("scope: 'singleton'");
+    expect(content).toContain('scope: ProviderScope.GLOBAL');
   });
 
   it('should use specified scope', async () => {
     await providerGenerator(tree, { name: 'database', project: 'my-app', scope: 'request', skipFormat: true });
 
     const content = tree.read('apps/my-app/src/providers/database.provider.ts', 'utf-8');
-    expect(content).toContain("scope: 'request'");
+    expect(content).toContain('scope: ProviderScope.CONTEXT');
   });
 
-  it('should generate token with CONSTANT_CASE', async () => {
+  it('should register the class itself as the DI token', async () => {
     await providerGenerator(tree, { name: 'database', project: 'my-app', skipFormat: true });
 
     const content = tree.read('apps/my-app/src/providers/database.provider.ts', 'utf-8');
-    expect(content).toContain('DATABASE_TOKEN');
+    expect(content).toContain("name: 'DatabaseProvider'");
+    expect(content).not.toContain('token:');
   });
 
   it('should use correct class name', async () => {

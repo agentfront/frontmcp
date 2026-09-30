@@ -38,6 +38,7 @@ nx g @frontmcp/nx:server production --apps crm,analytics
     ├── docker-compose.yml       # Docker Compose (+ Redis if selected)
     ├── .dockerignore
     ├── project.json
+    ├── package.json             # Minimal manifest so `frontmcp build` runs in the project root
     ├── tsconfig.json
     └── tsconfig.lib.json
     ```
@@ -49,6 +50,7 @@ nx g @frontmcp/nx:server production --apps crm,analytics
     ├── skills/                  # Skills bundle (unless --skills none)
     ├── vercel.json              # Vercel deployment config
     ├── project.json
+    ├── package.json             # Minimal manifest so `frontmcp build` runs in the project root
     ├── tsconfig.json
     └── tsconfig.lib.json
     ```
@@ -60,6 +62,7 @@ nx g @frontmcp/nx:server production --apps crm,analytics
     ├── skills/                  # Skills bundle (unless --skills none)
     ├── template.yaml            # AWS SAM template
     ├── project.json
+    ├── package.json             # Minimal manifest so `frontmcp build` runs in the project root
     ├── tsconfig.json
     └── tsconfig.lib.json
     ```
@@ -71,6 +74,7 @@ nx g @frontmcp/nx:server production --apps crm,analytics
     ├── skills/                  # Skills bundle (unless --skills none)
     ├── wrangler.toml            # Cloudflare Workers config
     ├── project.json
+    ├── package.json             # Minimal manifest so `frontmcp build` runs in the project root
     ├── tsconfig.json
     └── tsconfig.lib.json
     ```

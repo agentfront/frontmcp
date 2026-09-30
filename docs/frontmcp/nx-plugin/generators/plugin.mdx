@@ -35,7 +35,7 @@ src/plugins/
 ## Generated Code
 
 ```ts audit.plugin.ts
-import { Plugin, DynamicPlugin, type PluginRegistrationContext } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, type ProviderType } from '@frontmcp/sdk';
 
 export interface AuditPluginOptions {
   // TODO: define plugin options
@@ -46,15 +46,21 @@ export interface AuditPluginOptions {
   description: 'TODO: describe what this plugin does',
 })
 export class AuditPlugin extends DynamicPlugin<AuditPluginOptions> {
-  async dynamicProviders() {
-    return [];
+  options: AuditPluginOptions;
+
+  constructor(options: AuditPluginOptions = {}) {
+    super();
+    this.options = options;
   }
 
-  async onRegister(ctx: PluginRegistrationContext): Promise<void> {
-    // TODO: register tools, resources, prompts, or context extensions
+  // Providers this plugin contributes to the container.
+  static override dynamicProviders(_options: AuditPluginOptions): ProviderType[] {
+    return [];
   }
 }
 ```
+
+`dynamicProviders` is a **static** method that receives the plugin options; there is no instance `dynamicProviders()` and no `onRegister` hook to implement.
 
 ### Context Extension (optional)
 

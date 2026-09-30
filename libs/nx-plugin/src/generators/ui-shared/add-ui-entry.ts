@@ -1,4 +1,4 @@
-import { type Tree, updateJson } from '@nx/devkit';
+import { updateJson, type Tree } from '@nx/devkit';
 
 function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -1,9 +1,11 @@
-import { type Tree, formatFiles, generateFiles, installPackagesTask, type GeneratorCallback } from '@nx/devkit';
 import { execSync } from 'child_process';
 import { join } from 'path';
-import type { WorkspaceGeneratorSchema } from './schema.js';
-import { normalizeOptions } from './lib/index.js';
+
+import { formatFiles, generateFiles, installPackagesTask, type GeneratorCallback, type Tree } from '@nx/devkit';
+
 import { getFrontmcpVersion, getNxVersion } from '../../utils/versions.js';
+import { normalizeOptions } from './lib/index.js';
+import type { WorkspaceGeneratorSchema } from './schema.js';
 
 export async function workspaceGenerator(tree: Tree, schema: WorkspaceGeneratorSchema): Promise<GeneratorCallback> {
   return workspaceGeneratorInternal(tree, schema);
@@ -33,6 +35,7 @@ async function workspaceGeneratorInternal(tree: Tree, schema: WorkspaceGenerator
     await appGenerator(tree, {
       name: 'demo',
       directory: join(options.workspaceRoot, 'apps', 'demo'),
+      workspaceRoot: options.workspaceRoot,
       tags: 'scope:apps',
       skipFormat: true,
     });
