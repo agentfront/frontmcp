@@ -512,13 +512,17 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       // restart and a second instance (or a second Worker isolate) rejects
       // tokens the first one signed. That is a configuration fault, not a
       // degraded mode, so refuse rather than warn. Public mode never mints
-      // through this path, so it keeps the warning.
+      // through this path, so it neither throws nor warns.
       throw new JwtSecretRequiredError(options.mode);
     } else {
-      this.logger.warn(
-        'JWT_SECRET is not set; signing with a random per-process secret. Tokens will not survive a ' +
-          'restart and will not verify across instances. Set JWT_SECRET for any deployment that mints tokens.',
-      );
+      // A public server has no user tokens to lose on restart, so the warning is noise there;
+      // modes that mint and verify real tokens keep it.
+      if (!isPublicMode(options)) {
+        this.logger.warn(
+          'JWT_SECRET is not set; signing with a random per-process secret. Tokens will not survive a ' +
+            'restart and will not verify across instances. Set JWT_SECRET for any deployment that mints tokens.',
+        );
+      }
       this.secret = getDefaultNoAuthSecret();
     }
 

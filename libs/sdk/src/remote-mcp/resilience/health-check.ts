@@ -118,7 +118,9 @@ export class HealthChecker {
 
       // Determine status based on latency and thresholds
       const previousStatus = this.status;
-      if (this.consecutiveSuccesses >= this.options.healthyThreshold) {
+      // The first success leaves 'unknown' at once: waiting for `healthyThreshold`
+      // successes would keep /readyz failing for a whole interval after startup.
+      if (previousStatus === 'unknown' || this.consecutiveSuccesses >= this.options.healthyThreshold) {
         this.status = latencyMs > this.options.degradedLatencyMs ? 'degraded' : 'healthy';
       }
 

@@ -98,4 +98,32 @@ describe('LocalPrimaryAuth JWT secret handling (#546)', () => {
       await expectBoots('public');
     });
   });
+  describe('the "JWT_SECRET is not set" warning (#646)', () => {
+    async function warningsWhileBooting(mode: 'public' | 'local'): Promise<string[]> {
+      const messages: string[] = [];
+      const spies = (['warn', 'info', 'log'] as const).map((method) =>
+        jest.spyOn(console, method).mockImplementation((...args: unknown[]) => {
+          messages.push(args.map(String).join(' '));
+        }),
+      );
+      try {
+        await expectBoots(mode);
+      } finally {
+        spies.forEach((spy) => spy.mockRestore());
+      }
+      return messages.filter((message) => message.includes('JWT_SECRET is not set'));
+    }
+
+    it('stays silent for a public server, which mints no tokens of its own', async () => {
+      await withEnv({ NODE_ENV: 'development', JWT_SECRET: undefined }, async () => {
+        expect(await warningsWhileBooting('public')).toEqual([]);
+      });
+    });
+
+    it('still warns a token-minting mode that has no secret', async () => {
+      await withEnv({ NODE_ENV: 'development', JWT_SECRET: undefined }, async () => {
+        expect((await warningsWhileBooting('local')).length).toBeGreaterThan(0);
+      });
+    });
+  });
 });

@@ -143,6 +143,18 @@ describe('web-fetch peer address (GHSA-p3qf-fcwm-35x4)', () => {
       expect(seenRequests.length).toBeGreaterThan(0);
     });
 
+    it("keeps Bun's peer address for a request whose body the limit re-buffered", async () => {
+      const nativeRequests = new WeakSet<Request>();
+      const bun: WebFetchHandler = (request) => {
+        nativeRequests.add(request);
+        return server.handler(request, {
+          requestIP: (candidate) => (nativeRequests.has(candidate) ? { address: '198.51.100.7' } : null),
+        });
+      };
+
+      expect(await clientIpSeenBy(bun)).toBe('198.51.100.7');
+    });
+
     it('has no client IP when Bun cannot report one', async () => {
       const bun = withCtx(server.handler, { requestIP: () => null });
 

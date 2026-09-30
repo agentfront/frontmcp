@@ -127,12 +127,13 @@ export default class Server {}
 
 Configuration reference:
 
-| Option                 | Type                 | Default     | Description                                                                                                          |
-| ---------------------- | -------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------- |
-| `path`                 | `string`             | (optional)  | Absolute or `~`-prefixed path to the `.sqlite` file. Auto-resolved when omitted — see the default-path policy below. |
-| `walMode`              | `boolean`            | `true`      | Enable WAL mode for better read concurrency                                                                          |
-| `encryption`           | `{ secret: string }` | `undefined` | AES-256-GCM encryption for values at rest                                                                            |
-| `ttlCleanupIntervalMs` | `number`             | `60000`     | Interval for purging expired keys (milliseconds)                                                                     |
+| Option                 | Type                 | Default     | Description                                                                                                                                                                      |
+| ---------------------- | -------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`                 | `string`             | (optional)  | Absolute or `~`-prefixed path to the `.sqlite` file. Auto-resolved when omitted — see the default-path policy below.                                                             |
+| `walMode`              | `boolean`            | `true`      | Enable WAL mode for better read concurrency                                                                                                                                      |
+| `busyTimeoutMs`        | `number`             | `5000`      | How long a connection waits on a lock held by another process before `SQLITE_BUSY`. Set before WAL and table creation, so two processes starting on one file wait for each other |
+| `encryption`           | `{ secret: string }` | `undefined` | AES-256-GCM encryption for values at rest                                                                                                                                        |
+| `ttlCleanupIntervalMs` | `number`             | `60000`     | Interval for purging expired keys (milliseconds)                                                                                                                                 |
 
 ### With at-rest encryption
 
@@ -154,6 +155,8 @@ If the database stores sensitive session data (tokens, credentials), enable encr
 })
 export default class Server {}
 ```
+
+Reading a value written under a different secret throws `SqliteDecryptionError` (code `SQLITE_DECRYPTION_FAILED`) whose message names the secret as the likely cause; restore the original secret or delete the database file.
 
 The encryption uses HKDF-SHA256 for key derivation and AES-256-GCM for value encryption. The secret should be at least 32 characters. Store it in environment variables, never in source code.
 

@@ -1,3 +1,5 @@
+import { attachRedisErrorListener } from '@frontmcp/utils';
+
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobStateStore } from './job-state.interface';
 import { MemoryJobStateStore } from './memory-job-state.store';
@@ -37,6 +39,7 @@ export function createJobStateStore(options?: JobStateStoreOptions, logger?: Fro
             host: options.redis.host ?? 'localhost',
             port: options.redis.port ?? 6379,
           });
+      attachRedisErrorListener(client, { label: 'JobStateStore', logger });
       return {
         store: new RedisJobStateStore(client, logger, keyPrefix, ttlSeconds),
         type: 'redis',

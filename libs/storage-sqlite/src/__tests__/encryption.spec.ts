@@ -1,4 +1,4 @@
-import { deriveEncryptionKey, encryptValue, decryptValue } from '../encryption';
+import { decryptValue, deriveEncryptionKey, encryptValue } from '../encryption';
 
 describe('Encryption', () => {
   const secret = 'test-secret-key-for-encryption';
@@ -82,5 +82,15 @@ describe('Encryption', () => {
       parts[2] = parts[2].slice(0, -2) + 'XX';
       expect(() => decryptValue(key, parts.join(':'))).toThrow();
     });
+  });
+});
+
+describe('SqliteDecryptionError (#646)', () => {
+  it('is thrown with an actionable message when the encryption secret changed', () => {
+    const { SqliteDecryptionError } = require('../encryption') as typeof import('../encryption');
+    const encrypted = encryptValue(deriveEncryptionKey('old-secret'), 'payload');
+    const attempt = () => decryptValue(deriveEncryptionKey('new-secret'), encrypted);
+    expect(attempt).toThrow(SqliteDecryptionError);
+    expect(attempt).toThrow(/encryption secret/i);
   });
 });

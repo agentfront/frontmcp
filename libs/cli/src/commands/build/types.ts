@@ -12,6 +12,12 @@ export type AdapterBuildContext = {
    * the server's `http.entryPath` default so one declaration drives both.
    */
   transportHttpPath?: string;
+  /**
+   * `FRONTMCP_*` security-header variables derived from `server.csp` /
+   * `server.headers`. Adapters that emit a setup file set each one only when the
+   * platform has not already defined it.
+   */
+  securityHeadersEnv?: Record<string, string>;
 };
 
 /** Outcome of reconciling an existing platform config file with the build. */

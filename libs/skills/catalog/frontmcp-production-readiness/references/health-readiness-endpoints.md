@@ -81,7 +81,9 @@ Deep check: probes all registered dependencies, returns catalog hash and registr
 The health service automatically registers probes for:
 
 - **Session store** (Redis/Vercel KV) via `TransportService.pingSessionStore()`
-- **Remote MCP apps** via the existing `HealthCheckManager` background checks
+- **Remote MCP apps** via the existing `HealthCheckManager` background checks. Until the first check completes the probe is `degraded` (`state: unknown`), so `/readyz` stays 200; a remote that fails its checks is `unhealthy` and gives 503.
+
+The fetch handler (Workers, Vercel Edge, Deno) honours the same `health` settings (`healthzPath`, `readyzPath`, `readyz.enabled`, `enabled: false` gives 404).
 
 ## Custom Probes
 

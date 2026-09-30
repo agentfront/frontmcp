@@ -336,6 +336,11 @@ Serverless environments require distributed storage since each invocation may ru
       },
     })
     ```
+
+    <Note>
+      Vercel KV has no pub/sub, so **background tasks** and **elicitation** cannot use it. The server still starts: tasks are skipped with a `[tasks]` startup warning unless you set `tasks: { enabled: true }` (which keeps the error), and elicitation throws `ElicitationNotSupportedError` only when its store actually resolves to Vercel KV. Give either feature its own backend (`tasks: { redis }`, or a Redis-backed `elicitation`) to use it on Vercel.
+    </Note>
+
   </Tab>
   <Tab title="Upstash (REST)">
     Upstash exposes a Vercel-KV-compatible REST API. Use the `vercel-kv`
@@ -455,6 +460,10 @@ Error: Serverless handler not initialized. Ensure @FrontMcp decorator ran and FR
 
 - Ensure your main.ts/main.js has the `@FrontMcp` decorator on a class
 - Verify the generated `index.js` sets the environment variable before importing main.js
+
+### Server answers 500 `server_misconfigured`
+
+A configuration fault (for example a missing `MCP_SESSION_SECRET` or `JWT_SECRET`) is answered on Node, Vercel and Lambda the same way as on Workers: `500 {"error":"server_misconfigured","code":"SESSION_SECRET_REQUIRED","message":"<remedy>"}`. The `code` is one of `SESSION_SECRET_REQUIRED`, `JWT_SECRET_REQUIRED`, `JWT_SECRET_INVALID`, `UNENFORCED_METADATA`, `AUTH_CONFIGURATION_ERROR` or `CONFIG_INVALID`; set the named variable in the platform's environment settings and redeploy.
 
 ### "Module not found: @codegenie/serverless-express"
 

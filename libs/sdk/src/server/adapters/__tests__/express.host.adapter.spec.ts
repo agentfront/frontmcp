@@ -175,6 +175,72 @@ describe('ExpressHostAdapter', () => {
     });
   });
 
+  describe('security headers (#646)', () => {
+    const fetchHeaders = async (adapter: ExpressHostAdapter, path = '/test'): Promise<http.IncomingHttpHeaders> => {
+      adapter.registerRoute('GET', '/test', (_req: unknown, res: any) => {
+        res.status(200).json({ ok: true });
+      });
+      const server = http.createServer(adapter.getHandler() as http.RequestListener);
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const port = (server.address() as { port: number }).port;
+      try {
+        const res = await new Promise<http.IncomingMessage>((resolve, reject) => {
+          http.get(`http://127.0.0.1:${port}${path}`, resolve).on('error', reject);
+        });
+        res.resume();
+        return res.headers;
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    };
+
+    it('sends nosniff and X-Frame-Options DENY by default and never X-Powered-By', async () => {
+      const headers = await fetchHeaders(new ExpressHostAdapter());
+      expect(headers['x-content-type-options']).toBe('nosniff');
+      expect(headers['x-frame-options']).toBe('DENY');
+      expect(headers['x-powered-by']).toBeUndefined();
+    });
+
+    it('sends security headers on 404s too', async () => {
+      const headers = await fetchHeaders(new ExpressHostAdapter(), '/nope');
+      expect(headers['x-content-type-options']).toBe('nosniff');
+      expect(headers['x-powered-by']).toBeUndefined();
+    });
+
+    it('applies configured headers and CSP', async () => {
+      const headers = await fetchHeaders(
+        new ExpressHostAdapter({
+          securityHeaders: {
+            hsts: 'max-age=31536000',
+            frameOptions: 'SAMEORIGIN',
+            custom: { 'Referrer-Policy': 'no-referrer' },
+            csp: { enabled: true, directives: { 'default-src': "'self'" } },
+          },
+        }),
+      );
+      expect(headers['strict-transport-security']).toBe('max-age=31536000');
+      expect(headers['x-frame-options']).toBe('SAMEORIGIN');
+      expect(headers['referrer-policy']).toBe('no-referrer');
+      expect(headers['content-security-policy']).toBe("default-src 'self'");
+    });
+
+    it('honours FRONTMCP_* env vars', async () => {
+      process.env['FRONTMCP_HSTS'] = 'max-age=10';
+      try {
+        const headers = await fetchHeaders(new ExpressHostAdapter());
+        expect(headers['strict-transport-security']).toBe('max-age=10');
+      } finally {
+        delete process.env['FRONTMCP_HSTS'];
+      }
+    });
+
+    it('omits a header configured as false', async () => {
+      const headers = await fetchHeaders(new ExpressHostAdapter({ securityHeaders: { frameOptions: false } }));
+      expect(headers['x-frame-options']).toBeUndefined();
+      expect(headers['x-content-type-options']).toBe('nosniff');
+    });
+  });
+
   describe('route registration', () => {
     it('should register routes with the correct method and path', () => {
       const adapter = new ExpressHostAdapter();

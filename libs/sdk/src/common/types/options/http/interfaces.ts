@@ -180,6 +180,44 @@ export interface HttpOptionsInterface {
    * @see HttpRouteConfig
    */
   routes?: HttpRouteConfig[];
+
+  /**
+   * Response security headers (`X-Content-Type-Options`, `X-Frame-Options`,
+   * `Strict-Transport-Security`, `Content-Security-Policy`, custom headers).
+   *
+   * `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are sent by
+   * default, and `X-Powered-By` is never sent. Precedence per header: this
+   * option, then the `FRONTMCP_HSTS` / `FRONTMCP_FRAME_OPTIONS` /
+   * `FRONTMCP_CONTENT_TYPE_OPTIONS` / `FRONTMCP_CSP_*` env vars, then the
+   * default. Set a header to `false` to omit it.
+   */
+  securityHeaders?: SecurityHeadersOptions;
+}
+
+/** CSP configuration for {@link SecurityHeadersOptions.csp}. */
+export interface CspHeaderOptions {
+  /** Emit the CSP header. When omitted, `FRONTMCP_CSP_ENABLED` decides. */
+  enabled?: boolean;
+  /** Directive name to value. Arrays are joined with a space; `''` emits a value-less directive. */
+  directives?: Record<string, string | string[]>;
+  /** Appended as `report-uri`. */
+  reportUri?: string;
+  /** Send `Content-Security-Policy-Report-Only` instead of enforcing. */
+  reportOnly?: boolean;
+}
+
+/** Response security headers applied by the Express host and the web-fetch handler. */
+export interface SecurityHeadersOptions {
+  /** `Strict-Transport-Security` value, or `false` to omit. */
+  hsts?: string | false;
+  /** `X-Content-Type-Options` value. @default 'nosniff' */
+  contentTypeOptions?: string | false;
+  /** `X-Frame-Options` value. @default 'DENY' */
+  frameOptions?: string | false;
+  /** Additional headers, sent verbatim. */
+  custom?: Record<string, string>;
+  /** Content Security Policy. */
+  csp?: CspHeaderOptions;
 }
 
 /**
@@ -217,7 +255,7 @@ export interface SecurityOptions {
    * When enabled, validates Host and Origin headers on incoming requests.
    */
   dnsRebindingProtection?: {
-    /** Enable host/origin header validation. @default false */
+    /** Set `false` to turn host/origin header validation off. @default true */
     enabled?: boolean;
     /** Allowed Host header values (e.g., ['localhost:3001', 'api.example.com']) */
     allowedHosts?: string[];

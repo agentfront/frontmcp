@@ -1,5 +1,5 @@
 import { z } from '@frontmcp/lazy-zod';
-import { buildSetCookie, getMachineId, getRuntimeContext } from '@frontmcp/utils';
+import { getMachineId, getRuntimeContext } from '@frontmcp/utils';
 
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
 import {
@@ -18,7 +18,7 @@ import {
   type FlowRunOptions,
 } from '../../common';
 import { TransportServiceNotAvailableError } from '../../errors';
-import { DEFAULT_FRONTMCP_MACHINE_ID_HEADER, DEFAULT_FRONTMCP_NODE_COOKIE } from '../../ha/ha.constants';
+import { applyNodeAffinity } from '../../ha/ha-headers';
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
 
 export const plan = {
@@ -207,16 +207,7 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
     const transport = await transportService.createTransporter('sse', token, session.id, response);
 
     // Set LB affinity headers in distributed mode
-    if (getRuntimeContext().deployment === 'distributed') {
-      const nodeId = getMachineId();
-      response.setHeader(DEFAULT_FRONTMCP_MACHINE_ID_HEADER, nodeId);
-      const cookie = buildSetCookie({ name: DEFAULT_FRONTMCP_NODE_COOKIE, value: nodeId }, request);
-      if (cookie) {
-        const existing = response.getHeader('Set-Cookie');
-        const existingArr = Array.isArray(existing) ? existing : existing ? [String(existing)] : [];
-        response.setHeader('Set-Cookie', [...existingArr, cookie]);
-      }
-    }
+    applyNodeAffinity(response, request);
 
     await transport.initialize(request, response);
     this.handled();

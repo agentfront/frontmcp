@@ -1,3 +1,5 @@
+import { attachRedisErrorListener } from '@frontmcp/utils';
+
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobDefinitionStore } from './job-definition.interface';
 import { MemoryJobDefinitionStore } from './memory-job-definition.store';
@@ -59,6 +61,7 @@ export function createJobDefinitionStore(
             host: options.redis.host ?? 'localhost',
             port: options.redis.port ?? 6379,
           });
+      attachRedisErrorListener(client, { label: 'JobDefinitionStore', logger: effectiveLogger });
       return {
         // Factory-created client lifetime is bound to the store, so the store
         // must close it on dispose() — pass ownsClient: true.

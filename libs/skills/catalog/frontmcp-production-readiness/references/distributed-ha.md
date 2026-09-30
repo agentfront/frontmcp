@@ -122,12 +122,20 @@ When a request arrives for a session owned by a dead pod:
 
 Each pod subscribes to `mcp:ha:notify:{nodeId}` via Redis Pub/Sub. Cross-pod MCP notifications (progress updates, resource changes) are published to the target pod's channel for local delivery.
 
+## Redis Connection, TTL and Recovery
+
+- HA uses one dedicated ioredis client built from the top-level `redis` config (host/port/password/db/tls or `url`). It reconnects on its own, logs errors at a rate-limited interval, and is closed on shutdown. Vercel KV cannot back HA.
+- The orphan scanner reads `<keyPrefix>session:` (default `mcp:transport:session:`), the same prefix the session store writes, and only runs when `transport.persistence.redis` is set.
+- Session TTL is `persistence.defaultTtlMs`, then `persistence.redis.defaultTtlMs`, then 1 hour. The pod serving a session refreshes it at most once per quarter TTL.
+- If Redis is unreachable at startup the server still starts; the session store retries with exponential backoff (1s doubling to 30s) and persistence resumes without a restart.
+- `.frontmcp/machine-id` is only read/written in standalone development (never in `distributed` or `serverless`); in Kubernetes the machine ID is `HOSTNAME`.
+
 ## Load Balancer Affinity
 
 FrontMCP sets:
 
 - **Cookie**: `__frontmcp_node` on Streamable HTTP initialize
-- **Header**: `X-FrontMCP-Machine-Id` on every distributed response
+- **Header**: `X-FrontMCP-Machine-Id` on every distributed response (initialize, message POSTs, DELETE, stateless requests and SSE), applied by the hookable `applyNodeHeaders` flow stage
 
 NGINX sticky session example:
 
@@ -173,12 +181,14 @@ upstream mcp_backend {
 
 ## Troubleshooting
 
-| Problem                                  | Cause                                  | Solution                                                                 |
-| ---------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------ |
-| Sessions not transferred after pod death | `heartbeatTtlMs` too high              | Lower TTL while keeping >= 2x interval (e.g., 20-30s for a 10s interval) |
-| `HaConfigurationError` on startup        | Missing Redis config                   | Add `redis` to `@FrontMcp()` decorator                                   |
-| Duplicate notifications                  | Shared Redis subscriber connection     | Use dedicated connections per relay                                      |
-| Session takeover race failures           | High pod count + simultaneous restarts | Increase `takeoverGracePeriodMs`                                         |
+| Problem                                  | Cause                                  | Solution                                                                                                                                          |
+| ---------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sessions not transferred after pod death | `heartbeatTtlMs` too high              | Lower TTL while keeping >= 2x interval (e.g., 20-30s for a 10s interval)                                                                          |
+| `HaConfigurationError` on startup        | Missing Redis config                   | Add `redis` to `@FrontMcp()` decorator                                                                                                            |
+| Duplicate notifications                  | Shared Redis subscriber connection     | Use dedicated connections per relay                                                                                                               |
+| Sessions expire too early or too late    | TTL not configured                     | Set `transport.persistence.defaultTtlMs` (or `persistence.redis.defaultTtlMs`); default is 1 hour and slides while the owning pod serves requests |
+| Redis was down when pods started         | Startup connect failed                 | Nothing to do: the session store reconnects with backoff (1s to 30s) and `/readyz` turns 200                                                      |
+| Session takeover race failures           | High pod count + simultaneous restarts | Increase `takeoverGracePeriodMs`                                                                                                                  |
 
 ## Examples
 

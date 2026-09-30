@@ -28,7 +28,7 @@ import { detectProvider } from './provider';
 
 /**
  * Snapshot of the current runtime environment. Detected once and cached
- * for the lifetime of the process.
+ * for the lifetime of the process (`env` is read live from `NODE_ENV`).
  */
 export interface RuntimeContext {
   /** OS platform: 'darwin', 'linux', 'win32', etc. (issue #417: renamed from platform) */
@@ -267,11 +267,21 @@ let cached: RuntimeContext | undefined;
 
 /**
  * Get the current runtime context (lazy singleton).
- * The context is detected on first call and cached for the process lifetime.
+ * The context is detected on first call and cached for the process lifetime,
+ * except `env`, which always reflects the live `NODE_ENV`. A Cloudflare Worker's
+ * `[vars]` reach `process.env` on the first request, after module evaluation has
+ * already read this context, so a frozen `env` would report `development` in a
+ * production deployment.
  */
 export function getRuntimeContext(): RuntimeContext {
   if (!cached) {
-    cached = detectRuntimeContext();
+    const detected = detectRuntimeContext();
+    Object.defineProperty(detected, 'env', {
+      get: () => process.env['NODE_ENV'] || 'development',
+      enumerable: true,
+      configurable: true,
+    });
+    cached = detected;
   }
   return cached;
 }

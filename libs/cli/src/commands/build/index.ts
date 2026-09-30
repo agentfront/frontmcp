@@ -7,6 +7,7 @@ import { runTsc } from '../../shared/tsc';
 import { cleanOutDir } from '../../shared/clean-out-dir';
 import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
 import { ADAPTERS } from './adapters';
+import { securityHeadersEnv } from '../../config/security-headers-env';
 import { type AdapterBuildContext, type AdapterName } from './types';
 import { bundleForServerless } from './bundler';
 import { resolveEmittedEntry } from '../../shared/emitted-entry';
@@ -352,7 +353,10 @@ async function runAdapterBuild(
     typeof decoratorHttp === 'object' && decoratorHttp !== null
       ? (decoratorHttp as Record<string, unknown>)['entryPath']
       : undefined;
-  const context: AdapterBuildContext = { transportHttpPath };
+  const context: AdapterBuildContext = {
+    transportHttpPath,
+    securityHeadersEnv: securityHeadersEnv(deployment && 'server' in deployment ? deployment.server : undefined),
+  };
 
   if (
     typeof decoratorEntryPath === 'string' &&

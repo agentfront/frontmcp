@@ -1,11 +1,11 @@
 // common/types/options/__tests__/transport.options.spec.ts
 
 import {
-  transportOptionsSchema,
-  persistenceConfigSchema,
-  TransportOptionsInput,
   expandProtocolConfig,
+  persistenceConfigSchema,
   PROTOCOL_PRESETS,
+  transportOptionsSchema,
+  type TransportOptionsInput,
 } from '../transport';
 import { toLegacyProtocolFlags } from '../transport/schema';
 
@@ -17,9 +17,9 @@ function getRedisProperty<K extends string>(redis: unknown, key: K): unknown {
 
 describe('persistenceConfigSchema', () => {
   describe('default values', () => {
-    it('should apply default defaultTtlMs of 3600000 (1 hour)', () => {
+    it('leaves defaultTtlMs unset so redis.defaultTtlMs can apply (resolved to 1 hour by TransportService)', () => {
       const result = persistenceConfigSchema.parse({});
-      expect(result.defaultTtlMs).toBe(3600000);
+      expect(result.defaultTtlMs).toBeUndefined();
     });
   });
 

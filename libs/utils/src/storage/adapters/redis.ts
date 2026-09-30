@@ -6,6 +6,7 @@
  */
 
 import { StorageConfigError, StorageConnectionError } from '../errors';
+import { attachRedisErrorListener, type RedisErrorListenerOptions } from '../redis-error-listener';
 import type { MessageHandler, RedisAdapterOptions, SetOptions, Unsubscribe } from '../types';
 import { validateTTL } from '../utils';
 import { BaseStorageAdapter } from './base';
@@ -67,6 +68,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   private subscriber?: Redis;
   private readonly options: RedisAdapterOptions;
   private readonly ownsClient: boolean;
+  private detachErrorListener?: () => void;
   private connecting?: Promise<void>;
   private readonly keyPrefix: string;
   private readonly subscriptionHandlers = new Map<string, Set<MessageHandler>>();
@@ -145,7 +147,12 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
       await client.ping();
       this.client = client;
       this.connected = true;
-      if (this.ownsClient) client.removeListener('error', recordSocketError);
+      if (this.ownsClient) {
+        client.removeListener('error', recordSocketError);
+        // A later outage makes ioredis emit 'error' on every reconnect attempt; without a
+        // listener each one is printed as "Unhandled error event".
+        this.detachErrorListener = attachRedisErrorListener(client, { label: 'RedisStorage' });
+      }
     } catch (e) {
       // A client this adapter created keeps reconnecting in the background
       // unless it is torn down, and `disconnect()` is a no-op while
@@ -177,6 +184,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
       await this.client.quit();
     }
 
+    this.detachErrorListener?.();
+    this.detachErrorListener = undefined;
     this.client = undefined;
     this.connected = false;
     this.subscriptionHandlers.clear();
@@ -460,6 +469,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
       throw new StorageConfigError('redis', 'Cannot create subscriber without url, config, or client');
     }
 
+    attachRedisErrorListener(subscriber, { label: 'RedisStorage:subscriber' });
+
     // Set up message handler before assigning to instance
     subscriber.on('message', (channel: string, message: string) => {
       const handlers = this.subscriptionHandlers.get(channel);
@@ -501,4 +512,37 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   getClient(): Redis | undefined {
     return this.client;
   }
+}
+
+export interface CreateRedisClientOptions {
+  url?: string;
+  host?: string;
+  port?: number;
+  password?: string;
+  db?: number;
+  tls?: boolean;
+  /** Prefix for the rate-limited connection-error log line. */
+  label?: string;
+  logger?: RedisErrorListenerOptions['logger'];
+}
+
+/**
+ * Create a plain ioredis client that reconnects on its own and never emits an unhandled
+ * 'error' event. The caller owns the client and must `quit()`/`disconnect()` it.
+ */
+export function createRedisClient(options: CreateRedisClientOptions): Redis {
+  const RedisClass = getRedisClass();
+  const baseOptions: RedisOptions = { lazyConnect: false, maxRetriesPerRequest: 3 };
+  const client = options.url
+    ? new RedisClass(options.url, baseOptions)
+    : new RedisClass({
+        ...baseOptions,
+        host: options.host ?? 'localhost',
+        port: options.port ?? 6379,
+        password: options.password,
+        db: options.db ?? 0,
+        tls: options.tls ? {} : undefined,
+      });
+  attachRedisErrorListener(client, { label: options.label ?? 'redis', logger: options.logger });
+  return client;
 }

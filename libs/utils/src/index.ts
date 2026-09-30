@@ -279,6 +279,7 @@ export {
   BaseStorageAdapter,
   MemoryStorageAdapter,
   RedisStorageAdapter,
+  createRedisClient,
   VercelKvStorageAdapter,
   UpstashStorageAdapter,
   FileSystemStorageAdapter,
@@ -308,6 +309,8 @@ export {
   expiresAtToTTL,
   isExpired,
   normalizeTTL,
+  attachRedisErrorListener,
+  DEFAULT_REDIS_ERROR_LOG_INTERVAL_MS,
 } from './storage';
 export type {
   StorageAdapter,
@@ -323,6 +326,9 @@ export type {
   UpstashAdapterOptions,
   StorageType,
   StorageConfig,
+  RedisErrorListenerOptions,
+  CreateRedisClientOptions,
+  ErrorEmitterClient,
 } from './storage';
 
 // LLM platform tool call processing (cross-platform: Node.js and browser)
