@@ -27,10 +27,10 @@ function createMetadata(): FlowMetadata<'session:verify'> {
   } as unknown as FlowMetadata<'session:verify'>;
 }
 
-function runPublic(headers: Record<string, string>) {
+function runPublic(headers: Record<string, string>, body?: unknown) {
   const scope = createMockScopeEntry({ auth: { mode: 'public' } as never });
   (scope.auth as unknown as Record<string, unknown>)['options'] = { mode: 'public' };
-  const input = createMockHttpRequest({ method: 'POST', path: '/', headers });
+  const input = createMockHttpRequest({ method: 'POST', path: '/', headers, body });
   const flow = new SessionVerifyFlow(createMetadata(), input as never, scope, jest.fn(), new Map());
   return runFlowStages(flow, ['parseInput', 'handlePublicMode']);
 }
@@ -158,6 +158,44 @@ describe('SessionVerifyFlow — anonymous sessions across secrets and instances'
     expect(second.output.authorization.session?.id).toBe(mintedOnA);
     expect(second.output.authorization.session?.payload?.nodeId).toBe('instance-a');
     expect(second.output.authorization.user.sub).toBe(first.output.authorization.user.sub);
+  });
+
+  it('mints a fresh session for an initialize that presents an id another instance owns', async () => {
+    // A re-initialize reusing a peer's id would build a second transport for that id here while
+    // the peer keeps its own: notifications and session state would split across the two.
+    useSessionSecret('shared-deployment-secret');
+    setMachineIdOverride('instance-a');
+    const first = await runPublic({});
+    if (first.output?.kind !== 'authorized') throw new Error('not authorized');
+    const mintedOnA = first.output.authorization.session?.id as string;
+
+    setMachineIdOverride('instance-b');
+    const { output } = await runPublic(
+      { 'mcp-session-id': mintedOnA },
+      { jsonrpc: '2.0', id: 1, method: 'initialize' },
+    );
+
+    expect(output?.kind).toBe('authorized');
+    if (output?.kind !== 'authorized') return;
+    expect(output.authorization.session?.id).not.toBe(mintedOnA);
+    expect(output.authorization.session?.payload?.nodeId).toBe('instance-b');
+  });
+
+  it('keeps the id of an initialize that this instance owns', async () => {
+    useSessionSecret('shared-deployment-secret');
+    setMachineIdOverride('instance-a');
+    const first = await runPublic({});
+    if (first.output?.kind !== 'authorized') throw new Error('not authorized');
+    const mintedOnA = first.output.authorization.session?.id as string;
+
+    const { output } = await runPublic(
+      { 'mcp-session-id': mintedOnA },
+      { jsonrpc: '2.0', id: 1, method: 'initialize' },
+    );
+
+    expect(output?.kind).toBe('authorized');
+    if (output?.kind !== 'authorized') return;
+    expect(output.authorization.session?.id).toBe(mintedOnA);
   });
 
   it('honors an id minted before a restart that changed the machine id', async () => {

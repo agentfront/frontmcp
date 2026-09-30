@@ -253,8 +253,16 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     // decision — it relays over the bus or recreates the transport from the
     // stored session (taking it over in HA mode), keyed on the STORED session's
     // `nodeId`.
+    //
+    // The exception is `initialize`: it builds a transport here for the id it presents, so an id a
+    // peer owns would leave two live transports for one session (notifications and session state
+    // split between them). It gets a fresh id instead, as it did before.
     if (sessionIdHeader) {
-      const existingPayload = decryptPublicSession(sessionIdHeader, authSignature);
+      const body = this.rawInput.request.body;
+      const isInitialize =
+        typeof body === 'object' && body !== null && 'method' in body && body.method === 'initialize';
+      const decrypted = decryptPublicSession(sessionIdHeader, authSignature);
+      const existingPayload = decrypted && isInitialize && decrypted.nodeId !== machineId ? undefined : decrypted;
       // `decryptPublicSession` already rejects any payload not signed with this
       // exact signature, so a session issued for one mode — or, in static mode,
       // for a DIFFERENT token — never reaches here.

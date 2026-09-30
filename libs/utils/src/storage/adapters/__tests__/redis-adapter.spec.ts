@@ -932,6 +932,30 @@ describe('RedisStorageAdapter', () => {
         expect(MockRedisClass).toHaveBeenCalledTimes(2);
       });
 
+      it('should share one connection attempt between concurrent connect() calls', async () => {
+        const adapter = new RedisStorageAdapter({ url: 'redis://localhost:6379' });
+
+        await Promise.all([adapter.connect(), adapter.connect()]);
+
+        expect(MockRedisClass).toHaveBeenCalledTimes(1);
+        expect(mockRedisInstance.ping).toHaveBeenCalledTimes(1);
+        expect(await adapter.ping()).toBe(true);
+      });
+
+      it('should fail every concurrent connect() with one attempt, then allow a retry', async () => {
+        mockRedisInstance.ping.mockRejectedValueOnce(new Error('ECONNREFUSED')).mockResolvedValue('PONG');
+        const adapter = new RedisStorageAdapter({ url: 'redis://localhost:6379' });
+
+        const attempts = await Promise.allSettled([adapter.connect(), adapter.connect()]);
+
+        expect(attempts.map((a) => a.status)).toEqual(['rejected', 'rejected']);
+        expect(MockRedisClass).toHaveBeenCalledTimes(1);
+        expect(mockRedisInstance.disconnect).toHaveBeenCalledTimes(1);
+
+        await expect(adapter.connect()).resolves.toBeUndefined();
+        expect(MockRedisClass).toHaveBeenCalledTimes(2);
+      });
+
       it('should leave an external client connected when connect fails', async () => {
         const externalClient = {
           ...createMockRedisClient(),

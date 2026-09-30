@@ -99,7 +99,7 @@ That also means a `@Will('checkAuthorization')` hook can implement its own share
 </Note>
 
 <Warning>
-  **The session id is the anonymous caller's only credential.** Every anonymous session shares an empty token, so the server honors an `mcp-session-id` only when it decrypts under this deployment's `MCP_SESSION_SECRET`. An id minted under another secret — another deployment sharing the Redis, or a secret you rotated — is answered with HTTP 404 and the client re-initializes. Run every instance with the same `MCP_SESSION_SECRET`: any of them then serves a session another one minted.
+  **The session id is the anonymous caller's only credential.** Every anonymous session shares an empty token, so the server honors an `mcp-session-id` only when it decrypts under this deployment's `MCP_SESSION_SECRET`. An id minted under another secret — another deployment sharing the Redis, or a secret you rotated — is answered with HTTP 404 and the client re-initializes. Run every instance with the same `MCP_SESSION_SECRET`: any of them then serves a session another one minted. A client that sends `initialize` again on a different instance starts a new session there, rather than a second transport for the old id.
 </Warning>
 
 ---
