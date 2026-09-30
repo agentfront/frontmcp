@@ -30,8 +30,9 @@
  * @module @frontmcp/ui/react/hooks
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import { useMcpBridgeContext, useMcpBridge } from './context';
+import { useCallback, useEffect, useState } from 'react';
+
+import { useMcpBridge, useMcpBridgeContext } from './context';
 
 // ============================================
 // Types
@@ -116,7 +117,20 @@ export type UseCallToolReturn<TInput extends object, TOutput> = [
  * ```
  */
 export function useToolInput<T extends object = Record<string, unknown>>(): T | null {
-  const { bridge, ready } = useMcpBridgeContext();
+  const { bridge, ready, revision } = useMcpBridgeContext();
+  const [, setTick] = useState(0);
+
+  // The host sends tool-input after the handshake; the bridge announces it on window.
+  useEffect(() => {
+    if (!ready || typeof window === 'undefined') return;
+    const bump = () => setTick((t) => t + 1);
+    window.addEventListener('tool:input', bump);
+    window.addEventListener('tool:input-partial', bump);
+    return () => {
+      window.removeEventListener('tool:input', bump);
+      window.removeEventListener('tool:input-partial', bump);
+    };
+  }, [ready, revision]);
 
   if (!ready || !bridge) {
     return null;
@@ -158,7 +172,7 @@ export function useToolInput<T extends object = Record<string, unknown>>(): T | 
  * ```
  */
 export function useToolOutput<T = unknown>(): T | null {
-  const { bridge, ready } = useMcpBridgeContext();
+  const { bridge, ready, revision } = useMcpBridgeContext();
   const [output, setOutput] = useState<T | null>(null);
 
   useEffect(() => {
@@ -180,7 +194,7 @@ export function useToolOutput<T = unknown>(): T | null {
     });
 
     return unsubscribe;
-  }, [bridge, ready]);
+  }, [bridge, ready, revision]);
 
   return output;
 }
@@ -211,7 +225,7 @@ export function useToolOutput<T = unknown>(): T | null {
  * ```
  */
 export function useStructuredContent<T = unknown>(): T | null {
-  const { bridge, ready } = useMcpBridgeContext();
+  const { bridge, ready, revision } = useMcpBridgeContext();
   const [content, setContent] = useState<T | null>(null);
 
   useEffect(() => {
@@ -238,7 +252,7 @@ export function useStructuredContent<T = unknown>(): T | null {
     });
 
     return unsubscribe;
-  }, [bridge, ready]);
+  }, [bridge, ready, revision]);
 
   return content;
 }

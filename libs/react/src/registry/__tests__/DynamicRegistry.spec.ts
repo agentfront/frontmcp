@@ -1,5 +1,6 @@
 import type { CallToolResult, ReadResourceResult } from '@frontmcp/sdk';
-import type { DynamicToolDef, DynamicResourceDef } from '../../types';
+
+import type { DynamicResourceDef, DynamicToolDef } from '../../types';
 import { DynamicRegistry } from '../DynamicRegistry';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -633,6 +634,32 @@ describe('DynamicRegistry', () => {
 
       expect(listener).not.toHaveBeenCalled();
       expect(registry.getVersion()).toBe(v);
+    });
+  });
+  describe('onResourceUpdated', () => {
+    it('emits the uri when a resource read is updated', () => {
+      const registry = new DynamicRegistry();
+      registry.registerResource({ uri: 'state://a', name: 'a', read: jest.fn() });
+      const listener = jest.fn();
+      registry.onResourceUpdated(listener);
+
+      registry.updateResourceRead('state://a', jest.fn());
+
+      expect(listener).toHaveBeenCalledWith('state://a');
+    });
+
+    it('does not emit for unknown uris and stops after unsubscribe', () => {
+      const registry = new DynamicRegistry();
+      registry.registerResource({ uri: 'state://a', name: 'a', read: jest.fn() });
+      const listener = jest.fn();
+      const off = registry.onResourceUpdated(listener);
+
+      registry.updateResourceRead('state://missing', jest.fn());
+      expect(listener).not.toHaveBeenCalled();
+
+      off();
+      registry.updateResourceRead('state://a', jest.fn());
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 });

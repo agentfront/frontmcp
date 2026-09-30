@@ -1,9 +1,14 @@
+import { act, render } from '@testing-library/react';
 import React from 'react';
-import { render, act } from '@testing-library/react';
-import type { DirectMcpServer, DirectClient } from '@frontmcp/sdk';
-import { serverRegistry } from '../../registry/ServerRegistry';
+
+import type { DirectClient, DirectMcpServer } from '@frontmcp/sdk';
+
+import { ComponentRegistry } from '../../components/ComponentRegistry';
+import { FrontMcpContext } from '../../provider/FrontMcpContext';
+import { DynamicRegistry } from '../../registry/DynamicRegistry';
+import { serverRegistry, type ServerEntry } from '../../registry/ServerRegistry';
+import type { FrontMcpContextValue } from '../../types';
 import { useServer } from '../useServer';
-import type { ServerEntry } from '../../registry/ServerRegistry';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -241,5 +246,37 @@ describe('useServer', () => {
     });
 
     expect(captured).toBeUndefined();
+  });
+
+  it('reads the name of the nearest FrontMcpProvider when no name is given', () => {
+    const defaultServer = createMockServer();
+    const namedServer = createMockServer();
+    serverRegistry.register('default', defaultServer);
+    serverRegistry.register('named', namedServer);
+
+    let captured: ServerEntry | undefined;
+    const ctx = {
+      name: 'named',
+      registry: new ComponentRegistry(),
+      dynamicRegistry: new DynamicRegistry(),
+      getDynamicRegistry: () => new DynamicRegistry(),
+      connect: async () => {},
+    } as FrontMcpContextValue;
+
+    act(() => {
+      render(
+        React.createElement(
+          FrontMcpContext.Provider,
+          { value: ctx },
+          React.createElement(HookReader, {
+            onEntry: (entry) => {
+              captured = entry;
+            },
+          }),
+        ),
+      );
+    });
+
+    expect(captured!.server).toBe(namedServer);
   });
 });

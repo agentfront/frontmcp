@@ -85,6 +85,7 @@ import { ToolInstance } from '../tool/tool.instance';
 import ToolRegistry from '../tool/tool.registry';
 import { normalizeTool } from '../tool/tool.utils';
 import { hasUIConfig, StaticWidgetResourceTemplate, ToolUIRegistry } from '../tool/ui';
+import { describeIgnoredUiOptions } from '../tool/ui/ui-option-warnings';
 import { RedisTransportBus } from '../transport/bus';
 import { createEventStore } from '../transport/event-stores';
 import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/request-state';
@@ -1086,6 +1087,17 @@ export class Scope extends ScopeEntry {
   private async compileUIWidgets(): Promise<void> {
     const toolsWithUI = this.scopeTools.getTools(true).filter((t) => hasUIConfig(t.metadata));
     if (toolsWithUI.length === 0) return;
+
+    for (const tool of toolsWithUI) {
+      const resourceUri = tool.metadata.ui?.resourceUri;
+      this.toolUIRegistry.registerTool(tool.metadata.name, typeof resourceUri === 'string' ? resourceUri : undefined);
+      for (const message of describeIgnoredUiOptions(
+        tool.metadata.name,
+        tool.metadata.ui as Record<string, unknown> | undefined,
+      )) {
+        this.logger.warn(message);
+      }
+    }
 
     // Register static widget template for OpenAI discovery (ui://widget/{toolName}.html)
     this.scopeResources.registerDynamicResource(StaticWidgetResourceTemplate);

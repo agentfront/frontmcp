@@ -34,9 +34,17 @@ const MARKER = '__frontmcpCreateRequire';
 // `file:///` base: `require` is only used here to reach Node builtins (via
 // `nodejs_compat`), and builtin resolution doesn't depend on the base path. On
 // Node, the real `import.meta.url` is used unchanged.
+//
+// The banner must not statically `import ... from 'module'`: a browser bundler (Vite,
+// webpack) replaces that builtin with an empty stub, so `createRequire` is not a function
+// and the app dies on load (#645). `process.getBuiltinModule` reaches the builtin only where
+// one exists (Node, workerd with nodejs_compat); in a browser `require` stays undefined and
+// esbuild's `__require` shim only throws if a lazy `require()` is actually called.
 const BANNER =
-  "import { createRequire as __frontmcpCreateRequire } from 'module';\n" +
-  "const require = __frontmcpCreateRequire(import.meta.url || 'file:///');\n";
+  'const __frontmcpModule = typeof process !== "undefined" && typeof process.getBuiltinModule === "function"' +
+  ' ? process.getBuiltinModule("module") : undefined;\n' +
+  "const require = __frontmcpModule ? __frontmcpModule.createRequire(import.meta.url || 'file:///') : undefined;\n" +
+  '// __frontmcpCreateRequire\n';
 
 function injectInto(file) {
   const original = fs.readFileSync(file, 'utf8');
@@ -83,4 +91,8 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { BANNER, MARKER };
