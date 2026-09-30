@@ -4,7 +4,7 @@
  *
  * The remote-proxy is built around `@modelcontextprotocol/sdk`'s `Client`, which
  * cannot speak 2026-07-28 — it opens with `initialize` and assumes a session.
- * Rather than fork the proxy, this adapter satisfies the eight methods the
+ * Rather than fork the proxy, this adapter satisfies the nine methods the
  * service actually calls, so a remote server on either revision looks the same
  * to everything downstream.
  *
@@ -25,6 +25,7 @@ export interface RemoteClientLike {
   callTool(params: { name: string; arguments?: Record<string, unknown> }): Promise<unknown>;
   listResources(params?: ListPageParams): Promise<{ resources: unknown[]; nextCursor?: string }>;
   readResource(params: { uri: string }): Promise<unknown>;
+  listResourceTemplates(params?: ListPageParams): Promise<{ resourceTemplates: unknown[]; nextCursor?: string }>;
   listPrompts(params?: ListPageParams): Promise<{ prompts: unknown[]; nextCursor?: string }>;
   getPrompt(params: { name: string; arguments?: Record<string, string> }): Promise<unknown>;
   getServerCapabilities(): ServerCapabilities | undefined;
@@ -76,6 +77,14 @@ export class McpStatelessClientAdapter implements RemoteClientLike {
     const result = await this.client.listResources(params?.cursor);
     return {
       resources: Array.isArray(result['resources']) ? (result['resources'] as unknown[]) : [],
+      ...nextCursorOf(result),
+    };
+  }
+
+  async listResourceTemplates(params?: ListPageParams): Promise<{ resourceTemplates: unknown[]; nextCursor?: string }> {
+    const result = await this.client.listResourceTemplates(params?.cursor);
+    return {
+      resourceTemplates: Array.isArray(result['resourceTemplates']) ? (result['resourceTemplates'] as unknown[]) : [],
       ...nextCursorOf(result),
     };
   }

@@ -9,6 +9,7 @@ import {
   ProviderScope,
   type FrontMcpConfigType,
   type ProviderType,
+  type ToolType,
 } from '@frontmcp/sdk';
 
 import { createRememberAccessor } from './providers/remember-accessor.provider';
@@ -17,6 +18,7 @@ import RememberRedisProvider from './providers/remember-redis.provider';
 import RememberVercelKvProvider from './providers/remember-vercel-kv.provider';
 import { RememberAccessorToken, RememberConfigToken, RememberStoreToken } from './remember.symbols';
 import type { RememberPluginOptions, RememberPluginOptionsInput } from './remember.types';
+import { createRememberTools } from './tools/remember-tools.factory';
 
 /**
  * RememberPlugin - Stateful session memory for FrontMCP.
@@ -86,6 +88,13 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
       ...options,
     } as RememberPluginOptions;
   }
+
+  /**
+   * The memory tools, when `tools.enabled` is set: `remember_this`, `recall`, `forget` and
+   * `list_memories`, under `tools.prefix`.
+   */
+  static override dynamicTools = (options: RememberPluginOptionsInput): readonly ToolType[] =>
+    options.tools?.enabled ? createRememberTools(options.tools.prefix) : [];
 
   /**
    * Dynamic providers based on plugin options.

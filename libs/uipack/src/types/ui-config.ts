@@ -477,7 +477,7 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - Claude / static widgets: the host measures DOM height itself, so this is
    *   a CSS-only no-op.
    * - OpenAI: forwarded through the Apps SDK sizing API.
-   * - ext-apps hosts: reported via the `ui/setSize` request.
+   * - ext-apps hosts: reported with the standard `ui/notifications/size-changed` notification.
    *
    * @default true (when the widget configures sizing)
    */

@@ -569,7 +569,7 @@ RememberPlugin.init({
 });
 ```
 
-This exposes tools like `memory_remember_this`, `memory_recall`, `memory_forget`, and `memory_list_memories`.
+This exposes `memory_remember_this`, `memory_recall`, `memory_forget`, and `memory_list_memories`. Without `prefix` they are `remember_this`, `recall`, `forget` and `list_memories`; with `enabled` unset or `false` no memory tool is registered. Each tool's description names its prefixed siblings, and a scope outside `allowedScopes` is rejected.
 
 Each takes an optional `scope` (default `session`), described to the model the same way in all four tools:
 

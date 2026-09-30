@@ -503,6 +503,15 @@ var ExtAppsAdapter = {
       window.parent.postMessage({ jsonrpc: '2.0', id: id, method: method, params: params }, targetOrigin);
     });
   },
+  sendNotification: function(method, params) {
+    // JSON-RPC notification: no id, no response. Same origin rule as sendRequest.
+    if (!this.trustedOrigin && this.trustedOrigins.length === 0) {
+      return Promise.reject(new Error('Cannot send notification: no trusted origin established'));
+    }
+    var targetOrigin = this.trustedOrigin || this.trustedOrigins[0];
+    window.parent.postMessage({ jsonrpc: '2.0', method: method, params: params }, targetOrigin);
+    return Promise.resolve();
+  },
   performHandshake: function(context) {
     var self = this;
     var params = {
@@ -544,13 +553,12 @@ var ExtAppsAdapter = {
     return this.sendRequest('ui/setDisplayMode', { mode: mode });
   },
   setSize: function(context, size) {
-    // FrontMCP sizing channel — parallels ui/setDisplayMode. Reports the
-    // measured/desired widget dimensions to the host.
-    return this.sendRequest('ui/setSize', {
-      height: size && size.height,
-      width: size && size.width,
-      aspectRatio: size && size.aspectRatio
-    });
+    // Standard ext-apps sizing: the view tells the host its dimensions with the
+    // ui/notifications/size-changed notification ({ width?, height? } in px).
+    var params = {};
+    if (size && typeof size.width === 'number') params.width = size.width;
+    if (size && typeof size.height === 'number') params.height = size.height;
+    return this.sendNotification('ui/notifications/size-changed', params);
   },
   requestClose: function(context) {
     return this.sendRequest('ui/close', {});
@@ -953,7 +961,7 @@ FrontMcpBridge.prototype.requestDisplayMode = function(mode) {
 
 // Report a desired widget size to the host. \`size\` is { height?, width?, aspectRatio? }.
 // Per-adapter behaviour: Claude/generic no-op (host measures the DOM),
-// ext-apps sends ui/setSize, OpenAI forwards to its SDK when available.
+// ext-apps sends ui/notifications/size-changed, OpenAI forwards to its SDK when available.
 FrontMcpBridge.prototype.setSize = function(size) {
   if (!this._adapter) return Promise.reject(new Error('Not initialized'));
   if (!this._adapter.setSize) return Promise.resolve();

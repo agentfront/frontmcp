@@ -51,10 +51,11 @@ describe('generateBridgeIIFE', () => {
       expect(result).toContain('__mcpAppsEnabled');
     });
 
-    it('should emit a ui/setSize request from the ext-apps setSize method', () => {
+    it('should emit the standard size-changed notification from the ext-apps setSize method', () => {
       const result = generateBridgeIIFE({ adapters: ['ext-apps', 'generic'] });
       expect(result).toContain('setSize:');
-      expect(result).toContain("'ui/setSize'");
+      expect(result).toContain("'ui/notifications/size-changed'");
+      expect(result).not.toContain('ui/setSize');
     });
   });
 

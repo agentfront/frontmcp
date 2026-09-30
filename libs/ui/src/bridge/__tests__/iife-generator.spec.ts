@@ -246,10 +246,11 @@ describe('IIFE Generator', () => {
       expect(script).toContain('window.FrontMcpBridge.setSize');
     });
 
-    it('should emit ui/setSize from the ext-apps adapter', () => {
+    it('should emit the standard size-changed notification from the ext-apps adapter', () => {
       const script = generateBridgeIIFE({ adapters: ['ext-apps', 'generic'] });
       expect(script).toContain('setSize:');
-      expect(script).toContain("'ui/setSize'");
+      expect(script).toContain("'ui/notifications/size-changed'");
+      expect(script).not.toContain('ui/setSize');
     });
 
     it('is present even when only the generic adapter is selected', () => {

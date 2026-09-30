@@ -20,10 +20,11 @@
  */
 import { createBridgeFrame, HOST_ORIGIN, type BridgeFrame, type StubLayout } from './bridge-frame';
 
+const SIZE_NOTIFICATION = 'ui/notifications/size-changed';
 const HANDSHAKE_RESULT = { hostCapabilities: {}, hostContext: {} };
 
 function sizeRequests(frame: BridgeFrame) {
-  return frame.requests('ui/setSize');
+  return frame.notifications(SIZE_NOTIFICATION);
 }
 
 describe.each([
@@ -61,27 +62,27 @@ describe.each([
       expect(sent).toHaveLength(1);
       expect(sent[0].params).toMatchObject({ height: 120 });
       expect(window.postMessage).toHaveBeenLastCalledWith(
-        expect.objectContaining({ method: 'ui/setSize' }),
+        expect.objectContaining({ method: SIZE_NOTIFICATION }),
         HOST_ORIGIN,
       );
     });
 
-    it('sends a rejected report again for the same height', async () => {
+    it('reports the size with the standard notification, not the FrontMCP-only ui/setSize request', async () => {
       const f = open({ autoResize: true });
       await f.settle();
       await f.answer('ui/initialize', HANDSHAKE_RESULT);
       f.flushFrames();
       await f.settle();
-      expect(sizeRequests(f)).toHaveLength(1);
-
-      await f.fail('ui/setSize');
-      f.triggerResize();
-      f.flushFrames();
-      await f.settle();
 
       const sent = sizeRequests(f);
-      expect(sent).toHaveLength(2);
-      expect(sent[1].params).toMatchObject({ height: 120 });
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toEqual({
+        jsonrpc: '2.0',
+        method: SIZE_NOTIFICATION,
+        params: { width: expect.any(Number), height: 120 },
+      });
+      expect(f.posted.filter((m) => m.method === 'ui/setSize')).toHaveLength(0);
+      expect(f.requests(SIZE_NOTIFICATION)).toHaveLength(0);
     });
 
     it('does not send an unchanged height again after a successful report', async () => {
@@ -90,7 +91,6 @@ describe.each([
       await f.answer('ui/initialize', HANDSHAKE_RESULT);
       f.flushFrames();
       await f.settle();
-      await f.answer('ui/setSize', {});
 
       f.triggerResize();
       f.flushFrames();
@@ -112,12 +112,12 @@ describe.each([
       expect(sent).toHaveLength(1);
       expect(sent[0].params).toMatchObject({ height: 300, width: 500 });
 
-      await f.answer('ui/setSize', { ok: true });
-      await expect(first).resolves.toEqual({ ok: true });
-      await expect(latest).resolves.toEqual({ ok: true });
+      await f.settle();
+      await expect(first).resolves.toBeUndefined();
+      await expect(latest).resolves.toBeUndefined();
     });
 
-    it('sends a queued setSize after a failed handshake and passes the host rejection through', async () => {
+    it('sends a queued setSize after a failed handshake', async () => {
       const f = open({ autoResize: false });
       await f.settle();
       // The promise comes from the frame's realm, so read its outcome as a string.
@@ -131,8 +131,7 @@ describe.each([
       const sent = sizeRequests(f);
       expect(sent).toHaveLength(1);
       expect(sent[0].params).toMatchObject({ height: 300 });
-      await f.fail('ui/setSize');
-      await expect(outcome).resolves.toMatch(/^rejected: Method not found/);
+      await expect(outcome).resolves.toBe('resolved');
     });
   });
 
