@@ -1,17 +1,23 @@
-import { Agent, AgentContext } from '@frontmcp/sdk';
-
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
+<% toolRefs.forEach(t => { %>import <%= t.className %>Tool from '<%= t.importPath %>';
+<% }) %>
 @Agent({
   name: '<%= name %>',
   description: 'TODO: describe what this agent does',
   llm: {
+    provider: '<%= llmProvider %>',
     model: '<%= model %>',
+    apiKey: { env: '<%= apiKeyEnv %>' },
+  },
+  inputSchema: {
+    task: z.string().describe('TODO: describe the task the agent should perform'),
   },<% if (toolRefs.length > 0) { %>
-  tools: [<%- toolRefs.map(t => `'${t}'`).join(', ') %>],<% } %>
+  tools: [<%- toolRefs.map(t => `${t.className}Tool`).join(', ') %>],<% } %>
   systemInstructions: 'TODO: define system instructions for this agent',
 })
 export default class <%= className %>Agent extends AgentContext {
-  async execute(input: unknown): Promise<unknown> {
-    // TODO: implement agent logic
-    return {};
+  async execute(input: { task: string }) {
+    // The default implementation runs the LLM loop with the agent's tools.
+    return super.execute(input);
   }
 }

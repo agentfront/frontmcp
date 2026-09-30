@@ -1,7 +1,9 @@
-import { type Tree, formatFiles, generateFiles, names, type GeneratorCallback } from '@nx/devkit';
 import { join } from 'path';
-import type { ProviderGeneratorSchema } from './schema.js';
+
+import { formatFiles, generateFiles, type GeneratorCallback, type Tree } from '@nx/devkit';
+
 import { normalizePrimitiveOptions } from '../../utils/normalize-options.js';
+import type { ProviderGeneratorSchema } from './schema.js';
 
 export async function providerGenerator(
   tree: Tree,
@@ -9,12 +11,12 @@ export async function providerGenerator(
 ): Promise<GeneratorCallback | void> {
   const options = normalizePrimitiveOptions(tree, schema, 'providers');
   const scope = schema.scope ?? 'singleton';
-  const constantName = names(schema.name).constantName;
+  const scopeEnum = scope === 'singleton' ? 'GLOBAL' : 'CONTEXT';
 
   generateFiles(tree, join(__dirname, 'files'), options.directory, {
     ...options,
     scope,
-    constantName,
+    scopeEnum,
     tmpl: '',
   });
 

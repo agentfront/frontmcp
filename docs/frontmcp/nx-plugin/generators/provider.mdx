@@ -27,33 +27,37 @@ nx g @frontmcp/nx:provider database --project crm --scope singleton
 ## Generated Code
 
 ```ts
-import { Provider } from '@frontmcp/sdk';
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export const DATABASE_TOKEN = Symbol('DatabaseProvider');
-
+// Register with `providers: [DatabaseProvider]` on an @App or @FrontMcp,
+// then resolve it inside a tool with `this.get(DatabaseProvider)`.
 @Provider({
-  token: DATABASE_TOKEN,
-  scope: 'singleton',
+  name: 'DatabaseProvider',
+  scope: ProviderScope.GLOBAL,
 })
 export class DatabaseProvider {
   // TODO: implement provider logic
-
-  static factory(): DatabaseProvider {
-    return new DatabaseProvider();
-  }
 }
 ```
+
+`--scope singleton` generates `ProviderScope.GLOBAL`; `--scope request` and `--scope context` generate `ProviderScope.CONTEXT`.
+
+The provider class is its own injection token: register the class and resolve it by the same class. There is no separate token constant to import.
 
 ## Usage in Tools
 
 ```ts
-import { DATABASE_TOKEN } from '../providers/database.provider';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
+import { DatabaseProvider } from '../providers/database.provider';
 
 @Tool({ name: 'query-db', inputSchema: { sql: z.string() } })
 class QueryDbTool extends ToolContext {
-  async execute({ sql }) {
-    const db = this.get(DATABASE_TOKEN);
+  async execute({ sql }: { sql: string }) {
+    const db = this.get(DatabaseProvider);
     return db.query(sql);
   }
 }
 ```
+
+Add `providers: [DatabaseProvider]` to the `@App` or `@FrontMcp` decorator so the container can build it.

@@ -1,4 +1,5 @@
 // Generators
+export { initGenerator } from './generators/init/init.js';
 export { workspaceGenerator } from './generators/workspace/workspace.js';
 export { appGenerator } from './generators/app/app.js';
 export { libGenerator } from './generators/lib/lib.js';

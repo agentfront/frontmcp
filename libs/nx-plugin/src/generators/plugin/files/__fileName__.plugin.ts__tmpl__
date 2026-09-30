@@ -1,4 +1,4 @@
-import { Plugin, DynamicPlugin, type PluginRegistrationContext } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, type ProviderType } from '@frontmcp/sdk';
 
 export interface <%= className %>PluginOptions {
   // TODO: define plugin options
@@ -9,11 +9,15 @@ export interface <%= className %>PluginOptions {
   description: 'TODO: describe what this plugin does',
 })
 export class <%= className %>Plugin extends DynamicPlugin<<%= className %>PluginOptions> {
-  async dynamicProviders() {
-    return [];
+  options: <%= className %>PluginOptions;
+
+  constructor(options: <%= className %>PluginOptions = {}) {
+    super();
+    this.options = options;
   }
 
-  async onRegister(ctx: PluginRegistrationContext): Promise<void> {
-    // TODO: register tools, resources, prompts, or context extensions
+  // Providers this plugin contributes to the container.
+  static override dynamicProviders(_options: <%= className %>PluginOptions): ProviderType[] {
+    return [];
   }
 }

@@ -1,10 +1,11 @@
 import {
-  getFrontmcpVersion,
   getFrontmcpDependencies,
   getFrontmcpDevDependencies,
-  getNxVersion,
+  getFrontmcpVersion,
+  getJestDevDependencies,
   getNxDependencies,
   getNxDevDependencies,
+  getNxVersion,
 } from './versions';
 
 jest.mock('fs', () => ({
@@ -60,6 +61,33 @@ describe('versions', () => {
       const deps = getNxDevDependencies();
       expect(deps['typescript']).toBeDefined();
       expect(deps['jest']).toBeDefined();
+    });
+
+    it('pins swc to the range nx declares as its peer (create --nx ERESOLVE)', () => {
+      const peers: Record<string, string> = jest.requireActual('nx/package.json').peerDependencies;
+      const deps = getNxDevDependencies();
+      const floor = (range: string) =>
+        range
+          .replace(/^[\^~]/, '')
+          .split('.')
+          .map(Number);
+      const [pMajor, pMinor, pPatch] = floor(peers['@swc/core']);
+      const [major, minor, patch] = floor(deps['@swc/core']);
+      expect(major).toBe(pMajor);
+      expect(minor).toBeGreaterThanOrEqual(pMinor);
+      if (minor === pMinor) expect(patch).toBeGreaterThanOrEqual(pPatch);
+
+      const [nMajor, nMinor] = floor(peers['@swc-node/register']);
+      const [rMajor, rMinor] = floor(deps['@swc-node/register']);
+      expect(rMajor).toBe(nMajor);
+      expect(rMinor).toBeGreaterThanOrEqual(nMinor);
+    });
+  });
+
+  describe('getJestDevDependencies', () => {
+    it('lists what frontmcp test and the generated jest config need', () => {
+      const deps = getJestDevDependencies();
+      expect(Object.keys(deps)).toEqual(expect.arrayContaining(['@swc/core', '@swc/jest', '@types/jest', 'jest']));
     });
   });
 });

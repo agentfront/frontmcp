@@ -28,21 +28,32 @@ nx g @frontmcp/nx:agent researcher --project crm --model claude-sonnet-4-5-20250
 ## Generated Code
 
 ```ts
-import { Agent, AgentContext } from '@frontmcp/sdk';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
+
+import WebSearchTool from '../tools/web-search.tool';
+import SummarizeTool from '../tools/summarize.tool';
 
 @Agent({
   name: 'researcher',
   description: 'TODO: describe what this agent does',
   llm: {
+    provider: 'anthropic',
     model: 'claude-sonnet-4-5-20250514',
+    apiKey: { env: 'ANTHROPIC_API_KEY' },
   },
-  tools: ['web_search', 'summarize'],
+  inputSchema: {
+    task: z.string().describe('TODO: describe the task the agent should perform'),
+  },
+  tools: [WebSearchTool, SummarizeTool],
   systemInstructions: 'TODO: define system instructions for this agent',
 })
 export default class ResearcherAgent extends AgentContext {
-  async execute(input: unknown): Promise<unknown> {
-    // TODO: implement agent logic
-    return {};
+  async execute(input: { task: string }) {
+    // The default implementation runs the LLM loop with the agent's tools.
+    return super.execute(input);
   }
 }
 ```
+
+- The LLM provider follows the model name: models starting with `claude` use `anthropic` and read `ANTHROPIC_API_KEY`; everything else uses `openai` and reads `OPENAI_API_KEY`. Set the variable in the environment that runs the server.
+- Each name in `--tools` becomes an import of `../tools/<name>.tool` (relative to the agent file) and a class reference in `tools`. Names are de-duplicated, so `--tools search,search` imports the tool once. Generate the tools first with the [tool generator](/frontmcp/nx-plugin/generators/tool) so the imports resolve.

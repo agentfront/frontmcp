@@ -1,9 +1,9 @@
 import { execSync } from 'child_process';
+
 import type { ExecutorContext } from '../executor-context.js';
+import deployExecutor from './deploy.impl';
 
 jest.mock('child_process', () => ({ execSync: jest.fn() }));
-
-import deployExecutor from './deploy.impl';
 
 const mockContext: ExecutorContext = {
   root: '/workspace',

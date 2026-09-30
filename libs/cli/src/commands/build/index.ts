@@ -9,6 +9,8 @@ import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
 import { ADAPTERS } from './adapters';
 import { type AdapterBuildContext, type AdapterName } from './types';
 import { bundleForServerless } from './bundler';
+import { resolveEmittedEntry } from '../../shared/emitted-entry';
+import { buildEmittedAliases, readTsPathAliases } from '../../shared/tsconfig-aliases';
 import { shipWidgetSources } from './copy-widgets';
 import {
   type DeploymentTarget,
@@ -39,10 +41,11 @@ function normalizeServedPath(entryPath: string): string {
 async function generateAdapterFiles(
   adapter: AdapterName,
   outDir: string,
-  entryBasename: string,
+  entryModule: string,
   cwd: string,
   deployment?: DeploymentTarget,
   context?: AdapterBuildContext,
+  aliases: Record<string, string> = {},
 ): Promise<void> {
   const template = ADAPTERS[adapter];
 
@@ -56,7 +59,7 @@ async function generateAdapterFiles(
   }
 
   // Generate index.js entry point
-  const mainModuleName = entryBasename.replace(/\.tsx?$/, '.js');
+  const mainModuleName = entryModule.replace(/\.tsx?$/, '.js');
   const entryContent = template.getEntryTemplate(`./${mainModuleName}`, deployment);
 
   // Skip if no entry template (e.g., node adapter)
@@ -80,7 +83,7 @@ async function generateAdapterFiles(
   if (template.shouldBundle && template.bundleOutput) {
     console.log(c('cyan', `[build] Bundling for ${adapter}...`));
     const entryPath = path.join(outDir, 'index.js');
-    await bundleForServerless(entryPath, outDir, template.bundleOutput);
+    await bundleForServerless(entryPath, outDir, template.bundleOutput, aliases);
     console.log(c('green', `  Created bundle: ${template.bundleOutput}`));
 
     // Run post-bundle hook if defined (e.g., create Build Output API structure)
@@ -412,9 +415,10 @@ async function runAdapterBuild(
   // the tool is called, and tsc never emits them. Ship them where each tool's
   // `__dirname` points: bundled adapters run from one file in outDir, the others
   // keep tsc's tree (rooted at the entry's directory, like the generated entry).
+  const { compiledEntry, emittedEntryDir } = resolveEmittedEntry(outDir, entry);
   await shipWidgetSources({
     srcRoot: path.dirname(entry),
-    outDir,
+    outDir: template.shouldBundle ? outDir : emittedEntryDir,
     layout: template.shouldBundle ? 'flat' : 'preserve',
     cwd,
     label: '[build]',
@@ -422,8 +426,11 @@ async function runAdapterBuild(
 
   if (adapter !== 'node') {
     console.log(c('cyan', `[build] Generating ${adapter} deployment files...`));
-    const entryBasename = path.basename(entry);
-    await generateAdapterFiles(adapter, outDir, entryBasename, cwd, deployment, context);
+    const emittedEntry = path.relative(outDir, compiledEntry).split(path.sep).join('/');
+    // `tsc` leaves tsconfig path aliases (`@scope/lib`) as bare imports; the bundler needs them pointed at the emitted output.
+    const tsPaths = hasTsconfig ? readTsPathAliases(tsconfigPath, cwd) : undefined;
+    const aliases = tsPaths ? buildEmittedAliases(tsPaths, path.dirname(entry), emittedEntryDir) : {};
+    await generateAdapterFiles(adapter, outDir, emittedEntry, cwd, deployment, context, aliases);
   }
 
   console.log(c('green', 'Build completed.'));

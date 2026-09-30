@@ -120,10 +120,10 @@ graph LR
     # Development mode
     nx dev my-app
 
-    # Build
+    # Build (bundles code imported from workspace libraries too)
     nx build production
 
-    # Test
+    # Test (runs the generated jest config, which maps the tsconfig path aliases)
     nx test my-app
 
     # Visualize dependencies

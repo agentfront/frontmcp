@@ -1,5 +1,6 @@
+import { addProjectConfiguration, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, addProjectConfiguration } from '@nx/devkit';
+
 import { flowGenerator } from './flow';
 
 describe('flow generator', () => {
@@ -31,11 +32,13 @@ describe('flow generator', () => {
     await flowGenerator(tree, { name: 'http-request', project: 'my-app', skipFormat: true });
 
     const content = tree.read('apps/my-app/src/flows/http-request.flow.ts', 'utf-8');
+    expect(content).toContain("@Stage('pre')");
     expect(content).toContain('async pre()');
     expect(content).toContain('async execute()');
     expect(content).toContain('async post()');
     expect(content).toContain('async finalize()');
-    expect(content).toContain('async error(');
+    expect(content).toContain('declare global');
+    expect(content).toContain('FlowRunOptions<');
   });
 
   it('should generate in subdirectory', async () => {

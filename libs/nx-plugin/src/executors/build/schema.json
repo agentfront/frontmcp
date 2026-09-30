@@ -14,8 +14,28 @@
     },
     "adapter": {
       "type": "string",
-      "description": "Deployment adapter",
-      "enum": ["node", "vercel", "lambda", "cloudflare"]
+      "description": "Deprecated alias of `target`",
+      "enum": [
+        "node",
+        "vercel",
+        "lambda",
+        "cloudflare"
+      ]
+    },
+    "target": {
+      "type": "string",
+      "description": "Build target passed to `frontmcp build --target`",
+      "enum": [
+        "node",
+        "vercel",
+        "lambda",
+        "cloudflare",
+        "distributed",
+        "cli",
+        "sdk",
+        "browser",
+        "mcpb"
+      ]
     }
   },
   "required": []

@@ -47,4 +47,4 @@ nx build-exec my-app
 
 ## Caching
 
-This executor is **cacheable**. The bundled output is deterministic given the same inputs.
+This executor is **cacheable**. The bundled output is deterministic given the same inputs. Generated projects set `"cache": true` on the target, and `nx add @frontmcp/nx` registers it in `nx.json` `targetDefaults`. It runs the `frontmcp` CLI installed in your workspace and never downloads one with `npx`.

@@ -1,8 +1,6 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "<%= offset %>tsconfig.base.json",
   "compilerOptions": {
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "emitDecoratorMetadata": true,
