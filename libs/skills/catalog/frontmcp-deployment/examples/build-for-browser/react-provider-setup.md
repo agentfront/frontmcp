@@ -23,7 +23,7 @@ Connect a React application to a FrontMCP server using `@frontmcp/react`. `Front
 
 ```typescript
 // src/server.ts — create a DirectMcpServer (in-memory) for the React app to consume.
-import { create, tool, z } from '@frontmcp/sdk';
+import { create, tool, z } from '@frontmcp/react'; // `z` is re-exported; `@frontmcp/sdk` works too
 
 export const server = await create({
   info: { name: 'browser-app', version: '1.0.0' },
@@ -70,10 +70,12 @@ function ToolUI() {
 // useCallTool requires the tool name as a hook arg, so each row owns its own
 // hook instance. The mutate fn takes just the arguments object — not `{ name, arguments }`.
 function ToolButton({ tool }: { tool: { name: string; description?: string } }) {
-  const [callTool] = useCallTool<{ name: string }>(tool.name);
+  const [callTool, { data }] = useCallTool<{ name: string }>(tool.name);
+  // `data` is the full CallToolResult; failures arrive as `data.isError`, not in `error`.
+  const text = data?.content?.[0]?.type === 'text' ? data.content[0].text : null;
   return (
     <button onClick={() => callTool({ name: 'World' })}>
-      {tool.name}: {tool.description}
+      {tool.name}: {tool.description} {data?.isError ? '(failed)' : text}
     </button>
   );
 }

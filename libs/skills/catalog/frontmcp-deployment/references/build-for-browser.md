@@ -117,6 +117,14 @@ function ToolUI() {
 }
 ```
 
+Things that trip people up with `@frontmcp/react`:
+
+- `useCallTool`'s `data` is the whole MCP `CallToolResult` (`content`, `structuredContent`, `isError`), not the tool's return value. Render `data.structuredContent ?? data.content`, never `String(data)`. A tool-side failure resolves with `data.isError === true`; `error` is only set when the call throws (for example when the client is not connected).
+- `z` is re-exported from `@frontmcp/react`, but `zod` remains a required peer dependency of `@frontmcp/lazy-zod` and must be installed in the consuming project.
+- `create({ resources })` takes `@Resource` classes or `resource(...)(handler)` / `resourceTemplate(...)(handler)` values. A plain `{ uri, name, read }` object is rejected with "Expected a class or a resource function".
+- The subpath entries (`@frontmcp/react/state`, `/api`, `/ai`, `/router`) share the root entry's provider and server registry, so `useStoreResource`, `useApiClient`, `useAITools` and `useTools` register against the same `FrontMcpProvider`.
+- `createRouterEntries()` from `@frontmcp/react/router` returns `{ tools, resources }` that go straight into `create({ tools, resources })`.
+
 For connecting to a remote MCP server (HTTP), create a server-bound `DirectMcpServer` via `connect()` from `@frontmcp/sdk` and pass that instance to the provider.
 
 ## Browser vs Node vs SDK Target

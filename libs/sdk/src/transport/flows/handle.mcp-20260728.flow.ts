@@ -31,7 +31,12 @@ import {
   type FlowRunOptions,
 } from '../../common';
 import { FrontMcpContextStorage } from '../../context';
-import { detectAIPlatform, type ClientInfo } from '../../notification';
+import {
+  detectAIPlatform,
+  detectPlatformFromCapabilities,
+  type ClientCapabilities,
+  type ClientInfo,
+} from '../../notification';
 import { type Scope } from '../../scope';
 import {
   createSubscriptionStream,
@@ -448,7 +453,9 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
 
     const clientInfo = toClientInfo(meta[MCP_20260728_META.clientInfo]);
     if (clientInfo) {
-      const platformType = detectAIPlatform(clientInfo, this.scope.metadata.transport?.platformDetection);
+      const platformType =
+        detectPlatformFromCapabilities(clientCapabilities as ClientCapabilities) ??
+        detectAIPlatform(clientInfo, this.scope.metadata.transport?.platformDetection);
       this.tryGetContext()?.setClientInfo(clientInfo, platformType);
     }
 

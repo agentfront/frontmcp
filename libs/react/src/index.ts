@@ -48,6 +48,9 @@ export {
   FrontMcpPlugin,
 } from '@frontmcp/sdk';
 
+// Schema builder — the same `z` the SDK uses, so tool/resource schemas need no extra import
+export { z } from '@frontmcp/sdk';
+
 // Base context classes
 export { ToolContext, ResourceContext, PromptContext, ExecutionContextBase } from '@frontmcp/sdk';
 

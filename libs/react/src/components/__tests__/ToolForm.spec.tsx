@@ -1,7 +1,8 @@
+import { fireEvent, render } from '@testing-library/react';
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react';
+
+import type { FieldRenderProps, ToolInfo } from '../../types';
 import { ToolForm } from '../ToolForm';
-import type { ToolInfo, FieldRenderProps } from '../../types';
 
 describe('ToolForm', () => {
   const baseTool: ToolInfo = {
@@ -324,5 +325,53 @@ describe('ToolForm', () => {
     fireEvent.change(input, { target: { value: 'value' } });
     fireEvent.submit(container.querySelector('form')!);
     expect(onSubmit).toHaveBeenCalledWith({ data: 'value' });
+  });
+  describe('enum fields left untouched', () => {
+    const enumTool: ToolInfo = {
+      name: 'pick',
+      description: 'Pick one',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          color: { type: 'string', enum: ['red', 'green'] },
+          size: { type: 'string', enum: ['s', 'm', 'l'], default: 'm' },
+          note: { type: 'string', enum: ['a', 'b'] },
+        },
+        required: ['color', 'size'],
+      },
+    };
+
+    it('submits the first enum value (or the schema default) instead of an empty string', () => {
+      const onSubmit = jest.fn();
+      const { container } = render(<ToolForm tool={enumTool} onSubmit={onSubmit} />);
+
+      fireEvent.submit(container.querySelector('form') as HTMLFormElement);
+
+      expect(onSubmit).toHaveBeenCalledWith({ color: 'red', size: 'm' });
+    });
+
+    it('shows the seeded value to custom renderers', () => {
+      const seen: Record<string, string> = {};
+      render(
+        <ToolForm
+          tool={enumTool}
+          onSubmit={jest.fn()}
+          renderField={(p: FieldRenderProps) => {
+            seen[p.name] = p.value;
+            return null;
+          }}
+        />,
+      );
+      expect(seen['color']).toBe('red');
+      expect(seen['size']).toBe('m');
+    });
+
+    it('still submits what the user picked', () => {
+      const onSubmit = jest.fn();
+      const { container } = render(<ToolForm tool={enumTool} onSubmit={onSubmit} />);
+      fireEvent.change(container.querySelector('#field-color') as HTMLSelectElement, { target: { value: 'green' } });
+      fireEvent.submit(container.querySelector('form') as HTMLFormElement);
+      expect(onSubmit).toHaveBeenCalledWith({ color: 'green', size: 'm' });
+    });
   });
 });

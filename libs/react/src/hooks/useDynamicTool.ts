@@ -51,18 +51,30 @@ export type UseDynamicToolOptions<S extends z.ZodObject<z.ZodRawShape> = z.ZodOb
   | UseDynamicToolSchemaOptions<S>
   | UseDynamicToolJsonSchemaOptions;
 
+function stableKey(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? '';
+  } catch {
+    return String(Math.random());
+  }
+}
+
 export function useDynamicTool<S extends z.ZodObject<z.ZodRawShape>>(options: UseDynamicToolOptions<S>): void {
   const { name, description, enabled = true } = options;
   const { getDynamicRegistry } = useContext(FrontMcpContext);
   const dynamicRegistry = getDynamicRegistry(options.server);
 
-  // Resolve JSON Schema from zod or pass through raw inputSchema
-  const resolvedInputSchema = useMemo(() => {
-    if ('schema' in options && options.schema) {
-      return zodToJsonSchema(options.schema);
-    }
-    return (options as UseDynamicToolJsonSchemaOptions).inputSchema;
-  }, ['schema' in options ? options.schema : undefined, 'inputSchema' in options ? options.inputSchema : undefined]);
+  // Resolve JSON Schema from zod or pass through raw inputSchema. An inline
+  // `z.object(...)` or object literal is a new value on every render, so the schema is
+  // keyed by content: re-registering the tool on each render would notify the registry,
+  // re-render the component and never settle.
+  const computedInputSchema =
+    'schema' in options && options.schema
+      ? zodToJsonSchema(options.schema)
+      : (options as UseDynamicToolJsonSchemaOptions).inputSchema;
+  const inputSchemaKey = stableKey(computedInputSchema);
+  // Memoized on the content key on purpose, see above
+  const resolvedInputSchema = useMemo(() => computedInputSchema, [inputSchemaKey]);
 
   // Keep the latest execute fn in a ref to avoid stale closures
   const executeRef = useRef(options.execute);

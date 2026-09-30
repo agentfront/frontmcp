@@ -53,12 +53,10 @@ const widgetPath = fileURLToPath(new URL('./sales-chart.widget.tsx', import.meta
   inputSchema,
   outputSchema,
   ui: {
-    widgetDescription: 'Monthly revenue chart',
     template: { file: widgetPath },
     // resourceMode is intentionally UNSET — framework host-detects: 'inline' for Claude
     // (React bundled in, widget renders under Claude's CSP), 'cdn' for OpenAI / ChatGPT /
     // Cursor / MCP Inspector (smaller payload from esm.sh). Issue #456.
-    hydrate: false, // SSR-only — dodges React error #418 in iframe sandboxes
   },
 })
 export class SalesChartTool extends ToolContext {
@@ -111,5 +109,5 @@ export default function SalesChartWidget({ output }: Props) {
 - **`import.meta.url` anchoring** — relative paths in `FileSource` resolve against `process.cwd()`, not the tool file (#444). Running the server from a different directory breaks the widget at tool-call time. Anchoring fixes it once.
 - **Ship the widget** — the anchored path points next to the **compiled** file after a build, and tsc doesn't emit `*.widget.tsx`. `frontmcp build` copies widget files into the output (directly next to the bundle for the bundled `node` / `cli` / `lambda` / `vercel` targets, so keep widget file names unique); a plain `tsc` build needs its own copy step (#649).
 - **`resourceMode` unset** — leave it. The framework picks `'inline'` for Claude (React bundled into the widget — actually renders) and `'cdn'` for everyone else (smaller payload via esm.sh). Setting it explicitly only locks in one behavior across all clients.
-- **`hydrate: false`** — default. React SSR output is static HTML; the bridge IIFE handles any interactivity. Enabling hydration creates React error #418 in Claude's iframe sandbox where the client-side render diverges from the SSR render.
+- **No `hydrate` option** — `ui.hydrate` is accepted but has no effect yet (startup logs a warning). The `.tsx` widget is bundled and mounted on the client by the generated entry.
 - **`*.widget.tsx` naming** — the scaffolded `tsconfig.json` excludes `**/*.widget.tsx` from the server typecheck (#445). The widget compiles via uipack/esbuild at render time with its own React-aware config.

@@ -281,4 +281,49 @@ describe('useDynamicTool — Zod schema mode', () => {
     expect(propsV2).toHaveProperty('q');
     expect(propsV2).toHaveProperty('page');
   });
+
+  it('does not re-register on every render when the schema is written inline', () => {
+    const registerSpy = jest.spyOn(dynamicRegistry, 'registerTool');
+    let renders = 0;
+
+    const { rerender } = renderHook(
+      () => {
+        renders++;
+        // Reading registry state makes the component re-render whenever the registry notifies
+        React.useSyncExternalStore(
+          (l) => dynamicRegistry.subscribe(l),
+          () => dynamicRegistry.getVersion(),
+        );
+        useDynamicTool({
+          name: 'inline_schema',
+          description: 'inline',
+          schema: z.object({ q: z.string() }),
+          execute: async () => okResult('ok'),
+        });
+      },
+      { wrapper: createWrapper(dynamicRegistry) },
+    );
+
+    rerender();
+    rerender();
+
+    expect(registerSpy).toHaveBeenCalledTimes(1);
+    expect(renders).toBeLessThan(8);
+  });
+
+  it('re-registers when the schema content changes', () => {
+    const registerSpy = jest.spyOn(dynamicRegistry, 'registerTool');
+    const { rerender } = renderHook(
+      ({ field }: { field: string }) =>
+        useDynamicTool({
+          name: 'changing_schema',
+          description: 'changing',
+          inputSchema: { type: 'object', properties: { [field]: { type: 'string' } } },
+          execute: async () => okResult('ok'),
+        }),
+      { wrapper: createWrapper(dynamicRegistry), initialProps: { field: 'a' } },
+    );
+    rerender({ field: 'b' });
+    expect(registerSpy).toHaveBeenCalledTimes(2);
+  });
 });

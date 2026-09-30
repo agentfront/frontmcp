@@ -8,8 +8,9 @@
  * Integrates with React via useSyncExternalStore for tear-free reads.
  */
 
-import type { DirectMcpServer, DirectClient } from '@frontmcp/sdk';
-import type { FrontMcpStatus, ToolInfo, ResourceInfo, ResourceTemplateInfo, PromptInfo } from '../types';
+import type { DirectClient, DirectMcpServer } from '@frontmcp/sdk';
+
+import type { FrontMcpStatus, PromptInfo, ResourceInfo, ResourceTemplateInfo, ToolInfo } from '../types';
 
 type Listener = () => void;
 
@@ -133,5 +134,15 @@ export class ServerRegistry {
   }
 }
 
-/** Module-scoped singleton — shared across all components. */
-export const serverRegistry = new ServerRegistry();
+// One registry per page, shared by every bundled copy of this module (see FrontMcpContext).
+const REGISTRY_KEY = Symbol.for('@frontmcp/react/serverRegistry');
+
+type RegistryHost = { [REGISTRY_KEY]?: ServerRegistry };
+
+function getOrCreateRegistry(): ServerRegistry {
+  const host = globalThis as RegistryHost;
+  return (host[REGISTRY_KEY] ??= new ServerRegistry());
+}
+
+/** Page-wide singleton — shared across all components and all entry points. */
+export const serverRegistry = getOrCreateRegistry();
