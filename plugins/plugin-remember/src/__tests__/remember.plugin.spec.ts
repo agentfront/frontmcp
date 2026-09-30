@@ -1,11 +1,12 @@
 // file: plugins/plugin-remember/src/__tests__/remember.plugin.spec.ts
 
 import 'reflect-metadata';
-import RememberPlugin from '../remember.plugin';
-import { RememberStoreToken, RememberConfigToken, RememberAccessorToken } from '../remember.symbols';
+
 import RememberMemoryProvider from '../providers/remember-memory.provider';
 import RememberRedisProvider from '../providers/remember-redis.provider';
 import RememberVercelKvProvider from '../providers/remember-vercel-kv.provider';
+import RememberPlugin from '../remember.plugin';
+import { RememberAccessorToken, RememberConfigToken, RememberStoreToken } from '../remember.symbols';
 
 // Mock ioredis
 jest.mock('ioredis', () => {
@@ -85,11 +86,18 @@ describe('RememberPlugin', () => {
     describe('type: memory', () => {
       it('should create memory provider', () => {
         const providers = RememberPlugin.dynamicProviders({ type: 'memory' });
-        const storeProvider = providers.find((p) => p.name === 'remember:store:memory') as ValueProvider;
+        const storeProvider = providers.find((p) => p.name === 'remember:store:memory') as FactoryProvider;
 
         expect(storeProvider).toBeDefined();
         expect(storeProvider.provide).toBe(RememberStoreToken);
-        expect(storeProvider.useValue).toBeInstanceOf(RememberMemoryProvider);
+        expect(storeProvider.useFactory()).toBeInstanceOf(RememberMemoryProvider);
+      });
+
+      it('should build a new memory store for every server that installs it', () => {
+        const providers = RememberPlugin.dynamicProviders({ type: 'memory' });
+        const storeProvider = providers.find((p) => p.name === 'remember:store:memory') as FactoryProvider;
+
+        expect(storeProvider.useFactory()).not.toBe(storeProvider.useFactory());
       });
 
       it('should use memory as default type', () => {

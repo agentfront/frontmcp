@@ -3,15 +3,16 @@
  */
 
 import 'reflect-metadata';
-import PluginRegistry, { PluginScopeInfo } from '../plugin.registry';
-import { FlowCtxOf } from '../../common/interfaces';
+
+import { createClassProvider } from '../../__test-utils__/fixtures/provider.fixtures';
+import { createMockScope, createProviderRegistryWithScope } from '../../__test-utils__/fixtures/scope.fixtures';
+import { FlowHooksOf } from '../../common/decorators/hook.decorator';
 import { FrontMcpPlugin } from '../../common/decorators/plugin.decorator';
 import { FrontMcpProvider } from '../../common/decorators/provider.decorator';
-import { FlowHooksOf } from '../../common/decorators/hook.decorator';
-import { createClassProvider } from '../../__test-utils__/fixtures/provider.fixtures';
-import { createProviderRegistryWithScope, createMockScope } from '../../__test-utils__/fixtures/scope.fixtures';
+import { type FlowCtxOf } from '../../common/interfaces';
 import { InvalidPluginScopeError } from '../../errors';
 import { Scope } from '../../scope';
+import PluginRegistry, { type PluginScopeInfo } from '../plugin.registry';
 
 // Create ToolHook for tests (same as exported from index.ts)
 const ToolHook = FlowHooksOf('tools:call-tool');

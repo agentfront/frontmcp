@@ -137,6 +137,9 @@ const stateSchema = z.object({
   uiResult: z.any().optional() as z.ZodType<ToolResponseContent | undefined>,
   // UI metadata from rendering (merged into _meta)
   uiMeta: z.record(z.string(), z.unknown()).optional(),
+  // Metadata hooks add to the result (e.g. the cache plugin's `cache: 'hit'`), merged into the
+  // result's _meta; never merged into rawOutput, which is the tool's data
+  resultMeta: z.record(z.string(), z.unknown()).optional(),
   // Progress token from request's _meta (for progress notifications)
   progressToken: z.union([z.string(), z.number()]).optional(),
   // JSON-RPC request ID (for elicitation routing)
@@ -1431,7 +1434,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
-    const { tool, rawOutput, uiResult, uiMeta } = this.state;
+    const { tool, rawOutput, uiResult, uiMeta, resultMeta } = this.state;
 
     if (!tool) {
       // No tool found - this is an early failure, just skip finalization
@@ -1480,7 +1483,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     const result = parseResult.data;
 
-    // Preserve any _meta from rawOutput (e.g., cache plugin adds cache: 'hit')
+    // Preserve any _meta the tool returned itself
     // Runtime type guard to safely extract _meta from rawOutput
     const rawMeta = (() => {
       if (typeof rawOutput !== 'object' || rawOutput === null) return undefined;
@@ -1490,6 +1493,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     })();
     if (rawMeta) {
       result._meta = { ...result._meta, ...rawMeta };
+    }
+
+    // Metadata hooks recorded for the result (e.g. the cache plugin's cache: 'hit')
+    if (resultMeta) {
+      result._meta = { ...result._meta, ...resultMeta };
     }
 
     // Apply UI result if available (from applyUI stage)

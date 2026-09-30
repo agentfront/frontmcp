@@ -9,6 +9,7 @@ features:
   - 'Using `toolPatterns` glob patterns to cache groups of tools without per-tool configuration'
   - 'Per-tool `cache` metadata with custom `ttl` (seconds) and `slideWindow` for TTL refresh on hits'
   - 'Using `cache: true` for simple default-TTL caching'
+  - "A cache hit returns the same `content`/`structuredContent` as the miss, marked by `_meta.cache: 'hit'` on the result"
   - "Gating a tool with `featureFlag: 'beta-search'` -- the tool is hidden from `list_tools` when the flag is off"
   - 'Accessing `this.featureFlags.isEnabled()` inside a tool for runtime flag checks'
 ---
@@ -75,6 +76,9 @@ class GetWeatherTool extends ToolContext {
     return { city: input.city, temperature: weather.temp, condition: weather.condition };
   }
 }
+
+// A second identical call is a hit: execute() does not run, `structuredContent` is the same
+// `{ city, temperature, condition }` as the first call, and `result._meta.cache === 'hit'`.
 ```
 
 ```typescript
@@ -106,6 +110,7 @@ class BetaSearchTool extends ToolContext {
 - Using `toolPatterns` glob patterns to cache groups of tools without per-tool configuration
 - Per-tool `cache` metadata with custom `ttl` (seconds) and `slideWindow` for TTL refresh on hits
 - Using `cache: true` for simple default-TTL caching
+- A cache hit returns the same `content`/`structuredContent` as the miss, marked by `_meta.cache: 'hit'` on the result
 - Gating a tool with `featureFlag: 'beta-search'` -- the tool is hidden from `list_tools` when the flag is off
 - Accessing `this.featureFlags.isEnabled()` inside a tool for runtime flag checks
 

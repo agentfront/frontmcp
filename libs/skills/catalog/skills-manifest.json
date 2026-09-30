@@ -2073,6 +2073,7 @@
                 "Using `toolPatterns` glob patterns to cache groups of tools without per-tool configuration",
                 "Per-tool `cache` metadata with custom `ttl` (seconds) and `slideWindow` for TTL refresh on hits",
                 "Using `cache: true` for simple default-TTL caching",
+                "A cache hit returns the same `content`/`structuredContent` as the miss, marked by `_meta.cache: 'hit'` on the result",
                 "Gating a tool with `featureFlag: 'beta-search'` -- the tool is hidden from `list_tools` when the flag is off",
                 "Accessing `this.featureFlags.isEnabled()` inside a tool for runtime flag checks"
               ]
@@ -2101,8 +2102,8 @@
               "tags": ["development", "session", "plugins", "remember", "plugin", "memory"],
               "features": [
                 "Installing `RememberPlugin` with `type: 'memory'` for development",
-                "Enabling `tools: { enabled: true }` to expose LLM-callable memory tools (`remember_this`, `recall`, etc.)",
-                "Using `this.remember.set()` with default `session` scope and explicit `user` scope",
+                "Enabling `tools: { enabled: true }` to expose LLM-callable memory tools (`remember_this`, `recall`, etc.), whose `scope` defaults to `session`",
+                "Using `this.remember.set()` with default `session` scope and explicit `user` scope (refused for an anonymous caller)",
                 "Using `this.remember.get()` with a `defaultValue` fallback",
                 "Using `this.remember.knows()` to check key existence without retrieving the value"
               ]

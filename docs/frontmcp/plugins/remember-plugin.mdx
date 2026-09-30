@@ -142,9 +142,9 @@ Memory is organized into four scopes with different visibility and lifetime:
 | Scope     | Description                                                                               | Use Case                              |
 | --------- | ----------------------------------------------------------------------------------------- | ------------------------------------- |
 | `session` | The verified session (default); without one, the signed-in principal, across its requests | Temporary state, conversation context |
-| `user`    | Persists across user sessions                                                             | User preferences, settings            |
+| `user`    | The signed-in user, across all of its sessions (refused for an anonymous caller)          | User preferences, settings            |
 | `tool`    | A specific tool plus the `session` identity                                               | Tool-specific cache                   |
-| `global`  | Shared across all sessions/users                                                          | Application-wide configuration        |
+| `global`  | Shared by every caller, across all sessions and users                                     | Application-wide configuration        |
 
 <Warning>
   **`session`, `tool`, and `user` scopes require a per-client identity.**
@@ -156,7 +156,10 @@ request, MCP 2026-07-28 has no sessions, and an `mcp-session-id` the server did 
 anyone's. `session` and `tool` scope then fall back to the authenticated principal (the memory
 lasts across that principal's requests), and an **unauthenticated request without a verified
 session is refused** with a `RememberIdentityError` rather than being given a namespace it would
-share with other clients. `user` scope is likewise refused when there is no authenticated user.
+share with other clients. `user` scope is likewise refused when there is no authenticated user, and an anonymous
+subject counts as none: the `anon:<id>` client id the SDK gives an anonymous caller is made up for one session (or for
+each request without one), so `user` memory kept under it would never be found again. The refusal reaches the client as
+its message (`RememberIdentityError` is a public MCP error, code `REMEMBER_IDENTITY_REQUIRED`), in production too.
 
 If the data really is shared across clients, say so with `scope: 'global'`. Otherwise
 authenticate the request or use a stateful transport.
@@ -246,7 +249,11 @@ RememberPlugin.init({
 });
 ```
 
-<Warning>Memory storage resets when the process restarts. Not shared across instances.</Warning>
+<Warning>
+  Memory storage resets when the process restarts. Not shared across instances, and not shared between servers in one
+  process either: every server gets its own store, even when several servers are built from the same app class or
+  `RememberPlugin.init()` result, so a `global` value one server stores is not visible to another.
+</Warning>
 
 ### Redis (Recommended for Production)
 
@@ -563,6 +570,19 @@ RememberPlugin.init({
 ```
 
 This exposes tools like `memory_remember_this`, `memory_recall`, `memory_forget`, and `memory_list_memories`.
+
+Each takes an optional `scope` (default `session`), described to the model the same way in all four tools:
+
+| `scope`   | What the model is told                                                                                                                                          |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session` | This session; without one (stateless HTTP, MCP 2026-07-28), the signed-in caller across its requests                                                            |
+| `user`    | The signed-in caller, across all of its sessions                                                                                                                |
+| `tool`    | The tool running the call, for the same caller as `session`. Each memory tool has its own, so `recall` does not see what `remember_this` stored in `tool` scope |
+| `global`  | Shared by every caller                                                                                                                                          |
+
+An anonymous caller cannot use `user`, nor `session` or `tool` without a session. None of these lifetimes is "until
+disconnect" or "forever": entries last until they are forgotten or their `ttl` runs out, and `session` memory without a
+session belongs to the signed-in caller rather than ending with a connection.
 
 ---
 

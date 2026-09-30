@@ -44,7 +44,9 @@ npm install @frontmcp/plugin-approval
   </Step>
 
   <Step title="Approval Request">
-    If not approved, throws `ApprovalRequiredError` for client handling
+    If not approved, throws `ApprovalRequiredError`. The client receives an error result whose text is exactly the
+    tool's `approvalMessage` (or the default prompt) and whose `_meta.code` is `APPROVAL_REQUIRED`, in production and
+    outside it alike
   </Step>
 
   <Step title="Grant/Revoke">
@@ -148,7 +150,24 @@ For a tool with `approval` set, the check runs before the tool executes and deci
 5. A valid (unexpired) approval for the caller: the tool runs.
 6. Otherwise the call is refused with state `pending`, or `expired` when the approval has lapsed.
 
-A refused call throws `ApprovalRequiredError`, which the client receives as an error result.
+A refused call throws `ApprovalRequiredError`, which the client receives as an error result:
+
+```json
+{
+  "isError": true,
+  "content": [{ "type": "text", "text": "Tool \"my-app:file_write\" requires approval to execute. Allow?" }],
+  "_meta": { "code": "APPROVAL_REQUIRED", "errorId": "err_…", "timestamp": "…" }
+}
+```
+
+The text is the tool's `approvalMessage` when it sets one, and `Tool "<full name>" execution denied.` for a recorded
+denial. The approval errors are public MCP errors (`ApprovalError` extends `PublicMcpError`), so the message is never
+replaced by an internal-error notice in production and never carries a stack trace.
+
+<Note>
+  Releases up to 1.8.5 wrapped a refusal as an internal server error: outside production its text carried a stack
+  trace, and in production the client saw `Internal FrontMCP error` instead of the approval message.
+</Note>
 
 ### Whose Approval It Is
 
@@ -338,6 +357,15 @@ still wins over a pre-approved context.
 
 ### ApprovalService Methods
 
+<Note>
+  Every grant method records who granted the approval in `grantedBy`. When you pass none, it is the signed-in caller
+  whose tool made the grant, `userGrantor(<caller's user id>)`, i.e. `{ source: 'user', identifier: '<user id>', method:
+  'interactive' }`. Without a signed-in user (no principal, or an anonymous `anon:` subject) it is `{ source: 'user' }`
+  with no identifier. Pass `grantedBy` to record something else, e.g. `policyGrantor('policy:read-only-safe')` for an
+  automatic grant. `revokeApproval()` records `revokedBy` by the same rule (`userRevoker(<user id>)`). Releases up to
+  1.8.5 recorded every such grant and revocation as `'policy'`.
+</Note>
+
 <ParamField path="isApproved(toolId)" type="Promise<boolean>">
   Check if a tool is approved for execution
 
@@ -433,14 +461,15 @@ interface ApprovalRecord {
 
 ### Grantor Factory Functions
 
-Create typed grantors for audit trails:
+Create typed grantors for audit trails. `userGrantor(userId, displayName?, options?)` takes the method and origin in
+its third argument (`{ method?, origin? }`, method defaulting to `'interactive'`):
 
 ```ts
 import { userGrantor, adminGrantor, policyGrantor, systemGrantor } from '@frontmcp/plugin-approval';
 
 // User-initiated approval
 await this.approval.grantSessionApproval('tool', {
-  grantedBy: userGrantor('user-123', 'John Doe', 'interactive'),
+  grantedBy: userGrantor('user-123', 'John Doe', { method: 'interactive' }),
 });
 
 // Admin approval
@@ -601,7 +630,7 @@ ApprovalPlugin.init({
     Always provide meaningful `reason` and `grantedBy` information for compliance and debugging:
     ```ts
     await this.approval.grantSessionApproval('tool', {
-      grantedBy: userGrantor(userId, userName, 'interactive'),
+      grantedBy: userGrantor(userId, userName, { method: 'interactive' }),
       reason: 'User approved via UI dialog',
     });
     ```
@@ -676,12 +705,12 @@ class GrantToolAccessTool extends ToolContext {
 
     if (input.scope === 'session') {
       await this.approval.grantSessionApproval(input.toolId, {
-        grantedBy: userGrantor(userId, 'Admin', 'interactive'),
+        grantedBy: userGrantor(userId, 'Admin', { method: 'interactive' }),
         reason: 'Admin granted access',
       });
     } else {
       await this.approval.grantUserApproval(input.toolId, {
-        grantedBy: userGrantor(userId, 'Admin', 'interactive'),
+        grantedBy: userGrantor(userId, 'Admin', { method: 'interactive' }),
         reason: 'Admin granted persistent access',
       });
     }

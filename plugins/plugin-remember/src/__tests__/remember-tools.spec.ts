@@ -3,11 +3,41 @@
 import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
+import { App, FrontMcpInstance, LogLevel } from '@frontmcp/sdk';
 
+import RememberPlugin from '../remember.plugin';
+import { ForgetTool, ListMemoriesTool, RecallTool, RememberThisTool } from '../tools';
 import { forgetInputSchema, forgetOutputSchema } from '../tools/forget.tool';
 import { listMemoriesInputSchema, listMemoriesOutputSchema } from '../tools/list-memories.tool';
 import { recallInputSchema, recallOutputSchema } from '../tools/recall.tool';
 import { rememberThisInputSchema, rememberThisOutputSchema } from '../tools/remember-this.tool';
+
+@App({
+  id: 'memory',
+  name: 'Memory',
+  plugins: [RememberPlugin.init({ type: 'memory', skipLegacyPurge: true })],
+  tools: [RememberThisTool, RecallTool, ForgetTool, ListMemoriesTool],
+})
+class MemoryApp {}
+
+interface ListedTool {
+  name: string;
+  description?: string;
+  inputSchema: { properties?: Record<string, { description?: string }> };
+}
+
+async function listRememberTools(): Promise<ListedTool[]> {
+  const server = await FrontMcpInstance.createDirect({
+    info: { name: 'remember-tool-descriptions', version: '1.0.0' },
+    apps: [MemoryApp],
+    logging: { level: LogLevel.Off },
+  });
+  try {
+    return (await server.listTools()).tools as ListedTool[];
+  } finally {
+    await server.dispose();
+  }
+}
 
 describe('Remember Tools', () => {
   describe('RememberThisTool', () => {
@@ -182,6 +212,54 @@ describe('Remember Tools', () => {
         const result = listMemoriesOutputSchema.safeParse(output);
         expect(result.success).toBe(true);
       });
+    });
+  });
+
+  describe('what the tools tell the model about scopes (#647)', () => {
+    let tools: ListedTool[];
+
+    beforeAll(async () => {
+      tools = await listRememberTools();
+    });
+
+    function scopeDescriptions(): string[] {
+      return tools.map((tool) => tool.inputSchema.properties?.['scope']?.description ?? '');
+    }
+
+    it('describes the scope argument of all four tools the same way', () => {
+      const descriptions = scopeDescriptions();
+
+      expect({ tools: tools.length, distinct: new Set(descriptions).size }).toEqual({ tools: 4, distinct: 1 });
+    });
+
+    it('promises no lifetime the scopes do not have', () => {
+      const promises = scopeDescriptions().filter((text) => /until disconnect|forever/i.test(text));
+
+      expect(promises).toEqual([]);
+    });
+
+    it('says what every scope means, and that an anonymous caller is refused', () => {
+      const [description] = scopeDescriptions();
+
+      expect(description).toEqual(expect.stringMatching(/session:.*user:.*tool:.*global:.*anonymous caller/s));
+    });
+
+    it('says that a caller without a session keeps session memory as the signed-in caller', () => {
+      const [description] = scopeDescriptions();
+
+      expect(description).toEqual(expect.stringContaining('MCP 2026-07-28'));
+    });
+
+    it('does not promise that remember_this reaches future conversations', () => {
+      const rememberThis = tools.find((tool) => tool.name === 'remember_this');
+
+      expect(rememberThis?.description).not.toMatch(/future conversations/i);
+    });
+
+    it('does not tell the model list_memories reads the session or the user', () => {
+      const listMemories = tools.find((tool) => tool.name === 'list_memories');
+
+      expect(listMemories?.description).not.toMatch(/current session or user/i);
     });
   });
 });

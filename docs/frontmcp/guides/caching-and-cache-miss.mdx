@@ -220,7 +220,8 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
   </Step>
 
 <Step title="Observe cache hit">
-  The second call returns instantly from cache! Check your logs for: ``` [DEBUG] Cache hit for get-user-profile ```
+  The second call returns instantly from cache. Its `content` and `structuredContent` are the same as the first call's,
+  and the result's own `_meta` carries `{ "cache": "hit" }`. The first call has no `cache` key there.
 </Step>
 
   <Step title="Test cache expiration">
@@ -237,14 +238,16 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
     When a tool is called, the plugin creates a deterministic hash from:
     - Tool name (e.g., `get-user-profile`)
     - Validated input (e.g., `{ userId: "user-123" }`)
+    - The caller's identity (unless `keyByIdentity: false`)
 
-    Same input = Same cache key
+    Same caller + same input = Same cache key
 
   </Step>
 
 <Step title="Before Execution (Will Hook)">
-  The plugin checks the cache store for the key: - **Cache Hit**: Return cached result immediately, skip execution -
-  **Cache Miss**: Allow tool to execute normally
+  The plugin checks the cache store for the key: - **Cache Hit**: Return cached result immediately, skip execution, and
+  mark the result's `_meta.cache` as `'hit'` (the cached data itself is returned unchanged) - **Cache Miss**: Allow tool
+  to execute normally
 </Step>
 
 <Step title="After Execution (Did Hook)">

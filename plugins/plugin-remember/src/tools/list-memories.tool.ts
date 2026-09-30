@@ -2,15 +2,13 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
+import { REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
 
 /**
  * Input schema for the list_memories tool.
  */
 export const listMemoriesInputSchema = {
-  scope: z
-    .enum(['session', 'user', 'tool', 'global'])
-    .optional()
-    .describe('Which scope to list from (default: session)'),
+  scope: z.enum(['session', 'user', 'tool', 'global']).optional().describe(REMEMBER_SCOPE_DESCRIPTION),
   pattern: z.string().optional().describe('Pattern to filter keys (e.g., "user_*")'),
   limit: z.number().positive().max(100).optional().describe('Maximum number of keys to return (default: 50)'),
 };
@@ -35,8 +33,8 @@ export type ListMemoriesOutput = z.infer<typeof listMemoriesOutputSchema>;
 @Tool({
   name: 'list_memories',
   description:
-    'List all remembered keys in a scope. ' +
-    'Use this to see what memories are stored for the current session or user.',
+    'List the remembered keys in one scope (default: session). ' +
+    'Use this to see what memories are stored before you recall or forget one.',
   inputSchema: listMemoriesInputSchema,
   outputSchema: listMemoriesOutputSchema,
   annotations: {
