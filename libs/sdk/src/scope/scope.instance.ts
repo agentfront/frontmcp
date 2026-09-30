@@ -86,6 +86,7 @@ import { normalizeTool } from '../tool/tool.utils';
 import { hasUIConfig, StaticWidgetResourceTemplate, ToolUIRegistry } from '../tool/ui';
 import { RedisTransportBus } from '../transport/bus';
 import { createEventStore } from '../transport/event-stores';
+import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/request-state';
 import { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import HttpIpFilterFlow from './flows/http.ip-filter.flow';
@@ -275,6 +276,7 @@ export class Scope extends ScopeEntry {
       effectivePersistence = { sqlite: resolvedTopLevelSqlite };
     }
     this.transportService = new TransportService(this, effectivePersistence, transportBus);
+    warnIfRequestStateKeyNotShared({ logger: this.logger, metadata: this.metadata });
 
     // Orphan session scanner (distributed mode only — scans for dead-pod sessions)
     if (this.haManager && isDistributed) {

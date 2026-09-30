@@ -144,6 +144,40 @@ export default class Server {}
 
 Switch the `redis` block to `{ provider: 'vercel-kv' }` when deploying on Vercel KV—the Cache Plugin will keep reusing the same store without code changes.
 
+### Running more than one instance
+
+Redis lets several instances share sessions, but each instance still signs and encrypts with its own secrets. Give every instance the **same** values:
+
+| Variable             | What breaks when instances differ                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MCP_SESSION_SECRET` | Session ids are encrypted with it. An id minted under a different secret is not this deployment's: the server answers the request with HTTP 404 and the client re-initializes. This holds in every auth mode, including `public`, where the id is the caller's only credential.                                                                                                                                                 |
+| `VAULT_SECRET`       | Signs MCP 2026-07-28 `requestState` (falling back to `JWT_SECRET`, then a random per-process key). Under the per-process key, a multi-round tool (`elicit()` / `sample()`) whose next round lands on another instance asks its first question again. In production, `redis` or `transport.persistence` without `VAULT_SECRET`/`JWT_SECRET` logs a startup warning, and each rejected round logs a `hint` naming `VAULT_SECRET`. |
+
+An anonymous session minted by one instance is honored by any instance with the same `MCP_SESSION_SECRET`: the instance that receives the request recreates the transport from the stored session (in distributed mode it relays to, or takes over from, the node recorded with that session).
+
+### When Redis is unreachable at startup
+
+Not every Redis consumer reacts the same way when Redis is down as the server starts:
+
+- **`redis` and `transport.persistence`** fall back to in-memory storage and log the failure (`[TransportService] Failed to connect to redis - session persistence disabled`). The server starts; sessions live on the instance that created them until Redis is back and the server restarts.
+- **`throttle.storage`** fails closed: rate limits are a security control, so startup aborts with `GuardStorageUnavailableError` (`throttle.storage (redis) is unavailable: …`). This is the default in production, where storage `fallback` defaults to `'error'`. To start with per-instance counters instead, opt in explicitly:
+
+```typescript
+@FrontMcp({
+  throttle: {
+    enabled: true,
+    storage: {
+      type: 'redis',
+      redis: { config: { host: process.env.REDIS_HOST ?? 'localhost', port: 6379 } },
+      fallback: 'memory', // per-instance counters while Redis is down
+    },
+    global: { maxRequests: 1000, windowMs: 60_000, partitionBy: 'ip' },
+  },
+})
+```
+
+`throttle.storage` takes the `@frontmcp/utils` storage shape (`{ type: 'redis', redis: { config } }` or `{ type: 'redis', redis: { url } }`), not the top-level `redis` shape.
+
 ## Environment Variables
 
 ### Redis Configuration
@@ -198,6 +232,12 @@ async function checkRedisHealth(): Promise<boolean> {
 - Verify Redis is running: `redis-cli ping`
 - Check firewall rules
 - Verify host/port configuration
+- If startup fails with `GuardStorageUnavailableError`, the `throttle.storage` backend is down; see [When Redis is unreachable at startup](#when-redis-is-unreachable-at-startup)
+
+### Clients keep re-initializing or tools repeat their questions
+
+- A `404` for a session the client just used, on a load-balanced deployment, means the instances run with different `MCP_SESSION_SECRET` values
+- A 2026-07-28 tool that asks its first question again after it was answered, with `mcp-20260728: rejected requestState` and `reason: 'bad-signature'` in the log, means `VAULT_SECRET` (or `JWT_SECRET`) is unset or differs between instances
 
 ### Authentication Failed
 

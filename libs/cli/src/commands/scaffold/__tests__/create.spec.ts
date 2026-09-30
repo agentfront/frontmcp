@@ -190,6 +190,29 @@ describe('runCreate', () => {
       expect(consoleLogs.some((log) => log.includes('.dockerignore'))).toBe(true);
     });
 
+    it.each([
+      ['npm', 'npx frontmcp build --target vercel', 'npm install'],
+      ['yarn', 'yarn frontmcp build --target vercel', 'yarn install'],
+      ['pnpm', 'pnpm exec frontmcp build --target vercel', 'pnpm install'],
+    ] as const)(
+      'should write a vercel.json that builds the vercel target with %s',
+      async (pm, buildCommand, installCommand) => {
+        // `frontmcp build --target vercel` skips an existing vercel.json, so the
+        // scaffolded one is what Vercel runs — a legacy `builds` entry pointing at
+        // dist/main.js never matches the Build Output API tree the build writes.
+        await runCreate(`vercel-json-${pm}`, { yes: true, target: 'vercel', pm });
+
+        const vercelJson = JSON.parse(readFileSync(path.join(tempDir, `vercel-json-${pm}`, 'vercel.json'), 'utf8'));
+
+        expect(vercelJson).toEqual({
+          $schema: 'https://openapi.vercel.sh/vercel.json',
+          version: 2,
+          buildCommand,
+          installCommand,
+        });
+      },
+    );
+
     it('should not create .dockerignore for non-Docker targets', async () => {
       await runCreate('vercel-no-dockerignore', { yes: true, target: 'vercel' });
 

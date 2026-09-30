@@ -63,6 +63,12 @@
     "typescript": "^5.9.3"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.5.7"
+    "@frontmcp/lazy-zod": "1.5.7",
+    "esbuild": ">=0.27.0 <1"
+  },
+  "peerDependenciesMeta": {
+    "esbuild": {
+      "optional": true
+    }
   }
 }

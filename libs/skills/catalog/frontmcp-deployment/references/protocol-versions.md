@@ -122,6 +122,15 @@ before the first `elicit()`/`sample()`/`listRoots()` call.
 and a 10-minute expiry — a tampered or replayed blob is discarded and the
 exchange restarts.
 
+**Multi-instance: set `VAULT_SECRET`.** The signing key is `VAULT_SECRET`, else
+`JWT_SECRET`, else a random per-process key. With the per-process key, a round
+that lands on another instance (or arrives after a restart) fails verification
+and the tool asks its first question again. Set `VAULT_SECRET` (or `JWT_SECRET`)
+to the same value on every instance. In production, `redis` or
+`transport.persistence` without either secret logs a startup warning; each
+rejection logs `mcp-20260728: rejected requestState` with `reason: 'bad-signature'`
+and a `hint` naming `VAULT_SECRET`.
+
 The client MUST declare the matching capability, or the server answers `-32021`. (An unversioned call the server only defaulted to 2026-07-28 comes from a client that never declared it; `elicit()` answers that one with `ElicitationNotSupportedError`, as for a legacy client without a session.)
 
 ```json

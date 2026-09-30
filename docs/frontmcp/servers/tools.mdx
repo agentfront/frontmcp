@@ -975,6 +975,8 @@ ui: {
 <Info>
 **`.tsx`/`.jsx` widgets require `@frontmcp/ui` installed.** When `ui.template` points at a `.tsx`/`.jsx` file (the recommended pattern for non-trivial widgets), FrontMCP injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Install `@frontmcp/ui` in the consuming project at the same version as `@frontmcp/sdk` — without it, server-side bundling fails.
 
+Bundling also needs **`esbuild`**. `@frontmcp/uipack` loads it on demand to bundle the widget when the tool is called, so install it as a runtime dependency where the server runs (`npm install esbuild` — in `dependencies`, not `devDependencies`). Projects created with `frontmcp create` already get it through the `frontmcp` package. Without it, the call fails with an error naming the widget.
+
 In the default `resourceMode: 'cdn'` mode, `react` / `react-dom` stay external and load from the CDN at runtime, so only `@frontmcp/ui` needs to be present on disk. When the framework selects `resourceMode: 'inline'` — either explicitly or via host detection (Claude, #456) — `react` and `react-dom` must also be resolvable from the consuming project so esbuild can bundle them into the widget; install them as devDependencies if your project doesn't already pull them in. See [building-tool-ui](/frontmcp/guides/building-tool-ui#step-1-install-the-ui-package) for the install snippet and the per-host trade-offs.
 
 </Info>
@@ -989,7 +991,9 @@ const widgetPath = fileURLToPath(new URL('./weather.widget.tsx', import.meta.url
 ui: { template: { file: widgetPath } }
 ```
 
-In a **CommonJS** project (`"type": "commonjs"`), `import.meta.url` is unavailable — anchor with `join(__dirname, 'weather.widget.tsx')` (from `node:path`) instead. Both forms are invariant to `process.cwd()`.
+In a **CommonJS** project (`"type": "commonjs"`), `import.meta.url` is unavailable — anchor with `join(__dirname, 'weather.widget.tsx')` (from `node:path`) instead. Both forms are independent of `process.cwd()`, but not of the build: once the tool is compiled they resolve next to the **compiled** file, so the widget has to ship there.
+
+`frontmcp build` copies every `*.widget.tsx` / `*.widget.jsx` under the entry's directory into the output. Targets that run tsc's output as emitted get them at the same relative path, next to each compiled tool. Bundled targets (`node`, `cli`, `lambda`, `vercel`) get them directly next to the bundle, because every bundled module's `__dirname` is the bundle's directory — keep each widget beside the tool that uses it and give it a unique file name. Only widget files are copied, not other local files a widget imports. A plain `tsc` build copies nothing, so add a copy step; otherwise the call fails with an `ENOENT` error that names the path it looked for.
 
 </Warning>
 
@@ -1015,6 +1019,10 @@ Detection only applies to per-call rendering (inline / hybrid / lean serving mod
 
 <Info>
 **Widget files use the `*.widget.tsx` naming convention.** `.tsx`/`.jsx` widgets are bundled separately by uipack/esbuild at render time. The `tsconfig.json` scaffolded by `frontmcp init` excludes `**/*.widget.tsx` / `**/*.widget.jsx` from the server typecheck so widgets don't force the project to set `jsx: 'react-jsx'` or pull in `@types/react`. Running `frontmcp init` on an existing project also adds these excludes. For IDE typecheck of widget sources, add a sibling `tsconfig.widget.json` with `jsx: 'react-jsx'` and `include: ['src/**/*.widget.tsx']`.
+</Info>
+
+<Info>
+**The widget page follows the host theme.** When an MCP Apps host sends `theme: 'light'` or `'dark'` — in the `ui/initialize` result or a later `ui/notifications/host-context-changed` — the `window.FrontMcpBridge` runtime sets `<meta name="color-scheme">` and `<html data-theme>` to it, so the frame's background and form controls match the host and your CSS can use `[data-theme="dark"]`. `getTheme()` returns the same value and `onContextChange` listeners also fire for the handshake context. Nothing is written when the host sends no theme. A widget styled for light only can keep it with `:root { color-scheme: light }`, which takes precedence over the meta tag.
 </Info>
 
 ### Using @frontmcp/ui Components

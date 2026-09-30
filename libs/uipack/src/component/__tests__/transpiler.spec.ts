@@ -265,6 +265,63 @@ describe('bundleFileSource', () => {
     }
   });
 
+  describe('when esbuild is not installed (#649)', () => {
+    function hideEsbuild(error: Error & { code?: string }) {
+      jest.doMock('esbuild', () => {
+        throw error;
+      });
+    }
+    const missing = () => Object.assign(new Error("Cannot find module 'esbuild'"), { code: 'MODULE_NOT_FOUND' });
+
+    it('bundleFileSource names the widget and says to install esbuild as a runtime dependency', () => {
+      hideEsbuild(missing());
+      const { bundleFileSource: bundle } = require('../transpiler');
+
+      let message = '';
+      try {
+        bundle('const x = 1;', '/app/src/tools/queue.widget.tsx', '/app/src/tools', 'Widget');
+      } catch (err) {
+        message = (err as Error).message;
+      }
+      expect(message).toContain('"/app/src/tools/queue.widget.tsx"');
+      expect(message).toMatch(/@frontmcp\/uipack loads esbuild on demand to bundle FileSource widgets/);
+      expect(message).toMatch(/when the tool is called/);
+      expect(message).toMatch(/npm install esbuild/);
+      expect(message).toMatch(/"dependencies", not "devDependencies"/);
+      expect(message).toMatch(/frontmcp create/);
+      expect(mockBuildSync).not.toHaveBeenCalled();
+    });
+
+    it('transpileReactSource gives the same guidance', () => {
+      hideEsbuild(missing());
+      const { transpileReactSource: transpile } = require('../transpiler');
+
+      expect(() => transpile('export default () => null;', 'login.tsx')).toThrow(
+        /FileSource widget "login\.tsx" needs esbuild/,
+      );
+    });
+
+    it('rethrows other esbuild load errors unchanged', () => {
+      const broken = Object.assign(new Error('esbuild binary is for the wrong platform'), {
+        code: 'ERR_DLOPEN_FAILED',
+      });
+      hideEsbuild(broken);
+      const { bundleFileSource: bundle } = require('../transpiler');
+
+      expect(() => bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget')).toThrow(broken);
+    });
+
+    it('rethrows MODULE_NOT_FOUND for a module other than esbuild unchanged', () => {
+      const nested = Object.assign(new Error("Cannot find module '@esbuild/darwin-arm64'"), {
+        code: 'MODULE_NOT_FOUND',
+      });
+      hideEsbuild(nested);
+      const { bundleFileSource: bundle } = require('../transpiler');
+
+      expect(() => bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget')).toThrow(nested);
+    });
+  });
+
   it('should use write: false and format: esm', () => {
     const { bundleFileSource: bundle } = require('../transpiler');
 

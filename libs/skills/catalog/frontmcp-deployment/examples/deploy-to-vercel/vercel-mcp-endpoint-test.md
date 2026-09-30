@@ -55,7 +55,7 @@ vercel --prod
 // `rewrites` keyed on `api/frontmcp.ts`/`.js` (no such file exists).
 {
   "version": 2,
-  "buildCommand": "yarn build",
+  "buildCommand": "yarn frontmcp build --target vercel",
   "installCommand": "yarn install"
 }
 ```

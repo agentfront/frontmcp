@@ -27,7 +27,12 @@ import { type McpHandlerOptions } from '../mcp-handlers/mcp-handlers.types';
 import { buildDiscoverResult } from './discover';
 import { buildInputRequiredResult, MrtrExchange } from './mrtr';
 import { type RequestNotificationSink } from './request-notifications';
-import { computeRequestBinding, decodeRequestState, type RequestStateBinding } from './request-state';
+import {
+  computeRequestBinding,
+  decodeRequestState,
+  getRequestStateKeySource,
+  type RequestStateBinding,
+} from './request-state';
 import { type JsonRpcErrorPayload } from './request-validation';
 import { decorateResult, isShapedPerCaller, orderListResult, resolveCacheScope } from './result-decorator';
 import {
@@ -364,7 +369,14 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
   };
   const carried = decodeRequestState(params['requestState'], binding);
   if (!carried.ok && carried.reason !== 'absent') {
-    scope.logger.warn('mcp-20260728: rejected requestState', { method, reason: carried.reason });
+    // Under a per-process key a round answered on another instance (or before a
+    // restart) always fails here, which the client sees only as a repeated question.
+    const hint =
+      carried.reason === 'bad-signature' && getRequestStateKeySource() === 'per-process'
+        ? 'requestState is signed with a per-process key; set VAULT_SECRET (or JWT_SECRET) to the same value on ' +
+          'every instance so a round can land on any of them'
+        : undefined;
+    scope.logger.warn('mcp-20260728: rejected requestState', { method, reason: carried.reason, ...(hint && { hint }) });
   }
 
   const exchange = new MrtrExchange({

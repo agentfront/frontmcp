@@ -463,8 +463,10 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   aspectRatio?: string | number;
 
   /**
-   * Whether the widget should auto-report its content height to the host as it
-   * changes (via a debounced `ResizeObserver` on `#root`).
+   * Whether the widget should auto-report its height to the host as it changes
+   * (via a debounced `ResizeObserver` on `<html>`, `<body>` and `#root`). The
+   * whole document is measured, margins included; the first report is sent once
+   * the host handshake completes.
    *
    * Only takes effect when the widget configures sizing — i.e. at least one
    * sizing field (`preferredHeight` / `minHeight` / `maxHeight` / `aspectRatio` /

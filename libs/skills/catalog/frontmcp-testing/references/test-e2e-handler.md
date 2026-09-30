@@ -12,6 +12,7 @@ Real API references:
 - `TestServer.start({ command, port })` returns a `TestServer` instance with `info.baseUrl` and `stop()` — `libs/testing/src/server/test-server.ts:101`. There is no `TestServer.create(ServerClass)`.
 - Build a client with `await McpTestClient.create({ baseUrl }).withTransport('streamable-http').buildAndConnect()` — `libs/testing/src/client/mcp-test-client.builder.ts`.
 - The public client API is namespaced: `client.tools.list()`, `client.tools.call(name, args)`, `client.resources.list()`, `client.resources.read(uri)`, `client.prompts.list()`, `client.prompts.get(name, args)`, `client.disconnect()` — `libs/testing/src/client/mcp-test-client.ts:306-402`.
+- `tools.list()`, `resources.list()`, `resources.listTemplates()` and `prompts.list()` return **every page**: they follow `nextCursor` until the server stops returning one (a FrontMCP server pages at 40 by default), and throw if a cursor repeats or paging passes 1000 pages. Assert on the full list; there is no cursor to pass.
 
 ```typescript
 // server.e2e.spec.ts

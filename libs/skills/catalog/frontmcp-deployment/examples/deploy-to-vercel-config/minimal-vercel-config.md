@@ -11,6 +11,7 @@ tags:
   - minimal
 features:
   - The exact shape of the auto-generated `vercel.json` — three keys, nothing else
+  - That `buildCommand` builds the vercel target (`<exec> frontmcp build --target vercel`), not the `build` script
   - That routing and function configuration live in `.vercel/output/`, not `vercel.json`
   - That hand-authoring `api/frontmcp.ts` references in `vercel.json` is unnecessary and breaks deploys
 ---
@@ -25,7 +26,7 @@ features:
 // vercel.json — yarn project (yarn.lock present)
 {
   "version": 2,
-  "buildCommand": "yarn build",
+  "buildCommand": "yarn frontmcp build --target vercel",
   "installCommand": "yarn install"
 }
 ```
@@ -34,7 +35,7 @@ features:
 // vercel.json — pnpm project (pnpm-lock.yaml present)
 {
   "version": 2,
-  "buildCommand": "pnpm run build",
+  "buildCommand": "pnpm exec frontmcp build --target vercel",
   "installCommand": "pnpm install"
 }
 ```
@@ -43,10 +44,12 @@ features:
 // vercel.json — npm project (package-lock.json present)
 {
   "version": 2,
-  "buildCommand": "npm run build",
+  "buildCommand": "npx frontmcp build --target vercel",
   "installCommand": "npm install"
 }
 ```
+
+`buildCommand` runs the vercel target through the project's package manager (bun projects get `bunx frontmcp build --target vercel`). It is never `<pm> run build`: the `build` script is `frontmcp build`, which builds the config's deployments and never writes `.vercel/output`.
 
 The actual function and routes live under `.vercel/output/`:
 
@@ -64,6 +67,7 @@ The actual function and routes live under `.vercel/output/`:
 ## What This Demonstrates
 
 - The exact shape of the auto-generated `vercel.json` — three keys, nothing else
+- That `buildCommand` builds the vercel target (`<exec> frontmcp build --target vercel`), not the `build` script
 - That routing and function configuration live in `.vercel/output/`, not `vercel.json`
 - That hand-authoring `api/frontmcp.ts` references in `vercel.json` is unnecessary and breaks deploys
 

@@ -19,6 +19,7 @@ import { c } from '../../core/colors';
 import { runInit } from '../../core/tsconfig';
 import { getSelfVersion } from '../../core/version';
 import { clack } from '../../shared/prompts';
+import { buildVercelJson } from '../build/adapters/vercel-config';
 import { buildSkillsSection } from '../skills/install';
 
 // Inline skill manifest types to avoid build dependency on @frontmcp/skills source
@@ -615,32 +616,11 @@ REDIS_DB=0
 REDIS_TLS=false
 `;
 
-// Vercel template
-const TEMPLATE_VERCEL_JSON = (projectName: string) =>
-  JSON.stringify(
-    {
-      $schema: 'https://openapi.vercel.sh/vercel.json',
-      name: projectName,
-      version: 2,
-      builds: [
-        {
-          src: 'dist/main.js',
-          use: '@vercel/node',
-        },
-      ],
-      routes: [
-        {
-          src: '/(.*)',
-          dest: '/dist/main.js',
-        },
-      ],
-      env: {
-        NODE_ENV: 'production',
-      },
-    },
-    null,
-    2,
-  );
+// Vercel template — the same commands `frontmcp build --target vercel` writes
+// (it skips an existing vercel.json, so this file is what Vercel runs). The
+// build emits `.vercel/output` (Build Output API), which carries the routes.
+const TEMPLATE_VERCEL_JSON = (pm: PackageManager) =>
+  JSON.stringify({ $schema: 'https://openapi.vercel.sh/vercel.json', ...buildVercelJson(pm) }, null, 2);
 
 // AWS Lambda SAM template
 const TEMPLATE_SAM_YAML = (projectName: string) => `
@@ -1623,7 +1603,7 @@ async function scaffoldDeploymentFiles(targetDir: string, options: CreateOptions
       await scaffoldFileIfMissing(
         targetDir,
         path.join(targetDir, 'vercel.json'),
-        TEMPLATE_VERCEL_JSON(sanitizeForFolder(projectName)),
+        TEMPLATE_VERCEL_JSON(options.packageManager),
       );
       break;
 

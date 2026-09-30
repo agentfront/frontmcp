@@ -12,11 +12,13 @@ import {
   type ListPromptsResult,
   type ListResourcesResult,
   type ListResourceTemplatesResult,
+  type ListToolsResult,
   type ReadResourceResult,
   type ServerCapabilities,
 } from '@frontmcp/protocol';
 import { fileExists, pathResolve, randomUUID } from '@frontmcp/utils';
 
+import { listAllPages } from '../common/utils/list-all-pages.utils';
 import { PublicMcpError } from '../errors';
 import type { Scope } from '../scope/scope.instance';
 import {
@@ -269,8 +271,13 @@ export class DirectClientImpl implements DirectClient {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async listTools(): Promise<FormattedTools> {
-    const result = await this.mcpClient.listTools();
-    return formatToolsForPlatform(result.tools, this.platform);
+    // Every page: the formatted list carries no cursor, so a first-page-only
+    // read (40 tools by default) could never be completed by the caller.
+    const tools = await listAllPages('tools/list', async (cursor) => {
+      const result: ListToolsResult = await this.mcpClient.listTools(cursor ? { cursor } : undefined);
+      return { items: result.tools, nextCursor: result.nextCursor };
+    });
+    return formatToolsForPlatform(tools, this.platform);
   }
 
   async callTool(name: string, args?: Record<string, unknown>): Promise<FormattedToolResult> {
