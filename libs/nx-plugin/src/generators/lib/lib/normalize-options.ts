@@ -1,10 +1,13 @@
-import { names, joinPathFragments } from '@nx/devkit';
+import { type Tree, names, joinPathFragments } from '@nx/devkit';
 import type { LibGeneratorSchema } from '../schema.js';
+import { getIgnoreDeprecations, resolveProjectPaths } from '../../../utils/project-paths.js';
 
 export interface NormalizedLibOptions {
   name: string;
   projectName: string;
   projectRoot: string;
+  offset: string;
+  ignoreDeprecations: string;
   className: string;
   fileName: string;
   propertyName: string;
@@ -15,9 +18,9 @@ export interface NormalizedLibOptions {
   skipFormat: boolean;
 }
 
-export function normalizeOptions(schema: LibGeneratorSchema): NormalizedLibOptions {
+export function normalizeOptions(tree: Tree, schema: LibGeneratorSchema): NormalizedLibOptions {
   const { className, fileName, propertyName } = names(schema.name);
-  const projectRoot = schema.directory ?? joinPathFragments('libs', fileName);
+  const { projectRoot, offset } = resolveProjectPaths(schema.directory ?? joinPathFragments('libs', fileName));
   const libType = schema.libType ?? 'generic';
   const publishable = schema.publishable ?? false;
   const importPath = schema.importPath ?? `@frontmcp/${fileName}`;
@@ -33,6 +36,8 @@ export function normalizeOptions(schema: LibGeneratorSchema): NormalizedLibOptio
     name: schema.name,
     projectName: fileName,
     projectRoot,
+    offset,
+    ignoreDeprecations: getIgnoreDeprecations(tree),
     className,
     fileName,
     propertyName,

@@ -1,27 +1,16 @@
 import type { ExecutorContext } from '../executor-context.js';
-import { execSync } from 'child_process';
+import { runFrontmcp, toAbsolute } from '../frontmcp-cli.js';
 import type { BuildExecutorSchema } from './schema.js';
 
 export default async function buildExecutor(
   options: BuildExecutorSchema,
   context: ExecutorContext,
 ): Promise<{ success: boolean }> {
-  const args: string[] = ['npx', 'frontmcp', 'build'];
-  if (options.entry) args.push('--entry', options.entry);
-  if (options.outputPath) args.push('--out-dir', options.outputPath);
-  if (options.adapter) args.push('--adapter', options.adapter);
-
-  const command = args.join(' ');
-  console.log(`Running: ${command}`);
-
-  try {
-    execSync(command, {
-      cwd: context.root,
-      stdio: 'inherit',
-      env: { ...process.env, FORCE_COLOR: '1' },
-    });
-    return { success: true };
-  } catch {
-    return { success: false };
-  }
+  const args: string[] = ['build'];
+  // `adapter` is the old spelling of `target`; the CLI has no `--adapter` flag.
+  const target = options.target ?? options.adapter;
+  if (target) args.push('--target', target);
+  if (options.entry) args.push('--entry', toAbsolute(context, options.entry));
+  if (options.outputPath) args.push('--out-dir', toAbsolute(context, options.outputPath));
+  return runFrontmcp(context, args);
 }

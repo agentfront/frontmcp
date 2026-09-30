@@ -8,11 +8,13 @@ import { c } from '../../core/colors';
  * @param entryPath - Absolute path to the entry file (e.g., dist/index.js)
  * @param outDir - Output directory for the bundled file
  * @param outputFilename - Name of the output bundle (e.g., 'handler.cjs')
+ * @param aliases - Extra module aliases (tsconfig `paths` pointing at the emitted output)
  */
 export async function bundleForServerless(
   entryPath: string,
   outDir: string,
   outputFilename: string,
+  aliases: Record<string, string> = {},
 ): Promise<void> {
   const compiler = rspack({
     mode: 'production',
@@ -55,6 +57,7 @@ export async function bundleForServerless(
       '@anthropic-ai/sdk': '@anthropic-ai/sdk',
     },
     resolve: {
+      alias: aliases,
       extensions: ['.js', '.mjs', '.cjs', '.json'],
       // Allow imports without file extensions (TypeScript compiles without .js
       // but strict ESM requires them).

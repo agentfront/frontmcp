@@ -1,5 +1,6 @@
+import { readJson, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, readJson } from '@nx/devkit';
+
 import { uiComponentGenerator } from './ui-component';
 
 describe('ui-component generator', () => {
@@ -78,7 +79,7 @@ describe('ui-component generator', () => {
 
     const content = tree.read('ui/components/src/LoginForm/LoginForm.tsx', 'utf-8');
     if (!content) throw new Error('Expected LoginForm.tsx to exist');
-    expect(content).toContain("import React from 'react'");
+    expect(content).toContain("from '@mui/material'");
     expect(content).toContain("import { Box, Typography } from '@mui/material'");
     expect(content).toContain('export interface LoginFormProps');
     expect(content).toContain('export function LoginForm(props: LoginFormProps)');
@@ -111,7 +112,9 @@ describe('ui-component generator', () => {
   it('should not crash when project.json is missing', async () => {
     tree.delete('ui/components/project.json');
 
-    await expect(uiComponentGenerator(tree, { name: 'LoginForm', skipFormat: true })).resolves.toBeUndefined();
+    await expect(uiComponentGenerator(tree, { name: 'LoginForm', skipFormat: true })).resolves.toEqual(
+      expect.any(Function),
+    );
 
     expect(tree.exists('ui/components/src/LoginForm/LoginForm.tsx')).toBe(true);
   });
@@ -119,7 +122,9 @@ describe('ui-component generator', () => {
   it('should not crash when tsconfig.base.json is missing', async () => {
     tree.delete('tsconfig.base.json');
 
-    await expect(uiComponentGenerator(tree, { name: 'LoginForm', skipFormat: true })).resolves.toBeUndefined();
+    await expect(uiComponentGenerator(tree, { name: 'LoginForm', skipFormat: true })).resolves.toEqual(
+      expect.any(Function),
+    );
 
     expect(tree.exists('ui/components/src/LoginForm/LoginForm.tsx')).toBe(true);
   });

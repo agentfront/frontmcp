@@ -1,58 +1,75 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
+import { join } from 'path';
 
-jest.mock('child_process', () => ({
-  execSync: jest.fn(),
-}));
-
-// Must import after mock setup
+import { createFakeWorkspace, type FakeWorkspace } from '../__tests__/fake-workspace';
 import buildExecutor from './build.impl';
 
-const mockContext = {
-  root: '/workspace',
-  projectName: 'demo',
-  projectsConfigurations: {
-    version: 2,
-    projects: { demo: { root: 'apps/demo' } },
-  },
-  cwd: '/workspace',
-  isVerbose: false,
-  projectGraph: { nodes: {}, dependencies: {} },
-  nxJsonConfiguration: {},
-} as any;
+jest.mock('child_process', () => ({ execFileSync: jest.fn(), spawn: jest.fn() }));
+
+const mockExecFileSync = execFileSync as jest.MockedFunction<typeof execFileSync>;
 
 describe('build executor', () => {
+  let ws: FakeWorkspace;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    ws = createFakeWorkspace();
   });
+  afterEach(() => ws.cleanup());
 
-  it('should run frontmcp build', async () => {
-    const result = await buildExecutor({}, mockContext);
+  function lastArgs(): string[] {
+    const call = mockExecFileSync.mock.calls[0];
+    return (call?.[1] ?? []) as string[];
+  }
 
-    expect(execSync).toHaveBeenCalledWith(
-      'npx frontmcp build',
-      expect.objectContaining({ cwd: '/workspace' }),
-    );
+  it('runs the local frontmcp CLI from the project folder', async () => {
+    const result = await buildExecutor({}, ws.context);
+
     expect(result.success).toBe(true);
-  });
-
-  it('should pass entry and outputPath options', async () => {
-    await buildExecutor(
-      { entry: 'src/main.ts', outputPath: 'dist', adapter: 'vercel' },
-      mockContext,
-    );
-
-    expect(execSync).toHaveBeenCalledWith(
-      'npx frontmcp build --entry src/main.ts --out-dir dist --adapter vercel',
-      expect.anything(),
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      process.execPath,
+      [ws.binPath, 'build'],
+      expect.objectContaining({ cwd: join(ws.root, 'apps', 'demo') }),
     );
   });
 
-  it('should return failure on error', async () => {
-    (execSync as jest.Mock).mockImplementation(() => {
-      throw new Error('Build failed');
+  it('never uses npx', async () => {
+    await buildExecutor({}, ws.context);
+    expect(mockExecFileSync.mock.calls[0]?.[0]).not.toMatch(/npx/);
+  });
+
+  it('passes absolute entry and output paths because the CLI runs in the project folder', async () => {
+    await buildExecutor({ entry: 'apps/demo/src/main.ts', outputPath: 'dist/apps/demo', target: 'vercel' }, ws.context);
+
+    expect(lastArgs()).toEqual([
+      ws.binPath,
+      'build',
+      '--target',
+      'vercel',
+      '--entry',
+      join(ws.root, 'apps/demo/src/main.ts'),
+      '--out-dir',
+      join(ws.root, 'dist/apps/demo'),
+    ]);
+  });
+
+  it('never passes --adapter, which the CLI does not know', async () => {
+    await buildExecutor({ adapter: 'vercel' }, ws.context);
+
+    expect(lastArgs()).not.toContain('--adapter');
+    expect(lastArgs()).toEqual([ws.binPath, 'build', '--target', 'vercel']);
+  });
+
+  it('prefers target over the deprecated adapter alias', async () => {
+    await buildExecutor({ target: 'lambda', adapter: 'vercel' }, ws.context);
+    expect(lastArgs()).toEqual([ws.binPath, 'build', '--target', 'lambda']);
+  });
+
+  it('reports failure when the CLI fails', async () => {
+    mockExecFileSync.mockImplementation(() => {
+      throw Object.assign(new Error('failed'), { status: 1 });
     });
-
-    const result = await buildExecutor({}, mockContext);
-    expect(result.success).toBe(false);
+    expect(await buildExecutor({}, ws.context)).toEqual({ success: false });
   });
+
 });

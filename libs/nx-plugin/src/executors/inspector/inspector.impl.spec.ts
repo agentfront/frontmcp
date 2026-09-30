@@ -1,10 +1,11 @@
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
+import { join } from 'path';
 
-import type { ExecutorContext } from '../executor-context.js';
+import { createFakeWorkspace, type FakeWorkspace } from '../__tests__/fake-workspace';
 import inspectorExecutor from './inspector.impl';
 
-jest.mock('child_process', () => ({ spawn: jest.fn() }));
+jest.mock('child_process', () => ({ execFileSync: jest.fn(), spawn: jest.fn() }));
 
 const mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
@@ -17,147 +18,85 @@ function createMockChild() {
   return child;
 }
 
-const mockContext: ExecutorContext = {
-  root: '/workspace',
-  projectName: 'demo',
-  projectsConfigurations: { version: 2, projects: { demo: { root: 'apps/demo' } } },
-  cwd: '/workspace',
-  isVerbose: false,
-  projectGraph: { nodes: {}, dependencies: {} },
-  nxJsonConfiguration: {},
-};
-
 describe('inspector executor', () => {
-  beforeEach(() => jest.clearAllMocks());
+  let ws: FakeWorkspace;
 
-  it('should spawn frontmcp inspector', async () => {
-    const mockChild = createMockChild();
-    mockSpawn.mockReturnValue(mockChild as never);
+  beforeEach(() => {
+    jest.clearAllMocks();
+    ws = createFakeWorkspace();
+  });
+  afterEach(() => ws.cleanup());
 
-    const gen = inspectorExecutor({}, mockContext);
+  async function run(options: Parameters<typeof inspectorExecutor>[0], exit: number | null = 0) {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child as never);
+    const gen = inspectorExecutor(options, ws.context);
     const first = await gen.next();
+    const secondPromise = gen.next();
+    child.emit('close', exit);
+    const second = await secondPromise;
+    return { child, first, second };
+  }
+
+  function spawnedArgs(): string[] {
+    return (mockSpawn.mock.calls[0]?.[1] ?? []) as string[];
+  }
+
+  it('spawns the local frontmcp CLI from the project folder without npx', async () => {
+    const { first, second } = await run({});
 
     expect(mockSpawn).toHaveBeenCalledWith(
-      expect.stringContaining('npx'),
-      ['frontmcp', 'inspector'],
-      expect.objectContaining({ cwd: '/workspace' }),
+      process.execPath,
+      [ws.binPath, 'inspector'],
+      expect.objectContaining({ cwd: join(ws.root, 'apps', 'demo') }),
     );
     expect(first.value?.success).toBe(true);
-
-    const secondPromise = gen.next();
-    mockChild.emit('close', 0);
-    const second = await secondPromise;
     expect(second.value?.success).toBe(true);
   });
 
-  it('should report failure on non-zero exit code', async () => {
-    const mockChild = createMockChild();
-    mockSpawn.mockReturnValue(mockChild as never);
+  it('never passes --port, which the CLI does not know', async () => {
+    await run({ port: 7000 });
+    expect(spawnedArgs()).toEqual([ws.binPath, 'inspector']);
+  });
 
-    const gen = inspectorExecutor({}, mockContext);
-    await gen.next();
+  it('hands the port to the MCP Inspector through CLIENT_PORT', async () => {
+    await run({ port: 7000 });
+    const options = mockSpawn.mock.calls[0]?.[2] as { env?: NodeJS.ProcessEnv };
+    expect(options.env?.['CLIENT_PORT']).toBe('7000');
+  });
 
-    const secondPromise = gen.next();
-    mockChild.emit('close', 1);
-    const second = await secondPromise;
+  it('reports failure on a non-zero exit code', async () => {
+    const { second } = await run({}, 1);
     expect(second.value?.success).toBe(false);
   });
 
-  it('should report failure on error event', async () => {
-    const mockChild = createMockChild();
-    mockSpawn.mockReturnValue(mockChild as never);
-
-    const gen = inspectorExecutor({}, mockContext);
-    await gen.next();
-
-    const secondPromise = gen.next();
-    mockChild.emit('error', new Error('spawn ENOENT'));
-    const second = await secondPromise;
+  it('reports failure when close emits null', async () => {
+    const { second } = await run({}, null);
     expect(second.value?.success).toBe(false);
   });
 
-  it('should report failure when close emits null', async () => {
-    const mockChild = createMockChild();
-    mockSpawn.mockReturnValue(mockChild as never);
-
-    const gen = inspectorExecutor({}, mockContext);
+  it('reports failure on an error event', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child as never);
+    const gen = inspectorExecutor({}, ws.context);
     await gen.next();
-
     const secondPromise = gen.next();
-    mockChild.emit('close', null);
-    const second = await secondPromise;
-    expect(second.value?.success).toBe(false);
+    child.emit('error', new Error('spawn failed'));
+    expect((await secondPromise).value?.success).toBe(false);
   });
 
-  it('should pass port option', async () => {
-    const mockChild = createMockChild();
-    mockSpawn.mockReturnValue(mockChild as never);
-
-    const gen = inspectorExecutor({ port: 9229 }, mockContext);
-    await gen.next();
-
-    expect(mockSpawn).toHaveBeenCalledWith(
-      expect.stringContaining('npx'),
-      ['frontmcp', 'inspector', '--port', '9229'],
-      expect.anything(),
-    );
-
-    const done = gen.next();
-    mockChild.emit('close', 0);
-    await done;
+  it('kills the child when the generator finishes and the child is alive', async () => {
+    const { child } = await run({});
+    expect(child.kill).toHaveBeenCalled();
   });
 
-  it('should use npx.cmd on win32', async () => {
-    const originalPlatform = process.platform;
-    Object.defineProperty(process, 'platform', { value: 'win32' });
-
-    try {
-      const mockChild = createMockChild();
-      mockSpawn.mockReturnValue(mockChild as never);
-
-      const gen = inspectorExecutor({}, mockContext);
-      await gen.next();
-
-      expect(mockSpawn).toHaveBeenCalledWith('npx.cmd', expect.any(Array), expect.anything());
-
-      const done = gen.next();
-      mockChild.emit('close', 0);
-      await done;
-    } finally {
-      Object.defineProperty(process, 'platform', { value: originalPlatform });
-    }
-  });
-
-  it('should kill the child when generator finishes and child is alive', async () => {
-    const mockChild = createMockChild();
-    mockSpawn.mockReturnValue(mockChild as never);
-
-    const gen = inspectorExecutor({}, mockContext);
-    await gen.next();
-
-    const secondPromise = gen.next();
-    mockChild.emit('close', 0);
-    await secondPromise;
-
-    await gen.next();
-    expect(mockChild.kill).toHaveBeenCalledTimes(1);
-  });
-
-  it('should not kill child if already killed', async () => {
-    const mockChild = createMockChild();
-    mockSpawn.mockReturnValue(mockChild as never);
-
-    const gen = inspectorExecutor({}, mockContext);
-    await gen.next();
-
-    mockChild.killed = true;
-
-    const secondPromise = gen.next();
-    mockChild.emit('close', 0);
-    await secondPromise;
-
-    await gen.next();
-
-    expect(mockChild.kill).not.toHaveBeenCalled();
+  it('fails without spawning when the CLI is not installed', async () => {
+    const bare = createFakeWorkspace({ installCli: false });
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const gen = inspectorExecutor({}, bare.context);
+    expect((await gen.next()).value?.success).toBe(false);
+    expect(mockSpawn).not.toHaveBeenCalled();
+    spy.mockRestore();
+    bare.cleanup();
   });
 });

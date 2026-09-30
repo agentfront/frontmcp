@@ -201,19 +201,28 @@ This creates:
 
 ## Option B — Existing Nx workspace
 
-Add `@frontmcp/nx` to an existing Nx workspace:
+Add `@frontmcp/nx` to an existing Nx workspace with `nx add`. It installs the plugin and runs its `init` generator, which adds `@frontmcp/sdk`, `frontmcp`, `@frontmcp/testing` and the Jest toolchain to your `package.json` (existing versions are kept) and makes the FrontMCP `build`, `build-exec` and `test` executors cacheable in `nx.json`:
+
+```bash
+nx add @frontmcp/nx
+```
+
+Prefer to manage dependencies yourself? Install the packages directly and run the generator once:
 
 <CodeGroup>
 ```bash npm
 npm install -D @frontmcp/nx @frontmcp/sdk frontmcp @frontmcp/testing
+nx g @frontmcp/nx:init
 ```
 
 ```bash yarn
 yarn add -D @frontmcp/nx @frontmcp/sdk frontmcp @frontmcp/testing
+nx g @frontmcp/nx:init
 ```
 
 ```bash pnpm
 pnpm add -D @frontmcp/nx @frontmcp/sdk frontmcp @frontmcp/testing
+nx g @frontmcp/nx:init
 ```
 
 </CodeGroup>

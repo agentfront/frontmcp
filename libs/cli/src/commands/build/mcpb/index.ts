@@ -14,6 +14,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ensureDir, fileExists } from '@frontmcp/utils';
+import { resolveEmittedEntry } from '../../../shared/emitted-entry';
 import { runTsc } from '../../../shared/tsc';
 import type { ParsedArgs } from '../../../core/args';
 import { c } from '../../../core/colors';
@@ -105,7 +106,7 @@ export async function buildMcpb(
   console.log(`${c('green', '[build:mcpb]')} TypeScript compiled`);
 
   // 4. esbuild bundle → dist/{name}.bundle.js
-  const compiledEntry = path.join(outDir, path.basename(entry).replace(/\.tsx?$/, '.js'));
+  const { compiledEntry } = resolveEmittedEntry(outDir, entry);
   const bundleResult = await bundleWithEsbuild(compiledEntry, outDir, execConfig);
   console.log(
     `${c('green', '[build:mcpb]')} bundle: ${path.relative(cwd, bundleResult.bundlePath)} (${formatSize(bundleResult.bundleSize)})`,
