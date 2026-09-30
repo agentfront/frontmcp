@@ -9,6 +9,7 @@ import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
 import { ADAPTERS } from './adapters';
 import { type AdapterBuildContext, type AdapterName } from './types';
 import { bundleForServerless } from './bundler';
+import { shipWidgetSources } from './copy-widgets';
 import {
   type DeploymentTarget,
   findDeployment,
@@ -396,6 +397,18 @@ async function runAdapterBuild(
   args.push('--skipLibCheck');
 
   await runTsc(args, { cwd });
+
+  // #649 — `.widget.tsx` / `.widget.jsx` FileSource widgets are read from disk when
+  // the tool is called, and tsc never emits them. Ship them where each tool's
+  // `__dirname` points: bundled adapters run from one file in outDir, the others
+  // keep tsc's tree (rooted at the entry's directory, like the generated entry).
+  await shipWidgetSources({
+    srcRoot: path.dirname(entry),
+    outDir,
+    layout: template.shouldBundle ? 'flat' : 'preserve',
+    cwd,
+    label: '[build]',
+  });
 
   if (adapter !== 'node') {
     console.log(c('cyan', `[build] Generating ${adapter} deployment files...`));

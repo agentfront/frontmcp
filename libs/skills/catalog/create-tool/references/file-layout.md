@@ -89,6 +89,8 @@ If you hoisted the entire `@Tool({...})` config, consumers would drag the `@Tool
 
 `.tsx` / `.jsx` widget files use the `*.widget.tsx` naming convention. The scaffolded `tsconfig.json` excludes `**/*.widget.tsx` from the server typecheck (#445 fix) — widgets are bundled separately by `@frontmcp/uipack` (esbuild) at render time, with React loaded externally. If you want IDE typecheck for widget sources, add a sibling `tsconfig.widget.json` with `jsx: 'react-jsx'` and `include: ['src/**/*.widget.tsx']`.
 
+Keep each widget beside the tool that uses it, with a unique file name. tsc never emits widget files, so `frontmcp build` copies them into the output — for the bundled `node` / `cli` / `lambda` / `vercel` targets directly next to the bundle, where every tool's `__dirname` points (#649). Two widgets with the same file name can't both go there; the build skips them with a warning.
+
 ## See also
 
 - [`derived-types.md`](./derived-types.md) — why schemas hoist

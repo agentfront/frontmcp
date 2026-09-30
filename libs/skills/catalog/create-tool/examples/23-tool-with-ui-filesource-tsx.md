@@ -16,7 +16,7 @@ Tool with a `.tsx` widget in a separate file via the `FileSource` form — the r
 
 For any React widget, FileSource is the right pattern. The widget lives in its own `.widget.tsx` file with its own React imports; the tool decorator just points at it.
 
-> **Prerequisite:** `@frontmcp/ui` installed at the same version as `@frontmcp/sdk`. Without it, server-side bundling fails — the framework injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`.
+> **Prerequisites:** `@frontmcp/ui` installed at the same version as `@frontmcp/sdk` — the framework injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. And `esbuild` installed as a runtime dependency (`npm install esbuild`, not a devDependency) — `@frontmcp/uipack` loads it to bundle the widget when the tool is called. `frontmcp create` projects get `esbuild` through the `frontmcp` package.
 
 ## Code
 
@@ -41,8 +41,10 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { inputSchema, outputSchema, type SalesChartInput, type SalesChartOutput } from './sales-chart.schema';
 
-// Anchor the widget path to THIS source file — bare relative paths resolve
-// against process.cwd() (issue #444), which fails in any non-trivial layout.
+// Anchor the widget path to THIS file — bare relative paths resolve against
+// process.cwd() (issue #444), which fails in any non-trivial layout. Once
+// compiled, this resolves next to the compiled file, so the widget must ship
+// with the build (`frontmcp build` copies *.widget.tsx files — #649).
 const widgetPath = fileURLToPath(new URL('./sales-chart.widget.tsx', import.meta.url));
 
 @Tool({
@@ -107,6 +109,7 @@ export default function SalesChartWidget({ output }: Props) {
 ## Why these defaults matter
 
 - **`import.meta.url` anchoring** — relative paths in `FileSource` resolve against `process.cwd()`, not the tool file (#444). Running the server from a different directory breaks the widget at tool-call time. Anchoring fixes it once.
+- **Ship the widget** — the anchored path points next to the **compiled** file after a build, and tsc doesn't emit `*.widget.tsx`. `frontmcp build` copies widget files into the output (directly next to the bundle for the bundled `node` / `cli` / `lambda` / `vercel` targets, so keep widget file names unique); a plain `tsc` build needs its own copy step (#649).
 - **`resourceMode` unset** — leave it. The framework picks `'inline'` for Claude (React bundled into the widget — actually renders) and `'cdn'` for everyone else (smaller payload via esm.sh). Setting it explicitly only locks in one behavior across all clients.
 - **`hydrate: false`** — default. React SSR output is static HTML; the bridge IIFE handles any interactivity. Enabling hydration creates React error #418 in Claude's iframe sandbox where the client-side render diverges from the SSR render.
 - **`*.widget.tsx` naming** — the scaffolded `tsconfig.json` excludes `**/*.widget.tsx` from the server typecheck (#445). The widget compiles via uipack/esbuild at render time with its own React-aware config.
