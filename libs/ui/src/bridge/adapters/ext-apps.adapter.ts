@@ -228,15 +228,14 @@ export class ExtAppsAdapter extends BaseAdapter {
   }
 
   /**
-   * Report a desired widget size to the host via the FrontMCP `ui/setSize`
-   * request (parallels `ui/setDisplayMode`).
+   * Report the widget's size to the host with the standard
+   * `ui/notifications/size-changed` notification (`{ width?, height? }` in px).
    */
   override async setSize(size: WidgetSize): Promise<void> {
-    await this._sendRequest('ui/setSize', {
-      height: size.height,
-      width: size.width,
-      aspectRatio: size.aspectRatio,
-    });
+    const params: { width?: number; height?: number } = {};
+    if (typeof size.width === 'number') params.width = size.width;
+    if (typeof size.height === 'number') params.height = size.height;
+    this._sendNotification('ui/notifications/size-changed', params);
   }
 
   override async requestClose(): Promise<void> {
@@ -515,23 +514,35 @@ export class ExtAppsAdapter extends BaseAdapter {
 
   /**
    * Send a JSON-RPC notification (no response expected).
+   *
+   * Unlike the handshake request, a notification is never broadcast with `'*'`:
+   * it goes to the pinned host origin or the first configured trusted origin,
+   * and is refused when neither exists.
    */
   private _sendNotification(method: string, params?: unknown): void {
+    const targetOrigin = this._trustedOrigin || this._config.options?.trustedOrigins?.[0];
+    if (!targetOrigin) {
+      throw new Error('Cannot send notification: no trusted origin established');
+    }
+
     const notification: JsonRpcNotification = {
       jsonrpc: '2.0',
       method,
       params,
     };
-    this._postMessage(notification);
+    this._postMessage(notification, targetOrigin);
   }
 
   /**
-   * Post a message to the parent window.
+   * Post a message to the parent window. Without an explicit `targetOrigin` it
+   * uses the pinned host origin, or `'*'` before one exists (the handshake).
    */
-  private _postMessage(message: JsonRpcRequest | JsonRpcResponse | JsonRpcNotification): void {
-    if (typeof window === 'undefined') return;
+  private _postMessage(
+    message: JsonRpcRequest | JsonRpcResponse | JsonRpcNotification,
+    targetOrigin: string = this._trustedOrigin || '*',
+  ): void {
+    if (typeof window === 'undefined' || typeof window.parent?.postMessage !== 'function') return;
 
-    const targetOrigin = this._trustedOrigin || '*';
     window.parent.postMessage(message, targetOrigin);
   }
 
@@ -621,7 +632,7 @@ export class ExtAppsAdapter extends BaseAdapter {
         // Origin is already set from first successful message
       }
     } catch (error) {
-      throw new Error(`ext-apps handshake failed: ${error}`);
+      throw new Error(`ext-apps handshake failed: ${error}`, { cause: error });
     }
   }
 

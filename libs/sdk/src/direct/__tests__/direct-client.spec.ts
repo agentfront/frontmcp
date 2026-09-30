@@ -485,6 +485,54 @@ describe('DirectClientImpl', () => {
     });
   });
 
+  describe('list pagination', () => {
+    let client: Awaited<ReturnType<typeof DirectClientImpl.create>>;
+
+    beforeEach(async () => {
+      client = await DirectClientImpl.create(createMockScope() as Scope);
+    });
+
+    afterEach(() => {
+      mockMcpClient.listResources.mockReset().mockResolvedValue({ resources: [] });
+      mockMcpClient.listResourceTemplates.mockReset().mockResolvedValue({ resourceTemplates: [] });
+      mockMcpClient.listPrompts.mockReset().mockResolvedValue({ prompts: [] });
+    });
+
+    function twoPages(key: string, first: unknown[], second: unknown[]) {
+      return jest.fn(async (params?: { cursor?: string }) =>
+        params?.cursor === 'page-2' ? { [key]: second } : { [key]: first, nextCursor: 'page-2' },
+      );
+    }
+
+    it('listResources, listResourceTemplates and listPrompts return every page without a cursor', async () => {
+      mockMcpClient.listResources.mockImplementation(twoPages('resources', [{ uri: 'a://1' }], [{ uri: 'a://2' }]));
+      mockMcpClient.listResourceTemplates.mockImplementation(
+        twoPages('resourceTemplates', [{ uriTemplate: 'a://{x}' }], [{ uriTemplate: 'b://{x}' }]),
+      );
+      mockMcpClient.listPrompts.mockImplementation(twoPages('prompts', [{ name: 'p1' }], [{ name: 'p2' }]));
+
+      const resources = await client.listResources();
+      const templates = await client.listResourceTemplates();
+      const prompts = await client.listPrompts();
+
+      expect(resources.resources.map((r) => r.uri)).toEqual(['a://1', 'a://2']);
+      expect(templates.resourceTemplates.map((t) => t.uriTemplate)).toEqual(['a://{x}', 'b://{x}']);
+      expect(prompts.prompts.map((p) => p.name)).toEqual(['p1', 'p2']);
+      expect(resources.nextCursor).toBeUndefined();
+      expect(templates.nextCursor).toBeUndefined();
+      expect(prompts.nextCursor).toBeUndefined();
+    });
+
+    it('sends the cursor of the previous page on the follow-up request', async () => {
+      const listResources = twoPages('resources', [{ uri: 'a://1' }], [{ uri: 'a://2' }]);
+      mockMcpClient.listResources.mockImplementation(listResources);
+
+      await client.listResources();
+
+      expect(listResources.mock.calls.map(([params]) => params)).toEqual([undefined, { cursor: 'page-2' }]);
+    });
+  });
+
   describe('prompt operations', () => {
     let client: Awaited<ReturnType<typeof DirectClientImpl.create>>;
 

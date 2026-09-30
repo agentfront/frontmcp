@@ -238,13 +238,13 @@ What FrontMCP does with it:
 - **`_meta` hints** — the same values ride along on the response/discovery `_meta` as `ui/preferredHeight`, `ui/minHeight`, `ui/maxHeight`, `ui/aspectRatio` (and nested under `_meta.ui` in `tools/list`), so hosts that read sizing from metadata pick it up.
 - **Runtime auto-resize** — when `autoResize !== false` and `ResizeObserver` is available, the bridge observes `<html>`, `<body>` and `#root` and reports the page height to the host (debounced via `requestAnimationFrame`), also firing a `widget:resize` event you can listen for. Call `window.FrontMcpBridge.setSize({ height, width, aspectRatio })` to report manually.
 - **What is measured** — the whole document: `<html>` at `height: fit-content`, plus any content overflowing a fixed-height `<body>`, clamped by a px `max-height` on `<html>`. Body margins and margins collapsed through the body (an `<h2>` or `<ul>` at the edge) are counted, and the height shrinks when content does. `preferredHeight` / `minHeight` / `maxHeight` act as the floor and ceiling.
-- **When it is sent** — reports wait for the bridge to initialize. In an ext-apps host the first report goes out once the `ui/initialize` handshake completes (a request sent earlier would be rejected); a report the host rejects is sent again on the next observation, even for the same height. A manual `setSize` called before the handshake is held and delivered right after it (only the latest size).
+- **When it is sent** — auto-resize reports wait for the bridge to initialize. In an ext-apps host the first report is sent after the `ui/initialize` handshake settles. `ui/notifications/size-changed` is a notification, so the host never answers it; it is refused locally (the promise rejects) only when no trusted origin exists, and auto-resize then retries that height on a later observation. A manual `setSize` called before the handshake, with no trusted origin configured, is held and only the latest size is sent right after it. `aspectRatio` stays part of the cross-platform `FrontMcpBridge.setSize` API; the ext-apps adapter leaves it out of the notification payload.
 
 Per-host behavior:
 
 - **Claude / static widgets** — the host measures the iframe DOM height itself, so auto-resize is effectively CSS-only (the `setSize` report is a no-op). The injected CSS is what makes a fixed-tall widget (media players, canvases) open without clipping.
 - **OpenAI ChatGPT** — auto-resize forwards to the Apps SDK sizing API when one is exposed; otherwise the SDK's own DOM measurement applies.
-- **ext-apps hosts** — the measured size is reported via a `ui/setSize` request (parallels `ui/setDisplayMode`).
+- **ext-apps hosts** — the measured size is reported with the standard `ui/notifications/size-changed` notification (`{ width, height }` in px), which any spec-compliant host handles.
 - **Gemini / generic / unknown** — `setSize` is a no-op; only the static CSS applies.
 
 `displayMode: 'fullscreen'` remains a separate, best-effort hint a host may ignore.
