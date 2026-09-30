@@ -44,6 +44,38 @@ beforeEach(() => {
   mockClose.mockResolvedValue(undefined);
 });
 
+describe('extractSchemas file logging (#642)', () => {
+  it('disables the file logger while the server boots, then restores the env', async () => {
+    const seen: Array<string | undefined> = [];
+    mockConnect.mockImplementationOnce(async () => {
+      seen.push(process.env['FRONTMCP_LOGS_MAX']);
+      return mockClient;
+    });
+    const before = process.env['FRONTMCP_LOGS_MAX'];
+    delete process.env['FRONTMCP_LOGS_MAX'];
+    try {
+      await extractSchemas('/fake/bundle.js');
+      expect(seen).toEqual(['0']);
+      expect(process.env['FRONTMCP_LOGS_MAX']).toBeUndefined();
+    } finally {
+      if (before !== undefined) process.env['FRONTMCP_LOGS_MAX'] = before;
+    }
+  });
+
+  it('restores a pre-existing FRONTMCP_LOGS_MAX and restores it even when extraction fails', async () => {
+    const before = process.env['FRONTMCP_LOGS_MAX'];
+    process.env['FRONTMCP_LOGS_MAX'] = '5';
+    mockConnect.mockRejectedValueOnce(new Error('boom'));
+    try {
+      await expect(extractSchemas('/fake/bundle.js')).rejects.toThrow();
+      expect(process.env['FRONTMCP_LOGS_MAX']).toBe('5');
+    } finally {
+      if (before === undefined) delete process.env['FRONTMCP_LOGS_MAX'];
+      else process.env['FRONTMCP_LOGS_MAX'] = before;
+    }
+  });
+});
+
 describe('extractSchemas', () => {
   it('should extract tools with name, description, and inputSchema', async () => {
     mockListTools.mockResolvedValue({

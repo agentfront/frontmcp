@@ -349,7 +349,9 @@ export function generateMcpbManifest(input: GenerateMcpbManifestInput): McpbMani
   const mcpConfig: McpbMcpConfig = {
     command: 'node',
     args: ['${__dirname}/server/index.js'],
-    ...(Object.keys(userConfigEnv).length > 0 ? { env: userConfigEnv } : {}),
+    // MCPB hosts talk to the server over stdio; the @FrontMcp decorator serves
+    // stdio only when this is set.
+    env: { FRONTMCP_STDIO: '1', ...userConfigEnv },
     ...(platformOverrides && Object.keys(platformOverrides).length > 0
       ? { platform_overrides: platformOverrides }
       : {}),

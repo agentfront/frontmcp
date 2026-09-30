@@ -113,6 +113,8 @@ export interface ParsedArgs {
   reloadDeadlineMs?: number;
   // Issue #400 — top-level config flag (forwarded from program.opts().config)
   config?: string;
+  /** Internal: directory holding the resolved `frontmcp.config.*` (set by `build`). */
+  configDir?: string;
   // Issue #400 — eject-mcp-config flags
   out?: string;
   dryRun?: boolean;

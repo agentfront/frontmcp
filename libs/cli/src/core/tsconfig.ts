@@ -62,6 +62,12 @@ export function ensureRequiredTsOptions(obj: Record<string, any>): Record<string
   next.compilerOptions.module = REQUIRED_DECORATOR_FIELDS.module;
   next.compilerOptions.emitDecoratorMetadata = REQUIRED_DECORATOR_FIELDS.emitDecoratorMetadata;
   next.compilerOptions.experimentalDecorators = REQUIRED_DECORATOR_FIELDS.experimentalDecorators;
+  // `module: esnext` with `moduleResolution: node16|nodenext` is rejected by TypeScript (TS5110):
+  // the Node resolution modes require the matching `module`. Fall back to the recommended value.
+  const resolution = normalizeStr(next.compilerOptions.moduleResolution);
+  if (resolution === 'node16' || resolution === 'nodenext') {
+    next.compilerOptions.moduleResolution = REQUIRED_DECORATOR_FIELDS.moduleResolution;
+  }
   return next;
 }
 
@@ -117,6 +123,13 @@ export function checkRequiredTsOptions(compilerOptions: Record<string, any> | un
 
   if (ed === REQUIRED_DECORATOR_FIELDS.experimentalDecorators) ok.push(`compilerOptions.experimentalDecorators = true`);
   else issues.push(`compilerOptions.experimentalDecorators should be true`);
+
+  const resolution = normalizeStr(compilerOptions?.moduleResolution);
+  if (resolution === 'node16' || resolution === 'nodenext') {
+    issues.push(
+      `compilerOptions.moduleResolution "${compilerOptions?.moduleResolution}" requires module "${compilerOptions?.moduleResolution}" (TS5110) — use "${REQUIRED_DECORATOR_FIELDS.moduleResolution}"`,
+    );
+  }
 
   return { ok, issues };
 }

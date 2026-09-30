@@ -6,7 +6,7 @@ jest.mock('fs', () => ({
   readFileSync: jest.fn(),
 }));
 
-import { normalizeConfig, loadExecConfig, FrontmcpExecConfig } from '../config';
+import { normalizeConfig, loadExecConfig, type FrontmcpExecConfig } from '../config';
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 
@@ -167,6 +167,85 @@ describe('config', () => {
       const config = await loadExecConfig('/test-cwd');
 
       expect(config.version).toBe('1.0.0');
+    });
+
+    describe('config location and version fallback', () => {
+      const configsAt = (files: Record<string, string>) => {
+        (mockFs.existsSync as jest.Mock).mockImplementation((p: string) => typeof p === 'string' && p in files);
+        (mockFs.readFileSync as jest.Mock).mockImplementation((p: string) => files[p]);
+      };
+
+      it('reads the explicit configPath (absolute)', async () => {
+        configsAt({ '/elsewhere/custom.json': JSON.stringify({ name: 'custom-app', version: '9.0.0' }) });
+
+        const config = await loadExecConfig('/test-cwd', { configPath: '/elsewhere/custom.json' });
+
+        expect(config.name).toBe('custom-app');
+        expect(config.version).toBe('9.0.0');
+      });
+
+      it('resolves a relative configPath against cwd', async () => {
+        configsAt({ [path.resolve('/test-cwd', 'cfg/app.json')]: JSON.stringify({ name: 'rel-app', version: '1.1.1' }) });
+
+        const config = await loadExecConfig('/test-cwd', { configPath: 'cfg/app.json' });
+
+        expect(config.name).toBe('rel-app');
+      });
+
+      it('throws a clear error when the explicit configPath does not exist', async () => {
+        configsAt({});
+
+        await expect(loadExecConfig('/test-cwd', { configPath: 'nope.json' })).rejects.toThrow(
+          'Config file not found: nope.json',
+        );
+      });
+
+      it('prefers configPath over configDir', async () => {
+        configsAt({
+          '/elsewhere/custom.json': JSON.stringify({ name: 'explicit', version: '1.0.0' }),
+          [path.join('/parent', 'frontmcp.config.json')]: JSON.stringify({ name: 'parent', version: '1.0.0' }),
+        });
+
+        const config = await loadExecConfig('/test-cwd', {
+          configPath: '/elsewhere/custom.json',
+          configDir: '/parent',
+        });
+
+        expect(config.name).toBe('explicit');
+      });
+
+      it('finds frontmcp.config.* in configDir when it lives above cwd', async () => {
+        configsAt({
+          [path.join('/monorepo', 'frontmcp.config.json')]: JSON.stringify({ name: 'root-app', version: '2.2.2' }),
+        });
+
+        const config = await loadExecConfig('/monorepo/packages/app', { configDir: '/monorepo' });
+
+        expect(config.name).toBe('root-app');
+        expect(config.version).toBe('2.2.2');
+      });
+
+      it('inherits the package.json version when the config omits one', async () => {
+        configsAt({
+          [path.join('/test-cwd', 'frontmcp.config.json')]: JSON.stringify({ name: 'no-version' }),
+          [path.join('/test-cwd', 'package.json')]: JSON.stringify({ name: 'pkg', version: '7.7.7' }),
+        });
+
+        const config = await loadExecConfig('/test-cwd');
+
+        expect(config.version).toBe('7.7.7');
+      });
+
+      it('keeps the config version over the package.json version', async () => {
+        configsAt({
+          [path.join('/test-cwd', 'frontmcp.config.json')]: JSON.stringify({ name: 'v', version: '3.0.0' }),
+          [path.join('/test-cwd', 'package.json')]: JSON.stringify({ name: 'pkg', version: '7.7.7' }),
+        });
+
+        const config = await loadExecConfig('/test-cwd');
+
+        expect(config.version).toBe('3.0.0');
+      });
     });
 
     it('should throw when no config files and no package.json', async () => {

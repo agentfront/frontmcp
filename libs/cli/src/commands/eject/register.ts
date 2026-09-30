@@ -2,7 +2,8 @@
  * `frontmcp eject-mcp-config <client>` (issue #400).
  *
  * Reads `clients.<client>` from the resolved `frontmcp.config` and prints a
- * ready-to-paste MCP client snippet to stdout. Supported clients:
+ * ready-to-paste MCP client snippet to stdout. With `-o` the server entry is merged
+ * into the target file (created, with its folder, when missing). Supported clients:
  * `claude-code`, `claude-desktop`, `cursor`, `windsurf`, `vscode`.
  */
 
@@ -10,11 +11,11 @@ import * as path from 'path';
 
 import type { Command } from 'commander';
 
-import { writeFile } from '@frontmcp/utils';
+import { ensureDir, fileExists, readFile, writeFile } from '@frontmcp/utils';
 
 import { resolveConfig, type McpClientName } from '../../config';
 import { c } from '../../core/colors';
-import { emitClientSnippet } from './mcp-client';
+import { buildClientPayload, emitClientSnippet, mergeClientConfig } from './mcp-client';
 
 const SUPPORTED_CLIENTS: McpClientName[] = ['claude-code', 'claude-desktop', 'cursor', 'windsurf', 'vscode'];
 
@@ -44,20 +45,22 @@ export function registerEjectCommands(program: Command): void {
         process.exit(1);
       }
 
-      const snippet = emitClientSnippet(client as McpClientName, resolved.config);
-
       if (opts.out) {
         const target = path.isAbsolute(opts.out) ? opts.out : path.resolve(process.cwd(), opts.out);
+        const existing = (await fileExists(target)) ? await readFile(target) : undefined;
+        const merged = mergeClientConfig(existing, buildClientPayload(client as McpClientName, resolved.config));
         if (opts.dryRun) {
           console.log(c('cyan', `[dry-run] would write ${target}:\n`));
-          console.log(snippet);
+          console.log(merged);
           return;
         }
-        await writeFile(target, snippet);
-        console.log(c('green', `✓ Wrote ${target}`));
+        await ensureDir(path.dirname(target));
+        await writeFile(target, merged);
+        console.log(c('green', `✓ Wrote ${target}${existing !== undefined ? ' (merged into existing config)' : ''}`));
         return;
       }
 
+      const snippet = emitClientSnippet(client as McpClientName, resolved.config);
       console.log(snippet);
     });
 }
