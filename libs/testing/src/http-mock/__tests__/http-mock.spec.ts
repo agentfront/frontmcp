@@ -1,4 +1,4 @@
-import { httpMock } from '../http-mock';
+import { httpMock, httpResponse } from '../http-mock';
 
 describe('httpMock', () => {
   const realFetch = globalThis.fetch;
@@ -58,6 +58,30 @@ describe('httpMock', () => {
     const handle = interceptor.put('https://api.test/x', { ok: true });
     await fetch(new Request('https://api.test/x'), { method: 'PUT', headers: { a: 'b' } });
     expect(handle.calls()[0].headers['a']).toBe('b');
+  });
+
+  it('init.headers replaces the Request headers instead of merging with them', async () => {
+    const interceptor = httpMock.interceptor();
+    const handle = interceptor.get('https://api.test/h', { ok: true });
+    await fetch(new Request('https://api.test/h', { headers: { 'x-from-request': '1' } }), {
+      headers: { 'x-from-init': '2' },
+    });
+    const { headers } = handle.calls()[0];
+    expect(headers['x-from-init']).toBe('2');
+    expect(headers['x-from-request']).toBeUndefined();
+  });
+
+  it('falls back to the Request body when init.body is null', async () => {
+    const interceptor = httpMock.interceptor();
+    const handle = interceptor.post('https://api.test/b', { ok: true });
+    await fetch(new Request('https://api.test/b', { method: 'POST', body: JSON.stringify({ a: 1 }) }), { body: null });
+    expect(handle.calls()[0].body).toEqual({ a: 1 });
+  });
+
+  it('httpResponse.networkError() rejects the fetch instead of resolving a Response', async () => {
+    const interceptor = httpMock.interceptor();
+    interceptor.get('https://api.test/down', httpResponse.networkError('boom'));
+    await expect(fetch('https://api.test/down')).rejects.toThrow('fetch failed: boom');
   });
 
   describe('bare body objects', () => {

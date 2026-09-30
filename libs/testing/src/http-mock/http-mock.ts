@@ -370,13 +370,13 @@ async function interceptedFetch(input: RequestInfo | URL, init?: RequestInit): P
       }
     }
   };
-  collectHeaders(request?.headers);
-  collectHeaders(init?.headers);
+  // fetch(request, init): init.headers replaces the Request's headers rather than merging with them
+  collectHeaders(init?.headers ?? request?.headers);
 
   let body: unknown;
   let rawBody: string | undefined;
   let bodySource: BodyInit | null | undefined = init?.body;
-  if (bodySource === undefined && request && request.body !== null) {
+  if ((bodySource === undefined || bodySource === null) && request && request.body !== null) {
     bodySource = await request.clone().text();
   }
   if (bodySource) {
@@ -451,6 +451,8 @@ function isResponseDescriptor(value: Record<string, unknown>): boolean {
 }
 
 function normalizeResponse(response: HttpMockResponse | Record<string, unknown>): HttpMockResponse {
+  const isNetworkError = !Array.isArray(response) && (response as Record<string, unknown>)['_throwError'] === true;
+  if (isNetworkError) return response as HttpMockResponse;
   if (Array.isArray(response) || !isResponseDescriptor(response as Record<string, unknown>)) {
     return { body: response as Record<string, unknown> };
   }

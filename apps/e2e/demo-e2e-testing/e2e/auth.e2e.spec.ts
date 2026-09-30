@@ -9,21 +9,30 @@ describe('authentication against a transparent-mode server', () => {
   let server: TestServer;
 
   beforeAll(async () => {
-    // The issuer URL is only known once the mock OAuth server is listening
-    const probe = new MockOAuthServer(new TestTokenFactory(), { debug: false });
-    const probeInfo = await probe.start();
-    await probe.stop();
+    // The issuer URL embeds the port, so it is only known once the mock OAuth server is listening.
+    // Probe a free port, then rebind it; if another process grabs it in between, probe again.
+    let oauthInfo: Awaited<ReturnType<MockOAuthServer['start']>> | undefined;
+    for (let attempt = 0; attempt < 5 && !oauthInfo; attempt++) {
+      const probe = new MockOAuthServer(new TestTokenFactory(), { debug: false });
+      const probeInfo = await probe.start();
+      await probe.stop();
 
-    tokenFactory = new TestTokenFactory({ issuer: probeInfo.issuer, audience: probeInfo.issuer });
-    mockOAuth = new MockOAuthServer(tokenFactory, {
-      debug: false,
-      port: probeInfo.port,
-      autoApprove: true,
-      testUser: { sub: 'oauth-user', email: 'oauth@example.com', name: 'OAuth User' },
-      clientId: 'test-client',
-      validRedirectUris: ['http://localhost:3000/callback'],
-    });
-    const oauthInfo = await mockOAuth.start();
+      tokenFactory = new TestTokenFactory({ issuer: probeInfo.issuer, audience: probeInfo.issuer });
+      mockOAuth = new MockOAuthServer(tokenFactory, {
+        debug: false,
+        port: probeInfo.port,
+        autoApprove: true,
+        testUser: { sub: 'oauth-user', email: 'oauth@example.com', name: 'OAuth User' },
+        clientId: 'test-client',
+        validRedirectUris: ['http://localhost:3000/callback'],
+      });
+      try {
+        oauthInfo = await mockOAuth.start();
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error;
+      }
+    }
+    if (!oauthInfo) throw new Error('Could not bind a port for the mock OAuth server');
 
     server = await TestServer.start({
       command: 'npx tsx apps/e2e/demo-e2e-testing/src/main.transparent.ts',
