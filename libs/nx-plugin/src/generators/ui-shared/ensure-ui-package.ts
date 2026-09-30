@@ -1,4 +1,4 @@
-import { offsetFromRoot, writeJson, type GeneratorCallback, type Tree } from '@nx/devkit';
+import { offsetFromRoot, readJson, writeJson, type GeneratorCallback, type Tree } from '@nx/devkit';
 
 import { addFrontmcpDependencies } from '../../utils/add-dependencies.js';
 import { getIgnoreDeprecations } from '../../utils/project-paths.js';
@@ -76,6 +76,13 @@ export function ensureUiPackage(tree: Tree, options: EnsureUiPackageOptions): Ge
   if (!tree.exists(`${packageRoot}/project.json`)) {
     const offset = offsetFromRoot(packageRoot);
     const ignoreDeprecations = getIgnoreDeprecations(tree);
+    // `customConditions` (Nx solution workspaces set it) is only valid with a modern `moduleResolution`
+    // (TS5098), so a package that inherits it must inherit the base's `module`/`moduleResolution` too.
+    const inheritsModernResolution = Boolean(
+      tree.exists('tsconfig.base.json') &&
+        readJson<{ compilerOptions?: { customConditions?: unknown } }>(tree, 'tsconfig.base.json').compilerOptions
+          ?.customConditions,
+    );
     writeJson(tree, `${packageRoot}/project.json`, {
       name: projectName,
       $schema: `${offset}node_modules/nx/schemas/project-schema.json`,
@@ -87,9 +94,8 @@ export function ensureUiPackage(tree: Tree, options: EnsureUiPackageOptions): Ge
     writeJson(tree, `${packageRoot}/tsconfig.json`, {
       extends: `${offset}tsconfig.base.json`,
       compilerOptions: {
-        module: 'commonjs',
-        moduleResolution: 'node10',
-        ...(ignoreDeprecations && { ignoreDeprecations }),
+        ...(!inheritsModernResolution && { module: 'commonjs', moduleResolution: 'node10' }),
+        ...(!inheritsModernResolution && ignoreDeprecations && { ignoreDeprecations }),
         ...(kind === 'react' && { jsx: 'react-jsx' }),
         esModuleInterop: true,
         strict: true,

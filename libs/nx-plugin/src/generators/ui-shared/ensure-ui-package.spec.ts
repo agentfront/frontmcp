@@ -27,6 +27,31 @@ describe('ensureUiPackage', () => {
     expect(tree.read('ui/components/jest.config.cjs', 'utf-8')).toContain("testEnvironment: 'jsdom'");
   });
 
+  it('sets commonjs/node10 unless the base config needs modern resolution', () => {
+    ensureUiPackage(tree, { packageRoot: 'ui/components', projectName: 'ui-components', kind: 'react' });
+
+    expect(readJson(tree, 'ui/components/tsconfig.json').compilerOptions).toMatchObject({
+      module: 'commonjs',
+      moduleResolution: 'node10',
+    });
+  });
+
+  it('inherits module and moduleResolution when the base config sets customConditions (TS5098)', () => {
+    tree.write(
+      'tsconfig.base.json',
+      JSON.stringify({
+        compilerOptions: { module: 'nodenext', moduleResolution: 'nodenext', customConditions: ['@ws/source'] },
+      }),
+    );
+    ensureUiPackage(tree, { packageRoot: 'ui/components', projectName: 'ui-components', kind: 'react' });
+
+    const { compilerOptions } = readJson(tree, 'ui/components/tsconfig.json');
+    expect(compilerOptions.module).toBeUndefined();
+    expect(compilerOptions.moduleResolution).toBeUndefined();
+    expect(compilerOptions.ignoreDeprecations).toBeUndefined();
+    expect(compilerOptions.jsx).toBe('react-jsx');
+  });
+
   it('gives a new package build targets that addUiEntry can extend', () => {
     ensureUiPackage(tree, { packageRoot: 'ui/components', projectName: 'ui-components', kind: 'react' });
 

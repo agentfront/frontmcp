@@ -21,6 +21,19 @@ describe('buildEmittedAliases', () => {
     });
   });
 
+  it.each([
+    ['index.mts', 'index.mjs'],
+    ['index.cts', 'index.cjs'],
+  ])('maps a %s target to the %s tsc emits', (source, emittedName) => {
+    const result = buildEmittedAliases(
+      { basePath: '/ws', paths: { '@scope/shared': [`libs/shared/src/${source}`] } },
+      entryDir,
+      emittedEntryDir,
+      alwaysExists,
+    );
+    expect(result).toEqual({ '@scope/shared$': `/ws/servers/gw/dist/vercel/libs/shared/src/${emittedName}` });
+  });
+
   it('maps a wildcard alias to the emitted directory', () => {
     const result = buildEmittedAliases(
       { basePath: '/ws', paths: { '@scope/utils/*': ['libs/utils/src/*'] } },

@@ -44,7 +44,11 @@ export function buildEmittedAliases(
   const result: Record<string, string> = {};
 
   const emitted = (source: string): string =>
-    path.join(emittedEntryDir, path.relative(entryDir, source)).replace(/\.(d\.)?tsx?$/, '.js');
+    path
+      .join(emittedEntryDir, path.relative(entryDir, source))
+      .replace(/\.(d\.)?tsx?$/, '.js')
+      .replace(/\.(d\.)?mts$/, '.mjs')
+      .replace(/\.(d\.)?cts$/, '.cjs');
 
   for (const [alias, targets] of Object.entries(aliases.paths)) {
     const isWildcard = alias.endsWith('/*');
@@ -57,7 +61,7 @@ export function buildEmittedAliases(
           break;
         }
       } else {
-        const hasExtension = /\.(d\.)?tsx?$/.test(source);
+        const hasExtension = /\.(d\.)?(tsx?|mts|cts)$/.test(source);
         const file = hasExtension
           ? candidate
           : [`${candidate}.js`, path.join(candidate, 'index.js')].find((option) => exists(option));
