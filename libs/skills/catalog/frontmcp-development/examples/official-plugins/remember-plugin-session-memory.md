@@ -6,8 +6,8 @@ description: 'Demonstrates installing the Remember plugin and using `this.rememb
 tags: [development, session, plugins, remember, plugin, memory]
 features:
   - "Installing `RememberPlugin` with `type: 'memory'` for development"
-  - 'Enabling `tools: { enabled: true }` to expose LLM-callable memory tools (`remember_this`, `recall`, etc.)'
-  - 'Using `this.remember.set()` with default `session` scope and explicit `user` scope'
+  - 'Enabling `tools: { enabled: true }` to expose LLM-callable memory tools (`remember_this`, `recall`, etc.), whose `scope` defaults to `session`'
+  - 'Using `this.remember.set()` with default `session` scope and explicit `user` scope (refused for an anonymous caller)'
   - 'Using `this.remember.get()` with a `defaultValue` fallback'
   - 'Using `this.remember.knows()` to check key existence without retrieving the value'
 ---
@@ -54,6 +54,7 @@ import { Tool, ToolContext, z } from '@frontmcp/sdk';
 class PreferencesTool extends ToolContext {
   async execute(input: { theme: string; language: string }) {
     await this.remember.set('theme', input.theme);
+    // User scope needs a signed-in caller: an anonymous one is refused with RememberIdentityError
     await this.remember.set('language', input.language, { scope: 'user' });
 
     return { saved: true, theme: input.theme, language: input.language };
@@ -75,7 +76,8 @@ import { Tool, ToolContext, z } from '@frontmcp/sdk';
 class GreetingTool extends ToolContext {
   async execute(input: { name: string }) {
     const theme = await this.remember.get('theme', { defaultValue: 'light' });
-    const language = await this.remember.get('language', { defaultValue: 'en' });
+    // Read from the scope it was stored in
+    const language = await this.remember.get('language', { scope: 'user', defaultValue: 'en' });
     const hasOnboarded = await this.remember.knows('onboarding_complete');
 
     return {
@@ -91,8 +93,8 @@ class GreetingTool extends ToolContext {
 ## What This Demonstrates
 
 - Installing `RememberPlugin` with `type: 'memory'` for development
-- Enabling `tools: { enabled: true }` to expose LLM-callable memory tools (`remember_this`, `recall`, etc.)
-- Using `this.remember.set()` with default `session` scope and explicit `user` scope
+- Enabling `tools: { enabled: true }` to expose LLM-callable memory tools (`remember_this`, `recall`, etc.), whose `scope` defaults to `session`
+- Using `this.remember.set()` with default `session` scope and explicit `user` scope (refused for an anonymous caller)
 - Using `this.remember.get()` with a `defaultValue` fallback
 - Using `this.remember.knows()` to check key existence without retrieving the value
 

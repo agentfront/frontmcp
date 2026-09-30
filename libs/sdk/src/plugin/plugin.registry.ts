@@ -17,6 +17,7 @@ import {
   type ProviderType,
   type ScopeEntry,
 } from '../common';
+import { initOptionsOf } from '../common/dynamic/dynamic.plugin';
 import { collectDynamicProviders, dedupePluginProviders } from '../common/dynamic/dynamic.utils';
 import { installContextExtensions } from '../context/context-extension';
 import { InvalidPluginScopeError, InvalidRegistryKindError, RegistryDependencyNotRegisteredError } from '../errors';
@@ -43,6 +44,9 @@ export interface PluginScopeInfo {
   /** Whether the app is standalone (standalone: true) */
   isStandaloneApp: boolean;
 }
+
+/** Plugin value instances some registry has installed; a later registry builds its own (#647). */
+const installedPluginValues = new WeakSet<object>();
 
 export default class PluginRegistry
   extends RegistryAbstract<PluginEntry, PluginRecord, PluginType[]>
@@ -330,8 +334,20 @@ export default class PluginRegistry
           pluginInstance: new (rec.provide as Ctor<PluginEntry>)(...depsInstances),
           dynamicProviders: rec.providers,
         };
-      case PluginKind.VALUE:
-        return { pluginInstance: rec.useValue as PluginEntry, dynamicProviders: rec.providers };
+      case PluginKind.VALUE: {
+        // One `SomePlugin.init(options)` record can be installed by several registries (an app class
+        // used by two servers). The first keeps the configured instance; each later one builds its own
+        // from the same options, so `get`, fields (ES `#private` ones too) and state belong to that
+        // registry, not to whichever installed the record last (#647). A hand-written value record
+        // names its instance, so it stays that instance everywhere.
+        const value = rec.useValue as PluginEntry;
+        const init = installedPluginValues.has(value) ? initOptionsOf(value) : undefined;
+        installedPluginValues.add(value);
+        if (init && isDynamicPluginClass(rec.provide)) {
+          return { pluginInstance: new rec.provide(init.options) as PluginEntry, dynamicProviders: rec.providers };
+        }
+        return { pluginInstance: value, dynamicProviders: rec.providers };
+      }
       case PluginKind.FACTORY: {
         const args: unknown[] = [];
         for (const d of rec.inject()) args.push(await this.providers.resolveBootstrapDep(d));

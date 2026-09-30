@@ -2,16 +2,14 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
+import { REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
 
 /**
  * Input schema for the forget tool.
  */
 export const forgetInputSchema = {
   key: z.string().min(1).describe('What memory to forget'),
-  scope: z
-    .enum(['session', 'user', 'tool', 'global'])
-    .optional()
-    .describe('Which scope to forget from (default: session)'),
+  scope: z.enum(['session', 'user', 'tool', 'global']).optional().describe(REMEMBER_SCOPE_DESCRIPTION),
 };
 
 /**

@@ -1,20 +1,22 @@
 /**
  * Error classes for approval operations.
  *
- * These are standalone error classes that can be extended by plugins
- * for MCP-specific error handling.
+ * They are public MCP errors: a refusal is an answer for the caller, so its message reaches the
+ * client as written, in every environment, instead of being wrapped as an internal server error.
  *
- * @module @frontmcp/utils/approval
+ * @module @frontmcp/plugin-approval
  */
+
+import { PublicMcpError } from '@frontmcp/sdk';
 
 import type { ApprovalScope } from './types';
 
 /**
  * Base class for approval-related errors.
  */
-export class ApprovalError extends Error {
-  constructor(message: string) {
-    super(message);
+export class ApprovalError extends PublicMcpError {
+  constructor(message: string, code = 'APPROVAL_REQUIRED', statusCode = 403) {
+    super(message, code, statusCode);
     this.name = 'ApprovalError';
   }
 }
@@ -70,7 +72,7 @@ export class ApprovalOperationError extends ApprovalError {
     public readonly operation: 'grant' | 'revoke' | 'query',
     public readonly reason: string,
   ) {
-    super(`Approval ${operation} failed: ${reason}`);
+    super(`Approval ${operation} failed: ${reason}`, 'APPROVAL_OPERATION_FAILED', 400);
     this.name = 'ApprovalOperationError';
   }
 
@@ -100,6 +102,8 @@ export class ApprovalScopeNotAllowedError extends ApprovalError {
     super(
       `Approval scope '${requestedScope}' is not allowed for this tool. ` +
         `Allowed scopes: ${allowedScopes.join(', ')}`,
+      'APPROVAL_SCOPE_NOT_ALLOWED',
+      400,
     );
     this.name = 'ApprovalScopeNotAllowedError';
   }
@@ -128,7 +132,7 @@ export class ApprovalExpiredError extends ApprovalError {
     public readonly toolId: string,
     public readonly expiredAt: number,
   ) {
-    super(`Approval for tool '${toolId}' expired at ${new Date(expiredAt).toISOString()}`);
+    super(`Approval for tool '${toolId}' expired at ${new Date(expiredAt).toISOString()}`, 'APPROVAL_EXPIRED', 403);
     this.name = 'ApprovalExpiredError';
   }
 
@@ -156,7 +160,7 @@ export class ChallengeValidationError extends ApprovalError {
     public readonly reason: 'invalid' | 'expired' | 'not_found' | 'already_used' = 'invalid',
     message?: string,
   ) {
-    super(message ?? `PKCE challenge validation failed: ${reason}`);
+    super(message ?? `PKCE challenge validation failed: ${reason}`, 'CHALLENGE_VALIDATION_FAILED', 400);
     this.name = 'ChallengeValidationError';
   }
 

@@ -1,4 +1,4 @@
-import type { FrontMcpContext } from '@frontmcp/sdk';
+import { PublicMcpError, type FrontMcpContext } from '@frontmcp/sdk';
 
 import { createRememberAccessor, RememberAccessor } from '../providers/remember-accessor.provider';
 import type { RememberStoreInterface } from '../providers/remember-store.interface';
@@ -472,6 +472,48 @@ describe('RememberAccessor', () => {
       await expect(anonAccessor.set('key', 'value', { scope: 'user' })).rejects.toThrow(
         /without an authenticated user/,
       );
+    });
+
+    describe('an anonymous subject is no user (#647)', () => {
+      // What the SDK builds for an anonymous caller: `authInfo.clientId` is `anon:<id>`, a subject
+      // made up for this session or request, and nothing names a user.
+      function anonymousAccessor(): RememberAccessor {
+        const anonymousCtx = createMockContext({
+          authInfo: { sessionId: 'test-session-123', clientId: 'anon:abc' },
+        } as Partial<FrontMcpContext>);
+        return new RememberAccessor(store, anonymousCtx, config);
+      }
+
+      it('refuses to store user memory for it', async () => {
+        await expect(anonymousAccessor().set('key', 'value', { scope: 'user' })).rejects.toThrow(
+          /without an authenticated user/,
+        );
+      });
+
+      it('refuses to list user memory for it', async () => {
+        await expect(anonymousAccessor().list({ scope: 'user' })).rejects.toThrow(/without an authenticated user/);
+      });
+
+      it('stores nothing under the anonymous subject', async () => {
+        await anonymousAccessor()
+          .set('key', 'value', { scope: 'user' })
+          .catch(() => undefined);
+
+        expect(await store.keys('remember:v2:user:*')).toEqual([]);
+      });
+
+      it('still keeps its session memory in the verified session', async () => {
+        const anonymous = anonymousAccessor();
+        await anonymous.set('key', 'value');
+
+        expect(await anonymous.get('key')).toBe('value');
+      });
+    });
+
+    it('refuses user scope with an error the client sees as it is written', async () => {
+      const anonAccessor = new RememberAccessor(store, createMockContext({ authInfo: undefined }), config);
+
+      await expect(anonAccessor.set('key', 'value', { scope: 'user' })).rejects.toBeInstanceOf(PublicMcpError);
     });
 
     it('handles unknown tool scope', async () => {

@@ -2,22 +2,21 @@
 
 import {
   detectToolIntent,
-  ToolIntent,
-  generateSmartExample,
+  generateBasicExample,
   generateCreateExample,
+  generateDeleteExample,
+  generateFilterExample,
   generateGetExample,
   generateListExample,
-  generateUpdateExample,
-  generateDeleteExample,
-  generateSearchExample,
-  hasPaginationParams,
-  hasFilterParams,
-  getFilterProperties,
-  generateBasicExample,
   generatePaginationExample,
-  generateFilterExample,
-  jsonSchemaToSignature,
+  generateSearchExample,
+  generateSmartExample,
+  generateUpdateExample,
+  getFilterProperties,
+  hasFilterParams,
+  hasPaginationParams,
   jsonSchemaToNaturalLanguage,
+  jsonSchemaToSignature,
 } from '../utils/describe.utils';
 
 describe('detectToolIntent', () => {
@@ -284,7 +283,7 @@ describe('Intent-Specific Example Generators', () => {
       };
 
       const result = generateSearchExample('users:search', schema);
-      expect(result.code).toContain('query:');
+      expect(result.code).toContain('"query": "search term"');
     });
 
     it('should detect search parameter', () => {
@@ -296,7 +295,7 @@ describe('Intent-Specific Example Generators', () => {
       };
 
       const result = generateSearchExample('users:search', schema);
-      expect(result.code).toContain('searchTerm:');
+      expect(result.code).toContain('"searchTerm": "search term"');
     });
   });
 });
@@ -1000,14 +999,42 @@ describe('generateBasicExample', () => {
 });
 
 describe('generatePaginationExample', () => {
+  const limitOffset = {
+    type: 'object' as const,
+    properties: { limit: { type: 'number' as const }, offset: { type: 'number' as const } },
+  };
+
   it('should generate pagination example with limit and offset', () => {
-    const result = generatePaginationExample('users:list');
+    const result = generatePaginationExample('users:list', limitOffset);
     expect(result.description).toContain('Pagination example');
-    expect(result.code).toContain('limit: 10');
-    expect(result.code).toContain('offset: 0');
-    expect(result.code).toContain('offset: 10');
+    expect(result.code).toContain('"limit": 10');
+    expect(result.code).toContain('"offset": 0');
+    expect(result.code).toContain('"offset": 10');
     expect(result.code).toContain('page1');
     expect(result.code).toContain('page2');
+  });
+
+  it('should page with the pagination properties the tool has, not limit and offset', () => {
+    const schema = {
+      type: 'object' as const,
+      properties: { page: { type: 'number' as const }, pageSize: { type: 'number' as const } },
+    };
+
+    const result = generatePaginationExample('users:list', schema);
+    expect(result.code).toContain('"page": 1');
+    expect(result.code).not.toMatch(/limit|offset/);
+  });
+
+  it('should pass the required properties on every page', () => {
+    const schema = { ...limitOffset, properties: { ...limitOffset.properties, region: { type: 'string' as const } } };
+
+    const result = generatePaginationExample('orders:list', { ...schema, required: ['region'] });
+    expect(result.code.match(/"region": "string"/g)).toHaveLength(2);
+  });
+
+  it('should pass nothing when there is no input schema', () => {
+    const result = generatePaginationExample('users:list');
+    expect(result.code).toContain("callTool('users:list', {})");
   });
 });
 
@@ -1015,7 +1042,17 @@ describe('generateFilterExample', () => {
   it('should generate filter example with specified property', () => {
     const result = generateFilterExample('users:list', 'status');
     expect(result.description).toBe('Filter by status');
-    expect(result.code).toContain("callTool('users:list', { status: 'value' })");
+    expect(result.code).toContain('"status": "value"');
+  });
+
+  it('should filter by a value the property accepts', () => {
+    const schema = {
+      type: 'object' as const,
+      properties: { status: { type: 'string' as const, enum: ['active', 'suspended'] } },
+    };
+
+    const result = generateFilterExample('users:list', 'status', schema);
+    expect(result.code).toContain('"status": "active"');
   });
 
   it('should include result handling', () => {
@@ -1291,7 +1328,7 @@ describe('generateDeleteExample edge cases', () => {
 });
 
 describe('generateSearchExample edge cases', () => {
-  it('should fallback to default query param when none found', () => {
+  it('should not invent a query argument when the schema has no query-like property', () => {
     const schema = {
       type: 'object' as const,
       properties: {
@@ -1300,7 +1337,56 @@ describe('generateSearchExample edge cases', () => {
     };
 
     const result = generateSearchExample('users:search', schema);
-    expect(result.code).toContain('query:');
+    expect(result.code).toContain("callTool('users:search', {})");
+    expect(result.code).not.toContain('query');
+  });
+
+  it('should search by the first filter property, with the first value of its enum', () => {
+    const schema = {
+      type: 'object' as const,
+      properties: {
+        status: { type: 'string' as const, enum: ['open', 'closed'] },
+        priority: { type: 'string' as const, enum: ['low', 'high'] },
+      },
+    };
+
+    const result = generateSearchExample('tickets:search', schema);
+    expect(result.code).toContain('"status": "open"');
+    expect(result.code).not.toContain('query');
+  });
+
+  it('should pass the required properties too', () => {
+    const schema = {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string' as const },
+        workspaceId: { type: 'string' as const },
+      },
+      required: ['workspaceId'],
+    };
+
+    const result = generateSearchExample('docs:search', schema);
+    expect(JSON.parse(result.code.slice(result.code.indexOf('{'), result.code.indexOf('});') + 1))).toEqual({
+      query: 'search term',
+      workspaceId: 'abc123',
+    });
+  });
+
+  it('should use the enum value of a query-like property rather than free text', () => {
+    const schema = {
+      type: 'object' as const,
+      properties: {
+        filter: { type: 'string' as const, enum: ['mine', 'all'] },
+      },
+    };
+
+    const result = generateSearchExample('docs:search', schema);
+    expect(result.code).toContain('"filter": "mine"');
+  });
+
+  it('should pass nothing when there is no input schema', () => {
+    const result = generateSearchExample('users:search');
+    expect(result.code).toContain("callTool('users:search', {})");
   });
 
   it('should detect keyword parameter', () => {
@@ -1312,7 +1398,7 @@ describe('generateSearchExample edge cases', () => {
     };
 
     const result = generateSearchExample('users:search', schema);
-    expect(result.code).toContain('keyword:');
+    expect(result.code).toContain('"keyword": "search term"');
   });
 
   it('should detect term parameter', () => {
@@ -1324,7 +1410,7 @@ describe('generateSearchExample edge cases', () => {
     };
 
     const result = generateSearchExample('users:search', schema);
-    expect(result.code).toContain('term:');
+    expect(result.code).toContain('"term": "search term"');
   });
 
   it('should detect q parameter', () => {
@@ -1336,6 +1422,123 @@ describe('generateSearchExample edge cases', () => {
     };
 
     const result = generateSearchExample('users:search', schema);
-    expect(result.code).toContain('q:');
+    expect(result.code).toContain('"q": "search term"');
+  });
+});
+
+function callsOf(code: string): unknown[] {
+  return [...code.matchAll(/callTool\('[^']+', (\{[\s\S]*?\})\);/g)].map((m) => JSON.parse(m[1]));
+}
+
+describe('constrained schemas (#647)', () => {
+  const paging = (limit: object, offset: object) => ({
+    type: 'object' as const,
+    properties: { limit: { type: 'number' as const, ...limit }, offset: { type: 'number' as const, ...offset } },
+  });
+
+  describe('generatePaginationExample', () => {
+    it('takes the limit from the schema enum', () => {
+      const result = generatePaginationExample('orders:list', paging({ enum: [25, 50] }, {}));
+      expect(callsOf(result.code)[0]).toMatchObject({ limit: 25 });
+    });
+
+    it('keeps the limit within its maximum', () => {
+      const result = generatePaginationExample('orders:list', paging({ maximum: 5 }, {}));
+      expect(callsOf(result.code)[0]).toMatchObject({ limit: 5 });
+    });
+
+    it('pages to the next offset the enum permits', () => {
+      const result = generatePaginationExample('orders:list', paging({ enum: [25, 50] }, { enum: [0, 25] }));
+      expect(callsOf(result.code)).toEqual([
+        { limit: 25, offset: 0 },
+        { limit: 25, offset: 25 },
+      ]);
+    });
+
+    it('makes one call when the offset permits no second page', () => {
+      const result = generatePaginationExample('orders:list', paging({}, { const: 0 }));
+      expect(callsOf(result.code)).toEqual([{ limit: 10, offset: 0 }]);
+      expect(result.code).not.toContain('page2');
+    });
+  });
+
+  describe('generateSearchExample', () => {
+    it('shortens the search term to the maxLength of the property', () => {
+      const schema = { type: 'object' as const, properties: { query: { type: 'string' as const, maxLength: 5 } } };
+      const [args] = callsOf(generateSearchExample('docs:search', schema).code) as { query: string }[];
+      expect(args.query.length).toBeLessThanOrEqual(5);
+      expect(args.query.length).toBeGreaterThan(0);
+    });
+
+    it('lengthens the search term to the minLength of the property', () => {
+      const schema = { type: 'object' as const, properties: { query: { type: 'string' as const, minLength: 15 } } };
+      const [args] = callsOf(generateSearchExample('docs:search', schema).code) as { query: string }[];
+      expect(args.query.length).toBeGreaterThanOrEqual(15);
+    });
+
+    it('omits an optional query that a pattern or a format constrains', () => {
+      const pattern = {
+        type: 'object' as const,
+        properties: { query: { type: 'string' as const, pattern: '^[A-Z]+$' } },
+      };
+      const format = { type: 'object' as const, properties: { query: { type: 'string' as const, format: 'uuid' } } };
+      expect(callsOf(generateSearchExample('docs:search', pattern).code)).toEqual([{}]);
+      expect(callsOf(generateSearchExample('docs:search', format).code)).toEqual([{}]);
+    });
+  });
+
+  describe('required properties on get, delete, update and list', () => {
+    const schema = {
+      type: 'object' as const,
+      properties: { id: { type: 'string' as const }, workspaceId: { type: 'string' as const, enum: ['w1', 'w2'] } },
+      required: ['id', 'workspaceId'],
+    };
+
+    it('get passes every required property, taking enum values from the schema', () => {
+      expect(generateGetExample('users:get', schema).code).toMatch(/\{ id: 'abc123', workspaceId: 'w1' \}/);
+    });
+
+    it('delete passes every required property', () => {
+      expect(generateDeleteExample('users:delete', schema).code).toMatch(/\{ id: 'abc123', workspaceId: 'w1' \}/);
+    });
+
+    it('update passes every required property next to the fields it updates', () => {
+      const code = generateUpdateExample('users:update', {
+        ...schema,
+        properties: { ...schema.properties, name: { type: 'string' as const } },
+      }).code;
+      expect(code).toContain("id: 'abc123'");
+      expect(code).toContain("workspaceId: 'w1'");
+      expect(code).toContain('"name"');
+    });
+
+    it('list passes the required properties and nothing else', () => {
+      const list = {
+        type: 'object' as const,
+        properties: { region: { type: 'string' as const, enum: ['eu'] }, note: { type: 'string' as const } },
+        required: ['region'],
+      };
+      expect(callsOf(generateListExample('orders:list', list).code)).toEqual([{ region: 'eu' }]);
+      expect(callsOf(generateListExample('orders:list').code)).toEqual([{}]);
+    });
+
+    it('writes an id with a quote or a line break as a valid literal', () => {
+      const schema = {
+        type: 'object' as const,
+        properties: { id: { type: 'string' as const, enum: ["o'neil", 'a\nb'] } },
+        required: ['id'],
+      };
+      expect(generateGetExample('users:get', schema).code).toContain('{ id: "o\'neil" }');
+    });
+
+    it('uses an id the schema accepts instead of abc123', () => {
+      const constrained = (id: object) => ({
+        type: 'object' as const,
+        properties: { id: { type: 'string' as const, ...id } },
+        required: ['id'],
+      });
+      expect(generateGetExample('users:get', constrained({ enum: ['u-1'] })).code).toContain("id: 'u-1'");
+      expect(generateGetExample('users:get', constrained({ maxLength: 3 })).code).toContain("id: 'abc'");
+    });
   });
 });

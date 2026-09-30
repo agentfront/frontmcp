@@ -372,7 +372,9 @@ export class RememberAccessor {
         return `${this.keyPrefix}${STORAGE_LAYOUT_VERSION}:session:${encodeKeyPart(this.resolveSessionIdentity())}:`;
       case 'user': {
         const userId = this.userId;
-        if (!userId) {
+        // An anonymous subject (`anon:…`) is no user: it is made up for one session, or for each
+        // request without one, so memory kept under it is never found again (#647).
+        if (!userId || isAnonymousSubject(userId)) {
           // 'anonymous' pooled every unauthenticated caller into one namespace, which is the
           // same cross-client disclosure as the stateless case above.
           throw new RememberIdentityError(

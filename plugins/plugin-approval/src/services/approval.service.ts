@@ -4,8 +4,9 @@
  * @module @frontmcp/plugin-approval
  */
 
-import { Provider, ProviderScope } from '@frontmcp/sdk';
+import { isAnonymousSubject, Provider, ProviderScope } from '@frontmcp/sdk';
 
+import { userGrantor, userRevoker } from '../approval/factories';
 import { checkGrantAgainstPolicy, isApprovalUsable } from '../approval/policy';
 import type { ApprovalQuery, ApprovalStore } from '../stores/approval-store.interface';
 import {
@@ -30,7 +31,7 @@ export type ApprovalRequirementLookup = (toolId: string) => ToolApprovalRequirem
  * Options for granting approvals via the service.
  */
 export interface GrantOptions {
-  /** Who/what is granting the approval (defaults to 'policy') */
+  /** Who/what is granting the approval (defaults to the signed-in user, or `{ source: 'user' }` without one) */
   grantedBy?: ApprovalGrantor | ApprovalSourceType;
   /** Optional reason for the approval */
   reason?: string;
@@ -42,7 +43,7 @@ export interface GrantOptions {
  * Options for revoking approvals via the service.
  */
 export interface RevokeOptions {
-  /** Who/what is revoking the approval (defaults to 'policy') */
+  /** Who/what is revoking the approval (defaults to the signed-in user, or `{ source: 'user' }` without one) */
   revokedBy?: ApprovalRevoker | RevocationSourceType;
   /** Optional reason for revocation */
   reason?: string;
@@ -67,6 +68,27 @@ export class ApprovalService {
   /** Checks a grant against the tool's `allowedScopes` and `maxTtlMs`; returns the ttl to store. */
   private checkGrant(toolId: string, scope: ApprovalScope, ttlMs?: number): number | undefined {
     return checkGrantAgainstPolicy(toolId, scope, ttlMs, this.requirementOf(toolId));
+  }
+
+  /** The caller's user id, when it names a principal: an anonymous subject (`anon:…`) names no one. */
+  private get signedInUserId(): string | undefined {
+    return this.userId && !isAnonymousSubject(this.userId) ? this.userId : undefined;
+  }
+
+  /**
+   * Who a grant is recorded as when the call names no one: the signed-in user whose tool call made it.
+   * It used to be `'policy'`, so an audit trail showed every approval a user gave as a policy's.
+   * Without a signed-in user it is the store's default, a user with no identifier.
+   */
+  private defaultGrantor(): ApprovalGrantor {
+    const userId = this.signedInUserId;
+    return userId ? userGrantor(userId) : { source: 'user' };
+  }
+
+  /** Who a revocation is recorded as when the call names no one, by the same rule as a grant. */
+  private defaultRevoker(): ApprovalRevoker {
+    const userId = this.signedInUserId;
+    return userId ? userRevoker(userId) : { source: 'user' };
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -145,7 +167,7 @@ export class ApprovalService {
       scope: ApprovalScope.SESSION,
       ttlMs,
       sessionId: this.sessionId,
-      grantedBy: options.grantedBy ?? 'policy',
+      grantedBy: options.grantedBy ?? this.defaultGrantor(),
       reason: options.reason,
       metadata: options.metadata,
     });
@@ -164,7 +186,7 @@ export class ApprovalService {
       scope: ApprovalScope.USER,
       ttlMs,
       userId: this.userId,
-      grantedBy: options.grantedBy ?? 'policy',
+      grantedBy: options.grantedBy ?? this.defaultGrantor(),
       reason: options.reason,
       metadata: options.metadata,
     });
@@ -181,7 +203,7 @@ export class ApprovalService {
       ttlMs,
       sessionId: this.sessionId,
       userId: this.userId,
-      grantedBy: options.grantedBy ?? 'policy',
+      grantedBy: options.grantedBy ?? this.defaultGrantor(),
       reason: options.reason,
       metadata: options.metadata,
     });
@@ -203,7 +225,7 @@ export class ApprovalService {
       context,
       sessionId: this.sessionId,
       userId: this.userId,
-      grantedBy: options.grantedBy ?? 'policy',
+      grantedBy: options.grantedBy ?? this.defaultGrantor(),
       reason: options.reason,
       metadata: options.metadata,
     });
@@ -222,7 +244,7 @@ export class ApprovalService {
       toolId,
       sessionId: this.sessionId,
       userId: this.userId,
-      revokedBy: options.revokedBy ?? 'policy',
+      revokedBy: options.revokedBy ?? this.defaultRevoker(),
       reason: options.reason,
     });
   }

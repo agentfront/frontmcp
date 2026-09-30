@@ -237,6 +237,70 @@ function generateSampleParams(schema?: JsonSchema): Record<string, unknown> | nu
 }
 
 /**
+ * A string cut or padded to the schema's `minLength` / `maxLength`.
+ */
+function fitString(schema: JsonSchema, value: string): string {
+  let fitted = value;
+  if (schema.maxLength !== undefined && fitted.length > schema.maxLength) {
+    fitted = fitted.slice(0, Math.max(0, schema.maxLength));
+  }
+  if (schema.minLength !== undefined && fitted.length < schema.minLength) {
+    fitted = fitted.padEnd(schema.minLength, 'x');
+  }
+  return fitted;
+}
+
+/**
+ * A string schema a generated example can fill with its own text: no enum, const, default,
+ * pattern or format to satisfy (length limits are met by `fitString`).
+ */
+function isFreeTextString(schema: JsonSchema | undefined): boolean {
+  return (
+    schema?.type === 'string' &&
+    schema.enum === undefined &&
+    schema.const === undefined &&
+    schema.default === undefined &&
+    schema.pattern === undefined &&
+    schema.format === undefined
+  );
+}
+
+function acceptsNumber(schema: JsonSchema, value: number): boolean {
+  if (schema.const !== undefined) return schema.const === value;
+  if (schema.enum !== undefined) return schema.enum.includes(value);
+  if (schema.minimum !== undefined && value < schema.minimum) return false;
+  if (schema.maximum !== undefined && value > schema.maximum) return false;
+  return true;
+}
+
+/**
+ * The first preferred number the schema accepts, else a value taken from the schema itself
+ * (const, first enum value, a bound, its sample); `undefined` when the schema names none.
+ */
+function pickNumber(schema: JsonSchema, preferred: number[]): number | undefined {
+  const accepted = preferred.find((value) => acceptsNumber(schema, value));
+  if (accepted !== undefined) return accepted;
+
+  const named = [schema.const, schema.enum?.[0], schema.minimum, schema.maximum].find(
+    (value): value is number => typeof value === 'number' && acceptsNumber(schema, value),
+  );
+  return named;
+}
+
+/**
+ * Arguments as a JavaScript object literal (`{ id: 'abc123' }`).
+ */
+function formatInlineArgs(args: Record<string, unknown>): string {
+  const entries = Object.entries(args).map(([key, value]) => {
+    const name = /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
+    const plain = typeof value === 'string' && [...value].every((ch) => ch !== "'" && ch !== '\\' && ch >= ' ');
+    const literal = plain ? `'${value}'` : JSON.stringify(value);
+    return `${name}: ${literal}`;
+  });
+  return entries.length > 0 ? `{ ${entries.join(', ')} }` : '{}';
+}
+
+/**
  * Generate a sample value for a schema property.
  */
 function getSampleValue(schema: JsonSchema, key: string): unknown {
@@ -257,11 +321,11 @@ function getSampleValue(schema: JsonSchema, key: string): unknown {
   switch (type) {
     case 'string':
       // Generate contextual sample based on key name
-      if (key.toLowerCase().includes('id')) return 'abc123';
-      if (key.toLowerCase().includes('email')) return 'user@example.com';
-      if (key.toLowerCase().includes('name')) return 'Example';
-      if (key.toLowerCase().includes('url')) return 'https://example.com';
-      return 'string';
+      if (key.toLowerCase().includes('id')) return fitString(schema, 'abc123');
+      if (key.toLowerCase().includes('email')) return fitString(schema, 'user@example.com');
+      if (key.toLowerCase().includes('name')) return fitString(schema, 'Example');
+      if (key.toLowerCase().includes('url')) return fitString(schema, 'https://example.com');
+      return fitString(schema, 'string');
 
     case 'number':
     case 'integer':
@@ -284,6 +348,12 @@ function getSampleValue(schema: JsonSchema, key: string): unknown {
   }
 }
 
+const PAGINATION_PROPERTIES = ['limit', 'offset', 'page', 'pagesize', 'cursor'];
+
+function isPaginationProperty(name: string): boolean {
+  return PAGINATION_PROPERTIES.includes(name.toLowerCase());
+}
+
 /**
  * Check if a schema has pagination parameters.
  */
@@ -292,8 +362,47 @@ export function hasPaginationParams(schema?: JsonSchema): boolean {
     return false;
   }
 
-  const props = Object.keys(schema.properties);
-  return props.some((p) => ['limit', 'offset', 'page', 'pageSize', 'cursor'].includes(p.toLowerCase()));
+  return Object.keys(schema.properties).some(isPaginationProperty);
+}
+
+/**
+ * The object properties of an input schema; none when it is not an object schema.
+ */
+function inputProperties(schema?: JsonSchema): Record<string, JsonSchema> {
+  if (!schema || schema.type !== 'object' || !schema.properties) {
+    return {};
+  }
+
+  const properties: Record<string, JsonSchema> = {};
+  for (const [key, propSchema] of Object.entries(schema.properties)) {
+    if (typeof propSchema !== 'boolean') properties[key] = propSchema;
+  }
+  return properties;
+}
+
+/**
+ * Arguments for a generated example call: the given properties, then every required one, each
+ * with a sample value (`values` overrides it). Only properties the schema declares, so an example
+ * never passes an argument the tool does not take (#647).
+ */
+function buildExampleArgs(
+  schema: JsonSchema | undefined,
+  keys: string[],
+  values: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const properties = inputProperties(schema);
+  const args: Record<string, unknown> = {};
+
+  for (const key of [...keys, ...(schema?.required ?? [])]) {
+    const propSchema = properties[key];
+    if (!propSchema || key in args) continue;
+    args[key] = key in values ? values[key] : getSampleValue(propSchema, key);
+  }
+  return args;
+}
+
+function formatExampleArgs(args: Record<string, unknown>): string {
+  return Object.keys(args).length > 0 ? JSON.stringify(args, null, 2) : '{}';
 }
 
 /**
@@ -336,29 +445,72 @@ export function getFilterProperties(schema?: JsonSchema): string[] {
 }
 
 /**
- * Generate a pagination example for a tool.
+ * Generate a pagination example for a tool, paging with the pagination properties its schema
+ * declares (two pages when it takes `limit` and `offset`, one otherwise).
  */
-export function generatePaginationExample(toolName: string): ToolUsageExample {
-  return {
-    description: `Pagination example for ${toolName}`,
-    code: `// Fetch first page
-const page1 = await callTool('${toolName}', { limit: 10, offset: 0 });
+export function generatePaginationExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
+  const description = `Pagination example for ${toolName}`;
+  const props = Object.keys(inputProperties(inputSchema));
+  const limitKey = props.find((p) => p.toLowerCase() === 'limit');
+  const offsetKey = props.find((p) => p.toLowerCase() === 'offset');
+
+  if (limitKey && offsetKey) {
+    const properties = inputProperties(inputSchema);
+    const limit = pickNumber(properties[limitKey], [10]);
+    const firstOffset = pickNumber(properties[offsetKey], [0]);
+    const values: Record<string, unknown> = {};
+    if (limit !== undefined) values[limitKey] = limit;
+    if (firstOffset !== undefined) values[offsetKey] = firstOffset;
+
+    const firstPage = buildExampleArgs(inputSchema, [limitKey, offsetKey], values);
+    const nextOffset = [limit ?? 10, 10, 20, ...(properties[offsetKey].enum ?? [])].find(
+      (value): value is number =>
+        typeof value === 'number' && value !== firstPage[offsetKey] && acceptsNumber(properties[offsetKey], value),
+    );
+    if (nextOffset !== undefined) {
+      const secondPage = { ...firstPage, [offsetKey]: nextOffset };
+      return {
+        description,
+        code: `// Fetch first page
+const page1 = await callTool('${toolName}', ${formatExampleArgs(firstPage)});
 
 // Fetch second page
-const page2 = await callTool('${toolName}', { limit: 10, offset: 10 });
+const page2 = await callTool('${toolName}', ${formatExampleArgs(secondPage)});
 
 // Combine results
 return [...page1.items, ...page2.items];`,
+      };
+    }
+
+    return {
+      description,
+      code: `const page = await callTool('${toolName}', ${formatExampleArgs(firstPage)});
+return page.items || page;`,
+    };
+  }
+
+  const args = buildExampleArgs(inputSchema, props.filter(isPaginationProperty));
+  return {
+    description,
+    code: `const page = await callTool('${toolName}', ${formatExampleArgs(args)});
+return page.items || page;`,
   };
 }
 
 /**
- * Generate a filter example for a tool.
+ * Generate a filter example for a tool, with a value the property's schema accepts.
  */
-export function generateFilterExample(toolName: string, filterProp: string): ToolUsageExample {
+export function generateFilterExample(
+  toolName: string,
+  filterProp: string,
+  inputSchema?: JsonSchema,
+): ToolUsageExample {
+  const described = filterProp in inputProperties(inputSchema);
+  const args = described ? buildExampleArgs(inputSchema, [filterProp]) : { [filterProp]: 'value' };
+
   return {
     description: `Filter by ${filterProp}`,
-    code: `const filtered = await callTool('${toolName}', { ${filterProp}: 'value' });
+    code: `const filtered = await callTool('${toolName}', ${formatExampleArgs(args)});
 return filtered.items || filtered;`,
   };
 }
@@ -394,6 +546,16 @@ return result;`,
 }
 
 /**
+ * The id property with a value the schema accepts (`abc123` when it takes any string), then the
+ * other required properties.
+ */
+function idArgs(schema: JsonSchema | undefined, idParam: string): Record<string, unknown> {
+  const idSchema = inputProperties(schema)[idParam];
+  const values = isFreeTextString(idSchema) ? { [idParam]: fitString(idSchema, 'abc123') } : {};
+  return buildExampleArgs(schema, [idParam], values);
+}
+
+/**
  * Generate a get (retrieve single item) example for a tool.
  */
 export function generateGetExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
@@ -403,7 +565,7 @@ export function generateGetExample(toolName: string, inputSchema?: JsonSchema): 
   if (idParam) {
     return {
       description: `Get ${entity} by ${idParam}`,
-      code: `const ${entity} = await callTool('${toolName}', { ${idParam}: 'abc123' });
+      code: `const ${entity} = await callTool('${toolName}', ${formatInlineArgs(idArgs(inputSchema, idParam))});
 return ${entity};`,
     };
   }
@@ -420,14 +582,15 @@ return ${entity};`,
 }
 
 /**
- * Generate a list example for a tool.
+ * Generate a list example for a tool: the required properties, or `{}` when it has none. Tools
+ * that declare pagination properties get `generatePaginationExample` instead.
  */
 export function generateListExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
   const entity = extractEntityName(toolName);
 
   return {
     description: `List all ${entity}s`,
-    code: `const result = await callTool('${toolName}', {});
+    code: `const result = await callTool('${toolName}', ${formatExampleArgs(buildExampleArgs(inputSchema, []))});
 return result.items || result;`,
   };
 }
@@ -446,10 +609,11 @@ export function generateUpdateExample(toolName: string, inputSchema?: JsonSchema
     : '{ /* fields to update */ }';
 
   if (idParam) {
+    const identifiers = formatInlineArgs(idArgs(inputSchema, idParam)).slice(2, -2);
     return {
       description: `Update ${entity} by ${idParam}`,
       code: `const updated = await callTool('${toolName}', {
-  ${idParam}: 'abc123',
+  ${identifiers},
   ...${fieldsStr}
 });
 return updated;`,
@@ -473,7 +637,7 @@ export function generateDeleteExample(toolName: string, inputSchema?: JsonSchema
   if (idParam) {
     return {
       description: `Delete ${entity} by ${idParam}`,
-      code: `const result = await callTool('${toolName}', { ${idParam}: 'abc123' });
+      code: `const result = await callTool('${toolName}', ${formatInlineArgs(idArgs(inputSchema, idParam))});
 return result;`,
     };
   }
@@ -490,22 +654,39 @@ return result;`,
 
 /**
  * Generate a search example for a tool.
+ *
+ * Searches by the tool's query-like property, else by its first filter property (`status`, `type`,
+ * ...), with the required properties alongside. Never a `query` the schema does not declare: a tool
+ * searched by `status` and `priority` was shown `callTool('<tool>', { query: 'search term' })`.
  */
 export function generateSearchExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
   const entity = extractEntityName(toolName);
-  const queryParam = findQueryParameter(inputSchema);
-
-  if (queryParam) {
-    return {
-      description: `Search for ${entity}s`,
-      code: `const results = await callTool('${toolName}', { ${queryParam}: 'search term' });
-return results.items || results;`,
-    };
-  }
+  const searchParam = findQueryParameter(inputSchema) ?? getFilterProperties(inputSchema)[0];
+  const searchSchema = searchParam ? inputProperties(inputSchema)[searchParam] : undefined;
+  // Free text gets a search term cut to its length limits; an enum, a default or a non-string type
+  // gets a value it accepts; a pattern or format nothing here can satisfy is left out when optional.
+  const required = new Set(inputSchema?.required ?? []);
+  const unfillable =
+    searchSchema?.type === 'string' &&
+    (searchSchema.pattern !== undefined || searchSchema.format !== undefined) &&
+    searchSchema.enum === undefined &&
+    searchSchema.const === undefined &&
+    searchSchema.default === undefined &&
+    !required.has(searchParam ?? '');
+  const args =
+    searchParam && !unfillable
+      ? buildExampleArgs(
+          inputSchema,
+          [searchParam],
+          isFreeTextString(searchSchema) && searchSchema
+            ? { [searchParam]: fitString(searchSchema, 'search term') }
+            : {},
+        )
+      : buildExampleArgs(inputSchema, []);
 
   return {
     description: `Search for ${entity}s`,
-    code: `const results = await callTool('${toolName}', { query: 'search term' });
+    code: `const results = await callTool('${toolName}', ${formatExampleArgs(args)});
 return results.items || results;`,
   };
 }
@@ -602,7 +783,7 @@ export function generateSmartExample(
     case 'list':
       // For list tools, still use pagination example if available
       return hasPaginationParams(inputSchema)
-        ? generatePaginationExample(toolName)
+        ? generatePaginationExample(toolName, inputSchema)
         : generateListExample(toolName, inputSchema);
     case 'update':
       return generateUpdateExample(toolName, inputSchema);
