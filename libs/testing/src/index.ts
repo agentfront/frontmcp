@@ -217,6 +217,7 @@ export type {
   HttpMockHandle,
   HttpInterceptor,
   HttpMockManager,
+  HttpMockOptions,
 } from './http-mock';
 
 // ═══════════════════════════════════════════════════════════════════

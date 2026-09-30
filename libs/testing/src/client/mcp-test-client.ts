@@ -12,6 +12,7 @@ import {
   type RequestInterceptor,
   type ResponseInterceptor,
 } from '../interceptor';
+import { errorMessage, isInterceptedError } from '../transport/error-utils';
 import { StreamableHttpTransport } from '../transport/streamable-http.transport';
 import type { JsonRpcRequest, McpTransport } from '../transport/transport.interface';
 import { McpTestClientBuilder } from './mcp-test-client.builder';
@@ -67,6 +68,19 @@ const MAX_LIST_PAGES = 1000;
 // ═══════════════════════════════════════════════════════════════════
 // MAIN CLIENT CLASS
 // ═══════════════════════════════════════════════════════════════════
+
+/** The server answered `initialize` with 401/403 — an auth decision, not a server that is still starting. */
+function isAuthFailure(error: McpErrorInfo | undefined): boolean {
+  return typeof error?.message === 'string' && /^HTTP (401|403)\b/.test(error.message);
+}
+
+/** Message plus the server's response text, so `toThrow('expired')` can match the reason. */
+function describeInitializeError(error: McpErrorInfo | undefined): string {
+  const message = error?.message ?? 'Unknown error';
+  const data = error?.data;
+  const detail = typeof data === 'string' ? data.trim() : '';
+  return detail ? `${message} - ${detail.slice(0, 500)}` : message;
+}
 
 /**
  * Pull `entryPaths` out of a 404 body the server produced.
@@ -184,6 +198,7 @@ export class McpTestClient {
     // Discovery is once per CONNECT, not once per client: a reconnect may face a
     // server that now serves a different path.
     this.triedDiscoveredEntryPath = false;
+    this.initResult = null;
 
     // Create transport based on config
     this.transport = this.createTransport();
@@ -197,7 +212,10 @@ export class McpTestClient {
     let lastError: string | undefined;
     let reportedEntryPaths: string[] | undefined;
 
+    let attemptsMade = 0;
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      attemptsMade = attempt;
       const initResponse = await this.initialize();
 
       if (initResponse.success && initResponse.data) {
@@ -205,7 +223,7 @@ export class McpTestClient {
         break;
       }
 
-      lastError = initResponse.error?.message ?? 'Unknown error';
+      lastError = describeInitializeError(initResponse.error);
       reportedEntryPaths = extractEntryPaths(initResponse.error?.data) ?? reportedEntryPaths;
 
       // Issue #543 — a server with a non-default `http.entryPath` answers the
@@ -223,6 +241,9 @@ export class McpTestClient {
         continue;
       }
 
+      // 401/403 are answers, not a server that is still starting: retrying only delays the failure
+      if (isAuthFailure(initResponse.error)) break;
+
       if (attempt < maxRetries) {
         this.log('debug', `MCP init attempt ${attempt} failed (${lastError}), retrying in ${retryDelayMs}ms...`);
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
@@ -236,7 +257,7 @@ export class McpTestClient {
         : '';
       throw new Error(
         `Failed to initialize MCP connection to ${this.config.baseUrl}${this.mcpPathLabel()} ` +
-          `after ${maxRetries} attempts: ${lastError}.${served}`,
+          `after ${attemptsMade} attempt${attemptsMade === 1 ? '' : 's'}: ${lastError}.${served}`,
       );
     }
     this._sessionId = this.transport.getSessionId();
@@ -325,9 +346,21 @@ export class McpTestClient {
   }
 
   /**
-   * Authenticate with a token
+   * Authenticate with a token.
+   *
+   * When connected, this opens a NEW session with the token (the previous session was created
+   * for the previous identity) and rejects if the server refuses it — for example because the
+   * token is expired or badly signed. On rejection the client keeps its previous identity and
+   * session. The token is kept in the client config, so `reconnect()` keeps using it.
    */
   async authenticate(token: string): Promise<void> {
+    if (typeof token !== 'string' || token.trim() === '') {
+      throw new Error('authenticate() requires a non-empty token');
+    }
+
+    const previousAuthState = this._authState;
+    const previousConfigAuth = this.config.auth;
+    this.config.auth = { ...previousConfigAuth, token };
     this._authState = {
       isAnonymous: false,
       token,
@@ -335,11 +368,30 @@ export class McpTestClient {
       user: this.parseUserFromToken(token),
     };
 
-    // Update transport headers
-    if (this.transport) {
-      this.transport.setAuthToken(token);
+    const previousTransport = this.transport;
+    if (!previousTransport) {
+      this.log('debug', 'Authentication updated (not connected yet)');
+      return;
     }
 
+    const previousInit = this.initResult;
+    const previousSessionId = this._sessionId;
+    const previousSessionInfo = this._sessionInfo;
+
+    try {
+      await this.connect();
+    } catch (err) {
+      await this.transport?.close().catch(() => undefined);
+      this.transport = previousTransport;
+      this.initResult = previousInit;
+      this._sessionId = previousSessionId;
+      this._sessionInfo = previousSessionInfo;
+      this.config.auth = previousConfigAuth;
+      this._authState = previousAuthState;
+      throw err;
+    }
+
+    await previousTransport.close().catch(() => undefined);
     this.log('debug', 'Authentication updated');
   }
 
@@ -1098,10 +1150,12 @@ export class McpTestClient {
         requestId: id,
       };
     } catch (err) {
+      // An error injected through mcp.intercept (failMethod / failWhen) must reject the call
+      if (isInterceptedError(err)) throw err;
       const durationMs = Date.now() - start;
       const error: McpErrorInfo = {
         code: -32603,
-        message: err instanceof Error ? err.message : 'Unknown error',
+        message: errorMessage(err),
       };
       return {
         success: false,

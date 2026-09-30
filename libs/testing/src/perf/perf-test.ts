@@ -28,13 +28,13 @@
  * ```
  */
 
+import { TestTokenFactory } from '../auth/token-factory';
 import { McpTestClient } from '../client/mcp-test-client';
 import { McpTestClientBuilder } from '../client/mcp-test-client.builder';
-import { TestTokenFactory } from '../auth/token-factory';
+import type { AuthFixture, ServerFixture, TestConfig, TestFixtures, TestUser } from '../fixtures/fixture-types';
 import { TestServer } from '../server/test-server';
-import type { TestConfig, TestFixtures, AuthFixture, ServerFixture, TestUser } from '../fixtures/fixture-types';
+import { addGlobalMeasurement, createPerfFixtures, type PerfFixturesImpl } from './perf-fixtures';
 import type { PerfFixtures, PerfTestConfig } from './types';
-import { createPerfFixtures, addGlobalMeasurement, PerfFixturesImpl } from './perf-fixtures';
 
 // ═══════════════════════════════════════════════════════════════════
 // EXTENDED FIXTURE TYPES
@@ -149,6 +149,7 @@ async function initializeSharedResources(): Promise<void> {
             `Project: ${currentConfig.project ?? 'default'}\n` +
             `Command: ${serverCommand}\n\n` +
             `Error: ${errMsg}`,
+          { cause: error },
         );
       }
     } else {
@@ -392,11 +393,15 @@ function todo(name: string): void {
 const perfTest = perfTestWithFixtures as PerfTestWithFixtures;
 
 perfTest.use = use;
-perfTest.describe = describe;
-perfTest.beforeAll = beforeAll;
-perfTest.beforeEach = beforeEach;
-perfTest.afterEach = afterEach;
-perfTest.afterAll = afterAll;
+// Jest's globals are read when accessed, not when this module loads, so the package stays importable
+// outside a Jest environment
+for (const hook of ['describe', 'beforeAll', 'beforeEach', 'afterEach', 'afterAll'] as const) {
+  Object.defineProperty(perfTest, hook, {
+    get: () => (globalThis as Record<string, unknown>)[hook],
+    enumerable: true,
+    configurable: true,
+  });
+}
 perfTest.skip = skip;
 perfTest.only = only;
 perfTest.todo = todo;
