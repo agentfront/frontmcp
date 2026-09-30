@@ -32,9 +32,8 @@ export async function runDoctor(): Promise<void> {
     console.log(`❌ Node ${nodeVer} — please upgrade to >= ${MIN_NODE}`);
   }
 
-  let npmVer = 'unknown';
   try {
-    npmVer = await new Promise<string>((resolve, reject) => {
+    const npmVer = await new Promise<string>((resolve, reject) => {
       // shell:true triggers Node DEP0190 (deprecated unescaped-arg passing).
       // Use explicit binary names: npm.cmd on win32, npm elsewhere — args
       // already in array form, no shell needed.
@@ -82,5 +81,8 @@ export async function runDoctor(): Promise<void> {
   }
 
   if (ok) console.log(c('green', '\nAll checks passed. You are ready to go!'));
-  else console.log(c('yellow', '\nSome checks failed. See above for fixes.'));
+  else {
+    console.log(c('yellow', '\nSome checks failed. See above for fixes.'));
+    process.exitCode = 1;
+  }
 }

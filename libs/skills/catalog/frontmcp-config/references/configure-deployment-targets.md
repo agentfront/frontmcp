@@ -230,8 +230,10 @@ Within a directory:
 For every CLI option that's also expressible in the config:
 
 ```
-explicit CLI flag  >  FRONTMCP_<NAME> env var  >  frontmcp.config field  >  built-in default
+explicit CLI flag  >  frontmcp.config field  >  built-in default
 ```
+
+There are no per-field `FRONTMCP_<NAME>` environment overrides. The only environment variable the CLI reads for configuration is `FRONTMCP_CONFIG`, which selects the config file (an explicit `--config <path>` flag wins over it).
 
 ## Per-command consumption (issue #400)
 
@@ -248,6 +250,22 @@ The config is consumed by every `frontmcp` command, not just `build`:
 | `eject-mcp-config <client>`       | `clients.<client>`, `name`, `transport`, `env.ship`                                                 |
 
 See `transport`, `env`, `clients`, `test`, `skills` field reference in [docs/frontmcp/deployment/frontmcp-config](https://docs.agentfront.dev/frontmcp/deployment/frontmcp-config).
+
+## `transport.http.path` for every build target
+
+`transport.http.path` is the mount path of the MCP endpoint for **every** build target, not only `frontmcp dev`:
+
+| Target                            | How the path reaches the server                                                                    |
+| --------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `node` (and its SEA binary)       | the generated runner script exports `FRONTMCP_HTTP_ENTRY_PATH` (default only; a real env var wins) |
+| `vercel`, `lambda`, `distributed` | the generated setup file assigns `process.env.FRONTMCP_HTTP_ENTRY_PATH` before the server loads    |
+| `cloudflare`                      | the generated worker setup assigns it the same way                                                 |
+
+A `@FrontMcp({ http: { entryPath } })` value still wins over the config. When the two differ, `frontmcp build` warns.
+
+## `eject-mcp-config --out` merges
+
+`--out` merges into an existing client config instead of replacing it: the parent folder is created when missing, other top-level keys and other `mcpServers` entries are kept, and only this server's entry is replaced. A file that is not valid JSON (or not a JSON object) is refused and left untouched. `--dry-run` prints the merged result and writes nothing.
 
 ## JSON Schema for IDE Support
 

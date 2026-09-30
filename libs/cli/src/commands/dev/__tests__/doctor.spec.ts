@@ -77,6 +77,7 @@ describe('doctor command', () => {
 
   afterEach(() => {
     consoleLogSpy.mockRestore();
+    process.exitCode = undefined;
     Object.defineProperty(process, 'versions', { value: originalVersions });
   });
 
@@ -103,6 +104,17 @@ describe('doctor command', () => {
 
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('✅'));
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('All checks passed'));
+      expect(process.exitCode).toBeUndefined();
+    });
+
+    it('sets a non-zero exit code when a check fails (empty folder)', async () => {
+      (fileExists as jest.Mock).mockResolvedValue(false);
+      (resolveEntry as jest.Mock).mockRejectedValue(new Error('No entry found'));
+
+      await runDoctor();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Some checks failed'));
+      expect(process.exitCode).toBe(1);
     });
 
     it('should fail with old Node version', async () => {

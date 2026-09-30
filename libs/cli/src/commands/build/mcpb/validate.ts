@@ -12,6 +12,8 @@
  *   7. `manifest.icon` file exists when referenced
  *   8. No zip-slip (normalized entry names escaping the archive root)
  *   9. Warnings on large archives, absolute-path args, node_modules presence
+ *  10. The server entry does not `require()` runtime packages that the archive
+ *      does not ship (the archive has no node_modules, so it could not start)
  */
 
 import * as fs from 'fs';
@@ -34,7 +36,7 @@ export interface ValidateResult {
 export async function validateMcpb(archivePath: string): Promise<ValidateResult> {
   const result: ValidateResult = { ok: false, errors: [], warnings: [] };
 
-  let archive: { entries: string[]; manifestRaw?: string; size: number };
+  let archive: RawArchive;
   try {
     archive = await readArchive(archivePath);
   } catch (err) {
@@ -98,6 +100,8 @@ export async function validateMcpb(archivePath: string): Promise<ValidateResult>
     );
   }
 
+  checkServerRuntime(manifest.server.entry_point, archive, result);
+
   // Variable substitution + user_config cross-check
   checkMcpConfig(manifest.server.mcp_config, manifest.user_config, result);
 
@@ -120,6 +124,24 @@ export async function validateMcpb(archivePath: string): Promise<ValidateResult>
 
   result.ok = result.errors.length === 0;
   return result;
+}
+
+// Packages the server needs at runtime. Node cannot resolve them from inside a
+// `.mcpb` (there is no node_modules), so they must be inlined into the bundle.
+const REQUIRED_INLINE_PACKAGES = ['@frontmcp/sdk', '@frontmcp/di', '@frontmcp/utils', '@frontmcp/auth', 'reflect-metadata'];
+
+function checkServerRuntime(entryPoint: string, archive: RawArchive, result: ValidateResult): void {
+  const source = archive.serverFiles?.[entryPoint];
+  if (source === undefined) return;
+  if (archive.entries.some((e) => e.startsWith('server/node_modules/'))) return;
+  for (const pkg of REQUIRED_INLINE_PACKAGES) {
+    const escaped = pkg.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+    if (new RegExp(`require\\((["'])${escaped}(?:/[^"']*)?\\1\\)`).test(source)) {
+      result.errors.push(
+        `${entryPoint} requires "${pkg}" but the archive has no node_modules — the server cannot start. Rebuild with \`frontmcp build --target mcpb\` so runtime packages are bundled`,
+      );
+    }
+  }
 }
 
 function checkMcpConfig(
@@ -178,6 +200,8 @@ interface RawArchive {
   entries: string[];
   manifestRaw?: string;
   size: number;
+  /** Source of top-level `server/*.js` files, keyed by archive path. */
+  serverFiles?: Record<string, string>;
 }
 
 function readArchive(archivePath: string): Promise<RawArchive> {
@@ -194,6 +218,7 @@ function readArchive(archivePath: string): Promise<RawArchive> {
       }
       const entries: string[] = [];
       let manifestRaw: string | undefined;
+      const serverFiles: Record<string, string> = {};
       let settled = false;
       const settle = (fn: () => void): void => {
         if (settled) return;
@@ -209,16 +234,20 @@ function readArchive(archivePath: string): Promise<RawArchive> {
       zip.readEntry();
       zip.on('entry', (entry: Entry) => {
         entries.push(entry.fileName);
-        if (entry.fileName === 'manifest.json') {
+        const isManifest = entry.fileName === 'manifest.json';
+        const isServerScript = /^server\/[^/]+\.js$/.test(entry.fileName);
+        if (isManifest || isServerScript) {
           zip.openReadStream(entry, (streamErr: Error | null, stream: NodeJS.ReadableStream | undefined) => {
             if (streamErr || !stream) {
-              settle(() => reject(streamErr || new Error('Failed to open manifest stream')));
+              settle(() => reject(streamErr || new Error(`Failed to open ${entry.fileName}`)));
               return;
             }
             const chunks: Buffer[] = [];
             stream.on('data', (chunk: Buffer) => chunks.push(chunk));
             stream.on('end', () => {
-              manifestRaw = Buffer.concat(chunks).toString('utf-8');
+              const text = Buffer.concat(chunks).toString('utf-8');
+              if (isManifest) manifestRaw = text;
+              else serverFiles[entry.fileName] = text;
               zip.readEntry();
             });
             stream.on('error', (e: Error) => settle(() => reject(e)));
@@ -228,7 +257,7 @@ function readArchive(archivePath: string): Promise<RawArchive> {
         }
       });
       zip.on('end', () => {
-        settle(() => resolve({ entries, manifestRaw, size }));
+        settle(() => resolve({ entries, manifestRaw, size, serverFiles }));
       });
       zip.on('error', (e: Error) => settle(() => reject(e)));
     });
