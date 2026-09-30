@@ -1,6 +1,6 @@
 import { fileExists, stat } from '@frontmcp/utils';
 
-import { readArchive, sha256File } from './helpers/archive';
+import { readArchive, readArchiveEntry, sha256File } from './helpers/archive';
 import {
   ensureBuild,
   getAppName,
@@ -63,6 +63,19 @@ describe('frontmcp build --target mcpb', () => {
     expect(entries).toContain('server/index.js');
     expect(entries).toContain('server/package.json');
     expect(entries).toContain('manifest.json');
+  });
+
+  it('sets FRONTMCP_STDIO so the server serves stdio to the MCPB host', async () => {
+    const { manifest } = await readArchive(getArchivePath());
+    const server = manifest['server'] as { mcp_config: { env?: Record<string, string> } };
+    expect(server.mcp_config.env?.['FRONTMCP_STDIO']).toBe('1');
+  });
+
+  it('ships a self-contained server (runtime packages inlined, no node_modules needed)', async () => {
+    const source = await readArchiveEntry(getArchivePath(), 'server/index.js');
+    expect(source).not.toMatch(/require\((["'])@frontmcp\/sdk\1\)/);
+    expect(source).not.toMatch(/require\((["'])reflect-metadata\1\)/);
+    expect(source.length).toBeGreaterThan(1024 * 1024);
   });
 
   it('reports compatibility defaults (platforms + node runtime)', async () => {

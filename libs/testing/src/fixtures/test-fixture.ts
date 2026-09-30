@@ -20,15 +20,6 @@
  * ```
  */
 
-import {
-  afterAll as _afterAll,
-  afterEach as _afterEach,
-  beforeAll as _beforeAll,
-  beforeEach as _beforeEach,
-  describe as _describe,
-  it as _it,
-} from '@jest/globals';
-
 import { TestTokenFactory } from '../auth/token-factory';
 import { McpTestClient } from '../client/mcp-test-client';
 import { McpTestClientBuilder } from '../client/mcp-test-client.builder';
@@ -44,141 +35,246 @@ import type {
 } from './fixture-types';
 import { gatewayTokenBinding } from './gateway-token-binding';
 
-// Re-export with compatible types (Jest globals may differ in type signatures
-// between @jest/globals and the global declarations used by our TestWithFixtures)
-const describe = _describe as unknown as jest.Describe;
-const beforeAll = _beforeAll as unknown as jest.Lifecycle;
-const beforeEach = _beforeEach as unknown as jest.Lifecycle;
-const afterEach = _afterEach as unknown as jest.Lifecycle;
-const afterAll = _afterAll as unknown as jest.Lifecycle;
-const it = _it as unknown as jest.It;
-
 // ═══════════════════════════════════════════════════════════════════
-// GLOBAL STATE
+// JEST BINDINGS
 // ═══════════════════════════════════════════════════════════════════
-
-/** Current test configuration (set via test.use()) */
-let currentConfig: TestConfig = {};
-
-/** Server instance (shared across tests in a file) */
-let serverInstance: TestServer | null = null;
-
-/** Token factory instance (shared across tests in a file) */
-let tokenFactory: TestTokenFactory | null = null;
-
-/** Track if server was started by us (vs external) */
-let serverStartedByUs = false;
 
 /**
- * Conditional-skip scopes, innermost last. Index 0 is the file itself.
- *
- * Issue #541: the fixture API is Playwright-shaped (`test.use`, `test.describe`,
- * destructured fixtures), so `test.skip(condition, reason)` reads as the natural
- * way to gate a block. It used to reach Jest's `skip(name, fn)` and throw
- * "Invalid first argument, true" at collection time, taking the whole suite
- * down rather than skipping it — worst of all when gating on credentials, which
- * is exactly when you reach for it.
+ * The Jest API, resolved on first use rather than at import time. `@jest/globals` throws when it
+ * is required outside a Jest environment, which used to make the whole package (token factory,
+ * mock OAuth server, ...) unimportable from plain Node scripts. Now only the fixture functions
+ * that really need Jest do, and they say so.
  */
-interface SkipScope {
-  skipped: boolean;
-  reason?: string;
+interface JestApi {
+  describe: jest.Describe;
+  beforeAll: jest.Lifecycle;
+  beforeEach: jest.Lifecycle;
+  afterEach: jest.Lifecycle;
+  afterAll: jest.Lifecycle;
+  it: jest.It;
 }
 
-const skipScopes: SkipScope[] = [{ skipped: false }];
+let jestApi: JestApi | undefined;
 
-function currentSkipScope(): SkipScope {
-  return skipScopes[skipScopes.length - 1];
+function jestGlobals(): JestApi {
+  if (jestApi) return jestApi;
+  try {
+    const api = require('@jest/globals') as Record<string, unknown>;
+    // Cast: the types of @jest/globals differ slightly from the global declarations used here
+    jestApi = {
+      describe: api['describe'],
+      beforeAll: api['beforeAll'],
+      beforeEach: api['beforeEach'],
+      afterEach: api['afterEach'],
+      afterAll: api['afterAll'],
+      it: api['it'],
+    } as unknown as JestApi;
+    return jestApi;
+  } catch (error) {
+    throw new Error(
+      `@frontmcp/testing fixtures ("test", "test.use", ...) can only be used inside a Jest test file: ` +
+        `${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SCOPES AND SHARED STATE
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * One scope per `test.describe` block (index 0 is the file itself).
+ *
+ * `test.use()` writes into the scope it is called in, so a describe block's configuration applies
+ * to that block only and inherits from the enclosing ones — the same as Playwright. A test
+ * captures its chain of scopes when it is registered and merges their configuration when it runs,
+ * so `test.use()` may appear before or after the tests it configures.
+ *
+ * The scope also carries the conditional-skip state (issue #541: `test.skip(condition, reason)`
+ * used to reach Jest's `skip(name, fn)` and throw "Invalid first argument, true" at collection
+ * time, taking the whole suite down).
+ */
+interface Scope {
+  skipped: boolean;
+  reason?: string;
+  config: TestConfig;
+  /** true once `test.use()` was called here — the scope then owns (and stops) servers it starts */
+  configured: boolean;
+  cleanupRegistered: boolean;
+}
+
+const scopes: Scope[] = [{ skipped: false, config: {}, configured: false, cleanupRegistered: false }];
+
+function currentScope(): Scope {
+  return scopes[scopes.length - 1];
+}
+
+/** A booted (or externally reachable) server plus everything derived from it */
+interface ServerEntry {
+  server: TestServer;
+  startedByUs: boolean;
+  tokenFactory: TestTokenFactory;
+  /** The scope whose afterAll stops it */
+  owner: Scope;
+}
+
+/** Servers of this test file, by the configuration that identifies them */
+const serverEntries = new Map<string, Promise<ServerEntry>>();
+
+/** Merge the configuration of a scope chain: later (inner) scopes win, `env` merges key by key */
+function resolveConfig(chain: readonly Scope[]): TestConfig {
+  const merged: TestConfig = {};
+  for (const scope of chain) {
+    const { env, ...rest } = scope.config;
+    Object.assign(merged, rest);
+    if (env) merged.env = { ...merged.env, ...env };
+  }
+  return merged;
+}
+
+/** Deepest scope that configured itself, or the file scope */
+function ownerScopeOf(chain: readonly Scope[]): Scope {
+  for (let i = chain.length - 1; i > 0; i--) {
+    if (chain[i].configured) return chain[i];
+  }
+  return chain[0];
+}
+
+/** What identifies a server: anything that changes how it is started or reached */
+function serverKey(config: TestConfig): string {
+  const env = Object.fromEntries(Object.entries(config.env ?? {}).sort(([a], [b]) => a.localeCompare(b)));
+  return JSON.stringify({
+    server: config.server,
+    baseUrl: config.baseUrl,
+    project: config.project,
+    port: config.port,
+    entryPath: config.entryPath,
+    startupTimeout: config.startupTimeout,
+    logLevel: config.logLevel,
+    auth: config.auth,
+    env,
+  });
+}
+
+/** Environment the fixture hands to the server it boots, so its entry file can follow `test.use({ auth })` */
+function serverEnv(config: TestConfig): Record<string, string> | undefined {
+  const extra: Record<string, string> = {};
+  if (config.auth?.mode) extra['FRONTMCP_TEST_AUTH_MODE'] = config.auth.mode;
+  if (config.auth?.type) extra['FRONTMCP_TEST_AUTH_TYPE'] = config.auth.type;
+  if (Object.keys(extra).length === 0 && !config.env) return undefined;
+  return { ...extra, ...config.env };
 }
 
 // ═══════════════════════════════════════════════════════════════════
 // FIXTURE SETUP/TEARDOWN
 // ═══════════════════════════════════════════════════════════════════
 
-/**
- * Initialize shared resources (server, token factory) once per test file
- */
-async function initializeSharedResources(): Promise<void> {
-  // Start or connect to server if not exists
-  if (!serverInstance) {
-    if (currentConfig.baseUrl && !currentConfig.server) {
-      // Connect to existing external server
-      serverInstance = TestServer.connect(currentConfig.baseUrl);
-      serverStartedByUs = false;
-    } else if (currentConfig.server) {
-      // Start new server with detailed error handling
-      const serverCommand = resolveServerCommand(currentConfig.server);
-      const isDebug =
-        currentConfig.logLevel === 'debug' || process.env['DEBUG'] === '1' || process.env['DEBUG_SERVER'] === '1';
+async function startServerEntry(config: TestConfig, owner: Scope): Promise<ServerEntry> {
+  let server: TestServer;
+  let startedByUs = false;
+
+  if (config.baseUrl && !config.server) {
+    // Connect to an existing external server
+    server = TestServer.connect(config.baseUrl);
+  } else if (config.server) {
+    const serverCommand = resolveServerCommand(config.server);
+    const isDebug = config.logLevel === 'debug' || process.env['DEBUG'] === '1' || process.env['DEBUG_SERVER'] === '1';
+
+    if (isDebug) {
+      console.log(`[TestFixture] Starting server: ${serverCommand}`);
+    }
+
+    try {
+      server = await TestServer.start({
+        project: config.project,
+        port: config.port,
+        command: serverCommand,
+        env: serverEnv(config),
+        startupTimeout: config.startupTimeout ?? 30000,
+        debug: isDebug,
+      });
+      startedByUs = true;
 
       if (isDebug) {
-        console.log(`[TestFixture] Starting server: ${serverCommand}`);
+        console.log(`[TestFixture] Server started at ${server.info.baseUrl}`);
       }
-
-      try {
-        serverInstance = await TestServer.start({
-          project: currentConfig.project,
-          port: currentConfig.port,
-          command: serverCommand,
-          env: currentConfig.env,
-          startupTimeout: currentConfig.startupTimeout ?? 30000,
-          debug: isDebug,
-        });
-        serverStartedByUs = true;
-
-        if (isDebug) {
-          console.log(`[TestFixture] Server started at ${serverInstance.info.baseUrl}`);
-        }
-      } catch (error) {
-        // Re-throw with additional context
-        const errMsg = error instanceof Error ? error.message : String(error);
-        throw new Error(
-          `Failed to start test server.\n\n` +
-            `Server entry: ${currentConfig.server}\n` +
-            `Project: ${currentConfig.project ?? 'default'}\n` +
-            `Command: ${serverCommand}\n\n` +
-            `Error: ${errMsg}`,
-        );
-      }
-    } else {
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
       throw new Error(
-        'test.use() requires either "server" (entry file path) or "baseUrl" (for external server) option',
+        `Failed to start test server.\n\n` +
+          `Server entry: ${config.server}\n` +
+          `Project: ${config.project ?? 'default'}\n` +
+          `Command: ${serverCommand}\n\n` +
+          `Error: ${errMsg}`,
+        { cause: error },
       );
     }
+  } else {
+    throw new Error('test.use() requires either "server" (entry file path) or "baseUrl" (for external server) option');
   }
 
-  // Create token factory if not exists.
-  //
-  // When the test config passes a JWT_SECRET to the server (gateway modes —
-  // auth.mode public/local/remote verify tokens against their own HS256
-  // secret), sign fixture tokens with that SAME secret so `auth.createToken`
-  // mints genuinely-valid tokens, and mint them the way that server does: its
-  // MCP URL (address + entry path) as issuer (`iss`) and as audience (`aud`),
-  // since a gateway token is only accepted by the server it was issued by and
-  // for. Without a shared secret the factory stays RS256 + JWKS for
-  // transparent mode.
-  if (!tokenFactory) {
-    const sharedSecret = currentConfig.env?.['JWT_SECRET'];
-    const binding = serverInstance
-      ? gatewayTokenBinding(resolveClientBaseUrl(serverInstance), currentConfig.entryPath)
-      : undefined;
-    tokenFactory = new TestTokenFactory(sharedSecret ? { hmacSecret: sharedSecret, ...binding } : {});
+  // When the test config passes a JWT_SECRET to the server (gateway modes — auth.mode
+  // public/local/remote verify tokens against their own HS256 secret), sign fixture tokens with that
+  // SAME secret so `auth.createToken` mints genuinely-valid tokens, and mint them the way that
+  // server does: its MCP URL (address + entry path) as issuer (`iss`) and as audience (`aud`),
+  // since a gateway token is only accepted by the server it was issued by and for. Without a shared
+  // secret the factory stays RS256 + JWKS for transparent mode.
+  const sharedSecret = config.env?.['JWT_SECRET'];
+  const binding = sharedSecret
+    ? gatewayTokenBinding(config.baseUrl ?? server.info.baseUrl, config.entryPath)
+    : undefined;
+  const tokenFactory = new TestTokenFactory(sharedSecret ? { hmacSecret: sharedSecret, ...binding } : {});
+
+  return { server, startedByUs, tokenFactory, owner };
+}
+
+/** Get the server for a chain of scopes, starting it on first use */
+function acquireServer(chain: readonly Scope[]): Promise<ServerEntry> {
+  const config = resolveConfig(chain);
+  const key = serverKey(config);
+  let entry = serverEntries.get(key);
+  if (!entry) {
+    entry = startServerEntry(config, ownerScopeOf(chain));
+    serverEntries.set(key, entry);
+    entry.catch(() => serverEntries.delete(key));
+  }
+  return entry;
+}
+
+/** Stop the servers owned by a scope (or, without one, every server of the file) */
+async function stopServers(owner?: Scope): Promise<void> {
+  for (const [key, pending] of Array.from(serverEntries)) {
+    let entry: ServerEntry;
+    try {
+      entry = await pending;
+    } catch {
+      serverEntries.delete(key);
+      continue;
+    }
+    if (owner && entry.owner !== owner) continue;
+    serverEntries.delete(key);
+    if (entry.startedByUs) {
+      await entry.server.stop();
+    }
   }
 }
 
-/**
- * Create fixtures for a single test
- */
-async function createTestFixtures(): Promise<TestFixtures> {
-  // Ensure shared resources are initialized
-  await initializeSharedResources();
+/** Per-test bookkeeping: clients handed out by `server.createClient` are closed with the test */
+interface FixtureContext {
+  extraClients: McpTestClient[];
+}
 
-  // Ensure shared resources are available
-  if (!serverInstance) {
-    throw new Error('Server instance not initialized');
-  }
-  if (!tokenFactory) {
-    throw new Error('Token factory not initialized');
-  }
+const fixtureContexts = new WeakMap<TestFixtures, FixtureContext>();
+
+async function buildFixtures(chain: readonly Scope[]): Promise<TestFixtures> {
+  const config = resolveConfig(chain);
+  const entry = await acquireServer(chain);
+  const { server, tokenFactory } = entry;
+
+  // `auth: { mode: 'public' }` describes the server, so the client stays anonymous unless told otherwise
+  const publicMode = config.publicMode ?? config.auth?.mode === 'public';
+  const clientConfig = { ...config, publicMode };
 
   // Create the MCP client for this test. It is connected eagerly so the `mcp`
   // fixture is ready to use, but the connect is TOLERANT of auth-required
@@ -189,10 +285,10 @@ async function createTestFixtures(): Promise<TestFixtures> {
   // does use an unconnected `mcp` client the failure surfaces clearly at the
   // point of use rather than aborting the whole file in fixture setup.
   const clientInstance = McpTestClient.create({
-    baseUrl: resolveClientBaseUrl(serverInstance),
-    entryPath: currentConfig.entryPath,
-    transport: currentConfig.transport ?? 'streamable-http',
-    publicMode: currentConfig.publicMode,
+    baseUrl: resolveClientBaseUrl(server, clientConfig),
+    entryPath: clientConfig.entryPath,
+    transport: clientConfig.transport ?? 'streamable-http',
+    publicMode,
   }).build();
 
   try {
@@ -210,15 +306,29 @@ async function createTestFixtures(): Promise<TestFixtures> {
     }
   }
 
-  // Build fixtures
-  const auth = createAuthFixture(tokenFactory);
-  const server = createServerFixture(serverInstance);
-
-  return {
+  const context: FixtureContext = { extraClients: [] };
+  const fixtures: TestFixtures = {
     mcp: clientInstance,
-    auth,
-    server,
+    auth: createAuthFixture(tokenFactory),
+    server: createServerFixture(server, clientConfig, clientInstance, context),
   };
+  fixtureContexts.set(fixtures, context);
+  return fixtures;
+}
+
+/**
+ * Create fixtures for a single test, from the configuration in effect where it is called
+ * (`test.use()` at file level unless called inside a `test.describe`).
+ */
+async function createTestFixtures(): Promise<TestFixtures> {
+  return buildFixtures(scopes.slice());
+}
+
+/**
+ * Initialize shared resources (start the server) for the configuration in effect where it is called
+ */
+async function initializeSharedResources(): Promise<void> {
+  await acquireServer(scopes.slice());
 }
 
 /**
@@ -228,8 +338,8 @@ async function createTestFixtures(): Promise<TestFixtures> {
  */
 async function cleanupTestFixtures(fixtures: TestFixtures, testFailed = false): Promise<void> {
   // Output server logs if test failed (helps with debugging)
-  if (testFailed && serverInstance) {
-    const logs = serverInstance.getLogs();
+  if (testFailed) {
+    const logs = fixtures.server.getLogs();
     if (logs.length > 0) {
       console.error('\n[TestFixture] === Server Logs (test failed) ===');
       // Show last 50 lines of logs to avoid flooding output
@@ -242,6 +352,13 @@ async function cleanupTestFixtures(fixtures: TestFixtures, testFailed = false): 
     }
   }
 
+  const extras = fixtureContexts.get(fixtures)?.extraClients ?? [];
+  for (const client of extras) {
+    if (client.isConnected()) {
+      await client.disconnect().catch(() => undefined);
+    }
+  }
+
   // Disconnect client
   if (fixtures.mcp.isConnected()) {
     await fixtures.mcp.disconnect();
@@ -249,16 +366,10 @@ async function cleanupTestFixtures(fixtures: TestFixtures, testFailed = false): 
 }
 
 /**
- * Clean up shared resources after all tests in a file
+ * Clean up shared resources: stops every server this test file started
  */
 async function cleanupSharedResources(): Promise<void> {
-  // Only stop server if we started it
-  if (serverInstance && serverStartedByUs) {
-    await serverInstance.stop();
-  }
-  serverInstance = null;
-  tokenFactory = null;
-  serverStartedByUs = false;
+  await stopServers();
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -274,8 +385,8 @@ async function cleanupSharedResources(): Promise<void> {
  * which is what you need when the server is reachable through a proxy or a
  * different host than it binds.
  */
-function resolveClientBaseUrl(server: TestServer): string {
-  return currentConfig.baseUrl ?? server.info.baseUrl;
+function resolveClientBaseUrl(server: TestServer, config: TestConfig): string {
+  return config.baseUrl ?? server.info.baseUrl;
 }
 
 /**
@@ -337,35 +448,54 @@ function createAuthFixture(factory: TestTokenFactory): AuthFixture {
 /**
  * Create the server fixture from test server
  */
-function createServerFixture(server: TestServer): ServerFixture {
+function createServerFixture(
+  server: TestServer,
+  config: TestConfig,
+  mcp: McpTestClient,
+  context: FixtureContext,
+): ServerFixture {
   return {
-    info: server.info,
+    // Live view: `pid` is filled in once the server is listening and follows restarts
+    get info() {
+      return server.info;
+    },
 
     createClient: async (opts) => {
       // Inherit publicMode and the MCP entry path from the current config so
       // every client reaches the same endpoint the `mcp` fixture does (#543).
-      return McpTestClient.create({
-        baseUrl: resolveClientBaseUrl(server),
-        entryPath: opts?.entryPath ?? currentConfig.entryPath,
+      // An explicit token is always sent — also in public mode, where the server
+      // simply accepts it as well as anonymous access.
+      const client = await McpTestClient.create({
+        baseUrl: resolveClientBaseUrl(server, config),
+        entryPath: opts?.entryPath ?? config.entryPath,
         transport: opts?.transport ?? 'streamable-http',
         auth: opts?.token ? { token: opts.token } : undefined,
         clientInfo: opts?.clientInfo,
-        publicMode: currentConfig.publicMode,
+        publicMode: config.publicMode,
       }).buildAndConnect();
+      context.extraClients.push(client);
+      return client;
     },
 
     createClientBuilder: () => {
       // Return a pre-configured builder with the server's base URL and publicMode
       // This allows full customization including platform-specific capabilities
       const builder = new McpTestClientBuilder({
-        baseUrl: resolveClientBaseUrl(server),
-        entryPath: currentConfig.entryPath,
-        publicMode: currentConfig.publicMode,
+        baseUrl: resolveClientBaseUrl(server, config),
+        entryPath: config.entryPath,
+        publicMode: config.publicMode,
       });
       return builder;
     },
 
-    restart: () => server.restart(),
+    restart: async () => {
+      const reconnect = [mcp, ...context.extraClients].filter((client) => client.isConnected());
+      await server.restart();
+      // A restarted server has forgotten every session: open new ones (keeping each client's token)
+      for (const client of reconnect) {
+        await client.reconnect();
+      }
+    },
 
     getLogs: () => server.getLogs(),
 
@@ -390,14 +520,17 @@ function resolveServerCommand(server: string): string {
 // ═══════════════════════════════════════════════════════════════════
 
 /**
- * Enhanced test function that provides fixtures
+ * Enhanced test function that provides fixtures. `extra` carries the row of a `test.each` table.
  */
-function runWithFixtures(fn: TestFn): () => Promise<void> {
-  return async () => {
-    const fixtures = await createTestFixtures();
+function runWithFixtures(
+  fn: (fixtures: TestFixtures, ...extra: never[]) => Promise<void> | void,
+  chain: readonly Scope[],
+) {
+  return async (...extra: unknown[]): Promise<void> => {
+    const fixtures = await buildFixtures(chain);
     let testFailed = false;
     try {
-      await fn(fixtures);
+      await (fn as (fixtures: TestFixtures, ...rest: unknown[]) => Promise<void> | void)(fixtures, ...extra);
     } catch (error) {
       testFailed = true;
       throw error;
@@ -407,29 +540,41 @@ function runWithFixtures(fn: TestFn): () => Promise<void> {
   };
 }
 
+function skipTitle(name: string, scope: Scope): string {
+  return scope.reason ? `${name} (skipped: ${scope.reason})` : name;
+}
+
 function testWithFixtures(name: string, fn: TestFn): void {
+  const chain = scopes.slice();
   // A `test.skip(condition, reason)` earlier in this block (or an enclosing
   // one) turns every later registration into a skip.
-  const scope = currentSkipScope();
+  const scope = currentScope();
   if (scope.skipped) {
-    it.skip(scope.reason ? `${name} (skipped: ${scope.reason})` : name, runWithFixtures(fn));
+    jestGlobals().it.skip(skipTitle(name, scope), runWithFixtures(fn, chain));
     return;
   }
-  it(name, runWithFixtures(fn));
+  jestGlobals().it(name, runWithFixtures(fn, chain));
 }
 
 /**
- * Configure test fixtures for the current test file/suite
+ * Configure test fixtures for the current test file, or — inside a `test.describe` — for that block only.
  */
 function use(config: TestConfig): void {
-  // Merge with existing config
-  currentConfig = { ...currentConfig, ...config };
+  const scope = currentScope();
+  scope.config = {
+    ...scope.config,
+    ...config,
+    env: config.env ? { ...scope.config.env, ...config.env } : scope.config.env,
+  };
+  scope.configured = true;
 
-  // Register cleanup hook if not already done
-  // This ensures server is stopped after all tests in the file
-  afterAll(async () => {
-    await cleanupSharedResources();
-  });
+  // The scope that configured the servers stops them once its tests are done
+  if (!scope.cleanupRegistered) {
+    scope.cleanupRegistered = true;
+    jestGlobals().afterAll(async () => {
+      await stopServers(scope === scopes[0] ? undefined : scope);
+    });
+  }
 }
 
 /**
@@ -448,7 +593,7 @@ function use(config: TestConfig): void {
 function skip(nameOrCondition: string | boolean, fnOrReason?: TestFn | string): void {
   if (typeof nameOrCondition === 'boolean') {
     if (nameOrCondition) {
-      const scope = currentSkipScope();
+      const scope = currentScope();
       scope.skipped = true;
       scope.reason = typeof fnOrReason === 'string' ? fnOrReason : undefined;
     }
@@ -462,7 +607,7 @@ function skip(nameOrCondition: string | boolean, fnOrReason?: TestFn | string): 
     );
   }
 
-  it.skip(nameOrCondition, runWithFixtures(fnOrReason));
+  jestGlobals().it.skip(nameOrCondition, runWithFixtures(fnOrReason, scopes.slice()));
 }
 
 /**
@@ -473,64 +618,109 @@ function skip(nameOrCondition: string | boolean, fnOrReason?: TestFn | string): 
  * the block was gated on.
  */
 function only(name: string, fn: TestFn): void {
-  const scope = currentSkipScope();
+  const scope = currentScope();
   if (scope.skipped) {
-    it.skip(scope.reason ? `${name} (skipped: ${scope.reason})` : name, runWithFixtures(fn));
+    jestGlobals().it.skip(skipTitle(name, scope), runWithFixtures(fn, scopes.slice()));
     return;
   }
-  it.only(name, runWithFixtures(fn));
+  jestGlobals().it.only(name, runWithFixtures(fn, scopes.slice()));
 }
 
 /**
  * Mark test as todo
  */
 function todo(name: string): void {
-  it.todo(name);
+  jestGlobals().it.todo(name);
 }
 
 /**
- * `describe` that gives its body its own conditional-skip scope.
- *
- * Jest runs a describe callback synchronously during collection, so pushing a
- * scope around it is enough to bound a `test.skip(condition, reason)` to that
- * block. A nested block inherits the outer decision — an outer skip is never
- * undone by an inner one. `.only`, `.skip`, `.each` and friends are copied
- * across so the surface is unchanged.
+ * `test.each(table)(name, (fixtures, ...row) => …)` — a parameterized test. Rows are passed after
+ * the fixtures; titles use the same `%s` / `$key` placeholders as Jest's `it.each`.
  */
-function withSkipScope(register: (name: string, body: () => void) => void) {
-  return (name: string, fn: () => void): void => {
-    register(name, () => {
-      const parent = currentSkipScope();
-      skipScopes.push({ skipped: parent.skipped, reason: parent.reason });
-      try {
-        fn();
-      } finally {
-        skipScopes.pop();
-      }
-    });
+function each(table: unknown, ...tagged: unknown[]) {
+  const chain = scopes.slice();
+  const register = (
+    jestGlobals().it.each as (...args: unknown[]) => (name: string, fn: (...row: unknown[]) => unknown) => void
+  )(table, ...tagged);
+  return (name: string, fn: (fixtures: TestFixtures, ...row: never[]) => Promise<void> | void): void => {
+    const scope = currentScope();
+    if (scope.skipped) {
+      const skipRegister = (
+        jestGlobals().it.skip.each as (...args: unknown[]) => (name: string, fn: (...row: unknown[]) => unknown) => void
+      )(table, ...tagged);
+      skipRegister(skipTitle(name, scope), runWithFixtures(fn, chain));
+      return;
+    }
+    register(name, runWithFixtures(fn, chain));
   };
 }
 
 /**
- * `describe.each(table)(name, fn)` — the returned registrar needs the same
- * scoping, or a conditional skip inside a parameterized block leaks to the file.
+ * `describe` that gives its body its own scope: its own conditional-skip state and its own
+ * `test.use()` configuration.
+ *
+ * Jest runs a describe callback synchronously during collection, so pushing a
+ * scope around it is enough to bound both to that block. A nested block inherits the outer
+ * decision — an outer skip is never undone by an inner one — and the outer configuration.
+ * `.only`, `.skip` and `.each` are provided so the surface is unchanged.
  */
-function eachWithSkipScope(each: jest.Describe['each']): jest.Describe['each'] {
-  return ((...eachArgs: Parameters<jest.Describe['each']>) => {
-    const register = (each as (...args: unknown[]) => (name: string, fn: () => void) => void)(...eachArgs);
-    return withSkipScope(register);
-  }) as jest.Describe['each'];
+function withScope<Args extends unknown[]>(fn: (...args: Args) => unknown): (...args: Args) => void {
+  return (...args: Args): void => {
+    const parent = currentScope();
+    scopes.push({
+      skipped: parent.skipped,
+      reason: parent.reason,
+      config: {},
+      configured: false,
+      cleanupRegistered: false,
+    });
+    try {
+      fn(...args);
+    } finally {
+      scopes.pop();
+    }
+  };
 }
 
-// Every variant that runs a block body gets its own scope. `describe.skip` is
-// included because Jest still evaluates a skipped block's callback during
-// collection, so a `test.skip(condition)` inside one would otherwise set the
-// FILE scope and skip later, unrelated blocks.
-const describeWithSkipScope = Object.assign(withSkipScope(describe), describe, {
-  only: Object.assign(withSkipScope(describe.only), { each: eachWithSkipScope(describe.only.each) }),
-  skip: Object.assign(withSkipScope(describe.skip), { each: eachWithSkipScope(describe.skip.each) }),
-  each: eachWithSkipScope(describe.each),
-}) as unknown as jest.Describe;
+type DescribeRegister = (name: string, body: (...args: never[]) => unknown, timeout?: number) => void;
+
+function scopedRegister(pick: () => DescribeRegister) {
+  return (name: string, fn: (...args: never[]) => unknown, timeout?: number): void => {
+    pick()(name, withScope(fn as (...args: unknown[]) => unknown) as (...args: never[]) => unknown, timeout);
+  };
+}
+
+/**
+ * `describe.each(table)(name, fn)` — the registrar needs the same scoping, and the row values must
+ * still reach the body.
+ */
+function scopedEach(pick: () => unknown) {
+  return (...eachArgs: unknown[]) =>
+    (name: string, fn: (...args: never[]) => unknown, timeout?: number): void => {
+      const register = (pick() as (...args: unknown[]) => DescribeRegister)(...eachArgs);
+      register(name, withScope(fn as (...args: unknown[]) => unknown) as (...args: never[]) => unknown, timeout);
+    };
+}
+
+const describeWithScope = Object.assign(
+  scopedRegister(() => jestGlobals().describe as unknown as DescribeRegister),
+  {
+    // `describe.skip` still evaluates its callback during collection, so it needs a scope too
+    only: Object.assign(
+      scopedRegister(() => jestGlobals().describe.only as unknown as DescribeRegister),
+      {
+        each: scopedEach(() => jestGlobals().describe.only.each),
+      },
+    ),
+    skip: Object.assign(
+      scopedRegister(() => jestGlobals().describe.skip as unknown as DescribeRegister),
+      {
+        each: scopedEach(() => jestGlobals().describe.skip.each),
+      },
+    ),
+    each: scopedEach(() => jestGlobals().describe.each),
+  },
+) as unknown as jest.Describe;
 
 // ═══════════════════════════════════════════════════════════════════
 // ATTACH STATIC METHODS
@@ -542,17 +732,18 @@ const test = testWithFixtures as TestWithFixtures;
 // Attach configuration method
 test.use = use;
 
-// Attach Jest lifecycle methods
-test.describe = describeWithSkipScope;
-test.beforeAll = beforeAll;
-test.beforeEach = beforeEach;
-test.afterEach = afterEach;
-test.afterAll = afterAll;
+// Attach Jest lifecycle methods (resolved when called, see jestGlobals)
+test.describe = describeWithScope;
+test.beforeAll = ((...args: Parameters<jest.Lifecycle>) => jestGlobals().beforeAll(...args)) as jest.Lifecycle;
+test.beforeEach = ((...args: Parameters<jest.Lifecycle>) => jestGlobals().beforeEach(...args)) as jest.Lifecycle;
+test.afterEach = ((...args: Parameters<jest.Lifecycle>) => jestGlobals().afterEach(...args)) as jest.Lifecycle;
+test.afterAll = ((...args: Parameters<jest.Lifecycle>) => jestGlobals().afterAll(...args)) as jest.Lifecycle;
 
 // Attach test modifiers
 test.skip = skip;
 test.only = only;
 test.todo = todo;
+test.each = each as TestWithFixtures['each'];
 
 // ═══════════════════════════════════════════════════════════════════
 // EXPORTS

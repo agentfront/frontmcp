@@ -70,7 +70,11 @@ export function createChildSupervisor(options: ChildSupervisorOptions): ChildSup
     if (mode === 'http') env['FRONTMCP_DEV_BOOTSTRAP_SENTINEL'] = '1';
     if (sessionId) env['FRONTMCP_DEV_FORCE_SESSION_ID'] = sessionId;
     if (mode === 'http' && port) env['FRONTMCP_DEV_PORT'] = String(port);
-    if (mode === 'pipe') env['FRONTMCP_DEV_STDIO_FD'] = '3';
+    if (mode === 'pipe') {
+      env['FRONTMCP_DEV_STDIO_FD'] = '3';
+      // Serve over the IPC channel instead of binding an HTTP port.
+      env['FRONTMCP_STDIO'] = '1';
+    }
     return env;
   }
 

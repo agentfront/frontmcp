@@ -385,6 +385,13 @@ test('check unused mocks', async ({ mcp }) => {
 
 ---
 
+## Scope and limits
+
+- `httpMock` patches `fetch` **in the test process**. It sees calls made by code that runs in the same process (for example a server started with `TestServer` in-process or a direct client), not calls made by a separate server process started by `test.use({ server })`.
+- Only `fetch` is intercepted, not `http.request` or libraries that bypass `fetch`.
+- The helpers (`get`, `post`, `put`, `delete`, `any`) accept an optional third argument `{ times, name, match }`. `match` adds header, body or method constraints on top of the URL.
+- Requests made with a `Request` object are matched the same way as URL strings.
+
 ## Cleanup
 
 <Warning>
@@ -528,7 +535,7 @@ test('respects rate limits', async ({ mcp }) => {
 
 **Do:**
 
-- Always call `restore()` in cleanup
+- Always call `restore()` in cleanup (it puts the original `fetch` back)
 - Use `httpResponse` helpers for common responses
 - Verify mocks were used with `assertDone()`
 - Mock at the appropriate level of detail

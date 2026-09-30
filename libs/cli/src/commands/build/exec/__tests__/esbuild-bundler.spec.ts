@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { FrontmcpExecConfig } from '../config';
+import { type FrontmcpExecConfig } from '../config';
 
 const mockBuild = jest.fn().mockResolvedValue({});
 jest.mock('esbuild', () => ({ build: mockBuild }), { virtual: true });
@@ -7,7 +7,7 @@ jest.mock('esbuild', () => ({ build: mockBuild }), { virtual: true });
 const mockStatSync = jest.fn().mockReturnValue({ size: 12345 });
 jest.mock('fs', () => ({ statSync: mockStatSync }));
 
-import { bundleWithEsbuild, formatSize } from '../esbuild-bundler';
+import { bundleWithEsbuild, formatSize, missingOptionalPeers } from '../esbuild-bundler';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -91,6 +91,53 @@ describe('bundleWithEsbuild', () => {
     expect(buildArgs.external).toContain('fsevents');
     expect(buildArgs.external).toContain('sharp');
     expect(buildArgs.external).not.toContain('custom-pkg');
+  });
+
+  it('inlines FrontMCP runtime packages with bundleRuntime + selfContained', async () => {
+    const config: FrontmcpExecConfig = {
+      ...defaultConfig,
+      esbuild: { external: ['@frontmcp/sdk'] },
+    };
+
+    await bundleWithEsbuild('/tmp/entry.js', '/tmp/out', config, { selfContained: true, bundleRuntime: true });
+
+    const buildArgs = mockBuild.mock.calls[0][0];
+    for (const pkg of ['@frontmcp/sdk', '@frontmcp/di', '@frontmcp/utils', '@frontmcp/auth', 'reflect-metadata']) {
+      expect(buildArgs.external).not.toContain(pkg);
+    }
+    expect(buildArgs.external).toContain('better-sqlite3');
+    expect(buildArgs.external).toContain('fsevents');
+  });
+
+  it('keeps FrontMCP runtime packages external by default', async () => {
+    await bundleWithEsbuild('/tmp/entry.js', '/tmp/out', defaultConfig);
+
+    const buildArgs = mockBuild.mock.calls[0][0];
+    expect(buildArgs.external).toContain('@frontmcp/sdk');
+    expect(buildArgs.external).toContain('reflect-metadata');
+  });
+
+  it('reports only the optional peers that cannot be resolved (#642)', () => {
+    const installed = (request: string): string => {
+      if (request === '@opentelemetry/sdk-trace-base') return request;
+      throw new Error('Cannot find module');
+    };
+    expect(missingOptionalPeers('/project', installed)).toEqual(['@frontmcp/observability']);
+    expect(
+      missingOptionalPeers('/project', () => {
+        throw new Error('nope');
+      }),
+    ).toEqual(['@frontmcp/observability', '@opentelemetry/sdk-trace-base']);
+    expect(missingOptionalPeers('/project', (request) => request)).toEqual([]);
+  });
+
+  it('adds the missing optional peers to the externals in both modes (#642)', async () => {
+    const missing = missingOptionalPeers();
+    await bundleWithEsbuild('/tmp/entry.js', '/tmp/out', defaultConfig, { selfContained: true });
+    await bundleWithEsbuild('/tmp/entry.js', '/tmp/out', defaultConfig);
+    for (const call of mockBuild.mock.calls) {
+      for (const pkg of missing) expect(call[0].external).toContain(pkg);
+    }
   });
 
   it('should respect minify option from config', async () => {

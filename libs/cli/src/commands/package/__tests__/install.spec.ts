@@ -170,6 +170,58 @@ describe('runInstall', () => {
       expect(fs.existsSync(path.join(appsDir, 'demo-app', 'bundle.js'))).toBe(true);
     });
 
+    it('finds a manifest in a per-target dist subdirectory (dist/node)', async () => {
+      writePackage(
+        { name: 'demo-app', bundle: 'demo-app.bundle.js' },
+        { 'demo-app.bundle.js': '1;' },
+        path.join(packageDir, 'dist', 'node'),
+      );
+
+      await install();
+
+      expect(fs.existsSync(path.join(appsDir, 'demo-app', 'demo-app.bundle.js'))).toBe(true);
+      expect(registerApp).toHaveBeenCalledWith('demo-app', expect.anything());
+    });
+
+    it.each(['frontmcp.config.ts', 'frontmcp.config.mjs', 'frontmcp.config.cjs', 'frontmcp.config.json'])(
+      'builds from %s when no manifest is present',
+      async (configName) => {
+        fs.writeFileSync(path.join(packageDir, configName), '{}', 'utf-8');
+        (runCmd as jest.Mock).mockImplementation(async () => {
+          writePackage(
+            { name: 'built-app', bundle: 'bundle.js' },
+            { 'bundle.js': '1;' },
+            path.join(packageDir, 'dist', 'node'),
+          );
+        });
+
+        await install();
+
+        expect(runCmd).toHaveBeenCalledWith('npx', ['frontmcp', 'build', '--target', 'node'], { cwd: packageDir });
+        expect(registerApp).toHaveBeenCalledWith('built-app', expect.anything());
+      },
+    );
+
+    it('installs project dependencies before building a fetched source', async () => {
+      fs.writeFileSync(path.join(packageDir, 'frontmcp.config.js'), 'module.exports = {};', 'utf-8');
+      fs.writeFileSync(path.join(packageDir, 'package.json'), '{}', 'utf-8');
+      const order: string[] = [];
+      (runCmd as jest.Mock).mockImplementation(async (cmd: string, args: string[]) => {
+        order.push(`${cmd} ${args[0]}`);
+        if (cmd === 'npx') {
+          writePackage(
+            { name: 'built-app', bundle: 'bundle.js' },
+            { 'bundle.js': '1;' },
+            path.join(packageDir, 'dist', 'node'),
+          );
+        }
+      });
+
+      await install();
+
+      expect(order.slice(0, 2)).toEqual(['npm install', 'npx frontmcp']);
+    });
+
     it('builds from frontmcp.config.js when no manifest is present', async () => {
       fs.writeFileSync(path.join(packageDir, 'frontmcp.config.js'), 'module.exports = {};', 'utf-8');
       (runCmd as jest.Mock).mockImplementation(async () => {
@@ -266,9 +318,53 @@ describe('runInstall', () => {
 
       const installDir = path.join(appsDir, 'demo-app');
       expect(runCmd).toHaveBeenCalledWith('npm', ['init', '-y', '--silent'], { cwd: installDir });
-      expect(runCmd).toHaveBeenCalledWith('npm', ['install', 'better-sqlite3', '--save', '--silent'], {
+      expect(runCmd).toHaveBeenCalledWith('npm', expect.arrayContaining(['better-sqlite3', '--save', '--silent']), {
         cwd: installDir,
       });
+    });
+
+    it('installs the externalized runtime packages next to the bundle', async () => {
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
+
+      await install();
+
+      const installDir = path.join(appsDir, 'demo-app');
+      const installCall = (runCmd as jest.Mock).mock.calls.find(
+        ([cmd, args]) => cmd === 'npm' && args[0] === 'install',
+      );
+      expect(installCall).toBeDefined();
+      const specs: string[] = installCall[1];
+      expect(specs).toEqual(
+        expect.arrayContaining([expect.stringMatching(/^@frontmcp\/sdk@/), 'reflect-metadata@^0.2.2']),
+      );
+      expect(installCall[2]).toEqual({ cwd: installDir });
+    });
+
+    it('uses the versions the project declares for runtime packages', async () => {
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({ dependencies: { '@frontmcp/sdk': '1.8.3', 'reflect-metadata': '^0.2.1' } }),
+        'utf-8',
+      );
+
+      await install();
+
+      const installCall = (runCmd as jest.Mock).mock.calls.find(
+        ([cmd, args]) => cmd === 'npm' && args[0] === 'install',
+      );
+      expect(installCall[1]).toEqual(expect.arrayContaining(['@frontmcp/sdk@1.8.3', 'reflect-metadata@^0.2.1']));
+    });
+
+    it('does not re-init an install dir that already has a package.json', async () => {
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
+      const installDir = path.join(appsDir, 'demo-app');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'package.json'), '{}', 'utf-8');
+
+      await install();
+
+      expect(runCmd).not.toHaveBeenCalledWith('npm', ['init', '-y', '--silent'], expect.anything());
     });
 
     it('creates the sqlite data directory', async () => {

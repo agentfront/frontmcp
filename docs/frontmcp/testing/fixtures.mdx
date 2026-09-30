@@ -29,7 +29,7 @@ test('example using all fixtures', async ({ mcp, auth, server }) => {
 
 ## Configuring Fixtures
 
-Use `test.use()` to configure fixtures for your test file:
+Use `test.use()` to configure fixtures. Called at the top of a file it applies to the whole file; called inside a `test.describe()` it applies to that block only.
 
 ```ts
 import { test, expect } from '@frontmcp/testing';
@@ -78,6 +78,41 @@ test.use({
 You usually do not need to set this. When the client's first request 404s and the server reports where it does serve MCP — the web-fetch host answers `{"error":"Not Found","entryPaths":["/mcp"]}` — the client reconnects there on its own. If it still cannot connect, the error names the paths the server reported instead of a bare `HTTP 404`.
 
 `entryPath` applies to the MCP endpoint only. OAuth and discovery endpoints stay at the server root, which is where the server mounts them.
+
+### Scoping `test.use()` to a `describe`
+
+`test.use()` is scoped to the `describe` block it is called in. Options from nested blocks are merged over the outer ones (`env` is merged key by key), and every distinct configuration gets its own server, which the block that configured it also stops. A block without its own `test.use()` shares its parent's server.
+
+```ts
+test.use({ server: './src/main.ts', port: 0, env: { SHARED: 'file' } });
+
+test.describe('block A', () => {
+  test.use({ env: { FEATURE: 'A' } }); // own server, env = { SHARED: 'file', FEATURE: 'A' }
+
+  test('sees feature A', async ({ mcp }) => {});
+});
+
+test.describe('block B', () => {
+  test.use({ env: { FEATURE: 'B' } }); // never sees block A's env
+
+  test('sees feature B', async ({ mcp }) => {});
+});
+```
+
+`auth: { mode, type }` is passed to the server process as `FRONTMCP_TEST_AUTH_MODE` and `FRONTMCP_TEST_AUTH_TYPE`, which the server entry file can read. `auth.mode: 'public'` also keeps the `mcp` client anonymous.
+
+### Parameterised tests
+
+`test.each` and `test.describe.each` pass the row values to the callback. For `test.each` the fixtures come first, then the row values:
+
+```ts
+test.each([
+  ['read', 1],
+  ['write', 2],
+])('scope %s', async ({ mcp }, scope, level) => {
+  expect(mcp.isConnected()).toBe(true);
+});
+```
 
 ### Conditional skipping
 
@@ -310,7 +345,7 @@ The `server` fixture provides server control and multi-client support.
 test('server info', async ({ server }) => {
   expect(server.info.baseUrl).toContain('localhost');
   expect(server.info.port).toBe(3003);
-  expect(server.info.pid).toBeDefined();
+  expect(server.info.pid).toBeGreaterThan(0); // pid of the process that listens on the port
 });
 ```
 
@@ -343,7 +378,8 @@ test('multi-client testing', async ({ server, auth }) => {
 test('server logs', async ({ server, mcp }) => {
   await mcp.tools.call('create-note', { title: 'Test' });
 
-  // Get server-side logs
+  // Server-side logs (stdout/stderr of the server process).
+  // `mcp.logs` is different: it holds the log notifications the client received.
   const logs = server.getLogs();
   expect(logs.some(log => log.includes('create-note'))).toBe(true);
 
@@ -359,7 +395,7 @@ test('server restart', async ({ server, mcp }) => {
   // Restart the server
   await server.restart();
 
-  // Client automatically reconnects
+  // `mcp` and every client created with server.createClient() reconnect automatically
   const tools = await mcp.tools.list();
   expect(tools.length).toBeGreaterThan(0);
 });
@@ -416,7 +452,7 @@ Understanding when fixtures are created and destroyed:
 - Use `test.use()` once at the top of each test file
 - Clear logs and traces between tests if needed
 - Disconnect additional clients created via `server.createClient()`
-- Use `port: 0` for automatic port selection in CI
+- Use `port: 0` for automatic port selection in CI. Ports are reserved with a lock that also covers other Jest workers, so parallel files do not collide
 
 **Don't:**
 

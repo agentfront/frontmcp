@@ -79,10 +79,46 @@ function buildServerEntry(client: McpClientName, config: FrontMcpConfigParsed): 
  * use the `{ mcpServers: { <name>: { ... } } }` shape — they differ only in
  * the file the user pastes it into.
  */
-export function emitClientSnippet(client: McpClientName, config: FrontMcpConfigParsed): string {
+export function buildClientPayload(
+  client: McpClientName,
+  config: FrontMcpConfigParsed,
+): { mcpServers: Record<string, ServerEntry> } {
   const connection = config.clients?.[client];
   const serverKey = connection?.name ?? config.name;
-  const entry = buildServerEntry(client, config);
-  const payload = { mcpServers: { [serverKey]: entry } };
-  return JSON.stringify(payload, null, 2);
+  return { mcpServers: { [serverKey]: buildServerEntry(client, config) } };
+}
+
+export function emitClientSnippet(client: McpClientName, config: FrontMcpConfigParsed): string {
+  return JSON.stringify(buildClientPayload(client, config), null, 2);
+}
+
+/**
+ * Merge the payload into the client config text in `existing` (the target file's
+ * current contents, or `undefined` when it does not exist). Other top-level keys
+ * and other `mcpServers` entries are preserved; only this server's entry is replaced.
+ */
+export function mergeClientConfig(
+  existing: string | undefined,
+  payload: { mcpServers: Record<string, ServerEntry> },
+): string {
+  let current: Record<string, unknown> = {};
+  if (existing !== undefined && existing.trim() !== '') {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(existing);
+    } catch (err) {
+      throw new Error(`Existing client config is not valid JSON, refusing to overwrite it: ${(err as Error).message}`, {
+        cause: err,
+      });
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Existing client config is not a JSON object, refusing to overwrite it.');
+    }
+    current = parsed as Record<string, unknown>;
+  }
+  const currentServers =
+    current['mcpServers'] && typeof current['mcpServers'] === 'object' && !Array.isArray(current['mcpServers'])
+      ? (current['mcpServers'] as Record<string, unknown>)
+      : {};
+  return JSON.stringify({ ...current, mcpServers: { ...currentServers, ...payload.mcpServers } }, null, 2);
 }

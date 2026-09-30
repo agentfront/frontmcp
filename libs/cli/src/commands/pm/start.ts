@@ -1,9 +1,22 @@
+import * as fs from 'fs';
 import * as path from 'path';
-import { ParsedArgs } from '../../core/args';
+
+import { formatProcessDetail, ProcessManager } from '.';
+import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
-import { resolveEntry } from '../../shared/fs';
 import { loadDevEnv } from '../../shared/env';
-import { ProcessManager, formatProcessDetail } from '.';
+import { resolveEntry } from '../../shared/fs';
+import { getRegisteredApp } from '../package/registry';
+import { superviseUntilSignalled } from './keep-alive';
+
+function resolveInstalledBundle(name: string, bundle: string): string {
+  if (!fs.existsSync(bundle)) {
+    throw new Error(
+      `Installed app "${name}" is missing its bundle at ${bundle}. Reinstall it with "frontmcp install".`,
+    );
+  }
+  return bundle;
+}
 
 export async function runStart(opts: ParsedArgs): Promise<void> {
   const name = opts._[1];
@@ -11,8 +24,11 @@ export async function runStart(opts: ParsedArgs): Promise<void> {
     throw new Error('Missing process name. Usage: frontmcp start <name> --entry <path>');
   }
 
-  const cwd = process.cwd();
-  const entry = await resolveEntry(cwd, opts.entry);
+  // `frontmcp install` registers apps by name; start them from their install
+  // directory (bundle + the .env the installer wrote) unless --entry overrides.
+  const installed = opts.entry ? null : getRegisteredApp(name);
+  const cwd = installed ? installed.installDir : process.cwd();
+  const entry = installed ? resolveInstalledBundle(name, installed.bundle) : await resolveEntry(cwd, opts.entry);
 
   // Load environment variables
   loadDevEnv(cwd);
@@ -25,7 +41,7 @@ export async function runStart(opts: ParsedArgs): Promise<void> {
   const info = await pm.start({
     name,
     entry,
-    port: opts.port,
+    port: opts.port ?? installed?.port,
     socket: !!opts.socket,
     socketPath: typeof opts.socket === 'string' ? opts.socket : undefined,
     dbPath: opts.db ? path.resolve(opts.db) : undefined,
@@ -41,16 +57,5 @@ export async function runStart(opts: ParsedArgs): Promise<void> {
     console.log(`\n${c('gray', 'hint:')} test with: curl http://localhost:${info.port}/health`);
   }
 
-  // Keep the supervisor process alive
-  await new Promise<void>((resolve) => {
-    process.once('SIGINT', async () => {
-      console.log(`\n${c('yellow', '[pm]')} stopping "${name}"...`);
-      await pm.stop(name);
-      resolve();
-    });
-    process.once('SIGTERM', async () => {
-      await pm.stop(name);
-      resolve();
-    });
-  });
+  await superviseUntilSignalled(pm, name);
 }

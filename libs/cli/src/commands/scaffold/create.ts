@@ -203,8 +203,9 @@ function renderFrontmcpConfigTemplate(projectName: string, deploymentTarget: Dep
 
 // Single source of truth for every \`frontmcp\` CLI command (dev / test /
 // inspector / pm start / socket / skills install / export). Override any
-// field with an explicit CLI flag or the matching \`FRONTMCP_<NAME>\` env
-// var — precedence: CLI > env > config > built-in default.
+// field with an explicit CLI flag — precedence: CLI > config > built-in
+// default. Point at another config file with \`--config <path>\` or the
+// \`FRONTMCP_CONFIG\` env var.
 export default defineConfig({
   name: '${safeName}',
   entry: './src/main.ts',
@@ -498,7 +499,9 @@ REDIS_TLS=false
 // =============================================================================
 
 // Docker templates (moved to ci/ folder)
-function generateDockerfile(pm: PackageManager): string {
+// `frontmcp build` (node target) writes `dist/node/<name>.bundle.js`, where
+// `<name>` is the `name` in frontmcp.config — the same sanitized project name.
+function generateDockerfile(pm: PackageManager, appName: string): string {
   const cfg = PM_CONFIG[pm];
   const corepack = pm !== 'npm' ? '\nRUN corepack enable\n' : '';
   return `
@@ -533,7 +536,7 @@ COPY --from=builder /app/package.json ./
 
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/node/${appName}.bundle.js"]
 `;
 }
 
@@ -622,7 +625,8 @@ REDIS_TLS=false
 const TEMPLATE_VERCEL_JSON = (pm: PackageManager) =>
   JSON.stringify({ $schema: 'https://openapi.vercel.sh/vercel.json', ...buildVercelJson(pm) }, null, 2);
 
-// AWS Lambda SAM template
+// AWS Lambda SAM template — `frontmcp build --target lambda` writes
+// `dist/lambda/handler.cjs` exporting `handler`.
 const TEMPLATE_SAM_YAML = (projectName: string) => `
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
@@ -638,8 +642,8 @@ Resources:
   FrontMCPFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: ../dist/
-      Handler: main.handler
+      CodeUri: ../dist/lambda/
+      Handler: handler.handler
       Events:
         ApiEvent:
           Type: HttpApi
@@ -1269,7 +1273,7 @@ async function scaffoldNxWorkspace(projectName: string, flags?: CreateFlags): Pr
       devDependencies: {
         nx: '22.3.3',
         '@nx/devkit': '22.3.3',
-        '@frontmcp/nx': `~${selfVersion}`,
+        '@frontmcp/nx': selfVersion,
       },
     });
 
@@ -1589,7 +1593,7 @@ async function scaffoldDeploymentFiles(targetDir: string, options: CreateOptions
       await scaffoldFileIfMissing(
         targetDir,
         path.join(ciDir, 'Dockerfile'),
-        generateDockerfile(options.packageManager),
+        generateDockerfile(options.packageManager, sanitizeForFolder(projectName)),
       );
 
       const dockerCompose = redisSetup === 'docker' ? generateDockerComposeWithRedis() : generateDockerComposeNoRedis();
@@ -1863,7 +1867,7 @@ async function upsertPackageJsonWithTarget(
   const pkgPath = path.join(cwd, 'package.json');
   const existing = await readJSON<PackageJson>(pkgPath);
 
-  const frontmcpLibRange = `~${selfVersion}`;
+  const frontmcpLibRange = selfVersion;
 
   const baseScripts: Record<string, string> = {
     dev: 'frontmcp dev',
@@ -1966,7 +1970,36 @@ async function upsertPackageJsonWithTarget(
 // Main Entry Point
 // =============================================================================
 
+const FLAG_CHOICES = {
+  target: ['node', 'vercel', 'lambda', 'cloudflare'],
+  redis: ['docker', 'existing', 'none'],
+  pm: ['npm', 'yarn', 'pnpm'],
+  skills: ['recommended', 'minimal', 'full', 'none'],
+} as const;
+
+/** Returns one message per flag whose value is not an accepted choice. */
+export function validateCreateFlags(flags?: CreateFlags): string[] {
+  const problems: string[] = [];
+  if (!flags) return problems;
+  for (const key of Object.keys(FLAG_CHOICES) as (keyof typeof FLAG_CHOICES)[]) {
+    const value: string | undefined = flags[key];
+    const choices: readonly string[] = FLAG_CHOICES[key];
+    if (value !== undefined && !choices.includes(value)) {
+      problems.push(`Invalid --${key} value '${value}'. Expected one of: ${choices.join(', ')}.`);
+    }
+  }
+  return problems;
+}
+
 export async function runCreate(projectArg?: string, flags?: CreateFlags): Promise<void> {
+  // Reject bad flag values before touching the filesystem, so a typo never
+  // leaves a half-built project folder behind.
+  const flagProblems = validateCreateFlags(flags);
+  if (flagProblems.length > 0) {
+    for (const problem of flagProblems) console.error(c('red', `Error: ${problem}`));
+    process.exit(1);
+  }
+
   // Nx monorepo mode (non-interactive with --nx flag)
   if (flags?.nx) {
     const name = projectArg || 'frontmcp-app';

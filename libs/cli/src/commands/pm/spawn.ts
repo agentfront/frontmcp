@@ -3,13 +3,14 @@
  * and exponential backoff.
  */
 
-import { spawn, ChildProcess } from 'child_process';
-import { StartOptions } from './types';
-import { socketFilePath } from './paths';
-import { createLogStreams } from './log-utils';
-import { writePidFile, removePidFile } from './pidfile';
-import { checkHealth } from './health';
+import { spawn, type ChildProcess } from 'child_process';
+
 import { getSelfVersion } from '../../core/version';
+import { checkHealth } from './health';
+import { createLogStreams } from './log-utils';
+import { socketFilePath } from './paths';
+import { removePidFile, writePidFile } from './pidfile';
+import { type StartOptions } from './types';
 
 const DEFAULT_MAX_RESTARTS = 5;
 const INITIAL_BACKOFF_MS = 1000;
@@ -96,7 +97,7 @@ export class Supervisor {
     };
 
     if (this.resolvedSocketPath) {
-      env['FRONTMCP_SOCKET_PATH'] = this.resolvedSocketPath;
+      env['FRONTMCP_DAEMON_SOCKET'] = this.resolvedSocketPath;
     }
     if (port) {
       env['PORT'] = String(port);
@@ -132,6 +133,7 @@ export class Supervisor {
       port,
       socketPath: this.resolvedSocketPath,
       dbPath,
+      maxRestarts: this.opts.maxRestarts,
       startedAt: new Date().toISOString(),
       restartCount: this.restartCount,
       supervisorPid: process.pid,

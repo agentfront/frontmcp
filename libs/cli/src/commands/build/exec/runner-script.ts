@@ -17,9 +17,24 @@ export function sanitizeShellLiteral(value: string): string {
   return value.replace(/[^A-Za-z0-9._+-]/g, '_');
 }
 
+/** Keep a URL path safe to interpolate into bash: only path characters survive. */
+export function sanitizeHttpPath(value: string): string {
+  return value.replace(/[^A-Za-z0-9._~/+-]/g, '_');
+}
+
 export function generateRunnerScript(config: FrontmcpExecConfig, cliMode?: boolean, seaMode?: boolean): string {
   const name = config.name;
   const version = sanitizeShellLiteral(config.version || '0.0.0');
+
+  // #642 — `transport.http.path` reaches the bundle through the same env seam
+  // `frontmcp dev` uses. An explicit env var / .env value still wins.
+  const httpPathBlock =
+    !cliMode && config.httpEntryPath
+      ? `
+# Serve MCP at the configured transport.http.path unless overridden
+export FRONTMCP_HTTP_ENTRY_PATH="\${FRONTMCP_HTTP_ENTRY_PATH:-${sanitizeHttpPath(config.httpEntryPath)}}"
+`
+      : '';
 
   // #377 — `--target node` runner used to silently exec the bundle for any
   // flag, so `./frontegg-bin --help` quietly booted the HTTP server. Intercept
@@ -108,7 +123,7 @@ if [ -f "\${ENV_FILE}" ]; then
   source "\${ENV_FILE}"
   set +a
 fi
-
+${httpPathBlock}
 exec "\${BINARY}" "$@"
 `;
   }
@@ -162,6 +177,7 @@ if [ -f "\${ENV_FILE}" ]; then
   set +a
 fi
 
+${httpPathBlock}
 # Enable Node.js compile cache for faster startup on warm runs
 COMPILE_CACHE_DIR="\${HOME}/.cache/frontmcp/${name}"
 mkdir -p "\${COMPILE_CACHE_DIR}" 2>/dev/null || true

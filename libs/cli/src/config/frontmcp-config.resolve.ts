@@ -3,7 +3,10 @@
  *
  * Single entry point each CLI command calls. Applies the precedence rules:
  *
- *   explicit CLI flag  >  FRONTMCP_<NAME> env var  >  frontmcp.config field  >  built-in default
+ *   explicit CLI flag  >  frontmcp.config field  >  built-in default
+ *
+ * There are no per-field `FRONTMCP_<NAME>` overrides; the only env var read
+ * here is `FRONTMCP_CONFIG` (the config file path).
  *
  * and returns a `ResolvedFrontMcpConfig` with all defaults applied, the
  * chosen deployment merged in, env overlays composed, and per-command
@@ -133,7 +136,7 @@ export async function resolveConfig(options: ResolveConfigOptions): Promise<Reso
       // parse/schema failures still propagate as a hard error.
       config = await tryLoadFrontMcpConfigFromFile(configPath);
     } catch (err) {
-      throw new Error(`Failed to load config from "${explicitPath}": ${(err as Error).message}`);
+      throw new Error(`Failed to load config from "${explicitPath}": ${(err as Error).message}`, { cause: err });
     }
   } else {
     configDir = await findConfigDir(options.cwd);
@@ -146,7 +149,7 @@ export async function resolveConfig(options: ResolveConfigOptions): Promise<Reso
         // `tryLoadFrontMcpConfig` already returns `undefined` for old
         // exec-only configs, so anything reaching this catch is a real
         // parse failure that the caller needs to see.
-        throw new Error(`Failed to load frontmcp.config in ${configDir}: ${(err as Error).message}`);
+        throw new Error(`Failed to load frontmcp.config in ${configDir}: ${(err as Error).message}`, { cause: err });
       }
     }
   }

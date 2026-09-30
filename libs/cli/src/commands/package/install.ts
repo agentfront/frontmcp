@@ -8,6 +8,7 @@ import * as path from 'path';
 
 import { copyFile, ensureDir, realpath, runCmd, stat } from '@frontmcp/utils';
 
+import { CONFIG_FILENAMES } from '../../config/frontmcp-config.loader';
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
 import { assertValidPluginName, isPluginContainedPath } from '../build/exec/cli-runtime/plugin-emitter';
@@ -15,6 +16,7 @@ import { type ExecManifest } from '../build/exec/manifest';
 import { appDir, ensurePmDirs } from '../pm/paths';
 import { runQuestionnaire, writeEnvFile } from './questionnaire';
 import { registerApp } from './registry';
+import { resolveRuntimePackageSpecs } from './runtime-packages';
 import { fetchFromGit } from './sources/git';
 import { fetchFromLocal } from './sources/local';
 import { fetchFromNpm } from './sources/npm';
@@ -59,22 +61,28 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
 
     // 3. If no manifest, check for frontmcp.config.js and build
     if (!manifest) {
-      const configPath = path.join(packageDir, 'frontmcp.config.js');
-      const configJsonPath = path.join(packageDir, 'frontmcp.config.json');
+      const hasConfig = CONFIG_FILENAMES.some((f) => fs.existsSync(path.join(packageDir, f)));
 
-      if (fs.existsSync(configPath) || fs.existsSync(configJsonPath)) {
+      if (hasConfig) {
         console.log(`${c('cyan', '[install]')} no manifest found, building from config...`);
+        if (
+          fs.existsSync(path.join(packageDir, 'package.json')) &&
+          !fs.existsSync(path.join(packageDir, 'node_modules'))
+        ) {
+          console.log(`${c('cyan', '[install]')} installing project dependencies...`);
+          await runCmd('npm', ['install', '--silent'], { cwd: packageDir });
+        }
         await runCmd('npx', ['frontmcp', 'build', '--target', 'node'], {
           cwd: packageDir,
         });
-        manifest = findManifest(path.join(packageDir, 'dist')) || findManifest(packageDir);
+        manifest = findManifest(packageDir);
       }
     }
 
     if (!manifest) {
       throw new Error(
         'Could not find or generate a manifest. Ensure the package has a ' +
-          'frontmcp.config.js (or frontmcp.config.json) or was built with "frontmcp build --target node".',
+          'frontmcp.config.{ts,js,json,mjs,cjs} or was built with "frontmcp build --target node".',
       );
     }
 
@@ -107,14 +115,15 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
       fs.chmodSync(runnerPath, 0o755);
     }
 
-    // 5. Install native addons
-    if (manifestData.dependencies.nativeAddons.length > 0) {
-      console.log(`${c('cyan', '[install]')} installing native dependencies...`);
+    // 5. Install runtime packages (externalized from the bundle) and native addons
+    const packagesToInstall = [...resolveRuntimePackageSpecs(packageDir), ...manifestData.dependencies.nativeAddons];
+    console.log(`${c('cyan', '[install]')} installing runtime dependencies...`);
+    if (!fs.existsSync(path.join(installDir, 'package.json'))) {
       await runCmd('npm', ['init', '-y', '--silent'], { cwd: installDir });
-      await runCmd('npm', ['install', ...manifestData.dependencies.nativeAddons, '--save', '--silent'], {
-        cwd: installDir,
-      });
     }
+    await runCmd('npm', ['install', ...packagesToInstall, '--save', '--silent'], {
+      cwd: installDir,
+    });
 
     // 6. Set up SQLite data dir if needed
     if (manifestData.storage.type === 'sqlite') {
@@ -162,24 +171,40 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
   }
 }
 
+function readManifestIn(dir: string): { data: ExecManifest; dir: string } | null {
+  let files: string[];
+  try {
+    files = fs.readdirSync(dir);
+  } catch {
+    return null;
+  }
+  const manifestFile = files.find((f: string) => f.endsWith('.manifest.json'));
+  if (!manifestFile) return null;
+  const data = JSON.parse(fs.readFileSync(path.join(dir, manifestFile), 'utf-8')) as ExecManifest;
+  return { data, dir };
+}
+
+/**
+ * Find `<name>.manifest.json` in `dir`, `dir/dist`, or a per-target subdirectory of
+ * `dir/dist` (`frontmcp build` writes to `dist/node`, `dist/cli`, ...).
+ */
 function findManifest(dir: string): { data: ExecManifest; dir: string } | null {
   if (!fs.existsSync(dir)) return null;
 
-  const files = fs.readdirSync(dir);
-  const manifestFile = files.find((f: string) => f.endsWith('.manifest.json'));
+  const direct = readManifestIn(dir);
+  if (direct) return direct;
 
-  if (manifestFile) {
-    const manifestPath = path.join(dir, manifestFile);
-    const data = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as ExecManifest;
-    return { data, dir };
-  }
-
-  // Check dist/ subdirectory
   const distDir = path.join(dir, 'dist');
-  if (fs.existsSync(distDir)) {
-    return findManifest(distDir);
-  }
+  if (!fs.existsSync(distDir)) return null;
 
+  const inDist = readManifestIn(distDir);
+  if (inDist) return inDist;
+
+  for (const entry of fs.readdirSync(distDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const nested = readManifestIn(path.join(distDir, entry.name));
+    if (nested) return nested;
+  }
   return null;
 }
 

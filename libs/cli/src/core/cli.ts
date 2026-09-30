@@ -31,7 +31,8 @@ async function main(): Promise<void> {
     await program.parseAsync(process.argv);
     // Defer process.exit() by one event-loop tick so native addon destructors
     // (ONNX runtime, etc.) can release mutexes before V8 tears down.
-    setImmediate(() => process.exit(0));
+    // Honour a code a command set via `process.exitCode` (e.g. `doctor` on a failed check).
+    setImmediate(() => process.exit(process.exitCode ?? 0));
   } catch (err: unknown) {
     if (err instanceof ProjectCommandFailedError) {
       // The child already printed its own output via stdio:'inherit'; just

@@ -1,6 +1,7 @@
 export { defineConfig } from './define-config';
 export {
   loadFrontMcpConfig,
+  loadFrontMcpConfigFromFile,
   tryLoadFrontMcpConfig,
   validateConfig,
   findDeployment,

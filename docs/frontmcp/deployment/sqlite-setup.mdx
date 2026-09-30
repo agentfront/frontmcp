@@ -101,6 +101,10 @@ export default class Server {}
 | `busyTimeoutMs`        | `number`  | `5000`     | How long a connection waits for a lock held by another process before failing with `SQLITE_BUSY` |
 | `ttlCleanupIntervalMs` | `number`  | `60000`    | Interval in ms for purging expired keys                                                          |
 
+<Note>
+  The database location can also be supplied through the `FRONTMCP_SQLITE_PATH` environment variable (used by `frontmcp start --db`, `frontmcp socket --db` and the generated installer). It overrides `sqlite.path`; other `sqlite` options are kept.
+</Note>
+
 ## Encryption
 
 Enable at-rest encryption to protect stored session data. Keys are stored in plaintext (needed for lookups); only values are encrypted.

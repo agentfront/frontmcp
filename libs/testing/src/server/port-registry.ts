@@ -4,7 +4,8 @@
  *
  * This module provides:
  * 1. Dedicated port ranges for each E2E test project
- * 2. Port reservation with proper locking
+ * 2. Port reservation with proper locking (a bound socket inside the process, plus a lock file
+ *    that also covers other Jest workers, which each load their own copy of this module)
  * 3. Verification that ports are actually available before assignment
  */
 
@@ -76,6 +77,9 @@ export const E2E_PORT_RANGES = {
   // Protocol revision E2E tests (50460-50479)
   'demo-e2e-protocol-20260728': { start: 50460, size: 20 },
 
+  // Testing library E2E tests (50480-50499)
+  'demo-e2e-testing': { start: 50480, size: 20 },
+
   // Mock servers and utilities (50900-50999)
   'mock-oauth': { start: 50900, size: 10 },
   'mock-api': { start: 50910, size: 10 },
@@ -105,6 +109,88 @@ interface PortReservation {
 /** Global registry of reserved ports */
 const reservedPorts = new Map<number, PortReservation>();
 
+/** Ports whose cross-process lock file this process currently holds */
+const lockedPorts = new Set<number>();
+
+/** A lock older than this is treated as abandoned even if its pid was recycled */
+const LOCK_MAX_AGE_MS = 10 * 60 * 1000;
+
+interface FsLike {
+  mkdirSync(path: string, options: { recursive: boolean }): void;
+  writeFileSync(path: string, data: string, options: { flag: string }): void;
+  readFileSync(path: string, encoding: 'utf8'): string;
+  unlinkSync(path: string): void;
+}
+
+function lockDir(): string | undefined {
+  try {
+    const os = require('node:os');
+    const path = require('node:path');
+    return path.join(os.tmpdir(), 'frontmcp-testing-ports');
+  } catch {
+    return undefined;
+  }
+}
+
+function pidIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * Take the cross-process lock for a port. Node-only and best effort: where the filesystem is not
+ * available (or not writable) the socket reservation alone is used, as before.
+ */
+function acquirePortLock(port: number): boolean {
+  if (lockedPorts.has(port)) return false;
+  let fs: FsLike;
+  let file: string;
+  try {
+    fs = require('node:fs');
+    const dir = lockDir();
+    if (!dir) return true;
+    fs.mkdirSync(dir, { recursive: true });
+    file = require('node:path').join(dir, `${port}.lock`);
+  } catch {
+    return true;
+  }
+
+  const payload = JSON.stringify({ pid: process.pid, at: Date.now() });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      fs.writeFileSync(file, payload, { flag: 'wx' });
+      lockedPorts.add(port);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') return true;
+      try {
+        const held = JSON.parse(fs.readFileSync(file, 'utf8')) as { pid?: number; at?: number };
+        const fresh = typeof held.at === 'number' && Date.now() - held.at < LOCK_MAX_AGE_MS;
+        if (fresh && typeof held.pid === 'number' && pidIsAlive(held.pid)) return false;
+        fs.unlinkSync(file);
+      } catch {
+        // unreadable or already gone: try to take it again
+      }
+    }
+  }
+  return false;
+}
+
+function releasePortLock(port: number): void {
+  if (!lockedPorts.delete(port)) return;
+  try {
+    const fs: FsLike = require('node:fs');
+    const dir = lockDir();
+    if (dir) fs.unlinkSync(require('node:path').join(dir, `${port}.lock`));
+  } catch {
+    // already removed
+  }
+}
+
 /** Track port index within each project's range */
 const projectPortIndex = new Map<string, number>();
 
@@ -132,19 +218,29 @@ export function getPortRange(project: string): { start: number; size: number } {
 export async function reservePort(
   project: string,
   preferredPort?: number,
-): Promise<{ port: number; release: () => Promise<void> }> {
+): Promise<{ port: number; release: () => Promise<void>; releaseSocket: () => Promise<void> }> {
   const range = getPortRange(project);
 
+  const handle = (port: number) => ({
+    port,
+    // Frees the socket only, so the server about to be spawned can bind the port; the lock file stays
+    releaseSocket: async () => {
+      await releasePort(port);
+    },
+    release: async () => {
+      await releasePort(port);
+      releasePortLock(port);
+    },
+  });
+
+  // `port: 0` (like an omitted port) means "any free port"
+  const wantsSpecificPort = preferredPort !== undefined && Number.isInteger(preferredPort) && preferredPort > 0;
+
   // If a preferred port is specified, try to use it
-  if (preferredPort !== undefined) {
+  if (wantsSpecificPort) {
     const reservation = await tryReservePort(preferredPort, project);
     if (reservation) {
-      return {
-        port: preferredPort,
-        release: async () => {
-          await releasePort(preferredPort);
-        },
-      };
+      return handle(preferredPort);
     }
     // If preferred port is not available, fall through to range allocation
     console.warn(`[PortRegistry] Preferred port ${preferredPort} not available for ${project}, allocating from range`);
@@ -158,8 +254,8 @@ export async function reservePort(
     const port = range.start + (index % range.size);
     index = (index + 1) % range.size;
 
-    // Skip if already reserved
-    if (reservedPorts.has(port)) {
+    // Skip if already reserved or locked
+    if (reservedPorts.has(port) || lockedPorts.has(port)) {
       continue;
     }
 
@@ -169,26 +265,15 @@ export async function reservePort(
       // Update the index for next allocation
       projectPortIndex.set(project, index);
 
-      return {
-        port,
-        release: async () => {
-          await releasePort(port);
-        },
-      };
+      return handle(port);
     }
   }
 
-  // If all ports in range are taken, try dynamic allocation
-  const dynamicPort = await findAvailablePortInRange(51000, 52000);
-  if (dynamicPort) {
-    const reservation = await tryReservePort(dynamicPort, project);
-    if (reservation) {
-      return {
-        port: dynamicPort,
-        release: async () => {
-          await releasePort(dynamicPort);
-        },
-      };
+  // If all ports in range are taken, fall back to dynamic allocation
+  for (let port = 51000; port < 52000; port++) {
+    if (reservedPorts.has(port) || lockedPorts.has(port)) continue;
+    if (await tryReservePort(port, project)) {
+      return handle(port);
     }
   }
 
@@ -203,11 +288,17 @@ export async function reservePort(
  * Try to reserve a specific port by binding a temporary server to it
  */
 async function tryReservePort(port: number, project: string): Promise<boolean> {
+  if (!acquirePortLock(port)) {
+    // Another process (or another server of this one) has claimed it
+    return false;
+  }
+
   return new Promise((resolve) => {
     const server = createServer();
 
     server.once('error', () => {
       // Port is not available
+      releasePortLock(port);
       resolve(false);
     });
 
@@ -243,43 +334,6 @@ async function releasePort(port: number): Promise<void> {
 }
 
 /**
- * Find an available port within a range
- */
-async function findAvailablePortInRange(start: number, end: number): Promise<number | null> {
-  for (let port = start; port < end; port++) {
-    if (reservedPorts.has(port)) {
-      continue;
-    }
-
-    const available = await isPortAvailable(port);
-    if (available) {
-      return port;
-    }
-  }
-  return null;
-}
-
-/**
- * Check if a port is available
- */
-async function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = createServer();
-
-    server.once('error', () => {
-      resolve(false);
-    });
-
-    // Omit host to match Express default behavior (:: on dual-stack, 0.0.0.0 otherwise)
-    server.listen(port, () => {
-      server.close(() => {
-        resolve(true);
-      });
-    });
-  });
-}
-
-/**
  * Get the primary port for a project (first port in its range)
  */
 export function getProjectPort(project: string): number {
@@ -309,6 +363,9 @@ export function getProjectPorts(project: string, count: number): number[] {
 export async function releaseAllPorts(): Promise<void> {
   const releases = Array.from(reservedPorts.keys()).map((port) => releasePort(port));
   await Promise.all(releases);
+  for (const port of Array.from(lockedPorts)) {
+    releasePortLock(port);
+  }
 }
 
 /**

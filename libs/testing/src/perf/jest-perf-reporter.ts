@@ -3,12 +3,15 @@
  * @description Custom Jest reporter for collecting and outputting performance measurements
  */
 
-import type { Config, Reporter, TestResult, AggregatedResult, TestContext } from '@jest/reporters';
+import { execSync } from 'child_process';
+
+import type { AggregatedResult, Config, Reporter, TestContext, TestResult } from '@jest/reporters';
 import type { Test } from '@jest/test-result';
-import { getGlobalMeasurements, clearGlobalMeasurements } from './perf-fixtures';
-import { ReportGenerator, saveReports } from './report-generator';
+
 import { getBaselineStore } from './baseline-store';
-import type { PerfMeasurement, PerfBaseline } from './types';
+import { clearGlobalMeasurements, getGlobalMeasurements } from './perf-fixtures';
+import { ReportGenerator, saveReports } from './report-generator';
+import type { PerfBaseline, PerfMeasurement } from './types';
 
 // ═══════════════════════════════════════════════════════════════════
 // JEST PERF REPORTER
@@ -168,7 +171,6 @@ class JestPerfReporter implements Reporter {
     // Try to get from git commands if not already set
     if (!commitHash || !branch) {
       try {
-        const { execSync } = await import('child_process');
         if (!commitHash) {
           commitHash = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim() || undefined;
         }
