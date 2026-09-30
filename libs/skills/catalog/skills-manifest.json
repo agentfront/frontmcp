@@ -74,7 +74,7 @@
         },
         {
           "name": "ui-widgets",
-          "description": "@Tool({ ui }) \u2014 template formats, trusted markup (html / escapeStringResults), servingMode, host-detect resourceMode, CSP, widgetAccessible, MCP Apps spec."
+          "description": "@Tool({ ui }) \u2014 template formats, trusted markup (html / escapeStringResults), servingMode, host-detect resourceMode, CSP, ignored options, MCP Apps spec."
         },
         {
           "name": "annotations",
@@ -362,10 +362,10 @@
           "name": "24-tool-with-ui-csp-and-bridge",
           "level": "advanced",
           "description": "Interactive tool widget that fetches from an allow-listed CSP origin and invokes another tool via `window.FrontMcpBridge.callTool` \u2014 the full pattern for live-data widgets that need cross-tool composition.",
-          "tags": ["ui", "csp", "widgetAccessible", "FrontMcpBridge", "interactive-widget"],
+          "tags": ["ui", "csp", "callTool", "FrontMcpBridge", "interactive-widget"],
           "features": [
             "Restricting the widget's outbound `fetch` via `ui.csp.connectDomains` (emitted on the resource per #455)",
-            "Opting the widget into cross-tool calls with `widgetAccessible: true` and using `window.FrontMcpBridge.callTool(name, args)` instead of host-specific APIs",
+            "Calling other tools from the widget with `window.FrontMcpBridge.callTool(name, args)` instead of host-specific APIs",
             "Building the markup with `ctx.helpers.html` and embedding initial data into the inline `<script>` via `trustedHtml(jsonEmbed(...))` (`jsonEmbed` escapes `<`, `>` and `&`)",
             "Surfacing in-flight status via `invocationStatus.invoking` / `invoked` so the host UI shows feedback"
           ]

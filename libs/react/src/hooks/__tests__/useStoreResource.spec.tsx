@@ -1,12 +1,15 @@
+import { act, renderHook } from '@testing-library/react';
 import React from 'react';
-import { renderHook, act } from '@testing-library/react';
-import { useStoreResource } from '../useStoreResource';
-import { FrontMcpContext } from '../../provider/FrontMcpContext';
-import { serverRegistry } from '../../registry/ServerRegistry';
+
+import type { DirectClient, DirectMcpServer } from '@frontmcp/sdk';
+
 import { ComponentRegistry } from '../../components/ComponentRegistry';
+import { FrontMcpContext } from '../../provider/FrontMcpContext';
+import { createWrappedServer } from '../../registry/createWrappedServer';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
+import { serverRegistry } from '../../registry/ServerRegistry';
 import type { FrontMcpContextValue } from '../../types';
-import type { DirectMcpServer, DirectClient } from '@frontmcp/sdk';
+import { useStoreResource } from '../useStoreResource';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -478,6 +481,44 @@ describe('useStoreResource', () => {
       expect(result.current.loading).toBe(true);
       expect(result.current.data).toBeNull();
       expect(result.current.error).toBeNull();
+    });
+  });
+  describe('dynamic (store-backed) resources', () => {
+    it('re-renders subscribers when the store publishes a new value', async () => {
+      const dynamicRegistry = new DynamicRegistry();
+      const read = (count: number) => async () => ({
+        contents: [{ uri: 'state://counter', text: JSON.stringify({ count }) }],
+      });
+      dynamicRegistry.registerResource({ uri: 'state://counter', name: 'counter', read: read(1) });
+
+      const base = {
+        connect: jest.fn().mockResolvedValue({ ...mockClient }),
+      } as unknown as DirectMcpServer;
+      const client = await createWrappedServer(base, dynamicRegistry).connect();
+
+      serverRegistry.register('default', mockServer);
+      serverRegistry.update('default', { client, status: 'connected' });
+      const ctx: FrontMcpContextValue = {
+        name: 'default',
+        registry: new ComponentRegistry(),
+        dynamicRegistry,
+        getDynamicRegistry: () => dynamicRegistry,
+        connect: jest.fn(),
+      };
+      const wrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(FrontMcpContext.Provider, { value: ctx }, children);
+
+      const { result } = renderHook(() => useStoreResource('state://counter'), { wrapper });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(result.current.data).toEqual({ count: 1 });
+
+      await act(async () => {
+        dynamicRegistry.updateResourceRead('state://counter', read(2));
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(result.current.data).toEqual({ count: 2 });
     });
   });
 });

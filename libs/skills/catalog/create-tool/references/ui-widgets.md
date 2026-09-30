@@ -1,6 +1,6 @@
 ---
 name: ui-widgets
-description: @Tool({ ui }) — template formats, trusted markup (html / escapeStringResults), servingMode, host-detect resourceMode, CSP, widgetAccessible, MCP Apps spec.
+description: @Tool({ ui }) — template formats, trusted markup (html / escapeStringResults), servingMode, host-detect resourceMode, CSP, ignored options, MCP Apps spec.
 ---
 
 # Tool UI widgets
@@ -39,12 +39,12 @@ That's it. The framework:
 
 ## Template formats
 
-| Format                       | Shape                                     | When                                                                                                      |
-| ---------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| **FileSource (recommended)** | `{ file: widgetPath }`                    | `.tsx` / `.jsx` / `.html` source files. Anchor with `import.meta.url`.                                    |
-| **Function**                 | `` (ctx) => ctx.helpers.html`…` ``        | Quick demo / one-liner HTML. Annotate `ctx: TemplateContext<In, Out>` ([why](#typescript-gotcha-ts7006)). |
-| **HTML / MDX string**        | `'<div>…</div>'` or `'# Title\n<Card />'` | Static markup; pair with `mdxComponents` for MDX.                                                         |
-| **React component**          | `MyWidget`                                | SSR React. Set `hydrate: false` (default) for Claude/ChatGPT.                                             |
+| Format                       | Shape                                   | When                                                                                                                               |
+| ---------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **FileSource (recommended)** | `{ file: widgetPath }`                  | `.tsx` / `.jsx` / `.html` source files. Anchor with `import.meta.url`.                                                             |
+| **Function**                 | `` (ctx) => ctx.helpers.html`…` ``      | Quick demo / one-liner HTML. Annotate `ctx: TemplateContext<In, Out>` ([why](#typescript-gotcha-ts7006)).                          |
+| **HTML / Markdown string**   | `'<div>…</div>'` or `'# Title\n- item'` | A string with both `<` and `>` is HTML as written; any other string is Markdown, converted on the server. MDX is **not** compiled. |
+| **React component**          | `MyWidget`                              | SSR React. Set `hydrate: false` (default) for Claude/ChatGPT.                                                                      |
 
 The renderer auto-detects which one you passed.
 
@@ -64,26 +64,54 @@ Or use the FileSource form — it sidesteps the issue.
 
 ## `ToolUIConfig` fields
 
-| Field                                                                                                           | Default     | Purpose                                                                                                                         |
-| --------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `template`                                                                                                      | —           | Required. Function / HTML-string / React component / `{ file }` FileSource.                                                     |
-| `widgetDescription`                                                                                             | —           | Human-readable description surfaced to the host UI.                                                                             |
-| `servingMode`                                                                                                   | `'auto'`    | `'inline'` / `'static'` / `'hybrid'` / `'direct-url'` / `'custom-url'`. `'auto'` picks the best per-host.                       |
-| `displayMode`                                                                                                   | `'inline'`  | `'inline'` / `'fullscreen'` / `'pip'` — host display hint.                                                                      |
-| `preferredHeight`                                                                                               | —           | `number` (px) or CSS string (`'50vh'`). Initial widget height; auto-resize grows/shrinks from this baseline.                    |
-| `minHeight` / `maxHeight`                                                                                       | —           | `number` (px) or CSS string. Clamp the widget height; auto-resize never reports outside this range.                             |
-| `aspectRatio`                                                                                                   | —           | CSS `aspect-ratio` (`'16 / 9'` or `1.5`). Hosts that honor it size by ratio instead of measured height.                         |
-| `autoResize`                                                                                                    | `true`      | Report the document height (margins included) to the host after the handshake. Set `false` to opt out (CSS still applies).      |
-| `csp`                                                                                                           | —           | `{ connectDomains?, resourceDomains? }` — emitted on the resource content's `_meta.ui.csp` (#455). Claude honors CSP only here. |
-| `contentSecurity`                                                                                               | strict      | `{ allowUnsafeLinks?, allowInlineScripts?, bypassSanitization? }` — keep defaults.                                              |
-| `escapeStringResults`                                                                                           | unset       | `true` escapes plain string results of a template function; `html` / `trustedHtml` stay markup. Default in 1.9.                 |
-| `widgetAccessible`                                                                                              | `false`     | `true` exposes `window.FrontMcpBridge.callTool` in the widget.                                                                  |
-| `resourceUri`                                                                                                   | auto        | Override the `ui://widget/{toolName}.html` URI.                                                                                 |
-| `uiType`                                                                                                        | `'auto'`    | Force `'html'` / `'react'` / `'mdx'` / `'markdown'`.                                                                            |
-| `resourceMode`                                                                                                  | host-detect | `'cdn'` / `'inline'`. Leave unset — the framework host-detects (Claude → `'inline'`, #456).                                     |
-| `hydrate`                                                                                                       | `false`     | Enable React hydration after SSR. Off by default — avoids React error #418 in Claude.                                           |
-| `externals`, `dependencies`                                                                                     | —           | CDN externals for FileSource widgets.                                                                                           |
-| `customShell`, `invocationStatus`, `widgetCapabilities`, `prefersBorder`, `sandboxDomain`, `htmlResponsePrefix` | —           | Platform-specific knobs.                                                                                                        |
+| Field                                                                                                     | Default     | Purpose                                                                                                                                                                                                                                            |
+| --------------------------------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `template`                                                                                                | —           | Required. `{ file }` FileSource (recommended) / function / HTML or Markdown string / React component.                                                                                                                                              |
+| `widgetDescription`                                                                                       | —           | **No effect yet** — accepted, not read.                                                                                                                                                                                                            |
+| `servingMode`                                                                                             | `'auto'`    | `'inline'` / `'static'` / `'hybrid'`. `'auto'` picks the best per-host. `'direct-url'` / `'custom-url'` are not implemented (served inline, startup warning). `'hybrid'` sends only `_meta['ui/component']` = `{ type, hash, toolName }`, no code. |
+| `displayMode`                                                                                             | `'inline'`  | **No effect yet.**                                                                                                                                                                                                                                 |
+| `preferredHeight`                                                                                         | —           | `number` (px) or CSS string (`'50vh'`). Initial widget height; auto-resize grows/shrinks from this baseline.                                                                                                                                       |
+| `minHeight` / `maxHeight`                                                                                 | —           | `number` (px) or CSS string. Clamp the widget height; auto-resize never reports outside this range.                                                                                                                                                |
+| `aspectRatio`                                                                                             | —           | CSS `aspect-ratio` (`'16 / 9'` or `1.5`). Hosts that honor it size by ratio instead of measured height.                                                                                                                                            |
+| `autoResize`                                                                                              | `true`      | Report the document height (margins included) to the host after the handshake. Set `false` to opt out (CSS still applies).                                                                                                                         |
+| `csp`                                                                                                     | —           | `{ connectDomains?, resourceDomains? }` — emitted on the resource content's `_meta.ui.csp` (#455). Claude honors CSP only here.                                                                                                                    |
+| `contentSecurity`                                                                                         | strict      | **No effect yet.**                                                                                                                                                                                                                                 |
+| `escapeStringResults`                                                                                     | unset       | `true` escapes plain string results of a template function; `html` / `trustedHtml` stay markup. Default in 1.9.                                                                                                                                    |
+| `widgetAccessible`                                                                                        | `false`     | **No effect yet.**                                                                                                                                                                                                                                 |
+| `resourceUri`                                                                                             | auto        | Override the `ui://widget/{toolName}.html` URI.                                                                                                                                                                                                    |
+| `uiType`                                                                                                  | `'auto'`    | **No effect yet** — the type is auto-detected.                                                                                                                                                                                                     |
+| `resourceMode`                                                                                            | host-detect | `'cdn'` / `'inline'`. Leave unset — the framework host-detects (Claude → `'inline'`, #456).                                                                                                                                                        |
+| `hydrate`                                                                                                 | `false`     | **No effect yet.**                                                                                                                                                                                                                                 |
+| `externals`, `dependencies`                                                                               | —           | CDN externals for FileSource widgets.                                                                                                                                                                                                              |
+| `customShell`, `invocationStatus`, `widgetCapabilities`                                                   | —           | Platform-specific knobs.                                                                                                                                                                                                                           |
+| `prefersBorder`, `sandboxDomain`, `runtimeOptions`, `mdxComponents`, `bundlingMode`, `htmlResponsePrefix` | —           | **No effect yet.** There is no dual HTML payload for Claude.                                                                                                                                                                                       |
+
+## Components and hooks
+
+`@frontmcp/ui` has **no** `card()`, `badge()`, `descriptionList()`, `button()`, `form()` or `input()` functions. Widgets use React: components from `@frontmcp/ui/components` (`Alert`, `Avatar`, `Badge`, `Button`, `Card`, `List`, `Loader`, `Modal`, `Select`, `Table`, `TextField`) and bridge hooks from `@frontmcp/ui/react` (`useToolInput`, `useToolOutput`, `useCallTool`, `useTheme`, `useHostContext`, ...). A `.tsx` widget receives `{ output, loading }`.
+
+`useCallTool` returns a **tuple**, not an object:
+
+```tsx
+import { Card } from '@frontmcp/ui/components';
+import { useCallTool } from '@frontmcp/ui/react';
+
+export default function Widget({ output }: { output: { id: string } | null }) {
+  const [refresh, { data, loading, error, called }, reset] = useCallTool('get_order');
+  if (!output) return <Card title="Loading..." />;
+  return (
+    <button disabled={loading} onClick={() => refresh({ orderId: output.id })}>
+      Refresh
+    </button>
+  );
+}
+```
+
+## Markdown, MDX and sanitization
+
+- A string template with both `<` and `>` is HTML and is used as written. Any other string is Markdown: headings, paragraphs, fenced code, lists, bold, italic, inline code and links are converted server-side; raw HTML is escaped; a link survives only if its target starts with `http:`, `https:`, `mailto:`, `/` or `#`.
+- MDX is not compiled: `{output.field}` expressions are not evaluated and `mdxComponents` is ignored. Use a `.tsx` FileSource widget for interactivity.
+- Author-written markup (template literals, HTML strings, `.tsx`) is trusted and not sanitized. Values interpolated into `` html`…` `` are escaped; plain string results are escaped only with `escapeStringResults: true`.
 
 ## Widget resources and per-call renders
 
@@ -169,7 +197,7 @@ Projects created with `frontmcp create` already have it through the `frontmcp` p
 
 ## Widget bridge — `window.FrontMcpBridge`
 
-When the widget needs to read tool data or invoke other tools, the bridge IIFE is injected automatically. Set `widgetAccessible: true` to enable `callTool`:
+When the widget needs to read tool data or invoke other tools, the bridge IIFE is injected automatically; no option is needed (`widgetAccessible` is accepted but has no effect yet):
 
 ```typescript
 ui: {
@@ -182,19 +210,18 @@ ui: {
       };
     </script>
   `,
-  widgetAccessible: true,
 }
 ```
 
-| Bridge method                                                   | Purpose                                                 |
-| --------------------------------------------------------------- | ------------------------------------------------------- |
-| `callTool(name, args)`                                          | Invoke another tool (requires `widgetAccessible: true`) |
-| `getToolInput()` / `getToolOutput()` / `getStructuredContent()` | Read the tool data                                      |
-| `getWidgetState()` / `setWidgetState(state)`                    | Persisted per-widget state                              |
-| `getHostContext()` / `getTheme()` / `getDisplayMode()`          | Host context                                            |
-| `onContextChange(cb)`                                           | Subscribe to host context changes (handshake included)  |
-| `hasCapability(cap)`                                            | Probe adapter capabilities                              |
-| `onToolResponseMetadata(cb)`                                    | Subscribe to `ui/html` arrival (inline mode)            |
+| Bridge method                                                   | Purpose                                                |
+| --------------------------------------------------------------- | ------------------------------------------------------ |
+| `callTool(name, args)`                                          | Invoke another tool (the host may still refuse)        |
+| `getToolInput()` / `getToolOutput()` / `getStructuredContent()` | Read the tool data                                     |
+| `getWidgetState()` / `setWidgetState(state)`                    | Persisted per-widget state                             |
+| `getHostContext()` / `getTheme()` / `getDisplayMode()`          | Host context                                           |
+| `onContextChange(cb)`                                           | Subscribe to host context changes (handshake included) |
+| `hasCapability(cap)`                                            | Probe adapter capabilities                             |
+| `onToolResponseMetadata(cb)`                                    | Subscribe to `ui/html` arrival (inline mode)           |
 
 The bridge routes to the right host adapter (OpenAI SDK / Claude postMessage / FrontMCP direct) automatically. **Never call `window.openai.*` directly** — it works on OpenAI but breaks everywhere else.
 
@@ -257,7 +284,7 @@ Per-host behavior:
 
 - [`22-tool-with-ui-html-template`](../examples/22-tool-with-ui-html-template.md) — inline function template
 - [`23-tool-with-ui-filesource-tsx`](../examples/23-tool-with-ui-filesource-tsx.md) — `.tsx` widget, host-detect
-- [`24-tool-with-ui-csp-and-bridge`](../examples/24-tool-with-ui-csp-and-bridge.md) — CSP + `widgetAccessible` + bridge
+- [`24-tool-with-ui-csp-and-bridge`](../examples/24-tool-with-ui-csp-and-bridge.md) — CSP + bridge `callTool`
 
 ## Related rules
 

@@ -68,25 +68,31 @@ const result = readDomBySelector('.card');
 Register DOM readers as MCP resource handlers so AI agents can inspect page content:
 
 ```ts
-import { create } from '@frontmcp/sdk';
-import { readDomById, readDomBySelector } from '@frontmcp/react';
+import { create, resourceTemplate, readDomById, readDomBySelector } from '@frontmcp/react';
+
+const domById = resourceTemplate({
+  name: 'DOM Element by ID',
+  uriTemplate: 'dom://byId/{id}',
+  mimeType: 'text/html',
+})((uri, { id }) => readDomById(id));
+
+const domBySelector = resourceTemplate({
+  name: 'DOM Elements by Selector',
+  uriTemplate: 'dom://selector/{selector}',
+  mimeType: 'text/html',
+})((uri, { selector }) => readDomBySelector(decodeURIComponent(selector)));
 
 const server = await create({
   info: { name: 'browser-app', version: '1.0.0' },
-  resources: [
-    {
-      uri: 'dom://byId/{id}',
-      name: 'DOM Element by ID',
-      read: ({ id }) => readDomById(id),
-    },
-    {
-      uri: 'dom://selector/{selector}',
-      name: 'DOM Elements by Selector',
-      read: ({ selector }) => readDomBySelector(decodeURIComponent(selector)),
-    },
-  ],
+  resources: [domById, domBySelector],
 });
 ```
+
+<Note>
+  `create({ resources })` accepts classes decorated with `@Resource` / `@ResourceTemplate` and the values returned by
+  `resource(...)(handler)` / `resourceTemplate(...)(handler)`. A plain `{ uri, name, read }` object is rejected with
+  "Expected a class or a resource function".
+</Note>
 
 An AI agent can then call `readResource('dom://byId/login-form')` to inspect a form, or `readResource('dom://selector/.error-message')` to check for error states on the page.
 

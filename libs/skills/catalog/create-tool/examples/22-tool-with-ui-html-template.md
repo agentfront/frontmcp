@@ -38,7 +38,6 @@ type Out = { city: string; temperatureF: number; conditions: string };
   inputSchema,
   outputSchema,
   ui: {
-    widgetDescription: 'Current weather card',
     // `html` escapes interpolated values — no manual escapeHtml needed
     template: (ctx: TemplateContext<In, Out>) => ctx.helpers.html`
       <div style="padding:16px;font-family:system-ui;border-radius:12px;background:#f5f7fa">

@@ -910,6 +910,16 @@ class GetWeatherTool extends ToolContext {
 FrontMCP auto-detects your template type:
 
 <CodeGroup>
+```ts FileSource (recommended)
+import { fileURLToPath } from 'node:url';
+
+const widgetPath = fileURLToPath(new URL('./weather.widget.tsx', import.meta.url));
+
+ui: {
+  template: { file: widgetPath }, // .tsx / .jsx / .html source file
+}
+```
+
 ```ts HTML Template
 import { type TemplateContext } from '@frontmcp/sdk';
 
@@ -918,32 +928,20 @@ ui: {
 template: (ctx: TemplateContext<MyInput, MyOutput>) =>
 ctx.helpers.html`<p>${ctx.output.message}</p>`,
 }
+```
 
-````
-
-```tsx React Component
-import WeatherCard from './components/WeatherCard';
-
+```ts Markdown String
 ui: {
-  template: WeatherCard, // React component
-}
-````
-
-```ts MDX Template
-ui: {
-  template: `
-# Weather Report
-
-**Location:** {output.location}
-**Temperature:** {output.temperature}°C
-
-<Alert type="info">Data updated every 15 minutes</Alert>
-  `,
-  mdxComponents: { Alert },
+  // No `<` and `>` together => treated as Markdown and converted to HTML.
+  template: '# Weather Report\n\n- Data updated every 15 minutes',
 }
 ```
 
 </CodeGroup>
+
+A string that contains both `<` and `>` is used as HTML. **MDX is not compiled**: JSX tags in a string reach the client as HTML, `{output.field}` expressions are not evaluated, and `mdxComponents` is ignored. Use a `.tsx` FileSource widget for anything interactive.
+
+Markdown strings are converted on the server (headings, paragraphs, fenced code, lists, bold, italic, inline code, links). Raw HTML in the Markdown is escaped, and a link survives only when its target starts with `http:`, `https:`, `mailto:`, `/` or `#`.
 
 <Warning>
 **TypeScript: annotate the `ctx` parameter (TS7006).** When you inline an HTML template as an arrow function, you need to annotate `ctx`. Because `ui.template` is a union of multiple callable shapes (`TemplateBuilderFn | string | ((props: any) => any) | FileSource`), TypeScript can't pick a single contextual type for the arrow's parameter, so `template: (ctx) => …` errors with `Parameter 'ctx' implicitly has an 'any' type`. Either annotate `ctx: TemplateContext<MyInput, MyOutput>` (imported from `@frontmcp/sdk`), or move the widget into its own `.tsx` file and use the `FileSource` form (`template: { file: … }`) — both avoid the inference gap.
@@ -951,18 +949,19 @@ ui: {
 
 ### UI Configuration Options
 
-| Option                | Description                                                                             |
-| --------------------- | --------------------------------------------------------------------------------------- |
-| `template`            | HTML function, React component, or MDX string                                           |
-| `displayMode`         | `'inline'` (default), `'fullscreen'`, or `'pip'`                                        |
-| `widgetDescription`   | Human-readable description shown to users                                               |
-| `widgetAccessible`    | Allow widget to call tools via MCP Bridge                                               |
-| `csp`                 | Content Security Policy (allowed domains)                                               |
-| `servingMode`         | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`, etc.     |
-| `htmlResponsePrefix`  | Text prefix for Claude dual-payload HTML block (default: `'Here is the visual result'`) |
-| `mdxComponents`       | Custom components for MDX templates                                                     |
-| `hydrate`             | Enable client-side React hydration for interactivity                                    |
-| `escapeStringResults` | Escape plain string results; `html` / `trustedHtml` stay markup (default in 1.9)        |
+| Option                | Description                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| `template`            | `{ file }` FileSource, HTML function, React component, or HTML / Markdown string         |
+| `csp`                 | Content Security Policy (allowed domains)                                                |
+| `servingMode`         | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`             |
+| `resourceMode`        | `'cdn'` or `'inline'` bundling for `.tsx` widgets (host-detected when unset)              |
+| `escapeStringResults` | Escape plain string results; `html` / `trustedHtml` stay markup (default in 1.9)         |
+
+**Options with no effect yet.** These pass validation but nothing reads them, so setting one changes nothing; startup logs a warning per tool that lists them: `widgetDescription`, `widgetAccessible`, `displayMode`, `prefersBorder`, `sandboxDomain`, `contentSecurity`, `hydrate`, `runtimeOptions`, `mdxComponents`, `bundlingMode`, `uiType` and `htmlResponsePrefix`. There is no dual HTML payload for Claude, so `htmlResponsePrefix` does nothing.
+
+**Serving modes.** `'direct-url'` and `'custom-url'` are not implemented: the widget is served inline, as with `'inline'`, and startup logs a warning. `'hybrid'` pre-compiles the shell at startup and sends only a reference in each call's `_meta['ui/component']` (`{ type, hash, toolName }`) — no component code and no data.
+
+**Sanitization.** Markup you author (template literals, HTML strings, `.tsx` files) is trusted and not sanitized. Values interpolated into `` html`…` `` are escaped; plain string results are escaped only with `escapeStringResults: true`; Markdown strings are always escaped.
 
 <Warning>
 **Build template markup with `ctx.helpers.html`.** A plain string a template function returns is rendered as markup when it looks like HTML, so returning unescaped tool output injects tags. The `html` tagged template escapes interpolated values; `ctx.helpers.trustedHtml(markup)` marks markup you already made safe. Set `ui.escapeStringResults: true` (or `@FrontMcp({ ui: { escapeStringResults: true } })`) to escape plain string results now — FrontMCP 1.9 does so by default. See [Trusted markup](/frontmcp/guides/building-tool-ui#trusted-markup).
@@ -1027,29 +1026,37 @@ Detection only applies to per-call rendering (inline / hybrid / lean serving mod
 
 ### Using @frontmcp/ui Components
 
-Combine Tool UI with the `@frontmcp/ui` component library:
+`@frontmcp/ui` is a React library: components come from `@frontmcp/ui/components` and bridge hooks from `@frontmcp/ui/react`. It has no `card()`, `badge()`, `descriptionList()`, `button()`, `form()` or `input()` functions.
 
-```ts
-import { card, badge, button, descriptionList } from '@frontmcp/ui';
+```tsx get-order.widget.tsx
+import { Badge, Card } from '@frontmcp/ui/components';
+import { useCallTool } from '@frontmcp/ui/react';
+
+export default function OrderWidget({ output }: { output: { id: string; status: string; customer: string } | null }) {
+  // useCallTool returns a tuple: [call, { data, loading, error, called }, reset]
+  const [refresh, { loading }] = useCallTool('get_order');
+
+  if (!output) return <Card title="Order Details" subtitle="Loading..." />;
+
+  return (
+    <Card title="Order Details" elevation={2}>
+      <span>{output.id}</span> <Badge variant="success">{output.status}</Badge>
+      <p>{output.customer}</p>
+      <button disabled={loading} onClick={() => refresh({ orderId: output.id })}>
+        Refresh
+      </button>
+    </Card>
+  );
+}
+```
+
+```ts get-order.tool.ts
+import { fileURLToPath } from 'node:url';
 
 @Tool({
   name: 'get_order',
   inputSchema: { orderId: z.string() },
-  ui: {
-    template: (ctx) => {
-      const { output, helpers } = ctx;
-      return card(`
-        <div class="flex justify-between">
-          <span>${helpers.escapeHtml(output.id)}</span>
-          ${badge(output.status, { variant: 'success' })}
-        </div>
-        ${descriptionList([
-          { term: 'Customer', description: output.customer },
-          { term: 'Total', description: helpers.formatCurrency(output.total) },
-        ])}
-      `, { title: 'Order Details' });
-    },
-  },
+  ui: { template: { file: fileURLToPath(new URL('./get-order.widget.tsx', import.meta.url)) } },
 })
 class GetOrderTool extends ToolContext { /* ... */ }
 ```

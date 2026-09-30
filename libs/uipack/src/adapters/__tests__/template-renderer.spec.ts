@@ -223,6 +223,29 @@ describe('renderToolTemplate', () => {
     });
   });
 
+  describe('ui.csp', () => {
+    const csp = { connectDomains: ['https://api.example.com'], resourceDomains: ['https://assets.example.com'] };
+    const cspTag = (html: string) => /http-equiv="Content-Security-Policy" content="([^"]*)"/.exec(html)?.[1] ?? '';
+
+    it.each([
+      ['function', () => '<div>x</div>'],
+      ['string', '<div>x</div>'],
+    ])('adds the declared origins to the page CSP for a %s template', (_label, template) => {
+      const result = renderToolTemplate({ toolName: 't', input: {}, output: {}, template, csp });
+      const policy = cspTag(result.html);
+
+      expect(policy).toContain('connect-src');
+      expect(policy).toContain('https://api.example.com');
+      expect(policy).toContain('https://assets.example.com');
+    });
+
+    it('leaves the page CSP free of undeclared origins', () => {
+      const result = renderToolTemplate({ toolName: 't', input: {}, output: {}, template: '<div>x</div>' });
+
+      expect(cspTag(result.html)).not.toContain('api.example.com');
+    });
+  });
+
   describe('string template', () => {
     it('should wrap string in shell', () => {
       const result = renderToolTemplate({
@@ -348,5 +371,71 @@ describe('renderToolTemplate', () => {
       expect(typeof result.html).toBe('string');
       expect(result.html.length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe('renderToolTemplate — function templates (#645)', () => {
+  it('renders a capitalized HTML builder function instead of an empty shell', () => {
+    const Card = (ctx: { output: { name: string } }) => `<section id="card">${ctx.output.name}</section>`;
+
+    const result = renderToolTemplate({ toolName: 'card_tool', input: {}, output: { name: 'Ada' }, template: Card });
+
+    expect(result.html).toContain('<section id="card">Ada</section>');
+  });
+
+  it('warns that a React component reference cannot be bundled and points at { file }', () => {
+    const warn = jest.fn();
+    function Widget() {
+      throw new Error('Invalid hook call');
+    }
+
+    const result = renderToolTemplate({
+      toolName: 'react_tool',
+      input: {},
+      output: {},
+      template: Widget,
+      logger: { warn },
+    });
+
+    expect(result.uiType).toBe('react');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('react_tool');
+    expect(warn.mock.calls[0][0]).toContain('{ file:');
+  });
+
+  it('warns for a class component and a memo component too', () => {
+    const warn = jest.fn();
+    class Klass {
+      render() {
+        return null;
+      }
+    }
+    const Memo = Object.assign(() => ({ $$typeof: Symbol.for('react.element') }), {
+      $$typeof: Symbol.for('react.memo'),
+    });
+
+    renderToolTemplate({ toolName: 'k', input: {}, output: {}, template: Klass, logger: { warn } });
+    renderToolTemplate({ toolName: 'm', input: {}, output: {}, template: Memo, logger: { warn } });
+
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('converts a Markdown string template to HTML and drops unsafe links', () => {
+    const result = renderToolTemplate({
+      toolName: 'md',
+      input: {},
+      output: {},
+      template: '# Report\n\n- **one**\n- [bad](javascript:alert(1))',
+    });
+
+    expect(result.uiType).toBe('markdown');
+    expect(result.html).toContain('<h1>Report</h1>');
+    expect(result.html).toContain('<li><strong>one</strong></li>');
+    expect(result.html).not.toContain('javascript:');
+  });
+
+  it('keeps an HTML string template as written', () => {
+    const result = renderToolTemplate({ toolName: 'h', input: {}, output: {}, template: '<p id="x">hi</p>' });
+    expect(result.html).toContain('<p id="x">hi</p>');
   });
 });
