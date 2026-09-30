@@ -5,6 +5,7 @@
 
 import type { ClientInfo, ElicitationCreateRequest, ElicitationHandler } from '../client/mcp-test-client.types';
 import type { InterceptorChain } from '../interceptor';
+import { errorMessage, isAbortError, markInterceptedError } from './error-utils';
 import type {
   JsonRpcRequest,
   JsonRpcResponse,
@@ -157,7 +158,7 @@ export class StreamableHttpTransport implements McpTransport {
         }
 
         case 'error':
-          throw interceptResult.error;
+          throw markInterceptedError(interceptResult.error);
 
         case 'continue':
           // Use possibly modified request
@@ -243,7 +244,7 @@ export class StreamableHttpTransport implements McpTransport {
     } catch (error) {
       clearTimeout(timeoutId);
 
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (isAbortError(error)) {
         return {
           jsonrpc: '2.0',
           id: message.id ?? null,
@@ -293,7 +294,7 @@ export class StreamableHttpTransport implements McpTransport {
     } catch (error) {
       clearTimeout(timeoutId);
 
-      if (error instanceof Error && error.name !== 'AbortError') {
+      if (!isAbortError(error)) {
         throw error;
       }
     }
@@ -344,7 +345,7 @@ export class StreamableHttpTransport implements McpTransport {
         error: {
           code: -32700,
           message: 'Parse error',
-          data: error instanceof Error ? error.message : 'Unknown error',
+          data: errorMessage(error),
         },
       };
     }
@@ -810,9 +811,9 @@ export class StreamableHttpTransport implements McpTransport {
       headers['User-Agent'] = `${this.config.clientInfo.name}/${this.config.clientInfo.version}`;
     }
 
-    // Only add Authorization header if we have a token AND not in public mode
-    // Public mode explicitly skips auth headers for CI/CD and public docs testing
-    if (this.authToken && !this.publicMode) {
+    // An explicit token is always sent, including in public mode: public mode only means the
+    // client does not go and fetch an anonymous token for itself.
+    if (this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
 
