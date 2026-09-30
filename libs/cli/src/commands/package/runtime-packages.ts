@@ -26,11 +26,30 @@ function readDeclaredRanges(packageDir: string): Record<string, string> {
   }
 }
 
+function defaultRange(name: (typeof RUNTIME_PACKAGES)[number]): string {
+  return name === 'reflect-metadata' ? REFLECT_METADATA_RANGE : getSelfVersion();
+}
+
+/**
+ * Turn a declared range into something `npm install` can resolve from the install
+ * directory: relative `file:` targets are anchored to the project, and workspace/link
+ * (or missing local) targets fall back to the default range.
+ */
+function normalizeRange(name: (typeof RUNTIME_PACKAGES)[number], range: string, packageDir: string): string {
+  if (range.startsWith('workspace:') || range.startsWith('link:')) return defaultRange(name);
+  if (range.startsWith('file:')) {
+    const target = range.slice('file:'.length);
+    const absolute = path.resolve(packageDir, target);
+    return fs.existsSync(absolute) ? `file:${absolute}` : defaultRange(name);
+  }
+  return range;
+}
+
 /** `name@range` specs for the runtime packages, preferring the versions the project declares. */
 export function resolveRuntimePackageSpecs(packageDir: string): string[] {
   const declared = readDeclaredRanges(packageDir);
   return RUNTIME_PACKAGES.map((name) => {
-    const range = declared[name] ?? (name === 'reflect-metadata' ? REFLECT_METADATA_RANGE : getSelfVersion());
-    return `${name}@${range}`;
+    const range = declared[name];
+    return `${name}@${range ? normalizeRange(name, range, packageDir) : defaultRange(name)}`;
   });
 }

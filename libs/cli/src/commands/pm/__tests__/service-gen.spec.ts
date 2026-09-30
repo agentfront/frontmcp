@@ -63,6 +63,10 @@ describe('pm.service generated units keep the start flags (#642)', () => {
     expect(unit).toContain('"--db" "/var/data/my-app.sqlite"');
   });
 
+  it('systemd unit escapes literal percent signs in arguments', () => {
+    expect(generateSystemdUnit({ name: 'a', entry: '/x/100%/main.ts' })).toContain('"/x/100%%/main.ts"');
+  });
+
   it('launchd plist passes --port to `frontmcp start`', () => {
     const plist = generateLaunchdPlist(data);
     expect(plist).toContain('<string>--port</string>\n    <string>4100</string>');

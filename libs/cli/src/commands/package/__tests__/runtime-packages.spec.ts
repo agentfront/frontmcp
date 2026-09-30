@@ -43,4 +43,28 @@ describe('resolveRuntimePackageSpecs', () => {
     fs.writeFileSync(path.join(dir, 'package.json'), '{not json');
     expect(resolveRuntimePackageSpecs(dir)[1]).toBe('reflect-metadata@^0.2.2');
   });
+
+  it('anchors a relative file: target to the project directory', () => {
+    fs.mkdirSync(path.join(dir, 'vendor', 'sdk'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({ dependencies: { '@frontmcp/sdk': 'file:./vendor/sdk' } }),
+    );
+    expect(resolveRuntimePackageSpecs(dir)[0]).toBe(`@frontmcp/sdk@file:${path.join(dir, 'vendor', 'sdk')}`);
+  });
+
+  it('falls back to the default range for workspace:, link: and missing file: targets', () => {
+    for (const range of ['workspace:*', 'link:../sdk', 'file:./missing']) {
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ dependencies: { '@frontmcp/sdk': range } }));
+      expect(resolveRuntimePackageSpecs(dir)[0]).toMatch(/^@frontmcp\/sdk@\d+\.\d+\.\d+/);
+    }
+  });
+
+  it('keeps git and remote specs unchanged', () => {
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({ dependencies: { '@frontmcp/sdk': 'git+https://github.com/acme/sdk.git#v1' } }),
+    );
+    expect(resolveRuntimePackageSpecs(dir)[0]).toBe('@frontmcp/sdk@git+https://github.com/acme/sdk.git#v1');
+  });
 });

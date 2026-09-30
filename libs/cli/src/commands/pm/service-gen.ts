@@ -82,7 +82,7 @@ After=network.target
 [Service]
 Type=simple
 ExecStart="${process.execPath}" "${frontmcpBin}" ${buildStartArgs(data)
-    .map((arg) => `"${arg.replace(/(["\\])/g, '\\$1')}"`)
+    .map((arg) => `"${arg.replace(/(["\\])/g, '\\$1').replace(/%/g, '%%')}"`)
     .join(' ')}
 Restart=on-failure
 RestartSec=5
