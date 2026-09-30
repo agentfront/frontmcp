@@ -33,6 +33,13 @@ export interface SqliteStorageOptions {
    * @default true
    */
   walMode?: boolean;
+
+  /**
+   * Milliseconds a connection waits for a lock held by another process before
+   * failing with SQLITE_BUSY.
+   * @default 5000
+   */
+  busyTimeoutMs?: number;
 }
 
 /**
@@ -47,6 +54,7 @@ export const sqliteStorageOptionsSchema = z.object({
     .optional(),
   ttlCleanupIntervalMs: z.number().int().nonnegative().optional().default(60000),
   walMode: z.boolean().optional().default(true),
+  busyTimeoutMs: z.number().int().nonnegative().optional().default(5000),
 });
 
 /**

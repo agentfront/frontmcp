@@ -3,8 +3,8 @@
  * @description Factory functions that create HealthProbe instances from known infrastructure.
  */
 
-import type { HealthProbe, HealthProbeResult } from './health.types';
 import type { HealthCheckResult } from '../remote-mcp/resilience/health-check';
+import type { HealthProbe, HealthProbeResult } from './health.types';
 
 /** Safely extract an error message from an unknown thrown value. */
 function getErrorMessage(err: unknown): string {
@@ -74,8 +74,10 @@ export function createRemoteAppProbe(appId: string, provider: HealthResultProvid
     name: `remote:${appId}`,
     async check(): Promise<HealthProbeResult> {
       const result = provider.getHealthStatus(appId);
-      if (!result) {
-        return { status: 'unhealthy', error: 'No health check result available' };
+      // No completed check yet is "unknown", not "down": reporting it unhealthy
+      // made /readyz answer 503 for the first health-check interval (#646).
+      if (!result || (result.status === 'unknown' && result.consecutiveFailures === 0)) {
+        return { status: 'degraded', details: { state: 'unknown' } };
       }
       return {
         status: result.status === 'healthy' ? 'healthy' : result.status === 'degraded' ? 'degraded' : 'unhealthy',

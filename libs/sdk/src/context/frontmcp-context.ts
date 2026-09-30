@@ -128,6 +128,11 @@ export interface FrontMcpContextArgs {
   metadata?: RequestMetadata;
   /** Optional configuration */
   config?: FrontMcpContextConfig;
+  /**
+   * The hosting platform's per-request bindings object (a Cloudflare Worker's `env`).
+   * Present only when the runtime supplies one.
+   */
+  platformEnv?: unknown;
 }
 
 /**
@@ -261,6 +266,13 @@ export class FrontMcpContext {
   /** Request metadata (headers, user-agent, etc.) */
   readonly metadata: RequestMetadata;
 
+  /**
+   * The hosting platform's bindings object for this request: a Cloudflare Worker's `env`
+   * (KV namespaces, D1 databases, R2 buckets, Durable Objects, `[vars]`, secrets).
+   * `undefined` on Node, where bindings do not exist.
+   */
+  readonly platformEnv: unknown;
+
   // =====================
   // Auth (mutable, progressively populated)
   // =====================
@@ -306,6 +318,7 @@ export class FrontMcpContext {
     this.traceContext = args.traceContext ?? generateTraceContext();
     this.timestamp = args.timestamp ?? Date.now();
     this._authInfo = args.authInfo ?? {};
+    this.platformEnv = args.platformEnv;
 
     // Configuration with defaults
     this.config = {

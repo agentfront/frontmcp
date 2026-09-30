@@ -75,6 +75,24 @@ const corsOptionsSchema = z.object({
   maxAge: z.number().optional(),
 });
 
+const securityHeaderValueSchema = z.union([z.string(), z.literal(false)]);
+
+/** Response security headers (see `SecurityHeadersOptions`). */
+const securityHeadersSchema = z.object({
+  hsts: securityHeaderValueSchema.optional(),
+  contentTypeOptions: securityHeaderValueSchema.optional(),
+  frameOptions: securityHeaderValueSchema.optional(),
+  custom: z.record(z.string(), z.string()).optional(),
+  csp: z
+    .object({
+      enabled: z.boolean().optional(),
+      directives: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
+      reportUri: z.string().optional(),
+      reportOnly: z.boolean().optional(),
+    })
+    .optional(),
+});
+
 /**
  * HTTP options Zod schema.
  */
@@ -144,6 +162,8 @@ export const httpOptionsSchema = z.object({
    * `session:verify` flow. Reserved-path collisions are rejected at startup.
    */
   routes: z.array(httpRouteSchema).optional(),
+  /** Response security headers; see `SecurityHeadersOptions`. */
+  securityHeaders: securityHeadersSchema.optional(),
 } satisfies RawZodShape<HttpOptionsInterface>);
 
 /**

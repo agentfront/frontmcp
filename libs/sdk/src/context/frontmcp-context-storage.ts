@@ -23,6 +23,7 @@ import { AsyncLocalStorage, randomUUID } from '@frontmcp/utils';
 
 import { Provider } from '../common/decorators';
 import { ProviderScope } from '../common/metadata';
+import { ServerRequestTokens } from '../common/tokens';
 import { RequestContextNotAvailableError } from '../errors/mcp.error';
 import { FrontMcpContext, type FrontMcpContextArgs, type FrontMcpContextConfig } from './frontmcp-context';
 import { extractMetadata } from './metadata.utils';
@@ -124,7 +125,13 @@ export class FrontMcpContextStorage {
     const headers = request.headers ?? {};
     const headerSessionId = typeof headers['mcp-session-id'] === 'string' ? headers['mcp-session-id'].trim() : '';
     const sessionId = headerSessionId.length > 0 ? headerSessionId : `anon:${randomUUID()}`;
-    return this.runFromHeaders(headers, { sessionId, scopeId, peerAddress: request.socket?.remoteAddress }, fn);
+    // The web-fetch adapter carries the Worker's bindings on the request (ServerRequestTokens.webEnv).
+    const platformEnv = (request as Record<PropertyKey, unknown>)[ServerRequestTokens.webEnv];
+    return this.runFromHeaders(
+      headers,
+      { sessionId, scopeId, peerAddress: request.socket?.remoteAddress, platformEnv },
+      fn,
+    );
   }
 
   private withServerConfig(args: FrontMcpContextArgs): FrontMcpContextArgs {

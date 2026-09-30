@@ -13,8 +13,9 @@ import {
   type ServerRequestHandler,
   type ServerResponse,
 } from '../../common';
-import type { SecurityOptions } from '../../common/types/options/http/interfaces';
+import type { SecurityHeadersOptions, SecurityOptions } from '../../common/types/options/http/interfaces';
 import { PayloadTooLargeError } from '../../errors/mcp.error';
+import { resolveSecurityHeaders } from '../middleware/csp.middleware';
 import { createHostValidationMiddleware } from '../middleware/host-validation.middleware';
 import { allowedHostsFromEnv, deriveAllowedHosts, shouldEnforceDerivedHosts } from '../security/resolve-allowed-hosts';
 import { HostServerAdapter } from './base.host.adapter';
@@ -42,6 +43,12 @@ export interface ExpressHostAdapterOptions {
    * Includes bind address and DNS rebinding protection.
    */
   security?: SecurityOptions;
+
+  /**
+   * Response security headers. `nosniff` and `X-Frame-Options: DENY` are sent by
+   * default; `FRONTMCP_*` env vars fill the rest. See {@link SecurityHeadersOptions}.
+   */
+  securityHeaders?: SecurityHeadersOptions;
 
   /**
    * Maximum body size for `express.json()`. Accepts a number of bytes or a
@@ -82,6 +89,16 @@ export class ExpressHostAdapter extends HostServerAdapter {
 
   constructor(options?: ExpressHostAdapterOptions) {
     super();
+
+    // Never advertise the framework, and send the security headers on every
+    // response — including 4xx/5xx from the middleware below (host validation,
+    // 413) — so they are installed first.
+    this.app.disable('x-powered-by');
+    const securityHeaders = resolveSecurityHeaders(options?.securityHeaders);
+    this.app.use((_req, res, next) => {
+      for (const [name, value] of Object.entries(securityHeaders)) res.setHeader(name, value);
+      next();
+    });
 
     // CORS must run BEFORE the body parsers so the 413-on-too-large response
     // still carries `Access-Control-Allow-Origin` and friends. If CORS runs

@@ -1,12 +1,13 @@
 // We test the Node.js version directly
 import {
   detectRuntimeContext,
-  getRuntimeContext,
-  resetRuntimeContext,
-  isEntryAvailable,
   entryAvailabilitySchema,
+  getRuntimeContext,
+  isEntryAvailable,
+  resetRuntimeContext,
+  type EntryAvailability,
+  type RuntimeContext,
 } from '../runtime-context';
-import type { RuntimeContext, EntryAvailability } from '../runtime-context';
 
 describe('runtime-context', () => {
   afterEach(() => {
@@ -162,6 +163,24 @@ describe('runtime-context', () => {
       expect(a).not.toBe(b);
       // Values should still be equivalent
       expect(a.platform).toBe(b.platform);
+    });
+
+    it('sees a NODE_ENV that is set after the context was first cached (#646, Workers [vars] bridge)', () => {
+      const original = process.env['NODE_ENV'];
+      try {
+        process.env['NODE_ENV'] = 'development';
+        const ctx = getRuntimeContext();
+        expect(ctx.env).toBe('development');
+
+        // The generated Worker entry copies `[vars]` into process.env on the first
+        // request, long after decorator evaluation already read the context.
+        process.env['NODE_ENV'] = 'production';
+        expect(getRuntimeContext().env).toBe('production');
+        expect(ctx.env).toBe('production');
+      } finally {
+        if (original === undefined) delete process.env['NODE_ENV'];
+        else process.env['NODE_ENV'] = original;
+      }
     });
   });
 

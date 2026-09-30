@@ -212,7 +212,7 @@ export const persistenceConfigSchema = z
   .object({
     redis: redisOptionsSchema.optional(),
     sqlite: sqliteOptionsSchema.optional(),
-    defaultTtlMs: z.number().int().positive().default(3600000),
+    defaultTtlMs: z.number().int().positive().optional(),
   })
   .refine((cfg) => !(cfg.redis && cfg.sqlite), {
     message: 'Invalid persistence config: choose either redis or sqlite, not both',

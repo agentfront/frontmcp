@@ -51,6 +51,7 @@ class MainApp {}
         provider: 'redis',
         host: process.env['REDIS_HOST'] || 'redis',
         port: 6379,
+        defaultTtlMs: 30 * 60_000, // slides while the owning pod serves the session; default 1 hour
       },
     },
   },

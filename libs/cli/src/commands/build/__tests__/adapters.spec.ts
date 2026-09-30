@@ -484,6 +484,26 @@ describe('Build Adapters', () => {
     });
   });
 
+  describe('security headers from frontmcp.config (#646)', () => {
+    const context = { securityHeadersEnv: { FRONTMCP_HSTS: 'max-age=1', FRONTMCP_FRAME_OPTIONS: 'off' } };
+
+    it.each([
+      ['cloudflare', cloudflareAdapter],
+      ['lambda', lambdaAdapter],
+      ['vercel', vercelAdapter],
+      ['distributed', distributedAdapter],
+    ] as const)('%s setup template fills in unset FRONTMCP_* header variables', (_name, adapter) => {
+      const setup = adapter.getSetupTemplate?.(context) ?? '';
+      expect(setup).toContain('if (process.env.FRONTMCP_HSTS === undefined) process.env.FRONTMCP_HSTS = "max-age=1";');
+      expect(setup).toContain('FRONTMCP_FRAME_OPTIONS = "off"');
+    });
+
+    it('emits nothing extra without security header config', () => {
+      expect(lambdaAdapter.getSetupTemplate?.({})).not.toContain('FRONTMCP_HSTS');
+      expect(vercelAdapter.getSetupTemplate?.()).not.toContain('FRONTMCP_HSTS');
+    });
+  });
+
   describe('transport.http.path reaches every built server (#642)', () => {
     it.each([
       ['vercel', vercelAdapter],

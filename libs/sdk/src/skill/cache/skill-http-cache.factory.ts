@@ -6,6 +6,8 @@
  * @module skill/cache/skill-http-cache.factory
  */
 
+import { attachRedisErrorListener } from '@frontmcp/utils';
+
 import type { FrontMcpLogger } from '../../common/index.js';
 import { MemorySkillHttpCache, RedisSkillHttpCache, type SkillHttpCache } from './skill-http-cache.js';
 
@@ -160,6 +162,7 @@ async function createRedisCache(
     enableReadyCheck: false,
     maxRetriesPerRequest: 3,
   });
+  attachRedisErrorListener(client, { label: 'SkillHttpCache' });
 
   await client.connect();
 

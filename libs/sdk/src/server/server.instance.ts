@@ -60,6 +60,7 @@ export class FrontMcpServerInstance extends FrontMcpServer {
       this.host = new ExpressHostAdapter({
         ...(corsConfig ? { cors: corsConfig } : {}),
         ...(this.config.security ? { security: this.config.security } : {}),
+        ...(this.config.securityHeaders ? { securityHeaders: this.config.securityHeaders } : {}),
         ...(this.config.bodyLimit !== undefined ? { bodyLimit: this.config.bodyLimit } : {}),
         ...(this.config.urlencodedLimit !== undefined ? { urlencodedLimit: this.config.urlencodedLimit } : {}),
       });

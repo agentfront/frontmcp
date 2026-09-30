@@ -159,8 +159,20 @@ export interface ElicitationStoreResult {
 /**
  * Detect storage type from environment or config.
  */
-function detectStorageType(storage: RootStorage): 'memory' | 'redis' | 'upstash' | 'auto' {
-  // Check environment variables to infer type
+function detectStorageType(
+  storage: RootStorage,
+  configuredType?: StorageConfig['type'],
+): 'memory' | 'redis' | 'upstash' | 'auto' {
+  // The resolved config wins; env probing is only a last-ditch guess.
+  if (configuredType === 'redis' || configuredType === 'upstash' || configuredType === 'memory') {
+    return configuredType;
+  }
+  const backend =
+    (storage as unknown as { type?: string; backendName?: string }).type ??
+    (storage as unknown as { backendName?: string }).backendName;
+  if (backend === 'redis' || backend === 'upstash' || backend === 'memory') {
+    return backend;
+  }
   if (getEnv('UPSTASH_REDIS_REST_URL')) {
     return 'upstash';
   }
@@ -320,7 +332,10 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
   }
 
   // Check for Vercel KV - not supported for elicitation (no pub/sub)
-  if (finalStorageConfig?.type === 'vercel-kv' || getEnv('KV_REST_API_URL')) {
+  // The ambient KV_REST_API_URL only selects Vercel KV when nothing else was
+  // configured; it must not shadow an explicit Redis/Upstash backend.
+  const explicitBackend = Boolean(storageConfig || redis);
+  if (finalStorageConfig?.type === 'vercel-kv' || (!explicitBackend && getEnv('KV_REST_API_URL'))) {
     throw new ElicitationNotSupportedError(
       'Vercel KV is not supported for elicitation stores. ' +
         'Elicitation requires pub/sub for cross-node result routing, which Vercel KV does not support. ' +
@@ -355,7 +370,7 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
 
   // Create the base store
   let store: ElicitationStore = new StorageElicitationStore(storage, logger);
-  const type = detectStorageType(storage);
+  const type = detectStorageType(storage, finalStorageConfig?.type);
 
   // Determine if encryption should be enabled
   const encryptionEnabled = encryption?.enabled ?? 'auto';

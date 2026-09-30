@@ -6,7 +6,7 @@ icon: 'shield'
 keywords: ['frontmcp', 'mcp', 'model context protocol', 'deployment', 'production', 'hosting', 'security headers', 'csp', 'hsts', 'typescript']
 ---
 
-FrontMCP applies security headers to every HTTP response, including Content Security Policy (CSP), Strict-Transport-Security (HSTS), X-Frame-Options, and X-Content-Type-Options. Configure them via `frontmcp.config` server settings --- they are injected as environment variables at build time and read by the built-in middleware.
+FrontMCP applies security headers to every HTTP response, including Content Security Policy (CSP), Strict-Transport-Security (HSTS), X-Frame-Options, and X-Content-Type-Options. `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are on by default, and `X-Powered-By` is never sent. Configure the rest with `frontmcp.config` server settings, with `@FrontMcp({ http: { securityHeaders } })`, or with `FRONTMCP_*` environment variables. The Express host and the fetch handler used on Cloudflare Workers, Vercel Edge and Deno share one resolver, so both send the same headers.
 
 ## Quick Start
 
@@ -39,7 +39,7 @@ export default defineConfig({
 });
 ```
 
-Build and deploy --- headers are applied automatically on every response.
+`frontmcp dev` passes this config to the server as environment variables. The `cloudflare`, `vercel`, `lambda` and `distributed` builds write them into the generated `serverless-setup.js`, and only where the platform has not already set that variable, so a real environment variable always wins. The `node` target has no setup file: set the `FRONTMCP_*` variables where the server runs, or configure `http.securityHeaders` on `@FrontMcp` (see below).
 
 ## CSP Configuration
 
@@ -76,24 +76,48 @@ directives: {
 | Custom headers              | `headers.custom`             | ---       | Record of additional header name-value pairs |
 
 <Note>
-  `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are applied by default even without explicit configuration. Set them to empty strings to disable.
+  `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are applied by default even without explicit configuration. Set `contentTypeOptions` or `frameOptions` to `false` to omit the header (the environment variable equivalent is `off`).
 </Note>
+
+## Decorator Option
+
+The same settings can live on `@FrontMcp`. This is the only route that works on every target without a build step:
+
+```typescript
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  http: {
+    securityHeaders: {
+      hsts: 'max-age=31536000; includeSubDomains',
+      frameOptions: 'SAMEORIGIN',
+      csp: { enabled: true, directives: { 'default-src': ["'self'"] } },
+      custom: { 'Referrer-Policy': 'no-referrer' },
+    },
+  },
+})
+class Server {}
+```
+
+Precedence, highest first: `http.securityHeaders`, then the `FRONTMCP_*` variables, then the defaults. `csp.enabled: false` in the decorator overrides `FRONTMCP_CSP_ENABLED`.
 
 ## Environment Variables
 
-All settings are injected as environment variables at build time by the deployment adapter:
+The settings map to these variables (see the note above for which commands set them for you):
 
-| Variable                        | Maps To                             |
-| ------------------------------- | ----------------------------------- |
-| `FRONTMCP_CSP_ENABLED`          | `server.csp.enabled`                |
-| `FRONTMCP_CSP_DIRECTIVES`       | `server.csp.directives`             |
-| `FRONTMCP_CSP_REPORT_URI`       | `server.csp.reportUri`              |
-| `FRONTMCP_CSP_REPORT_ONLY`      | `server.csp.reportOnly`             |
-| `FRONTMCP_HSTS`                 | `server.headers.hsts`               |
-| `FRONTMCP_CONTENT_TYPE_OPTIONS` | `server.headers.contentTypeOptions` |
-| `FRONTMCP_FRAME_OPTIONS`        | `server.headers.frameOptions`       |
+| Variable                        | Maps To                                 |
+| ------------------------------- | --------------------------------------- |
+| `FRONTMCP_CSP_ENABLED`          | `server.csp.enabled`                    |
+| `FRONTMCP_CSP_DIRECTIVES`       | `server.csp.directives`                 |
+| `FRONTMCP_CSP_REPORT_URI`       | `server.csp.reportUri`                  |
+| `FRONTMCP_CSP_REPORT_ONLY`      | `server.csp.reportOnly`                 |
+| `FRONTMCP_HSTS`                 | `server.headers.hsts`                   |
+| `FRONTMCP_CONTENT_TYPE_OPTIONS` | `server.headers.contentTypeOptions`     |
+| `FRONTMCP_FRAME_OPTIONS`        | `server.headers.frameOptions`           |
+| `FRONTMCP_HEADERS_CUSTOM`       | `server.headers.custom` (a JSON object) |
 
-You can override these at runtime without rebuilding:
+`FRONTMCP_HSTS`, `FRONTMCP_CONTENT_TYPE_OPTIONS` and `FRONTMCP_FRAME_OPTIONS` accept `off`, `false` or `none` to omit the header. A malformed `FRONTMCP_HEADERS_CUSTOM` is ignored.
+
+You can set or override these at runtime without rebuilding:
 
 ```bash
 FRONTMCP_CSP_ENABLED=1 \

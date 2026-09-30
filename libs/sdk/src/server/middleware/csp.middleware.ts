@@ -8,6 +8,8 @@
 
 import { getEnv, getEnvFlag } from '@frontmcp/utils';
 
+import type { SecurityHeadersOptions } from '../../common/types/options/http/interfaces';
+
 /**
  * CSP configuration read from environment variables (set by build adapter).
  */
@@ -83,11 +85,13 @@ export function getCspHeaderName(reportOnly: boolean): string {
 
 /**
  * Security headers read from environment variables.
- * Set by the build adapter from frontmcp.config server.headers settings.
+ * Set by the CLI (`frontmcp dev`, serverless setup templates) from frontmcp.config server.headers.
+ * `off` / `false` / `none` omits a header.
  *
  * FRONTMCP_HSTS=max-age=31536000; includeSubDomains
  * FRONTMCP_CONTENT_TYPE_OPTIONS=nosniff
  * FRONTMCP_FRAME_OPTIONS=DENY
+ * FRONTMCP_HEADERS_CUSTOM={"Referrer-Policy":"no-referrer"}
  */
 export interface SecurityHeaders {
   hsts?: string;
@@ -101,10 +105,34 @@ export interface SecurityHeaders {
  */
 export function readSecurityHeadersFromEnv(): SecurityHeaders {
   return {
-    hsts: getEnv('FRONTMCP_HSTS'),
-    contentTypeOptions: getEnv('FRONTMCP_CONTENT_TYPE_OPTIONS') ?? 'nosniff',
-    frameOptions: getEnv('FRONTMCP_FRAME_OPTIONS') ?? 'DENY',
+    hsts: readHeaderEnv('FRONTMCP_HSTS'),
+    contentTypeOptions: readHeaderEnv('FRONTMCP_CONTENT_TYPE_OPTIONS', 'nosniff'),
+    frameOptions: readHeaderEnv('FRONTMCP_FRAME_OPTIONS', 'DENY'),
+    custom: readCustomHeadersFromEnv(),
   };
+}
+
+/** A header env var: unset gives `fallback`; `off` / `false` / `none` omits the header. */
+function readHeaderEnv(name: string, fallback?: string): string | undefined {
+  const value = getEnv(name);
+  if (value === undefined || value === '') return fallback;
+  return ['off', 'false', 'none'].includes(value.trim().toLowerCase()) ? undefined : value;
+}
+
+/** `FRONTMCP_HEADERS_CUSTOM` — a JSON object of extra response headers. Malformed values are ignored. */
+function readCustomHeadersFromEnv(): Record<string, string> | undefined {
+  const raw = getEnv('FRONTMCP_HEADERS_CUSTOM');
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined;
+    // fromEntries defines own properties, so a "__proto__" key cannot rewrite the prototype.
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -137,4 +165,46 @@ export function applySecurityHeaders(
       res.setHeader(headerName, headerValue);
     }
   }
+}
+
+/**
+ * Resolve the response security headers for a deployment as a plain header map.
+ *
+ * Precedence per header: explicit `options`, then the `FRONTMCP_*` env vars,
+ * then the default (`nosniff`, `DENY`). `false` omits a header. Shared by the
+ * Express host and the web-fetch handler so both send identical headers.
+ */
+export function resolveSecurityHeaders(options: SecurityHeadersOptions = {}): Record<string, string> {
+  const env = readSecurityHeadersFromEnv();
+  const pick = (explicit: string | false | undefined, fromEnv: string | undefined): string | undefined =>
+    explicit === false ? undefined : (explicit ?? fromEnv);
+
+  const resolved: SecurityHeaders = {
+    hsts: pick(options.hsts, env.hsts),
+    contentTypeOptions: pick(options.contentTypeOptions, env.contentTypeOptions),
+    frameOptions: pick(options.frameOptions, env.frameOptions),
+    custom: { ...env.custom, ...options.custom },
+  };
+
+  let csp: CspOptions | undefined;
+  if (options.csp?.enabled === false) {
+    csp = undefined;
+  } else if (options.csp?.enabled === true) {
+    const directives: Record<string, string> = {};
+    for (const [name, value] of Object.entries(options.csp.directives ?? {})) {
+      directives[name] = Array.isArray(value) ? value.join(' ') : value;
+    }
+    csp = {
+      enabled: true,
+      directives,
+      reportUri: options.csp.reportUri,
+      reportOnly: options.csp.reportOnly ?? false,
+    };
+  } else {
+    csp = readCspFromEnv();
+  }
+
+  const headers: Record<string, string> = {};
+  applySecurityHeaders({ setHeader: (name, value) => void (headers[name] = value) }, resolved, csp);
+  return headers;
 }

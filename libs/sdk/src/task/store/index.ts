@@ -3,6 +3,7 @@ export { StorageTaskStore } from './storage-task.store';
 export {
   createTaskStore,
   createMemoryTaskStore,
+  resolvesToVercelKvTaskBackend,
   TaskStoreNotSupportedError,
   type TaskStoreOptions,
   type TaskStoreResult,

@@ -5,7 +5,7 @@ description: Configure CSP, HSTS, X-Frame-Options, and X-Content-Type-Options vi
 
 # Configure Security Headers
 
-Set Content Security Policy (CSP), HSTS, and other security headers on every HTTP response. Configure them in `frontmcp.config` per deployment target — the build adapter injects them as environment variables that the built-in middleware reads at runtime.
+Set Content Security Policy (CSP), HSTS, and other security headers on every HTTP response. Configure them in `frontmcp.config` per deployment target — `frontmcp dev` and the `cloudflare`, `vercel`, `lambda` and `distributed` builds pass them to the server as `FRONTMCP_*` environment variables (set only when the platform has not already defined them). The `node` target has no setup file: set the variables where the server runs or use `@FrontMcp({ http: { securityHeaders } })`. `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are on by default and `X-Powered-By` is never sent; the Express host and the Workers/Vercel Edge fetch handler share one resolver.
 
 ## When to Use This Skill
 
@@ -109,7 +109,9 @@ curl -I http://localhost:3000/healthz
 | `frameOptions`       | `string \| false`       | `DENY`    | `X-Frame-Options`           |
 | `custom`             | `Record<string,string>` | ---       | Any custom headers          |
 
-Set any of the first three fields to `false` to explicitly disable that header.
+Set any of the first three fields to `false` to omit that header (env var value: `off`).
+
+The same settings work on the decorator: `@FrontMcp({ http: { securityHeaders: { hsts, contentTypeOptions, frameOptions, csp, custom } } })`. Precedence: decorator, then `FRONTMCP_*` variables, then defaults.
 
 ### Value-Less CSP Directives
 
@@ -137,17 +139,20 @@ csp: {
 
 ### Environment Variables
 
-The build adapter converts config to these env vars (can also be overridden at runtime):
+The CLI converts config to these env vars for `dev` and the serverless/distributed builds (you can also set them yourself at runtime):
 
-| Variable                        | Config Path                          |
-| ------------------------------- | ------------------------------------ |
-| `FRONTMCP_CSP_ENABLED`          | `server.csp.enabled`                 |
-| `FRONTMCP_CSP_DIRECTIVES`       | `server.csp.directives` (serialized) |
-| `FRONTMCP_CSP_REPORT_URI`       | `server.csp.reportUri`               |
-| `FRONTMCP_CSP_REPORT_ONLY`      | `server.csp.reportOnly`              |
-| `FRONTMCP_HSTS`                 | `server.headers.hsts`                |
-| `FRONTMCP_CONTENT_TYPE_OPTIONS` | `server.headers.contentTypeOptions`  |
-| `FRONTMCP_FRAME_OPTIONS`        | `server.headers.frameOptions`        |
+| Variable                        | Config Path                           |
+| ------------------------------- | ------------------------------------- |
+| `FRONTMCP_CSP_ENABLED`          | `server.csp.enabled`                  |
+| `FRONTMCP_CSP_DIRECTIVES`       | `server.csp.directives` (serialized)  |
+| `FRONTMCP_CSP_REPORT_URI`       | `server.csp.reportUri`                |
+| `FRONTMCP_CSP_REPORT_ONLY`      | `server.csp.reportOnly`               |
+| `FRONTMCP_HSTS`                 | `server.headers.hsts`                 |
+| `FRONTMCP_CONTENT_TYPE_OPTIONS` | `server.headers.contentTypeOptions`   |
+| `FRONTMCP_FRAME_OPTIONS`        | `server.headers.frameOptions`         |
+| `FRONTMCP_HEADERS_CUSTOM`       | `server.headers.custom` (JSON object) |
+
+`off`, `false` or `none` in `FRONTMCP_HSTS`, `FRONTMCP_CONTENT_TYPE_OPTIONS` or `FRONTMCP_FRAME_OPTIONS` omits that header.
 
 ## Common Patterns
 

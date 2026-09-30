@@ -159,7 +159,8 @@ An anonymous session minted by one instance is honored by any instance with the 
 
 Not every Redis consumer reacts the same way when Redis is down as the server starts:
 
-- **`redis` and `transport.persistence`** fall back to in-memory storage and log the failure (`[TransportService] Failed to connect to redis - session persistence disabled`). The server starts; sessions live on the instance that created them until Redis is back and the server restarts.
+- **`redis` and `transport.persistence`** log the failure (`[TransportService] Failed to connect to redis - session persistence disabled`) and the server starts. The connection is retried in the background with exponential backoff (1s doubling to 30s); once Redis is reachable, sessions are persisted again and `/readyz` turns healthy without a restart. Until then, sessions live on the instance that created them.
+- Every Redis connection FrontMCP opens reconnects on its own and logs connection errors at a rate-limited interval (with a count of suppressed repeats) rather than once per retry.
 - **`throttle.storage`** fails closed: rate limits are a security control, so startup aborts with `GuardStorageUnavailableError` (`throttle.storage (redis) is unavailable: …`). This is the default in production, where storage `fallback` defaults to `'error'`. To start with per-instance counters instead, opt in explicitly:
 
 ```typescript

@@ -122,14 +122,17 @@ export function auditSecurityDefaults(config: SecurityAuditConfig, isProduction:
     });
   }
 
-  // DNS rebinding protection audit — strict mode implies protection is enabled
-  const dnsProtectionEnabled = config.security?.dnsRebindingProtection?.enabled ?? strict;
+  // DNS rebinding protection audit. Host validation is ON by default (ExpressHostAdapter installs it
+  // unless `enabled: false`), so only an explicit opt-out is unprotected — reporting the default as
+  // "disabled" contradicted the adapter that was enforcing it.
+  const dnsProtectionEnabled = config.security?.dnsRebindingProtection?.enabled !== false;
   if (!dnsProtectionEnabled) {
     findings.push({
       level: 'warn',
       code: 'DNS_REBINDING_UNPROTECTED',
-      message: 'DNS rebinding protection is disabled.',
-      recommendation: 'Enable security.dnsRebindingProtection with allowedHosts to prevent DNS rebinding attacks.',
+      message: 'DNS rebinding protection is disabled (security.dnsRebindingProtection.enabled is false).',
+      recommendation:
+        'Remove `enabled: false`, or set security.dnsRebindingProtection.allowedHosts, to prevent DNS rebinding attacks.',
     });
   } else {
     findings.push({
