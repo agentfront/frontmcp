@@ -73,7 +73,7 @@ Or use the FileSource form — it sidesteps the issue.
 | `preferredHeight`                                                                                               | —           | `number` (px) or CSS string (`'50vh'`). Initial widget height; auto-resize grows/shrinks from this baseline.                    |
 | `minHeight` / `maxHeight`                                                                                       | —           | `number` (px) or CSS string. Clamp the widget height; auto-resize never reports outside this range.                             |
 | `aspectRatio`                                                                                                   | —           | CSS `aspect-ratio` (`'16 / 9'` or `1.5`). Hosts that honor it size by ratio instead of measured height.                         |
-| `autoResize`                                                                                                    | `true`      | Auto-report content height to the host via a debounced `ResizeObserver` on `#root`. Set `false` to opt out (CSS still applies). |
+| `autoResize`                                                                                                    | `true`      | Report the document height (margins included) to the host after the handshake. Set `false` to opt out (CSS still applies).      |
 | `csp`                                                                                                           | —           | `{ connectDomains?, resourceDomains? }` — emitted on the resource content's `_meta.ui.csp` (#455). Claude honors CSP only here. |
 | `contentSecurity`                                                                                               | strict      | `{ allowUnsafeLinks?, allowInlineScripts?, bypassSanitization? }` — keep defaults.                                              |
 | `escapeStringResults`                                                                                           | unset       | `true` escapes plain string results of a template function; `html` / `trustedHtml` stay markup. Default in 1.9.                 |
@@ -140,6 +140,12 @@ ui: {
 
 See [`rules/widget-paths-anchor-with-import-meta-url.md`](../rules/widget-paths-anchor-with-import-meta-url.md).
 
+The widget is read when the tool is called, from the path the **compiled** tool computes — an anchored path points into the build output once the tool is compiled, so the file has to ship there (#649):
+
+- `frontmcp build` copies every `*.widget.tsx` / `*.widget.jsx` under the entry's directory into the output. tsc-output targets (`distributed`, `cloudflare`) get them at the same relative path, next to each compiled tool. Bundled targets (`node`, `cli`, `lambda`, `vercel`) get them directly next to the bundle, because every bundled module's `__dirname` is the bundle's directory — keep each widget beside its tool and give it a unique file name (the build skips, and warns about, names used twice).
+- Only widget files are copied, not other local files a widget imports.
+- A plain `tsc` build copies nothing — add a copy step. A missing widget fails the call with an `ENOENT` error naming the path it looked for, and the `src/` file when one matches.
+
 ## `@frontmcp/ui` prerequisite (#443)
 
 `.tsx` / `.jsx` FileSource widgets require `@frontmcp/ui` in the consuming project — the bundler injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`:
@@ -150,6 +156,16 @@ npm install @frontmcp/ui
 ```
 
 Match the version to `@frontmcp/sdk`. Without it, server-side bundling fails with a friendly error pointing at this requirement.
+
+## `esbuild` prerequisite (#649)
+
+`@frontmcp/uipack` loads `esbuild` on demand to bundle a `.tsx` / `.jsx` widget **when the tool is called**, so it must be installed where the server runs — as a runtime dependency:
+
+```bash
+npm install esbuild   # in "dependencies", not "devDependencies"
+```
+
+Projects created with `frontmcp create` already have it through the `frontmcp` package. `@frontmcp/uipack` declares it as an optional peer dependency (`>=0.27.0 <1`). Without it, the call fails with an error naming the widget.
 
 ## Widget bridge — `window.FrontMcpBridge`
 
@@ -176,10 +192,21 @@ ui: {
 | `getToolInput()` / `getToolOutput()` / `getStructuredContent()` | Read the tool data                                      |
 | `getWidgetState()` / `setWidgetState(state)`                    | Persisted per-widget state                              |
 | `getHostContext()` / `getTheme()` / `getDisplayMode()`          | Host context                                            |
+| `onContextChange(cb)`                                           | Subscribe to host context changes (handshake included)  |
 | `hasCapability(cap)`                                            | Probe adapter capabilities                              |
 | `onToolResponseMetadata(cb)`                                    | Subscribe to `ui/html` arrival (inline mode)            |
 
 The bridge routes to the right host adapter (OpenAI SDK / Claude postMessage / FrontMCP direct) automatically. **Never call `window.openai.*` directly** — it works on OpenAI but breaks everywhere else.
+
+### Theme
+
+The page follows the host theme. When an MCP Apps host sends `theme: 'light' | 'dark'` — in the `ui/initialize` result or a later `ui/notifications/host-context-changed` — the bridge sets `<meta name="color-scheme" content="…">` and `<html data-theme="…">`:
+
+- The frame's canvas and form controls match the host (a dark host no longer gets an opaque white frame).
+- Style dark mode with `[data-theme='dark'] …` selectors.
+- `getTheme()` returns the same value; `onContextChange` listeners fire for the handshake context too.
+- Nothing is written when the host sends no theme (the OS fallback `getTheme()` starts with is never applied).
+- A widget styled for light only keeps it with `:root { color-scheme: light }` — author CSS wins over the meta tag.
 
 ## Host considerations
 
@@ -209,7 +236,9 @@ What FrontMCP does with it:
 
 - **Static sizing CSS** — `preferredHeight` (initial `height`), `minHeight`, `maxHeight`, and `aspectRatio` are injected as a `<style>` block on `html` / `body` / `#root`, so the widget opens at the right size before any JS runs.
 - **`_meta` hints** — the same values ride along on the response/discovery `_meta` as `ui/preferredHeight`, `ui/minHeight`, `ui/maxHeight`, `ui/aspectRatio` (and nested under `_meta.ui` in `tools/list`), so hosts that read sizing from metadata pick it up.
-- **Runtime auto-resize** — when `autoResize !== false` and `ResizeObserver` is available, the bridge observes `#root` and reports the measured height to the host (debounced via `requestAnimationFrame`), also firing a `widget:resize` event you can listen for. Call `window.FrontMcpBridge.setSize({ height, width, aspectRatio })` to report manually.
+- **Runtime auto-resize** — when `autoResize !== false` and `ResizeObserver` is available, the bridge observes `<html>`, `<body>` and `#root` and reports the page height to the host (debounced via `requestAnimationFrame`), also firing a `widget:resize` event you can listen for. Call `window.FrontMcpBridge.setSize({ height, width, aspectRatio })` to report manually.
+- **What is measured** — the whole document: `<html>` at `height: fit-content`, plus any content overflowing a fixed-height `<body>`, clamped by a px `max-height` on `<html>`. Body margins and margins collapsed through the body (an `<h2>` or `<ul>` at the edge) are counted, and the height shrinks when content does. `preferredHeight` / `minHeight` / `maxHeight` act as the floor and ceiling.
+- **When it is sent** — reports wait for the bridge to initialize. In an ext-apps host the first report goes out once the `ui/initialize` handshake completes (a request sent earlier would be rejected); a report the host rejects is sent again on the next observation, even for the same height. A manual `setSize` called before the handshake is held and delivered right after it (only the latest size).
 
 Per-host behavior:
 

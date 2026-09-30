@@ -10,6 +10,7 @@ import type { FileSource } from '../types';
 // Mock fs/path/esbuild so resolveFileSource doesn't touch the real workspace.
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
+  existsSync: jest.fn(() => false),
 }));
 
 jest.mock('path', () => {
@@ -90,6 +91,83 @@ describe('resolveFileSource — relative .tsx/.jsx FileSource (#444)', () => {
     const source: FileSource = { file: '/abs/path/foo.widget.tsx' };
     expect(() => resolveUISource(source)).toThrow(/ENOENT/);
     expect(() => resolveUISource(source)).not.toThrow(/process\.cwd/);
+  });
+});
+
+describe('resolveFileSource — absolute .tsx/.jsx FileSource that is missing (#649)', () => {
+  const enoentFor = (file: string): NodeJS.ErrnoException =>
+    Object.assign(new Error(`ENOENT: no such file or directory, open '${file}'`), { code: 'ENOENT' as const });
+
+  function missing(file: string, existing: string[] = []) {
+    const fs = require('fs');
+    const path = require('path');
+    (path.isAbsolute as jest.Mock).mockReturnValue(true);
+    (fs.readFileSync as jest.Mock).mockImplementation(() => {
+      throw enoentFor(file);
+    });
+    (fs.existsSync as jest.Mock).mockImplementation((p: string) => existing.includes(p));
+    const { resolveUISource } = require('../loader');
+    try {
+      resolveUISource({ file });
+    } catch (err) {
+      return err as NodeJS.ErrnoException;
+    }
+    throw new Error('expected resolveUISource to throw');
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('names the path, keeps ENOENT, and explains when the file is read and that tsc does not copy it', () => {
+    const err = missing('/proj/lib/queue.widget.tsx');
+
+    expect(err.message).toContain('"/proj/lib/queue.widget.tsx"');
+    expect(err.message).toMatch(/ENOENT/);
+    expect(err.code).toBe('ENOENT');
+    expect(err.message).toMatch(/read from this path when the tool is called/);
+    expect(err.message).toMatch(/tsc does not copy `\*\.widget\.tsx`/);
+    expect(err.message).toMatch(/frontmcp build/);
+    expect(err.message).not.toMatch(/source widget exists at/);
+  });
+
+  it('names the source file when the path is in dist/ and the same relative path exists under src/', () => {
+    const err = missing('/proj/dist/tools/queue.widget.tsx', ['/proj/src/tools/queue.widget.tsx']);
+
+    expect(err.message).toContain('The source widget exists at "/proj/src/tools/queue.widget.tsx"');
+  });
+
+  it('also looks past a per-target directory such as dist/node/', () => {
+    const err = missing('/proj/dist/node/queue.widget.tsx', ['/proj/src/queue.widget.tsx']);
+
+    expect(err.message).toContain('The source widget exists at "/proj/src/queue.widget.tsx"');
+  });
+
+  it('names the file next to the build directory when tsc compiles from the project root', () => {
+    const err = missing('/proj/dist/queue.widget.tsx', ['/proj/queue.widget.tsx']);
+
+    expect(err.message).toContain('The source widget exists at "/proj/queue.widget.tsx"');
+  });
+
+  it('prefers the src/ file over one next to the build directory', () => {
+    const err = missing('/proj/dist/queue.widget.tsx', ['/proj/queue.widget.tsx', '/proj/src/queue.widget.tsx']);
+
+    expect(err.message).toContain('The source widget exists at "/proj/src/queue.widget.tsx"');
+  });
+
+  it('checks build/ and out/ directories too', () => {
+    expect(missing('/proj/build/queue.widget.jsx', ['/proj/src/queue.widget.jsx']).message).toContain(
+      '"/proj/src/queue.widget.jsx"',
+    );
+    expect(missing('/proj/out/queue.widget.tsx', ['/proj/src/queue.widget.tsx']).message).toContain(
+      '"/proj/src/queue.widget.tsx"',
+    );
+  });
+
+  it('names no source file when none exists', () => {
+    const err = missing('/proj/dist/tools/queue.widget.tsx');
+
+    expect(err.message).not.toMatch(/source widget exists at/);
   });
 });
 

@@ -156,8 +156,19 @@ export function generateBridgeIIFE(options: IIFEGeneratorOptions = {}): string {
  * config sets any sizing field), applies the configured CSS as a runtime
  * fallback (covers render paths that don't emit the static `<style>`), and —
  * unless `autoResize === false` — installs a debounced `ResizeObserver` on
- * `#root` that reports the measured content height to the host via
- * `bridge.setSize(...)`.
+ * `<html>`, `<body>` and `#root` that reports the document height to the host
+ * via `bridge.setSize(...)`.
+ *
+ * The height is `<html>` measured at `height: fit-content`, extended by any
+ * content overflowing `<body>` and clamped by a px `max-height` on `<html>`. That
+ * counts body margins and margins collapsed through it, shrinks when content
+ * does (unlike `scrollHeight`, which never drops below the frame), and keeps the
+ * `preferredHeight` / `minHeight` / `maxHeight` CSS as the floor and ceiling.
+ *
+ * Reports wait for the bridge to initialize — in an ext-apps host a request sent
+ * before `ui/initialize` is answered is rejected — and one is sent on
+ * `bridge:ready`. A report the host rejected is not remembered, so the same
+ * height is sent again on the next observation.
  *
  * Everything is feature-detected and wrapped in try/catch so older hosts (no
  * `ResizeObserver`) degrade gracefully to CSS-only sizing.
@@ -193,6 +204,23 @@ function __applySizingCss(sizing) {
   }
 }
 
+function __measureHeight() {
+  // <html> at fit-content includes body margins and collapsed child margins;
+  // content overflowing a fixed-height body is added; a px max-height clamps.
+  var de = document.documentElement;
+  var body = document.body;
+  if (!de || !body) return 0;
+  var prev = de.style.height;
+  de.style.height = 'fit-content';
+  var dr = de.getBoundingClientRect();
+  var br = body.getBoundingClientRect();
+  var h = Math.max(dr.height, br.top + body.scrollHeight + Math.max(0, dr.bottom - br.bottom) - dr.top);
+  de.style.height = prev;
+  var maxHeight = getComputedStyle(de).maxHeight;
+  var mx = maxHeight && maxHeight.slice(-2) === 'px' ? parseFloat(maxHeight) : NaN;
+  return Math.ceil(isNaN(mx) ? h : Math.min(h, mx));
+}
+
 function __initAutoResize() {
   if (typeof window === 'undefined') return;
   // Idempotent: a re-injected IIFE must not stack observers.
@@ -215,23 +243,30 @@ function __initAutoResize() {
   if (typeof ResizeObserver === 'undefined') return;
 
   function startObserving() {
-    var target = document.getElementById('root') || document.body;
-    if (!target) return;
+    if (!document.body) return;
+    var targets = [document.documentElement, document.body];
+    var root = document.getElementById('root');
+    if (root) targets.push(root);
 
     var rafId = null;
     var lastReported = -1;
     function report() {
       rafId = null;
       try {
-        var rect = target.getBoundingClientRect();
-        var height = Math.ceil(rect.height);
-        var width = Math.ceil(rect.width);
+        // Before the handshake an ext-apps host can't receive the report; the
+        // bridge:ready listener below sends it once the bridge is up.
+        if (window.FrontMcpBridge && window.FrontMcpBridge.initialized === false) return;
+        var height = __measureHeight();
+        var width = Math.ceil(document.documentElement.getBoundingClientRect().width);
         if (height === lastReported || height <= 0) return;
         lastReported = height;
         var payload = { height: height, width: width };
         if (sizing.aspectRatio != null) payload.aspectRatio = sizing.aspectRatio;
         if (window.FrontMcpBridge && typeof window.FrontMcpBridge.setSize === 'function') {
-          window.FrontMcpBridge.setSize(payload).catch(function() {});
+          window.FrontMcpBridge.setSize(payload).catch(function() {
+            // Forget a rejected report so the same height is sent again.
+            if (lastReported === height) lastReported = -1;
+          });
         }
         window.dispatchEvent(new CustomEvent('widget:resize', { detail: payload }));
       } catch (e) {}
@@ -252,9 +287,17 @@ function __initAutoResize() {
         window.__mcpResizeObserver.disconnect();
       }
       var ro = new ResizeObserver(function() { schedule(); });
-      ro.observe(target);
+      for (var i = 0; i < targets.length; i++) ro.observe(targets[i]);
       window.__mcpResizeObserver = ro;
     } catch (e) {}
+    // Report once the bridge is ready (the report scheduled below is skipped
+    // while the handshake is still pending).
+    var readySent = false;
+    window.addEventListener('bridge:ready', function() {
+      if (readySent) return;
+      readySent = true;
+      schedule();
+    });
     // Report once on init so the host gets an initial measurement.
     schedule();
   }
@@ -304,6 +347,25 @@ function detectViewport() {
     return { width: window.innerWidth, height: window.innerHeight };
   }
   return undefined;
+}
+
+function __applyHostTheme(theme) {
+  // Follow a host-supplied theme: <meta name="color-scheme"> sets the frame's
+  // canvas and form controls (a widget's own :root color-scheme still wins),
+  // <html data-theme> is a styling hook. The OS fallback is never written.
+  if (theme !== 'light' && theme !== 'dark') return;
+  if (typeof document === 'undefined' || !document.documentElement) return;
+  try {
+    var meta = document.querySelector('meta[name="color-scheme"]');
+    var head = document.head || document.getElementsByTagName('head')[0];
+    if (!meta && head) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'color-scheme');
+      head.appendChild(meta);
+    }
+    if (meta) meta.setAttribute('content', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch (e) {}
 }
 
 function readInjectedData() {
@@ -425,6 +487,8 @@ var ExtAppsAdapter = {
   pendingRequests: {},
   requestId: 0,
   hostCapabilities: {},
+  handshakeSettled: false,
+  pendingSize: null,
   canHandle: function() {
     if (typeof window === 'undefined') return false;
     if (window.parent === window) return false;
@@ -590,6 +654,7 @@ var ExtAppsAdapter = {
       var timeout = setTimeout(function() {
         delete self.pendingRequests[id];
         // Handshake timeout is non-fatal — notifications may still arrive
+        self.settleHandshake();
         resolve();
       }, 10000);
 
@@ -603,7 +668,9 @@ var ExtAppsAdapter = {
             supportsDisplayModes: true
           });
           if (result.hostContext) {
-            Object.assign(context.hostContext, result.hostContext);
+            // Notify (not a silent merge) so onContextChange listeners and the
+            // host theme see the handshake's context.
+            context.notifyContextChange(result.hostContext);
           }
           // Send ui/notifications/initialized to tell the host the view is ready.
           // Per MCP Apps spec, the host waits for this before sending tool-result.
@@ -613,9 +680,10 @@ var ExtAppsAdapter = {
             method: 'ui/notifications/initialized',
             params: {}
           }, targetOrigin);
+          self.settleHandshake();
           resolve();
         },
-        reject: function(err) { resolve(); }, // Non-fatal
+        reject: function(err) { self.settleHandshake(); resolve(); }, // Non-fatal
         timeout: timeout
       };
 
@@ -628,6 +696,18 @@ var ExtAppsAdapter = {
   },
   performHandshake: function(context) {
     return this.sendHandshake(context);
+  },
+  settleHandshake: function() {
+    // Deliver the latest size requested while no host origin was trusted.
+    this.handshakeSettled = true;
+    var pending = this.pendingSize;
+    if (!pending) return;
+    this.pendingSize = null;
+    this.sendRequest('ui/setSize', pending.params).then(function(result) {
+      for (var i = 0; i < pending.waiters.length; i++) pending.waiters[i].resolve(result);
+    }, function(err) {
+      for (var i = 0; i < pending.waiters.length; i++) pending.waiters[i].reject(err);
+    });
   },
   callTool: function(context, name, args) {
     if (!this.hostCapabilities.serverTools && !this.hostCapabilities.serverToolProxy) {
@@ -652,11 +732,22 @@ var ExtAppsAdapter = {
   setSize: function(context, size) {
     // FrontMCP sizing channel — parallels ui/setDisplayMode. Reports the
     // measured/desired widget dimensions to the host.
-    return this.sendRequest('ui/setSize', {
+    var params = {
       height: size && size.height,
       width: size && size.width,
       aspectRatio: size && size.aspectRatio
-    });
+    };
+    if (!this.handshakeSettled && !this.trustedOrigin && this.trustedOrigins.length === 0) {
+      // No host origin yet: keep only the latest size and send it when the
+      // handshake settles; every caller's promise follows that one request.
+      var self = this;
+      if (!this.pendingSize) this.pendingSize = { params: params, waiters: [] };
+      this.pendingSize.params = params;
+      return new Promise(function(resolve, reject) {
+        self.pendingSize.waiters.push({ resolve: resolve, reject: reject });
+      });
+    }
+    return this.sendRequest('ui/setSize', params);
   },
   requestClose: function(context) {
     return this.sendRequest('ui/close', {});
@@ -925,6 +1016,7 @@ function FrontMcpBridge() {
     toolResultListeners: [],
     notifyContextChange: function(changes) {
       Object.assign(this.hostContext, changes);
+      if (changes && changes.theme) __applyHostTheme(changes.theme);
       for (var i = 0; i < this.contextListeners.length; i++) {
         try { this.contextListeners[i](changes); } catch(e) {}
       }
