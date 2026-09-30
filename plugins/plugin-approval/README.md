@@ -72,6 +72,24 @@ class DangerousTool extends ToolContext {
 }
 ```
 
+A refused call reaches the client as an error result whose text is exactly the tool's `approvalMessage` and whose
+`_meta.code` is `APPROVAL_REQUIRED`, in production too: the approval errors extend `PublicMcpError`.
+
+A grant made through `this.approval` records the signed-in caller as its grantor, `userGrantor(<user id>)`
+(`{ source: 'user', identifier, method: 'interactive' }`), or `{ source: 'user' }` when there is no signed-in user
+(an anonymous `anon:` subject included). Pass `grantedBy` to record something else:
+
+```typescript
+import { policyGrantor, userGrantor } from '@frontmcp/plugin-approval';
+
+await this.approval.grantSessionApproval('ops:deploy', { grantedBy: policyGrantor('safe-list') });
+await this.approval.grantUserApproval('ops:deploy', {
+  grantedBy: userGrantor('user-123', 'Jane Doe', { method: 'interactive' }),
+});
+```
+
+`revokeApproval()` records `revokedBy` by the same rule.
+
 ### Approval Scopes
 
 | Scope              | Description                                 |

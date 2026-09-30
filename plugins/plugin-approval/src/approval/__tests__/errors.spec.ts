@@ -1,8 +1,76 @@
 import 'reflect-metadata';
-import { ApprovalError, ApprovalScopeNotAllowedError, ApprovalExpiredError, ChallengeValidationError } from '../errors';
+
+import { PublicMcpError, toMcpError } from '@frontmcp/sdk';
+
+import {
+  ApprovalError,
+  ApprovalExpiredError,
+  ApprovalOperationError,
+  ApprovalRequiredError,
+  ApprovalScopeNotAllowedError,
+  ChallengeValidationError,
+} from '../errors';
 import { ApprovalScope } from '../types';
 
 describe('approval errors', () => {
+  describe('as public MCP errors (#647)', () => {
+    const refusal = () =>
+      new ApprovalRequiredError({ toolId: 'ops:deploy', state: 'pending', message: 'Deploying needs approval.' });
+
+    it('are public MCP errors, so the SDK passes them to the client as they are', () => {
+      const error = refusal();
+
+      expect({ public: error instanceof PublicMcpError, approval: error instanceof ApprovalError }).toEqual({
+        public: true,
+        approval: true,
+      });
+      expect(toMcpError(error)).toBe(error);
+    });
+
+    it('refuses with the APPROVAL_REQUIRED code and a 403', () => {
+      const error = refusal();
+
+      expect({ code: error.code, statusCode: error.statusCode, name: error.name }).toEqual({
+        code: 'APPROVAL_REQUIRED',
+        statusCode: 403,
+        name: 'ApprovalRequiredError',
+      });
+    });
+
+    it('answers with its message alone, in production and outside it', () => {
+      const error = refusal();
+      const texts = [error.toMcpError(false), error.toMcpError(true)].map((result) => result.content[0].text);
+
+      expect(texts).toEqual(['Deploying needs approval.', 'Deploying needs approval.']);
+    });
+
+    it('keeps the JSON-RPC shape of a refusal', () => {
+      expect(refusal().toJsonRpcError()).toEqual({
+        code: -32600,
+        message: 'Deploying needs approval.',
+        data: { type: 'approval_required', toolId: 'ops:deploy', state: 'pending', options: undefined },
+      });
+    });
+
+    it('gives the other approval errors codes of their own', () => {
+      const codes = [
+        new ApprovalError('base'),
+        new ApprovalOperationError('grant', 'ttlMs must be positive'),
+        new ApprovalScopeNotAllowedError(ApprovalScope.USER, [ApprovalScope.SESSION]),
+        new ApprovalExpiredError('ops:deploy', 0),
+        new ChallengeValidationError(),
+      ].map((error) => [error.name, error.code, error.statusCode]);
+
+      expect(codes).toEqual([
+        ['ApprovalError', 'APPROVAL_REQUIRED', 403],
+        ['ApprovalOperationError', 'APPROVAL_OPERATION_FAILED', 400],
+        ['ApprovalScopeNotAllowedError', 'APPROVAL_SCOPE_NOT_ALLOWED', 400],
+        ['ApprovalExpiredError', 'APPROVAL_EXPIRED', 403],
+        ['ChallengeValidationError', 'CHALLENGE_VALIDATION_FAILED', 400],
+      ]);
+    });
+  });
+
   describe('ApprovalScopeNotAllowedError', () => {
     it('should create with scope and allowed scopes', () => {
       const error = new ApprovalScopeNotAllowedError(ApprovalScope.CONTEXT_SPECIFIC, [

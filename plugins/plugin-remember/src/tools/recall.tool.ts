@@ -3,13 +3,14 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
 import type { RememberScope } from '../remember.types';
+import { REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
 
 /**
  * Input schema for the recall tool.
  */
 export const recallInputSchema = {
   key: z.string().min(1).describe('What memory to recall'),
-  scope: z.enum(['session', 'user', 'tool', 'global']).optional().describe('Which scope to look in (default: session)'),
+  scope: z.enum(['session', 'user', 'tool', 'global']).optional().describe(REMEMBER_SCOPE_DESCRIPTION),
 };
 
 /**

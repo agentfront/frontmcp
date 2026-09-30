@@ -1,13 +1,17 @@
 import 'reflect-metadata';
+
 import type { ProviderFactoryType } from '@frontmcp/sdk';
+
 import CachePlugin from '../cache.plugin';
 import { CacheStoreToken } from '../cache.symbol';
-import CacheRedisProvider from '../providers/cache-redis.provider';
 import CacheMemoryProvider from '../providers/cache-memory.provider';
+import CacheRedisProvider from '../providers/cache-redis.provider';
 import CacheVercelKvProvider from '../providers/cache-vercel-kv.provider';
 
 // Helper type for value providers returned by dynamicProviders
 type ValueProvider = { name: string; provide: symbol; useValue: unknown };
+// Helper type for the memory store's factory provider, which needs no injected dependencies
+type MemoryFactoryProvider = { name: string; provide: symbol; useFactory: () => unknown };
 // Helper type for factory providers returned by dynamicProviders
 type FactoryProvider = {
   name: string;
@@ -49,12 +53,12 @@ describe('CachePlugin', () => {
     describe('type: memory', () => {
       it('should create memory provider with default TTL', () => {
         const providers = CachePlugin.dynamicProviders({ type: 'memory' });
-        const provider = providers[0] as ValueProvider;
+        const provider = providers[0] as MemoryFactoryProvider;
 
         expect(providers).toHaveLength(1);
         expect(provider.name).toBe('cache:memory');
         expect(provider.provide).toBe(CacheStoreToken);
-        expect(provider.useValue).toBeInstanceOf(CacheMemoryProvider);
+        expect(provider.useFactory()).toBeInstanceOf(CacheMemoryProvider);
       });
 
       it('should create memory provider with custom TTL', () => {
@@ -62,10 +66,16 @@ describe('CachePlugin', () => {
           type: 'memory',
           defaultTTL: 7200,
         });
-        const provider = providers[0] as ValueProvider;
+        const provider = providers[0] as MemoryFactoryProvider;
 
         expect(providers).toHaveLength(1);
-        expect(provider.useValue).toBeInstanceOf(CacheMemoryProvider);
+        expect(provider.useFactory()).toBeInstanceOf(CacheMemoryProvider);
+      });
+
+      it('should build a new memory store for every server that installs it', () => {
+        const provider = CachePlugin.dynamicProviders({ type: 'memory' })[0] as MemoryFactoryProvider;
+
+        expect(provider.useFactory()).not.toBe(provider.useFactory());
       });
     });
 
@@ -417,6 +427,16 @@ describe('CachePlugin', () => {
     let plugin: CachePlugin;
     let mockCacheStore: any;
 
+    /** A flow state for the hit path, which keeps what the hook sets the way FlowState does. */
+    function hitState(initial: Record<string, unknown>): Record<string, unknown> {
+      const state: Record<string, unknown> = { ...initial };
+      state['set'] = (key: string, value: unknown) => {
+        state[key] = value;
+        return state;
+      };
+      return state;
+    }
+
     beforeEach(() => {
       plugin = new CachePlugin({ type: 'memory', toolPatterns: ['test:*'] });
       mockCacheStore = {
@@ -506,7 +526,7 @@ describe('CachePlugin', () => {
         safeParseOutput: jest.fn().mockReturnValue({ success: true }),
       };
       const flowCtx = {
-        state: {
+        state: hitState({
           tool: mockTool,
           toolContext: {
             metadata: { cache: true },
@@ -514,13 +534,52 @@ describe('CachePlugin', () => {
             respond: respondMock,
           },
           rawOutput: undefined,
-        },
+        }),
       } as any;
 
       await plugin.willReadCache(flowCtx);
 
-      expect(flowCtx.state.rawOutput).toEqual({ data: 'cached', _meta: { cache: 'hit' } });
-      expect(respondMock).toHaveBeenCalled();
+      expect(flowCtx.state.rawOutput).toEqual({ data: 'cached' });
+      expect(respondMock).toHaveBeenCalledWith({ data: 'cached' });
+    });
+
+    it('should mark a hit on the result metadata, not in the cached data', async () => {
+      mockCacheStore.getValue.mockResolvedValue({ data: 'cached' });
+      const mockTool = {
+        fullName: 'test:tool',
+        name: 'test:tool',
+        safeParseOutput: jest.fn().mockReturnValue({ success: true }),
+      };
+      const flowCtx = {
+        state: hitState({
+          tool: mockTool,
+          toolContext: { metadata: { cache: true }, input: { key: 'value' }, respond: jest.fn() },
+        }),
+      } as any;
+
+      await plugin.willReadCache(flowCtx);
+
+      expect(flowCtx.state.resultMeta).toEqual({ cache: 'hit' });
+    });
+
+    it('should keep result metadata another hook recorded', async () => {
+      mockCacheStore.getValue.mockResolvedValue({ data: 'cached' });
+      const mockTool = {
+        fullName: 'test:tool',
+        name: 'test:tool',
+        safeParseOutput: jest.fn().mockReturnValue({ success: true }),
+      };
+      const flowCtx = {
+        state: hitState({
+          tool: mockTool,
+          toolContext: { metadata: { cache: true }, input: { key: 'value' }, respond: jest.fn() },
+          resultMeta: { traced: 'yes' },
+        }),
+      } as any;
+
+      await plugin.willReadCache(flowCtx);
+
+      expect(flowCtx.state.resultMeta).toEqual({ traced: 'yes', cache: 'hit' });
     });
 
     it('should return cached data as-is for primitives', async () => {
@@ -533,7 +592,7 @@ describe('CachePlugin', () => {
         safeParseOutput: jest.fn().mockReturnValue({ success: true }),
       };
       const flowCtx = {
-        state: {
+        state: hitState({
           tool: mockTool,
           toolContext: {
             metadata: { cache: true },
@@ -541,7 +600,7 @@ describe('CachePlugin', () => {
             respond: respondMock,
           },
           rawOutput: undefined,
-        },
+        }),
       } as any;
 
       await plugin.willReadCache(flowCtx);
@@ -560,7 +619,7 @@ describe('CachePlugin', () => {
         safeParseOutput: jest.fn().mockReturnValue({ success: true }),
       };
       const flowCtx = {
-        state: {
+        state: hitState({
           tool: mockTool,
           toolContext: {
             metadata: { cache: true },
@@ -568,7 +627,7 @@ describe('CachePlugin', () => {
             respond: respondMock,
           },
           rawOutput: undefined,
-        },
+        }),
       } as any;
 
       await plugin.willReadCache(flowCtx);
@@ -606,7 +665,7 @@ describe('CachePlugin', () => {
         safeParseOutput: jest.fn().mockReturnValue({ success: true }),
       };
       const flowCtx = {
-        state: {
+        state: hitState({
           tool: mockTool,
           toolContext: {
             metadata: { cache: { ttl: 1000, slideWindow: true } },
@@ -614,7 +673,7 @@ describe('CachePlugin', () => {
             respond: respondMock,
           },
           rawOutput: undefined,
-        },
+        }),
       } as any;
 
       await plugin.willReadCache(flowCtx);
@@ -622,7 +681,7 @@ describe('CachePlugin', () => {
       expect(mockCacheStore.setValue).toHaveBeenCalled();
     });
 
-    it('should preserve existing _meta in cached data', async () => {
+    it('should leave the _meta a tool returned itself in the cached data', async () => {
       const cachedData = { data: 'cached', _meta: { source: 'api' } };
       mockCacheStore.getValue.mockResolvedValue(cachedData);
       const respondMock = jest.fn();
@@ -632,7 +691,7 @@ describe('CachePlugin', () => {
         safeParseOutput: jest.fn().mockReturnValue({ success: true }),
       };
       const flowCtx = {
-        state: {
+        state: hitState({
           tool: mockTool,
           toolContext: {
             metadata: { cache: true },
@@ -640,14 +699,14 @@ describe('CachePlugin', () => {
             respond: respondMock,
           },
           rawOutput: undefined,
-        },
+        }),
       } as any;
 
       await plugin.willReadCache(flowCtx);
 
-      expect(flowCtx.state.rawOutput).toEqual({
-        data: 'cached',
-        _meta: { source: 'api', cache: 'hit' },
+      expect({ rawOutput: flowCtx.state.rawOutput, resultMeta: flowCtx.state.resultMeta }).toEqual({
+        rawOutput: { data: 'cached', _meta: { source: 'api' } },
+        resultMeta: { cache: 'hit' },
       });
     });
   });

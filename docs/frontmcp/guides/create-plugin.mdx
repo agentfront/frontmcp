@@ -464,6 +464,9 @@ async myHook(flowCtx: FlowCtxOf<'tools:call-tool'>) {
   // Set state values
   flowCtx.state.rawOutput = myValue;
 
+  // Add metadata to the result's own _meta (never to the tool's data)
+  flowCtx.state.set('resultMeta', { ...flowCtx.state.resultMeta, traced: true });
+
   // Bypass execution by responding early
   toolContext.respond(cachedResult);
 }

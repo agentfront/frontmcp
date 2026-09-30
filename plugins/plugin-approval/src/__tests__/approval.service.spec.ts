@@ -2,7 +2,7 @@
 
 import 'reflect-metadata';
 
-import { ApprovalOperationError, ApprovalScopeNotAllowedError } from '../approval';
+import { ApprovalOperationError, ApprovalScopeNotAllowedError, userGrantor, userRevoker } from '../approval';
 import { ApprovalService, createApprovalService } from '../services/approval.service';
 import type { ApprovalStore } from '../stores/approval-store.interface';
 import { ApprovalScope, ApprovalState, type ApprovalRecord } from '../types';
@@ -193,7 +193,7 @@ describe('ApprovalService', () => {
         toolId: 'my-tool',
         scope: ApprovalScope.SESSION,
         sessionId,
-        grantedBy: 'policy',
+        grantedBy: userGrantor(userId),
         reason: undefined,
         metadata: undefined,
       });
@@ -232,7 +232,7 @@ describe('ApprovalService', () => {
         toolId: 'my-tool',
         scope: ApprovalScope.USER,
         userId,
-        grantedBy: 'policy',
+        grantedBy: userGrantor(userId),
         reason: undefined,
         metadata: undefined,
       });
@@ -261,7 +261,7 @@ describe('ApprovalService', () => {
         ttlMs: 60000,
         sessionId,
         userId,
-        grantedBy: 'policy',
+        grantedBy: userGrantor(userId),
         reason: undefined,
         metadata: undefined,
       });
@@ -283,7 +283,7 @@ describe('ApprovalService', () => {
         context,
         sessionId,
         userId,
-        grantedBy: 'policy',
+        grantedBy: userGrantor(userId),
         reason: undefined,
         metadata: undefined,
       });
@@ -301,7 +301,7 @@ describe('ApprovalService', () => {
         toolId: 'my-tool',
         sessionId,
         userId,
-        revokedBy: 'policy',
+        revokedBy: userRevoker(userId),
         reason: undefined,
       });
     });
@@ -404,6 +404,61 @@ describe('ApprovalService', () => {
         approval({ scope: ApprovalScope.USER, state: ApprovalState.DENIED }),
       ]);
       expect(await svc.isApproved('app:governed')).toBe(false);
+    });
+  });
+
+  describe('who a grant or revocation is recorded as by default (#647)', () => {
+    const grants = (svc: ApprovalService) => [
+      () => svc.grantSessionApproval('my-tool'),
+      () => svc.grantTimeLimitedApproval('my-tool', 60_000),
+      () => svc.grantContextApproval('my-tool', { type: 'repo', identifier: 'x' }),
+    ];
+
+    beforeEach(() => {
+      mockStore.grantApproval.mockResolvedValue(mockApprovalRecord);
+      mockStore.revokeApproval.mockResolvedValue(true);
+    });
+
+    function recordedGrantors(): unknown[] {
+      return mockStore.grantApproval.mock.calls.map(([options]) => options.grantedBy);
+    }
+
+    it('records the signed-in user, not a policy, as the grantor', async () => {
+      for (const grant of [...grants(service), () => service.grantUserApproval('my-tool')]) await grant();
+
+      expect(recordedGrantors()).toEqual(Array(4).fill({ source: 'user', identifier: userId, method: 'interactive' }));
+    });
+
+    it('records a grant without a user as a user grant with no identifier', async () => {
+      const serviceWithoutUser = new ApprovalService(mockStore, sessionId);
+      for (const grant of grants(serviceWithoutUser)) await grant();
+
+      expect(recordedGrantors()).toEqual(Array(3).fill({ source: 'user' }));
+    });
+
+    it('does not record an anonymous subject as the grantor', async () => {
+      const anonymousService = new ApprovalService(mockStore, sessionId, 'anon:3f2a');
+      for (const grant of grants(anonymousService)) await grant();
+
+      expect(recordedGrantors()).toEqual(Array(3).fill({ source: 'user' }));
+    });
+
+    it('keeps a grantor the caller names', async () => {
+      await service.grantSessionApproval('my-tool', { grantedBy: 'policy' });
+
+      expect(recordedGrantors()).toEqual(['policy']);
+    });
+
+    it('records the signed-in user as the revoker, and no identifier without one', async () => {
+      await service.revokeApproval('my-tool');
+      await new ApprovalService(mockStore, sessionId).revokeApproval('my-tool');
+      await new ApprovalService(mockStore, sessionId, 'anon:3f2a').revokeApproval('my-tool');
+
+      expect(mockStore.revokeApproval.mock.calls.map(([options]) => options.revokedBy)).toEqual([
+        { source: 'user', identifier: userId, method: 'interactive' },
+        { source: 'user' },
+        { source: 'user' },
+      ]);
     });
   });
 

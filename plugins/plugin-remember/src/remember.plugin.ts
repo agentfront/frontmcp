@@ -2,13 +2,13 @@ import {
   DynamicPlugin,
   FRONTMCP_CONTEXT,
   FrontMcpConfig,
-  FrontMcpConfigType,
   FrontMcpLogger,
   getGlobalStoreConfig,
   isVercelKvProvider,
   Plugin,
   ProviderScope,
-  ProviderType,
+  type FrontMcpConfigType,
+  type ProviderType,
 } from '@frontmcp/sdk';
 
 import { createRememberAccessor } from './providers/remember-accessor.provider';
@@ -51,11 +51,13 @@ import type { RememberPluginOptions, RememberPluginOptionsInput } from './rememb
   name: 'remember',
   description: 'Help your LLM remember things across sessions',
   providers: [
-    // Default in-memory provider (overridden by dynamicProviders if configured)
+    // Default in-memory provider (overridden by dynamicProviders if configured). A factory, so each
+    // server gets its own store: a value built here is one store for every server in the process.
     {
       name: 'remember:store:memory',
       provide: RememberStoreToken,
-      useValue: new RememberMemoryProvider(),
+      inject: () => [] as const,
+      useFactory: () => new RememberMemoryProvider(),
     },
   ],
   // Context extensions - SDK handles runtime installation
@@ -181,7 +183,9 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
         providers.push({
           name: 'remember:store:memory',
           provide: RememberStoreToken,
-          useValue: new RememberMemoryProvider(),
+          // Built per server: `init()` runs once, so a value here would be shared by every server using it.
+          inject: () => [] as const,
+          useFactory: () => new RememberMemoryProvider(),
         });
         break;
     }

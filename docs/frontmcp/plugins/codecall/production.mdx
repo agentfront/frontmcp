@@ -122,7 +122,10 @@ Bypass VM overhead for single-tool operations:
 
 ### 4. Cache Describe Results
 
-Tool schemas rarely change. CodeCall internally caches describe and search results to reduce overhead on repeated calls.
+Tool schemas rarely change. CodeCall caches `codecall:describe` and `codecall:search` results for 60 seconds through the
+Cache plugin it installs. An entry belongs to one server and one caller: the key includes the caller's identity, and each
+server has its own memory store, so a server whose `includeTools` excludes a tool never answers with a describe another
+server in the same process cached.
 
 ---
 
