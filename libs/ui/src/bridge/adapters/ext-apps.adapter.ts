@@ -524,23 +524,25 @@ export class ExtAppsAdapter extends BaseAdapter {
     if (!targetOrigin) {
       throw new Error('Cannot send notification: no trusted origin established');
     }
-    if (typeof window === 'undefined') return;
 
     const notification: JsonRpcNotification = {
       jsonrpc: '2.0',
       method,
       params,
     };
-    window.parent.postMessage(notification, targetOrigin);
+    this._postMessage(notification, targetOrigin);
   }
 
   /**
-   * Post a message to the parent window.
+   * Post a message to the parent window. Without an explicit `targetOrigin` it
+   * uses the pinned host origin, or `'*'` before one exists (the handshake).
    */
-  private _postMessage(message: JsonRpcRequest | JsonRpcResponse | JsonRpcNotification): void {
-    if (typeof window === 'undefined') return;
+  private _postMessage(
+    message: JsonRpcRequest | JsonRpcResponse | JsonRpcNotification,
+    targetOrigin: string = this._trustedOrigin || '*',
+  ): void {
+    if (typeof window === 'undefined' || typeof window.parent?.postMessage !== 'function') return;
 
-    const targetOrigin = this._trustedOrigin || '*';
     window.parent.postMessage(message, targetOrigin);
   }
 

@@ -219,6 +219,18 @@ describe('ExtAppsAdapter', () => {
         expect(postMessage).toHaveBeenCalledWith(sizeNotification({ height: 200 }), 'https://claude.ai');
       });
 
+      it('does nothing when the parent window cannot receive messages', async () => {
+        const postMessage = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => undefined);
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._trustedOrigin = 'https://host.example';
+        // @ts-expect-error - simulate a parent without postMessage
+        window.parent.postMessage = undefined;
+
+        await expect(adapterWithConfig.setSize({ height: 200 })).resolves.toBeUndefined();
+
+        expect(postMessage).not.toHaveBeenCalled();
+      });
+
       it('never broadcasts to "*" when no host origin is known', async () => {
         const postMessage = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => undefined);
 
