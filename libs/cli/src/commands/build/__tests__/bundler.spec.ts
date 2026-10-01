@@ -98,3 +98,51 @@ module.exports = { env: () => process.env.NODE_ENV, optional, kv, obs, sqlite };
     }
   }, 60000);
 });
+
+describe('bundleForServerless: Lambda adapter (#680)', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-lambda-'));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('inlines an installed @codegenie/serverless-express, so dist/lambda runs without node_modules', async () => {
+    const pkg = path.join(dir, 'node_modules', '@codegenie', 'serverless-express');
+    await ensureDir(pkg);
+    await writeFile(
+      path.join(pkg, 'package.json'),
+      '{"name":"@codegenie/serverless-express","version":"5.0.0","main":"index.js"}',
+    );
+    await writeFile(path.join(pkg, 'index.js'), "module.exports = () => () => 'adapted';");
+
+    const out = path.join(dir, 'dist');
+    await ensureDir(out);
+    const entry = path.join(out, 'index.js');
+    await writeFile(
+      entry,
+      `const serverlessExpress = require('@codegenie/serverless-express');
+exports.handler = serverlessExpress({ app: {} });
+`,
+    );
+
+    const cwd = process.cwd();
+    process.chdir(dir);
+    try {
+      await bundleForServerless(entry, out, 'handler.cjs');
+    } finally {
+      process.chdir(cwd);
+    }
+
+    const bundle = await readFile(path.join(out, 'handler.cjs'));
+    expect(bundle).not.toContain('require("@codegenie/serverless-express")');
+
+    // The deployed folder has no node_modules: the handler must load from the bundle alone.
+    await rm(path.join(dir, 'node_modules'), { recursive: true, force: true });
+    const mod = require(path.join(out, 'handler.cjs')) as { handler: () => string };
+    expect(mod.handler()).toBe('adapted');
+  }, 60000);
+});

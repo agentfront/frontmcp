@@ -10,12 +10,19 @@ import { c } from '../../core/colors';
  * rspack treats every `require()` as a hard import — so a missing one failed the
  * whole build with "Module not found". They are bundled when installed and left
  * as a runtime `require()` (which the SDK already guards) when they are not.
+ *
+ * `@codegenie/serverless-express` is the Lambda entry's adapter. The lambda
+ * target refuses to build without it, so for that target it is always installed
+ * and therefore bundled: the deployed `dist/lambda/` (the generated SAM
+ * template's `CodeUri`) carries no `node_modules`, and leaving it external made
+ * the function fail to load (#680).
  */
 export const OPTIONAL_RUNTIME_PACKAGES = [
   '@frontmcp/storage-sqlite',
   '@frontmcp/observability',
   '@vercel/kv',
   '@opentelemetry/sdk-trace-base',
+  '@codegenie/serverless-express',
 ];
 
 /** Native addons can never be inlined into a single-file bundle. */
@@ -95,13 +102,6 @@ export async function bundleForServerless(
       'react-dom': 'react-dom',
       'react-dom/server': 'react-dom/server',
       'react/jsx-runtime': 'react/jsx-runtime',
-      // #368 round-2 — Lambda's entry imports `@codegenie/serverless-express`
-      // which is intentionally a peer dep (the user installs the version
-      // they want). Mark it external so rspack doesn't fail with
-      // "Module not found" trying to bundle it. The lambda adapter's own
-      // validate hook surfaces a clear "npm install @codegenie/serverless-express"
-      // error when it's actually missing from node_modules at build time.
-      '@codegenie/serverless-express': '@codegenie/serverless-express',
       // #368 round-3 — `@frontmcp/sdk/esm` contains lazy `await import('openai')`
       // and `await import('@anthropic-ai/sdk')` calls inside agent adapters.
       // These are intentionally optional peers (only resolved when the user
