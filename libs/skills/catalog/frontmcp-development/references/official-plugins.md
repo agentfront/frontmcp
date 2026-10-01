@@ -840,14 +840,23 @@ class BetaFeatureTool extends ToolContext {
       return { content: [{ type: 'text', text: 'Feature not available' }] };
     }
 
+    // Fail open: `true` when the adapter throws or has no answer for the flag
+    const engine = (await this.featureFlags.isEnabled('search-v2', true)) ? 'v2' : 'v1';
+
     // Get variant value (for multivariate flags)
     const variant = await this.featureFlags.getVariant('experiment-flag');
     // variant may be 'control', 'treatment-a', 'treatment-b', etc.
 
-    return { content: [{ type: 'text', text: `Running variant: ${variant}` }] };
+    return { content: [{ type: 'text', text: `Running variant: ${variant} on search ${engine}` }] };
   }
 }
 ```
+
+`isEnabled(key, defaultValue?)` answers `defaultValue` (else the plugin's `defaultValue`, else `false`) when the
+adapter throws or has no answer for the flag -- a key the `static` adapter was not given, or one a custom adapter's
+`evaluateFlags()` omits -- the same rule the gates apply to a ref's `defaultValue`. A flag the adapter answers keeps
+its answer, `false` included. Split.io, LaunchDarkly and Unleash answer every key with the service's own default. Up to
+1.8.7 the default applied only when the adapter threw, so `isEnabled('unknown-flag', true)` was `false`.
 
 ### Per-Tool Feature Flag Gating
 
@@ -860,7 +869,7 @@ class BetaTool extends ToolContext {
   /* ... */
 }
 
-// Object with default value -- if flag evaluation fails, use the default
+// Object with default value -- if flag evaluation fails or the flag is unknown, use the default
 @Tool({
   name: 'experimental_tool',
   featureFlag: { key: 'experimental-flag', defaultValue: false },
