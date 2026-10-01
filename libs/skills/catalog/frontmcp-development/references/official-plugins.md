@@ -349,6 +349,7 @@ clear the legacy prefixes manually if you want the storage back.
 
 `tools.prefix` renames them (`prefix: 'memory_'` gives `memory_recall`, ...; each description names the prefixed siblings) and
 `tools.allowedScopes` rejects any other `scope` (including the default `session` when a call omits it) with a public `REMEMBER_SCOPE_NOT_ALLOWED` error that lists the allowed scopes. With `enabled` unset or `false` none is registered.
+With `RememberPlugin.init({ inject, useFactory })`, `tools` is read from the options the factory returns, at startup.
 
 All four take an optional `scope` (default `session`) and describe it to the model the same way:
 `session` is this session, or without one (stateless HTTP, MCP 2026-07-28) the signed-in caller

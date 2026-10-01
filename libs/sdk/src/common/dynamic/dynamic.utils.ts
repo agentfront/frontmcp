@@ -33,8 +33,21 @@ export function collectDynamicTools<T>(klass: any, options: T): ToolType[] {
   return out;
 }
 
-/** Metadata keys whose value is a list of entries; an option of the same name is not one of them. */
-const LIST_METADATA_KEYS = ['exports', 'plugins', 'adapters', 'tools', 'resources', 'prompts', 'skills'] as const;
+/**
+ * Metadata keys whose value is a list of entries; an option of the same name is not one of them.
+ * `providers` is not listed: `init` always sets it on the record to the providers it collects.
+ */
+const LIST_METADATA_KEYS = [
+  'exports',
+  'plugins',
+  'adapters',
+  'tools',
+  'resources',
+  'prompts',
+  'skills',
+  'contextExtensions',
+  'enforcesMetadata',
+] as const;
 
 /**
  * The part of a plugin's options that the registry reads as plugin metadata. A plugin option that
