@@ -23,13 +23,15 @@ export interface PlatformMappingEntryInterface {
  */
 export interface PlatformDetectionConfigInterface {
   /**
-   * Custom mappings to check before default detection.
+   * Custom mappings, checked first: a match wins over the MCP Apps capability and over the
+   * keyword detection, so a mapping can opt a client that declares MCP Apps out of it.
    * Mappings are evaluated in order; first match wins.
    */
   mappings?: PlatformMappingEntryInterface[];
   /**
    * If true, skip default detection when no custom mapping matches.
-   * The platform will be 'unknown' instead of attempting keyword-based detection.
+   * The platform will be 'unknown' instead of attempting keyword-based detection
+   * (a client that declares the MCP Apps extension is still 'ext-apps').
    * @default false
    */
   customOnly?: boolean;
