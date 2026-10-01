@@ -52,7 +52,8 @@ export function buildJestArgs(configPath: string, opts: ParsedArgs, positionalPa
  * `jose` ships as pure ESM and is reachable from the `@frontmcp/sdk` barrel, so
  * every scaffolded project needs it transformed.
  */
-const DEFAULT_ESM_PACKAGES = ['jose'];
+// `@noble/*` are ESM-only dependencies of CodeCall (via its crypto), so any spec that loads a CodeCall app needs them transformed.
+const DEFAULT_ESM_PACKAGES = ['jose', '@noble/hashes', '@noble/ciphers'];
 
 /** Matches either path separator so the patterns hold on Windows too. */
 const PATH_SEPARATOR = '[/\\\\]';

@@ -265,7 +265,7 @@ interface FeatureFlagAdapter {
 
 ## Annotating Capabilities
 
-Add `featureFlag` to any tool, resource, resource template, prompt, or skill metadata. Capabilities with disabled flags are hidden from `list` responses **and** refused on direct access. A client that cached an earlier listing, or holds a URI from a previous session, gets an error rather than the capability.
+Add `featureFlag` to any tool, resource, resource template, prompt, or skill metadata. Capabilities with disabled flags are hidden from `list` responses **and** refused on direct access. The refusal is a public `FeatureFlagDisabledError` (code `FEATURE_FLAG_DISABLED`, HTTP 403) whose message names the capability and the flag, in every environment. A client that cached an earlier listing, or holds a URI from a previous session, gets an error rather than the capability.
 
 | Capability        | Hidden from                                                                                                                                                                                                                  | Refused on                                                                                                                     |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -322,7 +322,9 @@ When using the string shorthand (`featureFlag: 'key'`), `defaultValue` is `false
 ## Plugin Options
 
 <ParamField path="adapter" type="'static' | 'splitio' | 'launchdarkly' | 'unleash' | 'custom'" required>
-  The feature flag provider to use
+  The feature flag provider to use. `FeatureFlagPlugin.init()` with no `adapter`, or an unknown one, throws a
+  `FeatureFlagConfigurationError` at startup that names the option and the supported adapters (it used to start and
+  answer every request with a 500).
 </ParamField>
 
 <ParamField path="flags" type="Record<string, boolean | FeatureFlagVariant>">

@@ -5,13 +5,13 @@
  */
 
 import type {
-  ApprovalScope,
-  ApprovalState,
   ApprovalContext,
   ApprovalGrantor,
-  ApprovalRevoker,
   ApprovalRecord,
+  ApprovalRevoker,
+  ApprovalScope,
   ApprovalSourceType,
+  ApprovalState,
   RevocationSourceType,
 } from '../types';
 
@@ -142,7 +142,12 @@ export interface ApprovalStore {
    * with `context`, context-specific). The approval gate uses it to find an approval the tool's
    * policy accepts; stores without it are read through `getApproval()`.
    */
-  getApprovals?(toolId: string, sessionId: string, userId?: string, context?: ApprovalContext): Promise<ApprovalRecord[]>;
+  getApprovals?(
+    toolId: string,
+    sessionId: string,
+    userId?: string,
+    context?: ApprovalContext,
+  ): Promise<ApprovalRecord[]>;
 
   /**
    * Get all approvals matching a query.
@@ -159,6 +164,17 @@ export interface ApprovalStore {
    * (only the given context's, when `context` is set). Recorded denials are kept.
    */
   revokeApproval(options: RevokeApprovalOptions): Promise<boolean>;
+
+  /**
+   * The caller's recent revocations of a tool: each is the approval that was revoked, with `revokedBy`,
+   * `revokedAt` and `revocationReason`. Optional: a store that keeps no revocations leaves it out.
+   */
+  getRevocations?(
+    toolId: string,
+    sessionId: string,
+    userId?: string,
+    context?: ApprovalContext,
+  ): Promise<ApprovalRecord[]>;
 
   /**
    * Check if a tool is approved.

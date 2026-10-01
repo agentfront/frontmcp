@@ -208,7 +208,16 @@ describe('buildTransformIgnorePatterns (issue #519)', () => {
     expect(isIgnored(patterns, '/proj/node_modules/.pnpm/@noble+hashes@1.7.1/node_modules/@noble/hashes/sha2.js')).toBe(
       false,
     );
-    expect(isIgnored(patterns, '/proj/node_modules/@noble/ciphers/aes.js')).toBe(true);
+    expect(isIgnored(patterns, '/proj/node_modules/@noble/curves/ed25519.js')).toBe(true);
+  });
+
+  it('transforms the @noble packages CodeCall pulls in without any configuration (#660)', () => {
+    const patterns = buildTransformIgnorePatterns();
+    expect(isIgnored(patterns, '/proj/node_modules/@noble/hashes/sha2.js')).toBe(false);
+    expect(isIgnored(patterns, '/proj/node_modules/@noble/ciphers/aes.js')).toBe(false);
+    expect(
+      isIgnored(patterns, '/proj/node_modules/.pnpm/@noble+ciphers@1.0.0/node_modules/@noble/ciphers/aes.js'),
+    ).toBe(false);
   });
 
   it('escapes regex metacharacters in package names', () => {
@@ -346,6 +355,12 @@ describe('buildTestChildEnv (issue #540)', () => {
     });
 
     expect(env['API_KEY']).toBe('from-ci');
+  });
+
+  it('does not force --experimental-vm-modules, which would break transformed ESM-only dependencies', () => {
+    const env = buildTestChildEnv({ effectiveEnv: {}, baseEnv: { NODE_OPTIONS: '--max-old-space-size=4096' } });
+    expect(env['NODE_OPTIONS']).toBe('--max-old-space-size=4096');
+    expect(buildTestChildEnv({ effectiveEnv: {}, baseEnv: { PATH: '/usr/bin' } })['NODE_OPTIONS']).toBeUndefined();
   });
 
   it('passes through a variable that only the real environment has', () => {

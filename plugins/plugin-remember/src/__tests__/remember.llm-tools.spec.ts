@@ -123,6 +123,32 @@ describe('RememberPlugin LLM tools', () => {
       expect((result as { isError?: boolean }).isError).toBe(true);
     });
 
+    it.each([
+      ['remember_this', { key: 'k', value: 'v' }],
+      ['recall', { key: 'k' }],
+      ['forget', { key: 'k' }],
+      ['list_memories', {}],
+    ])('tells the model why %s was refused, in production too, when it omits the scope (#660)', async (tool, args) => {
+      const nodeEnv = process.env['NODE_ENV'];
+      process.env['NODE_ENV'] = 'production';
+
+      try {
+        client = await connect(serverWith({ tools: { enabled: true, allowedScopes: ['user'] } }));
+        const result = (await client.callTool(tool, args)) as {
+          isError?: boolean;
+          content?: Array<{ text?: string }>;
+        };
+
+        const text = (result.content ?? []).map((c) => c.text ?? '').join(' ');
+        expect(result.isError).toBe(true);
+        expect(text).toContain("Scope 'session' is not allowed. Allowed scopes: user");
+        expect(text).not.toContain('Internal FrontMCP error');
+      } finally {
+        if (nodeEnv === undefined) delete process.env['NODE_ENV'];
+        else process.env['NODE_ENV'] = nodeEnv;
+      }
+    });
+
     it('allows a scope inside it', async () => {
       client = await connect(serverWith({ tools: { enabled: true, allowedScopes: ['session'] } }));
 

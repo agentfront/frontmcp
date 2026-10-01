@@ -7,13 +7,14 @@
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 import {
   createMemoryStorage,
+  createNamespacedStorage,
   createStorage,
   type NamespacedStorage,
   type RootStorage,
   type StorageConfig,
 } from '@frontmcp/utils';
 
-import { ApprovalOperationError, approvalRecordSchema, normalizeGrantor } from '../approval';
+import { ApprovalOperationError, approvalRecordSchema, normalizeGrantor, normalizeRevoker } from '../approval';
 import { assertValidTtl } from '../approval/policy';
 import { ApprovalScope, ApprovalState, type ApprovalContext, type ApprovalRecord } from '../types';
 import type {
@@ -34,6 +35,9 @@ import type {
 function escapePattern(str: string): string {
   return str.replace(/[*?[\]\\]/g, '\\$&');
 }
+
+/** How long a revocation stays readable through `getRevocations()`. */
+const REVOCATION_RETENTION_SECONDS = 24 * 60 * 60;
 
 /** Suffix of the key of a time-limited approval granted to a session alone or a user alone. */
 const TIME_LIMITED_KEY_SEGMENT = `scope:${ApprovalScope.TIME_LIMITED}`;
@@ -86,6 +90,8 @@ export interface ApprovalStorageStoreOptions {
 })
 export class ApprovalStorageStore implements ApprovalStore {
   private storage!: NamespacedStorage;
+  /** Revoked approvals live beside the live ones, in a namespace no live-approval query scans. */
+  private revocationStorage?: NamespacedStorage;
   private readonly options: Required<Omit<ApprovalStorageStoreOptions, 'storageInstance'>> & {
     storageInstance?: RootStorage | NamespacedStorage;
   };
@@ -127,6 +133,14 @@ export class ApprovalStorageStore implements ApprovalStore {
     }
 
     this.initialized = true;
+  }
+
+  private get revocations(): NamespacedStorage {
+    this.revocationStorage ??= createNamespacedStorage(
+      this.storage.root,
+      `${this.storage.prefix.replace(/:$/, '')}-revoked`,
+    );
+    return this.revocationStorage;
   }
 
   private ensureInitialized(): void {
@@ -329,9 +343,11 @@ export class ApprovalStorageStore implements ApprovalStore {
     const keys = await this.storage.keys(`${escapePattern(toolId)}:*`);
     const values = await this.storage.mget(keys);
     const keysToDelete: string[] = [];
+    const revoked = new Map<string, ApprovalRecord>();
     for (let i = 0; i < keys.length; i++) {
       const record = this.parseRecord(values[i]);
       if (!record || record.toolId !== toolId || record.state === ApprovalState.DENIED) continue;
+      const matches = keysToDelete.length;
       if (context) {
         const sameSession = sessionId !== undefined && record.sessionId === sessionId;
         if (
@@ -343,18 +359,40 @@ export class ApprovalStorageStore implements ApprovalStore {
         ) {
           keysToDelete.push(keys[i]);
         }
-        continue;
-      }
-      if ((sessionId && record.sessionId === sessionId) || (userId && record.userId === userId)) {
+      } else if ((sessionId && record.sessionId === sessionId) || (userId && record.userId === userId)) {
         keysToDelete.push(keys[i]);
       }
+      if (keysToDelete.length > matches) revoked.set(keys[i], record);
     }
 
     if (keysToDelete.length === 0) {
       return false;
     }
+
+    const revokedAt = Date.now();
+    const revokedBy = normalizeRevoker(options.revokedBy);
+    for (const [key, record] of revoked) {
+      const entry: ApprovalRecord = { ...record, revokedAt, revokedBy, revocationReason: options.reason };
+      await this.revocations.set(key, JSON.stringify(entry), { ttlSeconds: REVOCATION_RETENTION_SECONDS });
+    }
     await this.storage.mdelete(keysToDelete);
     return true;
+  }
+
+  async getRevocations(
+    toolId: string,
+    sessionId: string,
+    userId?: string,
+    context?: ApprovalContext,
+  ): Promise<ApprovalRecord[]> {
+    this.ensureInitialized();
+
+    const records: ApprovalRecord[] = [];
+    for (const key of this.callerKeys(toolId, sessionId, userId, context)) {
+      const record = this.parseRecord(await this.revocations.get(key));
+      if (record && record.toolId === toolId) records.push(record);
+    }
+    return records.sort((a, b) => (a.revokedAt ?? 0) - (b.revokedAt ?? 0));
   }
 
   async isApproved(toolId: string, sessionId: string, userId?: string, context?: ApprovalContext): Promise<boolean> {
@@ -457,6 +495,7 @@ export class ApprovalStorageStore implements ApprovalStore {
       await this.storage.root.disconnect();
     }
 
+    this.revocationStorage = undefined;
     this.initialized = false;
   }
 }

@@ -1,6 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
+import { RememberScopeNotAllowedError } from '../remember.errors';
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
 import type { RememberScope } from '../remember.types';
 import { REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
@@ -64,7 +65,7 @@ export default class RecallTool extends ToolContext {
     const allowedScopes = config.tools?.allowedScopes ?? ['session', 'user', 'tool', 'global'];
 
     if (!allowedScopes.includes(scope)) {
-      this.fail(new Error(`Scope '${scope}' is not allowed. Allowed scopes: ${allowedScopes.join(', ')}`));
+      throw this.fail(new RememberScopeNotAllowedError(scope, allowedScopes));
     }
 
     // Get full entry with metadata

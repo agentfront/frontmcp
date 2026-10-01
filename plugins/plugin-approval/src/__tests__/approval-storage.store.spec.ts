@@ -49,7 +49,8 @@ describe('ApprovalStorageStore', () => {
     keys: jest.Mock;
     mget: jest.Mock;
     mdelete: jest.Mock;
-    root: { disconnect: jest.Mock };
+    prefix: string;
+    root: { disconnect: jest.Mock; set: jest.Mock; get: jest.Mock };
   };
 
   beforeEach(() => {
@@ -64,7 +65,8 @@ describe('ApprovalStorageStore', () => {
       keys: jest.fn().mockResolvedValue([]),
       mget: jest.fn().mockResolvedValue([]),
       mdelete: jest.fn().mockResolvedValue(0),
-      root: { disconnect: jest.fn() },
+      prefix: 'approval:',
+      root: { disconnect: jest.fn(), set: jest.fn(), get: jest.fn() },
     };
 
     const mockRootStorage = {

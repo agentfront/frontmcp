@@ -944,7 +944,7 @@
                 "Using `keyPrefix` to namespace guard keys in a shared Redis instance",
                 "Combining `partitionBy: 'ip'` for global limits with `partitionBy: 'session'` per tool",
                 "In-memory counters are per-process and would allow N times the intended rate with N instances",
-                "Startup fails closed with `GuardStorageUnavailableError` when Redis is down, unless `fallback: 'memory'`"
+                "Startup fails closed, and a limited call is refused, with `GuardStorageUnavailableError` when Redis is down, unless `fallback: 'memory'`"
               ]
             },
             {
