@@ -138,6 +138,20 @@ test.describe('Feature Flags E2E', () => {
       expect(result).toBeSuccessful();
       expect(result).toHaveTextContent('"isEnabled":false');
     });
+
+    test('should return the defaultValue for an unknown flag (#678)', async ({ mcp }) => {
+      const result = await mcp.tools.call('check-flag', { flagKey: 'nonexistent', defaultValue: true });
+
+      expect(result).toBeSuccessful();
+      expect(result).toHaveTextContent('"isEnabled":true');
+    });
+
+    test('should keep a disabled flag disabled whatever the defaultValue', async ({ mcp }) => {
+      const result = await mcp.tools.call('check-flag', { flagKey: 'experimental-agent', defaultValue: true });
+
+      expect(result).toBeSuccessful();
+      expect(result).toHaveTextContent('"isEnabled":false');
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────

@@ -39,6 +39,11 @@ export type AttributesResolver = (ctx: FrontMcpContext) => Record<string, unknow
 
 /** Shared base options for all adapter configurations. */
 interface FeatureFlagBaseOptions {
+  /**
+   * What `this.featureFlags.isEnabled()` answers when the adapter throws or has no answer for the
+   * flag and the call passes no `defaultValue` of its own. Gates use their ref's `defaultValue`.
+   * @default false
+   */
   defaultValue?: boolean;
   cacheStrategy?: FeatureFlagCacheStrategy;
   cacheTtlMs?: number;

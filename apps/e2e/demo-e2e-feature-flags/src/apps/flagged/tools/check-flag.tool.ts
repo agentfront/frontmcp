@@ -3,6 +3,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   flagKey: z.string().describe('Feature flag key to check programmatically'),
+  defaultValue: z.boolean().optional().describe('Answer for a flag the adapter has no answer for'),
 };
 
 const outputSchema = z.object({
@@ -21,7 +22,7 @@ type Output = z.infer<typeof outputSchema>;
 })
 export default class CheckFlagTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
-    const isEnabled = await this.featureFlags.isEnabled(input.flagKey);
+    const isEnabled = await this.featureFlags.isEnabled(input.flagKey, input.defaultValue);
     return {
       flagKey: input.flagKey,
       isEnabled,

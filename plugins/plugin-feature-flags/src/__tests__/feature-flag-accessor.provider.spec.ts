@@ -14,6 +14,11 @@ function createMockAdapter(overrides: Partial<FeatureFlagAdapter> = {}): Feature
   };
 }
 
+/** An `evaluateFlags()` that answers `value` for every key it is asked about. */
+function answering(value: boolean): jest.Mock {
+  return jest.fn(async (keys: string[]) => new Map(keys.map((key) => [key, value])));
+}
+
 function createMockContext(overrides: Partial<FrontMcpContext> = {}): FrontMcpContext {
   return {
     sessionId: 'test-session-id',
@@ -29,9 +34,9 @@ function createMockContext(overrides: Partial<FrontMcpContext> = {}): FrontMcpCo
 
 describe('FeatureFlagAccessor', () => {
   describe('isEnabled', () => {
-    it('should delegate to adapter', async () => {
+    it("should answer with the adapter's evaluateFlags() answer", async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockResolvedValue(true),
+        evaluateFlags: answering(true),
       });
       const accessor = new FeatureFlagAccessor(adapter, createMockContext(), {
         adapter: 'static',
@@ -40,8 +45,8 @@ describe('FeatureFlagAccessor', () => {
 
       const result = await accessor.isEnabled('my-flag');
       expect(result).toBe(true);
-      expect(adapter.isEnabled).toHaveBeenCalledWith(
-        'my-flag',
+      expect(adapter.evaluateFlags).toHaveBeenCalledWith(
+        ['my-flag'],
         expect.objectContaining({
           userId: 'user-123',
           sessionId: 'test-session-id',
@@ -51,7 +56,7 @@ describe('FeatureFlagAccessor', () => {
 
     it('should return defaultValue on adapter error', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockRejectedValue(new Error('network error')),
+        evaluateFlags: jest.fn().mockRejectedValue(new Error('network error')),
       });
       const accessor = new FeatureFlagAccessor(adapter, createMockContext(), {
         adapter: 'static',
@@ -65,7 +70,7 @@ describe('FeatureFlagAccessor', () => {
 
     it('should return per-call defaultValue over config defaultValue on error', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockRejectedValue(new Error('network error')),
+        evaluateFlags: jest.fn().mockRejectedValue(new Error('network error')),
       });
       const accessor = new FeatureFlagAccessor(adapter, createMockContext(), {
         adapter: 'static',
@@ -77,9 +82,30 @@ describe('FeatureFlagAccessor', () => {
       expect(result).toBe(false);
     });
 
+    it('should return the defaultValue for a key the adapter omits (#678)', async () => {
+      const adapter = createMockAdapter({ evaluateFlags: jest.fn().mockResolvedValue(new Map()) });
+      const accessor = new FeatureFlagAccessor(adapter, createMockContext(), {
+        adapter: 'static',
+        flags: {},
+      } as FeatureFlagPluginOptions);
+
+      await expect(accessor.isEnabled('unknown-flag', true)).resolves.toBe(true);
+      await expect(accessor.isEnabled('unknown-flag')).resolves.toBe(false);
+    });
+
+    it("should keep the adapter's false over the defaultValue", async () => {
+      const adapter = createMockAdapter({ evaluateFlags: answering(false) });
+      const accessor = new FeatureFlagAccessor(adapter, createMockContext(), {
+        adapter: 'static',
+        flags: {},
+      } as FeatureFlagPluginOptions);
+
+      await expect(accessor.isEnabled('disabled-flag', true)).resolves.toBe(false);
+    });
+
     it('should return false on error when no defaultValue configured', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockRejectedValue(new Error('fail')),
+        evaluateFlags: jest.fn().mockRejectedValue(new Error('fail')),
       });
       const accessor = new FeatureFlagAccessor(adapter, createMockContext(), {
         adapter: 'static',
@@ -94,7 +120,7 @@ describe('FeatureFlagAccessor', () => {
   describe('caching', () => {
     it('should not cache when strategy is none', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockResolvedValue(true),
+        evaluateFlags: answering(true),
       });
       const accessor = new FeatureFlagAccessor(adapter, createMockContext(), {
         adapter: 'static',
@@ -104,12 +130,12 @@ describe('FeatureFlagAccessor', () => {
 
       await accessor.isEnabled('my-flag');
       await accessor.isEnabled('my-flag');
-      expect(adapter.isEnabled).toHaveBeenCalledTimes(2);
+      expect(adapter.evaluateFlags).toHaveBeenCalledTimes(2);
     });
 
     it('should cache when strategy is session', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockResolvedValue(true),
+        evaluateFlags: answering(true),
       });
       const accessor = new FeatureFlagAccessor(adapter, createMockContext(), {
         adapter: 'static',
@@ -120,12 +146,12 @@ describe('FeatureFlagAccessor', () => {
 
       await accessor.isEnabled('my-flag');
       await accessor.isEnabled('my-flag');
-      expect(adapter.isEnabled).toHaveBeenCalledTimes(1);
+      expect(adapter.evaluateFlags).toHaveBeenCalledTimes(1);
     });
 
     it('should re-evaluate after cache TTL expires', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockResolvedValue(true),
+        evaluateFlags: answering(true),
       });
 
       let currentTime = 1000;
@@ -139,22 +165,38 @@ describe('FeatureFlagAccessor', () => {
       } as FeatureFlagPluginOptions);
 
       await accessor.isEnabled('my-flag'); // call 1 - cache miss
-      expect(adapter.isEnabled).toHaveBeenCalledTimes(1);
+      expect(adapter.evaluateFlags).toHaveBeenCalledTimes(1);
 
       currentTime = 2000; // 1s later, within TTL
       await accessor.isEnabled('my-flag'); // call 2 - cache hit
-      expect(adapter.isEnabled).toHaveBeenCalledTimes(1);
+      expect(adapter.evaluateFlags).toHaveBeenCalledTimes(1);
 
       currentTime = 10_000; // 9s later, TTL expired
       await accessor.isEnabled('my-flag'); // call 3 - cache expired, re-evaluate
-      expect(adapter.isEnabled).toHaveBeenCalledTimes(2);
+      expect(adapter.evaluateFlags).toHaveBeenCalledTimes(2);
 
       dateNowSpy.mockRestore();
     });
 
+    it('should not cache an adapter error', async () => {
+      const adapter = createMockAdapter({
+        evaluateFlags: jest.fn().mockRejectedValueOnce(new Error('network error')).mockImplementation(answering(true)),
+      });
+      const accessor = new FeatureFlagAccessor(adapter, createMockContext(), {
+        adapter: 'static',
+        flags: {},
+        cacheStrategy: 'session',
+        cacheTtlMs: 60_000,
+      } as FeatureFlagPluginOptions);
+
+      await expect(accessor.isEnabled('my-flag', false)).resolves.toBe(false);
+      await expect(accessor.isEnabled('my-flag', false)).resolves.toBe(true);
+      expect(adapter.evaluateFlags).toHaveBeenCalledTimes(2);
+    });
+
     it('should cache with request strategy', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockResolvedValue(false),
+        evaluateFlags: answering(false),
       });
       const accessor = new FeatureFlagAccessor(adapter, createMockContext(), {
         adapter: 'static',
@@ -165,14 +207,14 @@ describe('FeatureFlagAccessor', () => {
 
       await accessor.isEnabled('flag-a');
       await accessor.isEnabled('flag-a');
-      expect(adapter.isEnabled).toHaveBeenCalledTimes(1);
+      expect(adapter.evaluateFlags).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('context resolution', () => {
     it('should use custom userIdResolver', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockResolvedValue(true),
+        evaluateFlags: answering(true),
       });
       const ctx = createMockContext();
       const accessor = new FeatureFlagAccessor(adapter, ctx, {
@@ -182,8 +224,8 @@ describe('FeatureFlagAccessor', () => {
       } as FeatureFlagPluginOptions);
 
       await accessor.isEnabled('flag');
-      expect(adapter.isEnabled).toHaveBeenCalledWith(
-        'flag',
+      expect(adapter.evaluateFlags).toHaveBeenCalledWith(
+        ['flag'],
         expect.objectContaining({
           userId: 'custom-user-id',
         }),
@@ -192,7 +234,7 @@ describe('FeatureFlagAccessor', () => {
 
     it('should use custom attributesResolver', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockResolvedValue(true),
+        evaluateFlags: answering(true),
       });
       const ctx = createMockContext();
       const accessor = new FeatureFlagAccessor(adapter, ctx, {
@@ -202,8 +244,8 @@ describe('FeatureFlagAccessor', () => {
       } as FeatureFlagPluginOptions);
 
       await accessor.isEnabled('flag');
-      expect(adapter.isEnabled).toHaveBeenCalledWith(
-        'flag',
+      expect(adapter.evaluateFlags).toHaveBeenCalledWith(
+        ['flag'],
         expect.objectContaining({
           attributes: { plan: 'enterprise' },
         }),
@@ -212,7 +254,7 @@ describe('FeatureFlagAccessor', () => {
 
     it('should fallback to authInfo.extra.sub for userId', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockResolvedValue(true),
+        evaluateFlags: answering(true),
       });
       const ctx = createMockContext({
         authInfo: { extra: { sub: 'sub-user' } } as any,
@@ -223,8 +265,8 @@ describe('FeatureFlagAccessor', () => {
       } as FeatureFlagPluginOptions);
 
       await accessor.isEnabled('flag');
-      expect(adapter.isEnabled).toHaveBeenCalledWith(
-        'flag',
+      expect(adapter.evaluateFlags).toHaveBeenCalledWith(
+        ['flag'],
         expect.objectContaining({
           userId: 'sub-user',
         }),
@@ -233,7 +275,7 @@ describe('FeatureFlagAccessor', () => {
 
     it('should fallback to clientId when no sub/userId', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockResolvedValue(true),
+        evaluateFlags: answering(true),
       });
       const ctx = createMockContext({
         authInfo: { clientId: 'client-x', extra: {} } as any,
@@ -244,8 +286,8 @@ describe('FeatureFlagAccessor', () => {
       } as FeatureFlagPluginOptions);
 
       await accessor.isEnabled('flag');
-      expect(adapter.isEnabled).toHaveBeenCalledWith(
-        'flag',
+      expect(adapter.evaluateFlags).toHaveBeenCalledWith(
+        ['flag'],
         expect.objectContaining({
           userId: 'client-x',
         }),
@@ -254,7 +296,7 @@ describe('FeatureFlagAccessor', () => {
 
     it('should have undefined userId when no auth info', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockResolvedValue(true),
+        evaluateFlags: answering(true),
       });
       const ctx = createMockContext({ authInfo: undefined as any });
       const accessor = new FeatureFlagAccessor(adapter, ctx, {
@@ -263,8 +305,8 @@ describe('FeatureFlagAccessor', () => {
       } as FeatureFlagPluginOptions);
 
       await accessor.isEnabled('flag');
-      expect(adapter.isEnabled).toHaveBeenCalledWith(
-        'flag',
+      expect(adapter.evaluateFlags).toHaveBeenCalledWith(
+        ['flag'],
         expect.objectContaining({
           userId: undefined,
         }),
@@ -309,7 +351,7 @@ describe('FeatureFlagAccessor', () => {
   describe('resolveRef', () => {
     it('should handle string ref', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockResolvedValue(true),
+        evaluateFlags: answering(true),
       });
       const accessor = new FeatureFlagAccessor(adapter, createMockContext(), {
         adapter: 'static',
@@ -322,7 +364,7 @@ describe('FeatureFlagAccessor', () => {
 
     it('should handle object ref with defaultValue', async () => {
       const adapter = createMockAdapter({
-        isEnabled: jest.fn().mockRejectedValue(new Error('fail')),
+        evaluateFlags: jest.fn().mockRejectedValue(new Error('fail')),
       });
       const accessor = new FeatureFlagAccessor(adapter, createMockContext(), {
         adapter: 'static',
