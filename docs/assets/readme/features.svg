@@ -12,7 +12,6 @@
   @keyframes run{to{stroke-dashoffset:-100}}
   @media (prefers-reduced-motion:reduce){*{animation:none!important}.k{opacity:1}}
 </style>
-<rect width="1280" height="360" fill="#05070a"/>
 <g transform="translate(20 20)"><g class="k k0">
   <rect width="400" height="148" rx="16" fill="url(#card)" stroke="#1d2833"/>
   <rect class="sweep" style="animation-delay:-0.0s" width="400" height="148" rx="16" fill="none" stroke="url(#edge)" stroke-width="1.6" pathLength="100"/>

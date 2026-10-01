@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="380" viewBox="0 0 960 380" role="img" aria-label="Terminal: npx frontmcp create my-app, then npm run dev starts an MCP server on localhost:3000">
+<title>frontmcp create + dev</title>
+<defs>
+  <linearGradient id="bd" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#12945f" stop-opacity=".75"/>
+    <stop offset=".5" stop-color="#c9d1d9" stop-opacity=".6"/>
+    <stop offset="1" stop-color="#15803D" stop-opacity=".6"/>
+  </linearGradient>
+  <filter id="sh" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#12945f" flood-opacity=".10"/></filter>
+</defs>
+<style>
+  .l0{width:0;animation:t0 16.0s steps(28,end) infinite}@keyframes t0{0%,3.75%{width:0}16.00%,94.0%{width:357px}100%{width:0}}.l1{opacity:0;animation:f1 16.0s linear infinite}@keyframes f1{0%,20.00%{opacity:0}21.60%,94.0%{opacity:1}100%{opacity:0}}.l2{opacity:0;animation:f2 16.0s linear infinite}@keyframes f2{0%,23.75%{opacity:0}25.35%,94.0%{opacity:1}100%{opacity:0}}.l3{opacity:0;animation:f3 16.0s linear infinite}@keyframes f3{0%,27.50%{opacity:0}29.10%,94.0%{opacity:1}100%{opacity:0}}.l4{width:0;animation:t4 16.0s steps(26,end) infinite}@keyframes t4{0%,37.50%{width:0}48.88%,94.0%{width:332px}100%{width:0}}.l5{opacity:0;animation:f5 16.0s linear infinite}@keyframes f5{0%,55.00%{opacity:0}56.60%,94.0%{opacity:1}100%{opacity:0}}.l6{opacity:0;animation:f6 16.0s linear infinite}@keyframes f6{0%,59.38%{opacity:0}60.98%,94.0%{opacity:1}100%{opacity:0}}
+  .cur{animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important}text{opacity:1!important}}
+</style>
+<rect x="8" y="8" width="944" height="364" rx="16" fill="#ffffff" stroke="url(#bd)" stroke-width="1.5" filter="url(#sh)"/>
+<path d="M8 24a16 16 0 0 1 16-16h912a16 16 0 0 1 16 16v28H8z" fill="#f6f8fa"/>
+<line x1="8" y1="52" x2="952" y2="52" stroke="#d8dee4"/>
+<circle cx="36" cy="30" r="6.5" fill="#ff5f57"/><circle cx="58" cy="30" r="6.5" fill="#febc2e"/><circle cx="80" cy="30" r="6.5" fill="#28c840"/>
+<text x="480.0" y="35" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="13" fill="#6e7781">~/projects  -  frontmcp</text>
+<clipPath id="c0"><rect class="l0" x="44" y="98" height="28"/></clipPath><text clip-path="url(#c0)" x="44" y="118" xml:space="preserve" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="21"><tspan fill="#12945f">$ </tspan><tspan fill="#1f2328">npx frontmcp create my-app</tspan></text><text class="l1" x="44" y="154" xml:space="preserve" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="21"><tspan fill="#12945f">✔ </tspan><tspan fill="#424a53">TypeScript project scaffolded</tspan></text><text class="l2" x="44" y="190" xml:space="preserve" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="21"><tspan fill="#12945f">✔ </tspan><tspan fill="#424a53">Sample </tspan><tspan fill="#8250df">@App</tspan><tspan fill="#424a53"> and </tspan><tspan fill="#8250df">@Tool</tspan><tspan fill="#424a53"> wired up</tspan></text><text class="l3" x="44" y="226" xml:space="preserve" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="21"><tspan fill="#12945f">✔ </tspan><tspan fill="#424a53">Dev server, tests and deploy config ready</tspan></text><clipPath id="c4"><rect class="l4" x="44" y="256" height="28"/></clipPath><text clip-path="url(#c4)" x="44" y="276" xml:space="preserve" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="21"><tspan fill="#12945f">$ </tspan><tspan fill="#1f2328">cd my-app &amp;&amp; npm run dev</tspan></text><text class="l5" x="44" y="312" xml:space="preserve" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="21"><tspan fill="#12945f">● </tspan><tspan fill="#1f2328">MCP server ready  </tspan><tspan fill="#0969da">http://localhost:3000</tspan></text><text class="l6" x="44" y="348" xml:space="preserve" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="21"><tspan fill="#6e7781">  tools </tspan><tspan fill="#1f2328">1</tspan><tspan fill="#6e7781">   resources </tspan><tspan fill="#1f2328">0</tspan><tspan fill="#6e7781">   prompts </tspan><tspan fill="#1f2328">0</tspan><tspan fill="#6e7781">   hot reload </tspan><tspan fill="#12945f">on</tspan></text>
+<rect class="cur" x="44" y="392" width="11" height="22" fill="#12945f" opacity=".9"/>
+</svg>

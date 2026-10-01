@@ -1,6 +1,10 @@
 <div align="center">
 
-<a href="https://docs.agentfront.dev/frontmcp"><img src="docs/assets/readme/hero.svg" alt="FrontMCP - The TypeScript way to build MCP servers" width="100%"></a>
+<a href="https://docs.agentfront.dev/frontmcp"><picture>
+
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero.svg">
+  <img src="docs/assets/readme/hero.light.svg" alt="FrontMCP - The TypeScript way to build MCP servers" width="100%">
+</picture></a>
 
 [![NPM](https://img.shields.io/npm/v/@frontmcp/sdk.svg?style=flat-square&color=16A34A&labelColor=0b1117&label=npm)](https://www.npmjs.com/package/@frontmcp/sdk)
 [![Node](https://img.shields.io/badge/node-%E2%89%A5%2024-16A34A?style=flat-square&labelColor=0b1117&logo=node.js&logoColor=white)](https://nodejs.org)
@@ -10,7 +14,10 @@
 
 **[Quickstart][docs-quickstart]** &nbsp;&middot;&nbsp; **[Docs][docs-home]** &nbsp;&middot;&nbsp; **[API Reference][docs-sdk-ref]** &nbsp;&middot;&nbsp; **[Website](https://frontmcp.dev)**
 
-<img src="docs/assets/readme/terminal.svg" alt="npx frontmcp create my-app, then npm run dev: an MCP server running on localhost:3000" width="760">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/terminal.svg">
+  <img src="docs/assets/readme/terminal.light.svg" alt="npx frontmcp create my-app, then npm run dev: an MCP server running on localhost:3000" width="760">
+</picture>
 
 </div>
 
@@ -48,7 +55,10 @@ export default class Server {}
 ```
 
 <div align="center">
-<img src="docs/assets/readme/features.svg" alt="Typed end to end, auth built in, ship anywhere, every stage is a hook, tools with a face, one endpoint for any client" width="100%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/features.svg">
+  <img src="docs/assets/readme/features.light.svg" alt="Typed end to end, auth built in, ship anywhere, every stage is a hook, tools with a face, one endpoint for any client" width="100%">
+</picture>
 </div>
 
 <br>
