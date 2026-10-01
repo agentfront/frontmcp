@@ -2,7 +2,9 @@
  * useDynamicTool — registers an MCP tool on mount, unregisters on unmount.
  *
  * Uses useRef for the execute function to avoid stale closures.
- * The tool appears in useListTools and can be called by agents.
+ * The provider registers the tool with the server as a real tool, so it
+ * runs through the server's flows (hooks, authorities, `availableWhen`),
+ * appears in useListTools and can be called by agents, WebMCP included.
  *
  * Supports both JSON Schema and zod-based schemas. When a zod schema
  * is provided, input is validated before reaching the execute callback.
@@ -14,11 +16,20 @@ import type { z } from '@frontmcp/lazy-zod';
 import type { CallToolResult } from '@frontmcp/sdk';
 
 import { FrontMcpContext } from '../provider/FrontMcpContext';
+import type { DynamicToolDef } from '../types';
 import { zodToJsonSchema } from '../utils/zodToJsonSchema';
+
+/** Options every dynamic tool takes, whichever way its schema is given. */
+interface UseDynamicToolCommonOptions {
+  /** MCP behavioral hints, e.g. `{ readOnlyHint: true }`. */
+  annotations?: DynamicToolDef['annotations'];
+  /** Where the tool is offered, e.g. `{ surface: ['webmcp'] }` for in-browser agents only. */
+  availableWhen?: DynamicToolDef['availableWhen'];
+}
 
 // ─── Zod-based options ───────────────────────────────────────────────────────
 
-export interface UseDynamicToolSchemaOptions<S extends z.ZodObject<z.ZodRawShape>> {
+export interface UseDynamicToolSchemaOptions<S extends z.ZodObject<z.ZodRawShape>> extends UseDynamicToolCommonOptions {
   name: string;
   description: string;
   /** Zod schema for type-safe input validation. */
@@ -34,7 +45,7 @@ export interface UseDynamicToolSchemaOptions<S extends z.ZodObject<z.ZodRawShape
 
 // ─── JSON Schema options (backward compat) ───────────────────────────────────
 
-export interface UseDynamicToolJsonSchemaOptions {
+export interface UseDynamicToolJsonSchemaOptions extends UseDynamicToolCommonOptions {
   name: string;
   description: string;
   schema?: never;
@@ -75,6 +86,11 @@ export function useDynamicTool<S extends z.ZodObject<z.ZodRawShape>>(options: Us
   const inputSchemaKey = stableKey(computedInputSchema);
   // Memoized on the content key on purpose, see above
   const resolvedInputSchema = useMemo(() => computedInputSchema, [inputSchemaKey]);
+  // Same for inline annotations / availability objects
+  const annotationsKey = stableKey(options.annotations ?? null);
+  const annotations = useMemo(() => options.annotations, [annotationsKey]);
+  const availableWhenKey = stableKey(options.availableWhen ?? null);
+  const availableWhen = useMemo(() => options.availableWhen, [availableWhenKey]);
 
   // Keep the latest execute fn in a ref to avoid stale closures
   const executeRef = useRef(options.execute);
@@ -118,8 +134,10 @@ export function useDynamicTool<S extends z.ZodObject<z.ZodRawShape>>(options: Us
       description,
       inputSchema: resolvedInputSchema,
       execute: stableExecute,
+      ...(annotations && { annotations }),
+      ...(availableWhen && { availableWhen }),
     });
 
     return unregister;
-  }, [dynamicRegistry, name, description, resolvedInputSchema, enabled]);
+  }, [dynamicRegistry, name, description, resolvedInputSchema, annotations, availableWhen, enabled]);
 }

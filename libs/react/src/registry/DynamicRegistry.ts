@@ -2,9 +2,10 @@
  * DynamicRegistry — React-side registry for tools and resources that
  * components register on mount and unregister on unmount.
  *
- * Operates as an overlay on the base DirectMcpServer: dynamic entries
- * are merged into listTools/listResources and checked first on
- * callTool/readResource.
+ * Tools are mirrored into the server as real tools by `bindDynamicTools`
+ * (the provider binds each server's registry), so they run through the
+ * server's flows. Resources stay an overlay on the base DirectMcpServer:
+ * they are merged into listResources and checked first on readResource.
  *
  * Uses the same listener/version pattern as ServerRegistry for
  * useSyncExternalStore compatibility.
