@@ -138,6 +138,15 @@ redis: {
 },
 ```
 
+From a single connection URL (what managed Redis providers hand out). It is read into `host` / `port` / `password` / `db` at parse time; `rediss://` sets `tls: true`; the user part must be empty or `default`:
+
+```typescript
+redis: {
+  url: process.env['REDIS_URL'], // redis://:password@host:6379/0 (or rediss:// for TLS)
+  keyPrefix: 'mcp:', // optional, as with the other forms
+},
+```
+
 ### For Vercel KV
 
 ```typescript
@@ -332,7 +341,7 @@ throttle: {
 },
 ```
 
-`throttle.storage` takes the `@frontmcp/utils` storage shape (`{ type: 'redis', redis: { config } }` or `{ type: 'redis', redis: { url } }`), not the top-level `redis` shape.
+`throttle.storage` takes the `@frontmcp/utils` storage shape (`{ type: 'redis', redis: { config } }` or `{ type: 'redis', redis: { url } }`), not the top-level `redis` shape (which takes `{ host, ... }` or `{ url }`).
 
 ## Common Patterns
 

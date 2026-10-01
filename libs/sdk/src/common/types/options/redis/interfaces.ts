@@ -67,6 +67,25 @@ export interface RedisProviderOptionsInterface extends CommonStorageOptionsInter
 }
 
 /**
+ * Redis configured from a connection URL — `redis://[[user]:password@]host[:port][/db]`,
+ * or `rediss://` for TLS. The URL is read into `host` / `port` / `password` /
+ * `db` / `tls` when the config is parsed, so every consumer sees the same
+ * connection whichever way it was written.
+ */
+export interface RedisUrlOptionsInterface extends CommonStorageOptionsInterface {
+  /**
+   * Storage provider type. Optional — a `url` already says Redis.
+   */
+  provider?: 'redis';
+
+  /**
+   * Redis connection URL, e.g. `process.env.REDIS_URL`. The user part may be
+   * empty or `default` (ACL users other than `default` are not supported).
+   */
+  url: string;
+}
+
+/**
  * Vercel KV provider configuration.
  * Uses environment variables by default (KV_REST_API_URL, KV_REST_API_TOKEN).
  */
@@ -95,6 +114,7 @@ export interface VercelKvProviderOptionsInterface extends CommonStorageOptionsIn
 export type RedisOptionsInterface =
   | RedisProviderOptionsInterface
   | VercelKvProviderOptionsInterface
+  | RedisUrlOptionsInterface
   | (RedisConnectionInterface & CommonStorageOptionsInterface);
 
 /**
@@ -102,4 +122,5 @@ export type RedisOptionsInterface =
  */
 export type PubsubOptionsInterface =
   | RedisProviderOptionsInterface
+  | RedisUrlOptionsInterface
   | (RedisConnectionInterface & CommonStorageOptionsInterface);

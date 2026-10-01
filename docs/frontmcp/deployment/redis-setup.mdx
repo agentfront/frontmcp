@@ -144,6 +144,17 @@ export default class Server {}
 
 Switch the `redis` block to `{ provider: 'vercel-kv' }` when deploying on Vercel KV—the Cache Plugin will keep reusing the same store without code changes.
 
+A managed Redis usually hands you a single connection URL. Pass it as `url` instead of the separate fields:
+
+```typescript
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  redis: { url: process.env.REDIS_URL }, // redis://:password@host:6379/0
+})
+```
+
+The URL is read into `host`, `port`, `password` and `db` when the config is parsed; `rediss://` turns `tls` on, and `?db=2` works when the path carries no database. The user part may be empty or `default` (Redis ACL users other than `default` are refused with a validation error). `keyPrefix` and `defaultTtlMs` go next to `url` as usual.
+
 ### Running more than one instance
 
 Redis lets several instances share sessions, but each instance still signs and encrypts with its own secrets. Give every instance the **same** values:
@@ -177,7 +188,7 @@ Not every Redis consumer reacts the same way when Redis is down as the server st
 })
 ```
 
-`throttle.storage` takes the `@frontmcp/utils` storage shape (`{ type: 'redis', redis: { config } }` or `{ type: 'redis', redis: { url } }`), not the top-level `redis` shape.
+`throttle.storage` takes the `@frontmcp/utils` storage shape (`{ type: 'redis', redis: { config } }` or `{ type: 'redis', redis: { url } }`), not the top-level `redis` shape (which takes `{ host, ... }` or `{ url }`).
 
 ## Environment Variables
 
