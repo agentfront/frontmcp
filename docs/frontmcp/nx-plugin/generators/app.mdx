@@ -30,7 +30,8 @@ apps/my-app/
 │   ├── main.ts               # Server entry point
 │   ├── my-app.app.ts         # @App class
 │   └── tools/
-│       └── hello.tool.ts     # Sample @Tool
+│       ├── hello.tool.ts     # Sample @Tool
+│       └── hello.tool.spec.ts # Starter spec, so `nx test` has a test to run
 ├── project.json               # Nx project config with targets
 ├── package.json               # Minimal manifest so `frontmcp build` runs in the project root
 ├── tsconfig.json
@@ -65,6 +66,19 @@ import { MyAppApp } from './my-app.app';
 export default class Server {}
 ```
 
+```ts src/tools/hello.tool.spec.ts
+import HelloTool from './hello.tool';
+
+describe('HelloTool', () => {
+  it('greets the caller by name', async () => {
+    // execute() holds the tool's logic; build the tool without the request context the server injects.
+    const tool: HelloTool = Object.create(HelloTool.prototype);
+
+    await expect(tool.execute({ name: 'Ada' })).resolves.toEqual({ message: 'Hello, Ada!' });
+  });
+});
+```
+
 ## Nx Targets
 
 The generated `project.json` includes these targets:
@@ -75,7 +89,17 @@ The generated `project.json` includes these targets:
 | `dev`       | `@frontmcp/nx:dev`       | Development mode with watch |
 | `serve`     | `@frontmcp/nx:serve`     | Run application server      |
 | `test`      | `@frontmcp/nx:test`      | Run Jest tests              |
+| `typecheck` | `nx:run-commands`        | `tsc --noEmit` on `tsconfig.lib.json` and `tsconfig.spec.json` |
 | `inspector` | `@frontmcp/nx:inspector` | Launch MCP Inspector        |
+
+## TypeScript Configuration
+
+`tsconfig.json` is what `frontmcp build` compiles, so it sets what a FrontMCP build needs regardless of the workspace's base config:
+
+- `module: commonjs`, with `moduleResolution: node10` on TypeScript 5 and `bundler` on TypeScript 6+ (which deprecates `node10`). Under `node10`, an inherited `customConditions` is reset to `null`.
+- `rootDir` at the workspace root, so code imported from libraries compiles too.
+- `composite`, `declarationMap` and `emitDeclarationOnly` set to `false`, so a TS-solution base config (`create-nx-workspace --preset=ts`) still emits JavaScript.
+- `"nx": { "addTypecheckTarget": false }`, so a workspace that registers `@nx/js/typescript` uses the `typecheck` target above instead of an inferred `tsc --build`.
 
 ## Example
 

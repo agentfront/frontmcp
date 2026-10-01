@@ -37,13 +37,14 @@ nx g @frontmcp/nx:lib shared-utils --libType generic
 
 ```
 libs/shared-utils/src/
-├── shared-utils.ts    # Sample class
-└── index.ts           # Barrel export
+├── shared-utils.ts       # Sample class
+├── shared-utils.spec.ts  # Starter spec
+└── index.ts              # Barrel export
 ```
 
 ### Plugin
 
-A FrontMCP plugin library extending `DynamicPlugin`:
+A FrontMCP plugin library extending `DynamicPlugin`. The class is the one the [`plugin` generator](/frontmcp/nx-plugin/generators/plugin) writes:
 
 ```bash
 nx g @frontmcp/nx:lib my-plugin --libType plugin
@@ -51,13 +52,14 @@ nx g @frontmcp/nx:lib my-plugin --libType plugin
 
 ```
 libs/my-plugin/src/
-├── my-plugin.plugin.ts  # @Plugin class
+├── my-plugin.plugin.ts       # @Plugin class
+├── my-plugin.plugin.spec.ts  # Starter spec
 └── index.ts
 ```
 
 ### Adapter
 
-A FrontMCP adapter library extending `DynamicAdapter`:
+A FrontMCP adapter library extending `DynamicAdapter`. The class is the one the [`adapter` generator](/frontmcp/nx-plugin/generators/adapter) writes:
 
 ```bash
 nx g @frontmcp/nx:lib my-adapter --libType adapter
@@ -65,7 +67,8 @@ nx g @frontmcp/nx:lib my-adapter --libType adapter
 
 ```
 libs/my-adapter/src/
-├── my-adapter.adapter.ts  # @Adapter class
+├── my-adapter.adapter.ts       # @Adapter class
+├── my-adapter.adapter.spec.ts  # Starter spec
 └── index.ts
 ```
 
@@ -79,7 +82,8 @@ nx g @frontmcp/nx:lib github-tools --libType tool-register
 
 ```
 libs/github-tools/src/
-├── github-tools.tools.ts  # Tool classes + exported array
+├── github-tools.tools.ts       # Tool classes + exported array
+├── github-tools.tools.spec.ts  # Starter spec
 └── index.ts
 ```
 
@@ -94,6 +98,23 @@ import { GithubToolsTools } from '@frontmcp/github-tools';
 })
 class MyApp {}
 ```
+
+## Project Setup
+
+Every library type gets the same project files:
+
+| File                          | Purpose                                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `project.json`                | `test` runs the starter spec with [`@frontmcp/nx:test`](/frontmcp/nx-plugin/executors/test); `typecheck` runs `tsc --noEmit` on `tsconfig.lib.json` and `tsconfig.spec.json` |
+| `tsconfig.json`               | CommonJS with `moduleResolution` `node10` on TypeScript 5 and `bundler` on TypeScript 6+, decorators, and JavaScript output even when the base config is a TS-solution one (`composite`, `emitDeclarationOnly`) |
+| `tsconfig.lib.json` / `.spec.json` | Sources and specs                                                                                                   |
+| `jest.config.cjs`             | Maps the `tsconfig.base.json` path aliases so cross-project imports resolve in tests                                    |
+
+The generator registers the import path in `tsconfig.base.json` as a relative path, `"@frontmcp/my-lib": ["./libs/my-lib/src/index.ts"]`, which TypeScript accepts with or without a `baseUrl`. Apps import the library through that alias, and `nx build <app>` bundles it, so a library needs no build target of its own (a workspace that registers `@nx/js/typescript` still infers one from `tsconfig.lib.json`).
+
+<Note>
+  `tsconfig.json` sets `"nx": { "addTypecheckTarget": false }` so that, in a workspace that registers the `@nx/js/typescript` plugin, Nx uses the project's own `typecheck` target instead of inferring a `tsc --build` one.
+</Note>
 
 ## Publishable Libraries
 

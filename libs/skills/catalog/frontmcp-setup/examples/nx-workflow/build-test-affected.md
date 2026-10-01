@@ -19,7 +19,7 @@ Use Nx commands for efficient building, testing, and CI with affected-only execu
 
 ```bash
 # Build a single server (builds all dependencies in correct order)
-nx build gateway
+nx build server-gateway
 
 # Test a single app
 nx test billing
@@ -59,7 +59,7 @@ nx g @frontmcp/nx:tool calculate-tax --project=billing
 nx test billing
 
 # 4. Build the server that includes this app
-nx build gateway
+nx build server-gateway
 
 # 5. Or test everything affected by your changes
 nx affected -t test

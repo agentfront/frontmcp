@@ -73,9 +73,9 @@ export default AdminPortal;
 ```
 
 ```bash
-# Build each server independently
-nx build public-gateway
-nx build admin-portal
+# Build each server independently (server projects are named server-<name>)
+nx build server-public-gateway
+nx build server-admin-portal
 
 # Test all projects
 nx run-many -t test
