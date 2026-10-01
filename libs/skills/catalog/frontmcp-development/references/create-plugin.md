@@ -359,6 +359,8 @@ class BillingApp {}
 class OpsApp {}
 ```
 
+An app that does not install the plugin does not get its providers: there, `this.get(Token)` throws and `this.tryGet(Token)` returns `undefined`. Install the plugin on the server (`@FrontMcp({ plugins })`) to share it with every app. Up to 1.8.7 the providers a plugin derives from its options (`dynamicProviders(options)`, `init({ providers })`) leaked to every other app on the server.
+
 ## Step 5: Extend Metadata and Execution Context
 
 FrontMCP provides two extension mechanisms for plugins: **metadata augmentation** (add fields to decorators) and **context extensions** (add properties to `this` in tools/resources/prompts).

@@ -206,6 +206,12 @@ class OpsApp {}
 
 A grant made through `this.approval` inside `RefundTool` is written to `billingStorage`, and one made inside `DeployTool` is written to `opsStorage`.
 
+An app that does not install the plugin does not get its providers: in that app's tools, resources and prompts,
+`this.get(Token)` throws and `this.tryGet(Token)` returns `undefined` (so `this.remember` or `this.approval` are not
+available there). To share a plugin with every app, install it on the server (`@FrontMcp({ plugins })`). Up to 1.8.7,
+the providers a plugin derives from its options (`dynamicProviders(options)` and `init({ providers })`) leaked to every
+other app on the same server.
+
 ## Adding Hooks
 
 Plugins can intercept flow stages using hooks. Use `this.get(Token)` to access providers:

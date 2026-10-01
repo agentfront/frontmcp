@@ -79,6 +79,12 @@ export default class ProviderRegistry
 {
   /** used to track which registry provided which token */
   private readonly providedBy: Map<Token, ProviderRegistry>;
+  /**
+   * Tokens merged into this registry on behalf of part of its subtree only (the providers a plugin
+   * installed on one app derives from its options), by the registries whose subtree may resolve them.
+   * Lookups made on this registry itself (the flows a scope runs) still see them.
+   */
+  private readonly visibleOnlyBelow = new Map<Token, Set<ProviderRegistry>>();
   /** topo order (deps first) */
   private order: Set<Token> = new Set();
 
@@ -130,10 +136,35 @@ export default class ProviderRegistry
 
   /* -------------------- Hierarchy helpers -------------------- */
 
-  /** Walk up the registry chain to find a def for a token. */
-  private lookupDefInHierarchy(token: Token): { registry: ProviderRegistry; rec: ProviderRecord } | undefined {
-    if (this.defs.has(token as any)) return { registry: this, rec: this.defs.get(token as any)! };
-    return this.providers?.lookupDefInHierarchy(token);
+  /** Walk up the registry chain to find a def for a token, as `requester` (where the lookup started) sees it. */
+  private lookupDefInHierarchy(
+    token: Token,
+    requester: ProviderRegistry = this,
+  ): { registry: ProviderRegistry; rec: ProviderRecord } | undefined {
+    const rec = this.defs.get(token);
+    if (rec && !this.hidesFrom(token, requester)) return { registry: this, rec };
+    return this.providers?.lookupDefInHierarchy(token, requester);
+  }
+
+  /** Whether `token`, merged here for part of the subtree only, is out of `requester`'s reach. */
+  private hidesFrom(token: Token, requester: ProviderRegistry): boolean {
+    const roots = this.visibleOnlyBelow.get(token);
+    if (!roots || requester === this) return false;
+    for (const root of roots) {
+      if (requester.isWithin(root)) return false;
+    }
+    return true;
+  }
+
+  /** Whether `root` is this registry or one of its ancestors. */
+  private isWithin(root: ProviderRegistry): boolean {
+    return this === root || (this.parentProviders?.isWithin(root) ?? false);
+  }
+
+  /** The ancestor of this registry (or itself) whose parent is `ancestor`; undefined when `ancestor` is not above it. */
+  subtreeBelow(ancestor: ProviderRegistry): ProviderRegistry | undefined {
+    if (this.parentProviders === ancestor) return this;
+    return this.parentProviders?.subtreeBelow(ancestor);
   }
 
   /** Resolve a DEFAULT-scoped dependency from the hierarchy, enforcing scope & instantiation. */
@@ -561,16 +592,21 @@ export default class ProviderRegistry
   }
 
   get<T>(token: Token<T>): T {
-    if (this.instances.has(token)) return this.instances.get(token) as T;
+    return this.getFor(token, this);
+  }
 
-    const rec = this.defs.get(token as any);
+  private getFor<T>(token: Token<T>, requester: ProviderRegistry): T {
+    const visible = !this.hidesFrom(token, requester);
+    if (visible && this.instances.has(token)) return this.instances.get(token) as T;
+
+    const rec = visible ? this.defs.get(token) : undefined;
     if (rec && this.getProviderScope(rec) !== ProviderScope.GLOBAL) {
       const scName = ProviderScope[this.getProviderScope(rec)];
       throw new ProviderScopedAccessError(tokenName(token), scName);
     }
 
     // bubble to parent
-    if (this.providers) return this.providers.get<T>(token);
+    if (this.providers) return this.providers.getFor<T>(token, requester);
 
     throw new ProviderNotAvailableError(tokenName(token), 'not found in local or parent registries');
   }
@@ -660,6 +696,15 @@ export default class ProviderRegistry
     );
   }
 
+  /**
+   * Copy provider definitions (and GLOBAL instances) another registry built into this one.
+   *
+   * @param visibleBelow - Merge them for this registry's own lookups (the flows a scope runs) and for
+   *   `visibleBelow`'s subtree only: other registries below this one resolve them as if they were not
+   *   here. A plugin installed on one app passes its app, so another app's tools, resources and
+   *   prompts cannot resolve the providers it contributes. A definition merged without this
+   *   restriction (a server-level plugin's) is kept and stays visible to every registry below.
+   */
   mergeFromRegistry(
     providedBy: ProviderRegistry,
     exported: {
@@ -668,8 +713,18 @@ export default class ProviderRegistry
       /** Instance may be undefined for CONTEXT-scoped providers (built per-request) */
       instance: ProviderEntry | undefined;
     }[],
+    visibleBelow?: ProviderRegistry,
   ) {
     for (const { token, def, instance } of exported) {
+      if (visibleBelow) {
+        // Never narrow a definition every registry below already resolves.
+        if (this.defs.has(token) && !this.visibleOnlyBelow.has(token)) continue;
+        const roots = this.visibleOnlyBelow.get(token) ?? new Set<ProviderRegistry>();
+        roots.add(visibleBelow);
+        this.visibleOnlyBelow.set(token, roots);
+      } else {
+        this.visibleOnlyBelow.delete(token);
+      }
       // Use default GLOBAL scope when scope is not explicitly set (undefined)
       // This matches the behavior in getProviderScope() and resolveFromViews()
       const scope = def.metadata.scope ?? ProviderScope.GLOBAL;
@@ -937,8 +992,12 @@ export default class ProviderRegistry
     // instead of cached.
     const requestTokens = requestScopedTokens(contextProviders);
     const contextStore = new Map<Token, unknown>(sessionProviders);
+    // The source's views also hold what it keeps from this registry's reach (another app's plugin providers).
+    const sourceRegistry =
+      contextSource instanceof ProviderRegistry && contextSource !== this ? contextSource : undefined;
     for (const [token, instance] of contextProviders ?? []) {
-      if (!ownDefs.has(token)) contextStore.set(token, instance);
+      if (ownDefs.has(token) || sourceRegistry?.hidesFrom(token, this)) continue;
+      contextStore.set(token, instance);
     }
 
     // Build all CONTEXT-scoped providers (including normalized SESSION/REQUEST)

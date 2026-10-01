@@ -299,15 +299,15 @@ export default class PluginRegistry
 
         // Also merge to scope's registry (for flow buildViews to find them)
         // This enables CONTEXT-scoped providers from plugins to be built during flows.
-        // The scope.providers is a ProviderRegistryInterface but the actual implementation
-        // is ProviderRegistry which has mergeFromRegistry. We check at runtime to be safe.
+        // A plugin installed below the scope (on an app or agent) keeps the copy out of reach of
+        // the scope's other apps: only its own subtree resolves it (#678).
         const scopeProviders = this.scope.providers;
-        if (
-          scopeProviders !== this.providers &&
-          'mergeFromRegistry' in scopeProviders &&
-          typeof (scopeProviders as ProviderRegistry).mergeFromRegistry === 'function'
-        ) {
-          (scopeProviders as ProviderRegistry).mergeFromRegistry(providers, exported);
+        if (scopeProviders !== this.providers && scopeProviders instanceof ProviderRegistry) {
+          const installedOnScope = !this.owner || this.owner.kind === 'scope';
+          const visibleBelow = installedOnScope
+            ? undefined
+            : (this.providers.subtreeBelow(scopeProviders) ?? this.providers);
+          scopeProviders.mergeFromRegistry(providers, exported, visibleBelow);
         }
       }
       this.instances.set(token, pluginInstance);
