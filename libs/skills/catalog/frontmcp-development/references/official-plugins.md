@@ -99,7 +99,7 @@ class MyServer {}
 
 ### Modes
 
-- `codecall_only` -- Hides all tools from `list_tools` except CodeCall meta-tools. All other tools are discovered only via `codecall:search`. Best when the server has a large number of tools and you want the AI to search-then-execute. When `appIds` is set, only tools from those apps are hidden — tools from other apps remain visible.
+- `codecall_only` -- Hides all tools from `list_tools` except CodeCall meta-tools. All other tools are discovered only via `codecall:search` and reached only through CodeCall: a client's direct `tools/call` of a hidden tool is refused. Best when the server has a large number of tools and you want the AI to search-then-execute. When `appIds` is set, only tools from those apps are hidden — tools from other apps remain visible.
 - `codecall_opt_in` -- Shows all tools in `list_tools` normally. Tools opt-in to CodeCall execution via metadata. Useful when only some tools benefit from orchestrated execution.
 - `metadata_driven` -- Per-tool `metadata.codecall` controls visibility and CodeCall availability independently. Most granular control.
 
@@ -117,6 +117,18 @@ CodeCallPlugin.init({
 ```
 
 Without `appIds`, `codecall_only` mode hides ALL tools in the server. With `appIds`, only tools from the specified apps are hidden — tools from other apps remain directly callable.
+
+### Hidden Tools Are Not Directly Callable
+
+A tool CodeCall hides from `list_tools` (in any mode: every non-meta tool in `codecall_only` unless it sets
+`visibleInListTools: true`, any tool with `visibleInListTools: false` otherwise) is reachable only through CodeCall. A
+client's direct `tools/call` of it -- MCP, an MCP Apps widget, an in-page WebMCP agent, `DirectMcpServer.callTool()` --
+is answered exactly like a call of an unknown tool (`Tool "<name>" not found`), before its input is validated. Still
+allowed: CodeCall's own calls (`codecall:execute`, `codecall:invoke`), server-side composition (`this.callTool()` from
+a tool, agent or job), and the server's own system tools (such as `sendElicitationResult`). Give a tool that clients
+or widgets call directly `codecall: { visibleInListTools: true }`. Up to 1.8.7 the tool was only missing from the
+listing, and a client that knew its name ran it directly, past `includeTools`, `enabledInCodeCall`, the blocked
+namespaces and `directCalls`.
 
 ### VM Presets
 
@@ -144,7 +156,7 @@ Control how individual tools interact with CodeCall:
 @Tool({
   name: 'my_tool',
   codecall: {
-    visibleInListTools: false, // Hide from list_tools (only discoverable via codecall:search)
+    visibleInListTools: false, // Hide from list_tools; reached only through CodeCall (direct tools/call refused)
     enabledInCodeCall: true, // Available for execution via codecall:execute
     tags: ['data', 'query'], // Extra indexing hints for semantic search
   },
@@ -175,7 +187,7 @@ CodeCallPlugin.init({
 - `tool.appId` names the owning app for the tools its adapters and plugins provide too, so `includeTools: (tool) => tool.appId !== 'admin'` withholds every tool of app `admin`.
 - `codecall:searchSkills` and `codecall:searchKnowledge` run the SDK's `skills:filter` flow, so a skill a plugin withholds there (a flag-disabled skill, for one) is absent from both.
 - `directCalls.allowedTools` and `directCalls.filter` only narrow the base policy; listing a withheld tool does not make it callable. Unlisted tools are refused.
-- Hiding a tool from search is not the control; the refusal at execution is. Do not rely on `visibleInListTools` or search ranking to protect a tool.
+- Hiding a tool from search is not the control; the refusal at execution is. Do not rely on search ranking to protect a tool. Hiding it from `list_tools` (`visibleInListTools: false`) does also refuse a client's direct `tools/call` of it, but CodeCall's own surfaces then apply this policy.
 - `includeTools` and `directCalls.filter` receive the same object, with the tool's `annotations` and declared `metadata` (`tool.metadata?.annotations` is the same object as `tool.annotations`). It is a deep read-only copy, so a filter cannot change what the next decision reads.
 - Namespace bindings (`mail.send({...})` for a tool named `mail.send`) are AgentScript wrappers over `callTool()` inside the sandbox: they count toward `vm.maxSteps` and pass the rate limit and suspicious-sequence checks exactly like `callTool('mail.send', {...})`. A binding with no argument sends `{}`.
 - `codecall:execute` results never include a `stack`, in any environment. In `runtime_error`, `syntax_error` and `tool_error` messages, stack frames are dropped and absolute paths (POSIX, Windows, UNC, `file:` URLs, quoted paths) become `[path]`; other URLs are kept.

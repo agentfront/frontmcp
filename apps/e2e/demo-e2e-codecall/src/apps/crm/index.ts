@@ -24,7 +24,11 @@ import UsersUpdateTool from './tools/users-update.tool';
       mode: 'codecall_only',
       topK: 10,
       includeTools: (tool) => !tool.name.startsWith('admin:'),
-      directCalls: { enabled: true, allowedTools: ['users-list', 'users-get'] },
+      directCalls: {
+        enabled: true,
+        // users-create and the activities tools for the parallel perf spec, which invokes them
+        allowedTools: ['users-list', 'users-get', 'users-create', 'activities-list', 'activities-stats'],
+      },
     }),
   ],
   tools: [

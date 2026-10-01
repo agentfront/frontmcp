@@ -62,13 +62,25 @@ CodeCallPlugin.init({
 });
 ```
 
-| Tool Location | Behavior                                |
-| ------------- | --------------------------------------- |
-| `list_tools`  | Only CodeCall meta-tools visible        |
-| CodeCall      | All tools searchable and callable       |
-| Override      | Set `visibleInListTools: true` per tool |
+| Tool Location       | Behavior                                          |
+| ------------------- | ------------------------------------------------- |
+| `list_tools`        | Only CodeCall meta-tools visible                  |
+| CodeCall            | All tools searchable and callable                 |
+| Direct `tools/call` | Refused for a hidden tool, as for an unknown tool |
+| Override            | Set `visibleInListTools: true` per tool           |
 
 **Best for:** Large toolsets (20+), OpenAPI adapters, clean client experience.
+
+<Note>
+  A tool CodeCall hides from `list_tools` is reachable only through CodeCall, in every mode: a client's direct
+  `tools/call` of it is answered exactly like a call of an unknown tool (`Tool "<name>" not found`), before its input
+  is validated, so the refusal reveals nothing about it. CodeCall's own calls (`codecall:execute`, `codecall:invoke`)
+  and server-side composition (a tool, agent or job calling it with `this.callTool()`) still reach it, and the
+  server's own system tools (such as `sendElicitationResult`) are never refused. Releases up to 1.8.7 hid the tool from
+  the listing only, so a client that knew its name called it directly, past `includeTools`, `enabledInCodeCall`,
+  the blocked namespaces and `directCalls`. A tool that clients or widgets must call directly sets
+  `visibleInListTools: true`.
+</Note>
 
 ### `codecall_opt_in`
 
@@ -97,10 +109,11 @@ CodeCallPlugin.init({
 });
 ```
 
-| Tool Location | Behavior                                      |
-| ------------- | --------------------------------------------- |
-| `list_tools`  | Based on `visibleInListTools` (default: true) |
-| CodeCall      | Based on `enabledInCodeCall` (default: false) |
+| Tool Location       | Behavior                                                        |
+| ------------------- | --------------------------------------------------------------- |
+| `list_tools`        | Based on `visibleInListTools` (default: true)                   |
+| CodeCall            | Based on `enabledInCodeCall` (default: false)                   |
+| Direct `tools/call` | Refused for a tool with `visibleInListTools: false`, as unknown |
 
 **Best for:** Small toolsets, fine-grained control.
 
@@ -118,7 +131,7 @@ Control individual tool behavior with the `codecall` metadata field:
     // Is this tool searchable and callable via CodeCall?
     enabledInCodeCall: true,  // default depends on mode
 
-    // Is this tool visible in standard list_tools?
+    // Is this tool visible in standard list_tools, and callable directly with tools/call?
     visibleInListTools: false,  // default depends on mode
 
     // App ID for multi-app filtering (auto-detected if not set)
@@ -145,7 +158,8 @@ Control individual tool behavior with the `codecall` metadata field:
       visibleInListTools: false,
     }
     ```
-    Use for: Most tools in `codecall_only` mode.
+    Use for: Most tools in `codecall_only` mode. A client's direct `tools/call` of the tool is refused as for an
+    unknown tool; it is reached through CodeCall.
   </Accordion>
 
   <Accordion title="Visible everywhere">
@@ -596,6 +610,8 @@ export default class MyApp {}
     ```ts
     CodeCallPlugin.init({ mode: 'codecall_only' })
     ```
+    From here a client's direct `tools/call` of a hidden tool is refused. Keep `visibleInListTools: true` on any tool
+    a client or widget still calls directly.
   </Step>
 
   <Step title="Remove Direct Visibility">
