@@ -93,13 +93,15 @@ describe('bundleWithEsbuild', () => {
     expect(buildArgs.external).not.toContain('custom-pkg');
   });
 
-  it('inlines FrontMCP runtime packages with bundleRuntime + selfContained', async () => {
+  // #679 — an SEA binary resolves a bare require() against Node's built-ins only:
+  // `--sea` binaries died with "No such built-in module: reflect-metadata".
+  it('inlines FrontMCP runtime packages in selfContained mode', async () => {
     const config: FrontmcpExecConfig = {
       ...defaultConfig,
       esbuild: { external: ['@frontmcp/sdk'] },
     };
 
-    await bundleWithEsbuild('/tmp/entry.js', '/tmp/out', config, { selfContained: true, bundleRuntime: true });
+    await bundleWithEsbuild('/tmp/entry.js', '/tmp/out', config, { selfContained: true });
 
     const buildArgs = mockBuild.mock.calls[0][0];
     for (const pkg of ['@frontmcp/sdk', '@frontmcp/di', '@frontmcp/utils', '@frontmcp/auth', 'reflect-metadata']) {

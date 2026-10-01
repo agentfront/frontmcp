@@ -153,7 +153,7 @@ describe('buildMcpb integration', () => {
       expect.any(String),
       expect.any(String),
       expect.anything(),
-      expect.objectContaining({ bundleRuntime: true, selfContained: true }),
+      expect.objectContaining({ selfContained: true, outputName: 'demo-app.server' }),
     );
     expect(manifest.server.mcp_config.env).toEqual({
       FRONTMCP_STDIO: '1',

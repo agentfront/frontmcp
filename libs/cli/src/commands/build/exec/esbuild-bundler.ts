@@ -32,7 +32,8 @@ const DEFAULT_EXTERNALS = [
 ];
 
 // Runtime packages that are normally externalized for single-copy semantics.
-// Archives with no node_modules (mcpb) must inline them instead.
+// Self-contained outputs (SEA binaries, the mcpb server) have no node_modules
+// to resolve them from and must inline them instead.
 export const RUNTIME_PACKAGE_EXTERNALS = [
   '@frontmcp/sdk',
   '@frontmcp/di',
@@ -91,7 +92,17 @@ export async function bundleWithEsbuild(
   entryPath: string,
   outDir: string,
   config: FrontmcpExecConfig,
-  options?: { selfContained?: boolean; bundleRuntime?: boolean; outputName?: string },
+  options?: {
+    /**
+     * The output runs with no node_modules next to it (an SEA binary, the mcpb
+     * server): the FrontMCP runtime and `reflect-metadata` are inlined, and only
+     * native addons and optional peers stay external. An SEA binary resolves a
+     * bare `require()` against Node's built-in modules only, so anything left
+     * external there fails with `No such built-in module` (#679).
+     */
+    selfContained?: boolean;
+    outputName?: string;
+  },
 ): Promise<BundleResult> {
   // Lazy-load esbuild
   let esbuild: typeof import('esbuild');
@@ -107,8 +118,8 @@ export async function bundleWithEsbuild(
   const bundleName = `${options?.outputName || config.name}.bundle.js`;
   const bundlePath = path.join(outDir, bundleName);
 
-  // In self-contained mode (SEA), only keep true native addons external
-  const baseExternals = options?.bundleRuntime
+  // In self-contained mode, only keep true native addons and optional peers external
+  const baseExternals = options?.selfContained
     ? DEFAULT_EXTERNALS.filter((e) => !RUNTIME_PACKAGE_EXTERNALS.includes(e))
     : DEFAULT_EXTERNALS;
   const external = options?.selfContained
