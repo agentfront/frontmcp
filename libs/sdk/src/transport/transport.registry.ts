@@ -343,6 +343,20 @@ export class TransportService {
     return this.backendKind;
   }
 
+  /** The configured backend as an operator reads it in a log line. */
+  private sessionStoreLabel(): string {
+    switch (this.backendKind) {
+      case 'sqlite':
+        return 'SQLite';
+      case 'vercel-kv':
+        return 'Vercel KV';
+      case 'redis':
+        return 'Redis';
+      default:
+        return 'the session store';
+    }
+  }
+
   /**
    * Slide the stored session's TTL while this instance is serving it. Redis and Vercel KV
    * session stores extend the TTL on read, so a plain `get` is enough. Throttled per session
@@ -575,7 +589,7 @@ export class TransportService {
         lastAccessedAt: Date.now(),
       };
       sessionStore.set(sessionId, updatedSession, defaultTtlMs).catch((err) => {
-        this.scope.logger.warn('[TransportService] Failed to update session in Redis', {
+        this.scope.logger.warn(`[TransportService] Failed to update session in ${this.sessionStoreLabel()}`, {
           sessionId: sessionId.slice(0, 20),
           error: err instanceof Error ? err.message : String(err),
         });
@@ -669,7 +683,7 @@ export class TransportService {
         initialized: true, // Mark as initialized for session recreation
       };
       sessionStore.set(sessionId, storedSession, defaultTtlMs).catch((err) => {
-        this.scope.logger.warn('[TransportService] Failed to persist session to Redis', {
+        this.scope.logger.warn(`[TransportService] Failed to persist session to ${this.sessionStoreLabel()}`, {
           sessionId: sessionId.slice(0, 20),
           error: err instanceof Error ? err.message : String(err),
         });

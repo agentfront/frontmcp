@@ -12,6 +12,10 @@ jest.mock('@frontmcp/utils', () => {
   return { ...actual, createStorage: jest.fn(actual.createStorage) };
 });
 
+jest.mock('@frontmcp/storage-sqlite', () => ({
+  SqliteTaskStore: jest.fn().mockImplementation(() => ({ kind: 'sqlite-task-store' })),
+}));
+
 describe('task-store.factory', () => {
   it('createMemoryTaskStore returns a usable memory-backed store', async () => {
     const { store, type, storage } = createMemoryTaskStore({ keyPrefix: 'test:mem:' });
@@ -37,6 +41,17 @@ describe('task-store.factory', () => {
   it('createTaskStore auto-detects memory in the default environment', async () => {
     const { type } = await createTaskStore({ keyPrefix: 'test:auto:' });
     expect(type).toBe('memory');
+  });
+
+  it('createTaskStore hands every SQLite option, busyTimeoutMs included, to SqliteTaskStore', async () => {
+    const { SqliteTaskStore } = jest.requireMock<{ SqliteTaskStore: jest.Mock }>('@frontmcp/storage-sqlite');
+    const { type } = await createTaskStore({
+      sqlite: { path: '/tmp/tasks.sqlite', walMode: false, ttlCleanupIntervalMs: 1000, busyTimeoutMs: 40 },
+    });
+    expect(type).toBe('sqlite');
+    expect(SqliteTaskStore).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/tmp/tasks.sqlite', walMode: false, ttlCleanupIntervalMs: 1000, busyTimeoutMs: 40 }),
+    );
   });
 
   it('createTaskStore throws for Edge runtime with memory-only config', async () => {
