@@ -473,7 +473,7 @@ The Lambda adapter requires an additional dependency:
 npm install @codegenie/serverless-express
 ```
 
-`frontmcp build --target lambda` refuses to build without it, and bundles it into `dist/lambda/handler.cjs`. The `dist/lambda/` folder therefore deploys on its own (`CodeUri: dist/lambda/` in SAM, `Code.fromAsset('dist/lambda')` in CDK) with no `node_modules` or Lambda Layer.
+`frontmcp create --target lambda` adds it to `dependencies`. `frontmcp build --target lambda` refuses to build without it, and bundles it into `dist/lambda/handler.cjs`. The `dist/lambda/` folder therefore deploys on its own (`CodeUri: dist/lambda/` in SAM, `Code.fromAsset('dist/lambda')` in CDK) with no `node_modules` or Lambda Layer.
 
 ### Cold Start Performance
 
