@@ -215,7 +215,7 @@ const elicitation = new SqliteElicitationStore({
   <Accordion title="Database is locked">
     **Cause**: Multiple processes are trying to write to the same SQLite file simultaneously.
 
-    **Solution**: The store sets `busy_timeout` (5 s by default) before it enables WAL and creates tables, and retries `SQLITE_BUSY` during startup, so two processes starting on the same file wait for each other. If a writer holds the lock longer than that, raise `busyTimeoutMs`. SQLite still allows one writer at a time: for many writer processes, use Redis.
+    **Solution**: The store sets `busy_timeout` (5 s by default) before it enables WAL and creates tables, and retries `SQLITE_BUSY` during startup, so two processes starting on the same file wait for each other. If a writer holds the lock longer than that, raise `busyTimeoutMs` (it applies to every store built from the block: sessions, elicitation and tasks, and to `tasks.sqlite` and `auth.tokenStorage.sqlite` on their own). A session write that still times out is logged as `[TransportService] Failed to persist session to SQLite`. SQLite still allows one writer at a time: for many writer processes, use Redis.
 
   </Accordion>
 

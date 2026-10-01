@@ -470,6 +470,13 @@ export const tokenStorageSqliteSchema = z.object({
    * @default true
    */
   walMode: z.boolean().optional(),
+
+  /**
+   * Milliseconds to wait for a lock held by another process before a write
+   * fails with `SQLITE_BUSY`.
+   * @default 5000
+   */
+  busyTimeoutMs: z.number().int().nonnegative().optional(),
 });
 
 export type TokenStorageSqliteConfig = z.infer<typeof tokenStorageSqliteSchema>;

@@ -226,6 +226,36 @@ describe('TransportService', () => {
         await service.destroy();
         expect(fakeSqliteStore.close).toHaveBeenCalledTimes(1);
       });
+
+      it('hands busyTimeoutMs to the SQLite store', async () => {
+        const { SqliteSessionStore } = jest.requireMock<{ SqliteSessionStore: jest.Mock }>('@frontmcp/storage-sqlite');
+        service = new TransportService(mockScope as never, {
+          sqlite: { path: '/tmp/test-sessions.sqlite', busyTimeoutMs: 250 },
+        });
+        await service.ready;
+        expect(SqliteSessionStore).toHaveBeenCalledWith(
+          expect.objectContaining({ path: '/tmp/test-sessions.sqlite', busyTimeoutMs: 250 }),
+        );
+      });
+
+      it('names SQLite, not Redis, when persisting a session fails', async () => {
+        fakeSqliteStore.set.mockRejectedValueOnce(new Error('SQLITE_BUSY: database is locked'));
+        service = new TransportService(mockScope as never, {
+          sqlite: { path: '/tmp/test-sessions.sqlite' },
+        });
+        await service.ready;
+        await service.createTransporter('streamable-http', 'token', 'sqlite-session', mockResponse as never);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(mockScope.logger.warn).toHaveBeenCalledWith(
+          '[TransportService] Failed to persist session to SQLite',
+          expect.objectContaining({ error: 'SQLITE_BUSY: database is locked' }),
+        );
+        expect(mockScope.logger.warn).not.toHaveBeenCalledWith(
+          expect.stringContaining('Redis'),
+          expect.anything(),
+        );
+      });
     });
   });
 

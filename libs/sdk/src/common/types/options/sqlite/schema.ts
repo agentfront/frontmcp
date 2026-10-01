@@ -44,6 +44,14 @@ export const sqliteOptionsSchema = z.object({
    * @default true
    */
   walMode: z.boolean().optional().default(true),
+
+  /**
+   * Milliseconds a connection waits for a lock held by another process before
+   * the write fails with `SQLITE_BUSY`. Left unset here so the storage layer's
+   * own default (5000) applies.
+   * @default 5000
+   */
+  busyTimeoutMs: z.number().int().nonnegative().optional(),
 } satisfies RawZodShape<SqliteOptionsInterface>);
 
 /**

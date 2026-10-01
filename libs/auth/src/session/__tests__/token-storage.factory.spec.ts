@@ -129,6 +129,7 @@ describe('token-storage.factory', () => {
           encryption: { secret: 's3cr3t' },
           ttlCleanupIntervalMs: 30000,
           walMode: false,
+          busyTimeoutMs: 1500,
         },
       })) as unknown as { __kind: string };
 
@@ -138,6 +139,7 @@ describe('token-storage.factory', () => {
         encryption: { secret: 's3cr3t' },
         ttlCleanupIntervalMs: 30000,
         walMode: false,
+        busyTimeoutMs: 1500,
       });
       expect(connectSqlite).toHaveBeenCalledTimes(1);
     });

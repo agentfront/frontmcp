@@ -327,6 +327,7 @@ interface TasksConfig {
     encryption?: { secret: string };
     walMode?: boolean;
     ttlCleanupIntervalMs?: number;
+    busyTimeoutMs?: number; // lock wait before SQLITE_BUSY, default 5000
   };
 
   /**
