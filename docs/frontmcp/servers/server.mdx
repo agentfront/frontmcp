@@ -80,7 +80,8 @@ Everything else is optional with sensible defaults.
   /** Transport & session lifecycle (NEW in v0.6) */
   transport?: {
     // Session lifecycle
-    // sessionMode has been removed in v1.0 — configure via transport.protocol presets
+    // sessionMode has no effect since v1.0: sessions follow transport.protocol ('stateless-api' serves
+    // without them). A value other than 'stateful' logs a startup warning.
     platformDetection?: {
       mappings?: { pattern: string | RegExp; platform: AIPlatformType }[],
       customOnly?: boolean,
