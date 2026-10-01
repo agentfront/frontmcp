@@ -1,11 +1,11 @@
 ---
 name: distributed-ha
-description: Deploy FrontMCP across multiple pods with heartbeat, session takeover, and notification relay for zero-downtime failover
+description: Deploy FrontMCP across multiple pods with heartbeat, cross-pod request relay, session takeover, and notification relay for zero-downtime failover
 ---
 
 # Distributed High Availability
 
-FrontMCP's HA module provides automatic session failover across multiple pods using Redis. Three components work together: HeartbeatService (liveness detection), session takeover (atomic CAS), and NotificationRelay (cross-pod MCP notifications).
+FrontMCP's HA module lets any pod receive any request of an MCP session, using Redis. Four components work together: HeartbeatService (liveness detection), request relay (a request for a session another live pod owns is served by that pod), session takeover (atomic CAS — a session whose owner stopped is served by the receiving pod), and NotificationRelay (cross-pod MCP notifications).
 
 ## When to Use This Skill
 
@@ -33,6 +33,7 @@ FrontMCP's HA module provides automatic session failover across multiple pods us
 - Redis 6+ accessible from all pods
 - `@frontmcp/sdk` and `@frontmcp/cli` installed
 - `FRONTMCP_DEPLOYMENT_MODE=distributed` environment variable
+- The same `MCP_SESSION_SECRET` on every pod (session ids are encrypted with it; a pod with another secret answers other pods' sessions with `404`)
 
 ## Step 1: Configure @FrontMcp Decorator
 
@@ -79,8 +80,11 @@ export default defineConfig({
 
 ```bash
 export FRONTMCP_DEPLOYMENT_MODE=distributed
+export MCP_SESSION_SECRET=<same value on every pod>
 frontmcp build --target distributed
 ```
+
+The build writes the `ha` block to `FRONTMCP_HA_*` variables in the generated setup file (only when the platform has not set them), and every pod reads them at startup.
 
 Deploy with Docker or Kubernetes (see example below).
 
@@ -97,12 +101,14 @@ redis-cli GET "mcp:ha:heartbeat:mcp-server-7b8f9-abc12"
 
 ## Configuration
 
-| Field                   | Type   | Default   | Description                                      |
-| ----------------------- | ------ | --------- | ------------------------------------------------ |
-| `heartbeatIntervalMs`   | number | 10000     | How often each pod writes its heartbeat to Redis |
-| `heartbeatTtlMs`        | number | 30000     | TTL for heartbeat key (should be 2-3x interval)  |
-| `takeoverGracePeriodMs` | number | 5000      | Wait time before claiming orphaned sessions      |
-| `redisKeyPrefix`        | string | `mcp:ha:` | Redis key prefix for all HA keys                 |
+| Field                   | Environment variable                | Type   | Default   | Description                                      |
+| ----------------------- | ----------------------------------- | ------ | --------- | ------------------------------------------------ |
+| `heartbeatIntervalMs`   | `FRONTMCP_HA_HEARTBEAT_INTERVAL_MS` | number | 10000     | How often each pod writes its heartbeat to Redis |
+| `heartbeatTtlMs`        | `FRONTMCP_HA_HEARTBEAT_TTL_MS`      | number | 30000     | TTL for heartbeat key (should be 2-3x interval)  |
+| `takeoverGracePeriodMs` | `FRONTMCP_HA_TAKEOVER_GRACE_MS`     | number | 5000      | Wait time before claiming orphaned sessions      |
+| `redisKeyPrefix`        | `FRONTMCP_HA_KEY_PREFIX`            | string | `mcp:ha:` | Redis key prefix for all HA keys                 |
+
+`heartbeatTtlMs` is also how long a request for a stopped pod's session is answered with `503` + `Retry-After` before another pod takes it over.
 
 ## Architecture
 
@@ -110,22 +116,28 @@ redis-cli GET "mcp:ha:heartbeat:mcp-server-7b8f9-abc12"
 
 Each pod writes `mcp:ha:heartbeat:{nodeId}` to Redis every `heartbeatIntervalMs` with PX TTL of `heartbeatTtlMs`. The value contains `{ nodeId, startedAt, lastBeat, sessionCount }`. When a pod dies, the key expires.
 
+### Request Relay
+
+The owner of each session is recorded on the transport bus (`mcp:bus:session:{sessionId}`) and in the persisted session record. The hookable `relayToSessionOwner` stage of `http:request` (after the IP filter, before quota and auth) finds it; when it is another **live** pod the request (method, URL, headers, parsed body, client address) is published to `mcp:ha:notify:{ownerNodeId}`. The owner runs it through its own full `http:request` flow — auth, quota, transport and hooks run there — and streams the response (status, headers, each chunk, end; SSE included) back. A client disconnect aborts it on the owner. An owner that does not listen, does not acknowledge within 5s, or loses its heartbeat mid-request yields `503` + `Retry-After` (`SessionOwnerUnreachableError`), never a 500. A relayed request is never relayed again.
+
 ### Session Takeover
 
 When a request arrives for a session owned by a dead pod:
 
 1. The live pod checks if the owner's heartbeat key exists
 2. If missing, runs an atomic Lua CAS script: verifies `expectedOldNodeId`, updates `nodeId` + `reassignedAt`
-3. Returns `{ claimed: true }` on success, `{ claimed: false }` if another pod won the race
+3. On success it recreates the transport from the persisted session, records itself as owner on the bus, and serves the request; if another pod won the race, it relays the request to that pod
+
+Takeover needs `transport.persistence` (Streamable HTTP only — an SSE stream cannot move to another pod).
 
 ### Notification Relay
 
-Each pod subscribes to `mcp:ha:notify:{nodeId}` via Redis Pub/Sub. Cross-pod MCP notifications (progress updates, resource changes) are published to the target pod's channel for local delivery.
+Each pod subscribes to `mcp:ha:notify:{nodeId}` via Redis Pub/Sub. A notification for a session on another pod is published to the channel of the pod that owns it (looked up on the bus) and delivered there; it is never relayed twice.
 
 ## Redis Connection, TTL and Recovery
 
-- HA uses one dedicated ioredis client built from the top-level `redis` config (host/port/password/db/tls or `url`). It reconnects on its own, logs errors at a rate-limited interval, and is closed on shutdown. Vercel KV cannot back HA.
-- The orphan scanner reads `<keyPrefix>session:` (default `mcp:transport:session:`), the same prefix the session store writes, and only runs when `transport.persistence.redis` is set.
+- HA uses one dedicated ioredis client built from the top-level `redis` config (host/port/password/db/tls or `url`) for commands and publishing, plus a second connection for the relay channel subscription (retried 1s→30s until it succeeds). Both reconnect on their own, log errors at a rate-limited interval, and are closed on shutdown. Vercel KV cannot back HA.
+- The orphan scanner reads `<keyPrefix>session:` (default `mcp:session:`, as `keyPrefix` defaults to `mcp:`), the same prefix the session store writes, and only runs when `transport.persistence.redis` is set. A claimed session is re-advertised on the bus, so every pod relays its next requests to the claimer, which recreates the transport on the first one.
 - Session TTL is `persistence.defaultTtlMs`, then `persistence.redis.defaultTtlMs`, then 1 hour. The pod serving a session refreshes it at most once per quarter TTL.
 - If Redis is unreachable at startup the server still starts; the session store retries with exponential backoff (1s doubling to 30s) and persistence resumes without a restart.
 - `.frontmcp/machine-id` is only read/written in standalone development (never in `distributed` or `serverless`); in Kubernetes the machine ID is `HOSTNAME`.
@@ -137,7 +149,7 @@ FrontMCP sets:
 - **Cookie**: `__frontmcp_node` on Streamable HTTP initialize
 - **Header**: `X-FrontMCP-Machine-Id` on every distributed response (initialize, message POSTs, DELETE, stateless and MCP 2026-07-28 requests, SSE, `/healthz`, `/readyz`, `/metrics` and 404s). The Express host and the web-fetch handler add it next to the security headers; the session flows also set it in the hookable `applyNodeHeaders` stage. Only distributed mode (`FRONTMCP_DEPLOYMENT_MODE=distributed`) sends it
 
-NGINX sticky session example:
+Affinity is an optimization: without it a request on the wrong pod is relayed to the owner (one Redis round trip each way). NGINX sticky session example:
 
 ```nginx
 upstream mcp_backend {
@@ -158,16 +170,18 @@ upstream mcp_backend {
 
 ## Errors
 
-| Error                       | When                                       | Solution                                                |
-| --------------------------- | ------------------------------------------ | ------------------------------------------------------- |
-| `SessionClaimConflictError` | Session claimed by another pod during race | Retry --- the load balancer will route to the new owner |
-| `HaConfigurationError`      | Redis not configured for distributed mode  | Add `redis` to `@FrontMcp()` config                     |
+| Error                          | When                                                                                        | Solution                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `SessionOwnerUnreachableError` | `503` + `Retry-After`: owner alive by heartbeat but did not answer the relay (just stopped) | Retry after `Retry-After` seconds; by then the owner answers or is taken over |
+| `SessionClaimConflictError`    | Takeover lost to a pod that is gone too, or the session expired (client gets `404`)         | None — a lost race against a live pod is relayed to it instead                |
+| `HaConfigurationError`         | Redis not configured for distributed mode                                                   | Add `redis` to `@FrontMcp()` config                                           |
 
 ## Verification Checklist
 
 ### Configuration
 
 - [ ] `FRONTMCP_DEPLOYMENT_MODE=distributed` set in deployment
+- [ ] Same `MCP_SESSION_SECRET` on every pod
 - [ ] Redis accessible from all pods
 - [ ] `heartbeatTtlMs` >= 2x `heartbeatIntervalMs`
 - [ ] Transport persistence configured with Redis
@@ -175,20 +189,24 @@ upstream mcp_backend {
 ### Runtime
 
 - [ ] `redis-cli --scan --pattern "mcp:ha:heartbeat:*"` shows entries for each pod
+- [ ] `redis-cli PUBSUB CHANNELS "mcp:ha:notify:*"` lists one channel per pod
+- [ ] A request sent to a pod that does not own the session is answered (relayed; `X-FrontMCP-Machine-Id` names the owner)
 - [ ] Killing a pod results in its heartbeat expiring within TTL
-- [ ] Surviving pods claim orphaned sessions after takeover grace period
+- [ ] Surviving pods claim orphaned sessions after takeover grace period (`redis-cli HGETALL "mcp:bus:session:<id>"` names the new owner)
 - [ ] `/healthz` and `/readyz` return healthy on all pods
 
 ## Troubleshooting
 
-| Problem                                  | Cause                                  | Solution                                                                                                                                          |
-| ---------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Sessions not transferred after pod death | `heartbeatTtlMs` too high              | Lower TTL while keeping >= 2x interval (e.g., 20-30s for a 10s interval)                                                                          |
-| `HaConfigurationError` on startup        | Missing Redis config                   | Add `redis` to `@FrontMcp()` decorator                                                                                                            |
-| Duplicate notifications                  | Shared Redis subscriber connection     | Use dedicated connections per relay                                                                                                               |
-| Sessions expire too early or too late    | TTL not configured                     | Set `transport.persistence.defaultTtlMs` (or `persistence.redis.defaultTtlMs`); default is 1 hour and slides while the owning pod serves requests |
-| Redis was down when pods started         | Startup connect failed                 | Nothing to do: the session store reconnects with backoff (1s to 30s) and `/readyz` turns 200                                                      |
-| Session takeover race failures           | High pod count + simultaneous restarts | Increase `takeoverGracePeriodMs`                                                                                                                  |
+| Problem                                    | Cause                                          | Solution                                                                                                                                          |
+| ------------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `503` "did not answer the relayed request" | Owner just stopped (heartbeat not expired yet) | Expected for up to `heartbeatTtlMs`; the client retries after `Retry-After` and the session is taken over                                         |
+| `404` on another pod for a live session    | Pods use different `MCP_SESSION_SECRET`        | Give every pod the same `MCP_SESSION_SECRET`                                                                                                      |
+| Sessions not transferred after pod death   | `heartbeatTtlMs` too high                      | Lower TTL while keeping >= 2x interval (e.g., 20-30s for a 10s interval)                                                                          |
+| `HaConfigurationError` on startup          | Missing Redis config                           | Add `redis` to `@FrontMcp()` decorator                                                                                                            |
+| Duplicate notifications                    | Shared Redis subscriber connection             | Use dedicated connections per relay                                                                                                               |
+| Sessions expire too early or too late      | TTL not configured                             | Set `transport.persistence.defaultTtlMs` (or `persistence.redis.defaultTtlMs`); default is 1 hour and slides while the owning pod serves requests |
+| Redis was down when pods started           | Startup connect failed                         | Nothing to do: the session store reconnects with backoff (1s to 30s) and `/readyz` turns 200                                                      |
+| Session takeover race failures             | High pod count + simultaneous restarts         | Increase `takeoverGracePeriodMs`                                                                                                                  |
 
 ## Examples
 

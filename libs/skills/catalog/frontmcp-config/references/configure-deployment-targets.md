@@ -157,6 +157,8 @@ frontmcp build --target vercel
 | `takeoverGracePeriodMs` | number | 5000      | Grace period before takeover |
 | `redisKeyPrefix`        | string | `mcp:ha:` | Redis key prefix             |
 
+The build writes these to `FRONTMCP_HA_HEARTBEAT_INTERVAL_MS`, `FRONTMCP_HA_HEARTBEAT_TTL_MS`, `FRONTMCP_HA_TAKEOVER_GRACE_MS` and `FRONTMCP_HA_KEY_PREFIX` in the generated setup file (only where the platform has not set them), which every pod reads at startup.
+
 ### Project-Defined CLI Commands (`cli.commands`)
 
 Register project-specific verbs that ship alongside the built-in
