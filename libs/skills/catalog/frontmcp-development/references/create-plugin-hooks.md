@@ -62,6 +62,9 @@ These are the flow names with pre-built hook decorator exports in `@frontmcp/sdk
 | `resources:read-resource`           | Resource reading          | `ResourceHook`              |
 | `resources:list-resources`          | Resource listing          | `ListResourcesHook`         |
 | `resources:list-resource-templates` | Resource template listing | `ListResourceTemplatesHook` |
+| `prompts:get-prompt`                | Prompt retrieval          | `PromptHook`                |
+| `prompts:list-prompts`              | Prompt listing            | `ListPromptsHook`           |
+| `completion:complete`               | Argument completion       | `CompletionHook`            |
 | `agents:call-agent`                 | Agent invocation          | `AgentCallHook`             |
 | `channels:send-notification`        | Channel notification send | `ChannelSendHook`           |
 | `channels:list`                     | Channel listing           | `ChannelListHook`           |
@@ -152,10 +155,13 @@ import {
   AgentCallHook, // FlowHooksOf('agents:call-agent')
   ChannelListHook, // FlowHooksOf('channels:list')
   ChannelSendHook, // FlowHooksOf('channels:send-notification')
+  CompletionHook, // FlowHooksOf('completion:complete')
   HttpHook, // FlowHooksOf('http:request')
+  ListPromptsHook, // FlowHooksOf('prompts:list-prompts')
   ListResourcesHook, // FlowHooksOf('resources:list-resources')
   ListResourceTemplatesHook, // FlowHooksOf('resources:list-resource-templates')
   ListToolsHook, // FlowHooksOf('tools:list-tools')
+  PromptHook, // FlowHooksOf('prompts:get-prompt')
   ResourceHook, // FlowHooksOf('resources:read-resource')
   ToolHook, // FlowHooksOf('tools:call-tool')
 } from '@frontmcp/sdk';
@@ -167,7 +173,7 @@ Usage:
 const { Will, Did, Around, Stage } = ToolHook;
 ```
 
-> **Note:** Other internal flows (e.g., `prompts:get-prompt`, `prompts:list-prompts`, `skills:search`, `completion:complete`, transport flows) exist at runtime and can be hooked by passing the flow name to `FlowHooksOf<'flow:name'>('flow:name')`, but they do not currently ship with a pre-built typed export. Prefer the pre-built exports above when one is available.
+> **Note:** Other flows (e.g., `skills:filter`, transport flows) can be hooked by passing the flow name to `FlowHooksOf('flow:name')`. Prefer the pre-built exports above when one is available: exporting them is also what puts a flow's types in the published package, which is why `FlowHooksOf('prompts:get-prompt')`, `'prompts:list-prompts'` and `'completion:complete'` did not typecheck in consumer projects up to 1.8.7.
 
 ## call-tool Flow Stages
 
@@ -310,7 +316,9 @@ export class MyApp {}
 
 Plugins are initialized in array order. Hook priority determines execution order within the same stage.
 
-Hooks declared on an app's providers, on its plugins (including plugins nested inside them), and on those plugins' providers run only for that app's tools, resources and prompts (`tools:call-tool`, `resources:read-resource`, `prompts:get-prompt`, `completion:complete`), including the ones its adapters and plugins provide, such as the tools an OpenAPI adapter generates. Plugins registered on the server (`@FrontMcp({ plugins })`) apply to every app. Resources and prompts the server serves outside every app, such as the SEP-2640 `skill://` resources, run every app's hooks.
+Hooks declared on an app's providers, on its plugins (including plugins nested inside them), and on those plugins' providers run only for that app's tools, resources and prompts (`tools:call-tool`, `resources:read-resource`, `prompts:get-prompt`, `completion:complete`), including the ones its adapters and plugins provide, such as the tools an OpenAPI adapter generates. Plugins and providers registered on the server (`@FrontMcp({ plugins, providers })`) apply to every app. Resources and prompts the server serves outside every app, such as the SEP-2640 `skill://` resources, run every app's hooks.
+
+A hook declared on a `CONTEXT`-scoped provider (`@Provider({ scope: ProviderScope.CONTEXT })`, a class provider) runs on the instance built for the request or session -- the same instance the request's tools get from `this.get()`. Up to 1.8.7, hooks on server-level and `CONTEXT`-scoped providers were never registered.
 
 ## Using Hooks Inside a @Tool Class
 
@@ -377,11 +385,12 @@ class ProcessOrderTool extends ToolContext {
 ### Available Stages for Tool Hooks
 
 ```
-parseInput → findTool → checkToolAuthorization → createToolCallContext
-  → validateInput → execute → validateOutput → finalize
+parseInput → ensureRemoteCapabilities → findTool → checkToolAuthorization → checkEntryAuthorities
+  → createTaskIfRequested → createToolCallContext → checkToolCredentials → acquireQuota → acquireSemaphore
+  → validateInput → execute → validateOutput → releaseSemaphore → releaseQuota → applyUI → finalize
 ```
 
-Any stage can have `@Will`, `@Did`, `@Stage`, or `@Around` hooks.
+A tool-class hook runs on the tool instance, which `createToolCallContext` builds. So it can hook `Did`/`Stage` on `createToolCallContext` and any hook on a later stage. A hook on an earlier stage, `Will`/`Around` on `createToolCallContext`, or a list-flow hook (`ListToolsHook`; listing builds no instance) fails startup with `InvalidHookFlowError` -- put those on a plugin or a provider. The same holds for `@Resource` (`createResourceContext`), `@Prompt` (`createPromptContext`) and `@Agent` (`createAgentContext`) classes. `@Job` classes cannot declare hooks at all (jobs do not run through a hookable flow); hook `tools:call-tool` for the `execute_job` tool instead. Up to 1.8.7 these hooks were accepted and silently never ran.
 
 ## Common Patterns
 
@@ -415,6 +424,7 @@ Any stage can have `@Will`, `@Did`, `@Stage`, or `@Around` hooks.
 | Problem                                       | Cause                                            | Solution                                                                          |
 | --------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------- |
 | Hook never fires                              | Plugin not registered in `plugins` array         | Add plugin class to `@App` or `@FrontMcp` `plugins` array                         |
+| `InvalidHookFlowError` at startup             | Entry-class hook that could never run            | Move early-stage, list-flow and `@Job` hooks to a plugin or a provider            |
 | Hook fires for wrong flow                     | Used wrong flow name in `FlowHooksOf`            | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)            |
 | `@Around` skips the stage entirely            | `next()` not called inside the around handler    | Always `await next()` to execute the wrapped stage                                |
 | Multiple hooks execute in wrong order         | Priorities not set or conflicting                | Set explicit `priority` values; lower numbers execute first                       |

@@ -255,6 +255,10 @@ Get the in-process channel event bus (if channels are enabled).
 get channelEventBus(): ChannelEventBus | undefined
 ```
 
+`channels`, `channelNotifications` and `channelEventBus` are declared on `ScopeEntry`, the type of `this.scope` in tools,
+resources and other contexts, so `this.scope.channelEventBus?.emit('app:error', payload)` typechecks without a cast
+(up to 1.8.7 it needed one).
+
 ### skillSession
 
 Get the skill session manager (if skills exist).

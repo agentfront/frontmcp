@@ -334,6 +334,13 @@ export const ResourceHook = FlowHooksOf('resources:read-resource');
 export const ListResourcesHook = FlowHooksOf('resources:list-resources');
 export const ListResourceTemplatesHook = FlowHooksOf('resources:list-resource-templates');
 
+// Prompt and completion hooks. Exported so their flow augmentations land in the public type graph
+// and `FlowHooksOf('prompts:get-prompt' | 'prompts:list-prompts' | 'completion:complete')` typechecks
+// for consumers (#678).
+export const PromptHook = FlowHooksOf('prompts:get-prompt');
+export const ListPromptsHook = FlowHooksOf('prompts:list-prompts');
+export const CompletionHook = FlowHooksOf('completion:complete');
+
 // Agent hooks
 export const AgentCallHook = FlowHooksOf('agents:call-agent');
 
