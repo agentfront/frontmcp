@@ -63,7 +63,7 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] Per-client/per-IP limits are set
 - [ ] Throttle configuration uses `@FrontMcp({ throttle: {...} })`
 - [ ] Multi-instance: `throttle.storage` uses the storage shape `{ type: 'redis', redis: { config: { host, port } } }` (not the top-level `redis` shape, which silently falls back to auto-detection)
-- [ ] Decided what happens when the throttle Redis is down at startup: the default fails closed (`GuardStorageUnavailableError`); `throttle.storage.fallback: 'memory'` starts with per-instance counters instead
+- [ ] Decided what happens when the throttle Redis is down, at startup or mid-run: the default fails closed (`GuardStorageUnavailableError`); `throttle.storage.fallback: 'memory'` uses per-instance counters instead
 - [ ] Large payload limits are set to prevent memory exhaustion
 
 ### Dependencies

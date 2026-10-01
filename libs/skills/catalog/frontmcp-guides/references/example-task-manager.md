@@ -31,8 +31,8 @@ An authenticated task management MCP server with CRUD tools, a Redis-backed prov
   },
   "devDependencies": {
     "@frontmcp/testing": "^1.0.0",
-    "jest": "^29.0.0",
-    "ts-jest": "^29.0.0",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.4.0",
     "typescript": "^5.4.0",
   },
 }

@@ -3,10 +3,11 @@
  */
 
 import type { StorageConfig } from '@frontmcp/utils';
-import type { RateLimitConfig } from '../rate-limit/types';
+
 import type { ConcurrencyConfig } from '../concurrency/types';
-import type { TimeoutConfig } from '../timeout/types';
 import type { IpFilterConfig } from '../ip-filter/types';
+import type { RateLimitConfig } from '../rate-limit/types';
+import type { TimeoutConfig } from '../timeout/types';
 
 /**
  * Full guard configuration — SDK-agnostic.
@@ -46,4 +47,20 @@ export interface GuardLogger {
 export interface CreateGuardManagerArgs {
   config: GuardConfig;
   logger?: GuardLogger;
+}
+
+/**
+ * Runtime behaviour of a GuardManager when its storage stops answering.
+ */
+export interface GuardManagerOptions {
+  /** Backend name used in error and log messages, e.g. `'redis'`. */
+  storageType?: string;
+  /**
+   * `'error'` (default): a limit check fails with `GuardStorageUnavailableError`.
+   * `'memory'`: serve from per-instance counters until the storage answers again.
+   */
+  fallback?: 'error' | 'memory';
+  logger?: GuardLogger;
+  /** While on the memory fallback, how long to wait before trying the configured storage again. @default 30000 */
+  retryPrimaryAfterMs?: number;
 }

@@ -37,10 +37,12 @@ const mockStorage = {
 
 const mockCreateStorage = jest.fn().mockResolvedValue(mockStorage);
 const mockCreateMemoryStorage = jest.fn().mockReturnValue(mockStorage);
+const mockIsProduction = jest.fn().mockReturnValue(false);
 
 jest.mock('@frontmcp/utils', () => ({
   createStorage: (...args: unknown[]) => mockCreateStorage(...args),
   createMemoryStorage: (...args: unknown[]) => mockCreateMemoryStorage(...args),
+  isProduction: () => mockIsProduction(),
 }));
 
 describe('createGuardManager', () => {
@@ -242,5 +244,54 @@ describe('createGuardManager — ipFilter proxy options are not read (GHSA-p3qf-
 
   it('stays quiet when no ipFilter is configured', async () => {
     expect(await warningsFor(undefined)).not.toHaveBeenCalled();
+  });
+});
+
+describe('createGuardManager — throttle.storage stops answering after startup (#660)', () => {
+  const limited = { maxRequests: 1, windowMs: 60_000 };
+
+  function downNamespace(): unknown {
+    const reject = () => Promise.reject(new Error('Connection is closed.'));
+    return { ...mockNamespace(), mget: reject, incr: reject, expire: reject, supportsPubSub: () => false };
+  }
+
+  it('fails a call with GuardStorageUnavailableError naming the configured backend in production', async () => {
+    mockIsProduction.mockReturnValueOnce(true);
+    mockNamespace.mockReturnValueOnce(downNamespace());
+    const manager = await createGuardManager({
+      config: {
+        enabled: true,
+        defaultRateLimit: limited,
+        storage: { type: 'redis', redis: { config: { host: 'localhost' } } },
+      },
+    });
+
+    const error = await manager.checkRateLimit('tool', undefined, undefined).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(GuardStorageUnavailableError);
+    expect((error as GuardStorageUnavailableError).storageType).toBe('redis');
+  });
+
+  it("keeps serving from per-instance counters when storage.fallback is 'memory'", async () => {
+    mockIsProduction.mockReturnValue(true);
+    try {
+      mockNamespace.mockReturnValueOnce(downNamespace());
+      mockCreateMemoryStorage.mockReturnValueOnce(jest.requireActual('@frontmcp/utils').createMemoryStorage());
+      const logger: GuardLogger = { info: jest.fn(), warn: jest.fn() };
+      const manager = await createGuardManager({
+        config: {
+          enabled: true,
+          defaultRateLimit: limited,
+          storage: { type: 'redis', redis: { config: { host: 'localhost' } }, fallback: 'memory' },
+        },
+        logger,
+      });
+
+      const first = await manager.checkRateLimit('tool', undefined, undefined);
+      const second = await manager.checkRateLimit('tool', undefined, undefined);
+      expect([first.allowed, second.allowed]).toEqual([true, false]);
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('throttle.storage (redis) is unavailable'));
+    } finally {
+      mockIsProduction.mockReturnValue(false);
+    }
   });
 });

@@ -20,6 +20,7 @@ import {
 import type { FeatureFlagAdapter } from './adapters/feature-flag-adapter.interface';
 import { StaticFeatureFlagAdapter } from './adapters/static.adapter';
 import { buildFeatureFlagContext } from './feature-flag.context';
+import { FeatureFlagConfigurationError, FeatureFlagDisabledError } from './feature-flag.errors';
 import { FeatureFlagAccessorToken, FeatureFlagAdapterToken, FeatureFlagConfigToken } from './feature-flag.symbols';
 import type {
   FeatureFlagContext,
@@ -38,6 +39,8 @@ const GetPromptHook = (FlowHooksOf as any)('prompts:get-prompt');
 const CompleteHook = (FlowHooksOf as any)('completion:complete');
 
 const FilterSkillsHook = FlowHooksOf('skills:filter');
+
+const SUPPORTED_ADAPTERS: readonly string[] = ['static', 'splitio', 'launchdarkly', 'unleash', 'custom'];
 
 /**
  * FeatureFlagPlugin - Dynamic capability gating for FrontMCP.
@@ -85,6 +88,13 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    */
   static override dynamicProviders = (options: FeatureFlagPluginOptionsInput): ProviderType[] => {
     const providers: ProviderType[] = [];
+
+    if (!SUPPORTED_ADAPTERS.includes(options?.adapter as string)) {
+      throw new FeatureFlagConfigurationError(
+        `FeatureFlagPlugin.init() requires an \`adapter\` option, got ${JSON.stringify(options?.adapter)}. ` +
+          `Supported adapters: ${SUPPORTED_ADAPTERS.map((a) => `"${a}"`).join(', ')}.`,
+      );
+    }
 
     // ─────────────────────────────────────────────────────────────────────
     // Adapter Provider
@@ -387,7 +397,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
     }
 
     if (!enabled) {
-      throw new Error(`${kind} "${metadata?.name}" is disabled by feature flag "${key}"`);
+      throw new FeatureFlagDisabledError(kind, metadata?.name, key);
     }
   }
 

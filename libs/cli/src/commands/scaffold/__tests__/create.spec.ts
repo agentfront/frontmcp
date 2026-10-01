@@ -126,6 +126,14 @@ describe('runCreate', () => {
       }
     });
 
+    it('scaffolds Jest 30 so a CodeCall app can be tested (#660)', async () => {
+      await runCreate('jest-30', { yes: true });
+
+      const pkg = JSON.parse(readFileSync(path.join(tempDir, 'jest-30', 'package.json'), 'utf8'));
+      expect(pkg.devDependencies['jest']).toMatch(/^\^30\./);
+      expect(pkg.devDependencies['@types/jest']).toMatch(/^\^30\./);
+    });
+
     it('does not promise FRONTMCP_<NAME> overrides in the scaffolded config', async () => {
       await runCreate('config-comment', { yes: true });
 

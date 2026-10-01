@@ -259,3 +259,13 @@ describe('IIFE Generator', () => {
     });
   });
 });
+
+describe('data-tool-call spinner (#660)', () => {
+  it('gives the spinner svg a size of its own so it cannot swell without Tailwind', () => {
+    const script = generateBridgeIIFE();
+    const spinner = script.match(/var spinner = '(<svg[^']*)'/);
+    expect(spinner).not.toBeNull();
+    expect(spinner?.[1]).toMatch(/style="[^"]*width:\s*1em/);
+    expect(spinner?.[1]).toMatch(/style="[^"]*height:\s*1em/);
+  });
+});

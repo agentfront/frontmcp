@@ -515,7 +515,10 @@ matches at the first `node_modules/`, and the run fails with
 `SyntaxError: Unexpected token 'export'`.
 
 In standalone projects driven by `frontmcp test`, prefer `test.esmPackages` in
-`frontmcp.config.ts` — the injected config already carries the pattern above:
+`frontmcp.config.ts` — the injected config already carries the pattern above,
+and already transpiles `jose`, `@noble/hashes` and `@noble/ciphers` (CodeCall).
+`frontmcp test` does not set `NODE_OPTIONS=--experimental-vm-modules` (it would make Jest
+load ESM natively and bypass these transforms); use Jest 30 (what `frontmcp create` scaffolds):
 
 ```typescript
 // frontmcp.config.ts

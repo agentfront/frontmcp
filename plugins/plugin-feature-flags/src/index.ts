@@ -25,6 +25,9 @@
 // Main plugin (default and named)
 export { default, default as FeatureFlagPlugin } from './feature-flag.plugin';
 
+// Errors
+export { FeatureFlagConfigurationError, FeatureFlagDisabledError } from './feature-flag.errors';
+
 // Symbols (DI tokens)
 export { FeatureFlagAdapterToken, FeatureFlagConfigToken, FeatureFlagAccessorToken } from './feature-flag.symbols';
 

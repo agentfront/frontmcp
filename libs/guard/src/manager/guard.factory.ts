@@ -5,7 +5,7 @@
  * Accepts a StorageConfig from @frontmcp/utils.
  */
 
-import { createMemoryStorage, createStorage, type RootStorage } from '@frontmcp/utils';
+import { createMemoryStorage, createStorage, isProduction, type RootStorage } from '@frontmcp/utils';
 
 import { GuardStorageUnavailableError } from '../errors';
 import { GuardManager } from './guard.manager';
@@ -19,7 +19,8 @@ import type { CreateGuardManagerArgs } from './types';
  *
  * A configured backend that cannot be reached rejects with
  * {@link GuardStorageUnavailableError}: rate limits fail closed unless
- * `storage.fallback: 'memory'` allows per-instance counters.
+ * `storage.fallback: 'memory'` allows per-instance counters. The same policy
+ * applies if the backend stops answering later, while the server runs.
  */
 /**
  * `prefix` without its trailing colons. A scan, not `/:+$/`, which backtracks
@@ -74,5 +75,10 @@ export async function createGuardManager(args: CreateGuardManagerArgs): Promise<
     hasIpFilter: !!config.ipFilter,
   });
 
-  return new GuardManager(namespacedStorage, config);
+  return new GuardManager(namespacedStorage, config, {
+    storageType: config.storage?.type ?? (config.storage ? 'auto' : 'memory'),
+    // Same default as `createStorage`: fail closed in production, per-instance counters otherwise.
+    fallback: config.storage?.fallback ?? (isProduction() ? 'error' : 'memory'),
+    logger,
+  });
 }

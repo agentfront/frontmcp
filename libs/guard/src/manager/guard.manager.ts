@@ -5,33 +5,51 @@
  * and timeout within a scope. SDK-agnostic — built on StorageAdapter.
  */
 
-import type { NamespacedStorage } from '@frontmcp/utils';
+import { createMemoryStorage, type NamespacedStorage } from '@frontmcp/utils';
 
 import { DistributedSemaphore } from '../concurrency/semaphore';
 import type { ConcurrencyConfig, SemaphoreTicket } from '../concurrency/types';
+import { GuardError, GuardStorageUnavailableError } from '../errors';
 import { IpFilter } from '../ip-filter/ip-filter';
 import type { IpFilterResult } from '../ip-filter/types';
 import { buildStorageKey, resolvePartitionKey } from '../partition-key/partition-key.resolver';
 import type { PartitionKeyContext } from '../partition-key/types';
 import { SlidingWindowRateLimiter } from '../rate-limit/rate-limiter';
 import type { RateLimitConfig, RateLimitResult } from '../rate-limit/types';
-import type { GuardConfig } from './types';
+import type { GuardConfig, GuardManagerOptions } from './types';
 
 const DEFAULT_WINDOW_MS = 60_000;
+const DEFAULT_RETRY_PRIMARY_AFTER_MS = 30_000;
+const MEMORY_NAMESPACE = 'mcp:guard';
+
+interface LimitBackend {
+  rateLimiter: SlidingWindowRateLimiter;
+  semaphore: DistributedSemaphore;
+}
 
 export class GuardManager {
-  private readonly rateLimiter: SlidingWindowRateLimiter;
-  private readonly semaphore: DistributedSemaphore;
+  private readonly primary: LimitBackend;
+  private memoryBackend?: Promise<LimitBackend>;
+  private memoryUntil = 0;
+  private outageLogged = false;
   private readonly ipFilter?: IpFilter;
+  private readonly storageType: string;
+  private readonly fallback: 'error' | 'memory';
+  private readonly retryPrimaryAfterMs: number;
+  private readonly logger?: GuardManagerOptions['logger'];
   readonly config: GuardConfig;
 
   constructor(
     private readonly storage: NamespacedStorage,
     config: GuardConfig,
+    options: GuardManagerOptions = {},
   ) {
     this.config = config;
-    this.rateLimiter = new SlidingWindowRateLimiter(storage);
-    this.semaphore = new DistributedSemaphore(storage);
+    this.primary = { rateLimiter: new SlidingWindowRateLimiter(storage), semaphore: new DistributedSemaphore(storage) };
+    this.storageType = options.storageType ?? 'storage';
+    this.fallback = options.fallback ?? 'error';
+    this.retryPrimaryAfterMs = options.retryPrimaryAfterMs ?? DEFAULT_RETRY_PRIMARY_AFTER_MS;
+    this.logger = options.logger;
 
     if (config.ipFilter) {
       this.ipFilter = new IpFilter(config.ipFilter);
@@ -81,7 +99,7 @@ export class GuardManager {
     const storageKey = buildStorageKey(entityName, partitionKey, 'rl');
     const windowMs = config.windowMs ?? DEFAULT_WINDOW_MS;
 
-    return this.rateLimiter.check(storageKey, config.maxRequests, windowMs);
+    return this.withBackend((b) => b.rateLimiter.check(storageKey, config.maxRequests, windowMs));
   }
 
   /**
@@ -97,7 +115,7 @@ export class GuardManager {
     const storageKey = buildStorageKey('__global__', partitionKey, 'rl');
     const windowMs = config.windowMs ?? DEFAULT_WINDOW_MS;
 
-    return this.rateLimiter.check(storageKey, config.maxRequests, windowMs);
+    return this.withBackend((b) => b.rateLimiter.check(storageKey, config.maxRequests, windowMs));
   }
 
   // ============================================
@@ -119,7 +137,7 @@ export class GuardManager {
     const storageKey = buildStorageKey(entityName, partitionKey, 'sem');
     const queueTimeoutMs = config.queueTimeoutMs ?? 0;
 
-    return this.semaphore.acquire(storageKey, config.maxConcurrent, queueTimeoutMs, entityName);
+    return this.acquireTicket(storageKey, config.maxConcurrent, queueTimeoutMs, entityName);
   }
 
   /**
@@ -133,7 +151,85 @@ export class GuardManager {
     const storageKey = buildStorageKey('__global__', partitionKey, 'sem');
     const queueTimeoutMs = config.queueTimeoutMs ?? 0;
 
-    return this.semaphore.acquire(storageKey, config.maxConcurrent, queueTimeoutMs, '__global__');
+    return this.acquireTicket(storageKey, config.maxConcurrent, queueTimeoutMs, '__global__');
+  }
+
+  // ============================================
+  // Storage outages
+  // ============================================
+
+  /**
+   * Run a limit operation against the configured storage. When that storage
+   * stops answering (Redis gone while the server runs), the call fails with
+   * `GuardStorageUnavailableError` — the same error startup raises — unless
+   * `fallback: 'memory'` allows per-instance counters for the duration.
+   * Limit errors (`GuardError`) are the operation's own answer and pass through.
+   */
+  private async withBackend<T>(operation: (backend: LimitBackend) => Promise<T>): Promise<T> {
+    if (this.memoryUntil > Date.now()) {
+      return operation(await this.getMemoryBackend());
+    }
+
+    try {
+      const result = await operation(this.primary);
+      if (this.outageLogged) {
+        this.outageLogged = false;
+        this.logger?.info(`GuardManager: throttle.storage (${this.storageType}) is available again`);
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof GuardError) throw error;
+      if (this.fallback !== 'memory') {
+        throw new GuardStorageUnavailableError(this.storageType, error, 'runtime');
+      }
+      if (!this.outageLogged) {
+        this.outageLogged = true;
+        const reason = error instanceof Error ? error.message : String(error);
+        this.logger?.warn(
+          `GuardManager: throttle.storage (${this.storageType}) is unavailable: ${reason}. ` +
+            'Using per-instance in-memory counters until it answers again.',
+        );
+      }
+      this.memoryUntil = Date.now() + this.retryPrimaryAfterMs;
+      return operation(await this.getMemoryBackend());
+    }
+  }
+
+  private getMemoryBackend(): Promise<LimitBackend> {
+    this.memoryBackend ??= (async () => {
+      const root = createMemoryStorage();
+      await root.connect();
+      const memory = root.namespace(MEMORY_NAMESPACE);
+      return { rateLimiter: new SlidingWindowRateLimiter(memory), semaphore: new DistributedSemaphore(memory) };
+    })();
+    return this.memoryBackend;
+  }
+
+  private async acquireTicket(
+    storageKey: string,
+    maxConcurrent: number,
+    queueTimeoutMs: number,
+    entityName: string,
+  ): Promise<SemaphoreTicket | null> {
+    const ticket = await this.withBackend((b) =>
+      b.semaphore.acquire(storageKey, maxConcurrent, queueTimeoutMs, entityName),
+    );
+    if (!ticket) return null;
+    // The call has already run by the time a slot is released; a storage failure here must not
+    // replace its result. The slot's TTL reclaims it.
+    return {
+      ticket: ticket.ticket,
+      release: async () => {
+        try {
+          await ticket.release();
+        } catch (error) {
+          this.logger?.warn(
+            `GuardManager: could not release the concurrency slot for "${entityName}": ` +
+              `${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      },
+    };
   }
 
   // ============================================
