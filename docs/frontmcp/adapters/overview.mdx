@@ -154,6 +154,18 @@ Register one or more configured instances on a server or app:
 class Server {}
 ```
 
+When the options depend on a provider, build them at startup with `init({ name, inject, useFactory })`. The factory returns the adapter's **options** (or a promise of them), and the adapter is built from them; it is named by the `name` given to `init()`, which is also the name it is registered and de-duplicated under:
+
+```ts
+MyCustomAdapter.init({
+  name: 'production-api',
+  inject: () => [ApiConfig] as const,
+  useFactory: (config: ApiConfig) => ({ name: 'production-api', baseUrl: config.baseUrl, apiKey: config.apiKey }),
+});
+```
+
+A factory may also return an adapter instance it built itself, which is used as is. A factory that returns neither fails startup with an `InvalidEntityError` that says what it expected. Until 1.8.7 the factory's options were used as the adapter, so startup failed with `Cannot read properties of undefined (reading 'name')`, and a second, unhandled rejection could end a Node process that had no handler.
+
 ### Adapter Best Practices
 
 <AccordionGroup>

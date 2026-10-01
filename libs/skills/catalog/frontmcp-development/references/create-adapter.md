@@ -120,6 +120,18 @@ const adapter = MyApiAdapter.init({
 @App({ adapters: [adapter] })
 ```
 
+When the options depend on a provider, use `init({ name, inject, useFactory })`. The factory returns the adapter's **options** (or a promise of them) and the adapter is built from them, named by the `name` given to `init()`:
+
+```typescript
+MyApiAdapter.init({
+  name: 'my-api',
+  inject: () => [ApiConfig] as const,
+  useFactory: (config: ApiConfig) => ({ name: 'my-api', endpoint: config.endpoint, apiKey: config.apiKey }),
+});
+```
+
+A factory may instead return an adapter instance, used as is; anything else fails startup with an `InvalidEntityError`.
+
 ## Nx Generator
 
 ```bash

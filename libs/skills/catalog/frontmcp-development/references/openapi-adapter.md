@@ -201,6 +201,20 @@ class IntegrationHub {}
 // Tools: github:createIssue, jira:createTicket, slack:postMessage, etc.
 ```
 
+## Options From Providers (`useFactory`)
+
+Build the options at startup from injected providers. The factory returns `OpenApiAdapterOptions` (or a promise of them); the adapter is built from them under the `name` given to `init()`:
+
+```typescript
+OpenapiAdapter.init({
+  name: 'billing',
+  inject: () => [BillingConfig] as const,
+  useFactory: (config: BillingConfig) => ({ name: 'billing', url: config.specUrl, baseUrl: config.baseUrl }),
+});
+```
+
+Until 1.8.7 this form failed startup with `Cannot read properties of undefined (reading 'name')` plus an unhandled rejection that could end the Node process.
+
 ## Filtering Operations
 
 Control which API operations become MCP tools:
