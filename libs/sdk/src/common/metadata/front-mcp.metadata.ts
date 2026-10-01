@@ -1,8 +1,9 @@
 import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 
-import type { AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
+import type { AdapterType, AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
 import {
+  annotatedFrontMcpAdaptersSchema,
   annotatedFrontMcpAppSchema,
   annotatedFrontMcpPluginsSchema,
   annotatedFrontMcpProvidersSchema,
@@ -140,6 +141,14 @@ export interface FrontMcpBaseMetadata {
    * These plugins have server-wide access (can see all apps in scope).
    */
   plugins?: PluginType[];
+
+  /**
+   * Server-level adapters (e.g. `OpenapiAdapter.init({ ... })`). The tools, resources and prompts each
+   * adapter fetches are served by every app, like the entries of a server-level plugin. Like
+   * server-level plugins, each scope (a standalone or `splitByApp` app gets its own) instantiates
+   * them, so each runs its own `fetch()`.
+   */
+  adapters?: AdapterType[];
 
   /**
    * Pagination configuration for list operations.
@@ -560,6 +569,7 @@ export const frontMcpBaseSchema = z.object({
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
   skills: z.array(annotatedFrontMcpSkillsSchema).optional().default([]),
   plugins: z.array(annotatedFrontMcpPluginsSchema).optional().default([]),
+  adapters: z.array(annotatedFrontMcpAdaptersSchema).optional().default([]),
   apps: z.array(annotatedFrontMcpAppSchema),
   serve: z.boolean().optional().default(true),
   http: httpOptionsSchema.optional(),
@@ -782,6 +792,7 @@ const frontMcpLiteSchema = z.object({
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
   skills: z.array(annotatedFrontMcpSkillsSchema).optional().default([]),
   plugins: z.array(annotatedFrontMcpPluginsSchema).optional().default([]),
+  adapters: z.array(annotatedFrontMcpAdaptersSchema).optional().default([]),
   apps: z.array(annotatedFrontMcpAppSchema),
   serve: z.boolean().optional().default(false),
   splitByApp: z.boolean().optional().default(false),

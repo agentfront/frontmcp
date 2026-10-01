@@ -4,6 +4,7 @@ import { createGuardManager, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
 import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
 
+import AdapterRegistry from '../adapter/adapter.registry';
 import AgentRegistry from '../agent/agent.registry';
 import CallAgentFlow from '../agent/flows/call-agent.flow';
 import AppRegistry from '../app/app.registry';
@@ -164,6 +165,9 @@ export class Scope extends ScopeEntry {
   private _authoritiesEngine?: import('@frontmcp/auth').AuthoritiesEngine;
   private _authoritiesContextBuilder?: import('@frontmcp/auth').AuthoritiesContextBuilder;
   private _authoritiesScopeMapping?: import('@frontmcp/auth').AuthoritiesScopeMapping;
+
+  /** Server-level adapters (`@FrontMcp({ adapters })`), optional */
+  private scopeAdapters?: AdapterRegistry;
 
   /** Channel system (optional) */
   private _scopeChannels?: ChannelRegistry;
@@ -712,6 +716,13 @@ export class Scope extends ScopeEntry {
     // during adoption. Without this ordering, plugin tools are "orphaned".
     if (this.scopePlugins) {
       await this.scopePlugins.ready;
+    }
+
+    // `@FrontMcp({ adapters })`: the entries each adapter fetches register in this scope's providers,
+    // so the scope registries below adopt them and every app serves them (#678).
+    if (this.metadata.adapters?.length) {
+      this.scopeAdapters = new AdapterRegistry(this.scopeProviders, this.metadata.adapters);
+      await this.scopeAdapters.ready;
     }
 
     // Initialize authorities engine from metadata config (built-in, no plugin needed)

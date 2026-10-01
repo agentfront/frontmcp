@@ -66,6 +66,8 @@ Everything else is optional with sensible defaults.
   serve?: true,                 // default true (auto-boot)
   splitByApp?: false,           // app composition mode
   providers?: [/* provider classes/factories/values */],
+  plugins?: [/* server-level plugins: every app */],
+  adapters?: [/* server-level adapters (e.g. OpenapiAdapter.init(...)): their tools, resources and prompts serve every app */],
 
   http?: {
     port?: 3000,                // default: process.env.PORT or 3000
