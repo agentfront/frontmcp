@@ -2,33 +2,23 @@
  * Notification Relay — Redis Pub/Sub Cross-Pod Messaging
  *
  * Each pod subscribes to its own channel (`mcp:ha:notify:{nodeId}`).
- * When a notification targets a session on a different pod,
- * it's published to that pod's channel for local delivery.
+ * Other pods publish to it to deliver a notification to a session it owns,
+ * ask it to destroy a session, or relay an HTTP request for one of its
+ * sessions (see {@link HaRelayMessage}).
  */
 
 import { DEFAULT_HA_CONFIG, type HaConfig } from './ha.types';
+import type { HaRelayMessage, NotificationRelayMessage } from './relay-messages';
 
 /**
  * Notification message relayed between pods.
  */
-export interface RelayMessage {
-  /** Target session ID */
-  sessionId: string;
-  /** MCP notification to deliver */
-  notification: {
-    method: string;
-    params?: Record<string, unknown>;
-  };
-  /** Source pod that originated the notification */
-  sourceNodeId: string;
-  /** Timestamp of relay */
-  timestamp: number;
-}
+export type RelayMessage = NotificationRelayMessage;
 
 /**
- * Handler invoked when a relay message arrives for this pod.
+ * Handler invoked when a message arrives on this pod's relay channel.
  */
-export type RelayHandler = (message: RelayMessage) => void | Promise<void>;
+export type RelayHandler = (message: HaRelayMessage) => void | Promise<void>;
 
 /**
  * Minimal Redis pub/sub client interface.
@@ -55,12 +45,18 @@ export class NotificationRelay {
     config?: Partial<HaConfig>,
   ) {
     this.keyPrefix = config?.redisKeyPrefix ?? DEFAULT_HA_CONFIG.redisKeyPrefix;
-    this.channel = `${this.keyPrefix}notify:${nodeId}`;
+    this.channel = this.channelOf(nodeId);
+  }
+
+  /** The relay channel of a node. */
+  channelOf(nodeId: string): string {
+    return `${this.keyPrefix}notify:${nodeId}`;
   }
 
   /** Start listening for relay messages on this pod's channel. */
   async subscribe(handler: RelayHandler): Promise<void> {
     this.handler = handler;
+    this.subscriber.removeListener('message', this.onMessage);
     this.subscriber.on('message', this.onMessage);
     await this.subscriber.subscribe(this.channel);
   }
@@ -80,25 +76,42 @@ export class NotificationRelay {
    * Publish a notification to a target pod's channel.
    * Used when a notification targets a session not owned by this pod.
    */
-  async publish(targetNodeId: string, sessionId: string, notification: RelayMessage['notification']): Promise<void> {
-    const targetChannel = `${this.keyPrefix}notify:${targetNodeId}`;
-    const message: RelayMessage = {
+  async publish(
+    targetNodeId: string,
+    sessionId: string,
+    notification: NotificationRelayMessage['notification'],
+  ): Promise<void> {
+    await this.send(targetNodeId, {
+      kind: 'notification',
       sessionId,
       notification,
       sourceNodeId: this.nodeId,
       timestamp: Date.now(),
-    };
-    await this.publisher.publish(targetChannel, JSON.stringify(message));
+    });
   }
 
-  private onMessage = (_channel: string, raw: string): void => {
-    if (!this.handler) return;
+  /**
+   * Publish any relay message to a target pod's channel.
+   * @returns How many subscribers received it — 0 when nothing listens on that pod's channel.
+   */
+  async send(targetNodeId: string, message: HaRelayMessage): Promise<number> {
+    return this.publisher.publish(this.channelOf(targetNodeId), JSON.stringify(message));
+  }
+
+  private onMessage = (channel: string, raw: string): void => {
+    if (!this.handler || channel !== this.channel) return;
+    let message: unknown;
     try {
-      const message = JSON.parse(raw) as RelayMessage;
-      // Fire-and-forget — handler errors shouldn't crash the relay
-      Promise.resolve(this.handler(message)).catch(() => {});
+      message = JSON.parse(raw);
     } catch {
-      // Malformed message — skip
+      return; // Malformed message — skip
+    }
+    if (!message || typeof message !== 'object') return;
+    // Fire-and-forget — handler errors shouldn't crash the relay
+    try {
+      Promise.resolve(this.handler(message as HaRelayMessage)).catch(() => undefined);
+    } catch {
+      // A synchronous handler error is dropped the same way
     }
   };
 }

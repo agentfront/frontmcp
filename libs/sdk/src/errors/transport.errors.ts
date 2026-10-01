@@ -90,3 +90,34 @@ export class SessionClaimConflictError extends InternalMcpError {
     super(`Session ${sessionId} claimed by another pod`, 'SESSION_CLAIM_CONFLICT');
   }
 }
+
+/**
+ * Thrown when a request for an MCP session owned by another live instance of a distributed
+ * deployment cannot be relayed to that instance (it does not listen on its relay channel, does
+ * not acknowledge the request, or stops while serving it).
+ *
+ * Public (503) and retryable: the client retries after `retryAfterSeconds`. If the owner has
+ * stopped, its heartbeat expires within that time and the next request takes the session over.
+ */
+export class SessionOwnerUnreachableError extends PublicMcpError {
+  /** Seconds after which a retry can succeed (the owner's heartbeat TTL). */
+  readonly retryAfterSeconds: number;
+  /** Instance that owns the session. Logged, never sent to the client. */
+  readonly ownerNodeId: string;
+  /** Why the relay failed. Logged, never sent to the client. */
+  readonly reason: string;
+
+  constructor(ownerNodeId: string, retryAfterSeconds: number, reason: string) {
+    const retryAfter = Math.max(1, Math.ceil(retryAfterSeconds));
+    super(
+      'This MCP session is served by another instance of the server, which did not answer the relayed ' +
+        `request. Retry after ${retryAfter}s; if that instance has stopped, the session is taken over by ` +
+        'another instance once its heartbeat expires.',
+      'SESSION_OWNER_UNREACHABLE',
+      503,
+    );
+    this.retryAfterSeconds = retryAfter;
+    this.ownerNodeId = ownerNodeId;
+    this.reason = reason;
+  }
+}

@@ -1,5 +1,4 @@
 import { z } from '@frontmcp/lazy-zod';
-import { getMachineId, getRuntimeContext } from '@frontmcp/utils';
 
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
 import {
@@ -239,44 +238,10 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
 
-    // 1. Check local memory first
+    // Local transport, or — in a distributed deployment — a relay to the live node that holds
+    // the session's SSE stream. An SSE session cannot be recreated on another node (its stream
+    // is bound to the original connection), so when its owner stopped the client reconnects.
     const transport = await transportService.getTransporter('sse', token, session.id);
-
-    // 2. If not in memory but in distributed mode, check if the session exists on another pod
-    //    SSE sessions can't be "recreated" like streamable-http (the SSE response stream is
-    //    tied to the original HTTP connection), but we can relay the message to the owning pod.
-    if (!transport && getRuntimeContext().deployment === 'distributed') {
-      const storedSession = await transportService.getStoredSession('sse', token, session.id);
-      if (storedSession) {
-        // Session exists on another pod — relay via notification relay if available
-        const haManager = this.scope.haManager;
-        const relay = haManager?.getRelay();
-        if (relay && storedSession.session.nodeId && storedSession.session.nodeId !== getMachineId()) {
-          const isAlive = await haManager!.isNodeAlive(storedSession.session.nodeId);
-          if (isAlive) {
-            try {
-              const body = request.body as Record<string, unknown> | undefined;
-              await relay.publish(storedSession.session.nodeId, session.id, {
-                method: 'sse:relay-message',
-                params: { jsonRpcMessage: body },
-              });
-              logger.info('Relayed SSE message to owning pod', {
-                sessionId: session.id?.slice(0, 20),
-                targetNodeId: storedSession.session.nodeId,
-              });
-              response.status(202).json({ jsonrpc: '2.0', result: {} });
-              this.handled();
-              return;
-            } catch (err) {
-              logger.warn('Failed to relay SSE message', {
-                sessionId: session.id?.slice(0, 20),
-                error: err instanceof Error ? err.message : String(err),
-              });
-            }
-          }
-        }
-      }
-    }
 
     if (!transport) {
       // Check if session was ever created to differentiate error types per MCP Spec 2025-11-25

@@ -3,19 +3,23 @@ import type { SessionStore, StoredSession } from '@frontmcp/auth';
 import { getMachineId, sha256Hex } from '@frontmcp/utils';
 
 import { createSessionStore, type SessionStoreFactoryOptions } from '../auth/session/session-store.factory';
-import type { ServerResponse, TransportPersistenceConfigInput } from '../common';
+import type { ServerRequest, ServerResponse, TransportPersistenceConfigInput } from '../common';
 import type { RedisOptions } from '../common/types/options/redis';
+import { sessionIdPresentedBy } from '../common/utils/auth-info.utils';
 import { InvalidTransportSessionError, SessionClaimConflictError } from '../errors/transport.errors';
+import type { ClaimedSessionInfo } from '../ha';
 import type { ClientCapabilities } from '../notification/notification.service';
 import type { Scope } from '../scope';
 import HandleMcp20260728Flow from './flows/handle.mcp-20260728.flow';
 import HandleSseFlow from './flows/handle.sse.flow';
 import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
+import { isRelayedRequest } from './relay/relay-http';
 import { LocalTransporter } from './transport.local';
 import { RemoteTransporter } from './transport.remote';
 import {
   STATELESS_SESSION_ID,
+  type RemoteLocation,
   type TransportBus,
   type Transporter,
   type TransportKey,
@@ -28,6 +32,15 @@ import {
 /** Backoff bounds for reconnecting a session store that was unreachable at startup. */
 const SESSION_STORE_RETRY_BASE_MS = 1000;
 const SESSION_STORE_RETRY_MAX_MS = 30000;
+
+/** How often a node re-advertises a session it keeps serving (the bus entry lives one hour). */
+const BUS_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+
+/** Longest session id the distributed routing looks up (ids are ~200 characters). */
+const MAX_ROUTABLE_SESSION_ID_LENGTH = 4096;
+
+/** Session protocols that live on one node and can be relayed to it. */
+const RELAYABLE_TYPES: ReadonlySet<TransportType> = new Set<TransportType>(['streamable-http', 'sse']);
 
 export class TransportService {
   readonly ready: Promise<void>;
@@ -117,6 +130,12 @@ export class TransportService {
 
   /** Last time a request refreshed the stored session's TTL, by session id. */
   private readonly lastTtlRefreshAt = new Map<string, number>();
+
+  /** Last time a request re-advertised a served session on the transport bus, by session id. */
+  private readonly lastBusRefreshAt = new Map<string, number>();
+
+  /** Session ids with a transport on this node (any type / token), with their transport count. */
+  private readonly localSessionIds = new Map<string, number>();
 
   /**
    * Redis key prefix under which session records are stored.
@@ -275,6 +294,7 @@ export class TransportService {
       this.storeRetryTimer = undefined;
     }
     this.lastTtlRefreshAt.clear();
+    this.lastBusRefreshAt.clear();
     await this.teardownSessionStore();
   }
 
@@ -387,14 +407,23 @@ export class TransportService {
     const local = this.lookupLocal(key);
     if (local) {
       this.refreshStoredSessionTtl(sessionId);
+      this.refreshBusAdvertisement(key);
       return local;
     }
 
-    // 2. Check distributed bus (if enabled)
+    // 2. Distributed: a session another LIVE node owns is served there, through the relay.
+    //    A session whose owner stopped is not: the caller recreates it from the session store,
+    //    which takes it over (recreateTransporter).
     if (this.distributed && this.bus) {
       const location = await this.bus.lookup(key);
       if (location) {
-        return new RemoteTransporter(key, this.bus);
+        if (await this.isNodeAlive(location.nodeId)) {
+          return new RemoteTransporter(key, this.bus, location);
+        }
+        this.scope.logger.info('[HA] Session owner is gone — the session will be taken over', {
+          sessionId: sessionId.slice(0, 20),
+          previousNodeId: location.nodeId,
+        });
       }
     }
 
@@ -403,6 +432,120 @@ export class TransportService {
     // then call recreateTransporter() with the response object.
 
     return undefined;
+  }
+
+  /**
+   * Distributed routing: the node a request must be relayed to, because another live node
+   * owns the session it presents. `undefined` means "serve it here": the session is local,
+   * unknown, owned by this node, or owned by a node that stopped (this node takes it over).
+   *
+   * Runs before authentication — it only decides where the request is served; the owner
+   * authenticates it.
+   */
+  async findRemoteSessionOwner(request: ServerRequest): Promise<RemoteLocation | undefined> {
+    if (!this.distributed || !this.bus?.canRelay() || isRelayedRequest(request)) return undefined;
+
+    const sessionId = sessionIdPresentedBy(request);
+    if (!sessionId || sessionId.length > MAX_ROUTABLE_SESSION_ID_LENGTH) return undefined;
+    if (this.localSessionIds.has(sessionId)) return undefined;
+
+    try {
+      const owner = await this.lookupSessionOwner(sessionId);
+      if (!owner || owner.nodeId === getMachineId()) return undefined;
+      return (await this.isNodeAlive(owner.nodeId)) ? owner : undefined;
+    } catch (error) {
+      this.scope.logger.warn('[HA] Could not resolve the session owner — serving the request here', {
+        sessionId: sessionId.slice(0, 20),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
+
+  /**
+   * The node that owns a session: the transport bus entry, else the persisted session record.
+   * `undefined` when neither knows the session.
+   */
+  async lookupSessionOwner(sessionId: string): Promise<RemoteLocation | undefined> {
+    if (!this.bus) return undefined;
+    const advertised = await this.bus.lookupOwner(sessionId);
+    if (advertised) return advertised;
+
+    const stored = this.sessionStore ? await this.sessionStore.get(sessionId) : null;
+    const nodeId = stored?.session?.nodeId;
+    if (!nodeId) return undefined;
+    return { nodeId, channel: this.bus.channelOf(nodeId) };
+  }
+
+  /**
+   * Relay a request to the node that owns its session and write that node's response.
+   * @throws SessionOwnerUnreachableError when the owner could not serve it (nothing written yet).
+   */
+  async relayToSessionOwner(location: RemoteLocation, request: ServerRequest, response: ServerResponse): Promise<void> {
+    if (!this.bus) throw new InvalidTransportSessionError('Session relay requires the distributed transport bus.');
+    const sessionId = sessionIdPresentedBy(request) ?? '';
+    await this.bus.proxyRequest(location, sessionId, request, response);
+  }
+
+  /**
+   * The orphan scanner claimed a session of a stopped node for this node: point the
+   * transport bus at this node, so every node relays the session's requests here. The
+   * transport itself is recreated from the session store by the first request.
+   */
+  async adoptClaimedSession(sessionId: string, previousNodeId: string, info: ClaimedSessionInfo): Promise<void> {
+    if (!this.bus) return;
+    const type = info.protocol;
+    if (!info.authorizationId || (type !== 'streamable-http' && type !== 'sse')) return;
+    await this.bus.advertise({ type, token: '', tokenHash: info.authorizationId, sessionId });
+    this.scope.logger.info('[HA] Adopted an orphaned session — this node now serves it', {
+      sessionId: sessionId.slice(0, 20),
+      previousNodeId,
+    });
+  }
+
+  /**
+   * Destroy this node's transports for a session (asked by another node through the relay).
+   * @returns Whether a transport was found.
+   */
+  async destroyLocalSession(sessionId: string, reason?: string): Promise<boolean> {
+    let found = false;
+    for (const [type, typeBucket] of [...this.byType.entries()]) {
+      if (!RELAYABLE_TYPES.has(type)) continue;
+      for (const tokenBucket of [...typeBucket.values()]) {
+        const transporter = tokenBucket.get(sessionId);
+        if (!transporter) continue;
+        found = true;
+        await transporter.destroy(reason);
+      }
+    }
+    return found;
+  }
+
+  /** Whether a node's heartbeat is present (`true` when liveness cannot be determined). */
+  private async isNodeAlive(nodeId: string): Promise<boolean> {
+    const haManager = this.scope.haManager;
+    if (!haManager) return true;
+    try {
+      return await haManager.isNodeAlive(nodeId);
+    } catch {
+      // Heartbeats unreadable: treat the owner as alive rather than take its session over.
+      return true;
+    }
+  }
+
+  /** Re-advertise a session this node serves, so its bus entry does not expire under it. */
+  private refreshBusAdvertisement(key: TransportKey): void {
+    if (!this.distributed || !this.bus || !RELAYABLE_TYPES.has(key.type)) return;
+    const now = Date.now();
+    const last = this.lastBusRefreshAt.get(key.sessionId);
+    if (last !== undefined && now - last < BUS_REFRESH_INTERVAL_MS) return;
+    this.lastBusRefreshAt.set(key.sessionId, now);
+    this.bus.advertise(key).catch((err) => {
+      this.scope.logger.warn('[HA] Failed to refresh the session advertisement', {
+        sessionId: key.sessionId.slice(0, 20),
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
   }
 
   /**
@@ -512,6 +655,16 @@ export class TransportService {
   }
 
   /**
+   * A transporter that relays to `ownerNodeId` when that node is alive and the transport bus
+   * is available; `undefined` when the owner stopped (its session can be taken over).
+   */
+  private async remoteOwnerTransporter(key: TransportKey, ownerNodeId: string): Promise<Transporter | undefined> {
+    if (!this.distributed || !this.bus) return undefined;
+    if (!(await this.isNodeAlive(ownerNodeId))) return undefined;
+    return new RemoteTransporter(key, this.bus, { nodeId: ownerNodeId, channel: this.bus.channelOf(ownerNodeId) });
+  }
+
+  /**
    * Internal method to actually recreate the transport (called with mutex protection)
    */
   private async doRecreateTransporter(
@@ -530,14 +683,32 @@ export class TransportService {
       createdAt: storedSession.createdAt,
     });
 
-    // HA: If session belongs to a different node, attempt atomic takeover
+    // HA: a session another node owns is served by that node while it lives (relayed),
+    // and taken over atomically once it has stopped.
     const currentNodeId = getMachineId();
-    if (this.scope.haManager && storedSession.session.nodeId && storedSession.session.nodeId !== currentNodeId) {
+    const ownerNodeId = storedSession.session.nodeId;
+    if (this.scope.haManager && ownerNodeId && ownerNodeId !== currentNodeId) {
+      const remote = await this.remoteOwnerTransporter(key, ownerNodeId);
+      if (remote) return remote;
+
       const sessionKey = `${this.getSessionKeyPrefix()}${sessionId}`;
-      const result = await this.scope.haManager.attemptTakeover(sessionKey, storedSession.session.nodeId);
-      if (!result.claimed) {
-        this.scope.logger.debug('[HA] Session already claimed by another pod', { sessionId: sessionId.slice(0, 20) });
-        throw new SessionClaimConflictError(sessionId);
+      const result = await this.scope.haManager.attemptTakeover(sessionKey, ownerNodeId);
+      if (result.claimed) {
+        this.scope.logger.info('[HA] Took over session from a stopped node', {
+          sessionId: sessionId.slice(0, 20),
+          previousNodeId: ownerNodeId,
+        });
+      } else {
+        // Claimed first by another node (relay to it while it lives) or by this node's
+        // orphan scanner (serve it here).
+        const current = this.sessionStore ? await this.sessionStore.get(sessionId) : null;
+        const newOwner = current?.session?.nodeId;
+        if (newOwner !== currentNodeId) {
+          const relayed = newOwner ? await this.remoteOwnerTransporter(key, newOwner) : undefined;
+          if (relayed) return relayed;
+          this.scope.logger.debug('[HA] Session already claimed by another pod', { sessionId: sessionId.slice(0, 20) });
+          throw new SessionClaimConflictError(sessionId);
+        }
       }
     }
 
@@ -582,10 +753,12 @@ export class TransportService {
       });
     }
 
-    // Update session access time in Redis
+    // Update session access time in Redis. The record names this node as the owner: writing
+    // back the record read before a takeover would hand the session back to the stopped node.
     if (sessionStore) {
       const updatedSession: StoredSession = {
         ...storedSession,
+        session: { ...storedSession.session, nodeId: currentNodeId },
         lastAccessedAt: Date.now(),
       };
       sessionStore.set(sessionId, updatedSession, defaultTtlMs).catch((err) => {
@@ -922,6 +1095,9 @@ export class TransportService {
   private insertLocal(key: TransportKey, t: Transporter): void {
     const typeBucket = this.ensureTypeBucket(key.type);
     const tokenBucket = this.ensureTokenBucket(typeBucket, key.tokenHash);
+    if (!tokenBucket.has(key.sessionId)) {
+      this.localSessionIds.set(key.sessionId, (this.localSessionIds.get(key.sessionId) ?? 0) + 1);
+    }
     tokenBucket.set(key.sessionId, t);
 
     // Record session creation in history for HTTP 404 detection
@@ -974,11 +1150,16 @@ export class TransportService {
 
   private evictLocal(key: TransportKey): void {
     this.lastTtlRefreshAt.delete(key.sessionId);
+    this.lastBusRefreshAt.delete(key.sessionId);
     const typeBucket = this.byType.get(key.type);
     if (!typeBucket) return;
     const tokenBucket = typeBucket.get(key.tokenHash);
     if (!tokenBucket) return;
-    tokenBucket.delete(key.sessionId);
+    if (tokenBucket.delete(key.sessionId)) {
+      const remaining = (this.localSessionIds.get(key.sessionId) ?? 1) - 1;
+      if (remaining > 0) this.localSessionIds.set(key.sessionId, remaining);
+      else this.localSessionIds.delete(key.sessionId);
+    }
     if (tokenBucket.size === 0) typeBucket.delete(key.tokenHash);
     if (typeBucket.size === 0) this.byType.delete(key.type);
   }

@@ -45,6 +45,12 @@ interface ServerRequestTokenValue {
         transport: { handleRequest(request: Request, options?: { authInfo?: unknown }): Promise<Response> };
       }
     | undefined;
+  /**
+   * Machine ID of the instance that relayed this request to the instance owning its MCP
+   * session (distributed deployments). Set only on a relayed request; such a request is
+   * served where it arrived and never relayed again.
+   */
+  relayedFrom: string | undefined;
 }
 
 export const ServerRequestTokens = {
@@ -57,4 +63,5 @@ export const ServerRequestTokens = {
   webCtx: tokenFactory.meta('webCtx'),
   webEnv: tokenFactory.meta('webEnv'),
   webTransport: tokenFactory.meta('webTransport'),
+  relayedFrom: tokenFactory.meta('relayedFrom'),
 } satisfies RawMetadataShape<ServerRequestTokenValue>;
