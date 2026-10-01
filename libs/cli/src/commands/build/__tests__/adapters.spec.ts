@@ -364,6 +364,12 @@ describe('Build Adapters', () => {
       expect(message).not.toContain('Use `redis:');
     });
 
+    it('refuses a literal TCP provider read from the source with the ioredis message', () => {
+      expect(() =>
+        cloudflareAdapter.validate?.(undefined, { keysSeenInSource: ['redis'], redisProviderInSource: 'redis' }),
+      ).toThrow(/ioredis-style/);
+    });
+
     it('trusts the evaluated config over the source literal', () => {
       expect(() =>
         cloudflareAdapter.validate?.(

@@ -217,7 +217,7 @@ ${bridgeCall}    if (!handlerPromise) {
     }
     if (redisSeen) {
       errors.push(
-        redisIsLiteral || decoratorConfig !== undefined
+        redisIsLiteral || decoratorConfig !== undefined || info?.redisProviderInSource !== undefined
           ? 'ioredis-style `redis` storage is not supported on --target cloudflare (no Node net). ' +
               'Even an env-gated `redis: process.env.X ? {...} : undefined` still ships the Node-only ' +
               "branch in the worker bundle. Use `redis: { provider: 'vercel-kv' }` (HTTP), or move the redis " +
