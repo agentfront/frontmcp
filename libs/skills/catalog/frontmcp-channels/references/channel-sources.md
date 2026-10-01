@@ -59,8 +59,8 @@ class ErrorAlertChannel extends ChannelContext {
   }
 }
 
-// In your application code:
-scope.channelEventBus.emit('app:error', {
+// In your application code (in a tool: this.scope.channelEventBus):
+scope.channelEventBus?.emit('app:error', {
   message: 'Connection refused',
   stack: 'Error: ECONNREFUSED...',
   level: 'critical',
@@ -181,7 +181,7 @@ class LogWatcherChannel extends ChannelContext {
 
 ## Manual Source
 
-No automatic wiring. Push notifications programmatically via `scope.channelNotifications.send()`.
+No automatic wiring. Push notifications programmatically via `scope.channelNotifications.send()`, which runs the hookable `channels:send-notification` flow like every channel notification: `channels.defaultMeta`, then the channel's `meta`, then the notification's own meta, with `source` set to the channel name.
 
 ```typescript
 const StatusChannel = channel({
@@ -193,7 +193,7 @@ const StatusChannel = channel({
 }));
 
 // Push from anywhere with scope access:
-scope.channelNotifications.send('status-updates', 'Server maintenance starting in 5 minutes');
+await scope.channelNotifications?.send('status-updates', 'Server maintenance starting in 5 minutes');
 ```
 
 ## Replay Buffer

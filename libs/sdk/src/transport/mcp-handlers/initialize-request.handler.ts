@@ -168,11 +168,12 @@ export default function initializeRequestHandler({
         }
       }
 
-      // Auto-subscribe session to channels if client supports claude/channel capability
+      // Auto-subscribe session to channels if client supports claude/channel capability: to the
+      // channels the hookable `channels:list` flow returns for it.
       if (sessionId && request.params.capabilities?.experimental?.['claude/channel'] !== undefined) {
-        const channelRegistry = scope.channels;
-        if (channelRegistry) {
-          const channelNames = channelRegistry.getChannelInstances().map((ch) => ch.name);
+        if (scope.channels) {
+          const listed = await scope.runFlowForOutput('channels:list', {});
+          const channelNames = listed.channels.map((ch) => ch.name);
           scope.notifications.subscribeAllChannels(sessionId, channelNames);
           logger.info(`initialize: auto-subscribed session to ${channelNames.length} channel(s)`, {
             channels: channelNames.join(', '),

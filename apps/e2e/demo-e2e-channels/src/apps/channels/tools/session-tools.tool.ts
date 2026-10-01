@@ -20,7 +20,9 @@ interface NotificationServiceLike {
 interface ChannelRegistryLike {
   findByName(
     name: string,
-  ): { pushNotification(content: string, meta?: Record<string, string>, targetSessionId?: string): void } | undefined;
+  ):
+    | { pushNotification(content: string, meta?: Record<string, string>, targetSessionId?: string): Promise<void> }
+    | undefined;
   getChannelInstances(): Array<{ name: string; twoWay: boolean }>;
 }
 
@@ -209,7 +211,7 @@ export class PushTargetedNotificationTool extends ToolContext<{
       throw new Error(`Channel "${input.channelName}" not found`);
     }
 
-    channel.pushNotification(input.content, {}, input.targetSessionId);
+    await channel.pushNotification(input.content, {}, input.targetSessionId);
     return {
       pushed: true,
       channelName: input.channelName,

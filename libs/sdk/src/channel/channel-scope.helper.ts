@@ -103,11 +103,13 @@ export async function registerChannelCapabilities(
   const channelRegistry = new ChannelRegistry(providers, channelsList, owner);
   await channelRegistry.ready;
 
-  // 2. Create notification service (with server-level default metadata if configured)
+  // 2. Create notification service (with server-level default metadata if configured). Its `send()`
+  // runs the hookable `channels:send-notification` flow, as every channel notification does.
   const channelNotificationService = new ChannelNotificationService(
     notificationService,
     logger,
     channelsConfig?.defaultMeta,
+    (input) => flowRegistry.runFlow('channels:send-notification', input),
   );
 
   // 3. Create event bus for app-event sources
@@ -181,7 +183,7 @@ export async function registerChannelCapabilities(
   }
 
   // 6. Register channel flows
-  flowRegistry.registryFlows([SendChannelNotificationFlow, ListChannelsFlow]);
+  await flowRegistry.registryFlows([SendChannelNotificationFlow, ListChannelsFlow]);
 
   // 7. Register reply tool if any channel is two-way
   const hasTwoWayChannels = channelRegistry.getChannelInstances().some((ch) => ch.twoWay);

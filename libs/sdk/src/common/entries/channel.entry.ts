@@ -74,5 +74,5 @@ export abstract class ChannelEntry extends BaseEntry<ChannelRecord, ChannelConte
    * @param meta - Optional additional metadata
    * @param targetSessionId - If set, deliver ONLY to this session (session isolation)
    */
-  abstract pushNotification(content: string, meta?: Record<string, string>, targetSessionId?: string): void;
+  abstract pushNotification(content: string, meta?: Record<string, string>, targetSessionId?: string): Promise<void>;
 }
