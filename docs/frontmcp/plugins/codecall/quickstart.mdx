@@ -121,7 +121,7 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'plugin', 'plugins', 'ex
 
     | Option | Value | What it does |
     | --- | --- | --- |
-    | `mode` | `'codecall_only'` | Only the 4 meta-tools appear in `tools/list`. Recommended for large toolsets. |
+    | `mode` | `'codecall_only'` | Only the 4 meta-tools appear in `tools/list`, and the other tools are reached through them (a direct `tools/call` of a hidden tool is refused). Recommended for large toolsets. |
     | `vm.preset` | `'secure'` | Bank-grade sandbox defaults: strict AST validation, short timeouts, no network access. |
     | `embedding.strategy` | `'tfidf'` | Fast local embeddings with no external API. Great for getting started. |
 

@@ -208,6 +208,10 @@ export type CodeCallMode = 'codecall_only' | 'codecall_opt_in' | 'metadata_drive
   - Hide all tools by default.
   - Show tools with `codecall.visibleInListTools === true`.
 
+- Direct `tools/call` from a client:
+  - Refused for a hidden tool, with the answer an unknown tool gets (in every mode: whatever CodeCall hides from
+    `list_tools` is reached only through CodeCall). CodeCall's own calls and `this.callTool()` still reach it.
+
 - CodeCall index:
   - Include all tools by default.
   - Exclude tools if:

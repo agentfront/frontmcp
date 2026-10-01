@@ -2,7 +2,8 @@
  * E2E: CodeCall's tool-access policy (GHSA-6w3j-82v5-6qrr).
  *
  * The CRM app configures `includeTools: (tool) => !tool.name.startsWith('admin:')` and
- * `directCalls.allowedTools: ['users-list', 'users-get']`, and registers three tools the policy
+ * `directCalls.allowedTools: ['users-list', 'users-get', 'users-create', 'activities-list', 'activities-stats']`,
+ * and registers three tools the policy
  * withholds: `admin:purge-users`, `system:wipe-config` and `users-export`
  * (`enabledInCodeCall: false`). The app id is `CRM`, so the SDK also knows the first one as
  * `CRM:admin:purge-users`, which is the spelling execution used to judge.
@@ -100,6 +101,36 @@ test.describe('CodeCall access control E2E (GHSA-6w3j-82v5-6qrr)', () => {
       for (const toolName of WITHHELD_TOOLS) {
         expect(foundNames).not.toContain(toolName);
       }
+    });
+  });
+
+  test.describe("a client's direct tools/call of a tool CodeCall hides (#678)", () => {
+    test('is refused like a call of an unknown tool', async ({ mcp }) => {
+      const unknown = await mcp.tools.call('no-such-tool', {});
+      expect(unknown).toBeError();
+
+      for (const toolName of ['users-list', 'users-delete', ...WITHHELD_TOOLS]) {
+        const direct = await mcp.tools.call(toolName, {});
+
+        expect(direct).toBeError();
+        expect(direct).toHaveTextContent(`Tool "${toolName}" not found`);
+      }
+    });
+
+    test('runs a tool CodeCall lists (visibleInListTools: true)', async ({ mcp }) => {
+      const tools = await mcp.tools.list();
+      expect(tools).toContainTool('crm-reset');
+
+      expect(await mcp.tools.call('crm-reset', {})).toBeSuccessful();
+    });
+
+    test('still reaches the hidden tool through CodeCall', async ({ mcp }) => {
+      await mcp.tools.call('crm-reset', {});
+
+      const invoked = await mcp.tools.call('codecall:invoke', { tool: 'users-list', input: {} });
+
+      expect(invoked).toBeSuccessful();
+      expect(invoked.json<UsersListResult>().count).toBe(3);
     });
   });
 

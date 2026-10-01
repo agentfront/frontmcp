@@ -7,6 +7,8 @@ import {
   ListToolsHook,
   Plugin,
   ScopeEntry,
+  ToolHook,
+  ToolNotFoundError,
   type FlowCtxOf,
   type ProviderType,
   type ToolEntry,
@@ -20,6 +22,7 @@ import {
   type CodeCallToolMetadata,
 } from './codecall.types';
 import CodeCallConfig from './providers/code-call.config';
+import { isInProcessDispatch } from './security';
 import { ToolSearchService } from './services';
 import { AuditLoggerService, type AuditEvent } from './services/audit-logger.service';
 import EnclaveService from './services/enclave.service';
@@ -36,6 +39,16 @@ import { DescribeTool, ExecuteTool, InvokeTool, SearchKnowledgeTool, SearchSkill
 function auditLogFields(event: AuditEvent): Record<string, unknown> {
   const { executionId, durationMs, data } = event;
   return durationMs === undefined ? { executionId, ...data } : { executionId, durationMs, ...data };
+}
+
+/**
+ * The call context a `tools:call-tool` run was started with: the MCP handler's request context for
+ * a client's `tools/call`, the one an in-process dispatcher built otherwise. The flow's input
+ * schema types it as `any`, since its shape is the dispatcher's.
+ */
+function callContextOf(flowCtx: FlowCtxOf<'tools:call-tool'>): unknown {
+  const rawInput: unknown = flowCtx.rawInput;
+  return typeof rawInput === 'object' && rawInput !== null ? (rawInput as { ctx?: unknown }).ctx : undefined;
 }
 
 @Plugin({
@@ -153,6 +166,33 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
 
     // Update the state with filtered tools
     flowCtx.state.set('resolvedTools', filteredTools);
+  }
+
+  /**
+   * Refuse a client's direct `tools/call` of a tool CodeCall hides from `tools/list` (#678).
+   *
+   * Such a tool is reached through CodeCall, which applies its policy (`includeTools`, the blocked
+   * namespaces, `enabledInCodeCall`, `directCalls`). Hiding it from the listing is not access
+   * control on its own: a client that knew the name called it directly, past that policy. The
+   * refusal is the one an unknown tool gets, so it does not reveal that the tool exists.
+   *
+   * Calls dispatched in process still reach it: CodeCall's own (`codecall:execute`,
+   * `codecall:invoke`) and a tool, agent or job composing with it through `this.callTool()`. The
+   * server's own system tools (owned by the scope, e.g. `sendElicitationResult`), which clients are
+   * told to call by name, are never refused. Runs as soon as the tool is found, where the SDK refuses
+   * an `internal` tool, so nothing after it (input validation, authorization, a task, the approval
+   * gate, a cache hit) can reveal the tool; and, like the listing, for the tools of every app that
+   * has no CodeCall plugin of its own.
+   */
+  @ToolHook.Did('findTool', { priority: 10, appliesTo: 'uncovered-apps' })
+  async refuseDirectCallOfHiddenTool(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const { tool } = flowCtx.state;
+    if (!tool || tool.owner?.kind === 'scope') return;
+    if (this.shouldShowInListTools(tool, this.options.mode)) return;
+    if (isInProcessDispatch(callContextOf(flowCtx))) return;
+
+    this.getLogger().verbose('refused a direct tools/call of a tool CodeCall hides', { tool: tool.fullName });
+    throw new ToolNotFoundError(flowCtx.state.input?.name ?? tool.name);
   }
 
   /**

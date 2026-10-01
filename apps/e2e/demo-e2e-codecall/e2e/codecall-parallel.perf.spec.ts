@@ -3,6 +3,9 @@
  *
  * Tests CRM operations under parallel load using multiple clients
  * to achieve higher throughput (400-2000+ req/s)
+ *
+ * The CRM tools are hidden in codecall_only mode and a client cannot call them directly, so each
+ * operation goes through `codecall:invoke` (no VM), which the app's `directCalls.allowedTools` permits.
  */
 import { perfTest, expect } from '@frontmcp/testing';
 
@@ -16,7 +19,7 @@ perfTest.describe('CodeCall Parallel Stress Testing', () => {
   perfTest('parallel stress: 5000 total users-list operations', async ({ perf, server }) => {
     const result = await perf.checkLeakParallel(
       (client) => async () => {
-        await client.tools.call('users-list', {});
+        await client.tools.call('codecall:invoke', { tool: 'users-list', input: {} });
       },
       {
         iterations: 1000,
@@ -43,11 +46,14 @@ perfTest.describe('CodeCall Parallel Stress Testing', () => {
       (client, workerId) => {
         let counter = workerId * 1000;
         return async () => {
-          await client.tools.call('users-create', {
-            name: `User ${counter}`,
-            email: `user${counter}@test.com`,
-            company: `Company ${counter}`,
-            role: counter++ % 2 === 0 ? 'admin' : 'user',
+          await client.tools.call('codecall:invoke', {
+            tool: 'users-create',
+            input: {
+              name: `User ${counter}`,
+              email: `user${counter}@test.com`,
+              company: `Company ${counter}`,
+              role: counter++ % 2 === 0 ? 'admin' : 'user',
+            },
           });
         };
       },
@@ -81,18 +87,21 @@ perfTest.describe('CodeCall Parallel Stress Testing', () => {
         return async () => {
           const op = callIndex++ % 4;
           if (op === 0) {
-            await client.tools.call('users-list', {});
+            await client.tools.call('codecall:invoke', { tool: 'users-list', input: {} });
           } else if (op === 1) {
-            await client.tools.call('users-create', {
-              name: `User ${callIndex}`,
-              email: `user${callIndex}@test.com`,
-              company: 'Test',
-              role: 'user',
+            await client.tools.call('codecall:invoke', {
+              tool: 'users-create',
+              input: {
+                name: `User ${callIndex}`,
+                email: `user${callIndex}@test.com`,
+                company: 'Test',
+                role: 'user',
+              },
             });
           } else if (op === 2) {
-            await client.tools.call('activities-list', {});
+            await client.tools.call('codecall:invoke', { tool: 'activities-list', input: {} });
           } else {
-            await client.tools.call('activities-stats', {});
+            await client.tools.call('codecall:invoke', { tool: 'activities-stats', input: {} });
           }
         };
       },
