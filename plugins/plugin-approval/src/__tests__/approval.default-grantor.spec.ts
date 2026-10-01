@@ -7,6 +7,7 @@
 import 'reflect-metadata';
 
 import { App, FrontMcpInstance, LogLevel, Tool, ToolContext, type DirectMcpServer } from '@frontmcp/sdk';
+import { createMemoryStorage } from '@frontmcp/utils';
 
 import { ApprovalPlugin } from '../index';
 
@@ -50,7 +51,35 @@ describe('this.approval grants — the recorded grantor (#647)', () => {
     const result = await server.callTool('approve_deploy', {}, { authContext: { user: { sub: 'alice' } } });
 
     expect(result.structuredContent).toEqual({
-      grantedBy: { source: 'user', identifier: 'alice', method: 'interactive' },
+      grantedBy: { source: 'user', identifier: 'alice', method: 'implicit' },
     });
+  });
+
+  it('keeps an explicit grantor as given, so an approval the user answered stays interactive', async () => {
+    const { ApprovalService, ApprovalStorageStore, userGrantor } = await import('../index');
+    const storage = createMemoryStorage();
+    await storage.connect();
+    const store = new ApprovalStorageStore({ storageInstance: storage, cleanupIntervalSeconds: 0 });
+    await store.initialize();
+    const service = new ApprovalService(store, 'session-1', 'alice');
+
+    const implicit = await service.grantSessionApproval(DEPLOY_TOOL_ID);
+    const answered = await service.grantUserApproval(DEPLOY_TOOL_ID, { grantedBy: userGrantor('alice') });
+    await store.close();
+
+    expect(implicit.grantedBy.method).toBe('implicit');
+    expect(answered.grantedBy.method).toBe('interactive');
+  });
+
+  it('records no interactive method for a grant without a signed-in user', async () => {
+    const { ApprovalService, ApprovalStorageStore } = await import('../index');
+    const storage = createMemoryStorage();
+    await storage.connect();
+    const store = new ApprovalStorageStore({ storageInstance: storage, cleanupIntervalSeconds: 0 });
+    await store.initialize();
+    const record = await new ApprovalService(store, 'session-1').grantSessionApproval(DEPLOY_TOOL_ID);
+    await store.close();
+
+    expect(record.grantedBy).toEqual({ source: 'user', method: 'implicit' });
   });
 });

@@ -9,7 +9,7 @@ features:
   - 'Using `keyPrefix` to namespace guard keys in a shared Redis instance'
   - "Combining `partitionBy: 'ip'` for global limits with `partitionBy: 'session'` per tool"
   - 'In-memory counters are per-process and would allow N times the intended rate with N instances'
-  - "Startup fails closed with `GuardStorageUnavailableError` when Redis is down, unless `fallback: 'memory'`"
+  - "Startup fails closed, and a limited call is refused, with `GuardStorageUnavailableError` when Redis is down, unless `fallback: 'memory'`"
 ---
 
 # Distributed Rate Limiting with Redis
@@ -87,13 +87,13 @@ class Server {}
 - Using `keyPrefix` to namespace guard keys in a shared Redis instance
 - Combining `partitionBy: 'ip'` for global limits with `partitionBy: 'session'` per tool
 - In-memory counters are per-process and would allow N times the intended rate with N instances
-- Startup fails closed with `GuardStorageUnavailableError` when Redis is down, unless `fallback: 'memory'`
+- Startup fails closed, and a limited call is refused, with `GuardStorageUnavailableError` when Redis is down, unless `fallback: 'memory'`
 
 ## Notes
 
 - `storage` is the `@frontmcp/utils` storage shape (`type` + `redis: { config }` or `redis: { url }`), not the top-level `redis` shape. A block without `type` is auto-detected from the environment and otherwise runs in memory.
 - Keys read `payments:guard:process_payment:<partition>:rl:...`: a trailing `:` on `keyPrefix` is dropped. Before 1.8.6 it was doubled (`payments:guard::...`), so counters briefly split between versions during a rolling deploy.
-- To keep serving with per-instance counters while Redis is down, add `fallback: 'memory'` to `storage`.
+- To keep serving with per-instance counters while Redis is down (at startup or mid-run), add `fallback: 'memory'` to `storage`.
 
 ## Related
 

@@ -30,8 +30,8 @@ A complete beginner MCP server that exposes a weather lookup tool and a static r
   },
   "devDependencies": {
     "@frontmcp/testing": "^1.0.0",
-    "jest": "^29.0.0",
-    "ts-jest": "^29.0.0",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.4.0",
     "typescript": "^5.4.0",
   },
 }

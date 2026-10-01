@@ -2,7 +2,7 @@
 
 import 'reflect-metadata';
 
-import { ApprovalOperationError, ApprovalScopeNotAllowedError, userGrantor, userRevoker } from '../approval';
+import { ApprovalOperationError, ApprovalScopeNotAllowedError, userGrantor } from '../approval';
 import { ApprovalService, createApprovalService } from '../services/approval.service';
 import type { ApprovalStore } from '../stores/approval-store.interface';
 import { ApprovalScope, ApprovalState, type ApprovalRecord } from '../types';
@@ -193,7 +193,7 @@ describe('ApprovalService', () => {
         toolId: 'my-tool',
         scope: ApprovalScope.SESSION,
         sessionId,
-        grantedBy: userGrantor(userId),
+        grantedBy: userGrantor(userId, undefined, { method: 'implicit' }),
         reason: undefined,
         metadata: undefined,
       });
@@ -232,7 +232,7 @@ describe('ApprovalService', () => {
         toolId: 'my-tool',
         scope: ApprovalScope.USER,
         userId,
-        grantedBy: userGrantor(userId),
+        grantedBy: userGrantor(userId, undefined, { method: 'implicit' }),
         reason: undefined,
         metadata: undefined,
       });
@@ -261,7 +261,7 @@ describe('ApprovalService', () => {
         ttlMs: 60000,
         sessionId,
         userId,
-        grantedBy: userGrantor(userId),
+        grantedBy: userGrantor(userId, undefined, { method: 'implicit' }),
         reason: undefined,
         metadata: undefined,
       });
@@ -283,7 +283,7 @@ describe('ApprovalService', () => {
         context,
         sessionId,
         userId,
-        grantedBy: userGrantor(userId),
+        grantedBy: userGrantor(userId, undefined, { method: 'implicit' }),
         reason: undefined,
         metadata: undefined,
       });
@@ -301,7 +301,7 @@ describe('ApprovalService', () => {
         toolId: 'my-tool',
         sessionId,
         userId,
-        revokedBy: userRevoker(userId),
+        revokedBy: { source: 'user', identifier: userId, method: 'implicit' },
         reason: undefined,
       });
     });
@@ -426,21 +426,21 @@ describe('ApprovalService', () => {
     it('records the signed-in user, not a policy, as the grantor', async () => {
       for (const grant of [...grants(service), () => service.grantUserApproval('my-tool')]) await grant();
 
-      expect(recordedGrantors()).toEqual(Array(4).fill({ source: 'user', identifier: userId, method: 'interactive' }));
+      expect(recordedGrantors()).toEqual(Array(4).fill({ source: 'user', identifier: userId, method: 'implicit' }));
     });
 
     it('records a grant without a user as a user grant with no identifier', async () => {
       const serviceWithoutUser = new ApprovalService(mockStore, sessionId);
       for (const grant of grants(serviceWithoutUser)) await grant();
 
-      expect(recordedGrantors()).toEqual(Array(3).fill({ source: 'user' }));
+      expect(recordedGrantors()).toEqual(Array(3).fill({ source: 'user', method: 'implicit' }));
     });
 
     it('does not record an anonymous subject as the grantor', async () => {
       const anonymousService = new ApprovalService(mockStore, sessionId, 'anon:3f2a');
       for (const grant of grants(anonymousService)) await grant();
 
-      expect(recordedGrantors()).toEqual(Array(3).fill({ source: 'user' }));
+      expect(recordedGrantors()).toEqual(Array(3).fill({ source: 'user', method: 'implicit' }));
     });
 
     it('keeps a grantor the caller names', async () => {
@@ -455,9 +455,9 @@ describe('ApprovalService', () => {
       await new ApprovalService(mockStore, sessionId, 'anon:3f2a').revokeApproval('my-tool');
 
       expect(mockStore.revokeApproval.mock.calls.map(([options]) => options.revokedBy)).toEqual([
-        { source: 'user', identifier: userId, method: 'interactive' },
-        { source: 'user' },
-        { source: 'user' },
+        { source: 'user', identifier: userId, method: 'implicit' },
+        { source: 'user', method: 'implicit' },
+        { source: 'user', method: 'implicit' },
       ]);
     });
   });

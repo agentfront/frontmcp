@@ -347,7 +347,7 @@ clear the legacy prefixes manually if you want the storage back.
 - `list_memories` -- List all stored keys, optionally filtered by pattern
 
 `tools.prefix` renames them (`prefix: 'memory_'` gives `memory_recall`, ...; each description names the prefixed siblings) and
-`tools.allowedScopes` rejects any other `scope`. With `enabled` unset or `false` none is registered.
+`tools.allowedScopes` rejects any other `scope` (including the default `session` when a call omits it) with a public `REMEMBER_SCOPE_NOT_ALLOWED` error that lists the allowed scopes. With `enabled` unset or `false` none is registered.
 
 All four take an optional `scope` (default `session`) and describe it to the model the same way:
 `session` is this session, or without one (stateless HTTP, MCP 2026-07-28) the signed-in caller
@@ -505,10 +505,12 @@ class DangerousActionTool extends ToolContext {
 ```
 
 Each grant records its grantor in `grantedBy`. Without one, it is the signed-in caller whose tool
-made the grant: `userGrantor(<user id>)`, i.e. `{ source: 'user', identifier: '<user id>', method:
-'interactive' }`. Without a signed-in user (no principal, or an anonymous `anon:` subject) it is
-`{ source: 'user' }` with no identifier. `revokeApproval()` records `revokedBy` the same way
-(`userRevoker(<user id>)`). Releases up to 1.8.5 recorded both as `'policy'`. Pass `grantedBy` to
+made the grant: `{ source: 'user', identifier: '<user id>', method: 'implicit' }` (a tool that grants
+through `this.approval` asked no one, so it is not an `'interactive'` answer; a tool that did ask passes
+`grantedBy: userGrantor(<user id>)`). Without a signed-in user (no principal, or an anonymous `anon:`
+subject) it is `{ source: 'user', method: 'implicit' }` with no identifier. `revokeApproval()` records
+`revokedBy` the same way and `getRevocations(toolId)` reads it back (kept 24 hours). Releases up to 1.8.5
+recorded both as `'policy'`; 1.8.6 recorded `'interactive'` and kept no `revokedBy`. Pass `grantedBy` to
 record anything else; `userGrantor`'s third argument is an options object, not the method:
 
 ```typescript
@@ -714,7 +716,9 @@ A disabled flag filters the entry out of `tools/list`, `resources/list`, `prompt
 
 That matters because a listing is not an access control. Clients cache listings and hold
 resource URIs and prompt names from earlier sessions, so anything gated only at list time
-stays reachable by name. If the adapter is unavailable the gate uses the ref's
+stays reachable by name. The refusal is a public `FeatureFlagDisabledError` (`FEATURE_FLAG_DISABLED`, 403)
+that names the capability and the flag. `FeatureFlagPlugin.init()` with no (or an unknown) `adapter` throws a
+`FeatureFlagConfigurationError` at startup. If the adapter is unavailable the gate uses the ref's
 `defaultValue`, and a bare string ref (no default) fails closed.
 
 ### Installation

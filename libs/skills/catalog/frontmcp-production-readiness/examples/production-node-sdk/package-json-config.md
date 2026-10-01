@@ -58,8 +58,8 @@ Shows the correct package.json configuration for publishing a FrontMCP SDK packa
 
   "devDependencies": {
     "@frontmcp/testing": "^1.0.0",
-    "jest": "^29.0.0",
-    "ts-jest": "^29.0.0",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.4.0",
     "typescript": "^5.4.0",
     "zod": "^4.0.0",
   },

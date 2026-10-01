@@ -377,7 +377,7 @@ async function createGuardManager(args: CreateGuardManagerArgs): Promise<GuardMa
 **Behavior:**
 
 1. Creates storage backend from `config.storage` (or in-memory if not set)
-2. Connects the storage backend. A configured backend that cannot be created or reached rejects with `GuardStorageUnavailableError` — rate limits fail closed — unless `config.storage.fallback` is `'memory'`. `createStorage` defaults `fallback` to `'error'` in production and `'memory'` otherwise.
+2. Connects the storage backend. A configured backend that cannot be created or reached rejects with `GuardStorageUnavailableError` — rate limits fail closed — unless `config.storage.fallback` is `'memory'`. The returned manager applies the same policy if the backend stops answering later: limit checks and slot acquisitions reject with `GuardStorageUnavailableError`, or, with `fallback: 'memory'`, run on per-instance counters and retry the configured backend every 30 seconds (`GuardManagerOptions.retryPrimaryAfterMs`). Releasing a concurrency slot never throws. `createStorage` defaults `fallback` to `'error'` in production and `'memory'` otherwise.
 3. Creates namespaced storage with `config.keyPrefix`, minus any trailing `:` (the namespace adds its own separator)
 4. Returns initialized `GuardManager`
 
@@ -546,7 +546,7 @@ For your own code to throw when a client IP is not on an allow list and `default
 
 ### `GuardStorageUnavailableError`
 
-Thrown by `createGuardManager()` when the configured `storage` backend cannot be created or reached — at SDK startup, when `throttle.storage` is down. The message names `throttle.storage` and says to set `throttle.storage.fallback: 'memory'` to start with per-instance counters.
+Thrown when the configured `storage` backend cannot be created or reached: by `createGuardManager()` at SDK startup, and by `GuardManager` limit checks (`checkRateLimit`, `checkGlobalRateLimit`, `acquireSemaphore`, `acquireGlobalSemaphore`) if the backend goes away while the server runs. The message names `throttle.storage` and says to set `throttle.storage.fallback: 'memory'` to use per-instance counters instead.
 
 | Property      | Type      | Value                                       |
 | ------------- | --------- | ------------------------------------------- |

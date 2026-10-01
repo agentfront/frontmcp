@@ -569,7 +569,7 @@ RememberPlugin.init({
 });
 ```
 
-This exposes `memory_remember_this`, `memory_recall`, `memory_forget`, and `memory_list_memories`. Without `prefix` they are `remember_this`, `recall`, `forget` and `list_memories`; with `enabled` unset or `false` no memory tool is registered. Each tool's description names its prefixed siblings, and a scope outside `allowedScopes` is rejected.
+This exposes `memory_remember_this`, `memory_recall`, `memory_forget`, and `memory_list_memories`. Without `prefix` they are `remember_this`, `recall`, `forget` and `list_memories`; with `enabled` unset or `false` no memory tool is registered. Each tool's description names its prefixed siblings, and a scope outside `allowedScopes` is rejected with a public `REMEMBER_SCOPE_NOT_ALLOWED` error (HTTP 400) whose message lists the allowed scopes, so the model can retry. That includes the default `session` scope when a call omits `scope` and `allowedScopes` does not list it; the refusal used to surface as `Internal FrontMCP error` in production.
 
 Each takes an optional `scope` (default `session`), described to the model the same way in all four tools:
 
