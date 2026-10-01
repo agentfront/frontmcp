@@ -93,20 +93,26 @@ export class IpNotAllowedError extends GuardError {
 }
 
 /**
- * Thrown at startup when the configured `throttle.storage` backend cannot be
- * created or reached.
+ * Thrown when the configured `throttle.storage` backend cannot be created or
+ * reached — at startup, or later when a limit check runs while it is down.
  *
  * Rate limits are a security control, so they fail closed: the server does not
- * start with per-instance counters unless the config says it may.
+ * start (and a call is refused) with per-instance counters unless the config
+ * says it may (`throttle.storage.fallback: 'memory'`).
  */
 export class GuardStorageUnavailableError extends GuardError {
   readonly storageType: string;
 
-  constructor(storageType: string, cause?: unknown) {
+  constructor(storageType: string, cause?: unknown, phase: 'startup' | 'runtime' = 'startup') {
     const reason = cause instanceof Error ? cause.message : cause !== undefined ? String(cause) : 'unknown error';
+    const consequence =
+      phase === 'startup'
+        ? 'Rate limits fail closed, so the server will not start without it. ' +
+          "Set throttle.storage.fallback: 'memory' to start with per-instance counters instead."
+        : 'Rate limits fail closed, so this call was refused. ' +
+          "Set throttle.storage.fallback: 'memory' to keep serving with per-instance counters while it is down.";
     super(
-      `throttle.storage (${storageType}) is unavailable: ${reason}. Rate limits fail closed, so the server will ` +
-        `not start without it. Set throttle.storage.fallback: 'memory' to start with per-instance counters instead.`,
+      `throttle.storage (${storageType}) is unavailable: ${reason}. ${consequence}`,
       'GUARD_STORAGE_UNAVAILABLE',
       503,
     );

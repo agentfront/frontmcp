@@ -15,3 +15,20 @@ export class RememberIdentityError extends PublicMcpError {
     super(message, 'REMEMBER_IDENTITY_REQUIRED', 403);
   }
 }
+
+/**
+ * Raised when a memory tool is called with a scope outside `tools.allowedScopes`, including the
+ * default scope when the caller omitted one. The model needs the message to retry with a valid
+ * scope, so it is public rather than an internal-error notice.
+ */
+export class RememberScopeNotAllowedError extends PublicMcpError {
+  override readonly name = 'RememberScopeNotAllowedError';
+
+  constructor(scope: string, allowedScopes: readonly string[]) {
+    super(
+      `Scope '${scope}' is not allowed. Allowed scopes: ${allowedScopes.join(', ')}`,
+      'REMEMBER_SCOPE_NOT_ALLOWED',
+      400,
+    );
+  }
+}

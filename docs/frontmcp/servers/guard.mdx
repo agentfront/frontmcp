@@ -465,6 +465,8 @@ Upstash is `{ type: 'upstash', upstash: { url, token } }`.
 
 Rate limits are a security control, so they **fail closed**. If the configured backend cannot be reached at startup, the server does not start: `createGuardManager` rejects with `GuardStorageUnavailableError` (`GUARD_STORAGE_UNAVAILABLE`), whose message names `throttle.storage`. This is the default in production, where `fallback` defaults to `'error'` (it defaults to `'memory'` otherwise).
 
+The same applies if the backend goes away **while the server is running**: a rate-limited or concurrency-limited call is refused with the same `GuardStorageUnavailableError` (503, `GUARD_STORAGE_UNAVAILABLE`, a public error the client can read), not an internal error. The Redis client logs the connection error at a rate-limited interval instead of once per reconnect attempt.
+
 To keep serving with per-instance counters while the store is down, opt in explicitly:
 
 ```typescript
@@ -473,7 +475,7 @@ throttle: {
   storage: {
     type: 'redis',
     redis: { url: process.env.REDIS_URL },
-    fallback: 'memory', // each instance counts on its own until Redis is back and the server restarts
+    fallback: 'memory', // each instance counts on its own while Redis is down, and goes back to Redis once it answers
   },
 }
 ```
@@ -494,15 +496,15 @@ Keys are `<keyPrefix><entity>:<partition>:<kind>:…`, for example `mcp:guard:ex
 
 Guard throws specific error classes when limits are exceeded:
 
-| Error Class                    | Code                        | HTTP Status | When Thrown                                        |
-| ------------------------------ | --------------------------- | ----------- | -------------------------------------------------- |
-| `RateLimitError`               | `RATE_LIMIT_EXCEEDED`       | 429         | Request exceeds rate limit                         |
-| `ConcurrencyLimitError`        | `CONCURRENCY_LIMIT`         | 429         | No concurrency slot available                      |
-| `QueueTimeoutError`            | `QUEUE_TIMEOUT`             | 429         | Queue wait time exceeded                           |
-| `ExecutionTimeoutError`        | `EXECUTION_TIMEOUT`         | 408         | Execution exceeded deadline                        |
-| `IpBlockedError`               | `IP_BLOCKED`                | 403         | Exported for your own code                         |
-| `IpNotAllowedError`            | `IP_NOT_ALLOWED`            | 403         | Exported for your own code                         |
-| `GuardStorageUnavailableError` | `GUARD_STORAGE_UNAVAILABLE` | 503         | At startup, when `throttle.storage` is unreachable |
+| Error Class                    | Code                        | HTTP Status | When Thrown                                                    |
+| ------------------------------ | --------------------------- | ----------- | -------------------------------------------------------------- |
+| `RateLimitError`               | `RATE_LIMIT_EXCEEDED`       | 429         | Request exceeds rate limit                                     |
+| `ConcurrencyLimitError`        | `CONCURRENCY_LIMIT`         | 429         | No concurrency slot available                                  |
+| `QueueTimeoutError`            | `QUEUE_TIMEOUT`             | 429         | Queue wait time exceeded                                       |
+| `ExecutionTimeoutError`        | `EXECUTION_TIMEOUT`         | 408         | Execution exceeded deadline                                    |
+| `IpBlockedError`               | `IP_BLOCKED`                | 403         | Exported for your own code                                     |
+| `IpNotAllowedError`            | `IP_NOT_ALLOWED`            | 403         | Exported for your own code                                     |
+| `GuardStorageUnavailableError` | `GUARD_STORAGE_UNAVAILABLE` | 503         | `throttle.storage` is unreachable, at startup or while running |
 
 A `tools/call` that hits a limit answers with an error result whose `_meta.code` is the code above, in production too.
 The built-in `ipFilter` does not throw: it answers the HTTP request with 403 before any tool runs (see [Filter Precedence](#filter-precedence)).

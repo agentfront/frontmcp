@@ -52,7 +52,8 @@ export function buildJestArgs(configPath: string, opts: ParsedArgs, positionalPa
  * `jose` ships as pure ESM and is reachable from the `@frontmcp/sdk` barrel, so
  * every scaffolded project needs it transformed.
  */
-const DEFAULT_ESM_PACKAGES = ['jose'];
+// `@noble/*` are ESM-only dependencies of CodeCall (via its crypto), so any spec that loads a CodeCall app needs them transformed.
+const DEFAULT_ESM_PACKAGES = ['jose', '@noble/hashes', '@noble/ciphers'];
 
 /** Matches either path separator so the patterns hold on Windows too. */
 const PATH_SEPARATOR = '[/\\\\]';
@@ -219,7 +220,14 @@ export function buildTestChildEnv(params: {
   effectiveEnv: Record<string, string>;
   baseEnv: NodeJS.ProcessEnv;
 }): NodeJS.ProcessEnv {
-  return { ...params.effectiveEnv, ...params.baseEnv };
+  const env = { ...params.effectiveEnv, ...params.baseEnv };
+  // Jest only loads native-ESM dependencies (and dynamic `import()` from a server
+  // started inside the test process) when Node runs with this flag.
+  const nodeOptions = env['NODE_OPTIONS'] ?? '';
+  if (!nodeOptions.split(/\s+/).includes('--experimental-vm-modules')) {
+    env['NODE_OPTIONS'] = `${nodeOptions} --experimental-vm-modules`.trim();
+  }
+  return env;
 }
 
 /**

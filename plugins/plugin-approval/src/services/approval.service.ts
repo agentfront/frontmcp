@@ -78,17 +78,20 @@ export class ApprovalService {
   /**
    * Who a grant is recorded as when the call names no one: the signed-in user whose tool call made it.
    * It used to be `'policy'`, so an audit trail showed every approval a user gave as a policy's.
-   * Without a signed-in user it is the store's default, a user with no identifier.
+   * Without a signed-in user it is a user with no identifier.
+   *
+   * The method is `'implicit'`: a tool that grants through `this.approval` asked no one, so the grant
+   * is not an `'interactive'` answer. A tool that did ask passes `grantedBy: userGrantor(id)`.
    */
   private defaultGrantor(): ApprovalGrantor {
     const userId = this.signedInUserId;
-    return userId ? userGrantor(userId) : { source: 'user' };
+    return userId ? userGrantor(userId, undefined, { method: 'implicit' }) : { source: 'user', method: 'implicit' };
   }
 
   /** Who a revocation is recorded as when the call names no one, by the same rule as a grant. */
   private defaultRevoker(): ApprovalRevoker {
     const userId = this.signedInUserId;
-    return userId ? userRevoker(userId) : { source: 'user' };
+    return userId ? { source: 'user', identifier: userId, method: 'implicit' } : { source: 'user', method: 'implicit' };
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -151,6 +154,14 @@ export class ApprovalService {
     return records.filter(
       (record) => record.sessionId === this.sessionId || (this.userId !== undefined && record.userId === this.userId),
     );
+  }
+
+  /**
+   * The caller's recent revocations of a tool, newest last: each is the approval that was revoked,
+   * with `revokedBy`, `revokedAt` and `revocationReason`. Empty when the store keeps no revocations.
+   */
+  async getRevocations(toolId: string): Promise<ApprovalRecord[]> {
+    return (await this.store.getRevocations?.(toolId, this.sessionId, this.userId)) ?? [];
   }
 
   // ─────────────────────────────────────────────────────────────────────────────

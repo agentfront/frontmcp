@@ -48,7 +48,9 @@ export abstract class DynamicAdapter<TOptions extends object> implements Adapter
    */
   static init<TThis extends AdapterClassWithOptions<any>>(
     this: TThis,
-    options: InitOptions<TThis['prototype'] extends { __options_brand?: infer O } ? O : never>,
+    options: InitOptions<TThis['prototype'] extends { __options_brand?: infer O } ? O : never> = {} as InitOptions<
+      TThis['prototype'] extends { __options_brand?: infer O } ? O : never
+    >,
   ): AdapterReturn<TThis['prototype'] extends { __options_brand?: infer O } ? O : never> {
     const typedOptions = options as any;
     const adapterName = typedOptions.name;

@@ -359,11 +359,13 @@ still wins over a pre-approved context.
 
 <Note>
   Every grant method records who granted the approval in `grantedBy`. When you pass none, it is the signed-in caller
-  whose tool made the grant, `userGrantor(<caller's user id>)`, i.e. `{ source: 'user', identifier: '<user id>', method:
-  'interactive' }`. Without a signed-in user (no principal, or an anonymous `anon:` subject) it is `{ source: 'user' }`
+  whose tool made the grant, i.e. `{ source: 'user', identifier: '<user id>', method: 'implicit' }`: a tool that grants
+  through `this.approval` asked no one, so the grant is not recorded as an `'interactive'` answer. A tool that did ask passes
+  `grantedBy: userGrantor(<user id>)`, whose method is `'interactive'`. Without a signed-in user (no principal, or an anonymous `anon:` subject) it is `{ source: 'user' }`
   with no identifier. Pass `grantedBy` to record something else, e.g. `policyGrantor('policy:read-only-safe')` for an
-  automatic grant. `revokeApproval()` records `revokedBy` by the same rule (`userRevoker(<user id>)`). Releases up to
-  1.8.5 recorded every such grant and revocation as `'policy'`.
+  automatic grant. `revokeApproval()` records `revokedBy` by the same rule, and `getRevocations(toolId)` reads it back. Releases up to
+  1.8.5 recorded every such grant and revocation as `'policy'`; 1.8.6 recorded every default grant as `'interactive'` and
+  kept no `revokedBy`.
 </Note>
 
 <ParamField path="isApproved(toolId)" type="Promise<boolean>">
@@ -418,6 +420,11 @@ await this.approval.revokeApproval('file_write', {
 });
 ```
 
+</ParamField>
+
+<ParamField path="getRevocations(toolId)" type="Promise<ApprovalRecord[]>">
+  The caller's recent revocations of the tool (kept for 24 hours), newest last. Each is the approval that was revoked,
+  with `revokedBy`, `revokedAt` and `revocationReason`. Empty when the store keeps no revocations.
 </ParamField>
 
 <ParamField path="getApproval(toolId)" type="Promise<ApprovalRecord | undefined>">

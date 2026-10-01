@@ -1,6 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
+import { RememberScopeNotAllowedError } from '../remember.errors';
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
 import { REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
 import { rememberToolNames, type RememberToolNames } from './remember-tool-names';
@@ -59,7 +60,7 @@ export default class ListMemoriesTool extends ToolContext {
     const allowedScopes = config.tools?.allowedScopes ?? ['session', 'user', 'tool', 'global'];
 
     if (!allowedScopes.includes(scope)) {
-      throw this.fail(new Error(`Scope '${scope}' is not allowed. Allowed scopes: ${allowedScopes.join(', ')}`));
+      throw this.fail(new RememberScopeNotAllowedError(scope, allowedScopes));
     }
 
     const limit = input.limit ?? 50;

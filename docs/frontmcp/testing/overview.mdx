@@ -55,7 +55,12 @@ runtime, so React component tests work without extra setup.
 
 Jest runs your tests through a CommonJS runtime, so any dependency published as
 pure ESM has to be transpiled rather than skipped. The injected config already
-does this for `jose` (pulled in transitively by `@frontmcp/sdk`), and its
+does this for `jose` (pulled in transitively by `@frontmcp/sdk`) and for
+`@noble/hashes` and `@noble/ciphers` (pulled in by CodeCall), so a spec that
+loads a CodeCall app needs no extra configuration. `frontmcp test` also runs
+Jest with `NODE_OPTIONS=--experimental-vm-modules`, which Jest needs to load
+native-ESM dependencies when a server is started inside the test process. The
+scaffolded project uses Jest 30 for this; Jest 29 cannot load them. Its
 `transformIgnorePatterns` understand every package-manager layout — including
 pnpm, which installs into a symlinked store at
 `node_modules/.pnpm/<name>@<version>/node_modules/<name>`.
@@ -70,7 +75,7 @@ export default defineConfig({
   name: 'my-server',
   deployments: [{ target: 'node' }],
   test: {
-    esmPackages: ['nanoid', '@noble/hashes'],
+    esmPackages: ['nanoid', 'p-limit'],
   },
 });
 ```
