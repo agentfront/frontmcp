@@ -1,6 +1,6 @@
 // errors/mcp.error.ts
 import { AuthorityDeniedError } from '@frontmcp/auth';
-import { GuardError } from '@frontmcp/guard';
+import { GuardError, GuardStorageUnavailableError } from '@frontmcp/guard';
 import { bytesToHex, isProduction, randomBytes } from '@frontmcp/utils';
 
 /**
@@ -730,9 +730,29 @@ export class AuthorityDeniedMcpError extends PublicMcpError {
  * timeout). Public, so the caller learns which limit it hit, under the guard's own code.
  */
 export class GuardLimitMcpError extends PublicMcpError {
+  /** The guard's own message — what the server logs. */
+  private readonly detail: string;
+
   constructor(error: GuardError) {
-    super(error.message, error.code, error.statusCode);
+    super(publicGuardMessage(error), error.code, error.statusCode);
+    this.detail = error.message;
   }
+
+  override getInternalMessage(): string {
+    return this.detail;
+  }
+}
+
+/**
+ * The limit errors describe the caller's own request and are read as they are. A storage
+ * outage's message names the store's address and the server's fallback setting, which the
+ * client has no use for, so it reads as the 503 it is; the detail stays in the server log.
+ */
+function publicGuardMessage(error: GuardError): string {
+  if (error instanceof GuardStorageUnavailableError) {
+    return 'Service temporarily unavailable: the rate-limit store cannot be reached. Retry shortly.';
+  }
+  return error.message;
 }
 
 /**
