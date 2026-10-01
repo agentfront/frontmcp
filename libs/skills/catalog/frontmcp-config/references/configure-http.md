@@ -137,7 +137,8 @@ until you name the public host, and the bound NIC address then joins the list al
 **Deployments behind a proxy need one line of config.** A routable bind (`0.0.0.0`, `::`, a specific
 NIC) is reached under a hostname the process cannot know, so a derived list is not enforced there —
 FrontMCP logs a warning and leaves host checking off rather than 403-ing a proxied deployment on a
-patch upgrade. Name the public host to turn it on:
+patch upgrade (the production security audit reports it as `DNS_REBINDING_NOT_ENFORCED`, and only says
+`DNS_REBINDING_PROTECTED` once a list is actually checked). Name the public host to turn it on:
 
 ```typescript
 http: {

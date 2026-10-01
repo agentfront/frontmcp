@@ -8,6 +8,7 @@
  */
 
 import type { CorsOptions } from '../../common';
+import { allowedHostsFromEnv, isRoutableBind } from './resolve-allowed-hosts';
 
 /**
  * Security configuration for the audit.
@@ -27,6 +28,8 @@ export interface SecurityAuditConfig {
   };
   /** Resolved bind address (what the server actually binds to) */
   resolvedBindAddress?: string;
+  /** Unix socket the server listens on instead of a TCP port, if any */
+  socketPath?: string;
   /** Deployment mode */
   deploymentMode?: string;
 }
@@ -122,25 +125,7 @@ export function auditSecurityDefaults(config: SecurityAuditConfig, isProduction:
     });
   }
 
-  // DNS rebinding protection audit. Host validation is ON by default (ExpressHostAdapter installs it
-  // unless `enabled: false`), so only an explicit opt-out is unprotected — reporting the default as
-  // "disabled" contradicted the adapter that was enforcing it.
-  const dnsProtectionEnabled = config.security?.dnsRebindingProtection?.enabled !== false;
-  if (!dnsProtectionEnabled) {
-    findings.push({
-      level: 'warn',
-      code: 'DNS_REBINDING_UNPROTECTED',
-      message: 'DNS rebinding protection is disabled (security.dnsRebindingProtection.enabled is false).',
-      recommendation:
-        'Remove `enabled: false`, or set security.dnsRebindingProtection.allowedHosts, to prevent DNS rebinding attacks.',
-    });
-  } else {
-    findings.push({
-      level: 'info',
-      code: 'DNS_REBINDING_PROTECTED',
-      message: 'DNS rebinding protection is enabled.',
-    });
-  }
+  findings.push(auditDnsRebinding(config, bindAddress));
 
   // Strict mode info
   if (config.security?.strict) {
@@ -162,6 +147,64 @@ export function auditSecurityDefaults(config: SecurityAuditConfig, isProduction:
   }
 
   return findings;
+}
+
+/**
+ * DNS rebinding protection audit. It reports what ExpressHostAdapter actually enforces, by the same
+ * rules: an explicit allow-list (config or FRONTMCP_ALLOWED_HOSTS) always applies; otherwise a list is
+ * derived from the listener, and enforced only on a loopback bind — a routable bind with no public
+ * name would 403 every request under the deployment's real hostname, so the adapter checks nothing
+ * there. Saying "enabled" for that case (#680) told an operator on 0.0.0.0 that Host headers were
+ * being checked when none were.
+ */
+function auditDnsRebinding(config: SecurityAuditConfig, bindAddress: string): SecurityFinding {
+  const protection = config.security?.dnsRebindingProtection;
+  if (protection?.enabled === false) {
+    return {
+      level: 'warn',
+      code: 'DNS_REBINDING_UNPROTECTED',
+      message: 'DNS rebinding protection is disabled (security.dnsRebindingProtection.enabled is false).',
+      recommendation:
+        'Remove `enabled: false`, or set security.dnsRebindingProtection.allowedHosts, to prevent DNS rebinding attacks.',
+    };
+  }
+
+  const explicitHosts = protection?.allowedHosts ?? allowedHostsFromEnv();
+  if (explicitHosts?.length || protection?.allowedOrigins?.length) {
+    return {
+      level: 'info',
+      code: 'DNS_REBINDING_PROTECTED',
+      message: 'DNS rebinding protection is enabled: Host/Origin headers are checked against the configured allow-list.',
+    };
+  }
+
+  if (config.socketPath) {
+    return {
+      level: 'info',
+      code: 'DNS_REBINDING_NOT_APPLICABLE',
+      message: 'Server listens on a Unix socket: there is no TCP Host to check; the socket permissions are the boundary.',
+    };
+  }
+
+  if (!isRoutableBind(bindAddress)) {
+    return {
+      level: 'info',
+      code: 'DNS_REBINDING_PROTECTED',
+      message: `DNS rebinding protection is enabled: Host headers are checked against the loopback names for ${bindAddress}.`,
+    };
+  }
+
+  // `info`, not `warn`: the host adapter already warns about this exact state when it starts
+  // listening, so a second warning would say the same thing twice.
+  return {
+    level: 'info',
+    code: 'DNS_REBINDING_NOT_ENFORCED',
+    message:
+      `DNS rebinding protection is on, but no Host allow-list is enforced: the server binds ${bindAddress} ` +
+      'and no allowed hosts are configured.',
+    recommendation:
+      'Set security.dnsRebindingProtection.allowedHosts (or FRONTMCP_ALLOWED_HOSTS) to your public hostname(s).',
+  };
 }
 
 /**

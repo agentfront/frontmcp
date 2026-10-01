@@ -157,6 +157,7 @@ export class FrontMcpServerInstance extends FrontMcpServer {
         cors: this.config.cors,
         security: this.config.security,
         resolvedBindAddress: bindAddress,
+        socketPath: this.config.socketPath,
         deploymentMode,
       },
       isProduction,
