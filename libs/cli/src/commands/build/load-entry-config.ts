@@ -35,6 +35,12 @@ export interface EntryDecoratorInfo {
    * validators to reject runtime-incompatible options before bundling.
    */
   keysSeenInSource: string[];
+  /**
+   * Why the decorator config could not be read (the entry threw, an import did
+   * not resolve, ...). Set only when `decoratorConfig` is `undefined` because
+   * loading failed — callers must not present a default as what the server does.
+   */
+  loadError?: string;
 }
 
 interface ReflectLike {
@@ -84,6 +90,7 @@ export async function loadEntryDecoratorInfo(entry: string): Promise<EntryDecora
   // gives breaks the CommonJS layout the scaffold generates. A .ts entry can
   // only ever be read through the esbuild path anyway, so don't probe.
   const isTypeScriptEntry = /\.tsx?$/i.test(entry);
+  let loadError: string | undefined;
   try {
     // Path 1: plain require() — works for compiled JS entries.
     if (!isTypeScriptEntry) {
@@ -91,19 +98,22 @@ export async function loadEntryDecoratorInfo(entry: string): Promise<EntryDecora
         const mod = require(entry) as { default?: unknown } & Record<string, unknown>;
         const target = mod.default ?? mod;
         decoratorConfig = readDecoratorMetadata(target);
-      } catch {
-        // require failed (e.g., an entry with unresolved imports); fall through.
+      } catch (err) {
+        // require failed (e.g., an entry with unresolved imports).
+        loadError = errorMessage(err);
       }
     }
 
-    // Path 2: esbuild transpile + Module._compile, only if the entry is .ts/.tsx.
+    // Path 2: esbuild bundle + Module._compile, only if the entry is .ts/.tsx.
     if (!decoratorConfig && isTypeScriptEntry) {
       try {
         decoratorConfig = await loadTsEntryViaEsbuild(entry);
-      } catch {
+      } catch (err) {
         // Anything throws (esbuild parse error, runtime error in the entry, etc.) —
-        // return undefined so the caller's validate() falls back to a no-op
-        // and the regular tsc compile produces the real error message.
+        // the caller's validate() falls back to a no-op and the regular tsc
+        // compile produces the real error message. The reason is kept so the
+        // caller does not present a default as what the server will do.
+        loadError = errorMessage(err);
       }
     }
   } finally {
@@ -114,7 +124,16 @@ export async function loadEntryDecoratorInfo(entry: string): Promise<EntryDecora
   // Source-level scan runs unconditionally (in addition to the runtime
   // load) because the runtime path can't see env-gated branches.
   const keysSeenInSource = scanFrontMcpDecoratorKeys(entry);
-  return { decoratorConfig, keysSeenInSource };
+  return { decoratorConfig, keysSeenInSource, ...(decoratorConfig === undefined && loadError ? { loadError } : {}) };
+}
+
+function errorMessage(err: unknown): string {
+  // esbuild's BuildFailure message is only "Build failed with N errors:"; the
+  // reason is in `errors[0].text`.
+  const firstBuildError = (err as { errors?: Array<{ text?: unknown }> } | undefined)?.errors?.[0]?.text;
+  if (typeof firstBuildError === 'string') return firstBuildError;
+  const message = err instanceof Error ? err.message : String(err);
+  return message.split('\n')[0] ?? message;
 }
 
 /**
@@ -209,15 +228,31 @@ function scanFrontMcpDecoratorKeys(entry: string): string[] {
   return Array.from(keys);
 }
 
+/**
+ * Bundle the entry with esbuild (in memory) and evaluate it.
+ *
+ * `bundle: true` inlines the entry's relative imports: transpiling only the
+ * entry left `require('./app')` pointing at a `.ts` file Node cannot load, the
+ * load failed silently, and the build reported the default MCP path instead of
+ * the decorator's `http.entryPath` (#679). `packages: 'external'` keeps
+ * `@frontmcp/sdk` and other dependencies as runtime `require()`s resolved from
+ * the project's node_modules (one SDK copy, so the metadata key matches), and
+ * esbuild reads the project's tsconfig.json for `experimentalDecorators`.
+ */
 async function loadTsEntryViaEsbuild(entryPath: string): Promise<Record<string, unknown> | undefined> {
   const esbuild = require('esbuild') as typeof import('esbuild');
-  const source = fs.readFileSync(entryPath, 'utf-8');
-  const transformed = esbuild.transformSync(source, {
-    loader: 'ts',
+  const built = await esbuild.build({
+    entryPoints: [entryPath],
+    bundle: true,
+    write: false,
+    platform: 'node',
     format: 'cjs',
     target: 'es2022',
-    sourcefile: entryPath,
+    packages: 'external',
+    logLevel: 'silent',
   });
+  const output = built.outputFiles?.[0];
+  if (!output) throw new Error(`esbuild produced no output for ${entryPath}`);
 
   const Module = require('module') as typeof import('module');
   const m = new Module(entryPath, module);
@@ -227,10 +262,12 @@ async function loadTsEntryViaEsbuild(entryPath: string): Promise<Record<string, 
   m.paths = (Module as unknown as { _nodeModulePaths(p: string): string[] })._nodeModulePaths(
     path.dirname(entryPath),
   );
-   
-  (m as any)._compile(transformed.code, entryPath);
-   
-  const exported = (m as any).exports as { default?: unknown } & Record<string, unknown>;
+  const compilable = m as unknown as {
+    _compile(code: string, filename: string): void;
+    exports: { default?: unknown } & Record<string, unknown>;
+  };
+  compilable._compile(output.text, entryPath);
+  const exported = compilable.exports;
   const target = exported.default ?? exported;
   return readDecoratorMetadata(target);
 }

@@ -20,6 +20,7 @@ import {
   getDeploymentTargets,
   resolveConfig,
 } from '../../config';
+import { absolutizePathOptions, enterConfigRoot } from '../../config/project-root';
 
 function isTsLike(p: string): boolean {
   return /\.tsx?$/i.test(p);
@@ -160,7 +161,7 @@ const TARGET_TO_ADAPTER: Record<string, AdapterName> = {
  * ```
  */
 export async function runBuild(opts: ParsedArgs): Promise<void> {
-  const cwd = process.cwd();
+  const invocationCwd = process.cwd();
 
   // Try loading frontmcp.config for multi-target support.
   //
@@ -177,9 +178,18 @@ export async function runBuild(opts: ParsedArgs): Promise<void> {
   // `FRONTMCP_CONFIG` env var, then the nearest `frontmcp.config.*` walking up
   // from the cwd. The location is forwarded so the exec/mcpb builds read the
   // same file instead of searching the cwd again.
-  const resolved = await resolveConfig({ cwd, mode: 'build:ship', configPath: opts.config });
+  const resolved = await resolveConfig({ cwd: invocationCwd, mode: 'build:ship', configPath: opts.config });
   const config: FrontMcpConfigParsed | undefined = resolved.config;
   opts = { ...opts, config: resolved.configPath ?? opts.config, configDir: resolved.configDir };
+
+  // #679 — a config found above the cwd makes its folder the project root:
+  // `entry`, `deployments[].outDir`, tsconfig.json and package.json resolve
+  // from there. Paths typed on the command line keep meaning what was typed.
+  const cwd = enterConfigRoot(resolved, invocationCwd);
+  if (cwd !== invocationCwd) {
+    opts = absolutizePathOptions(opts, ['entry', 'outDir', 'icon', 'mergeFrom'], invocationCwd);
+    console.log(c('gray', `[build] project root: ${cwd} (frontmcp.config found above ${invocationCwd})`));
+  }
 
   // If no -t flag and config has deployments, build all targets from config
   if (!opts.buildTarget && config && config.deployments.length > 0) {
@@ -376,6 +386,17 @@ async function runAdapterBuild(
   const servedPath = normalizeServedPath(
     typeof decoratorEntryPath === 'string' ? decoratorEntryPath : (transportHttpPath ?? ''),
   );
+  // #679 — when the entry could not be evaluated the decorator is unknown, and
+  // it wins at runtime: say so instead of presenting the default as the path.
+  if (entryInfo.loadError) {
+    console.log(
+      c(
+        'yellow',
+        `[build] could not read @FrontMcp metadata from ${path.relative(cwd, entry)} (${entryInfo.loadError}). ` +
+          'Adapter checks and the served-path report below assume no http.entryPath in the decorator.',
+      ),
+    );
+  }
 
   const moduleFormat = template.moduleFormat;
 
@@ -440,5 +461,12 @@ async function runAdapterBuild(
   console.log(c('green', 'Build completed.'));
   console.log(c('gray', `Output placed in ${path.relative(cwd, outDir)}`));
   // #539 — the served path was previously invisible until a client 404'd.
-  console.log(c('gray', `Server will serve MCP at ${servedPath}`));
+  console.log(
+    c(
+      'gray',
+      entryInfo.loadError
+        ? `Server will serve MCP at ${servedPath} unless @FrontMcp({ http: { entryPath } }) sets another path`
+        : `Server will serve MCP at ${servedPath}`,
+    ),
+  );
 }
