@@ -23,6 +23,10 @@
         {
           "projects": ["testing"],
           "target": "build"
+        },
+        {
+          "projects": ["observability"],
+          "target": "build"
         }
       ],
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-nx-plugin"],
