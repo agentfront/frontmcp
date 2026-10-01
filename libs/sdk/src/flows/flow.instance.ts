@@ -25,6 +25,7 @@ import { FRONTMCP_CONTEXT, FrontMcpContextStorage } from '../context';
 import { InternalMcpError, PublicMcpError, RequestContextNotAvailableError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
 import type HookRegistry from '../hooks/hook.registry';
+import { bindContextHookTargets } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
 import { writeHttpResponse } from '../server/server.validation';
 import { matchMountedPath } from './flow.http-path';
@@ -308,13 +309,16 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     const hookOwnerId = await (FlowClass as typeof FlowBase).resolveHookOwnerId?.(input, scope);
 
-    const initialInjectedHooks =
+    // A hook declared on a CONTEXT-scoped provider runs on this run's instance of that provider.
+    const initialInjectedHooks = await bindContextHookTargets(
       (this.hooks.getFlowHooksForOwner(name, hookOwnerId) as HookEntry<
         FlowInputOf<Name>,
         Name,
         FlowStagesOf<Name>,
         FlowCtxOf<Name>
-      >[]) ?? [];
+      >[]) ?? [],
+      { sessionKey, contextProviders: mergedDeps, contextSource: this.globalProviders },
+    );
 
     let contextReady = false;
 
