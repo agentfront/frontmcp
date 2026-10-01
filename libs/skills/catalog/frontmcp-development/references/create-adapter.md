@@ -92,6 +92,8 @@ class MyApiAdapter extends DynamicAdapter<MyAdapterOptions> {
 class MyApp {}
 ```
 
+To serve the adapter's tools, resources and prompts from every app, register it on the server instead with `@FrontMcp({ adapters: [MyApiAdapter.init({ ... })] })`. Like a server-level plugin, each scope (a standalone or `splitByApp` app gets its own) instantiates it and runs `fetch()`. Up to 1.8.7 `@FrontMcp({ adapters })` was silently dropped.
+
 ## FrontMcpAdapterResponse
 
 The `fetch()` method returns tools, resources, and prompts to register:
