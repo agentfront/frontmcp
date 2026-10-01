@@ -146,9 +146,13 @@ For a tool with `approval` set, the check runs before the tool executes and deci
 2. A recorded **denial** for the caller, in session or user scope: the call is refused with state `denied`.
    A denial outranks everything below, including pre-approved contexts and a session approval.
 3. The call runs in one of the tool's `preApprovedContexts`: the tool runs.
-4. `alwaysPrompt: true`: the call is refused with state `pending`.
-5. A valid (unexpired) approval for the caller: the tool runs.
-6. Otherwise the call is refused with state `pending`, or `expired` when the approval has lapsed.
+4. A valid (unexpired) approval for the caller: the tool runs. With `alwaysPrompt: true` the approval is used up by
+   this call, so the next call needs a new one; of two concurrent calls on one approval, only one runs.
+5. Otherwise the call is refused with state `pending`, or `expired` when the approval has lapsed.
+
+<Note>
+  Releases up to 1.8.7 refused every call of an `alwaysPrompt` tool, approved or not, so such a tool could never run.
+</Note>
 
 A refused call throws `ApprovalRequiredError`, which the client receives as an error result:
 
@@ -182,8 +186,15 @@ Installed on an app, `ApprovalPlugin` gates that app's tools, including those th
 provide, against its own store. It never judges the tools of another app that has its own `ApprovalPlugin`, so two
 apps can each install it with separate stores. It does gate, against its store, the `approval` tools of apps with no
 approval plugin of their own, so a tool that asks for approval never runs ungated because the plugin sits on a
-different app. Installed on the server (`@FrontMcp({ plugins })`), it gates every tool. A tool both gate must pass
-each store's check, and a denial in either one refuses the call.
+different app. Installed on the server (`@FrontMcp({ plugins })`), it gates every tool. A tool both gate is decided
+once, over both stores: an approval in either one lets it run (one approval is enough, such as a grant through
+`this.approval` in the tool's app), and a denial in either one refuses the call.
+
+<Note>
+  Releases up to 1.8.7 required an approval in each store, so a tool gated by a server-level and an app-level
+  `ApprovalPlugin` with separate stores needed two approvals, and a grant through `this.approval` alone never let it
+  run.
+</Note>
 
 <Note>
   Releases up to 1.8.2 let the `approval` tools of an app without the plugin run for anyone when the plugin was
@@ -333,7 +344,10 @@ ApprovalPlugin.init({
 </ParamField>
 
 <ParamField path="approval.alwaysPrompt" type="boolean" default="false">
-  Prompt every time, even if previously approved (for highly sensitive operations)
+  Prompt every time, even if previously approved (for highly sensitive operations). Each approval lets exactly one call
+  through and is used up by it, whatever its scope; the next call is refused with state `pending` until the caller
+  approves again. A custom `ApprovalStore` should implement `consumeApproval()` so that only one of two concurrent
+  calls gets an approval; without it the gate revokes the caller's approvals of the tool instead.
 </ParamField>
 
 <ParamField path="approval.skipApproval" type="boolean" default="false">

@@ -443,12 +443,16 @@ authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectI
 2. A recorded **denial** for the caller (session, user, time-limited or context scope): refused
    with state `denied`. A denial outranks pre-approved contexts and any approval.
 3. The session context is one of `preApprovedContexts`: the tool runs.
-4. `alwaysPrompt: true`: refused with state `pending`.
-5. An approval for the caller that the tool's policy accepts: the tool runs. The caller's session,
+4. An approval for the caller that the tool's policy accepts: the tool runs. The caller's session,
    user, time-limited and context approvals all count (a context approval only when the session
    carries that context); its scope must be in `allowedScopes`, and it must be younger than
-   `maxTtlMs`, however it was stored.
-6. Otherwise refused with state `pending` (or `expired`).
+   `maxTtlMs`, however it was stored. With `alwaysPrompt: true` the approval is used up by this
+   call (only one of two concurrent calls gets it), so the next call needs a new one.
+5. Otherwise refused with state `pending` (or `expired`).
+
+Releases up to 1.8.7 refused every call of an `alwaysPrompt` tool, approved or not. A custom
+`ApprovalStore` should implement `consumeApproval()` (delete exactly that record, resolve `true` only
+for the call that deleted it); without it the gate revokes the caller's approvals of the tool instead.
 
 A refused call throws `ApprovalRequiredError`; the client receives an error result whose text is
 exactly the tool's `approvalMessage` (or the default `Tool "<full name>" requires approval to
@@ -474,8 +478,10 @@ Installed on an app, `ApprovalPlugin` gates that app's tools (including those it
 plugins provide) against its own store, so two apps can each install it with separate stores. It
 also gates, against its store, the `approval` tools of apps with no approval plugin of their own,
 so such a tool never runs ungated because the plugin sits on another app (releases up to 1.8.2 ran
-them for anyone). Installed on the server, it gates every tool; a tool several plugins gate must
-pass each store's check, and a denial in any of them refuses the call.
+them for anyone). Installed on the server, it gates every tool. A tool several plugins gate (one on
+the server, one on its app) is decided once over all their stores: an approval in any of them lets
+it run -- one approval is enough, e.g. a grant through `this.approval` in the tool's app -- and a
+denial in any of them refuses the call. Releases up to 1.8.7 required an approval in each store.
 `this.approval` resolves the `ApprovalService` of the nearest `ApprovalPlugin` -- the one the
 tool's own app installed, otherwise the server's -- so with two apps each installing it, a grant
 or check in one app's tool uses that app's store. Releases up to 1.8.1 resolved the store of the

@@ -247,20 +247,58 @@ describe('ApprovalCheckPlugin', () => {
       expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'client-456', undefined);
     });
 
-    it('should handle alwaysPrompt option', async () => {
-      mockFlowCtx.state.tool!.metadata['approval'] = {
-        required: true,
-        alwaysPrompt: true,
-      };
-      mockStore.getApproval.mockResolvedValue({
+    describe('alwaysPrompt', () => {
+      const approval = {
         toolId: 'test-tool',
         state: ApprovalState.APPROVED,
         scope: ApprovalScope.SESSION,
         grantedAt: Date.now(),
-        grantedBy: { source: 'user' },
+        grantedBy: { source: 'user' as const },
+      };
+
+      beforeEach(() => {
+        mockFlowCtx.state.tool!.metadata['approval'] = { required: true, alwaysPrompt: true };
       });
 
-      await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toThrow(ApprovalRequiredError);
+      it('lets the call through when it uses up the approval', async () => {
+        mockStore.getApproval.mockResolvedValue(approval);
+        mockStore.consumeApproval = jest.fn().mockResolvedValue(true);
+
+        await expect(plugin.checkApproval(mockFlowCtx as never)).resolves.toBeUndefined();
+        expect(mockStore.consumeApproval).toHaveBeenCalledWith(approval, 'session-123', 'client-456', undefined);
+      });
+
+      it('refuses the call when another call used the approval up first', async () => {
+        mockStore.getApproval.mockResolvedValue(approval);
+        mockStore.consumeApproval = jest.fn().mockResolvedValue(false);
+
+        await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toThrow(ApprovalRequiredError);
+      });
+
+      it('refuses the call without an approval', async () => {
+        mockStore.getApproval.mockResolvedValue(undefined);
+        mockStore.consumeApproval = jest.fn();
+
+        await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toThrow(ApprovalRequiredError);
+        expect(mockStore.consumeApproval).not.toHaveBeenCalled();
+      });
+
+      it("revokes the caller's approvals on a store without consumeApproval", async () => {
+        mockStore.getApproval.mockResolvedValue(approval);
+        mockStore.revokeApproval.mockResolvedValue(true);
+
+        await expect(plugin.checkApproval(mockFlowCtx as never)).resolves.toBeUndefined();
+        expect(mockStore.revokeApproval).toHaveBeenCalledWith(
+          expect.objectContaining({ toolId: 'test-tool', sessionId: 'session-123', userId: 'client-456' }),
+        );
+      });
+
+      it('refuses the call when that revocation finds nothing left to revoke', async () => {
+        mockStore.getApproval.mockResolvedValue(approval);
+        mockStore.revokeApproval.mockResolvedValue(false);
+
+        await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toThrow(ApprovalRequiredError);
+      });
     });
 
     it('should skip for a pre-approved context established by the session', async () => {
