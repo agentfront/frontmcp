@@ -44,6 +44,10 @@
     "./package.json": "./package.json",
     ".": {
       "development": "./src/index.ts",
+      "browser": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/browser/index.mjs"
+      },
       "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"

@@ -60,8 +60,35 @@ if (pkg.exports) {
 // Fix imports map deeply (strip "./dist/" + remove "development")
 if (pkg.imports) {
   const cleaned = walk(pkg.imports);
-  if (cleaned !== undefined) pkg.imports = cleaned;
+  if (cleaned !== undefined) pkg.imports = withEsmBrowserTargets(cleaned, path.dirname(pkgPath));
   else delete pkg.imports;
+}
+
+/**
+ * Point a `browser` subpath import at its ESM build when there is one.
+ *
+ * The ESM bundle (`esm/index.mjs`) imports `#env` and friends through the same `imports` map as
+ * the CJS bundle, so a browser bundler resolving `#env` from it got the CJS file. Rollup (Vite 7)
+ * cannot see the named exports of esbuild's CJS output and fails the build ("getEnv is not
+ * exported by .../browser-env.js"). A browser bundler importing from the ESM bundle now gets the
+ * `.mjs` twin; `require` still gets the `.js`. Only `browser` changes: Node and `worker` keep
+ * resolving the files they resolved before.
+ */
+function withEsmBrowserTargets(imports, distDir) {
+  const out = {};
+  for (const [specifier, entry] of Object.entries(imports)) {
+    if (!entry || typeof entry !== 'object' || typeof entry.browser !== 'string') {
+      out[specifier] = entry;
+      continue;
+    }
+    const target = entry.browser;
+    const esmTarget = target.replace(/^\.\//, './esm/').replace(/\.js$/, '.mjs');
+    out[specifier] =
+      target.endsWith('.js') && fs.existsSync(path.join(distDir, esmTarget))
+        ? { ...entry, browser: { import: esmTarget, default: target } }
+        : entry;
+  }
+  return out;
 }
 
 // Fix bin map deeply (strip "./dist/")
@@ -152,4 +179,14 @@ if (fs.existsSync(esmDir)) {
       process.exit(1);
     }
   }
+}
+
+// A browser-conditioned ESM build (dist/browser, the `browser` export of @frontmcp/sdk) needs no
+// package.json of its own: its `#` imports were resolved when it was built, and the .mjs extension
+// signals ESM. The build copies the source package.json there (source paths, "development"
+// conditions), so remove it and let dist/package.json apply.
+const browserPkgPath = path.join(path.dirname(pkgPath), 'browser', 'package.json');
+if (fs.existsSync(browserPkgPath)) {
+  fs.unlinkSync(browserPkgPath);
+  console.log(`✅ Removed the copied ${browserPkgPath}.`);
 }

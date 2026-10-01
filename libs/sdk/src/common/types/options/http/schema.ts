@@ -3,6 +3,7 @@
 // not constructed at module load when nothing parses it.
 
 import { z } from '@frontmcp/lazy-zod';
+import { getEnv } from '@frontmcp/utils';
 
 import type { HttpMethod, ServerRequestHandler } from '../../../interfaces';
 import type { RawZodShape } from '../../common.types';
@@ -97,17 +98,19 @@ const securityHeadersSchema = z.object({
  * HTTP options Zod schema.
  */
 export const httpOptionsSchema = z.object({
+  // Read when the options are parsed, through `getEnv`, not when this module loads: a browser
+  // bundle has no `process`, and reading it at load stopped the page (#681)
   port: z
     .number()
     .optional()
-    .default(Number(process.env['PORT']) || 3000),
+    .default(() => Number(getEnv('PORT')) || 3000),
   // `FRONTMCP_HTTP_ENTRY_PATH` lets `frontmcp dev` propagate the configured
   // `transport.http.path` to the spawned server so the MCP endpoint is mounted
   // where the generated client URL points (#446) — mirrors how `port` reads
   // `PORT` above. The function default reads the env at parse time. An explicit
   // `entryPath` in `@FrontMcp({ http })` still wins (the default applies only
   // when the field is omitted).
-  entryPath: z.string().default(() => process.env['FRONTMCP_HTTP_ENTRY_PATH'] ?? ''),
+  entryPath: z.string().default(() => getEnv('FRONTMCP_HTTP_ENTRY_PATH') ?? ''),
   // Using z.any() because hostFactory accepts FrontMcpServer | ((config) => FrontMcpServer)
   // which Zod cannot validate at runtime - type safety is enforced via TypeScript interface
   hostFactory: z.any().optional(),
