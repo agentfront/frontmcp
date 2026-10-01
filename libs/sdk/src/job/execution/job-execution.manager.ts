@@ -245,6 +245,8 @@ export class JobExecutionManager {
           authInfo: opts.authInfo ?? {},
           contextProviders: opts.contextProviders,
         });
+        // `authorities.pipes` may be async: run them before execute() reads `this.auth`.
+        await ctx.loadAuthContext();
         // The job's code runs on the 'job' surface, which `getCallSurface()` reports and its tool calls carry.
         const result = await runOnSurface('job', async () => ctx.execute(parsedInput));
         const logs = ctx.getLogs();

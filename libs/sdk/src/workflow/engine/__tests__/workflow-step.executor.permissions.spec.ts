@@ -27,7 +27,7 @@ function jobEntry(name: string, permissions?: JobPermission[], execute = jest.fn
     name,
     metadata: { name, permissions },
     parseInput: (input: unknown) => input,
-    create: () => ({ execute }),
+    create: () => ({ loadAuthContext: async () => undefined, execute }),
   } as unknown as JobEntry;
 }
 
