@@ -4,6 +4,8 @@ import { type FuncType, type Token, type Type } from '@frontmcp/di';
 import { type AuthInfo, type GetPromptResult } from '@frontmcp/protocol';
 import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/utils';
 
+import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../context';
+import { workerEnvOf } from '../../context/frontmcp-context-storage';
 import { type ScopeEntry } from '../entries';
 import { type PromptMetadata } from '../metadata';
 import { FlowControl } from './flow.interface';
@@ -136,6 +138,29 @@ export abstract class PromptContext {
 
   mark(stage: string): void {
     this.activeStage = stage;
+  }
+
+  // ---- Platform bindings ----
+
+  /**
+   * The hosting platform's bindings for the current request — on a Cloudflare Worker, the `env`
+   * object holding KV namespaces, D1 databases, R2 buckets, Durable Object namespaces, `[vars]`
+   * and secrets. `undefined` where the request carries no such object: Node/Express, stdio, and
+   * `create()`/`connect()` direct servers. The same contract as a tool's `this.workerEnv`.
+   *
+   * @example
+   * ```typescript
+   * const kv = this.workerEnv?.['MY_KV'] as KVNamespace | undefined;
+   * ```
+   */
+  get workerEnv(): Readonly<Record<string, unknown>> | undefined {
+    let context: FrontMcpContext | undefined;
+    try {
+      context = this.providers.get(FRONTMCP_CONTEXT as Token<FrontMcpContext>);
+    } catch {
+      context = undefined;
+    }
+    return workerEnvOf(context);
   }
 
   // ---- Runtime context helpers ----
