@@ -720,7 +720,8 @@ That matters because a listing is not an access control. Clients cache listings 
 resource URIs and prompt names from earlier sessions, so anything gated only at list time
 stays reachable by name. The refusal is a public `FeatureFlagDisabledError` (`FEATURE_FLAG_DISABLED`, 403)
 that names the capability and the flag. `FeatureFlagPlugin.init()` with no (or an unknown) `adapter` throws a
-`FeatureFlagConfigurationError` at startup. If the adapter is unavailable the gate uses the ref's
+`FeatureFlagConfigurationError` at startup, and so does `adapter: 'custom'` without an `adapterInstance` that has
+`isEnabled()`, `getVariant()` and `evaluateFlags()` (it used to start and answer every request with a 500). If the adapter is unavailable the gate uses the ref's
 `defaultValue`, and a bare string ref (no default) fails closed.
 
 ### Installation
@@ -798,7 +799,7 @@ class CustomFlagServer {}
 - `splitio` -- Split.io integration. Requires `@splitsoftware/splitio` package.
 - `launchdarkly` -- LaunchDarkly integration. Requires `launchdarkly-node-server-sdk` package.
 - `unleash` -- Unleash integration. Requires `unleash-client` package.
-- `custom` -- Provide your own adapter instance implementing the `FeatureFlagAdapter` interface.
+- `custom` -- Provide your own adapter instance (`adapterInstance`, required) implementing the `FeatureFlagAdapter` interface.
 
 ### Using `this.featureFlags` in Tools
 
