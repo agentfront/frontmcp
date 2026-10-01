@@ -24,6 +24,8 @@ jest.mock('../stdio-framer', () => ({
 }));
 jest.mock('../child-supervisor', () => ({
   createChildSupervisor: () => ({ start: supervisorStart, stop: supervisorStop, restart: jest.fn() }),
+  resolveChildCommand: () => ({ command: process.execPath, args: [] }),
+  resolveProjectTsxLoader: () => undefined,
 }));
 jest.mock('../watcher', () => ({
   createDevWatcher: () => ({ start: jest.fn(), stop: watcherStop }),
@@ -40,7 +42,15 @@ jest.mock('../state-machine', () => ({
     stop: async () => undefined,
   }),
 }));
-jest.mock('../../../../shared/fs', () => ({ resolveEntry: async () => '/proj/src/main.ts' }));
+jest.mock('../../dev', () => ({
+  resolveDevLaunch: async () => ({
+    cwd: '/proj',
+    entry: '/proj/src/main.ts',
+    port: 3000,
+    childEnv: {},
+    resolved: { effectiveEnv: {} },
+  }),
+}));
 
 describe('runDevBridge lifecycle (dev --stdio must not return while the child is running)', () => {
   beforeEach(() => {

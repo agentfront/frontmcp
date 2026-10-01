@@ -1,25 +1,20 @@
 import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
 
-import { resolveConfig } from '../../config';
+import { resolveConfig, type ResolvedFrontMcpConfig } from '../../config';
+import { absolutizePathOptions, enterConfigRoot } from '../../config/project-root';
 import { pickServerDefaults, securityHeadersEnv } from '../../config/security-headers-env';
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
 import { loadDevEnv } from '../../shared/env';
 import { resolveEntry } from '../../shared/fs';
+import { processTreeSpawnOptions, signalProcessTree, stopProcessTree } from '../../shared/process-tree';
 import { findNextFreePort, isPortFree, lookupPortOwner } from './port';
 
 const DEFAULT_DEV_PORT = 3000;
 
-function killQuiet(proc?: ChildProcess, signal: NodeJS.Signals = 'SIGINT') {
-  try {
-    if (proc && proc.exitCode === null && proc.signalCode === null) {
-      proc.kill(signal);
-    }
-  } catch {
-    // ignore
-  }
-}
+/** How long children get to exit after a shutdown signal before `SIGKILL`. */
+const SHUTDOWN_GRACE_MS = 2000;
 
 /**
  * Resolve the port the dev child should bind to and report any conflict
@@ -104,30 +99,59 @@ export function buildDevChildEnv(params: {
   };
 }
 
-export async function runDev(opts: ParsedArgs): Promise<void> {
-  // Issue #399 — `--stdio` runs the first-party watch-aware stdio bridge
-  // instead of the legacy `tsx --watch + tsc --noEmit --watch` pair. The
-  // bridge owns process stdin/stdout (JSON-RPC frames only), holds the
-  // upstream MCP session across child restarts, and replaces the
-  // third-party `mcp-remote` recipe for the dev loop.
-  if (opts.stdio) {
-    const { runDevBridge } = await import('./bridge/index.js');
-    return runDevBridge(opts);
-  }
+/**
+ * Everything `frontmcp dev` (HTTP or `--stdio`) needs before it spawns the
+ * server: project root, entry, port and the child env.
+ */
+export interface DevLaunch {
+  /** Directory the command runs from — the folder holding a `frontmcp.config.*` found above the cwd. */
+  cwd: string;
+  /** Set when the command moved to the config's folder (#679). */
+  movedFrom?: string;
+  entry: string;
+  port: number;
+  /** `transport.http.path`, exported to the child as `FRONTMCP_HTTP_ENTRY_PATH`. */
+  configHttpPath?: string;
+  childEnv: NodeJS.ProcessEnv;
+  resolved: ResolvedFrontMcpConfig;
+}
 
-  const cwd = process.cwd();
+export interface ResolveDevLaunchOptions {
+  /**
+   * Pick a free port when none was chosen (no `--port`, `transport.http.port`
+   * or `PORT`). The stdio bridge sets this: its loopback port is internal, so a
+   * busy default must not stop it from starting.
+   */
+  autoPortWhenUnset?: boolean;
+  /**
+   * `false` when nothing will listen on the port (`--stdio --serve`): skip the
+   * busy-port check instead of refusing to start over a port nobody uses.
+   */
+  listens?: boolean;
+  /** Where port notices go (`--stdio` keeps stdout for JSON-RPC). */
+  log?: (msg: string) => void;
+}
 
-  // Issue #400 — resolve frontmcp.config so `entry`, `transport.http.port`,
-  // and `env.shared`/`env.dev` overlays apply. Precedence:
-  //   CLI flag > frontmcp.config field > built-in default.
+/**
+ * Resolve config, project root, entry, port and child env for `frontmcp dev`.
+ *
+ * Issue #400 — precedence is CLI flag > frontmcp.config field > built-in
+ * default; `env.shared`/`env.dev` overlays apply. Issue #679 — a config found
+ * above the cwd makes its folder the project root (see `enterConfigRoot`).
+ */
+export async function resolveDevLaunch(opts: ParsedArgs, options: ResolveDevLaunchOptions = {}): Promise<DevLaunch> {
+  const invocationCwd = process.cwd();
   const resolved = await resolveConfig({
-    cwd,
+    cwd: invocationCwd,
     mode: 'dev',
     configPath: typeof opts.config === 'string' ? opts.config : undefined,
   });
+  const cwd = enterConfigRoot(resolved, invocationCwd);
+  // Paths typed on the command line keep meaning what the user typed.
+  const args = cwd === invocationCwd ? opts : absolutizePathOptions(opts, ['entry'], invocationCwd);
   const cfg = resolved.config;
 
-  const cliEntry = typeof opts.entry === 'string' ? opts.entry : undefined;
+  const cliEntry = typeof args.entry === 'string' ? args.entry : undefined;
   const configEntry = typeof cfg?.entry === 'string' ? cfg.entry : undefined;
   const entry = await resolveEntry(cwd, cliEntry ?? configEntry);
 
@@ -151,14 +175,20 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   //      If the user's metadata HARD-CODES `http.port`, the child binds to
   //      that hard-coded value and ignores PORT — the probe is then advisory
   //      only. Documented in docs/frontmcp/deployment/local-dev-server.mdx.
-  const cliPort = typeof opts.port === 'number' ? opts.port : opts.port ? Number(opts.port) : undefined;
+  const cliPort = typeof args.port === 'number' ? args.port : args.port ? Number(args.port) : undefined;
   const configPort = cfg?.transport?.http?.port;
-  const port = await resolveDevPort({
-    port: cliPort ?? configPort,
-    autoPort: !!opts.autoPort,
-    showConflict: !!opts.showConflict,
-    envPort: process.env['PORT'],
-  });
+  const envPort = process.env['PORT'];
+  const portChosen = cliPort !== undefined || configPort !== undefined || (envPort !== undefined && envPort !== '');
+  const port =
+    options.listens === false
+      ? (cliPort ?? configPort ?? (Number(envPort) || DEFAULT_DEV_PORT))
+      : await resolveDevPort({
+          port: cliPort ?? configPort,
+          autoPort: !!args.autoPort || (!!options.autoPortWhenUnset && !portChosen),
+          showConflict: !!args.showConflict,
+          envPort,
+          log: options.log,
+        });
 
   // Issue #446 — honor the configured MCP mount path in dev. `transport.http.path`
   // already drives the generated client URLs (eject); propagate it to the spawned
@@ -167,6 +197,44 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   // caveat as PORT: a hard-coded `@FrontMcp({ http: { entryPath } })` still wins.
   const configHttpPath = typeof cfg?.transport?.http?.path === 'string' ? cfg.transport.http.path : undefined;
 
+  // Issue #400 — env overlays from `frontmcp.config.env.{shared,dev}` are
+  // included via `resolved.effectiveEnv`. `.env`/`.env.local` already loaded
+  // into `process.env` above, so they win (they're closer to deployment).
+  const childEnv = buildDevChildEnv({
+    effectiveEnv: resolved.effectiveEnv,
+    baseEnv: process.env,
+    port,
+    configHttpPath,
+    securityHeadersEnv: securityHeadersEnv(pickServerDefaults(cfg)),
+  });
+
+  return {
+    cwd,
+    ...(cwd === invocationCwd ? {} : { movedFrom: invocationCwd }),
+    entry,
+    port,
+    configHttpPath,
+    childEnv,
+    resolved,
+  };
+}
+
+export async function runDev(opts: ParsedArgs): Promise<void> {
+  // Issue #399 — `--stdio` runs the first-party watch-aware stdio bridge
+  // instead of the legacy `tsx --watch + tsc --noEmit --watch` pair. The
+  // bridge owns process stdin/stdout (JSON-RPC frames only), holds the
+  // upstream MCP session across child restarts, and replaces the
+  // third-party `mcp-remote` recipe for the dev loop.
+  if (opts.stdio) {
+    const { runDevBridge } = await import('./bridge/index.js');
+    return runDevBridge(opts);
+  }
+
+  const { cwd, movedFrom, entry, port, configHttpPath, childEnv, resolved } = await resolveDevLaunch(opts);
+
+  if (movedFrom) {
+    console.log(`${c('gray', '[dev]')} project root: ${cwd} (frontmcp.config found above ${movedFrom})`);
+  }
   console.log(`${c('cyan', '[dev]')} using entry: ${path.relative(cwd, entry)}`);
   if (resolved.configPath || resolved.configDir) {
     console.log(`${c('gray', '[dev]')} config: ${resolved.configPath ?? resolved.configDir}`);
@@ -188,90 +256,47 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   // On Windows resolve npx.cmd directly — previously we passed shell:true
   // for the .cmd suffix, but that triggers Node DEP0190 (#381) every run.
   // spawn() resolves .cmd via CreateProcessW since Node 16, so no shell is
-  // needed; on Unix spawn() works on 'npx' directly. SIGINT still
-  // propagates cleanly because no intermediate shell sits between us and
-  // the child process.
-  const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  // Issue #400 — env overlays from `frontmcp.config.env.{shared,dev}` are
-  // included via `resolved.effectiveEnv`. `.env`/`.env.local` already loaded
-  // into `process.env` above, so they win (they're closer to deployment).
-  const childEnv = buildDevChildEnv({
-    effectiveEnv: resolved.effectiveEnv,
-    baseEnv: process.env,
-    port,
-    configHttpPath,
-    securityHeadersEnv: securityHeadersEnv(pickServerDefaults(cfg)),
-  });
-  const app = spawn(npxCmd, ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
-    stdio: 'inherit',
+  // needed; on Unix spawn() works on 'npx' directly.
+  //
+  // #679 — each child leads its own process group (POSIX) so a shutdown
+  // signal reaches the server tsx forks, not just npm. Children outside the
+  // terminal's foreground group must not read the TTY, so the app's stdin is
+  // fed from ours (tsx --watch reruns on Return).
+  const treeOptions = processTreeSpawnOptions();
+  const app = spawn(npxCmd(), ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
+    stdio: [treeOptions.detached ? 'pipe' : 'inherit', 'inherit', 'inherit'],
     env: childEnv,
+    ...treeOptions,
   });
-  const checker = spawn(npxCmd, ['-y', 'tsc', '--noEmit', '--pretty', '--watch'], {
-    stdio: 'inherit',
+  forwardStdin(app);
+  const checker = spawn(npxCmd(), ['-y', 'tsc', '--noEmit', '--pretty', '--watch'], {
+    stdio: [treeOptions.detached ? 'ignore' : 'inherit', 'inherit', 'inherit'],
     env: childEnv,
+    ...treeOptions,
   });
 
-  const cleanup = (clearTimer = true) => {
-    if (clearTimer) {
-      clearForceKillTimer();
-    }
-    killQuiet(checker);
-    killQuiet(app);
+  // #679 — `kill <pid>` (SIGTERM or SIGINT to this process alone) used to exit
+  // 0 straight away while the server kept listening. Every shutdown path now
+  // signals both process trees and waits until they are gone.
+  let stopping: Promise<void> | undefined;
+  const stopChildren = (signal: NodeJS.Signals): Promise<void> => {
+    stopping ??= Promise.all([
+      stopProcessTree(checker, signal, SHUTDOWN_GRACE_MS),
+      stopProcessTree(app, signal, SHUTDOWN_GRACE_MS),
+    ]).then(() => undefined);
+    return stopping;
   };
-
-  let forceKillTimer: NodeJS.Timeout | undefined;
-  let appClosed = false;
-  let checkerClosed = false;
-
-  const clearForceKillTimer = () => {
-    if (forceKillTimer) {
-      clearTimeout(forceKillTimer);
-      forceKillTimer = undefined;
-    }
-  };
-
-  const markClosed = (child: 'app' | 'checker') => {
-    if (child === 'app') {
-      appClosed = true;
-    } else {
-      checkerClosed = true;
-    }
-    if (appClosed && checkerClosed) {
-      clearForceKillTimer();
-    }
-  };
-
-  process.once('SIGINT', () => {
-    cleanup(false);
-    // Force-kill after 2s if children haven't exited
-    clearForceKillTimer();
-    forceKillTimer = setTimeout(() => {
-      killQuiet(checker, 'SIGKILL');
-      killQuiet(app, 'SIGKILL');
+  const onSignal = (signal: NodeJS.Signals) => {
+    if (stopping) {
+      // Second signal while stopping: stop waiting.
+      signalProcessTree(checker, 'SIGKILL');
+      signalProcessTree(app, 'SIGKILL');
       process.exit(0);
-    }, 2000);
-    forceKillTimer.unref();
-    // Exit cleanly once both children have closed
-    const tryExit = () => {
-      if (appClosed && checkerClosed) {
-        clearForceKillTimer();
-        process.exit(0);
-      }
-    };
-    app.once('close', () => {
-      markClosed('app');
-      tryExit();
-    });
-    checker.once('close', () => {
-      markClosed('checker');
-      tryExit();
-    });
-  });
-
-  process.once('SIGTERM', () => {
-    cleanup();
-    process.exit(0);
-  });
+    }
+    void stopChildren(signal).then(() => process.exit(0));
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
 
   let appExitCode: number | null = 0;
   await new Promise<void>((resolve, reject) => {
@@ -280,22 +305,13 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
       // shell. SIGINT/SIGTERM yield code=null with a signalCode — treat
       // those as 0 so Ctrl+C doesn't appear as a failure.
       appExitCode = typeof code === 'number' ? code : 0;
-      markClosed('app');
-      cleanup(false);
-      resolve();
+      void stopChildren('SIGINT').then(resolve, resolve);
     });
     app.on('error', (err) => {
-      clearForceKillTimer();
-      cleanup();
-      reject(err);
-    });
-    checker.on('close', () => {
-      markClosed('checker');
+      void stopChildren('SIGINT').then(() => reject(err));
     });
     checker.on('error', (err) => {
-      clearForceKillTimer();
-      cleanup();
-      reject(err);
+      void stopChildren('SIGINT').then(() => reject(err));
     });
   });
 
@@ -304,4 +320,18 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   if (appExitCode && appExitCode !== 0) {
     process.exit(appExitCode);
   }
+}
+
+function npxCmd(): string {
+  return process.platform === 'win32' ? 'npx.cmd' : 'npx';
+}
+
+/** Feed our stdin to a child spawned with a piped stdin. */
+function forwardStdin(child: ChildProcess): void {
+  const target = child.stdin;
+  if (!target) return;
+  // The child closing its end (it exited) must not crash us with EPIPE.
+  target.on('error', () => undefined);
+  process.stdin.on('error', () => undefined);
+  process.stdin.pipe(target);
 }

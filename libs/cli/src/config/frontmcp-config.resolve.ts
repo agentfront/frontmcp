@@ -69,6 +69,12 @@ export interface ResolvedFrontMcpConfig {
   /** Absolute path to the resolved config file. */
   configPath?: string;
   /**
+   * How the config was located: named explicitly (`--config` /
+   * `FRONTMCP_CONFIG`) or found by walking up from `cwd`. A searched config may
+   * sit in an ancestor of the cwd — see `enterConfigRoot`.
+   */
+  configSource?: 'explicit' | 'search';
+  /**
    * `process.env` ⊕ `config.env.shared` ⊕ `config.env.<mode>` ⊕
    * `cliOptions.env` (later wins). `.env`/`.env.local` are NOT applied
    * here — `dev`/`test` load those separately so they win for parity
@@ -121,8 +127,10 @@ export async function resolveConfig(options: ResolveConfigOptions): Promise<Reso
   let config: FrontMcpConfigParsed | undefined;
   let configPath: string | undefined;
   let configDir: string | undefined;
+  let configSource: ResolvedFrontMcpConfig['configSource'];
 
   if (explicitPath) {
+    configSource = 'explicit';
     // Normalize to an absolute path so callers always see canonical metadata
     // regardless of how the caller-supplied path was spelt (relative, absolute,
     // or env-var-derived). `configDir` mirrors the auto-discovery branch.
@@ -141,6 +149,7 @@ export async function resolveConfig(options: ResolveConfigOptions): Promise<Reso
   } else {
     configDir = await findConfigDir(options.cwd);
     if (configDir) {
+      configSource = 'search';
       try {
         config = await tryLoadFrontMcpConfig(configDir);
       } catch (err) {
@@ -167,5 +176,5 @@ export async function resolveConfig(options: ResolveConfigOptions): Promise<Reso
   }
   Object.assign(effectiveEnv, fromShared, fromMode, cliEnv);
 
-  return { config, configDir, configPath, effectiveEnv };
+  return { config, configDir, configPath, configSource, effectiveEnv };
 }

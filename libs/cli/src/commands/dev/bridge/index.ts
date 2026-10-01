@@ -8,27 +8,32 @@
  *
  * Lifetime:
  *
- *   1. Parse options, resolve entry + log file path.
- *   2. Pin a stable session id (uuid) so the same id survives child
- *      restarts.
- *   3. Construct logger; open log file.
- *   4. Construct state machine + framer + watcher + supervisor +
+ *   1. Resolve config, project root, entry, port and child env exactly like
+ *      `frontmcp dev` (#679 — the bridge used to ignore all of them).
+ *   2. Construct logger; open log file.
+ *   3. Construct state machine + framer + watcher + supervisor +
  *      upstream client (transport per `--serve`).
- *   5. Spawn the first child, wait for ready, transition state to Ready.
- *   6. Forward frames in both directions; watcher events trigger
- *      controlled restart.
- *   7. SIGINT/SIGTERM → flush buffer with `dev_server_unreachable`,
+ *   4. Spawn the first child, wait for ready, transition state to Ready.
+ *   5. Forward frames in both directions. The client's `initialize` is
+ *      remembered; after a restart it is replayed against the new child
+ *      before buffered requests drain, so the client never re-connects.
+ *   6. SIGINT/SIGTERM → flush buffer with `dev_server_unreachable`,
  *      tear down child + watcher, exit cleanly.
  */
 
 import type { ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
 
-import { randomUUID } from '@frontmcp/utils';
-
 import type { ParsedArgs } from '../../../core/args';
-import { resolveEntry } from '../../../shared/fs';
-import { createChildSupervisor, type ChildSupervisor, type SupervisorMode } from './child-supervisor';
+import { resolveDevLaunch } from '../dev';
+import {
+  createChildSupervisor,
+  resolveChildCommand,
+  resolveProjectTsxLoader,
+  type ChildReadyInfo,
+  type ChildSupervisor,
+  type SupervisorMode,
+} from './child-supervisor';
 import { createBridgeLogger, type BridgeLogger } from './log';
 import { createBridgeStateMachine, type BridgeStateMachine } from './state-machine';
 import { createStdioFramer, type JsonRpcFrame, type StdioFramer } from './stdio-framer';
@@ -36,65 +41,96 @@ import { createHttpUpstream, createPipeUpstream, type UpstreamClient } from './u
 import { createDevWatcher } from './watcher';
 
 interface RuntimeBridgeOptions {
-  entry: string;
   mode: SupervisorMode;
-  port: number;
   bufferSize: number;
   reloadDeadlineMs: number;
   logFile: string;
 }
 
-const DEFAULT_PORT = 3000;
 const DEFAULT_LOG_FILE = path.join('.frontmcp', 'dev.log');
 
-function normalizeOptions(opts: ParsedArgs, entry: string): RuntimeBridgeOptions {
+/** `list_changed` notifications a reload may warrant, keyed by capability. */
+const LIST_CHANGED = {
+  tools: 'notifications/tools/list_changed',
+  resources: 'notifications/resources/list_changed',
+  prompts: 'notifications/prompts/list_changed',
+} as const;
+
+function normalizeOptions(opts: ParsedArgs): RuntimeBridgeOptions {
   const mode: SupervisorMode = opts.serve ? 'pipe' : 'http';
-  const port = typeof opts.port === 'number' ? opts.port : DEFAULT_PORT;
   const bufferSize = typeof opts.bufferSize === 'number' && opts.bufferSize > 0 ? opts.bufferSize : 8;
   const reloadDeadlineMs =
     typeof opts.reloadDeadlineMs === 'number' && opts.reloadDeadlineMs > 0 ? opts.reloadDeadlineMs : 30_000;
   const logFile = typeof opts.logFile === 'string' && opts.logFile.length > 0 ? opts.logFile : DEFAULT_LOG_FILE;
-  return { entry, mode, port, bufferSize, reloadDeadlineMs, logFile };
+  return { mode, bufferSize, reloadDeadlineMs, logFile };
+}
+
+/** `''` / `'mcp'` / `'/mcp/'` → `/` / `/mcp` / `/mcp` — the path the SDK mounts. */
+export function mcpPathOf(entryPath: string | undefined): string {
+  const trimmed = (entryPath ?? '').replace(/^\/+|\/+$/g, '');
+  return trimmed ? `/${trimmed}` : '/';
+}
+
+/** The `list_changed` notifications the capabilities of a fresh child advertise. */
+export function listChangedNotifications(initializeResult: Record<string, unknown> | undefined): JsonRpcFrame[] {
+  const capabilities = initializeResult?.['capabilities'];
+  if (typeof capabilities !== 'object' || capabilities === null) return [];
+  const frames: JsonRpcFrame[] = [];
+  for (const [capability, method] of Object.entries(LIST_CHANGED)) {
+    const entry = (capabilities as Record<string, unknown>)[capability];
+    if (typeof entry === 'object' && entry !== null && (entry as { listChanged?: unknown }).listChanged === true) {
+      frames.push({ jsonrpc: '2.0', method });
+    }
+  }
+  return frames;
 }
 
 export async function runDevBridge(opts: ParsedArgs): Promise<void> {
-  const cwd = process.cwd();
-  const entry = await resolveEntry(cwd, opts.entry);
-  const runtime = normalizeOptions(opts, entry);
+  const runtime = normalizeOptions(opts);
+  // stdout carries JSON-RPC frames only: port notices go to stderr.
+  const launch = await resolveDevLaunch(opts, {
+    autoPortWhenUnset: true,
+    listens: runtime.mode === 'http',
+    log: (msg) => process.stderr.write(`${msg}\n`),
+  });
+  // A relative --log-file was made absolute by resolveDevLaunch when the
+  // command moved to the project root.
+  const logFile =
+    typeof opts.logFile === 'string' && opts.logFile.length > 0 && launch.movedFrom
+      ? path.resolve(launch.movedFrom, opts.logFile)
+      : runtime.logFile;
+  // Fail fast (on stderr, before taking over stdio) when the entry cannot run
+  // in this mode — e.g. `--serve` without tsx.
+  resolveChildCommand(launch.entry, runtime.mode, () => resolveProjectTsxLoader(launch.cwd));
 
-  const log = await createBridgeLogger({ filePath: runtime.logFile });
+  const log = await createBridgeLogger({ filePath: logFile });
   log.info('bridge-start', {
-    entry: runtime.entry,
+    entry: launch.entry,
+    cwd: launch.cwd,
     mode: runtime.mode,
-    port: runtime.port,
+    port: runtime.mode === 'http' ? launch.port : null,
     bufferSize: runtime.bufferSize,
     reloadDeadlineMs: runtime.reloadDeadlineMs,
   });
 
-  // Pinned session id — child reads from FRONTMCP_DEV_FORCE_SESSION_ID so
-  // session continuity works across restarts (memory or Redis store both OK).
-  const sessionId = randomUUID();
+  // The client's handshake, replayed on every restarted child.
+  let clientInitialize: JsonRpcFrame | undefined;
+  let clientInitialized = false;
 
   // Only `upstream` is reassigned during runtime (on every child restart).
   // The rest are constructed exactly once below and referenced through
   // closures that fire after all bindings exist.
   let upstream: UpstreamClient | undefined;
 
-  function buildUpstreamForChild(child: ChildProcess): UpstreamClient {
+  function buildUpstreamForChild(child: ChildProcess, info: ChildReadyInfo): UpstreamClient {
     if (runtime.mode === 'http') {
-      return createHttpUpstream({
-        url: `http://127.0.0.1:${runtime.port}/`,
-        log,
-        sessionId,
-        onFrame: (frame: JsonRpcFrame) => fsm.relayUpstream(frame),
-      });
+      // The child reports where it serves (a decorator may hard-code the port
+      // or path); fall back to what we told it.
+      const url = `http://127.0.0.1:${info.port ?? launch.port}${info.path ?? mcpPathOf(launch.configHttpPath)}`;
+      log.info('upstream-url', { url });
+      return createHttpUpstream({ url, log, onFrame: (frame: JsonRpcFrame) => fsm.relayUpstream(frame) });
     }
-    return createPipeUpstream({
-      child,
-      log,
-      sessionId,
-      onFrame: (frame: JsonRpcFrame) => fsm.relayUpstream(frame),
-    });
+    return createPipeUpstream({ child, log, onFrame: (frame: JsonRpcFrame) => fsm.relayUpstream(frame) });
   }
 
   // Teardown needs the supervisor + watcher, which are built after the framer.
@@ -125,6 +161,12 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
     reloadDeadlineMs: runtime.reloadDeadlineMs,
     respond: (frame) => framer.write(frame),
     forward: async (frame) => {
+      if (frame.method === 'initialize' && frame.id !== undefined && frame.id !== null) {
+        clientInitialize = frame;
+        clientInitialized = false;
+      } else if (frame.method === 'notifications/initialized') {
+        clientInitialized = true;
+      }
       if (!upstream) {
         log.warn('forward-without-upstream', { method: frame.method });
         return;
@@ -136,13 +178,14 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
   framer.start();
 
   // ─── supervisor → boots first child, then attaches upstream ───
-  const supervisor = createChildSupervisor({
+  const supervisor: ChildSupervisor = createChildSupervisor({
     mode: runtime.mode,
-    entry: runtime.entry,
+    entry: launch.entry,
     log,
-    sessionId,
-    port: runtime.mode === 'http' ? runtime.port : undefined,
-    onReady: async (child) => {
+    env: launch.childEnv,
+    port: runtime.mode === 'http' ? launch.port : undefined,
+    resolveTsxLoader: () => resolveProjectTsxLoader(launch.cwd),
+    onReady: async (child, info) => {
       // Close any previous upstream (reload path). A rejection here MUST
       // NOT block re-binding — the child is up and ready, and leaving the
       // bridge without an upstream would strand every subsequent RPC.
@@ -153,7 +196,21 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
           error: err instanceof Error ? err.message : String(err),
         });
       }
-      upstream = buildUpstreamForChild(child);
+      const next = buildUpstreamForChild(child, info);
+      // The client's handshake went to an earlier child: this one knows
+      // nothing of it. Replay it first, so buffered requests land in an
+      // initialized session.
+      if (clientInitialize) {
+        try {
+          const result = await next.reinitialize(clientInitialize, clientInitialized);
+          log.info('client-handshake-replayed');
+          // The new code may expose different tools/resources/prompts.
+          for (const notification of listChangedNotifications(result)) await framer.write(notification);
+        } catch (err) {
+          log.error('client-handshake-replay-failed', { error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+      upstream = next;
       fsm.onChildReady();
     },
     onExit: (reason) => {
@@ -184,24 +241,17 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
   }
 
   // ─── watcher → restart on file change ───
-  // Watch the project root (cwd), not just the entry's directory: shared
+  // Watch the project root, not just the entry's directory: shared
   // helpers, `frontmcp.config.ts`, and `tsconfig.json` all live above
   // `src/main.ts` and must trigger a reload too. The recursive watcher
   // already debounces and filters via `shouldIgnore` so the wider scope
   // doesn't generate spurious reloads.
   const watcher = createDevWatcher({
-    rootDir: cwd,
+    rootDir: launch.cwd,
     log,
     onChange: (trigger) => {
       fsm.onWatcherEvent(trigger);
       void (async () => {
-        // Defensive — `supervisor` is captured in this closure after the
-        // initial assignment above, but a runtime check keeps the
-        // non-null assertion off the call site.
-        if (!supervisor) {
-          log.error('restart-failed', { error: 'supervisor not initialised', trigger });
-          return;
-        }
         try {
           await supervisor.restart();
         } catch (err) {

@@ -16,7 +16,7 @@ export function registerDevCommands(program: Command): void {
     // Code, etc.) don't sit on `Calling…` after every save.
     .option('--stdio', 'Run frontmcp dev as a stdio bridge for an MCP client')
     .option('--serve', 'Use stdio-over-pipe to the child (default: HTTP/SSE loopback)')
-    .option('--log-file <path>', 'Bridge log file path', './.frontmcp/dev.log')
+    .option('--log-file <path>', 'Bridge log file path (default: .frontmcp/dev.log in the project root)')
     .option('--buffer-size <n>', 'Max RPCs buffered during reload', (v) => parseInt(v, 10))
     .option('--reload-deadline-ms <ms>', 'Time to wait for a reload to complete', (v) => parseInt(v, 10))
     .action(async (options, cmd: { parent?: { opts?: () => Record<string, unknown> } }) => {
