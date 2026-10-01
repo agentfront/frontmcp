@@ -28,6 +28,7 @@ import {
   ResourceReadError,
 } from '../../errors';
 import { ResolvedEntries } from '../../flows/resolved-entries';
+import { type EntryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { handleUIResourceRead, isUIResourceUri } from '../../tool/ui';
@@ -84,6 +85,9 @@ declare global {
 }
 
 const name = 'resources:read-resource' as const;
+
+/** Where the hooks a resource class declares join a run: they run on the instance 'createResourceContext' builds. */
+export const resourceClassHooksJoin: EntryClassHooksJoin = { flow: name, plan, contextStage: 'createResourceContext' };
 const { Stage } = FlowHooksOf<'resources:read-resource'>(name);
 
 /** Resources `resolveHookOwnerId` matched, reused by the same run's `findResource`. */

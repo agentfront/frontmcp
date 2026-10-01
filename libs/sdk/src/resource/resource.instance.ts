@@ -21,10 +21,12 @@ import {
 } from '../common';
 import { InvalidRegistryKindError } from '../errors';
 import { InvalidHookFlowError } from '../errors/mcp.error';
+import { describeUnreachableEntryClassHooks, unreachableHooksMessage } from '../hooks/entry-class-hooks';
 import type HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
 import { buildResourceContent as buildParsedResourceResult } from '../utils/content.utils';
+import { resourceClassHooksJoin } from './flows/read-resource.flow';
 
 export class ResourceInstance<
   Params extends Record<string, string> = Record<string, string>,
@@ -88,6 +90,16 @@ export class ResourceInstance<
         `Resource "${className}" has hooks for unsupported flows: ${invalidFlowNames}. ` +
           `Only resource flows (${validFlows.join(', ')}) are supported on resource classes.`,
       );
+    }
+
+    // Fail fast on hooks that would never run on this class (#678)
+    const unreachable = describeUnreachableEntryClassHooks(validHooks, resourceClassHooksJoin, [
+      'resources:list-resources',
+      'resources:list-resource-templates',
+    ]);
+    if (unreachable.length > 0) {
+      const className = (this.record.provide as { name?: string } | undefined)?.name ?? 'Unknown';
+      throw new InvalidHookFlowError(unreachableHooksMessage('Resource', className, unreachable));
     }
 
     // Register valid hooks

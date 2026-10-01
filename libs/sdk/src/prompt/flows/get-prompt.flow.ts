@@ -27,6 +27,7 @@ import {
   PromptNotFoundError,
 } from '../../errors';
 import { ResolvedEntries } from '../../flows/resolved-entries';
+import { type EntryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
@@ -78,6 +79,9 @@ declare global {
 }
 
 const name = 'prompts:get-prompt' as const;
+
+/** Where the hooks a prompt class declares join a run: they run on the instance 'createPromptContext' builds. */
+export const promptClassHooksJoin: EntryClassHooksJoin = { flow: name, plan, contextStage: 'createPromptContext' };
 const { Stage } = FlowHooksOf<'prompts:get-prompt'>(name);
 
 /** Prompts `resolveHookOwnerId` found, reused by the same run's `findPrompt`. */

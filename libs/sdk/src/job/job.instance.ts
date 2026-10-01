@@ -47,25 +47,18 @@ export class JobInstance<
       return; // Dynamic jobs don't have hooks from classes
     }
 
-    const validFlows = ['jobs:execute-job', 'jobs:list-jobs'];
-    const allHooks = normalizeHooksFromCls(this.record.provide);
-
-    const validHooks = allHooks.filter((hook) => validFlows.includes(hook.metadata.flow));
-    const invalidHooks = allHooks.filter((hook) => !validFlows.includes(hook.metadata.flow));
-
-    if (invalidHooks.length > 0) {
-      const className = (this.record.provide as any)?.name ?? 'Unknown';
-      const invalidFlowNames = invalidHooks.map((h) => h.metadata.flow).join(', ');
+    // Jobs run through the job runner, not through a hookable flow (there is no `jobs:*` flow), so a
+    // hook declared on a job class would never run. Fail fast instead of accepting it (#678).
+    const hooks = normalizeHooksFromCls(this.record.provide);
+    if (hooks.length > 0) {
+      const className = (this.record.provide as { name?: string } | undefined)?.name ?? 'Unknown';
+      const declared = hooks.map((h) => `${h.metadata.method}() on ${h.metadata.flow}`).join(', ');
       throw new InvalidHookFlowError(
-        `Job "${className}" has hooks for unsupported flows: ${invalidFlowNames}. ` +
-          `Only job flows (${validFlows.join(', ')}) are supported on job classes.`,
+        `Job "${className}" declares hooks (${declared}), but jobs do not run through a hookable flow, ` +
+          `so they would never run. To act on job runs, hook the 'tools:call-tool' flow of the ` +
+          `'execute_job' tool from a provider or a plugin.`,
       );
     }
-
-    if (validHooks.length > 0) {
-      await this.hooks.registerHooks(true, ...validHooks);
-    }
-    return Promise.resolve();
   }
 
   getMetadata() {
