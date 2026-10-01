@@ -5,7 +5,7 @@ description: Build plugins with providers, context extensions, lifecycle hooks, 
 
 # Create a FrontMCP Plugin
 
-This skill covers building custom plugins for FrontMCP and using all 6 official plugins. Plugins are modular units that extend server behavior through providers, context extensions, lifecycle hooks, and contributed tools/resources/prompts.
+This skill covers building custom plugins for FrontMCP and using all 7 official plugins. Plugins are modular units that extend server behavior through providers, context extensions, lifecycle hooks, and contributed tools/resources/prompts.
 
 ## When to Use This Skill
 
@@ -475,7 +475,7 @@ export { MyServiceToken } from './my-plugin.symbols';
 
 ## Official Plugins
 
-For official plugin installation, configuration, and examples, see the **official-plugins** skill. FrontMCP provides 6 official plugins: CodeCall, Remember, Approval, Cache, Feature Flags, and Dashboard. Install individually or via `@frontmcp/plugins` (meta-package).
+For official plugin installation, configuration, and examples, see the **official-plugins** skill. FrontMCP provides 7 official plugins: CodeCall, Remember, Approval, Cache, Feature Flags, Dashboard, and WebMCP. Install individually or via `@frontmcp/plugins` (meta-package).
 
 ## Recommended Folder Structure
 

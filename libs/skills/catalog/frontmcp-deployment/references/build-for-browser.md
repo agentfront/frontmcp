@@ -127,8 +127,26 @@ Things that trip people up with `@frontmcp/react`:
 
 For connecting to a remote MCP server (HTTP), create a server-bound `DirectMcpServer` via `connect()` from `@frontmcp/sdk` and pass that instance to the provider.
 
-- `useDynamicTool` registers a **real server tool** (through `server.registerTool()`), so it runs through the server's flows (plugin hooks, authorities, `availableWhen`) and every client sees it. A name a server tool already has is refused and reported through the provider's `onError` (or `console.warn`) — it no longer shadows the server tool. The provider's tool listing follows the server's `notifications/tools/list_changed`.
-- Page code can add tools to the running server: `const unregister = await server.registerTool({ name, description, inputSchema, execute })`. The tool joins the server's app, so it is listed and run through the server's flows (plugin hooks, authorities, `availableWhen`). Arguments are not validated against `inputSchema` — validate in `execute`. `execute` runs outside the request's turn, so it may call the server back. A taken name rejects with `ToolNameConflictError`; names are 1–64 characters.
+- `useDynamicTool` registers a **real server tool** (through `server.registerTool()`), so it runs through the server's flows (plugin hooks, authorities, `availableWhen`) and every client sees it. A name a server tool already has is refused and reported through the provider's `onError` (or `console.warn`) — it no longer shadows the server tool. Names are 1–64 characters.
+- Page code can add tools without React too: `const unregister = await server.registerTool({ name, description, inputSchema, execute })`. Arguments are not validated against `inputSchema` — validate in `execute`. `execute` runs outside the request's turn, so it may call the server back.
+
+## Exposing Tools to Browser Agents (WebMCP)
+
+Install `@frontmcp/plugin-webmcp` to register the page server's tools with WebMCP (`document.modelContext`), the API Gemini in Chrome and other in-browser agents use:
+
+```typescript
+import { WebMcpPlugin } from '@frontmcp/plugin-webmcp';
+
+const server = await create({
+  info: { name: 'shop', version: '1.0.0' },
+  tools: [SearchProducts, AddToCart],
+  plugins: [WebMcpPlugin.init({ prefix: 'shop.' })],
+});
+```
+
+- Every agent call runs `tools:call-tool` on the `'webmcp'` surface; use `availableWhen: { surface: ['webmcp'] }` for agent-only tools and `['mcp']` to keep a tool away from browser agents.
+- Tools added later (`server.registerTool()`, `useDynamicTool`) are registered automatically; `server.dispose()` unregisters everything.
+- WebMCP is in origin trial (Chrome/Edge 149–162). Develop with `chrome://flags/#enable-webmcp-testing` and inspect with DevTools → Application → WebMCP. Without `document.modelContext` the plugin does nothing; load a polyfill such as `@mcp-b/global` for other browsers.
 
 ## Browser vs Node vs SDK Target
 

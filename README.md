@@ -1,146 +1,196 @@
 <div align="center">
 
-<a href="https://frontmcp.dev">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero.svg">
-  <img src="docs/assets/readme/hero.light.svg" alt="FrontMCP - The TypeScript way to build MCP servers" width="100%">
+  <source width="400" media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/agentfront/frontmcp/refs/heads/main/docs/assets/logo/frontmcp.dark.svg">
+  <source width="400" media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/agentfront/frontmcp/refs/heads/main/docs/assets/logo/frontmcp.light.svg">
+  <img width="400" alt="FrontMCP Logo" src="https://raw.githubusercontent.com/agentfront/frontmcp/refs/heads/main/docs/assets/logo/frontmcp.light.svg">
 </picture>
-</a>
+<hr>
 
-[![NPM](https://img.shields.io/npm/v/@frontmcp/sdk.svg?style=flat-square&color=16A34A&labelColor=0b1117&label=npm)](https://www.npmjs.com/package/@frontmcp/sdk)
-[![Node](https://img.shields.io/badge/node-%E2%89%A5%2024-16A34A?style=flat-square&labelColor=0b1117&logo=node.js&logoColor=white)](https://nodejs.org)
-[![License](https://img.shields.io/github/license/agentfront/frontmcp.svg?style=flat-square&color=16A34A&labelColor=0b1117)](./LICENSE)
-[![Snyk](https://img.shields.io/badge/snyk-monitored-16A34A?style=flat-square&labelColor=0b1117&logo=snyk&logoColor=white)](https://snyk.io/test/github/agentfront/frontmcp)
-[![Discord](https://img.shields.io/badge/discord-join-16A34A?style=flat-square&labelColor=0b1117&logo=discord&logoColor=white)](https://discord.gg/53AHnJnmwR)
+**The production-grade, TypeScript-first framework for building MCP servers — decorators, DI, auth, and Streamable HTTP, batteries included.**
 
-**[frontmcp.dev](https://frontmcp.dev)** &nbsp;&middot;&nbsp; **[Learn][docs-learn]** &nbsp;&middot;&nbsp; **[Reference][docs-reference]** &nbsp;&middot;&nbsp; **[Examples][docs-examples]** &nbsp;&middot;&nbsp; **[Playground][docs-playground]** &nbsp;&middot;&nbsp; **[Blog][docs-blog]**
+[![NPM - @frontmcp/sdk](https://img.shields.io/npm/v/@frontmcp/sdk.svg?v=2)](https://www.npmjs.com/package/@frontmcp/sdk)
+[![Node](https://img.shields.io/badge/node-%3E%3D24-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![License](https://img.shields.io/github/license/agentfront/frontmcp.svg?v=1)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
+[![Snyk](https://snyk.io/test/github/agentfront/frontmcp/badge.svg)](https://snyk.io/test/github/agentfront/frontmcp)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/terminal.svg">
-  <img src="docs/assets/readme/terminal.light.svg" alt="npx frontmcp create my-app, then npm run dev: an MCP server running on localhost:3000" width="760">
-</picture>
+[Docs][docs-home] &bull; [Quickstart][docs-quickstart] &bull; [API Reference][docs-sdk-ref] &bull; [Discord](https://discord.gg/53AHnJnmwR)
 
 </div>
 
-<br>
+---
 
-## Write a tool. Ship a server.
-
-Classes in, protocol out. FrontMCP handles transport, DI, sessions, auth and execution flow, and the same server runs locally and in production unchanged.
+FrontMCP turns the [Model Context Protocol](https://modelcontextprotocol.io) into a
+typed, declarative framework. You write clean `@Tool`, `@Resource`, and `@App`
+classes; FrontMCP handles the protocol, transport, dependency injection, sessions,
+auth, and execution flow — and the **same server runs locally and ships to
+production unchanged**.
 
 ```ts
 import 'reflect-metadata';
 
-import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 
-@Tool({
-  name: 'add',
-  description: 'Adds two numbers together',
-  inputSchema: { a: z.number(), b: z.number() },
-})
-class AddTool extends ToolContext {
-  async execute(input: { a: number; b: number }) {
-    return input.a + input.b;
-  }
-}
-
-@App({ id: 'calc', name: 'Calculator', tools: [AddTool] })
-class CalcApp {}
+import HelloApp from './hello.app';
 
 @FrontMcp({
   info: { name: 'Demo', version: '0.1.0' },
-  apps: [CalcApp],
+  apps: [HelloApp],
   http: { port: 3000 },
+  logging: { level: LogLevel.Info },
 })
 export default class Server {}
 ```
 
-<div align="center">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/features.svg">
-  <img src="docs/assets/readme/features.light.svg" alt="Typed end to end, auth built in, ship anywhere, every stage is a hook, tools with a face, one endpoint for any client" width="100%">
-</picture>
-</div>
+## Why FrontMCP
 
-<br>
+- **Typed by default** — decorators + Zod schemas give end-to-end types from input to output, with editor autocomplete and compile-time checks.
+- **Batteries included** — auth (OAuth/JWKS/DCR), sessions, transport, discovery, and DI are built in, not bolted on.
+- **Ship anywhere** — one codebase deploys to Node, Vercel, AWS Lambda, Cloudflare Workers, or a serverless bundle.
+- **Production-minded** — stateful/stateless sessions, high-availability transport, structured observability, and a 95%+ tested core.
+- **Extensible** — plugins, lifecycle hooks, OpenAPI adapters, and external MCP sub-apps when you outgrow the defaults.
 
-## Start
+## Installation
+
+**Node.js 24+** required.
 
 ```bash
-npx frontmcp create my-app        # new project (Node 24+)
-npx frontmcp init                 # or add FrontMCP to an existing one
+# New project (recommended)
+npx frontmcp create my-app
+
+# Existing project
+npm i -D frontmcp @types/node@^24
+npx frontmcp init
 ```
 
-Then follow **[Learn][docs-learn]** on [frontmcp.dev](https://frontmcp.dev), or browse [Tools][docs-tools], [Resources][docs-resources], [Prompts][docs-prompts], [Agents][docs-agents], [Auth][docs-auth], [Plugins][docs-plugins], [Tool UI][docs-ext-apps], [Testing][docs-testing] and [Deployment][docs-deploy]. Try it live in the [Playground][docs-playground].
+> Full setup guide: [Installation][docs-install] &middot; [Quickstart][docs-quickstart]
+
+## Capabilities
+
+**Build** — decorator-configured [`@FrontMcp` server][docs-server] and [`@App`][docs-apps]
+domains; typed [`@Tool`][docs-tools], [`@Resource`][docs-resources], and
+[`@Prompt`][docs-prompts] primitives; [`@Agent`][docs-agents] multi-step chains; and
+scoped [Providers / DI][docs-providers].
+
+**Secure** — [Remote & Local OAuth, JWKS, DCR, per-app auth][docs-auth] with
+stateful / stateless [sessions][docs-server] (JWT or UUID transport IDs).
+
+**Connect & operate** — [Streamable HTTP + SSE transport][docs-transport],
+every [MCP protocol revision][docs-protocol] from `2024-11-05` through
+`2026-07-28` on one endpoint, capability [discovery][docs-discovery],
+[elicitation][docs-elicitation], [hooks][docs-hooks], HTTP-discoverable
+[skills][docs-skills], [tool UI / MCP Apps][docs-ext-apps], an in-process
+[Direct Client][docs-direct] (`connectOpenAI` / `connectClaude`), and
+first-class [deployment][docs-deploy].
+
+**Extend & tooling** — official [plugins][docs-plugins] (Cache, Remember, CodeCall,
+Dashboard), the [OpenAPI adapter][docs-adapters], a [UI library][docs-ui] (HTML/React
+widgets, SSR, MCP Bridge), an [E2E testing framework][docs-testing], and a
+[CLI][docs-install] (`create`, `init`, `dev`, `build`, `inspect`, `doctor`).
+
+→ Full reference: **[docs.agentfront.dev/frontmcp][docs-home]**
 
 ## Packages
 
-Install `frontmcp` (CLI) and `@frontmcp/sdk`. The rest is pulled in for you, or opt-in. Keep every `@frontmcp/*` package on the same version; a mismatch fails fast at boot ([why][docs-production]).
+You install `frontmcp` (the CLI) and `@frontmcp/sdk`. Everything else is either
+pulled in for you or opt-in.
 
-<details>
-<summary><b>Core and extensions</b></summary>
-<br>
+### Core
 
-| Package                                             | What it does                                                    |
-| --------------------------------------------------- | --------------------------------------------------------------- |
-| [`frontmcp`](libs/cli)                              | CLI: `create`, `init`, `dev`, `build`, `inspect`, `doctor`      |
-| [`@frontmcp/sdk`](libs/sdk)                         | Core framework: decorators, DI, flows, transport, MCP protocol  |
-| [`@frontmcp/auth`](libs/auth)                       | OAuth, JWKS, DCR/CIMD, sessions, credential vault               |
-| [`@frontmcp/testing`](libs/testing)                 | E2E test framework with fixtures and matchers                   |
-| [`@frontmcp/adapters`](libs/adapters)               | Generate tools from an OpenAPI spec                             |
-| [`@frontmcp/skills`](libs/skills)                   | Curated `SKILL.md` catalog for scaffolding and `skills install` |
-| [`@frontmcp/guard`](libs/guard)                     | Rate limits, concurrency and policy guards                      |
-| [`@frontmcp/observability`](libs/observability)     | Structured logging, metrics and tracing                         |
-| [`@frontmcp/react`](libs/react)                     | React hooks and client for a FrontMCP server                    |
-| [`@frontmcp/ui`](libs/ui) / [`uipack`](libs/uipack) | Widgets, SSR renderers, MCP Bridge, themes                      |
-| [`@frontmcp/edge`](libs/edge)                       | Run a server on Cloudflare Workers / V8 isolates                |
-| [`@frontmcp/storage-sqlite`](libs/storage-sqlite)   | SQLite session, task and elicitation stores                     |
-| [`@frontmcp/nx`](libs/nx-plugin)                    | Nx generators and executors                                     |
+| Package                             | Description                                                     |
+| ----------------------------------- | --------------------------------------------------------------- |
+| [`frontmcp`](libs/cli)              | The CLI — `create`, `init`, `dev`, `build`, `inspect`, `doctor` |
+| [`@frontmcp/sdk`](libs/sdk)         | Core framework — decorators, DI, flows, transport, MCP protocol |
+| [`@frontmcp/auth`](libs/auth)       | Authentication, OAuth, JWKS, DCR/CIMD, credential vault         |
+| [`@frontmcp/testing`](libs/testing) | E2E test framework with fixtures and matchers                   |
 
-Internal, published so the above resolve: [`protocol`](libs/protocol), [`di`](libs/di), [`utils`](libs/utils), [`lazy-zod`](libs/lazy-zod).
+### Extend
 
-</details>
+| Package                                         | Description                                                   |
+| ----------------------------------------------- | ------------------------------------------------------------- |
+| [`@frontmcp/plugins`](libs/plugins)             | Plugin authoring toolkit + official plugin re-exports         |
+| [`@frontmcp/adapters`](libs/adapters)           | OpenAPI adapter — generate tools from an OpenAPI spec         |
+| [`@frontmcp/skills`](libs/skills)               | Curated SKILL.md catalog for scaffolding and `skills install` |
+| [`@frontmcp/guard`](libs/guard)                 | Policy/guard rules for tool inputs and outputs                |
+| [`@frontmcp/observability`](libs/observability) | Structured logging, metrics, and tracing helpers              |
 
-<details>
-<summary><b>Official plugins</b></summary>
-<br>
+### UI
 
-| Package                                                              | What it does                                  |
-| -------------------------------------------------------------------- | --------------------------------------------- |
-| [`@frontmcp/plugin-cache`](plugins/plugin-cache)                     | Cache tool results with a TTL                 |
-| [`@frontmcp/plugin-remember`](plugins/plugin-remember)               | Per-session memory (`this.remember`)          |
-| [`@frontmcp/plugin-approval`](plugins/plugin-approval)               | Human approval gates before a tool runs       |
-| [`@frontmcp/plugin-codecall`](plugins/plugin-codecall)               | Let the model compose tool calls as code      |
-| [`@frontmcp/plugin-dashboard`](plugins/plugin-dashboard)             | Built-in web dashboard                        |
-| [`@frontmcp/plugin-feature-flags`](plugins/plugin-feature-flags)     | Toggle tools and apps at runtime              |
-| [`@frontmcp/plugin-skilled-openapi`](plugins/plugin-skilled-openapi) | OpenAPI to skills and meta-tools for big APIs |
+| Package                           | Description                                           |
+| --------------------------------- | ----------------------------------------------------- |
+| [`@frontmcp/react`](libs/react)   | React hooks + client for talking to a FrontMCP server |
+| [`@frontmcp/ui`](libs/ui)         | React components, SSR renderers, MCP Bridge           |
+| [`@frontmcp/uipack`](libs/uipack) | React-free themes, build tools, platform adapters     |
 
-</details>
+### Runtime & storage
 
-<br>
+| Package                                           | Description                                                    |
+| ------------------------------------------------- | -------------------------------------------------------------- |
+| [`@frontmcp/edge`](libs/edge)                     | Run a server on Cloudflare Workers / V8 isolates from a config |
+| [`@frontmcp/storage-sqlite`](libs/storage-sqlite) | SQLite-backed session, task, and elicitation stores            |
+| [`@frontmcp/nx`](libs/nx-plugin)                  | Nx generators and executors for FrontMCP workspaces            |
 
-<div align="center">
+### Internal
 
-PRs welcome: see [CONTRIBUTING](./CONTRIBUTING.md). Released under the [Apache-2.0](./LICENSE) license.
+Published so the packages above resolve, but not intended for direct use:
 
-Docs also mirrored at [docs.agentfront.dev/frontmcp](https://docs.agentfront.dev/frontmcp).
+| Package                               | Description                                                  |
+| ------------------------------------- | ------------------------------------------------------------ |
+| [`@frontmcp/protocol`](libs/protocol) | The single boundary to the upstream MCP SDK — protocol types |
+| [`@frontmcp/di`](libs/di)             | Dependency injection container                               |
+| [`@frontmcp/utils`](libs/utils)       | Shared utilities — naming, URI, crypto, FS                   |
+| [`@frontmcp/lazy-zod`](libs/lazy-zod) | Lazily-loaded Zod wrapper that keeps cold starts small       |
 
-</div>
+### Official plugins
+
+| Package                                                              | Description                                     |
+| -------------------------------------------------------------------- | ----------------------------------------------- |
+| [`@frontmcp/plugin-cache`](plugins/plugin-cache)                     | Cache tool results with a TTL                   |
+| [`@frontmcp/plugin-remember`](plugins/plugin-remember)               | Per-session memory (`this.remember`)            |
+| [`@frontmcp/plugin-approval`](plugins/plugin-approval)               | Human approval gates before a tool runs         |
+| [`@frontmcp/plugin-codecall`](plugins/plugin-codecall)               | Let the model compose tool calls as code        |
+| [`@frontmcp/plugin-dashboard`](plugins/plugin-dashboard)             | Built-in web dashboard                          |
+| [`@frontmcp/plugin-feature-flags`](plugins/plugin-feature-flags)     | Toggle tools and apps at runtime                |
+| [`@frontmcp/plugin-skilled-openapi`](plugins/plugin-skilled-openapi) | OpenAPI → skills + meta-tools for large APIs    |
+| [`@frontmcp/plugin-webmcp`](plugins/plugin-webmcp)                   | Expose in-page tools to browser agents (WebMCP) |
+
+## Version Alignment
+
+Keep all `@frontmcp/*` packages on the same version. A clear **"version mismatch"** error is thrown at boot if versions drift. ([Production Build][docs-production])
+
+## Contributing
+
+PRs welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for workflow, coding standards, and the PR checklist.
+
+## License
+
+[Apache-2.0](./LICENSE)
 
 <!-- docs links -->
 
-[docs-learn]: https://frontmcp.dev/learn 'Learn FrontMCP'
-[docs-reference]: https://frontmcp.dev/reference 'Reference'
-[docs-examples]: https://frontmcp.dev/examples 'Examples'
-[docs-playground]: https://frontmcp.dev/playground 'Playground'
-[docs-blog]: https://frontmcp.dev/blog 'Blog'
-[docs-tools]: https://frontmcp.dev/reference/sdk/tool 'Tools'
-[docs-resources]: https://frontmcp.dev/reference/sdk/resource 'Resources'
-[docs-prompts]: https://frontmcp.dev/reference/sdk/prompt 'Prompts'
-[docs-agents]: https://frontmcp.dev/reference/sdk/agent 'Agents'
-[docs-auth]: https://frontmcp.dev/reference/auth/modes 'Authentication'
-[docs-ext-apps]: https://frontmcp.dev/learn/tools-with-a-ui 'Tool UI / MCP Apps'
-[docs-plugins]: https://frontmcp.dev/reference/plugins 'Plugins'
-[docs-testing]: https://frontmcp.dev/reference/testing 'Testing'
-[docs-deploy]: https://frontmcp.dev/reference/deployment/node 'Deployment'
-[docs-production]: https://frontmcp.dev/reference/deployment/production-build 'Production Build'
+[docs-home]: https://docs.agentfront.dev/frontmcp 'FrontMCP Docs'
+[docs-install]: https://docs.agentfront.dev/frontmcp/getting-started/installation 'Installation'
+[docs-quickstart]: https://docs.agentfront.dev/frontmcp/getting-started/quickstart 'Quickstart'
+[docs-sdk-ref]: https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/overview 'SDK Reference'
+[docs-server]: https://docs.agentfront.dev/frontmcp/servers/server 'The FrontMCP Server'
+[docs-apps]: https://docs.agentfront.dev/frontmcp/servers/apps 'Apps'
+[docs-tools]: https://docs.agentfront.dev/frontmcp/servers/tools 'Tools'
+[docs-resources]: https://docs.agentfront.dev/frontmcp/servers/resources 'Resources'
+[docs-prompts]: https://docs.agentfront.dev/frontmcp/servers/prompts 'Prompts'
+[docs-agents]: https://docs.agentfront.dev/frontmcp/servers/agents 'Agents'
+[docs-elicitation]: https://docs.agentfront.dev/frontmcp/servers/elicitation 'Elicitation'
+[docs-skills]: https://docs.agentfront.dev/frontmcp/servers/skills 'Skills'
+[docs-discovery]: https://docs.agentfront.dev/frontmcp/servers/discovery 'Discovery'
+[docs-protocol]: https://docs.agentfront.dev/frontmcp/fundamentals/protocol-versions 'Protocol Versions'
+[docs-auth]: https://docs.agentfront.dev/frontmcp/authentication/overview 'Authentication'
+[docs-direct]: https://docs.agentfront.dev/frontmcp/deployment/direct-client 'Direct Client'
+[docs-transport]: https://docs.agentfront.dev/frontmcp/deployment/transport-security 'Transport'
+[docs-ext-apps]: https://docs.agentfront.dev/frontmcp/guides/building-tool-ui 'Tool UI / MCP Apps'
+[docs-hooks]: https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/hooks 'Hooks'
+[docs-providers]: https://docs.agentfront.dev/frontmcp/extensibility/providers 'Providers'
+[docs-plugins]: https://docs.agentfront.dev/frontmcp/plugins/overview 'Plugins'
+[docs-adapters]: https://docs.agentfront.dev/frontmcp/adapters/overview 'Adapters'
+[docs-testing]: https://docs.agentfront.dev/frontmcp/testing/overview 'Testing'
+[docs-ui]: https://docs.agentfront.dev/frontmcp/react/overview 'React SDK'
+[docs-deploy]: https://docs.agentfront.dev/frontmcp/deployment/local-dev-server 'Deployment'
+[docs-production]: https://docs.agentfront.dev/frontmcp/deployment/production-build 'Production Build'

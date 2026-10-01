@@ -2640,6 +2640,18 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@frontmcp/plugin-webmcp@workspace:plugins/plugin-webmcp":
+  version: 0.0.0-use.local
+  resolution: "@frontmcp/plugin-webmcp@workspace:plugins/plugin-webmcp"
+  dependencies:
+    "@frontmcp/sdk": "npm:1.5.7"
+    "@frontmcp/utils": "npm:1.5.7"
+    reflect-metadata: "npm:^0.2.2"
+  peerDependencies:
+    "@frontmcp/lazy-zod": 1.5.7
+  languageName: unknown
+  linkType: soft
+
 "@frontmcp/plugins@workspace:libs/plugins":
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugins@workspace:libs/plugins"
