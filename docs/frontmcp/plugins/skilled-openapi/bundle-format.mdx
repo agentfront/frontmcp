@@ -70,7 +70,9 @@ type AuthBinding =
   | { kind: 'oauth2'; flow: 'client_credentials'; vaultRef: string };
 ```
 
-`passthroughCallerToken: true` on a bearer binding tells the executor to forward the MCP client's JWT to the upstream API instead of resolving a vault credential. Useful for "the upstream is this customer's own service and trusts our caller's token directly."
+`passthroughCallerToken: true` on a bearer binding tells the executor to forward the MCP client's JWT to the upstream API instead of resolving a vault credential. Useful for "the upstream is this customer's own service and trusts our caller's token directly." The token is forwarded only when its `resource` or `aud` claim names the service (see [Security](/frontmcp/plugins/skilled-openapi/security#rfc-8707-enforcement)); otherwise the call fails without reaching the upstream.
+
+A request body is sent as JSON with `content-type: application/json` (a `content-type` an operation's `header` mapper sets is kept).
 
 ### `BundledSkill`
 

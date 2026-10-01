@@ -12,6 +12,7 @@ import type { FrontMcpLogger } from '@frontmcp/sdk';
 
 import { type HiddenOpEntry } from '../registry/hidden-op.registry';
 import { type AuthorityGuard, type UnprotectedOpsPolicy } from '../security/authority-guard';
+import { callerTokenOf } from './caller-token';
 import { executeOperation, type OpenApiRuntimeDeps } from './openapi-runtime';
 import { getCompiledOpSchemas } from './schema-cache';
 
@@ -134,6 +135,8 @@ export async function executeSkillAction(args: {
       entry,
       bundleId: entry.bundleId,
       input: inputParse.data as Record<string, unknown>,
+      // For a bearer binding with `passthroughCallerToken: true`.
+      callerToken: callerTokenOf(authInfo),
       deps: runtimeDeps,
     });
   } catch (e) {
