@@ -257,11 +257,11 @@ See `transport`, `env`, `clients`, `test`, `skills` field reference in [docs/fro
 
 `transport.http.path` is the mount path of the MCP endpoint for **every** build target, not only `frontmcp dev`:
 
-| Target                            | How the path reaches the server                                                                    |
-| --------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `node` (and its SEA binary)       | the generated runner script exports `FRONTMCP_HTTP_ENTRY_PATH` (default only; a real env var wins) |
-| `vercel`, `lambda`, `distributed` | the generated setup file assigns `process.env.FRONTMCP_HTTP_ENTRY_PATH` before the server loads    |
-| `cloudflare`                      | the generated worker setup assigns it the same way                                                 |
+| Target                            | How the path reaches the server                                                                                                                                                                                |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node` (and its SEA binary)       | the runner script exports `FRONTMCP_HTTP_ENTRY_PATH`, and the bundle sets the same default itself when run directly (`node dist/node/<name>.bundle.js`, the generated Dockerfile's `CMD`); a real env var wins |
+| `vercel`, `lambda`, `distributed` | the generated setup file assigns `process.env.FRONTMCP_HTTP_ENTRY_PATH` before the server loads                                                                                                                |
+| `cloudflare`                      | the generated worker setup assigns it the same way                                                                                                                                                             |
 
 A `@FrontMcp({ http: { entryPath } })` value still wins over the config. When the two differ, `frontmcp build` warns.
 

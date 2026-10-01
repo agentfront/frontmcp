@@ -139,9 +139,7 @@ Run the **CLI bundle** (`frontmcp build --target cli`) directly with Node.js. Th
 }
 ```
 
-<Warning>
-Don't run the raw `--target node` bundle as `node dist/node/my-server.bundle.js --stdio` — that bundle is your `@FrontMcp` server module, which starts the HTTP server on import. Use the runner above (or set `FRONTMCP_STDIO=1` yourself before the bundle loads).
-</Warning>
+The bundle itself honors the flag too: `node dist/node/my-server.bundle.js --stdio` serves stdio and binds no port, so a client config may point `command: "node"` at the `.bundle.js` file. Run directly, the bundle also serves MCP at `transport.http.path` from `frontmcp.config`, as the runner does.
 
 ### With Environment Variables
 

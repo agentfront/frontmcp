@@ -46,6 +46,8 @@ single-file bundle at `dist/{name}.bundle.js` (where `{name}` is your
 NODE_ENV=production PORT=8080 node dist/my-server.bundle.js
 ```
 
+Run this way, the bundle applies what the generated `dist/node/<name>` runner script does: it serves MCP at `transport.http.path` from `frontmcp.config` (unless `FRONTMCP_HTTP_ENTRY_PATH` is set) and `--stdio` serves over stdin/stdout instead of HTTP. The generated Dockerfile's `CMD ["node", "dist/node/<name>.bundle.js"]` relies on this.
+
 If you prefer a script, add one to `package.json`:
 
 ```json
