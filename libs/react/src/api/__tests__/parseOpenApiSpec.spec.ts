@@ -183,6 +183,33 @@ describe('parseOpenApiSpec', () => {
       });
     });
 
+    it('records where each parameter goes, so the client can send query and header parameters', () => {
+      const spec = {
+        paths: {
+          '/users/{id}': {
+            parameters: [{ name: 'X-Tenant', in: 'header' }],
+            get: {
+              operationId: 'getUser',
+              parameters: [
+                { name: 'id', in: 'path', required: true },
+                { name: 'fields', in: 'query' },
+                { name: 'sid', in: 'cookie' },
+                { name: 'odd', in: 'matrix' },
+              ],
+            },
+          },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec);
+      expect(ops[0].parameters).toEqual([
+        { name: 'X-Tenant', in: 'header' },
+        { name: 'id', in: 'path' },
+        { name: 'fields', in: 'query' },
+        { name: 'sid', in: 'cookie' },
+      ]);
+    });
+
     it('marks required parameters in required array', () => {
       const spec = {
         paths: {

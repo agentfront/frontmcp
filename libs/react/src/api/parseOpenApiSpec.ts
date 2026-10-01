@@ -5,9 +5,10 @@
  * and builds a JSON Schema for the input from parameters and requestBody.
  */
 
-import type { ApiOperation } from './api.types';
+import type { ApiOperation, ApiParameter, ApiParameterLocation } from './api.types';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head'] as const;
+const PARAMETER_LOCATIONS: readonly string[] = ['path', 'query', 'header', 'cookie'] satisfies ApiParameterLocation[];
 
 interface OpenApiParameter {
   name: string;
@@ -73,6 +74,7 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
       }
 
       const propertyLocations = new Map<string, string>();
+      const parameters: ApiParameter[] = [];
       for (const param of paramMap.values()) {
         if (param.name === '__proto__' || param.name === 'constructor' || param.name === 'prototype') continue;
         const existingIn = propertyLocations.get(param.name);
@@ -87,6 +89,9 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
           description: param.description,
         };
         if (param.required) required.push(param.name);
+        if (PARAMETER_LOCATIONS.includes(param.in)) {
+          parameters.push({ name: param.name, in: param.in as ApiParameterLocation });
+        }
       }
 
       // Request body
@@ -111,7 +116,14 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
         inputSchema['required'] = required;
       }
 
-      operations.push({ operationId, description, method: method.toUpperCase(), path, inputSchema });
+      operations.push({
+        operationId,
+        description,
+        method: method.toUpperCase(),
+        path,
+        inputSchema,
+        ...(parameters.length > 0 ? { parameters } : {}),
+      });
     }
   }
 

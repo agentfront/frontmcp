@@ -1,10 +1,11 @@
+import { act, renderHook } from '@testing-library/react';
 import React from 'react';
-import { renderHook, act } from '@testing-library/react';
-import { useStoreResource } from '../useStoreResource';
+
+import { ComponentRegistry } from '../../components/ComponentRegistry';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
-import { ComponentRegistry } from '../../components/ComponentRegistry';
 import type { FrontMcpContextValue } from '../../types';
+import { useStoreResource } from '../useStoreResource';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -604,6 +605,108 @@ describe('useStoreResource (state module)', () => {
       const selectorResource = dynamicRegistry.findResource('state://counter/doubled')!;
       const selectorResult = await selectorResource.read();
       expect(JSON.parse(selectorResult.contents[0].text)).toBe(14);
+    });
+  });
+
+  describe('inline options (#681)', () => {
+    type Props = { tag: number; selectorKeys?: string[]; actionKeys?: string[] };
+
+    function renderInline(store: ReturnType<typeof createMockStore>, initialProps: Props = { tag: 0 }) {
+      return renderHook(
+        ({ tag, selectorKeys = ['count'], actionKeys = ['bump'] }: Props) =>
+          useStoreResource({
+            name: 'inline',
+            getState: () => ({ ...store.getState(), tag }),
+            subscribe: (cb) => store.subscribe(cb),
+            selectors: Object.fromEntries(
+              selectorKeys.map((key) => [key, (state: unknown) => [key, (state as { tag: number }).tag]]),
+            ),
+            actions: Object.fromEntries(actionKeys.map((key) => [key, () => `${key}:${tag}`])),
+          }),
+        { wrapper: createWrapper(dynamicRegistry), initialProps },
+      );
+    }
+
+    it('does not register the resources and tools again when the options are recreated', () => {
+      const store = createMockStore({ count: 0 });
+      const { rerender } = renderInline(store);
+      const version = dynamicRegistry.getVersion();
+
+      rerender({ tag: 1 });
+      rerender({ tag: 2 });
+
+      expect(dynamicRegistry.getVersion()).toBe(version);
+    });
+
+    it('reads and runs the functions of the latest render', async () => {
+      const store = createMockStore({ count: 3 });
+      const { rerender } = renderInline(store);
+      rerender({ tag: 7 });
+
+      const state = await dynamicRegistry.findResource('state://inline')!.read();
+      const selected = await dynamicRegistry.findResource('state://inline/count')!.read();
+      const action = await dynamicRegistry.findTool('inline_bump')!.execute({});
+
+      expect(JSON.parse(state.contents[0].text)).toEqual({ count: 3, tag: 7 });
+      expect(JSON.parse(selected.contents[0].text)).toEqual(['count', 7]);
+      expect(JSON.parse(action.content[0].text)).toEqual({ success: true, result: 'bump:7' });
+    });
+
+    it('still follows store changes after re-subscribing on a later render', () => {
+      const store = createMockStore({ count: 0 });
+      const updateSpy = jest.spyOn(dynamicRegistry, 'updateResourceRead');
+      const { rerender } = renderInline(store);
+      rerender({ tag: 1 });
+
+      act(() => {
+        store.setState({ count: 1 });
+      });
+
+      expect(updateSpy).toHaveBeenCalledTimes(2);
+      expect(updateSpy).toHaveBeenCalledWith('state://inline', expect.any(Function));
+      expect(updateSpy).toHaveBeenCalledWith('state://inline/count', expect.any(Function));
+    });
+
+    it('registers again when a selector or an action is added or removed', () => {
+      const store = createMockStore({ count: 0 });
+      const { rerender } = renderInline(store);
+
+      rerender({ tag: 0, selectorKeys: ['total'], actionKeys: ['reset'] });
+
+      expect(dynamicRegistry.hasResource('state://inline/count')).toBe(false);
+      expect(dynamicRegistry.hasResource('state://inline/total')).toBe(true);
+      expect(dynamicRegistry.hasTool('inline_bump')).toBe(false);
+      expect(dynamicRegistry.hasTool('inline_reset')).toBe(true);
+    });
+
+    it('reads null for a selector and refuses an action the latest render no longer has', async () => {
+      const store = createMockStore({ count: 0 });
+      let selectors: Record<string, (state: unknown) => unknown> | undefined = { count: () => 1 };
+      let actions: Record<string, () => unknown> | undefined = { bump: () => 1 };
+      const { rerender } = renderHook(
+        () =>
+          useStoreResource({
+            name: 'gone',
+            getState: store.getState,
+            subscribe: store.subscribe,
+            selectors,
+            actions,
+          }),
+        { wrapper: createWrapper(dynamicRegistry) },
+      );
+      const selector = dynamicRegistry.findResource('state://gone/count')!;
+      const tool = dynamicRegistry.findTool('gone_bump')!;
+
+      // Same keys, so the registrations stay, but the maps no longer hold the entries
+      selectors = { count: undefined as unknown as (state: unknown) => unknown };
+      actions = { bump: undefined as unknown as () => unknown };
+      rerender();
+
+      expect(JSON.parse((await selector.read()).contents[0].text)).toBeNull();
+      expect(await tool.execute({})).toEqual({
+        isError: true,
+        content: [{ type: 'text', text: 'Action "bump" is no longer available' }],
+      });
     });
   });
 });

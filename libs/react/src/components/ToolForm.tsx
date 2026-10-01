@@ -27,13 +27,16 @@ export function ToolForm({
   const required = (schema['required'] ?? []) as string[];
   const [values, setValues] = useState<Record<string, string>>({});
 
-  // What an untouched field holds: an enum shows its default (or first option) as selected, so
-  // that is also what is submitted; other fields start empty.
-  const initialValue = (prop: Record<string, unknown>): string => {
+  // What an untouched field holds, which is both what it shows and what is submitted: an enum
+  // holds its default, or else its first option when it is required. An optional enum without a
+  // default starts empty (an empty option is shown), so it is left out until the user picks one.
+  // Other fields start empty.
+  const initialValue = (key: string, prop: Record<string, unknown>): string => {
     const options = prop['enum'] as string[] | undefined;
     if (!options) return '';
     const fallback = prop['default'];
-    return typeof fallback === 'string' && options.includes(fallback) ? fallback : (options[0] ?? '');
+    if (typeof fallback === 'string' && options.includes(fallback)) return fallback;
+    return required.includes(key) ? (options[0] ?? '') : '';
   };
 
   const handleSubmit = useCallback(
@@ -41,8 +44,7 @@ export function ToolForm({
       e.preventDefault();
       const args: Record<string, unknown> = {};
       for (const [key, prop] of Object.entries(properties)) {
-        const seeded = required.includes(key) || prop['default'] !== undefined;
-        const raw = values[key] ?? (seeded ? initialValue(prop) : '');
+        const raw = values[key] ?? initialValue(key, prop);
         if (!required.includes(key) && raw === '') continue;
         if (prop['type'] === 'number' || prop['type'] === 'integer') {
           args[key] = Number(raw);
@@ -68,7 +70,7 @@ export function ToolForm({
       const isRequired = required.includes(key);
       const enumValues = prop['enum'] as string[] | undefined;
       const fieldType = getFieldType(prop);
-      const value = values[key] ?? initialValue(prop);
+      const value = values[key] ?? initialValue(key, prop);
 
       if (renderField) {
         return React.createElement(
@@ -102,6 +104,8 @@ export function ToolForm({
                 value,
                 onChange: (e: React.ChangeEvent<HTMLSelectElement>) => handleChange(key, e.target.value),
               },
+              // An optional enum can be left unset, so it offers an empty choice
+              ...(isRequired ? [] : [React.createElement('option', { key: '', value: '' }, '')]),
               ...enumValues.map((v) => React.createElement('option', { key: v, value: v }, v)),
             )
           : React.createElement('input', {

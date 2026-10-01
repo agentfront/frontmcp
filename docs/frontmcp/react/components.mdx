@@ -40,6 +40,8 @@ function ToolUI() {
 | `renderField` | `(props: FieldRenderProps) => ReactNode`  | —             | Custom field renderer                            |
 | `submitLabel` | `string`                                  | `'Call Tool'` | Submit button text                               |
 
+What a field shows is what is submitted. An enum field starts at its schema `default`, or at its first option when it is required. An optional enum without a default starts unset — the `<select>` offers an empty choice — and is left out of the arguments until the user picks a value. An empty optional field of any type is left out.
+
 ### Custom Field Rendering
 
 ```tsx
@@ -65,7 +67,7 @@ function ToolUI() {
 | `required`    | `boolean`                 | Whether the field is required                              |
 | `description` | `string?`                 | Schema description                                         |
 | `enumValues`  | `string[]?`               | Enum options (renders `<select>`)                          |
-| `value`       | `string`                  | Current value                                              |
+| `value`       | `string`                  | Current value (`''` for an optional enum left unset)       |
 | `onChange`    | `(value: string) => void` | Change handler                                             |
 
 ---

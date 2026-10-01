@@ -1,11 +1,13 @@
-import React from 'react';
 import { renderHook } from '@testing-library/react';
-import { useApiClient } from '../useApiClient';
-import type { ApiClientOptions, HttpClient } from '../api.types';
-import { FrontMcpContext } from '../../provider/FrontMcpContext';
-import type { FrontMcpContextValue } from '../../types';
+import React from 'react';
+
 import { ComponentRegistry } from '../../components/ComponentRegistry';
+import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
+import type { FrontMcpContextValue } from '../../types';
+import type { ApiClientOptions, ApiOperation, HttpClient } from '../api.types';
+import { parseOpenApiSpec } from '../parseOpenApiSpec';
+import { useApiClient } from '../useApiClient';
 
 function createMockContext(): FrontMcpContextValue {
   const dynamicRegistry = new DynamicRegistry();
@@ -339,6 +341,165 @@ describe('useApiClient', () => {
       );
 
       expect(ctx.dynamicRegistry.getTools()[0].name).toBe('myApi_getUser');
+    });
+  });
+
+  // ─── Query and header parameters (#681) ───────────────────────────────
+
+  describe('declared parameters', () => {
+    const searchOp: ApiOperation = {
+      operationId: 'searchUsers',
+      description: 'Search users',
+      method: 'GET',
+      path: '/orgs/{org}/users',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          org: { type: 'string' },
+          q: { type: 'string' },
+          tag: { type: 'array', items: { type: 'string' } },
+          filter: { type: 'object' },
+          limit: { type: 'integer' },
+          'X-Trace': { type: 'string' },
+        },
+      },
+      parameters: [
+        { name: 'org', in: 'path' },
+        { name: 'q', in: 'query' },
+        { name: 'tag', in: 'query' },
+        { name: 'filter', in: 'query' },
+        { name: 'limit', in: 'query' },
+        { name: 'X-Trace', in: 'header' },
+        { name: 'session', in: 'cookie' },
+      ],
+    };
+
+    function setup(baseUrl = 'https://api.example.com') {
+      const ctx = createMockContext();
+      const client: HttpClient = { request: jest.fn().mockResolvedValue({ status: 200, data: [] }) };
+      renderHook(() => useApiClient({ baseUrl, operations: [searchOp], client }), { wrapper: createWrapper(ctx) });
+      return { tool: ctx.dynamicRegistry.getTools()[0], request: client.request as jest.Mock };
+    }
+
+    it('sends the query parameters in the query string and header parameters as headers', async () => {
+      const { tool, request } = setup();
+
+      await tool.execute({
+        org: 'acme co',
+        q: 'a&b',
+        tag: ['x', 'y'],
+        filter: { active: true },
+        limit: 5,
+        'X-Trace': 't-1',
+        session: 's',
+      });
+
+      const config = request.mock.calls[0][0];
+      const url = new URL(config.url);
+      expect(url.pathname).toBe('/orgs/acme%20co/users');
+      expect(url.searchParams.get('q')).toBe('a&b');
+      expect(url.searchParams.getAll('tag')).toEqual(['x', 'y']);
+      expect(url.searchParams.get('filter')).toBe('{"active":true}');
+      expect(url.searchParams.get('limit')).toBe('5');
+      expect(url.searchParams.has('session')).toBe(false);
+      expect(config.headers).toEqual({ 'Content-Type': 'application/json', 'X-Trace': 't-1' });
+    });
+
+    it('leaves out query and header parameters that were not given', async () => {
+      const { tool, request } = setup();
+
+      await tool.execute({ org: 'acme', q: null });
+
+      expect(request.mock.calls[0][0].url).toBe('https://api.example.com/orgs/acme/users');
+      expect(request.mock.calls[0][0].headers).toEqual({ 'Content-Type': 'application/json' });
+    });
+
+    it('appends to a base URL that already has a query string', async () => {
+      const ctx = createMockContext();
+      const client: HttpClient = { request: jest.fn().mockResolvedValue({ status: 200, data: [] }) };
+      const op: ApiOperation = { ...searchOp, path: '/users?v=2', parameters: [{ name: 'q', in: 'query' }] };
+      renderHook(() => useApiClient({ baseUrl: 'https://api.example.com', operations: [op], client }), {
+        wrapper: createWrapper(ctx),
+      });
+
+      await ctx.dynamicRegistry.getTools()[0].execute({ q: 'x' });
+
+      expect((client.request as jest.Mock).mock.calls[0][0].url).toBe('https://api.example.com/users?v=2&q=x');
+    });
+
+    it('sends the query parameters of an operation read from an OpenAPI spec', async () => {
+      const ctx = createMockContext();
+      const client: HttpClient = { request: jest.fn().mockResolvedValue({ status: 200, data: [] }) };
+      const operations = parseOpenApiSpec({
+        paths: {
+          '/pets': {
+            get: { operationId: 'listPets', parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer' } }] },
+          },
+        },
+      });
+      renderHook(() => useApiClient({ baseUrl: 'https://pets.example.com', operations, client }), {
+        wrapper: createWrapper(ctx),
+      });
+
+      await ctx.dynamicRegistry.getTools()[0].execute({ limit: 3 });
+
+      expect((client.request as jest.Mock).mock.calls[0][0].url).toBe('https://pets.example.com/pets?limit=3');
+    });
+  });
+
+  // ─── Inline options (#681) ────────────────────────────────────────────
+
+  describe('inline options', () => {
+    it('does not register the tools again when the options are recreated on every render', () => {
+      const ctx = createMockContext();
+      const registerSpy = jest.spyOn(ctx.dynamicRegistry, 'registerTool');
+      const { rerender } = renderHook(
+        ({ baseUrl }: { baseUrl: string }) =>
+          useApiClient({
+            baseUrl,
+            operations: sampleOps.map((op) => ({ ...op })),
+            client: { request: async () => ({ status: 200, data: null }) },
+            headers: { 'X-A': '1' },
+          }),
+        { wrapper: createWrapper(ctx), initialProps: { baseUrl: 'https://a.example.com' } },
+      );
+
+      rerender({ baseUrl: 'https://b.example.com' });
+      rerender({ baseUrl: 'https://b.example.com' });
+
+      expect(registerSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls the base URL of the latest render', async () => {
+      const ctx = createMockContext();
+      const client: HttpClient = { request: jest.fn().mockResolvedValue({ status: 200, data: null }) };
+      const { rerender } = renderHook(
+        ({ baseUrl }: { baseUrl: string }) => useApiClient({ baseUrl, operations: sampleOps, client }),
+        { wrapper: createWrapper(ctx), initialProps: { baseUrl: 'https://a.example.com' } },
+      );
+
+      rerender({ baseUrl: 'https://b.example.com' });
+      await ctx.dynamicRegistry.getTools()[0].execute({ id: '7' });
+
+      expect((client.request as jest.Mock).mock.calls[0][0].url).toBe('https://b.example.com/users/7');
+    });
+
+    it('registers the tools again when an operation changes', () => {
+      const ctx = createMockContext();
+      const client: HttpClient = { request: jest.fn() };
+      const { rerender } = renderHook(
+        ({ description }: { description: string }) =>
+          useApiClient({
+            baseUrl: 'https://api.example.com',
+            operations: [{ ...sampleOps[0], description }],
+            client,
+          }),
+        { wrapper: createWrapper(ctx), initialProps: { description: 'first' } },
+      );
+
+      rerender({ description: 'second' });
+
+      expect(ctx.dynamicRegistry.getTools().map((tool) => tool.description)).toEqual(['second']);
     });
   });
 });
