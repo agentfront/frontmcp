@@ -307,6 +307,20 @@ export default class ProviderRegistry
   getAllSingletons(): ReadonlyMap<Token, unknown> {
     return this.instances; // exposed as ReadonlyMap in the type
   }
+
+  /**
+   * The CONTEXT-scoped providers defined here whose class is known before any instance exists
+   * (`useClass` and class-token providers), so the hooks their class declares can be registered.
+   */
+  getContextScopedClasses(): Array<{ token: Token; cls: Ctor<unknown> }> {
+    const out: Array<{ token: Token; cls: Ctor<unknown> }> = [];
+    for (const [token, rec] of this.defs) {
+      if (this.getProviderScope(rec) !== ProviderScope.CONTEXT) continue;
+      if (rec.kind === ProviderKind.CLASS) out.push({ token, cls: rec.useClass as Ctor<unknown> });
+      else if (rec.kind === ProviderKind.CLASS_TOKEN) out.push({ token, cls: rec.provide as Ctor<unknown> });
+    }
+    return out;
+  }
   discoveryDeps(rec: ProviderRecord): Token[] {
     return providerDiscoveryDeps(rec, this.tokens, (k, phase) => depsOfClass(k, phase));
   }

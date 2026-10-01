@@ -1,7 +1,18 @@
 import { getMetadata, isClass, type Token } from '@frontmcp/di';
 
-import { FrontMcpFlowHookTokens, HookKind, type HookEntry, type HookMetadata, type HookRecord } from '../common';
+import {
+  FrontMcpFlowHookTokens,
+  HookKind,
+  type EntryOwnerRef,
+  type HookContextRun,
+  type HookEntry,
+  type HookMetadata,
+  type HookRecord,
+  type ProviderType,
+} from '../common';
 import { resolvePendingTC39HooksForClass } from '../common/decorators/hook.decorator';
+import type ProviderRegistry from '../provider/provider.registry';
+import { normalizeProvider } from '../provider/provider.utils';
 
 export function collectHook(cls: Token): HookMetadata[] {
   return (getMetadata(FrontMcpFlowHookTokens.hooks, cls) ?? []) as HookMetadata[];
@@ -31,13 +42,82 @@ export function normalizeHooksFromCls(source: any): HookRecord[] {
   }));
 }
 
-/** Hook records declared on the instances a provider registry holds. */
-export function normalizeHooksFromProviders(providers: {
-  getAllSingletons(): ReadonlyMap<Token, unknown>;
-}): HookRecord[] {
-  return [...providers.getAllSingletons().values()]
-    .filter((instance) => typeof instance === 'object' && instance !== null)
-    .flatMap((instance) => normalizeHooksFromCls(instance));
+/**
+ * Hook records declared on the providers a registry defines: on its singletons, and on the class of
+ * each CONTEXT-scoped provider, whose hooks run on the instance built for each flow run.
+ *
+ * @param only - When given, only the providers with these tokens.
+ */
+export function normalizeHooksFromProviders(providers: ProviderRegistry, only?: ReadonlySet<Token>): HookRecord[] {
+  const records: HookRecord[] = [];
+  for (const [token, instance] of providers.getAllSingletons()) {
+    if (only && !only.has(token)) continue;
+    if (typeof instance === 'object' && instance !== null) records.push(...normalizeHooksFromCls(instance));
+  }
+  for (const { token, cls } of providers.getContextScopedClasses()) {
+    if (only && !only.has(token)) continue;
+    for (const record of normalizeHooksFromCls(cls)) {
+      // A static hook needs no instance; an instance hook runs on the run's own instance.
+      records.push(
+        record.metadata.static
+          ? record
+          : { ...record, metadata: { ...record.metadata, contextTarget: contextInstanceOf(providers, token) } },
+      );
+    }
+  }
+  return records;
+}
+
+/**
+ * Hook records of the providers a server declares (`@FrontMcp({ providers })`), owned by its scope so
+ * they run for every app's entries. The framework's own scope providers are left out.
+ */
+export function serverProviderHooks(
+  providers: ProviderRegistry,
+  declared: readonly ProviderType[] | undefined,
+  owner: EntryOwnerRef,
+): HookRecord[] {
+  if (!declared?.length) return [];
+  const tokens = new Set(declared.map((provider) => normalizeProvider(provider).provide));
+  return normalizeHooksFromProviders(providers, tokens).map((hook) => ({
+    ...hook,
+    metadata: { ...hook.metadata, owner },
+  }));
+}
+
+/** Builds (or reuses) a CONTEXT-scoped provider's instance for a flow run, as the run's entries resolve it. */
+function contextInstanceOf(providers: ProviderRegistry, token: Token): NonNullable<HookMetadata['contextTarget']> {
+  return async ({ sessionKey, contextProviders, contextSource }: HookContextRun) => {
+    const views = await providers.buildViews(sessionKey, new Map(contextProviders), contextSource);
+    const instance = views.context.get(token);
+    return typeof instance === 'object' && instance !== null ? instance : undefined;
+  };
+}
+
+/**
+ * Give each hook declared on a CONTEXT-scoped provider the instance of that provider for this flow run;
+ * other hooks are returned as they are.
+ */
+export async function bindContextHookTargets<T extends Pick<HookEntry, 'metadata'>>(
+  hooks: readonly T[],
+  run: HookContextRun,
+): Promise<Array<T | Pick<HookEntry, 'metadata'>>> {
+  if (!hooks.some((hook) => hook.metadata.contextTarget)) return [...hooks];
+  const bound: Array<T | Pick<HookEntry, 'metadata'>> = [];
+  for (const hook of hooks) {
+    const { contextTarget } = hook.metadata;
+    if (!contextTarget) {
+      bound.push(hook);
+      continue;
+    }
+    const target = await contextTarget(run);
+    // `target` holds the object a hook method runs on (an instance, here), as `hooksBoundTo` stores it.
+    if (target)
+      bound.push({
+        metadata: { ...hook.metadata, target: target as HookMetadata['target'], contextTarget: undefined },
+      });
+  }
+  return bound;
 }
 
 /** An entry class's hooks aimed at one call's instance, so each call runs them on its own instance. */

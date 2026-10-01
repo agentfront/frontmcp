@@ -49,7 +49,7 @@ import FlowRegistry from '../flows/flow.registry';
 import { HaManager } from '../ha';
 import { HealthService } from '../health';
 import HookRegistry from '../hooks/hook.registry';
-import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils';
 import { type JobExecutionManager } from '../job/execution/job-execution.manager';
 import { registerJobCapabilities, type JobsConfig } from '../job/job-scope.helper';
 import type JobRegistry from '../job/job.registry';
@@ -523,6 +523,9 @@ export class Scope extends ScopeEntry {
     if (tasksPromise) batch1.push(tasksPromise);
     if (rateLimitPromise) batch1.push(rateLimitPromise);
     await Promise.all(batch1);
+    // Hooks declared on `@FrontMcp({ providers })` run for every app's entries, like an app's provider hooks do for its own.
+    const serverHooks = serverProviderHooks(this.scopeProviders, this.metadata.providers, scopeRef);
+    if (serverHooks.length > 0) await this.scopeHooks.registerHooks(false, ...serverHooks);
     this.logger.verbose('HookRegistry initialized');
     this.logger.verbose('FlowRegistry initialized');
     this.logger.verbose('TransportService initialized');
