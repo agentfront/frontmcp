@@ -1,6 +1,6 @@
 <div align="center">
 
-<a href="https://docs.agentfront.dev/frontmcp">
+<a href="https://frontmcp.dev">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero.svg">
   <img src="docs/assets/readme/hero.light.svg" alt="FrontMCP - The TypeScript way to build MCP servers" width="100%">
@@ -13,7 +13,7 @@
 [![Snyk](https://img.shields.io/badge/snyk-monitored-16A34A?style=flat-square&labelColor=0b1117&logo=snyk&logoColor=white)](https://snyk.io/test/github/agentfront/frontmcp)
 [![Discord](https://img.shields.io/badge/discord-join-16A34A?style=flat-square&labelColor=0b1117&logo=discord&logoColor=white)](https://discord.gg/53AHnJnmwR)
 
-**[Quickstart][docs-quickstart]** &nbsp;&middot;&nbsp; **[Docs][docs-home]** &nbsp;&middot;&nbsp; **[API Reference][docs-sdk-ref]** &nbsp;&middot;&nbsp; **[Website](https://frontmcp.dev)**
+**[frontmcp.dev](https://frontmcp.dev)** &nbsp;&middot;&nbsp; **[Learn][docs-learn]** &nbsp;&middot;&nbsp; **[Reference][docs-reference]** &nbsp;&middot;&nbsp; **[Examples][docs-examples]** &nbsp;&middot;&nbsp; **[Playground][docs-playground]** &nbsp;&middot;&nbsp; **[Blog][docs-blog]**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/terminal.svg">
@@ -71,7 +71,7 @@ npx frontmcp create my-app        # new project (Node 24+)
 npx frontmcp init                 # or add FrontMCP to an existing one
 ```
 
-Then read the **[Quickstart][docs-quickstart]**, or browse [Tools][docs-tools], [Resources][docs-resources], [Prompts][docs-prompts], [Agents][docs-agents], [Auth][docs-auth], [Plugins][docs-plugins], [Tool UI][docs-ext-apps], [Testing][docs-testing] and [Deployment][docs-deploy].
+Then follow **[Learn][docs-learn]** on [frontmcp.dev](https://frontmcp.dev), or browse [Tools][docs-tools], [Resources][docs-resources], [Prompts][docs-prompts], [Agents][docs-agents], [Auth][docs-auth], [Plugins][docs-plugins], [Tool UI][docs-ext-apps], [Testing][docs-testing] and [Deployment][docs-deploy]. Try it live in the [Playground][docs-playground].
 
 ## Packages
 
@@ -123,20 +123,24 @@ Internal, published so the above resolve: [`protocol`](libs/protocol), [`di`](li
 
 PRs welcome: see [CONTRIBUTING](./CONTRIBUTING.md). Released under the [Apache-2.0](./LICENSE) license.
 
+Docs also mirrored at [docs.agentfront.dev/frontmcp](https://docs.agentfront.dev/frontmcp).
+
 </div>
 
 <!-- docs links -->
 
-[docs-home]: https://docs.agentfront.dev/frontmcp 'FrontMCP Docs'
-[docs-quickstart]: https://docs.agentfront.dev/frontmcp/getting-started/quickstart 'Quickstart'
-[docs-sdk-ref]: https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/overview 'SDK Reference'
-[docs-tools]: https://docs.agentfront.dev/frontmcp/servers/tools 'Tools'
-[docs-resources]: https://docs.agentfront.dev/frontmcp/servers/resources 'Resources'
-[docs-prompts]: https://docs.agentfront.dev/frontmcp/servers/prompts 'Prompts'
-[docs-agents]: https://docs.agentfront.dev/frontmcp/servers/agents 'Agents'
-[docs-auth]: https://docs.agentfront.dev/frontmcp/authentication/overview 'Authentication'
-[docs-ext-apps]: https://docs.agentfront.dev/frontmcp/guides/building-tool-ui 'Tool UI / MCP Apps'
-[docs-plugins]: https://docs.agentfront.dev/frontmcp/plugins/overview 'Plugins'
-[docs-testing]: https://docs.agentfront.dev/frontmcp/testing/overview 'Testing'
-[docs-deploy]: https://docs.agentfront.dev/frontmcp/deployment/local-dev-server 'Deployment'
-[docs-production]: https://docs.agentfront.dev/frontmcp/deployment/production-build 'Production Build'
+[docs-learn]: https://frontmcp.dev/learn 'Learn FrontMCP'
+[docs-reference]: https://frontmcp.dev/reference 'Reference'
+[docs-examples]: https://frontmcp.dev/examples 'Examples'
+[docs-playground]: https://frontmcp.dev/playground 'Playground'
+[docs-blog]: https://frontmcp.dev/blog 'Blog'
+[docs-tools]: https://frontmcp.dev/reference/sdk/tool 'Tools'
+[docs-resources]: https://frontmcp.dev/reference/sdk/resource 'Resources'
+[docs-prompts]: https://frontmcp.dev/reference/sdk/prompt 'Prompts'
+[docs-agents]: https://frontmcp.dev/reference/sdk/agent 'Agents'
+[docs-auth]: https://frontmcp.dev/reference/auth/modes 'Authentication'
+[docs-ext-apps]: https://frontmcp.dev/learn/tools-with-a-ui 'Tool UI / MCP Apps'
+[docs-plugins]: https://frontmcp.dev/reference/plugins 'Plugins'
+[docs-testing]: https://frontmcp.dev/reference/testing 'Testing'
+[docs-deploy]: https://frontmcp.dev/reference/deployment/node 'Deployment'
+[docs-production]: https://frontmcp.dev/reference/deployment/production-build 'Production Build'
