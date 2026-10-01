@@ -40,8 +40,12 @@ const MARKER = '__frontmcpCreateRequire';
 // and the app dies on load (#645). `process.getBuiltinModule` reaches the builtin only where
 // one exists (Node, workerd with nodejs_compat); in a browser `require` stays undefined and
 // esbuild's `__require` shim only throws if a lazy `require()` is actually called.
+//
+// `__frontmcpModule` is a `var`: a package that bundles another package's ESM output (edge and
+// some plugins inline @frontmcp/utils) already carries that package's banner further down as
+// `var __frontmcpModule`, and a `const` here would make the bundle a SyntaxError.
 const BANNER =
-  'const __frontmcpModule = typeof process !== "undefined" && typeof process.getBuiltinModule === "function"' +
+  'var __frontmcpModule = typeof process !== "undefined" && typeof process.getBuiltinModule === "function"' +
   ' ? process.getBuiltinModule("module") : undefined;\n' +
   "const require = __frontmcpModule ? __frontmcpModule.createRequire(import.meta.url || 'file:///') : undefined;\n" +
   '// __frontmcpCreateRequire\n';
