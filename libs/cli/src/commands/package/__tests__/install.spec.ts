@@ -183,6 +183,27 @@ describe('runInstall', () => {
       expect(registerApp).toHaveBeenCalledWith('demo-app', expect.anything());
     });
 
+    // #679 — `frontmcp start` runs the bundle as a server: the node target's
+    // manifest (with its port) must win over dist/cli, which sorts first.
+    it('prefers dist/node over the other per-target directories', async () => {
+      writePackage(
+        { name: 'demo-app', bundle: 'cli.bundle.js' },
+        { 'cli.bundle.js': '1;' },
+        path.join(packageDir, 'dist', 'cli'),
+      );
+      writePackage(
+        { name: 'demo-app', bundle: 'node.bundle.js', network: { defaultPort: 3456, supportsSocket: true } },
+        { 'node.bundle.js': '1;' },
+        path.join(packageDir, 'dist', 'node'),
+      );
+
+      await install();
+
+      expect(fs.existsSync(path.join(appsDir, 'demo-app', 'node.bundle.js'))).toBe(true);
+      expect(fs.existsSync(path.join(appsDir, 'demo-app', 'cli.bundle.js'))).toBe(false);
+      expect(registerApp).toHaveBeenCalledWith('demo-app', expect.objectContaining({ port: 3456 }));
+    });
+
     it.each(['frontmcp.config.ts', 'frontmcp.config.mjs', 'frontmcp.config.cjs', 'frontmcp.config.json'])(
       'builds from %s when no manifest is present',
       async (configName) => {
@@ -335,7 +356,13 @@ describe('runInstall', () => {
       expect(installCall).toBeDefined();
       const specs: string[] = installCall[1];
       expect(specs).toEqual(
-        expect.arrayContaining([expect.stringMatching(/^@frontmcp\/sdk@/), 'reflect-metadata@^0.2.2']),
+        expect.arrayContaining([
+          expect.stringMatching(/^@frontmcp\/sdk@/),
+          'reflect-metadata@^0.2.2',
+          // #679 — loaded by the SDK's skill registry at start-up (and its undeclared tslib)
+          expect.stringMatching(/^vectoriadb@/),
+          expect.stringMatching(/^tslib@/),
+        ]),
       );
       expect(installCall[2]).toEqual({ cwd: installDir });
     });

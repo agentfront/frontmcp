@@ -187,8 +187,12 @@ function readManifestIn(dir: string): { data: ExecManifest; dir: string } | null
 /**
  * Find `<name>.manifest.json` in `dir`, `dir/dist`, or a per-target subdirectory of
  * `dir/dist` (`frontmcp build` writes to `dist/node`, `dist/cli`, ...).
+ *
+ * `frontmcp start` runs the installed bundle as a server, which is what the `node`
+ * target builds — so `dist/node` wins over the other targets. Directory order used
+ * to decide, and `dist/cli` (no port in its manifest) sorted first (#679).
  */
-function findManifest(dir: string): { data: ExecManifest; dir: string } | null {
+export function findManifest(dir: string): { data: ExecManifest; dir: string } | null {
   if (!fs.existsSync(dir)) return null;
 
   const direct = readManifestIn(dir);
@@ -200,9 +204,13 @@ function findManifest(dir: string): { data: ExecManifest; dir: string } | null {
   const inDist = readManifestIn(distDir);
   if (inDist) return inDist;
 
-  for (const entry of fs.readdirSync(distDir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const nested = readManifestIn(path.join(distDir, entry.name));
+  const targetDirs = fs
+    .readdirSync(distDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort((a, b) => (a === 'node' ? -1 : b === 'node' ? 1 : a.localeCompare(b)));
+  for (const name of targetDirs) {
+    const nested = readManifestIn(path.join(distDir, name));
     if (nested) return nested;
   }
   return null;
