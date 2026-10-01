@@ -83,6 +83,7 @@ export {
   AgentLoopExceededError,
   AgentTimeoutError,
   AgentVisibilityError,
+  AgentCallDepthExceededError,
   AgentLlmError,
   AgentConfigurationError,
   AgentNotConfiguredError,

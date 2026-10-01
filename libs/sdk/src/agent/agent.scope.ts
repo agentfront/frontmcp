@@ -29,6 +29,16 @@ import { ToolInstance } from '../tool/tool.instance';
 import ToolRegistry from '../tool/tool.registry';
 import { normalizeTool } from '../tool/tool.utils';
 import AgentRegistry from './agent.registry';
+import CallAgentFlow from './flows/call-agent.flow';
+
+/** What an {@link AgentScope} takes from the agent it belongs to, besides its metadata. */
+export interface AgentScopeOptions {
+  /**
+   * The owner (app, plugin, scope or parent agent) the agent is registered under. With
+   * `execution.inheritPlugins`, the agent's tools get the parent scope's hooks for entries of this owner.
+   */
+  ownerId: string;
+}
 
 /**
  * AgentScope provides an isolated, private scope for agent execution.
@@ -88,6 +98,7 @@ export class AgentScope {
     agentId: string,
     private readonly metadata: AgentMetadata,
     agentToken: Token,
+    private readonly options?: AgentScopeOptions,
   ) {
     this.parentScope = parentScope;
     this.id = `agent:${agentId}`;
@@ -147,12 +158,16 @@ export class AgentScope {
 
     await this.agentProviders.ready;
 
-    // Initialize hooks registry (agent's own hooks only)
+    // Initialize hooks registry: the hooks of the agent's own plugins, and with `execution.inheritPlugins`
+    // also those of the plugins on the agent's app and on the server
     this.agentHooks = new HookRegistry(this.agentProviders, []);
     await this.agentHooks.ready;
+    if (this.metadata.execution?.inheritPlugins === true && this.options) {
+      this.agentHooks.inheritFrom(this.parentScope.hooks, this.options.ownerId);
+    }
 
-    // Initialize flow registry with call-tool flow
-    this.agentFlows = new FlowRegistry(this.agentProviders, [CallToolFlow]);
+    // The flows the agent's tools and nested agents (`agents: [...]`) run through
+    this.agentFlows = new FlowRegistry(this.agentProviders, [CallToolFlow, CallAgentFlow]);
     await this.agentFlows.ready;
 
     // Initialize plugins (they can register providers, tools, etc.)
@@ -194,7 +209,8 @@ export class AgentScope {
     this.agentPrompts = new PromptRegistry(this.agentProviders, this.metadata.prompts ?? [], this.agentOwner);
     await this.agentPrompts.ready;
 
-    // Initialize nested agents
+    // Initialize nested agents. Their registry adds each one's `invoke_<agent>` tool to this scope's
+    // tools, so the agent's model can call them, and their exported resources and prompts to this scope.
     this.agentAgents = new AgentRegistry(this.agentProviders, this.metadata.agents ?? [], this.agentOwner);
     await this.agentAgents.ready;
 

@@ -20,6 +20,7 @@ import {
   type FlowRunOptions,
 } from '../../common';
 import {
+  AgentCallDepthExceededError,
   AgentExecutionError,
   AgentNotFoundError,
   ElicitationFallbackRequired,
@@ -31,6 +32,7 @@ import {
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type SdkAuthInfo } from '../../server/server.types';
+import { DEFAULT_MAX_AGENT_CALL_DEPTH, nextAgentCallDepth, runAsAgent } from '../agent-call-chain';
 
 // ============================================================================
 // Schemas
@@ -102,6 +104,7 @@ const plan = {
   pre: [
     'parseInput',
     'findAgent',
+    'checkCallDepth',
     'checkEntryAuthorities',
     'checkAgentAuthorization',
     'createAgentContext',
@@ -254,6 +257,23 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     this.state.set('agent', agent);
     this.logger.info(`findAgent: agent "${agent.name}" found`);
     this.logger.verbose('findAgent:done');
+  }
+
+  /**
+   * Refuse a call from inside another agent's run when the chain of running agents is already as deep
+   * as one of them allows (`swarm.maxCallDepth`, 3 by default). A call from a client starts a chain.
+   */
+  @Stage('checkCallDepth')
+  async checkCallDepth() {
+    const next = nextAgentCallDepth();
+    if (!next || next.depth <= next.limit) return;
+    const agent = this.state.required.agent;
+    this.logger.warn(`checkCallDepth: agent call ${next.depth} exceeds maxCallDepth ${next.limit}`);
+    throw new AgentCallDepthExceededError(
+      agent.id,
+      next.chain.map((running) => running.id),
+      next.limit,
+    );
   }
 
   /**
@@ -523,9 +543,15 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
         agent.metadata.execution?.timeout ??
         this.scope.rateLimitManager?.config?.defaultTimeout?.executeMs);
 
-    const running = (async () => {
+    // The agent runs a step deeper in the chain of running agents, which `checkCallDepth` reads for
+    // the agents it calls in turn.
+    const runningAgent = {
+      id: agent.id,
+      maxCallDepth: agent.metadata.swarm?.maxCallDepth ?? DEFAULT_MAX_AGENT_CALL_DEPTH,
+    };
+    const running = runAsAgent(runningAgent, async () => {
       agentContext.output = await agentContext.execute(agentContext.input);
-    })();
+    });
 
     try {
       await (timeoutMs ? withTimeout(() => running, timeoutMs, agent.metadata.name) : running);
