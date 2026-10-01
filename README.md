@@ -1,10 +1,11 @@
 <div align="center">
 
-<a href="https://docs.agentfront.dev/frontmcp"><picture>
-
+<a href="https://docs.agentfront.dev/frontmcp">
+<picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero.svg">
   <img src="docs/assets/readme/hero.light.svg" alt="FrontMCP - The TypeScript way to build MCP servers" width="100%">
-</picture></a>
+</picture>
+</a>
 
 [![NPM](https://img.shields.io/npm/v/@frontmcp/sdk.svg?style=flat-square&color=16A34A&labelColor=0b1117&label=npm)](https://www.npmjs.com/package/@frontmcp/sdk)
 [![Node](https://img.shields.io/badge/node-%E2%89%A5%2024-16A34A?style=flat-square&labelColor=0b1117&logo=node.js&logoColor=white)](https://nodejs.org)
