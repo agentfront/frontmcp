@@ -172,6 +172,8 @@ Example — keep a tool away from in-browser agents (WebMCP) while MCP clients s
 | `'development'` | Development |
 | `'test'`        | Testing     |
 
+It is the `NODE_ENV` the process runs with, read live: a value the deployment sets at run time (a Cloudflare Worker's `[vars] NODE_ENV`) wins over the constant a bundler inlines for `process.env.NODE_ENV` at build time (`wrangler dev` inlines `"development"`). With no value set at run time it falls back to that constant, then to `'development'`. `getNodeEnv()` from `@frontmcp/utils` reads it the same way.
+
 ### Structured errors
 
 When a tool, resource, resource template or prompt exists but a process-wide axis (`os`, `runtime`, `deployment`, `provider`, `target`, `env`) excludes it, `tools/call`, `resources/read` and `prompts/get` throw `EntryUnavailableError` with a `missingAxes` array in `data` (issue #417). Clients can surface "this tool isn't reachable because provider=vercel / …" without parsing prose. A `surface` mismatch answers like an unknown entry instead (see `surface` above).

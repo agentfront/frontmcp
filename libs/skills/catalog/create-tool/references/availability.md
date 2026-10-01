@@ -26,15 +26,15 @@ On Linux / Windows servers, this tool simply doesn't exist — it's not in `tool
 
 ## Axes
 
-| Axis         | Values                                                                                                                          | Source                                                      |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `os`         | `'darwin'`, `'linux'`, `'win32'`                                                                                                | `process.platform` (since #417 — was previously `platform`) |
-| `runtime`    | `'node'`, `'browser'`, `'edge'`, `'bun'`, `'deno'`                                                                              | Detected at boot                                            |
-| `deployment` | `'serverless'`, `'standalone'`, `'distributed'`, `'browser'`                                                                    | Detected from `frontmcp.config` / env                       |
-| `provider`   | `'bare'`, `'docker'`, `'vercel'`, `'lambda'`, `'cloudflare'`, `'netlify'`, `'azure'`, `'gcp'`, `'fly'`, `'render'`, `'railway'` | Auto-detected; override with `FRONTMCP_PROVIDER=<name>`     |
-| `target`     | `'cli'`, `'node'`, `'vercel'`, `'lambda'`, `'cloudflare'`, `'browser'`, `'sdk'`, `'mcpb'`, `'distributed'`                      | Set by `frontmcp build --target <x>`; `'unknown'` in dev    |
-| `surface`    | `'mcp'`, `'cli'`, `'agent'`, `'job'`, `'http-trigger'`, `'webmcp'`                                                              | Per-call axis — which entry point is invoking the tool      |
-| `env`        | `'production'`, `'development'`, `'test'`                                                                                       | `process.env.NODE_ENV`                                      |
+| Axis         | Values                                                                                                                          | Source                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `os`         | `'darwin'`, `'linux'`, `'win32'`                                                                                                | `process.platform` (since #417 — was previously `platform`)                    |
+| `runtime`    | `'node'`, `'browser'`, `'edge'`, `'bun'`, `'deno'`                                                                              | Detected at boot                                                               |
+| `deployment` | `'serverless'`, `'standalone'`, `'distributed'`, `'browser'`                                                                    | Detected from `frontmcp.config` / env                                          |
+| `provider`   | `'bare'`, `'docker'`, `'vercel'`, `'lambda'`, `'cloudflare'`, `'netlify'`, `'azure'`, `'gcp'`, `'fly'`, `'render'`, `'railway'` | Auto-detected; override with `FRONTMCP_PROVIDER=<name>`                        |
+| `target`     | `'cli'`, `'node'`, `'vercel'`, `'lambda'`, `'cloudflare'`, `'browser'`, `'sdk'`, `'mcpb'`, `'distributed'`                      | Set by `frontmcp build --target <x>`; `'unknown'` in dev                       |
+| `surface`    | `'mcp'`, `'cli'`, `'agent'`, `'job'`, `'http-trigger'`, `'webmcp'`                                                              | Per-call axis — which entry point is invoking the tool                         |
+| `env`        | `'production'`, `'development'`, `'test'`                                                                                       | `NODE_ENV`, read live (a Worker's `[vars]` beats a bundler's inlined constant) |
 
 ## Semantics
 
