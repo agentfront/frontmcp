@@ -40,6 +40,16 @@ describe('bundleWithEsbuild', () => {
     expect(buildArgs.outfile).toBe(path.join('/tmp/out', 'custom-name.bundle.js'));
   });
 
+  it('places a banner ahead of the bundled modules when one is given', async () => {
+    await bundleWithEsbuild('/tmp/entry.js', '/tmp/out', defaultConfig, { banner: '// preamble' });
+    expect(mockBuild.mock.calls[0][0].banner).toEqual({ js: '// preamble' });
+  });
+
+  it('sets no banner by default', async () => {
+    await bundleWithEsbuild('/tmp/entry.js', '/tmp/out', defaultConfig);
+    expect(mockBuild.mock.calls[0][0].banner).toBeUndefined();
+  });
+
   it('should default target to node22', async () => {
     await bundleWithEsbuild('/tmp/entry.js', '/tmp/out', defaultConfig);
 

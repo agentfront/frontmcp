@@ -102,6 +102,8 @@ export async function bundleWithEsbuild(
      */
     selfContained?: boolean;
     outputName?: string;
+    /** JavaScript placed ahead of every bundled module (runs before the user's entry). */
+    banner?: string;
   },
 ): Promise<BundleResult> {
   // Lazy-load esbuild
@@ -148,6 +150,7 @@ export async function bundleWithEsbuild(
     treeShaking: true,
     minify: config.esbuild?.minify ?? false,
     define: config.esbuild?.define,
+    ...(options?.banner ? { banner: { js: options.banner } } : {}),
     sourcemap: false,
     metafile: true,
     logLevel: 'warning',
