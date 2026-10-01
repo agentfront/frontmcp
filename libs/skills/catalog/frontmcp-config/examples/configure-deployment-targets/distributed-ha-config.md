@@ -70,6 +70,8 @@ frontmcp build --target node
 FRONTMCP_DEPLOYMENT_MODE=distributed frontmcp build --target distributed
 ```
 
+The distributed build writes the `ha` block to `FRONTMCP_HA_HEARTBEAT_INTERVAL_MS`, `FRONTMCP_HA_HEARTBEAT_TTL_MS`, `FRONTMCP_HA_TAKEOVER_GRACE_MS` and `FRONTMCP_HA_KEY_PREFIX` in the generated setup file (only where the platform has not set them); each pod reads them at startup. Give every pod the same `MCP_SESSION_SECRET` so any pod can route a session's request to the pod that owns it.
+
 ### Server Code
 
 ```typescript
