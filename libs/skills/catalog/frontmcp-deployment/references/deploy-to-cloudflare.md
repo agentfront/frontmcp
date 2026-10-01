@@ -125,6 +125,8 @@ Copy the returned `id` into your `wrangler.toml`.
 
 Cloudflare storage: `redis: { provider: 'vercel-kv' }` (the HTTP-based Upstash/Vercel KV client) is accepted by `--target cloudflare`; only TCP `redis` and `sqlite` configs are rejected at build time, since Workers cannot open raw sockets or load native modules.
 
+To use it for sessions, install `@vercel/kv` in the project (the build bundles it into the worker), set `KV_REST_API_URL` / `KV_REST_API_TOKEN` as `[vars]` or secrets, and set `compatibility_date` to `2024-11-11` or later: the Upstash client sends `cache: 'no-store'` on every request, which Workers reject before that date (`The 'cache' field on 'RequestInitializerDict' is not implemented`). The build accepts the provider when it can read it, either from the evaluated config or written literally as `redis: { provider: 'vercel-kv' }` in `@FrontMcp({...})`; a `redis` whose provider it can read neither way is refused, and the error says so.
+
 ## Step 4: Configure the Server
 
 ```typescript

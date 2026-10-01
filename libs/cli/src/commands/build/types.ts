@@ -113,7 +113,15 @@ export type AdapterTemplate = {
    */
   validate?: (
     decoratorConfig: Record<string, unknown> | undefined,
-    info?: { keysSeenInSource: string[] },
+    info?: {
+      keysSeenInSource: string[];
+      /**
+       * `redis.provider` when the source writes it as a literal
+       * (`redis: { provider: 'vercel-kv' }`) — what the build can still know
+       * when the entry cannot be evaluated.
+       */
+      redisProviderInSource?: string;
+    },
   ) => void;
 
   /**
