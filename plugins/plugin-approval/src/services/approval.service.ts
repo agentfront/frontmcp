@@ -6,7 +6,7 @@
 
 import { isAnonymousSubject, Provider, ProviderScope } from '@frontmcp/sdk';
 
-import { userGrantor, userRevoker } from '../approval/factories';
+import { userGrantor } from '../approval/factories';
 import { checkGrantAgainstPolicy, isApprovalUsable } from '../approval/policy';
 import type { ApprovalQuery, ApprovalStore } from '../stores/approval-store.interface';
 import {
