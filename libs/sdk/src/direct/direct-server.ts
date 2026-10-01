@@ -28,7 +28,9 @@ import {
   type DirectCallOptions,
   type DirectMcpServer,
   type DirectRequestMetadata,
+  type RuntimeToolDefinition,
 } from './direct.types';
+import { registerRuntimeTool } from './runtime-tools';
 
 /**
  * Build AuthInfo from DirectAuthContext for flow execution.
@@ -162,6 +164,13 @@ export class DirectMcpServerImpl implements DirectMcpServer {
     );
   }
 
+  async registerTool(definition: RuntimeToolDefinition): Promise<() => void> {
+    if (this._isDisposed) {
+      throw new InternalMcpError('DirectMcpServer has been disposed');
+    }
+    return registerRuntimeTool(this.scope, definition);
+  }
+
   // ─────────────────────────────────────────────────────────────────
   // Resource Operations
   // ─────────────────────────────────────────────────────────────────
@@ -277,6 +286,9 @@ export class DirectMcpServerImpl implements DirectMcpServer {
   async dispose(): Promise<void> {
     if (this._isDisposed) return;
     this._isDisposed = true;
+
+    // Let plugins release what they hold outside the scope (e.g. WebMCP registrations)
+    await this.scope.emitDispose();
 
     // Cleanup transport service if exists
     if (this.scope.transportService) {

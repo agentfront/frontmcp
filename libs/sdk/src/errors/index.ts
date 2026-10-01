@@ -166,6 +166,7 @@ export {
   InvalidRegistryKindError,
   NameDisambiguationError,
   EntryValidationError,
+  ToolNameConflictError,
   FlowNotRegisteredError,
   UnsupportedHookOwnerKindError,
 } from './registry.errors';

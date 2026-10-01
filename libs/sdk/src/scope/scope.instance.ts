@@ -1853,6 +1853,7 @@ export class Scope extends ScopeEntry {
    * (e.g., ONNX runtime) whose threads are still running during teardown.
    */
   async dispose(): Promise<void> {
+    await this.emitDispose();
     this.scopeProviders.dispose();
     if (this.notificationService) {
       await this.notificationService.destroy();

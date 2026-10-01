@@ -12,7 +12,7 @@
  *   - `os` as the new name for `platform` (alias preserved for back-compat)
  *   - `provider` (vercel / lambda / cloudflare / netlify / docker / bare / …)
  *   - `target` (the build output produced by `frontmcp build --target <x>`)
- *   - `surface` (per-call axis: mcp / cli / agent / job / http-trigger)
+ *   - `surface` (per-call axis: mcp / cli / agent / job / http-trigger / webmcp)
  */
 
 import { z } from '@frontmcp/lazy-zod';
@@ -52,7 +52,7 @@ export interface RuntimeContext {
  * Set by transport adapters / agent dispatchers / job runners on the
  * outgoing `ctx` so registry filtering can fork on call origin.
  */
-export type Surface = 'mcp' | 'cli' | 'http-trigger' | 'job' | 'agent';
+export type Surface = 'mcp' | 'cli' | 'http-trigger' | 'job' | 'agent' | 'webmcp';
 
 /** Call-context wrapper threaded through `findTool` for per-call filtering. */
 export interface CallContext {
@@ -97,7 +97,7 @@ export interface EntryAvailability {
   provider?: string[];
   /** Build-target constraint (issue #417). */
   target?: string[];
-  /** Surface constraint (issue #417): 'mcp', 'cli', 'agent', 'job', 'http-trigger'. */
+  /** Surface constraint (issue #417): 'mcp', 'cli', 'agent', 'job', 'http-trigger', 'webmcp'. */
   surface?: Surface[];
   /** Environment constraint: 'production', 'development', 'test', etc. */
   env?: string[];
@@ -118,7 +118,7 @@ export const entryAvailabilitySchema = z
     deployment: z.array(z.string().min(1)).optional(),
     provider: z.array(z.string().min(1)).optional(),
     target: z.array(z.string().min(1)).optional(),
-    surface: z.array(z.enum(['mcp', 'cli', 'http-trigger', 'job', 'agent'])).optional(),
+    surface: z.array(z.enum(['mcp', 'cli', 'http-trigger', 'job', 'agent', 'webmcp'])).optional(),
     env: z.array(z.string().min(1)).optional(),
   })
   .strict();

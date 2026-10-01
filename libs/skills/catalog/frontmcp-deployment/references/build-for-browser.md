@@ -127,6 +127,8 @@ Things that trip people up with `@frontmcp/react`:
 
 For connecting to a remote MCP server (HTTP), create a server-bound `DirectMcpServer` via `connect()` from `@frontmcp/sdk` and pass that instance to the provider.
 
+- Page code can add tools to the running server: `const unregister = await server.registerTool({ name, description, inputSchema, execute })`. The tool joins the server's app, so it is listed and run through the server's flows (plugin hooks, authorities, `availableWhen`). Arguments are not validated against `inputSchema` — validate in `execute`. `execute` runs outside the request's turn, so it may call the server back. A taken name rejects with `ToolNameConflictError`; names are 1–64 characters.
+
 ## Browser vs Node vs SDK Target
 
 | Aspect      | `--target browser` | `--target node`   | `--target sdk`      |

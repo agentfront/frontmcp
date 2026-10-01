@@ -125,6 +125,52 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
     }
   }
 
+  /** Teardown callbacks registered via onDispose(), run once when the scope is disposed. */
+  private readonly disposeCallbacks: Array<() => void | Promise<void>> = [];
+  private disposeEmitted = false;
+
+  /**
+   * Register a callback to run when the scope is disposed: `Scope.dispose()`, or `dispose()` on the
+   * `DirectMcpServer` that `create()` returned. Plugins use it to release what they hold outside the
+   * scope (timers, subscriptions, browser registrations). Unlike onServerStarted(), it also fires in
+   * direct mode, where no HTTP server starts. Callbacks run in reverse order of registration; one
+   * registered after the scope was disposed runs right away.
+   *
+   * @returns A function that removes the callback.
+   */
+  onDispose(callback: () => void | Promise<void>): () => void {
+    if (this.disposeEmitted) {
+      void this.runDisposeCallback(callback);
+      return () => undefined;
+    }
+    this.disposeCallbacks.push(callback);
+    return () => {
+      const index = this.disposeCallbacks.indexOf(callback);
+      if (index !== -1) this.disposeCallbacks.splice(index, 1);
+    };
+  }
+
+  /**
+   * Run the dispose callbacks, once. A callback that throws is logged and does not stop the others.
+   * @internal
+   */
+  async emitDispose(): Promise<void> {
+    if (this.disposeEmitted) return;
+    this.disposeEmitted = true;
+    const callbacks = this.disposeCallbacks.splice(0).reverse();
+    for (const cb of callbacks) {
+      await this.runDisposeCallback(cb);
+    }
+  }
+
+  private async runDisposeCallback(callback: () => void | Promise<void>): Promise<void> {
+    try {
+      await callback();
+    } catch (error) {
+      this.logger.warn(`Scope dispose callback failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   abstract registryFlows(...flows: FlowType[]): Promise<void>;
 
   abstract runFlow<Name extends FlowName>(

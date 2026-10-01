@@ -24,8 +24,9 @@ export function runOnSurface<T>(surface: CallSurface | undefined, fn: () => Prom
 /**
  * The surface of the call the calling code serves: `'mcp'` inside a tool, resource read, prompt or
  * completion an MCP client asked for, `'cli'` for a CLI build's in-process client, `'agent'` in a tool
- * an agent's model called, `'job'` in a job (and the tools it calls), `'http-trigger'` in a channel
- * handling a webhook (and the tools it calls); undefined for in-process dispatch (a tool's
+ * an agent's model called, `'webmcp'` in a tool an in-browser agent called through WebMCP, `'job'` in a
+ * job (and the tools it calls), `'http-trigger'` in a channel handling a webhook (and the tools it
+ * calls); undefined for in-process dispatch (a tool's
  * `this.callTool()`) or outside any call. Code that acts for the caller (running tools, listing
  * skills) must apply it the way the caller's own request would.
  */
