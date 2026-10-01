@@ -30,7 +30,7 @@
     "indexing": "navigable",
     "metatags": {
       "canonical": "https://docs.agentfront.dev/frontmcp",
-      "og:image": "/assets/logo/banner.dark.png",
+      "og:image": "/assets/readme/og.png",
       "charset": "UTF-8",
       "viewport": "width=device-width, initial-scale=1.0",
       "keywords": "mcp, model context protocol, ai agents, llm tools, claude, openai, anthropic, ai sdk, typescript, dependency injection, decorators, zod, json-schema, openapi, api validation, type safety, runtime validation, mcp server, mcp framework, frontmcp, agentfront, ai tools, agent framework, streamable http, oauth, authentication"
