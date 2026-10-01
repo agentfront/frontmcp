@@ -112,7 +112,7 @@ export default class MyApiApp {}
 </ParamField>
 
 <ParamField path="generateOptions" type="GenerateOptions">
-  Options for tool generation — filtering, naming, schema depth, format resolution, and more. See [Advanced Features](#advanced-features) and [Format Resolution](#format-resolution) for details.
+  Options for tool generation — filtering (by tag, method, path glob, operation id, or read-only), naming, schema depth, format resolution, and more; every field is passed to `mcp-from-openapi`'s generator. See [Filtering Operations](#filtering-operations) and [Format Resolution](#format-resolution) for details.
 </ParamField>
 
 <ParamField path="inputTransforms" type="InputTransformOptions">
@@ -333,7 +333,56 @@ Control which API operations become MCP tools.
 
 <CodeGroup>
 
+```ts Filter by tag
+OpenapiAdapter.init({
+  name: 'billing-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  generateOptions: {
+    includeTags: ['invoices', 'customers'],
+    excludeTags: ['internal'],
+  },
+});
+```
+
 ```ts Filter by path
+OpenapiAdapter.init({
+  name: 'billing-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  generateOptions: {
+    // `*` matches within a path segment, `**` across segments, `?` one character
+    includePaths: ['/invoices/**', '/customers/*'],
+    excludePaths: ['/invoices/*/admin/**'],
+  },
+});
+```
+
+```ts Read-only tools
+OpenapiAdapter.init({
+  name: 'billing-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  generateOptions: {
+    // Only operations whose annotations say readOnlyHint: true
+    // (GET/HEAD/OPTIONS/TRACE, unless an x-mcp / x-frontmcp override says otherwise)
+    readOnlyOnly: true,
+  },
+});
+```
+
+```ts Filter by HTTP method
+OpenapiAdapter.init({
+  name: 'billing-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  generateOptions: {
+    excludeMethods: ['delete', 'put'], // lower-case method names
+  },
+});
+```
+
+```ts Custom filter
 OpenapiAdapter.init({
   name: 'billing-api',
   url: 'https://api.example.com/openapi.json',
@@ -367,6 +416,19 @@ OpenapiAdapter.init({
 ```
 
 </CodeGroup>
+
+| Option                                    | Type              | Keeps an operation when…                                                |
+| ----------------------------------------- | ----------------- | ----------------------------------------------------------------------- |
+| `includeTags` / `excludeTags`             | `string[]`        | it carries one of the tags / none of the tags                           |
+| `includeMethods` / `excludeMethods`       | `HTTPMethod[]`    | its method (lower-case: `'get'`, `'post'`, …) is listed / is not listed |
+| `includePaths` / `excludePaths`           | `string[]`        | its path matches one of the globs / none of the globs                   |
+| `includeOperations` / `excludeOperations` | `string[]`        | its `operationId` is listed / is not listed                             |
+| `readOnlyOnly`                            | `boolean`         | its effective annotations say `readOnlyHint: true`                      |
+| `filterFn`                                | `(op) => boolean` | the function returns `true` (runs after every other filter)             |
+
+Filters combine: an operation becomes a tool only when it passes every filter you set. Deprecated operations are left out unless `includeDeprecated: true`.
+
+Every `generateOptions` field is passed to `mcp-from-openapi`'s generator, including the ones not shown on this page (for example `maxToolNameLength`, `descriptionStrategy` or `target`). The adapter sets its own defaults for `preferredStatusCodes` (`[200, 201, 202, 204]`), `includeDeprecated` (`false`) and `includeAllResponses` (`true`), and decides `includeSecurityInInput` itself (see [Security Risk Levels](#security-risk-levels)).
 
 ### Input Schema Transformation
 
