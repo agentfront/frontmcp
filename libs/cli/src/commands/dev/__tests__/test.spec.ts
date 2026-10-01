@@ -357,20 +357,10 @@ describe('buildTestChildEnv (issue #540)', () => {
     expect(env['API_KEY']).toBe('from-ci');
   });
 
-  it('enables Jest ESM support for servers started inside the test process (#660)', () => {
-    const env = buildTestChildEnv({ effectiveEnv: {}, baseEnv: { PATH: '/usr/bin' } });
-    expect(env['NODE_OPTIONS']).toContain('--experimental-vm-modules');
-  });
-
-  it('keeps existing NODE_OPTIONS and does not add the ESM flag twice (#660)', () => {
-    const env = buildTestChildEnv({
-      effectiveEnv: {},
-      baseEnv: { NODE_OPTIONS: '--max-old-space-size=4096 --experimental-vm-modules' },
-    });
-    expect(env['NODE_OPTIONS']).toBe('--max-old-space-size=4096 --experimental-vm-modules');
-
-    const other = buildTestChildEnv({ effectiveEnv: {}, baseEnv: { NODE_OPTIONS: '--max-old-space-size=4096' } });
-    expect(other['NODE_OPTIONS']).toBe('--max-old-space-size=4096 --experimental-vm-modules');
+  it('does not force --experimental-vm-modules, which would break transformed ESM-only dependencies', () => {
+    const env = buildTestChildEnv({ effectiveEnv: {}, baseEnv: { NODE_OPTIONS: '--max-old-space-size=4096' } });
+    expect(env['NODE_OPTIONS']).toBe('--max-old-space-size=4096');
+    expect(buildTestChildEnv({ effectiveEnv: {}, baseEnv: { PATH: '/usr/bin' } })['NODE_OPTIONS']).toBeUndefined();
   });
 
   it('passes through a variable that only the real environment has', () => {

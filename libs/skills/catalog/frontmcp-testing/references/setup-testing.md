@@ -517,8 +517,8 @@ matches at the first `node_modules/`, and the run fails with
 In standalone projects driven by `frontmcp test`, prefer `test.esmPackages` in
 `frontmcp.config.ts` — the injected config already carries the pattern above,
 and already transpiles `jose`, `@noble/hashes` and `@noble/ciphers` (CodeCall).
-`frontmcp test` also sets `NODE_OPTIONS=--experimental-vm-modules`; use Jest 30
-(what `frontmcp create` scaffolds), as Jest 29 cannot load native-ESM deps:
+`frontmcp test` does not set `NODE_OPTIONS=--experimental-vm-modules` (it would make Jest
+load ESM natively and bypass these transforms); use Jest 30 (what `frontmcp create` scaffolds):
 
 ```typescript
 // frontmcp.config.ts

@@ -220,14 +220,7 @@ export function buildTestChildEnv(params: {
   effectiveEnv: Record<string, string>;
   baseEnv: NodeJS.ProcessEnv;
 }): NodeJS.ProcessEnv {
-  const env = { ...params.effectiveEnv, ...params.baseEnv };
-  // Jest only loads native-ESM dependencies (and dynamic `import()` from a server
-  // started inside the test process) when Node runs with this flag.
-  const nodeOptions = env['NODE_OPTIONS'] ?? '';
-  if (!nodeOptions.split(/\s+/).includes('--experimental-vm-modules')) {
-    env['NODE_OPTIONS'] = `${nodeOptions} --experimental-vm-modules`.trim();
-  }
-  return env;
+  return { ...params.effectiveEnv, ...params.baseEnv };
 }
 
 /**
