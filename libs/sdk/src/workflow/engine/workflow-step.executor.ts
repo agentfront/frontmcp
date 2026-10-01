@@ -97,6 +97,8 @@ export class WorkflowStepExecutor {
     const ctx = job.create(parsedInput, {
       ...this.extra,
     });
+    // `authorities.pipes` may be async: run them before execute() reads `this.auth`.
+    await ctx.loadAuthContext();
 
     // Race a timer against the job promise. Note: this does NOT cancel the
     // underlying job execution — it only rejects the caller early on timeout.

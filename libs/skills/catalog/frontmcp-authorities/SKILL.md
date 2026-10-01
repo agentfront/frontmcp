@@ -287,6 +287,11 @@ authorities: {
 }
 ```
 
+Tools, resources, agents and jobs (workflow steps included) run the pipes when their context is built, before any hook
+or `execute()` reads `this.auth`, so `this.auth.tenantId` is set there. Pipes can be async; one that throws is logged
+and leaves its fields `undefined`. Pipes extend `this.auth` only -- authority policies still evaluate the claims from
+`claimsMapping` / `claimsResolver`. Up to 1.8.7 `pipes` never ran (their fields were always `undefined`).
+
 ### Skill Authorities (`@Skill({ authorities })`)
 
 `authorities` on `@Skill` is enforced exactly like the other entry types, across

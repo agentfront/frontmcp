@@ -825,6 +825,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           signal: executionAbort.signal,
         }),
       );
+      // `authorities.pipes` may be async: run them before any hook or execute() reads `this.auth`.
+      await context.loadAuthContext();
       this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(tool.record.provide), context));
       context.mark('createToolCallContext');
 

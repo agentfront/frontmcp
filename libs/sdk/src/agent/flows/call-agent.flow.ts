@@ -399,6 +399,8 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       const agentViews = await agent.providers.buildViews(sessionKey, new Map(this.deps), this.scope.providers);
       const contextProviders = new FlowContextProviders(agent.providers, agentViews.context);
       const context = agent.create(input.arguments, { ...ctx, progressToken, contextProviders });
+      // `authorities.pipes` may be async: run them before any hook or execute() reads `this.auth`.
+      await context.loadAuthContext();
       this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(agent.record.provide), context));
       context.mark('createAgentContext');
 
