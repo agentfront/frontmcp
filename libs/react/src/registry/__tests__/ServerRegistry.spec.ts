@@ -1,6 +1,6 @@
 import type { DirectClient, DirectMcpServer } from '@frontmcp/sdk';
 
-import { ServerRegistry } from '../ServerRegistry';
+import { sameListing, ServerRegistry } from '../ServerRegistry';
 
 function createMockClient(): DirectClient {
   return {
@@ -474,6 +474,22 @@ describe('ServerRegistry', () => {
       expect(registry.get('srv')?.tools).toEqual([{ name: 'first' }, { name: 'second' }]);
     });
 
+    it('does not notify readers when an announcement leaves the listing unchanged', async () => {
+      const watched = watchableClient();
+      connectedEntry('srv', watched.client);
+      registry.watchToolList('srv', watched.client);
+      watched.answer(0, [{ name: 'first' }]);
+      await flush();
+      const listener = jest.fn();
+      registry.subscribe(listener);
+
+      watched.notify('notifications/tools/list_changed');
+      watched.answer(1, [{ name: 'first' }]);
+      await flush();
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     it('ignores other notifications', () => {
       const watched = watchableClient();
       connectedEntry('srv', watched.client);
@@ -562,6 +578,22 @@ describe('ServerRegistry', () => {
       await registry.connect('srv');
 
       expect(watched.client.onNotification).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('sameListing', () => {
+    it('compares listings entry for entry', () => {
+      const listing = [{ name: 'a' }];
+      expect(sameListing(listing, listing)).toBe(true);
+      expect(sameListing([{ name: 'a' }], [{ name: 'a' }])).toBe(true);
+      expect(sameListing([{ name: 'a' }], [{ name: 'b' }])).toBe(false);
+      expect(sameListing([{ name: 'a' }], [])).toBe(false);
+    });
+
+    it('treats a listing that cannot be serialized as changed', () => {
+      const circular: Record<string, unknown> = { name: 'a' };
+      circular['self'] = circular;
+      expect(sameListing([circular], [circular])).toBe(false);
     });
   });
 });

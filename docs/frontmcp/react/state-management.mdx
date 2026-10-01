@@ -57,6 +57,8 @@ function StoreProvider() {
 | `actions`   | `Record<string, (...args) => unknown>` | —       | Named actions, each becomes a server tool              |
 | `server`    | `string`                               | —       | Target a named server                                  |
 
+Options may be written inline, as above: a new `getState`, `selectors` or `actions` object on every render does not register anything again — resources and tools are registered again only when `name`, `server`, or the set of selector / action names changes, and each read or action call uses the functions of the latest render. A new `subscribe` function re-subscribes to the store, which re-renders nothing. The same holds for `useReduxResource` and `useValtioResource`, so any of them can sit in a component that also reads the server (`useListTools()`, say) without rendering it in a loop.
+
 ### Live Updates
 
 When the store changes, the main resource's read function automatically returns fresh state. The hook subscribes to your store and notifies the `DynamicRegistry` on every change so consumers re-read the latest value.
