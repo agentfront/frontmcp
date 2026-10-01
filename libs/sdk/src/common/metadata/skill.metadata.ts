@@ -305,7 +305,7 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
    * Validation mode for tool references.
    * Controls what happens when the skill references tools that are missing or hidden.
    *
-   * - 'strict': Fail initialization if any referenced tools are missing/hidden
+   * - 'strict': The server refuses to start if a referenced tool is not registered
    * - 'warn': Log warnings but continue initialization (default)
    * - 'ignore': Skip tool validation entirely
    *
@@ -451,8 +451,18 @@ const skillToolRefSchema = z.object({
   required: z.boolean().optional().default(false),
 });
 
+/**
+ * A tool class, kept as it is. `z.function()` can't be used here: it parses a function into a
+ * validating wrapper, which drops the class's `@Tool` metadata, so the tool's name could no longer be
+ * read from it and the server refused to start. Whether the class is a `@Tool` is checked when its
+ * name is read ({@link normalizeToolRef}).
+ */
+const toolClassSchema = z.custom<Type<ToolContext>>((value) => typeof value === 'function', {
+  message: 'Expected a tool class decorated with @Tool',
+});
+
 const skillToolRefWithClassSchema = z.object({
-  tool: z.function(), // Tool class
+  tool: toolClassSchema,
   purpose: z.string().optional(),
   required: z.boolean().optional().default(false),
 });
@@ -460,7 +470,7 @@ const skillToolRefWithClassSchema = z.object({
 // Accepts: string, tool class (function), SkillToolRef, or SkillToolRefWithClass
 const skillToolInputSchema = z.union([
   z.string().min(1), // String tool name
-  z.function(), // Tool class (will be validated at runtime)
+  toolClassSchema, // Tool class (its @Tool name is read when the skill is loaded)
   skillToolRefSchema, // { name, purpose?, required? }
   skillToolRefWithClassSchema, // { tool, purpose?, required? }
 ]);
@@ -633,7 +643,10 @@ export function isToolRefWithName(ref: unknown): ref is SkillToolRef {
 export function getToolNameFromClass(toolClass: Type<ToolContext>): string | undefined {
   if (!isClass(toolClass)) return undefined;
 
-  // Try to get the tool name from metadata
+  // The name the tool is registered and called under: its `id` when it declares one, else its `name`
+  const toolId = getMetadata(FrontMcpToolTokens.id, toolClass);
+  if (typeof toolId === 'string' && toolId.length > 0) return toolId;
+
   const toolName = getMetadata(FrontMcpToolTokens.name, toolClass);
   if (typeof toolName === 'string') return toolName;
 

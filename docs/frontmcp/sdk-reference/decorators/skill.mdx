@@ -287,9 +287,11 @@ Skills are validated on server startup. Validation strictness is configured **pe
 class ReviewPrSkill extends SkillContext {}
 ```
 
-- **strict**: Fail if skill references missing tools
+- **strict**: The server refuses to start (`SkillValidationError`) if the skill references a tool that isn't registered
 - **warn** (default): Log warnings but continue
 - **ignore**: Skip tool validation
+
+`tools` takes tool names, `{ name, purpose?, required? }` references, `@Tool` classes and `{ tool: ToolClass, purpose?, required? }` references. A class is named by the tool's `id` when it declares one, else its `name`.
 
 ## Skill Sessions
 

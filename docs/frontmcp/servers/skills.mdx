@@ -224,7 +224,7 @@ class MyApp {}
 | `priority`          | Higher values appear earlier in search results                                                                     |
 | `hideFromDiscovery` | When `true`, skill is loadable but not listed in search                                                            |
 | `visibility`        | Where this skill is discoverable: `mcp`, `http`, or `both`                                                         |
-| `toolValidation`    | How to handle missing tool references: `strict`, `warn`, `ignore`                                                  |
+| `toolValidation`    | How to handle missing tool references: `strict`, `warn`, `ignore` (see [Missing Tools](#missing-tools))            |
 | `license`           | License name or reference (per Agent Skills spec)                                                                  |
 | `compatibility`     | Environment requirements (max 500 chars, per Agent Skills spec)                                                    |
 | `specMetadata`      | Arbitrary key-value metadata (maps to spec `metadata` field)                                                       |
@@ -347,6 +347,31 @@ Include purpose and required flag for better LLM understanding:
 | `name`     | The tool's identifier                           |
 | `purpose`  | Explains why/how the tool is used in this skill |
 | `required` | If `true`, skill may not work without this tool |
+
+### Tool Classes
+
+Reference a `@Tool` class instead of its name, alone or with a purpose. The skill names the tool as it is called: its `id` when it declares one, else its `name`. The class is only a reference: register the tool in the app's (or server's) `tools` too.
+
+```ts
+@Skill({
+  name: 'class-workflow',
+  tools: [GitHubCreatePrTool, { tool: SlackNotifyTool, purpose: 'Notify team of completion' }],
+})
+```
+
+A class that isn't a `@Tool` stops the server from starting with `Invalid tool class '<ClassName>'`. Up to 1.8.7 any class reference did: the class was replaced while the skill's options were validated, and lost its `@Tool` name.
+
+### Missing Tools
+
+`toolValidation` decides what happens at startup when a referenced tool isn't registered:
+
+| Mode               | Behavior                                                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `'warn'` (default) | Logs a warning and starts                                                                                           |
+| `'strict'`         | The server refuses to start: `SkillValidationError: Skill 'x' failed tool validation: missing tools [no_such_tool]` |
+| `'ignore'`         | Checks nothing                                                                                                      |
+
+Up to 1.8.7 `'strict'` started the server anyway, and said nothing.
 
 ---
 
