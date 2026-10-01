@@ -634,7 +634,7 @@ class GlobalCacheServer {}
 Enable caching on individual tools via the `cache` metadata field:
 
 ```typescript
-// Enable caching with default TTL
+// Enable caching with default TTL (no sliding window)
 @Tool({ name: 'get_weather', cache: true })
 class GetWeatherTool extends ToolContext {
   /* ... */
@@ -671,6 +671,13 @@ CachePlugin.init({
 
 A tool is cached if it matches any pattern OR has `cache: true` (or a cache object) in its metadata. `cache: { ttl: 0 }` (or a negative TTL) turns caching off for the tool, even when it matches a pattern; up to 1.8.5 it cached the first result with no expiry.
 
+Only `slideWindow: true` refreshes the TTL on a hit (`ttl`, or the plugin's `defaultTTL` when the tool sets none).
+`cache: true` means the plugin defaults and never slides: an entry expires its TTL after it was written, however often it
+is read. Up to 1.8.7, `cache: true` slid on every hit and `{ slideWindow: true }` without a `ttl` never slid.
+
+A result the tool returns with `isError: true` (a `CallToolResult` reporting a failure) is never cached, so the next
+call runs the tool again; up to 1.8.7 the failure was served from the cache until the TTL ran out.
+
 ### Cache Bypass
 
 Send the bypass header to skip caching for a specific request:
@@ -680,6 +687,13 @@ x-frontmcp-disable-cache: true
 ```
 
 The header name is configurable via `bypassHeader` in the plugin options. Default: `'x-frontmcp-disable-cache'`.
+It must start with `x-frontmcp-` (case-insensitive): the plugin reads it from the request context, which keeps only a
+request's `x-frontmcp-*` headers. Any other name (`'x-no-cache'`) throws `CachePluginConfigurationError` when the
+plugin is created; up to 1.8.7 it was accepted and silently ignored.
+
+```typescript
+CachePlugin.init({ type: 'memory', bypassHeader: 'x-frontmcp-no-cache' }); // client sends `x-frontmcp-no-cache: 1`
+```
 
 ### Cache Key
 
