@@ -60,6 +60,24 @@ export interface DirectCallOptions {
 }
 
 /**
+ * Options for the list methods (`listTools`, `listResources`, `listResourceTemplates`, `listPrompts`).
+ *
+ * A FrontMCP server pages `tools/list` (40 tools per page by default). By default a list method
+ * reads every page and returns the whole list, without `nextCursor`, as `DirectClient` does. To
+ * page through the list yourself, as an MCP client does, set `paginate` (or pass a `cursor`).
+ */
+export interface DirectListOptions extends DirectCallOptions {
+  /**
+   * Return one page: the first, or the one `cursor` points at. The result carries `nextCursor`
+   * while more pages remain; pass it back as `cursor` for the next page.
+   * @default false
+   */
+  paginate?: boolean;
+  /** The page to return: a previous page's `nextCursor`. A cursor implies `paginate`. */
+  cursor?: string;
+}
+
+/**
  * What a runtime tool's `execute` receives besides its arguments.
  */
 export interface RuntimeToolExecuteContext {
@@ -137,12 +155,12 @@ export interface DirectMcpServer {
   // ─────────────────────────────────────────────────────────────────
 
   /**
-   * List all available tools.
+   * List all available tools: every page, unless `options.paginate` or `options.cursor` asks for one.
    *
-   * @param options - Optional call options with auth context
+   * @param options - Optional call options with auth context, and paging
    * @returns List of tool definitions
    */
-  listTools(options?: DirectCallOptions): Promise<ListToolsResult>;
+  listTools(options?: DirectListOptions): Promise<ListToolsResult>;
 
   /**
    * Call a tool with arguments.
@@ -183,20 +201,21 @@ export interface DirectMcpServer {
   // ─────────────────────────────────────────────────────────────────
 
   /**
-   * List all available resources.
+   * List all available resources: every page, unless `options.paginate` or `options.cursor` asks for one.
    *
-   * @param options - Optional call options with auth context
+   * @param options - Optional call options with auth context, and paging
    * @returns List of resource definitions
    */
-  listResources(options?: DirectCallOptions): Promise<ListResourcesResult>;
+  listResources(options?: DirectListOptions): Promise<ListResourcesResult>;
 
   /**
-   * List all available resource templates.
+   * List all available resource templates: every page, unless `options.paginate` or `options.cursor`
+   * asks for one.
    *
-   * @param options - Optional call options with auth context
+   * @param options - Optional call options with auth context, and paging
    * @returns List of resource template definitions
    */
-  listResourceTemplates(options?: DirectCallOptions): Promise<ListResourceTemplatesResult>;
+  listResourceTemplates(options?: DirectListOptions): Promise<ListResourceTemplatesResult>;
 
   /**
    * Read a resource by URI.
@@ -212,12 +231,12 @@ export interface DirectMcpServer {
   // ─────────────────────────────────────────────────────────────────
 
   /**
-   * List all available prompts.
+   * List all available prompts: every page, unless `options.paginate` or `options.cursor` asks for one.
    *
-   * @param options - Optional call options with auth context
+   * @param options - Optional call options with auth context, and paging
    * @returns List of prompt definitions
    */
-  listPrompts(options?: DirectCallOptions): Promise<ListPromptsResult>;
+  listPrompts(options?: DirectListOptions): Promise<ListPromptsResult>;
 
   /**
    * Get a prompt with arguments.

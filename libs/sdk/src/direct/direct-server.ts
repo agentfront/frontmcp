@@ -18,6 +18,7 @@ import {
 import { randomUUID, runRequestExclusive, sha256Hex } from '@frontmcp/utils';
 
 import { FlowControl } from '../common';
+import { listAllPages } from '../common/utils/list-all-pages.utils';
 import { type CallSurface } from '../common/availability';
 import { ErrorHandler, InternalMcpError, toMcpError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
@@ -26,6 +27,7 @@ import { type ConnectOptions, type DirectClient } from './client.types';
 import {
   type DirectAuthContext,
   type DirectCallOptions,
+  type DirectListOptions,
   type DirectMcpServer,
   type DirectRequestMetadata,
   type RuntimeToolDefinition,
@@ -152,8 +154,33 @@ export class DirectMcpServerImpl implements DirectMcpServer {
   // Tool Operations
   // ─────────────────────────────────────────────────────────────────
 
-  async listTools(options?: DirectCallOptions): Promise<ListToolsResult> {
-    return this.runFlow<ListToolsResult>('tools:list-tools', { method: 'tools/list', params: {} }, options);
+  /**
+   * Run a list flow: the one page `options` asks for, or every page joined into one result (#678).
+   * Every page is read with the same call options, so with the same caller and session.
+   */
+  private async runListFlow<TResult extends { nextCursor?: string }, TKey extends keyof TResult & string>(
+    flowName: string,
+    method: string,
+    itemsKey: TKey,
+    options?: DirectListOptions,
+  ): Promise<TResult> {
+    const fetchPage = (cursor: string | undefined) =>
+      this.runFlow<TResult>(flowName, { method, params: cursor === undefined ? {} : { cursor } }, options);
+
+    if (options?.paginate || options?.cursor !== undefined) return fetchPage(options?.cursor);
+
+    let first: TResult | undefined;
+    const items = await listAllPages(method, async (cursor) => {
+      const page = await fetchPage(cursor);
+      first ??= page;
+      return { items: page[itemsKey] as unknown[] | undefined, nextCursor: page.nextCursor };
+    });
+    const { nextCursor: _lastPageCursor, ...rest } = first ?? ({} as TResult);
+    return { ...rest, [itemsKey]: items } as unknown as TResult;
+  }
+
+  async listTools(options?: DirectListOptions): Promise<ListToolsResult> {
+    return this.runListFlow<ListToolsResult, 'tools'>('tools:list-tools', 'tools/list', 'tools', options);
   }
 
   async callTool(name: string, args?: Record<string, unknown>, options?: DirectCallOptions): Promise<CallToolResult> {
@@ -175,18 +202,20 @@ export class DirectMcpServerImpl implements DirectMcpServer {
   // Resource Operations
   // ─────────────────────────────────────────────────────────────────
 
-  async listResources(options?: DirectCallOptions): Promise<ListResourcesResult> {
-    return this.runFlow<ListResourcesResult>(
+  async listResources(options?: DirectListOptions): Promise<ListResourcesResult> {
+    return this.runListFlow<ListResourcesResult, 'resources'>(
       'resources:list-resources',
-      { method: 'resources/list', params: {} },
+      'resources/list',
+      'resources',
       options,
     );
   }
 
-  async listResourceTemplates(options?: DirectCallOptions): Promise<ListResourceTemplatesResult> {
-    return this.runFlow<ListResourceTemplatesResult>(
+  async listResourceTemplates(options?: DirectListOptions): Promise<ListResourceTemplatesResult> {
+    return this.runListFlow<ListResourceTemplatesResult, 'resourceTemplates'>(
       'resources:list-resource-templates',
-      { method: 'resources/templates/list', params: {} },
+      'resources/templates/list',
+      'resourceTemplates',
       options,
     );
   }
@@ -203,8 +232,8 @@ export class DirectMcpServerImpl implements DirectMcpServer {
   // Prompt Operations
   // ─────────────────────────────────────────────────────────────────
 
-  async listPrompts(options?: DirectCallOptions): Promise<ListPromptsResult> {
-    return this.runFlow<ListPromptsResult>('prompts:list-prompts', { method: 'prompts/list', params: {} }, options);
+  async listPrompts(options?: DirectListOptions): Promise<ListPromptsResult> {
+    return this.runListFlow<ListPromptsResult, 'prompts'>('prompts:list-prompts', 'prompts/list', 'prompts', options);
   }
 
   async getPrompt(name: string, args?: Record<string, string>, options?: DirectCallOptions): Promise<GetPromptResult> {

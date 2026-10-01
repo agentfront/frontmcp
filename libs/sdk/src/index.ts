@@ -439,6 +439,7 @@ export type {
   DirectMcpServer,
   DirectAuthContext,
   DirectCallOptions,
+  DirectListOptions,
   DirectRequestMetadata,
   RuntimeToolDefinition,
   RuntimeToolExecuteContext,

@@ -177,6 +177,31 @@ describe('createWrappedServer', () => {
       expect(base.listResources).toHaveBeenCalledWith(opts);
     });
 
+    it('passes the paging options to base listResources (#678)', async () => {
+      const opts = { paginate: true, cursor: 'page-2' };
+      await wrapped.listResources(opts);
+      expect(base.listResources).toHaveBeenCalledWith(opts);
+    });
+
+    it('adds the dynamic resources to the first page only when paging (#678)', async () => {
+      (base.listResources as jest.Mock)
+        .mockResolvedValueOnce({ resources: [{ uri: 'base://1', name: 'B1' }], nextCursor: 'page-2' })
+        .mockResolvedValueOnce({ resources: [{ uri: 'base://2', name: 'B2' }, { uri: 'dyn://r', name: 'Shadowed' }] });
+      dynamicRegistry.registerResource(createResourceDef({ uri: 'dyn://r', name: 'Dyn' }));
+
+      const first = (await wrapped.listResources({ paginate: true })) as {
+        resources: Array<{ uri: string }>;
+        nextCursor?: string;
+      };
+      const second = (await wrapped.listResources({ cursor: first.nextCursor })) as {
+        resources: Array<{ uri: string }>;
+      };
+
+      expect(first.resources.map((r) => r.uri)).toEqual(['base://1', 'dyn://r']);
+      expect(first.nextCursor).toBe('page-2');
+      expect(second.resources.map((r) => r.uri)).toEqual(['base://2']);
+    });
+
     it('handles base result without resources field', async () => {
       (base.listResources as jest.Mock).mockResolvedValue({});
       dynamicRegistry.registerResource(createResourceDef({ uri: 'dyn://r' }));
