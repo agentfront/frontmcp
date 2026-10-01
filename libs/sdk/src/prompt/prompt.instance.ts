@@ -16,10 +16,12 @@ import {
   type PromptSafeTransformResult,
   type ScopeEntry,
 } from '../common';
-import { InvalidRegistryKindError, MissingPromptArgumentError } from '../errors';
+import { InvalidHookFlowError, InvalidRegistryKindError, MissingPromptArgumentError } from '../errors';
+import { describeUnreachableEntryClassHooks, unreachableHooksMessage } from '../hooks/entry-class-hooks';
 import type HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
+import { promptClassHooksJoin } from './flows/get-prompt.flow';
 import { buildParsedPromptResult } from './prompt.utils';
 
 export class PromptInstance extends PromptEntry {
@@ -44,6 +46,14 @@ export class PromptInstance extends PromptEntry {
     const hooks = normalizeHooksFromCls(this.record.provide).filter(
       (hook) => hook.metadata.flow === 'prompts:get-prompt' || hook.metadata.flow === 'prompts:list-prompts',
     );
+
+    // Fail fast on hooks that would never run on this class (#678)
+    const unreachable = describeUnreachableEntryClassHooks(hooks, promptClassHooksJoin, ['prompts:list-prompts']);
+    if (unreachable.length > 0) {
+      const className = (this.record.provide as { name?: string } | undefined)?.name ?? this.name;
+      throw new InvalidHookFlowError(unreachableHooksMessage('Prompt', className, unreachable));
+    }
+
     if (hooks.length > 0) {
       await this.hooks.registerHooks(true, ...hooks);
     }
