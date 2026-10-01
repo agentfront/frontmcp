@@ -6,6 +6,9 @@ import type AgentRegistry from '../../agent/agent.registry';
 import type AppRegistry from '../../app/app.registry';
 import type { AuthUiRegistry } from '../../auth/auth-ui';
 import type { AuthRegistry } from '../../auth/auth.registry';
+import type { ChannelNotificationService } from '../../channel/channel-notification.service';
+import type ChannelRegistry from '../../channel/channel.registry';
+import type { ChannelEventBus } from '../../channel/sources/app-event.source';
 import type { ElicitationStore } from '../../elicitation/store/elicitation.store';
 import type { HaManager } from '../../ha';
 import type HookRegistry from '../../hooks/hook.registry';
@@ -87,6 +90,18 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
 
   /** Per-process task registry (AbortControllers + capability projection). */
   abstract get tasks(): TaskRegistry | undefined;
+
+  /** The channels the scope serves; `undefined` unless `channels.enabled`. */
+  abstract get channels(): ChannelRegistry | undefined;
+
+  /** Sends channel notifications to the sessions subscribed to a channel; `undefined` unless `channels.enabled`. */
+  abstract get channelNotifications(): ChannelNotificationService | undefined;
+
+  /**
+   * The bus `app-event` channel sources listen on: `this.scope.channelEventBus?.emit('app:error', payload)`.
+   * `undefined` unless `channels.enabled`.
+   */
+  abstract get channelEventBus(): ChannelEventBus | undefined;
 
   abstract get authoritiesEngine(): AuthoritiesEngine | undefined;
 

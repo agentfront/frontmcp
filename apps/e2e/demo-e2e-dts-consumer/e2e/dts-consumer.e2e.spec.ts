@@ -24,7 +24,7 @@ function toFixtureDiagnostic(diagnostic: ts.Diagnostic): FixtureDiagnostic {
   return { fileName, location: `${path.relative(workspaceRoot, fileName)}:${line + 1}`, summary };
 }
 
-const fixtureFiles = ['tool-must-fail.ts', 'prompts-must-compile.ts'].map((fileName) =>
+const fixtureFiles = ['tool-must-fail.ts', 'prompts-must-compile.ts', 'hooks-must-compile.ts'].map((fileName) =>
   path.join(fixtureDir, fileName),
 );
 
@@ -84,6 +84,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('accepts the documented @Prompt forms', () => {
     expect(describeEach(inFixtureFile('prompts-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types the prompt and completion hooks, the scope channel accessors and server-level adapters', () => {
+    expect(describeEach(inFixtureFile('hooks-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {
