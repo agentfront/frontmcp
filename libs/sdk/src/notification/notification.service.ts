@@ -606,14 +606,13 @@ export class NotificationService {
   sendNotificationToSession(sessionId: string, method: McpNotificationMethod, params?: Record<string, unknown>): void {
     const registered = this.servers.get(sessionId);
     if (!registered) {
-      // HA: If session is not local, try relaying via pub/sub to the owning pod
+      // HA: the session lives on another pod — relay the notification to its owner.
       const relay = this.scope.haManager?.getRelay();
-      if (relay) {
+      const transportService = this.scope.transportService;
+      if (relay && transportService) {
         this.logger.debug(`[HA] Relaying notification ${method} for non-local session ${sessionId.slice(0, 20)}...`);
         // Fire-and-forget relay — best effort for cross-pod delivery
-        relay.publish(sessionId, sessionId, { method, params }).catch(() => {
-          this.logger.warn(`[HA] Failed to relay notification ${method} to session ${sessionId.slice(0, 20)}...`);
-        });
+        void this.relayNotification(sessionId, method, params);
         return;
       }
       this.logger.warn(`Cannot send notification to unregistered session: ${sessionId.slice(0, 20)}...`);
@@ -621,6 +620,42 @@ export class NotificationService {
     }
 
     this.sendNotificationToServer(registered.server, sessionId, method, params);
+  }
+
+  /**
+   * Deliver a notification another pod relayed for a session this pod serves.
+   * Never relayed further: a session that is not (or no longer) local here is dropped.
+   *
+   * @returns Whether the session was found on this pod.
+   */
+  deliverRelayedNotification(sessionId: string, method: string, params?: Record<string, unknown>): boolean {
+    const registered = this.servers.get(sessionId);
+    if (!registered) {
+      this.logger.verbose(`[HA] Relayed ${method} for session ${sessionId.slice(0, 20)}... not served here — dropped`);
+      return false;
+    }
+    this.sendNotificationToServer(registered.server, sessionId, method as McpNotificationMethod, params);
+    return true;
+  }
+
+  /** Publish a notification to the pod that owns the session (looked up on the transport bus). */
+  private async relayNotification(
+    sessionId: string,
+    method: McpNotificationMethod,
+    params?: Record<string, unknown>,
+  ): Promise<void> {
+    const label = sessionId.slice(0, 20);
+    try {
+      const owner = await this.scope.transportService?.lookupSessionOwner(sessionId);
+      const relay = this.scope.haManager?.getRelay();
+      if (!owner || !relay || owner.nodeId === this.scope.haManager?.getNodeId()) {
+        this.logger.warn(`Cannot send notification to unregistered session: ${label}...`);
+        return;
+      }
+      await relay.publish(owner.nodeId, sessionId, { method, params });
+    } catch {
+      this.logger.warn(`[HA] Failed to relay notification ${method} to session ${label}...`);
+    }
   }
 
   /**

@@ -1,4 +1,4 @@
-import { type ServerResponse } from '../common';
+import { type ServerRequest, type ServerResponse } from '../common';
 import { type AuthenticatedServerRequest } from '../server/server.types';
 
 export type TransportType = 'sse' | 'streamable-http' | 'http' | 'stateless-http' | 'in-memory' | 'stdio';
@@ -19,30 +19,43 @@ export interface RemoteLocation {
   channel: string;
 }
 
+/**
+ * Distributed session registry: which node owns which session, and the relay that
+ * serves a request on the owning node.
+ */
 export interface TransportBus {
   nodeId(): string;
 
+  /** Record that this node owns the session. */
   advertise(key: TransportKey): Promise<void>;
 
+  /** Drop this node's ownership record (only when it still owns the session). */
   revoke(key: TransportKey): Promise<void>;
 
+  /** The node owning this exact session (same type and token), unless it is this node. */
   lookup(key: TransportKey): Promise<RemoteLocation | null>;
 
+  /** The node owning a session id, whatever its type or token — this node included. */
+  lookupOwner(sessionId: string): Promise<RemoteLocation | null>;
+
+  /** Relay channel of a node. */
+  channelOf(nodeId: string): string;
+
+  /** Whether requests can be relayed to another node from here. */
+  canRelay(): boolean;
+
+  /**
+   * Serve a request on the node that owns its session and write that node's response.
+   * @throws SessionOwnerUnreachableError when the owner could not serve it (nothing written yet).
+   */
   proxyRequest(
-    key: TransportKey,
-    payload: {
-      method?: string;
-      url?: string;
-      headers?: Record<string, string | string[] | undefined>;
-    },
-    io: {
-      onResponseStart(statusCode: number, headers: Record<string, string>): void;
-      onResponseChunk(chunk: Uint8Array | string): void;
-      onResponseEnd(finalChunk?: Uint8Array | string): void;
-      onError?(err: Error | string): void;
-    },
+    location: RemoteLocation,
+    sessionId: string,
+    request: ServerRequest,
+    response: ServerResponse,
   ): Promise<void>;
 
+  /** Ask the owning node to destroy its transport for the session. */
   destroyRemote(key: TransportKey, reason?: string): Promise<void>;
 }
 

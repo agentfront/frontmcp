@@ -1,12 +1,15 @@
 /**
  * Redis Transport Bus — Distributed Session Location Registry
  *
- * Maps sessions to the pods that own them using Redis Hash keys.
- * Used by TransportService in distributed mode to discover which
- * pod owns a given session and (optionally) relay operations to it.
+ * Maps sessions to the pods that own them using one Redis Hash per session id.
+ * Used by TransportService in distributed mode to discover which pod owns a
+ * given session, and to relay a request for it to that pod.
  */
 
-import { MethodNotImplementedError } from '../../errors/transport.errors';
+import type { ServerRequest, ServerResponse } from '../../common';
+import { SessionOwnerUnreachableError } from '../../errors/transport.errors';
+import { isRelayedRequest, serializeRelayRequest } from '../relay/relay-http';
+import type { SessionRelay } from '../relay/session-relay';
 import type { RemoteLocation, TransportBus, TransportKey } from '../transport.types';
 
 /**
@@ -14,9 +17,8 @@ import type { RemoteLocation, TransportBus, TransportKey } from '../transport.ty
  * Subset of ioredis — allows plugging any compatible client.
  */
 export interface BusRedisClient {
-  hset(key: string, field: string, value: string): Promise<number>;
-  hdel(key: string, ...fields: string[]): Promise<number>;
-  hget(key: string, field: string): Promise<string | null>;
+  hset(key: string, ...fieldValues: string[]): Promise<number>;
+  hgetall(key: string): Promise<Record<string, string>>;
   expire(key: string, seconds: number): Promise<number>;
   del(key: string): Promise<number>;
   publish(channel: string, message: string): Promise<number>;
@@ -28,6 +30,9 @@ const DEFAULT_BUS_PREFIX = 'mcp:bus:';
 
 /** Default TTL for bus entries (seconds). Matches session default of 1 hour. */
 const DEFAULT_BUS_TTL_SECONDS = 3600;
+
+/** `Retry-After` for a request that cannot be relayed (the default heartbeat TTL). */
+const DEFAULT_RETRY_AFTER_SECONDS = 30;
 
 /**
  * Lua CAS script for atomic revoke: only delete if nodeId still matches.
@@ -53,6 +58,8 @@ export interface RedisTransportBusOptions {
   ttlSeconds?: number;
   /** HA relay key prefix for destroy commands. @default 'mcp:ha:' */
   haKeyPrefix?: string;
+  /** `Retry-After` (seconds) given when a request cannot be relayed. @default 30 */
+  retryAfterSeconds?: number;
   /** Logger (optional) */
   logger?: {
     info: (msg: string, meta?: Record<string, unknown>) => void;
@@ -61,21 +68,26 @@ export interface RedisTransportBusOptions {
   };
 }
 
+/** A session's entry on the bus. */
+interface BusEntry extends RemoteLocation {
+  type?: string;
+  tokenHash?: string;
+}
+
 /**
  * Redis-backed TransportBus implementation.
  *
- * For each session, stores a Hash with nodeId and channel fields.
- * The bus provides session-to-node mapping for distributed lookups
- * and destroy-remote via pub/sub relay.
- *
- * Note: `proxyRequest()` is deferred — session recreation via
- * TransportService.recreateTransporter() handles cross-pod requests.
+ * For each session id, stores a Hash with the owning node, its relay channel,
+ * and the session's transport type and token hash. Requests are relayed to the
+ * owner through the {@link SessionRelay} attached with {@link attachRelay}.
  */
 export class RedisTransportBus implements TransportBus {
   private readonly keyPrefix: string;
   private readonly ttlSeconds: number;
   private readonly haKeyPrefix: string;
+  private readonly retryAfterSeconds: number;
   private readonly logger?: RedisTransportBusOptions['logger'];
+  private relay?: SessionRelay;
 
   constructor(
     private readonly redis: BusRedisClient,
@@ -85,6 +97,7 @@ export class RedisTransportBus implements TransportBus {
     this.keyPrefix = options?.keyPrefix ?? DEFAULT_BUS_PREFIX;
     this.ttlSeconds = options?.ttlSeconds ?? DEFAULT_BUS_TTL_SECONDS;
     this.haKeyPrefix = options?.haKeyPrefix ?? 'mcp:ha:';
+    this.retryAfterSeconds = options?.retryAfterSeconds ?? DEFAULT_RETRY_AFTER_SECONDS;
     this.logger = options?.logger;
   }
 
@@ -92,16 +105,37 @@ export class RedisTransportBus implements TransportBus {
     return this.machineId;
   }
 
+  /** Attach the relay that serves requests on their session's owner. */
+  attachRelay(relay: SessionRelay | undefined): void {
+    this.relay = relay;
+  }
+
+  canRelay(): boolean {
+    return this.relay !== undefined;
+  }
+
+  channelOf(nodeId: string): string {
+    return `${this.haKeyPrefix}notify:${nodeId}`;
+  }
+
   /**
    * Advertise that this node owns a session.
-   * Stores the nodeId and relay channel in a Redis Hash.
+   * Stores the nodeId, relay channel, type and token hash in a Redis Hash.
    */
   async advertise(key: TransportKey): Promise<void> {
-    const redisKey = this.busKey(key);
-    const channel = `${this.haKeyPrefix}notify:${this.machineId}`;
+    const redisKey = this.busKey(key.sessionId);
 
-    await this.redis.hset(redisKey, 'nodeId', this.machineId);
-    await this.redis.hset(redisKey, 'channel', channel);
+    await this.redis.hset(
+      redisKey,
+      'nodeId',
+      this.machineId,
+      'channel',
+      this.channelOf(this.machineId),
+      'type',
+      key.type,
+      'tokenHash',
+      key.tokenHash,
+    );
     await this.redis.expire(redisKey, this.ttlSeconds);
 
     this.logger?.debug('[TransportBus] Advertised session', {
@@ -115,7 +149,7 @@ export class RedisTransportBus implements TransportBus {
    * Uses atomic compare-and-delete to avoid removing a newer owner's registration.
    */
   async revoke(key: TransportKey): Promise<void> {
-    const redisKey = this.busKey(key);
+    const redisKey = this.busKey(key.sessionId);
 
     // Atomic CAS: only delete if we still own this session
     const result = await this.redis.eval(REVOKE_LUA, 1, redisKey, this.machineId);
@@ -127,45 +161,65 @@ export class RedisTransportBus implements TransportBus {
   }
 
   /**
-   * Look up which node owns a session.
-   * Returns null if the session is not registered in the bus.
+   * Look up which other node owns this exact session (same transport type and token).
+   * Returns null if the session is not registered, belongs to another token, or is ours.
    */
   async lookup(key: TransportKey): Promise<RemoteLocation | null> {
-    const redisKey = this.busKey(key);
-
-    const nodeId = await this.redis.hget(redisKey, 'nodeId');
-    if (!nodeId) return null;
+    const entry = await this.readEntry(key.sessionId);
+    if (!entry) return null;
 
     // Skip if we own this session — caller should use local transport
-    if (nodeId === this.machineId) return null;
+    if (entry.nodeId === this.machineId) return null;
 
-    const channel = await this.redis.hget(redisKey, 'channel');
-    if (!channel) return null;
+    // The entry must describe the same session: same transport and same token.
+    if ((entry.type && entry.type !== key.type) || (entry.tokenHash && entry.tokenHash !== key.tokenHash)) {
+      return null;
+    }
 
-    return { nodeId, channel };
+    return { nodeId: entry.nodeId, channel: entry.channel };
+  }
+
+  /** The node owning a session id (this node included), whatever its type or token. */
+  async lookupOwner(sessionId: string): Promise<RemoteLocation | null> {
+    const entry = await this.readEntry(sessionId);
+    return entry ? { nodeId: entry.nodeId, channel: entry.channel } : null;
   }
 
   /**
-   * Proxy a request to the owning node.
+   * Relay a request to the node owning its session and write that node's response.
    *
-   * Phase 1: Not implemented — TransportService.recreateTransporter()
-   * handles cross-pod session access via Redis session store.
+   * A request that was itself relayed here is never relayed again (one hop at most).
+   * @throws SessionOwnerUnreachableError when the request cannot be served by the owner.
    */
-  async proxyRequest(): Promise<void> {
-    throw new MethodNotImplementedError('RedisTransportBus', 'proxyRequest');
+  async proxyRequest(
+    location: RemoteLocation,
+    sessionId: string,
+    request: ServerRequest,
+    response: ServerResponse,
+  ): Promise<void> {
+    if (isRelayedRequest(request)) {
+      throw new SessionOwnerUnreachableError(
+        location.nodeId,
+        this.retryAfterSeconds,
+        'the request was already relayed once and its session moved again',
+      );
+    }
+    if (!this.relay) {
+      throw new SessionOwnerUnreachableError(
+        location.nodeId,
+        this.retryAfterSeconds,
+        'request relay is not available on this node (no Redis pub/sub)',
+      );
+    }
+    await this.relay.forward(location.nodeId, sessionId, serializeRelayRequest(request), response);
   }
 
   /**
    * Destroy a session on a remote node via pub/sub relay.
    */
   async destroyRemote(key: TransportKey, reason?: string): Promise<void> {
-    const redisKey = this.busKey(key);
-    const nodeId = await this.redis.hget(redisKey, 'nodeId');
-
-    if (!nodeId || nodeId === this.machineId) return;
-
-    const channel = await this.redis.hget(redisKey, 'channel');
-    if (!channel) return;
+    const entry = await this.readEntry(key.sessionId);
+    if (!entry || entry.nodeId === this.machineId) return;
 
     const message = JSON.stringify({
       kind: 'destroy-session',
@@ -175,22 +229,34 @@ export class RedisTransportBus implements TransportBus {
       timestamp: Date.now(),
     });
 
-    await this.redis.publish(channel, message);
+    await this.redis.publish(entry.channel, message);
 
     // Let the owning node revoke after it destroys the transport.
     // Don't blindly delete — another node may have already taken ownership.
 
     this.logger?.info('[TransportBus] Sent destroy-remote', {
       sessionId: key.sessionId.slice(0, 20),
-      targetNodeId: nodeId,
+      targetNodeId: entry.nodeId,
     });
+  }
+
+  private async readEntry(sessionId: string): Promise<BusEntry | null> {
+    const fields = await this.redis.hgetall(this.busKey(sessionId));
+    const nodeId = fields?.['nodeId'];
+    if (!nodeId) return null;
+    return {
+      nodeId,
+      channel: fields['channel'] || this.channelOf(nodeId),
+      type: fields['type'] || undefined,
+      tokenHash: fields['tokenHash'] || undefined,
+    };
   }
 
   /**
    * Build the Redis key for a session in the bus.
-   * Format: {prefix}{type}:{tokenHash}:{sessionId}
+   * Format: {prefix}session:{sessionId}
    */
-  private busKey(key: TransportKey): string {
-    return `${this.keyPrefix}${key.type}:${key.tokenHash}:${key.sessionId}`;
+  private busKey(sessionId: string): string {
+    return `${this.keyPrefix}session:${sessionId}`;
   }
 }

@@ -14,14 +14,13 @@
  */
 import { runRequestExclusive } from '@frontmcp/utils';
 
-import { FlowControl } from '../common';
 import { type HttpMethod, type ServerRequest } from '../common/interfaces/server.interface';
 import { type HttpOutput } from '../common/schemas/http-output.schema';
 import { ServerRequestTokens } from '../common/tokens/server.tokens';
 import { type CorsOptions } from '../common/types/options/http/interfaces';
 import { type MetricsOptionsInterface } from '../common/types/options/metrics';
 import { normalizeEntryPrefix, resolveEntryPath } from '../common/utils/path.utils';
-import { PayloadTooLargeError, PublicMcpError } from '../errors';
+import { PayloadTooLargeError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
 import { machineIdHeader } from '../ha/ha-headers';
 import { isReadyzEnabled } from '../health/health.routes';
@@ -30,6 +29,7 @@ import { type MetricsService } from '../metrics/metrics.service';
 import { type Scope } from '../scope/scope.instance';
 import { resolveSecurityHeaders } from '../server/middleware/csp.middleware';
 import { compileHostValidation, validateHostHeaders } from '../server/security/host-validation';
+import { flowErrorToHttpOutput } from './flow-error-output';
 import { renderHttpOutputToWebResponse } from './web-response.renderer';
 import { type WebStandardMcpPair } from './web-standard-mcp';
 
@@ -701,47 +701,4 @@ export function startupFailureResponse(error: unknown, retryAfterSeconds = 1): R
     },
     { status: 503, headers: { 'Retry-After': String(Math.max(1, retryAfterSeconds)) } },
   );
-}
-
-/**
- * Map an error thrown out of `runFlow('http:request', …)` to a normalized
- * `HttpOutput`, mirroring the Express middleware's FlowControl handling. Returns
- * `undefined` for `next`/`handled` (no response → the caller 404s).
- */
-function flowErrorToHttpOutput(error: unknown): HttpOutput | undefined {
-  // #546 — a deployment that is merely missing a secret used to answer a bare
-  // `Internal Server Error`, so the only way to learn the cause was to tail the
-  // live worker. Report the configuration fault instead.
-  const misconfiguration = findMisconfiguration(error);
-  if (misconfiguration) {
-    return {
-      kind: 'json',
-      status: 500,
-      contentType: 'application/json; charset=utf-8',
-      body: misconfigurationBody(misconfiguration),
-    };
-  }
-
-  if (error instanceof FlowControl) {
-    switch (error.type) {
-      case 'respond':
-        return error.output as HttpOutput;
-      case 'next':
-      case 'handled':
-        return undefined;
-      default: // 'abort' | 'fail'
-        return { kind: 'text', status: 500, body: 'Internal Server Error', contentType: 'text/plain; charset=utf-8' };
-    }
-  }
-  if (error instanceof PublicMcpError) {
-    const challenge = error.wwwAuthenticate;
-    return {
-      kind: 'json',
-      status: error.statusCode,
-      contentType: 'application/json; charset=utf-8',
-      body: { error: error.getPublicMessage() },
-      ...(typeof challenge === 'string' && challenge.length > 0 ? { headers: { 'WWW-Authenticate': challenge } } : {}),
-    };
-  }
-  return { kind: 'text', status: 500, body: 'Internal Server Error', contentType: 'text/plain; charset=utf-8' };
 }
