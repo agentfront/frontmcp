@@ -8,7 +8,7 @@ features:
   - 'Secure defaults: external `$ref` resolution off, spec-URL redirects not followed, internal/private targets blocked (DNS-resolved) — on `mcp-from-openapi` >= 2.5.0'
   - 'Opting back into external refs with `allowedProtocols`, and restricting the spec URL + `$ref`s with `allowedHosts`'
   - 'Using `allowInternalIPs` for trusted internal/local targets (governs the spec URL and `$ref`s)'
-  - 'Filtering operations with `includeOperations`, `excludeOperations`, and `filterFn`'
+  - 'Filtering operations with `readOnlyOnly`, `includeTags`, `includePaths`, `excludeMethods`, `includeOperations`, `excludeOperations`, and `filterFn`'
   - 'Combining security hardening with operation filtering for a production-ready setup'
 ---
 
@@ -20,8 +20,8 @@ Demonstrates configuring $ref / spec-URL resolution security to prevent SSRF att
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'secure-app',
@@ -45,8 +45,10 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
         },
       },
       generateOptions: {
-        // Only expose read operations to MCP clients
-        filterFn: (op) => op.method === 'get',
+        // Only expose read-only operations (readOnlyHint: true — GET/HEAD/OPTIONS/TRACE by default)
+        readOnlyOnly: true,
+        // ...and only the partner's public tag
+        includeTags: ['public'],
         // Skip deprecated endpoints
         includeDeprecated: false,
       },
@@ -88,8 +90,12 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
       generateOptions: {
         // Exclude admin and dangerous operations
         excludeOperations: ['deleteAll', 'resetDatabase', 'adminPanel'],
-        // Only include billing-related paths
-        filterFn: (op) => op.path.startsWith('/billing') || op.path.startsWith('/invoices'),
+        // Never expose deletes (lower-case HTTP method names)
+        excludeMethods: ['delete'],
+        // Only include billing-related paths (globs: `*` within a segment, `**` across segments)
+        includePaths: ['/billing/**', '/invoices/**'],
+        // Anything a declarative filter can't express goes in filterFn (runs after the others)
+        filterFn: (op) => !op.summary?.toLowerCase().includes('experimental'),
       },
     }),
   ],
@@ -109,7 +115,7 @@ class MyServer {}
 - Secure defaults: external `$ref` resolution off, spec-URL redirects not followed, internal/private targets blocked (DNS-resolved) — on `mcp-from-openapi` >= 2.5.0
 - Opting back into external refs with `allowedProtocols`, and restricting the spec URL + `$ref`s with `allowedHosts`
 - Using `allowInternalIPs` for trusted internal/local targets (governs the spec URL and `$ref`s)
-- Filtering operations with `includeOperations`, `excludeOperations`, and `filterFn`
+- Filtering operations with `readOnlyOnly`, `includeTags`, `includePaths`, `excludeMethods`, `includeOperations`, `excludeOperations`, and `filterFn`
 - Combining security hardening with operation filtering for a production-ready setup
 
 ## Related
