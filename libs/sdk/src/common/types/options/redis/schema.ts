@@ -1,7 +1,7 @@
 // common/types/options/redis/schema.ts
 // Zod schema for Redis/storage configuration
 
-import { z } from '@frontmcp/lazy-zod';
+import { NEVER, z } from '@frontmcp/lazy-zod';
 
 import type { PubsubOptionsInterface, RedisOptionsInterface } from './interfaces';
 
@@ -131,6 +131,102 @@ const legacyRedisSchema = redisConnectionSchema.merge(commonOptionsSchema).trans
 }));
 
 // ============================================
+// Redis URL Schema
+// ============================================
+
+/** Connection fields read out of a Redis URL. */
+export interface ParsedRedisUrl {
+  host: string;
+  port: number;
+  password?: string;
+  db: number;
+  tls: boolean;
+}
+
+/**
+ * Read `redis://[[user]:password@]host[:port][/db]` (or `rediss://` for TLS)
+ * into the connection fields every Redis consumer takes. Returns a string
+ * describing the problem when the URL cannot be used.
+ */
+export function parseRedisUrl(raw: string): ParsedRedisUrl | string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return 'redis.url is not a valid URL (expected redis://[[user]:password@]host[:port][/db])';
+  }
+  if (url.protocol !== 'redis:' && url.protocol !== 'rediss:') {
+    return `redis.url must use the redis:// or rediss:// scheme, got "${url.protocol}//"`;
+  }
+  // `URL` keeps the brackets of an IPv6 literal; a socket connect wants the bare address.
+  const host = url.hostname.replace(/^\[(.*)\]$/, '$1');
+  if (!host) return 'redis.url has no host';
+
+  const username = decodeURIComponent(url.username);
+  if (username && username !== 'default') {
+    return `redis.url names the ACL user "${username}"; only the default user is supported — use redis://:password@host`;
+  }
+
+  const dbText = url.pathname.replace(/^\/+/, '') || url.searchParams.get('db') || '0';
+  const db = Number(dbText);
+  if (!Number.isInteger(db) || db < 0) return `redis.url database "${dbText}" is not a non-negative integer`;
+
+  const port = url.port ? Number(url.port) : 6379;
+  const password = url.password ? decodeURIComponent(url.password) : undefined;
+  return { host, port, ...(password !== undefined ? { password } : {}), db, tls: url.protocol === 'rediss:' };
+}
+
+/**
+ * Redis configured from a URL (`redis: { url: process.env.REDIS_URL }`).
+ * Normalized to the explicit `provider: 'redis'` shape so downstream code
+ * never has to know which form the config used.
+ */
+export const redisUrlSchema = z
+  .object({
+    /**
+     * Storage provider type — optional, a `url` already says Redis.
+     */
+    provider: z.literal('redis').optional(),
+
+    /**
+     * Redis connection URL (`redis://` or `rediss://`).
+     */
+    url: z.string().trim().min(1),
+  })
+  .merge(commonOptionsSchema)
+  .transform((val, ctx) => {
+    const parsed = parseRedisUrl(val.url);
+    if (typeof parsed === 'string') {
+      ctx.addIssue({ code: 'custom', message: parsed, path: ['url'] });
+      return NEVER;
+    }
+    return {
+      provider: 'redis' as const,
+      ...parsed,
+      keyPrefix: val.keyPrefix,
+      defaultTtlMs: val.defaultTtlMs,
+    };
+  });
+
+/** The branch errors a failed union reports, as far as the URL message needs them. */
+interface UnionIssueLike {
+  errors?: ReadonlyArray<ReadonlyArray<{ code?: string; message?: string; path?: ReadonlyArray<PropertyKey> }>>;
+}
+
+/**
+ * A union reports "Invalid input" when no branch matches, burying the reason a
+ * `url` was refused among the other branches' complaints about a missing
+ * `host`. Surface the URL branch's own message instead.
+ */
+function redisUnionError(issue: UnionIssueLike): string | undefined {
+  for (const branch of issue.errors ?? []) {
+    const urlIssue = branch.find((entry) => entry.code === 'custom' && entry.path?.[0] === 'url');
+    if (urlIssue?.message) return urlIssue.message;
+  }
+  return undefined;
+}
+
+// ============================================
 // Combined Redis Options Schema
 // ============================================
 
@@ -162,6 +258,13 @@ const legacyRedisSchema = redisConnectionSchema.merge(commonOptionsSchema).trans
  * }
  * ```
  *
+ * @example Redis from a URL (`rediss://` turns TLS on)
+ * ```typescript
+ * {
+ *   url: process.env.REDIS_URL, // redis://:password@host:6379/0
+ * }
+ * ```
+ *
  * @example Vercel KV (explicit config)
  * ```typescript
  * {
@@ -171,7 +274,10 @@ const legacyRedisSchema = redisConnectionSchema.merge(commonOptionsSchema).trans
  * }
  * ```
  */
-export const redisOptionsSchema = z.union([redisProviderSchema, vercelKvProviderSchema, legacyRedisSchema]);
+export const redisOptionsSchema = z.union(
+  [redisProviderSchema, vercelKvProviderSchema, legacyRedisSchema, redisUrlSchema],
+  { error: redisUnionError },
+);
 
 /**
  * Storage configuration type (with defaults applied)
@@ -202,7 +308,9 @@ export type RedisOptionsInput = RedisOptionsInterface;
  * }
  * ```
  */
-export const pubsubOptionsSchema = z.union([redisProviderSchema, legacyRedisSchema]);
+export const pubsubOptionsSchema = z.union([redisProviderSchema, legacyRedisSchema, redisUrlSchema], {
+  error: redisUnionError,
+});
 
 /**
  * Pub/Sub configuration type (Redis-only)

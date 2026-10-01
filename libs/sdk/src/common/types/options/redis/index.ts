@@ -6,6 +6,7 @@ export type {
   CommonStorageOptionsInterface,
   RedisConnectionInterface,
   RedisProviderOptionsInterface,
+  RedisUrlOptionsInterface,
   VercelKvProviderOptionsInterface,
   RedisOptionsInterface,
   PubsubOptionsInterface,
@@ -15,6 +16,8 @@ export {
   storageProviderSchema,
   redisProviderSchema,
   vercelKvProviderSchema,
+  redisUrlSchema,
+  parseRedisUrl,
   redisOptionsSchema,
   pubsubOptionsSchema,
   isRedisProvider,
@@ -23,6 +26,7 @@ export {
 } from './schema';
 
 export type {
+  ParsedRedisUrl,
   RedisProviderOptions,
   VercelKvProviderOptions,
   RedisOptions,
