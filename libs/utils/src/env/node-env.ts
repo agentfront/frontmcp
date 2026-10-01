@@ -14,12 +14,29 @@ export function getCwd(): string {
   return process.cwd();
 }
 
+/** A computed key: bundlers only replace the literal `process.env.NODE_ENV` member expression. */
+const NODE_ENV_KEY = 'NODE_ENV';
+
+/**
+ * The NODE_ENV this process runs with.
+ *
+ * Bundlers replace `process.env.NODE_ENV` with a literal when they build —
+ * `wrangler dev` with `"development"`, `wrangler deploy` with `"production"` —
+ * so a value the deployment sets at run time (a Cloudflare Worker's
+ * `[vars] NODE_ENV`) was never seen (#680). The live value is read first,
+ * through a key no bundler folds; the build-time value only fills in when the
+ * runtime sets none.
+ */
+export function getNodeEnv(): string | undefined {
+  return process.env[NODE_ENV_KEY] || process.env['NODE_ENV'] || undefined;
+}
+
 export function isProduction(): boolean {
-  return process.env['NODE_ENV'] === 'production';
+  return getNodeEnv() === 'production';
 }
 
 export function isDevelopment(): boolean {
-  return process.env['NODE_ENV'] === 'development';
+  return getNodeEnv() === 'development';
 }
 
 export function getEnvFlag(key: string): boolean {
