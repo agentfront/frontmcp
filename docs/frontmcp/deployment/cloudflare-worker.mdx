@@ -204,6 +204,8 @@ A failed build is kept, and requests are refused with it, until a retry delay pa
 
 Cloudflare storage: `redis: { provider: 'vercel-kv' }` (the HTTP-based Upstash/Vercel KV client) is accepted by `--target cloudflare`; only TCP `redis` and `sqlite` configs are rejected at build time, since Workers cannot open raw sockets or load native modules.
 
+To use it for sessions, install `@vercel/kv` in the project (the build bundles it into the worker), set `KV_REST_API_URL` / `KV_REST_API_TOKEN` as `[vars]` or secrets, and set `compatibility_date` to `2024-11-11` or later: the Upstash client sends `cache: 'no-store'` on every request, which Workers reject before that date (`The 'cache' field on 'RequestInitializerDict' is not implemented`). The build accepts the provider when it can read it, either from the evaluated config or written literally as `redis: { provider: 'vercel-kv' }` in `@FrontMcp({...})`; a `redis` whose provider it can read neither way is refused, and the error says so.
+
 Background tasks need a store that outlives a single request and is shared between isolates, which an edge runtime cannot provide in-process. FrontMCP disables them automatically when no distributed store is configured, and the worker serves normally without them — no `tasks: { enabled: false }` opt-out is needed. Setting `tasks: { enabled: true }` without `tasks.redis` fails the build rather than the deployed worker.
 
 ### Startup checks

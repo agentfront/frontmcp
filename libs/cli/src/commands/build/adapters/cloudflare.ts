@@ -197,10 +197,14 @@ ${bridgeCall}    if (!handlerPromise) {
       decoratorConfig['redis'] !== null;
     const sqliteSeen = sqliteIsLiteral || !!info?.keysSeenInSource?.includes('sqlite');
     // `provider: 'vercel-kv'` talks to an HTTP endpoint (fetch), so it runs on
-    // Workers; only the TCP clients (ioredis) are incompatible. A `redis` key
-    // whose value cannot be read statically is still rejected.
-    const redisIsHttp =
-      redisIsLiteral && (decoratorConfig?.['redis'] as Record<string, unknown>)['provider'] === 'vercel-kv';
+    // Workers; only the TCP clients (ioredis) are incompatible. The evaluated
+    // config says which provider it is; when the entry could not be evaluated,
+    // a literal `redis: { provider: 'vercel-kv' }` in the source says it too
+    // (#680 — that config used to be refused with advice to write itself). A
+    // `redis` key whose value cannot be read either way is still rejected.
+    const redisIsHttp = redisIsLiteral
+      ? (decoratorConfig?.['redis'] as Record<string, unknown>)['provider'] === 'vercel-kv'
+      : decoratorConfig === undefined && info?.redisProviderInSource === 'vercel-kv';
     const redisSeen = !redisIsHttp && (redisIsLiteral || !!info?.keysSeenInSource?.includes('redis'));
 
     if (sqliteSeen) {
@@ -213,10 +217,16 @@ ${bridgeCall}    if (!handlerPromise) {
     }
     if (redisSeen) {
       errors.push(
-        'ioredis-style `redis` storage is not supported on --target cloudflare (no Node net). ' +
-          'Even an env-gated `redis: process.env.X ? {...} : undefined` still ships the Node-only ' +
-          'branch in the worker bundle. Use `redis: { provider: \'vercel-kv\' }` (HTTP), or move the redis ' +
-          'config behind a build-time `define` so the bundler can dead-code-eliminate it.',
+        redisIsLiteral || decoratorConfig !== undefined
+          ? 'ioredis-style `redis` storage is not supported on --target cloudflare (no Node net). ' +
+              'Even an env-gated `redis: process.env.X ? {...} : undefined` still ships the Node-only ' +
+              "branch in the worker bundle. Use `redis: { provider: 'vercel-kv' }` (HTTP), or move the redis " +
+              'config behind a build-time `define` so the bundler can dead-code-eliminate it.'
+          : // The entry could not be evaluated, so the build cannot tell which provider `redis` is.
+            '`redis` is configured, but the build could not evaluate the entry to see which provider ' +
+              "it uses, and the source does not spell it out as `redis: { provider: 'vercel-kv' }`. " +
+              'Only the HTTP vercel-kv provider runs on Workers (ioredis needs Node net): write the ' +
+              'provider as that literal in @FrontMcp({...}), or fix what keeps the entry from loading.',
       );
     }
 
