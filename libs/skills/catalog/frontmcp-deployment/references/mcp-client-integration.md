@@ -102,12 +102,17 @@ Wire the client at the bridge:
 
 Bridge guarantees:
 
-- Stdout is 100% JSON-RPC frames; diagnostics go to `./.frontmcp/dev.log` (override with `--log-file`).
-- Session id survives reload (pinned via `FRONTMCP_DEV_FORCE_SESSION_ID`).
-- Buffered RPCs during reload drain in FIFO once the child reports ready.
+- Stdout is 100% JSON-RPC frames; diagnostics go to `.frontmcp/dev.log` in the project root (override with `--log-file`).
+- Same project setup as `frontmcp dev`: `frontmcp.config.*` (from any subfolder), `entry`, `transport.http.port` / `path`, `env` overlays and `.env`. The server gets `PORT` + `FRONTMCP_HTTP_ENTRY_PATH`; with no port chosen anywhere the bridge picks a free loopback port.
+- The server reports the port and MCP path it really serves (`__FRONTMCP_BOOTSTRAP_COMPLETE__ {"port":…,"path":…}` on stderr), so values hard-coded in `@FrontMcp({ http })` work.
+- The client stays connected across reloads: the bridge uses the `mcp-session-id` the server issues, replays the client's `initialize` handshake on the restarted server, then sends `notifications/tools/list_changed` (and resources/prompts when advertised). Server-side session state starts fresh on each reload.
+- Buffered RPCs during reload drain in FIFO once the new server is ready and initialized.
 - Reload deadline + buffer overflow surface structured errors (`dev_server_unreachable` / `dev_buffer_full` / `dev_reload_deadline` — codes -32099 / -32098 / -32097) so the client spinner clears instead of hanging.
+- Closing stdin or `SIGINT` / `SIGTERM` stops the server and everything it started.
 
-Flags: `--stdio`, `--serve`, `--log-file <path>`, `--buffer-size <n>` (default 8), `--reload-deadline-ms <ms>` (default 30000), `-p <port>` (HTTP-mode loopback, default 3000).
+`--serve` runs the entry with the project's `tsx` (`node --import tsx`) so the server owns the IPC channel — keep `tsx` in devDependencies (scaffolded projects have it).
+
+Flags: `--stdio`, `--serve`, `--log-file <path>`, `--buffer-size <n>` (default 8), `--reload-deadline-ms <ms>` (default 30000), `-p <port>` (HTTP-mode loopback; default `transport.http.port`, then `PORT`, then a free port), `--auto-port`.
 
 ## Stdio Transport
 

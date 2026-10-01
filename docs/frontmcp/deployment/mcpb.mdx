@@ -220,6 +220,13 @@ alongside the bundled JS. FrontMCP emits a `platform_overrides` block in
 Platforms without a binary fall through to the Node command — the bundled JS
 runs on any machine with Node installed.
 
+The binary is self-contained, like `server/index.js`: the FrontMCP runtime and
+`reflect-metadata` are bundled into it. A single-executable binary resolves a bare
+`require()` against Node's built-in modules only, so a binary that left them
+external died at start-up with `No such built-in module: reflect-metadata`.
+Smoke-test it from the extracted archive with
+`FRONTMCP_STDIO=1 ./bin/<platform>/<name>`.
+
 ### Cross-platform archives
 
 Node SEA can only build for the **host** OS/arch in a single pass. To ship a
@@ -302,21 +309,25 @@ The validator checks that the archive:
 - has an accessible icon if one is declared
 - has no zip-slip paths or absolute paths where `${__dirname}/…` is expected
 - binaries referenced in `platform_overrides` exist under `bin/`
+- neither `server/index.js` nor any binary under `bin/` `require()`s a runtime
+  package (`@frontmcp/sdk`, `@frontmcp/di`, `@frontmcp/utils`, `@frontmcp/auth`,
+  `reflect-metadata`) the archive cannot provide
 
 Warnings fire for archives over 50 MB, for declarations of `node_modules/`,
 and for absolute paths that should probably be `${__dirname}/…`.
 
 ## Troubleshooting
 
-| Symptom                                                          | Cause / Fix                                                                                                                                                                              |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@frontmcp/sdk is required for schema extraction`                | Make sure `@frontmcp/sdk` is installed and not excluded from the bundle.                                                                                                                 |
-| `… requires "@frontmcp/sdk" but the archive has no node_modules` | The server entry still `require()`s a runtime package. Rebuild with `frontmcp build --target mcpb`, which bundles the SDK into `server/index.js`; `validate` flags archives that do not. |
-| Archive > 100 MB                                                 | Set `build.esbuild.external` for native/optional deps, or drop `--sea` to ship node-only.                                                                                                |
-| `Unknown substitution variable`                                  | Only the allow-listed variables above and declared `user_config` keys are valid.                                                                                                         |
-| `entry_point is not present in the archive`                      | A custom entry or bundler config moved the server file; re-run without overrides or set `--entry` correctly.                                                                             |
-| `platform_overrides.darwin-arm64.command` missing                | `--merge-from` layout must be `{dir}/{platform}/{name}[.exe]` — check the folder names against MCPB platform keys.                                                                       |
-| Two builds produce different SHA-256s                            | `--no-deterministic` or `deterministic: false` was set, or an input file had a changing timestamp embedded in content.                                                                   |
+| Symptom                                                                           | Cause / Fix                                                                                                                                                                              |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@frontmcp/sdk is required for schema extraction`                                 | Make sure `@frontmcp/sdk` is installed and not excluded from the bundle.                                                                                                                 |
+| `… requires "@frontmcp/sdk" but the archive has no node_modules`                  | The server entry still `require()`s a runtime package. Rebuild with `frontmcp build --target mcpb`, which bundles the SDK into `server/index.js`; `validate` flags archives that do not. |
+| `bin/… requires "reflect-metadata", which a single-executable binary cannot load` | The SEA binary was built by a CLI that left the runtime external (`No such built-in module` at start-up). Rebuild with `frontmcp build --target mcpb --sea`.                             |
+| Archive > 100 MB                                                                  | Set `build.esbuild.external` for native/optional deps, or drop `--sea` to ship node-only.                                                                                                |
+| `Unknown substitution variable`                                                   | Only the allow-listed variables above and declared `user_config` keys are valid.                                                                                                         |
+| `entry_point is not present in the archive`                                       | A custom entry or bundler config moved the server file; re-run without overrides or set `--entry` correctly.                                                                             |
+| `platform_overrides.darwin-arm64.command` missing                                 | `--merge-from` layout must be `{dir}/{platform}/{name}[.exe]` — check the folder names against MCPB platform keys.                                                                       |
+| Two builds produce different SHA-256s                                             | `--no-deterministic` or `deterministic: false` was set, or an input file had a changing timestamp embedded in content.                                                                   |
 
 ## Reference
 
