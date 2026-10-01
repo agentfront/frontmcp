@@ -1048,6 +1048,8 @@ export class Scope extends ScopeEntry {
       this._channelNotificationService = channelResult.channelNotificationService;
       this._channelEventBus = channelResult.channelEventBus;
       this._channelTeardown = channelResult.teardown;
+      // `dispose()` (what `create()` returns calls it) disconnects service channels, as `shutdown()` does.
+      this.onDispose(() => this.teardownChannels());
     }
 
     // Initialize health service (after all registries and stores are ready)
@@ -1851,13 +1853,18 @@ export class Scope extends ScopeEntry {
       }
     }
     await this.closeHaRedisClient();
-    if (this._channelTeardown) {
-      try {
-        await this._channelTeardown();
-      } catch (err) {
-        this.logger.error('Channel teardown failed', { error: err });
-      }
-      this._channelTeardown = undefined;
+    await this.teardownChannels();
+  }
+
+  /** Disconnect service channels (`onDisconnect()`) and drop channel subscriptions, once. */
+  private async teardownChannels(): Promise<void> {
+    const teardown = this._channelTeardown;
+    if (!teardown) return;
+    this._channelTeardown = undefined;
+    try {
+      await teardown();
+    } catch (err) {
+      this.logger.error('Channel teardown failed', { error: err });
     }
   }
 

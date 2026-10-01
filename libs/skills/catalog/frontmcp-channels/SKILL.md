@@ -75,13 +75,13 @@ Build push-based notification channels that stream real-time events into Claude 
 
 ## Common Patterns
 
-| Pattern        | Correct                                 | Incorrect                                    | Why                                                                |
-| -------------- | --------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------ |
-| Meta keys      | `meta: { env: 'prod' }`                 | `meta: { 'my-env': 'prod' }`                 | Meta keys must be valid identifiers (letters, digits, underscores) |
-| Source naming  | `name: 'deploy-alerts'`                 | `name: 'Deploy Alerts!'`                     | Channel names should be kebab-case identifiers                     |
-| Two-way gating | Check sender identity before emitting   | Trust room/group membership                  | Prevent prompt injection from untrusted group members              |
-| Error channels | Use `app-event` source with event bus   | Poll for errors in a loop                    | Event bus is push-based and efficient                              |
-| Manual push    | Use `scope.channelNotifications.send()` | Call `pushNotification` on instance directly | Service handles capability filtering                               |
+| Pattern        | Correct                                    | Incorrect                                       | Why                                                                                                                                     |
+| -------------- | ------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Meta keys      | `meta: { env: 'prod' }`                    | `meta: { 'my-env': 'prod' }`                    | Meta keys must be valid identifiers (letters, digits, underscores)                                                                      |
+| Source naming  | `name: 'deploy-alerts'`                    | `name: 'Deploy Alerts!'`                        | Channel names should be kebab-case identifiers                                                                                          |
+| Two-way gating | Check sender identity before emitting      | Trust room/group membership                     | Prevent prompt injection from untrusted group members                                                                                   |
+| Error channels | Use `app-event` source with event bus      | Poll for errors in a loop                       | Event bus is push-based and efficient                                                                                                   |
+| Manual push    | `await scope.channelNotifications?.send()` | `sendToSubscribedSessions()` for a regular push | `send()` runs the hookable `channels:send-notification` flow (defaultMeta, channel meta, hooks); the `sendTo*` methods deliver directly |
 
 ## Verification Checklist
 
@@ -102,24 +102,25 @@ Build push-based notification channels that stream real-time events into Claude 
 
 - [ ] `twoWay: true` is set on channels that need replies
 - [ ] `channel-reply` tool appears in tool list
-- [ ] `onReply()` is implemented and forwards to external system
+- [ ] `onReply()` is implemented and forwards to external system (if it throws, `channel-reply` answers an error result)
 - [ ] Sender authentication is enforced before emitting events
 
 ### Sources
 
 - [ ] Webhook endpoints return 200 on success
-- [ ] Event bus subscriptions are cleaned up on scope teardown
+- [ ] Event bus subscriptions are cleaned up on scope teardown, and service channels get `onDisconnect()` on shutdown and on `dispose()`
 - [ ] Agent/job completion filters match expected IDs
 
 ## Troubleshooting
 
-| Problem                      | Cause                           | Solution                                                           |
-| ---------------------------- | ------------------------------- | ------------------------------------------------------------------ |
-| No notifications arrive      | Client doesn't support channels | Check client capabilities include `experimental['claude/channel']` |
-| `channel-reply` tool missing | No two-way channels registered  | Set `twoWay: true` on at least one channel                         |
-| Webhook returns 500          | `onEvent()` throws              | Check channel handler error logs                                   |
-| Duplicate notifications      | Multiple sessions subscribed    | This is correct behavior -- each session gets its own copy         |
-| Events lost on reconnect     | Channels are in-memory          | Channel state resets on server restart; use persistent sources     |
+| Problem                      | Cause                                                                                                    | Solution                                                             |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| No notifications arrive      | Client doesn't support channels                                                                          | Check client capabilities include `experimental['claude/channel']`   |
+| `channel-reply` tool missing | No two-way channels registered                                                                           | Set `twoWay: true` on at least one channel                           |
+| Webhook returns 500          | `onEvent()` throws                                                                                       | Check channel handler error logs                                     |
+| A notification never arrives | A `ChannelSendHook` stopped it, or `ChannelListHook` left the channel out of the session's subscriptions | Check plugins hooking `channels:send-notification` / `channels:list` |
+| Duplicate notifications      | Multiple sessions subscribed                                                                             | This is correct behavior -- each session gets its own copy           |
+| Events lost on reconnect     | Channels are in-memory                                                                                   | Channel state resets on server restart; use persistent sources       |
 
 ## Examples
 
