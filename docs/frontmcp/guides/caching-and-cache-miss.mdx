@@ -251,11 +251,13 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
 </Step>
 
 <Step title="After Execution (Did Hook)">
-  If the tool executed, the plugin stores the result in the cache with the configured TTL
+  If the tool executed, the plugin stores the result in the cache with the configured TTL. A result the tool returned
+  with `isError: true` is not stored, so the next call runs the tool again
 </Step>
 
   <Step title="Sliding Window (Optional)">
-    If `slideWindow: true`, each cache read refreshes the TTL, keeping popular data cached longer
+    If `slideWindow: true`, each cache read refreshes the TTL, keeping popular data cached longer. Otherwise (the
+    default, and `cache: true`) an entry expires its TTL after it was written, however often it is read
   </Step>
 </Steps>
 
@@ -270,7 +272,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
 <ParamField path="cache" type="boolean | object">
   Enable caching for this tool
 
-- `true` - Use plugin's default TTL
+- `true` - Use plugin's default TTL, with no sliding window
 - `{ ttl, slideWindow }` - Custom configuration
 
 </ParamField>
@@ -288,7 +290,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
 </ParamField>
 
 <ParamField path="cache.slideWindow" type="boolean" default="false">
-  When `true`, reading from cache refreshes the TTL
+  When `true`, reading from cache refreshes the TTL (`cache.ttl`, or the plugin's `defaultTTL` when the tool sets none)
   **Use cases:**
 
 - Trending/popular data
