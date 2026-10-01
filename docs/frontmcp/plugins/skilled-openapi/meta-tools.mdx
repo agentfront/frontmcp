@@ -144,7 +144,7 @@ If your FrontMCP server is configured with `skills_only` mode (set via `?mode=sk
 
 By default (`exposeOperationsAsInternalTools: true`), per-operation tools are registered in `scope.tools` with **internal** visibility. This means they:
 
-- Are still callable via the SDK / direct client and can participate in DI, hooks, and observability
+- Are callable in-process as `<bundleId>.<operationId>` — `await this.callTool('acme:billing.getInvoice', { id })` from a tool, agent, job or CodeCall script — once the bundle has loaded, and participate in DI, hooks, and observability. Each call runs the operation's authority check (with the calling request's `authInfo`), input validation and the outbound pipeline, and answers with the same `{ ok, status, data?, error? }` envelope
 - **Do NOT appear** in the public MCP `tools/list` response
 - Are **NOT directly callable** from MCP clients via `tools/call`
 - Always live in the plugin's `HiddenOpRegistry` so a `run_workflow` script's `callTool` can find and run them with the ABAC checkpoint

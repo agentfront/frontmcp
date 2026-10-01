@@ -20,7 +20,7 @@ npm install @enclave-vm/core @enclave-vm/ast
 
 ## Usage
 
-Register the plugin with `SkilledOpenApiPlugin.init(...)` and point it at a bundle source. The `dev: true` flag bypasses signature verification and allows `http://` upstreams for local iteration — see [Security](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/security) before going to production.
+Register the plugin with `SkilledOpenApiPlugin.init(...)` and point it at a bundle source. The `dev: true` flag bypasses signature verification (unless `requireSignature` is set explicitly) and allows `http://` upstreams for local iteration — see [Security](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/security) before going to production.
 
 ```typescript
 import * as path from 'node:path';
@@ -94,18 +94,18 @@ OpenAPI spec  --(analyzer + optional signing)-->  bundle (spec + overlay)
 
 All options are validated by a strict Zod schema (`skilledOpenApiPluginOptionsSchema`).
 
-| Option                            | Type                                       | Default         | Description                                                                                                                                               |
-| --------------------------------- | ------------------------------------------ | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `source`                          | `static \| npm \| saas \| inline`          | — (required)    | Where bundles come from. `{ type: 'static', path, watch? }`, `{ type: 'npm', package }`, `{ type: 'saas', endpoint, ... }`, or `{ type: 'inline', ... }`. |
-| `requireSignature`                | `boolean`                                  | `true`          | Require a valid bundle signature (RS256/Ed25519 JWT-of-hashes). Opt out only with `dev: true`.                                                            |
-| `trustedKeys`                     | `SignatureKey[]`                           | `[]`            | Public keys trusted to sign bundles.                                                                                                                      |
-| `dev`                             | `boolean`                                  | `false`         | Local-dev escape hatch: bypasses signing and widens `outbound` to allow `http://`. **Never enable in production.**                                        |
-| `outbound`                        | `OutboundOptions`                          | see below       | SSRF / egress controls.                                                                                                                                   |
-| `unprotectedOps`                  | `'allow' \| 'deny'`                        | `'allow'`       | Default-deny policy for operations that declare no required authorities.                                                                                  |
-| `sourceConflictPolicy`            | `'static-wins' \| 'last-wins' \| 'reject'` | `'static-wins'` | How to resolve two sources registering the same skill id.                                                                                                 |
-| `bundleCacheDir`                  | `string`                                   | —               | Last-good cache directory (only for `source.type === 'saas'`).                                                                                            |
-| `credentials`                     | `Record<vaultRef, secret>`                 | —               | In-memory credential map for dev / single-tenant. In production resolve via `@frontmcp/auth`'s vault.                                                     |
-| `exposeOperationsAsInternalTools` | `boolean`                                  | `true`          | Keep operations reachable via `callTool` inside workflows.                                                                                                |
+| Option                            | Type                                       | Default                           | Description                                                                                                                                                              |
+| --------------------------------- | ------------------------------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `source`                          | `static \| npm \| saas \| inline`          | — (required)                      | Where bundles come from. `{ type: 'static', path, watch? }`, `{ type: 'npm', package }`, `{ type: 'saas', endpoint, ... }`, or `{ type: 'inline', ... }`.                |
+| `requireSignature`                | `boolean`                                  | `true` (`false` with `dev: true`) | Require a valid bundle signature (RS256/Ed25519 JWT-of-hashes). Opt out with `dev: true` or `requireSignature: false`; an explicit value wins over `dev`.                |
+| `trustedKeys`                     | `SignatureKey[]`                           | `[]`                              | Public keys trusted to sign bundles.                                                                                                                                     |
+| `dev`                             | `boolean`                                  | `false`                           | Local-dev escape hatch: turns the signature requirement off (unless `requireSignature` is set) and widens `outbound` to allow `http://`. **Never enable in production.** |
+| `outbound`                        | `OutboundOptions`                          | see below                         | SSRF / egress controls.                                                                                                                                                  |
+| `unprotectedOps`                  | `'allow' \| 'deny'`                        | `'allow'`                         | Default-deny policy for operations that declare no required authorities.                                                                                                 |
+| `sourceConflictPolicy`            | `'static-wins' \| 'last-wins' \| 'reject'` | `'static-wins'`                   | How to resolve two sources registering the same skill id.                                                                                                                |
+| `bundleCacheDir`                  | `string`                                   | —                                 | Last-good cache directory (only for `source.type === 'saas'`).                                                                                                           |
+| `credentials`                     | `Record<vaultRef, secret>`                 | —                                 | In-memory credential map for dev / single-tenant. In production resolve via `@frontmcp/auth`'s vault.                                                                    |
+| `exposeOperationsAsInternalTools` | `boolean`                                  | `true`                            | Register each operation as an internal tool, callable in-process as `this.callTool('<bundleId>.<operationId>', input)` (hidden from `tools/list`).                       |
 
 `outbound` (SSRF + egress):
 

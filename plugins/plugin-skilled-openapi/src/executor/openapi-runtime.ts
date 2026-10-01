@@ -31,6 +31,7 @@ import { isRedirectResponse } from '@frontmcp/utils';
 
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import type { OutboundOptions } from '../skilled-openapi.types';
+import { callerTokenRefusal } from './caller-token';
 import type { CredentialResolver } from './credential-resolver';
 import { withHostConcurrency } from './host-concurrency';
 import { checkOutboundUrl } from './ssrf-guard';
@@ -58,9 +59,11 @@ async function buildSecurityContext(args: {
   binding: AuthBinding;
   bundleId: string;
   resolver: CredentialResolver;
+  /** The service the request goes to; a passed-through caller token must have been issued for it. */
+  serviceBaseUrl: string;
   callerToken?: string;
 }): Promise<SecurityContext> {
-  const { binding, bundleId, resolver, callerToken } = args;
+  const { binding, bundleId, resolver, serviceBaseUrl, callerToken } = args;
   const ctx: SecurityContext = {};
   switch (binding.kind) {
     case 'none':
@@ -68,8 +71,10 @@ async function buildSecurityContext(args: {
     case 'bearer': {
       let token: string | undefined;
       if (binding.passthroughCallerToken) {
+        if (!callerToken) throw new Error('passthrough caller token requested but the caller presented none');
+        const refusal = callerTokenRefusal(callerToken, serviceBaseUrl);
+        if (refusal) throw new Error(`passthrough caller token refused: ${refusal}`);
         token = callerToken;
-        if (!token) throw new Error('passthrough caller token requested but not supplied');
       } else {
         token = await resolver.resolve(binding.vaultRef, { bundleId });
         if (!token) throw new Error(`bearer vaultRef "${binding.vaultRef}" did not resolve`);
@@ -204,6 +209,7 @@ export async function executeOperation(args: {
       binding: entry.authBinding,
       bundleId,
       resolver,
+      serviceBaseUrl: entry.service.baseUrl,
       callerToken,
     });
   } catch (e) {
@@ -229,6 +235,19 @@ export async function executeOperation(args: {
     return failure(0, `ssrf check rejected request: ${ssrf.reason}`);
   }
 
+  // The body is sent JSON-serialized below. Label it: a string body with no content-type goes out
+  // as `text/plain;charset=UTF-8`, which a JSON API rejects or misreads. A content-type the
+  // request already carries (a `header` mapper) is kept, as the OpenAPI adapter does.
+  let body: string | undefined;
+  try {
+    body = req.body !== undefined ? JSON.stringify(req.body) : undefined;
+  } catch (e) {
+    return failure(0, `request body serialization failed: ${(e as Error).message}`);
+  }
+  if (body !== undefined && !req.headers.has('content-type')) {
+    req.headers.set('content-type', 'application/json');
+  }
+
   const timeoutMs = entry.op.timeoutMs ?? outbound.defaultTimeoutMs;
   const maxBytes = entry.op.maxResponseBytes ?? outbound.defaultMaxResponseBytes;
 
@@ -252,7 +271,7 @@ export async function executeOperation(args: {
       const response = await fetchImpl(req.url, {
         method: entry.op.httpMethod,
         headers: req.headers,
-        body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
+        body,
         signal: ac.signal,
         // SECURITY: never auto-follow redirects. `fetch` defaults to
         // `redirect: 'follow'`, which re-sends the request — INCLUDING the

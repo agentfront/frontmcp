@@ -1,3 +1,5 @@
+import { base64urlEncode } from '@frontmcp/utils';
+
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
 import { executeOperation, type OpenApiRuntimeDeps } from '../executor/openapi-runtime';
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
@@ -11,6 +13,12 @@ const fakeLogger = {
   verbose: jest.fn(),
   child: jest.fn().mockReturnThis(),
 } as unknown as never;
+
+/** An (unsigned) JWT with these claims. */
+const jwtWith = (claims: Record<string, unknown>): string => {
+  const part = (value: unknown) => base64urlEncode(new TextEncoder().encode(JSON.stringify(value)));
+  return `${part({ alg: 'none', typ: 'JWT' })}.${part(claims)}.sig`;
+};
 
 const baseOutbound = (overrides: Partial<OutboundOptions> = {}): OutboundOptions => ({
   allowPrivateNetworks: true,
@@ -143,18 +151,81 @@ describe('executeOperation', () => {
   it('passthroughCallerToken uses the supplied caller token instead of the vault', async () => {
     const entry = buildEntry();
     entry.authBinding = { kind: 'bearer', vaultRef: 'unused', passthroughCallerToken: true };
+    const callerJwt = jwtWith({ sub: 'u1', resource: 'http://localhost:9999' });
     const calls: { headers?: Headers }[] = [];
     await executeOperation({
       entry,
       bundleId: 'acme',
       input: { id: '1' },
-      callerToken: 'caller_jwt',
+      callerToken: callerJwt,
       deps: buildDeps({
         resolver: new MemoryCredentialResolver({}),
         fetchImpl: makeFetch({ body: {}, capture: (c) => calls.push(c) }) as never,
       }),
     });
-    expect(calls[0].headers?.get('Authorization')).toBe('Bearer caller_jwt');
+    expect(calls[0].headers?.get('Authorization')).toBe(`Bearer ${callerJwt}`);
+  });
+
+  it('passthroughCallerToken refuses a caller token not issued for the service', async () => {
+    const entry = buildEntry();
+    entry.authBinding = { kind: 'bearer', vaultRef: 'unused', passthroughCallerToken: true };
+    const fetchImpl = jest.fn();
+    const result = await executeOperation({
+      entry,
+      bundleId: 'acme',
+      input: { id: '1' },
+      callerToken: jwtWith({ sub: 'u1', aud: 'https://mcp.example.com' }),
+      deps: buildDeps({ fetchImpl: fetchImpl as never }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/passthrough caller token refused: the caller token was not issued for/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('labels a JSON body application/json, and keeps a content-type the request already carries', async () => {
+    const sentTypes: Array<string | null | undefined> = [];
+    const capture = (c: { headers?: Headers }) => sentTypes.push(c.headers?.get('content-type'));
+    await executeOperation({
+      entry: buildEntry(),
+      bundleId: 'acme',
+      input: { id: '1', amount: 5 },
+      deps: buildDeps({ fetchImpl: makeFetch({ body: {}, capture }) as never }),
+    });
+    const withHeader = buildEntry({
+      mapper: [
+        { inputKey: 'id', type: 'path', key: 'id', required: true },
+        { inputKey: 'amount', type: 'body', key: 'amount' },
+        { inputKey: 'ct', type: 'header', key: 'Content-Type' },
+      ],
+    });
+    await executeOperation({
+      entry: withHeader,
+      bundleId: 'acme',
+      input: { id: '1', amount: 5, ct: 'application/merge-patch+json' },
+      deps: buildDeps({ fetchImpl: makeFetch({ body: {}, capture }) as never }),
+    });
+    // No body, no content-type.
+    await executeOperation({
+      entry: buildEntry(),
+      bundleId: 'acme',
+      input: { id: '1' },
+      deps: buildDeps({ fetchImpl: makeFetch({ body: {}, capture }) as never }),
+    });
+
+    expect(sentTypes).toEqual(['application/json', 'application/merge-patch+json', null]);
+  });
+
+  it('returns a failure, sending nothing, when the body cannot be serialized', async () => {
+    const fetchImpl = jest.fn();
+    const result = await executeOperation({
+      entry: buildEntry(),
+      bundleId: 'acme',
+      input: { id: '1', amount: BigInt(5) as unknown as number },
+      deps: buildDeps({ fetchImpl: fetchImpl as never }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/request body serialization failed/);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('returns auth error when passthrough requested but no caller token', async () => {

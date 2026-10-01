@@ -66,11 +66,11 @@ const skilledOpenApiPluginOptionsObjectSchema = z.object({
   source: bundleSourceSchema,
 
   /**
-   * Require a valid bundle signature. Defaults to true. Setting `dev: true`
-   * disables the requirement and emits a startup warning. Never set false
-   * (unsigned mode) silently in production.
+   * Require a valid bundle signature. Defaults to true, or to false with
+   * `dev: true`; an explicit value always wins. Never set false (unsigned mode)
+   * in production.
    */
-  requireSignature: z.boolean().default(true),
+  requireSignature: z.boolean().optional(),
 
   /**
    * Trusted public keys for bundle signature verification. At least one must
@@ -79,8 +79,9 @@ const skilledOpenApiPluginOptionsObjectSchema = z.object({
   trustedKeys: z.array(signatureKeySchema).default([]),
 
   /**
-   * Development mode: bypass signature verification and relax some defaults
-   * (e.g. allow http:). Loud startup warning. Never true in production.
+   * Development mode: bypass signature verification (unless `requireSignature`
+   * is set explicitly) and allow http: upstreams. Loud startup warning. Never
+   * true in production.
    */
   dev: z.boolean().default(false),
 
@@ -161,6 +162,9 @@ export const skilledOpenApiPluginOptionsSchema = skilledOpenApiPluginOptionsObje
   }
   return {
     ...opts,
+    // `dev: true` turns the signature requirement off, as it advertises; an explicit
+    // `requireSignature` (either way) is kept.
+    requireSignature: opts.requireSignature ?? !opts.dev,
     outbound,
     bundleCacheDir: opts.bundleCacheDir ?? '.frontmcp/skilled-openapi/',
   };
