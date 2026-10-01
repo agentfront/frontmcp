@@ -1,6 +1,6 @@
 // errors/__tests__/mcp.error.spec.ts
 import { AuthorityDeniedError } from '@frontmcp/auth';
-import { ConcurrencyLimitError, ExecutionTimeoutError } from '@frontmcp/guard';
+import { ConcurrencyLimitError, ExecutionTimeoutError, GuardStorageUnavailableError } from '@frontmcp/guard';
 
 import {
   AuthorityDeniedMcpError,
@@ -282,6 +282,23 @@ describe('toMcpError with an authorities refusal', () => {
       expect(mapped.isPublic).toBe(true);
       expect(mapped.code).toBe('CONCURRENCY_LIMIT');
       expect(mapped.statusCode).toBe(429);
+    });
+
+    it('answers a storage outage with a public 503 that keeps the store detail in the log (#680)', () => {
+      const outage = new GuardStorageUnavailableError('redis', new Error('connect ECONNREFUSED 10.0.0.3:6379'), 'runtime');
+      const mapped = toMcpError(outage) as GuardLimitMcpError;
+
+      expect(mapped).toBeInstanceOf(GuardLimitMcpError);
+      expect(mapped.isPublic).toBe(true);
+      expect(mapped.statusCode).toBe(503);
+      expect(mapped.getPublicMessage()).not.toContain('10.0.0.3');
+      expect(mapped.getInternalMessage()).toContain('10.0.0.3');
+
+      const response = formatMcpErrorResponse(outage, false);
+      expect(response.isError).toBe(true);
+      expect(response._meta?.code).toBe('GUARD_STORAGE_UNAVAILABLE');
+      expect(response.content[0].text).toContain('temporarily unavailable');
+      expect(response.content[0].text).not.toContain('ECONNREFUSED');
     });
 
     it('keeps the execution timeout message for the client', () => {

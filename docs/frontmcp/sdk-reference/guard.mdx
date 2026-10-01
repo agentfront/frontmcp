@@ -546,7 +546,7 @@ For your own code to throw when a client IP is not on an allow list and `default
 
 ### `GuardStorageUnavailableError`
 
-Thrown when the configured `storage` backend cannot be created or reached: by `createGuardManager()` at SDK startup, and by `GuardManager` limit checks (`checkRateLimit`, `checkGlobalRateLimit`, `acquireSemaphore`, `acquireGlobalSemaphore`) if the backend goes away while the server runs. The message names `throttle.storage` and says to set `throttle.storage.fallback: 'memory'` to use per-instance counters instead.
+Thrown when the configured `storage` backend cannot be created or reached: by `createGuardManager()` at SDK startup, and by `GuardManager` limit checks (`checkRateLimit`, `checkGlobalRateLimit`, `acquireSemaphore`, `acquireGlobalSemaphore`) if the backend goes away while the server runs. The message names `throttle.storage` and says to set `throttle.storage.fallback: 'memory'` to use per-instance counters instead. That message is for the server log: the SDK answers the client with a generic "Service temporarily unavailable" (HTTP 503 from the `throttle.global` check, or an `isError` `tools/call` result with `_meta.code: 'GUARD_STORAGE_UNAVAILABLE'` from a per-tool limit).
 
 | Property      | Type      | Value                                       |
 | ------------- | --------- | ------------------------------------------- |
