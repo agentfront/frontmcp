@@ -504,7 +504,10 @@ if (entry) {
 </ParamField>
 
 <ParamField path="update<T>(key, value, options?)" type="Promise<boolean>">
-  Update an existing value while preserving metadata. Returns `false` if key doesn't exist.
+  Update an existing value while preserving metadata. Returns `false` if key doesn't exist. With a `ttl`, the entry
+  expires that many seconds from now; without one it keeps its current expiry, and `knows()` and `list()` stop reporting
+  it once that passes, as `get()` does. Up to 1.8.7, an entry updated without a `ttl` stayed in `knows()` and `list()`
+  after it expired.
 
 ```ts
 const updated = await this.remember.update('counter', 42, {
@@ -520,7 +523,7 @@ if (!updated) {
 </ParamField>
 
 <ParamField path="knows(key, options?)" type="Promise<boolean>">
-  Check if a key exists
+  Check if a key exists and has not expired
 
 ```ts
 if (await this.remember.knows('onboarded', { scope: 'user' })) {
