@@ -1,7 +1,5 @@
 import 'reflect-metadata';
 
-import type { ProviderFactoryType } from '@frontmcp/sdk';
-
 import CachePlugin from '../cache.plugin';
 import { CacheStoreToken } from '../cache.symbol';
 import CacheMemoryProvider from '../providers/cache-memory.provider';
