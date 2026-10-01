@@ -122,3 +122,21 @@ describe('captureCallerDir (live stack)', () => {
     expect(() => captureCallerDir(['nonexistent.ts'])).not.toThrow();
   });
 });
+
+describe('parseCallerDir in a browser (#681)', () => {
+  it('returns undefined when the runtime has no dirname, instead of throwing', () => {
+    jest.isolateModules(() => {
+      jest.doMock('@frontmcp/utils', () => ({
+        ...jest.requireActual('@frontmcp/utils'),
+        // @frontmcp/utils' browser build: there is no file system to take a directory of
+        dirname: () => {
+          throw new Error('path.dirname() is not available in browser environments');
+        },
+      }));
+      const { parseCallerDir: parseInBrowser } = require('../caller-dir.utils') as typeof import('../caller-dir.utils');
+      const stack = ['Error', '    at Object.<anonymous> (http://localhost:5173/src/main.ts:12:1)'].join('\n');
+
+      expect(parseInBrowser(stack)).toBeUndefined();
+    });
+  });
+});

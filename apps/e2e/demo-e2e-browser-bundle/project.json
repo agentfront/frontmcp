@@ -21,6 +21,7 @@
     },
     "test:pw": {
       "executor": "nx:run-commands",
+      "dependsOn": [{ "projects": ["sdk", "react"], "target": "build" }],
       "options": {
         "command": "npx playwright test --config=apps/e2e/demo-e2e-browser-bundle/playwright.config.ts",
         "cwd": "{workspaceRoot}"

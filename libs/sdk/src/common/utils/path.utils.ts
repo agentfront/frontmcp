@@ -1,6 +1,6 @@
 // auth/path.utils.ts
 
-import { joinPath, trimSlashes } from '@frontmcp/utils';
+import { getEnv, joinPath, trimSlashes } from '@frontmcp/utils';
 
 import type { ServerRequest } from '../interfaces';
 
@@ -29,7 +29,8 @@ export function normalizeEntryPrefix(entryPath?: string): string {
  */
 export function resolveEntryPath(entryPath?: string): string {
   if (entryPath !== undefined) return entryPath;
-  return process.env['FRONTMCP_HTTP_ENTRY_PATH'] ?? '';
+  // `getEnv`, not `process.env`: a browser bundle has no `process` (#681)
+  return getEnv('FRONTMCP_HTTP_ENTRY_PATH') ?? '';
 }
 
 /** Normalize a scope base (per-app or per-auth) to "" or "/app1" */

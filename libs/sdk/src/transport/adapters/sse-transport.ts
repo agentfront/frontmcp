@@ -10,7 +10,9 @@
  */
 import type { ServerResponse } from 'http';
 
-import { SSEServerTransport, type SSEServerTransportOptions } from './base-sse-transport';
+// Through the conditional import, so a browser build of the SDK gets the stub and leaves the
+// Node-only body parsing (raw-body, content-type) out of the bundle
+import { SSEServerTransport, type SSEServerTransportOptions } from '#sse-transport';
 
 export interface RecreateableSSEServerTransportOptions extends SSEServerTransportOptions {
   /**
