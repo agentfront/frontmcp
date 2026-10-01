@@ -1,10 +1,8 @@
 import { spawn } from 'child_process';
 import * as path from 'path';
 
-import { fileExists, readJSON } from '@frontmcp/utils';
-
 import { c } from '../../core/colors';
-import { checkRequiredTsOptions } from '../../core/tsconfig';
+import { checkRequiredTsOptions, readTsconfig } from '../../core/tsconfig';
 import { resolveEntry } from '../../shared/fs';
 
 function cmpSemver(a: string, b: string): number {
@@ -56,10 +54,20 @@ export async function runDoctor(): Promise<void> {
   }
 
   const tsconfigPath = path.join(cwd, 'tsconfig.json');
-  if (await fileExists(tsconfigPath)) {
+  let tsconfig: Awaited<ReturnType<typeof readTsconfig>>;
+  let tsconfigError: string | undefined;
+  try {
+    tsconfig = await readTsconfig(tsconfigPath);
+  } catch (err) {
+    tsconfigError = err instanceof Error ? err.message : String(err);
+  }
+  if (tsconfigError) {
+    // Comments and trailing commas parse fine; this is a real syntax error.
+    ok = false;
+    console.log(`❌ ${tsconfigError} — fix it, then run ${c('cyan', 'frontmcp init')}`);
+  } else if (tsconfig) {
     console.log(`✅ tsconfig.json found`);
-    const tsconfig = await readJSON<Record<string, any>>(tsconfigPath);
-    const { ok: oks, issues } = checkRequiredTsOptions(tsconfig?.compilerOptions);
+    const { ok: oks, issues } = checkRequiredTsOptions(tsconfig.config['compilerOptions']);
     for (const line of oks) console.log(c('green', `  ✓ ${line}`));
     if (issues.length) {
       ok = false;

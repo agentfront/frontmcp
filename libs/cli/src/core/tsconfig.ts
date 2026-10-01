@@ -1,7 +1,8 @@
 import * as path from 'path';
 
-import { fileExists, readJSON, writeJSON } from '@frontmcp/utils';
+import { fileExists, readFile, writeFile, writeJSON } from '@frontmcp/utils';
 
+import { JsoncParseError, parseJsoncObject, updateJsoncText } from '../shared/jsonc';
 import { c } from './colors';
 
 export const REQUIRED_DECORATOR_FIELDS = {
@@ -134,25 +135,55 @@ export function checkRequiredTsOptions(compilerOptions: Record<string, any> | un
   return { ok, issues };
 }
 
+/**
+ * Read a `tsconfig.json` the way TypeScript does — comments and trailing commas
+ * allowed. Returns `undefined` when the file does not exist; throws
+ * `JsoncParseError` when it exists but cannot be parsed.
+ */
+export async function readTsconfig(
+  tsconfigPath: string,
+): Promise<{ text: string; config: Record<string, any> } | undefined> {
+  if (!(await fileExists(tsconfigPath))) return undefined;
+  const text = await readFile(tsconfigPath);
+  return { text, config: parseJsoncObject(text, path.basename(tsconfigPath)) };
+}
+
 export async function runInit(baseDir?: string): Promise<void> {
   const cwd = baseDir ?? process.cwd();
   const tsconfigPath = path.join(cwd, 'tsconfig.json');
-  const existing = await readJSON<Record<string, any>>(tsconfigPath);
+  // #679 — a parse failure must never read as "not found": that path wrote the
+  // default config over the user's file. The file is left untouched instead.
+  let current: Awaited<ReturnType<typeof readTsconfig>>;
+  try {
+    current = await readTsconfig(tsconfigPath);
+  } catch (err) {
+    if (!(err instanceof JsoncParseError)) throw err;
+    throw new Error(`${err.message}. It was left unchanged — fix it, then run "frontmcp init" again.`, {
+      cause: err,
+    });
+  }
 
-  if (!existing) {
+  if (!current) {
     console.log(c('yellow', `tsconfig.json not found — creating one in ${path.relative(process.cwd(), cwd) || '.'}.`));
     await writeJSON(tsconfigPath, RECOMMENDED_TSCONFIG);
     console.log(c('green', '✅ Created tsconfig.json with required decorator settings.'));
     return;
   }
 
+  const existing = current.config;
   let merged = deepMerge(RECOMMENDED_TSCONFIG as any, existing);
   merged = ensureRequiredTsOptions(merged);
 
   const { result: withWidgetExcludes, added: addedExcludes } = ensureWidgetExcludes(merged);
   merged = withWidgetExcludes;
 
-  await writeJSON(tsconfigPath, merged);
+  // Edit only the keys that change, so comments and formatting survive.
+  const updated = updateJsoncText(current.text, existing, merged);
+  if (updated === current.text) {
+    console.log(c('green', '✅ tsconfig.json verified (required decorator settings already present).'));
+    return;
+  }
+  await writeFile(tsconfigPath, updated);
   console.log(c('green', '✅ tsconfig.json verified and updated (required decorator settings enforced).'));
   if (addedExcludes.length > 0) {
     console.log(

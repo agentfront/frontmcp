@@ -3,7 +3,7 @@
 import { spawn } from 'child_process';
 import * as path from 'path';
 
-import { fileExists, readJSON } from '@frontmcp/utils';
+import { fileExists, readFile } from '@frontmcp/utils';
 
 import { resolveEntry } from '../../../shared/fs';
 import { runDoctor } from '../doctor';
@@ -24,7 +24,7 @@ jest.mock('child_process', () => {
 jest.mock('@frontmcp/utils', () => {
   return {
     fileExists: jest.fn(),
-    readJSON: jest.fn(),
+    readFile: jest.fn(),
   };
 });
 
@@ -34,6 +34,11 @@ jest.mock('../../../shared/fs', () => {
     resolveEntry: jest.fn(),
   };
 });
+
+// tsconfig.json content, as text (doctor parses it as JSONC)
+function mockTsconfig(config: unknown) {
+  (readFile as jest.Mock).mockResolvedValue(JSON.stringify(config));
+}
 
 // Helper to simulate npm version check
 function mockNpmVersion(version: string) {
@@ -90,7 +95,7 @@ describe('doctor command', () => {
       });
 
       (fileExists as jest.Mock).mockResolvedValue(true);
-      (readJSON as jest.Mock).mockResolvedValue({
+      mockTsconfig({
         compilerOptions: {
           target: 'es2021',
           module: 'esnext',
@@ -105,6 +110,43 @@ describe('doctor command', () => {
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('✅'));
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('All checks passed'));
       expect(process.exitCode).toBeUndefined();
+    });
+
+    // #679 — comments and trailing commas are legal in tsconfig.json.
+    it('accepts a tsconfig.json with comments and trailing commas', async () => {
+      Object.defineProperty(process, 'versions', {
+        value: { ...originalVersions, node: '22.0.0' },
+        configurable: true,
+      });
+      (fileExists as jest.Mock).mockResolvedValue(true);
+      (readFile as jest.Mock).mockResolvedValue(`{
+  // decorators
+  "compilerOptions": {
+    "target": "es2021",
+    "module": "esnext",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+  },
+}`);
+      (resolveEntry as jest.Mock).mockResolvedValue('/test/src/main.ts');
+
+      await runDoctor();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('All checks passed'));
+      expect(process.exitCode).toBeUndefined();
+    });
+
+    it('reports a tsconfig.json it cannot parse as a syntax error, not as missing', async () => {
+      (fileExists as jest.Mock).mockResolvedValue(true);
+      (readFile as jest.Mock).mockResolvedValue('{ "compilerOptions": { "target": } }');
+      (resolveEntry as jest.Mock).mockResolvedValue('/test/src/main.ts');
+
+      await runDoctor();
+
+      const lines = consoleLogSpy.mock.calls.map((call) => String(call[0]));
+      expect(lines.some((line) => /tsconfig\.json is not valid JSON: .* at line 1/.test(line))).toBe(true);
+      expect(lines.some((line) => line.includes('not found'))).toBe(false);
+      expect(process.exitCode).toBe(1);
     });
 
     it('sets a non-zero exit code when a check fails (empty folder)', async () => {
@@ -124,7 +166,7 @@ describe('doctor command', () => {
       });
 
       (fileExists as jest.Mock).mockResolvedValue(true);
-      (readJSON as jest.Mock).mockResolvedValue({
+      mockTsconfig({
         compilerOptions: {
           target: 'es2021',
           module: 'esnext',
@@ -149,7 +191,7 @@ describe('doctor command', () => {
       mockNpmVersion('9.0.0');
 
       (fileExists as jest.Mock).mockResolvedValue(true);
-      (readJSON as jest.Mock).mockResolvedValue({
+      mockTsconfig({
         compilerOptions: {
           target: 'es2021',
           module: 'esnext',
@@ -173,7 +215,7 @@ describe('doctor command', () => {
       mockNpmError();
 
       (fileExists as jest.Mock).mockResolvedValue(true);
-      (readJSON as jest.Mock).mockResolvedValue({
+      mockTsconfig({
         compilerOptions: {
           target: 'es2021',
           module: 'esnext',
@@ -209,7 +251,7 @@ describe('doctor command', () => {
       });
 
       (fileExists as jest.Mock).mockResolvedValue(true);
-      (readJSON as jest.Mock).mockResolvedValue({
+      mockTsconfig({
         compilerOptions: {
           target: 'es5', // Wrong target
           module: 'commonjs', // Wrong module
@@ -231,7 +273,7 @@ describe('doctor command', () => {
       });
 
       (fileExists as jest.Mock).mockResolvedValue(true);
-      (readJSON as jest.Mock).mockResolvedValue({
+      mockTsconfig({
         compilerOptions: {
           target: 'es2021',
           module: 'esnext',
@@ -254,7 +296,7 @@ describe('doctor command', () => {
         configurable: true,
       });
       (fileExists as jest.Mock).mockResolvedValue(true);
-      (readJSON as jest.Mock).mockResolvedValue({
+      mockTsconfig({
         compilerOptions: {
           target: 'es2021',
           module: 'esnext',
@@ -284,7 +326,7 @@ describe('doctor command', () => {
       });
 
       (fileExists as jest.Mock).mockResolvedValue(true);
-      (readJSON as jest.Mock).mockResolvedValue({
+      mockTsconfig({
         compilerOptions: {
           target: 'es2021',
           module: 'esnext',
