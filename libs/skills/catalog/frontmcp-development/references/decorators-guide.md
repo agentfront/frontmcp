@@ -87,7 +87,7 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
 | `pagination?`   | List operation pagination (`tools/list` endpoint)                                                                                                                            |
 | `fetch?`        | What `this.fetch()` adds upstream: `forwardCallerTokenTo` / `forwardCustomHeadersTo` origin allow-lists (default: none), `autoInjectTracingHeaders`, `requestTimeout`        |
 | `ui?`           | UI rendering config (CDN overrides for widget imports)                                                                                                                       |
-| `extApps?`      | Widget-to-host MCP Apps communication (host capabilities, session validation)                                                                                                |
+| `extApps?`      | Widget-to-host MCP Apps communication (host capabilities, session validation). `ui/callServerTool` returns the tool's data without its page; `ui/log` answers `result: {}`   |
 | `loader?`       | Default npm/ESM package loader for `App.esm()` / `App.remote()` apps                                                                                                         |
 
 > **Throttle vs per-tool guards:** Server-level `throttle` is a `GuardConfig` object with `global`, `defaultRateLimit`, `defaultConcurrency`, `defaultTimeout` sub-fields that set server-wide defaults. Tool-level `rateLimit`, `concurrency`, `timeout` fields (on `@Tool`) override these defaults per tool.

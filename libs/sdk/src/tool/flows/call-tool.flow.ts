@@ -1243,10 +1243,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const { tool, rawOutput: executeOutput, input } = this.state;
     const rawOutput = declaredOutput(tool, executeOutput);
 
-    // Skip UI for agent tool calls (structured data only)
+    // Skip UI for calls that want the data only: an agent's tool calls, and the calls a widget
+    // makes back to the server through `ui/callServerTool`
     const ctx = this.input.ctx;
     if (ctx?._skipUI) {
-      this.logger.verbose('applyUI:skip (agent context - structured data only)');
+      this.logger.verbose('applyUI:skip (agent or widget call - structured data only)');
       return;
     }
 

@@ -70,11 +70,10 @@ export function buildCSPDirectives(csp?: CSPConfig): string[] {
   const fontSources = ["'self'", 'data:', ...allResourceDomains];
   directives.push(`font-src ${fontSources.join(' ')}`);
 
-  if (validConnectDomains.length) {
-    directives.push(`connect-src ${validConnectDomains.join(' ')}`);
-  } else {
-    directives.push(`connect-src ${allResourceDomains.join(' ')}`);
-  }
+  // Declared connect origins are added to what the page may already reach (the CDNs and the
+  // resource origins), never in their place
+  const connectSources = [...new Set([...allResourceDomains, ...validConnectDomains])];
+  directives.push(`connect-src ${connectSources.join(' ')}`);
 
   directives.push("object-src 'self' data:");
 
@@ -90,25 +89,39 @@ export function buildCSPMetaTag(csp?: CSPConfig): string {
   return `<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(content)}">`;
 }
 
+/** Hosts a page may reach over plain `http:` / `ws:` (local development). */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
 /**
  * Validate CSP domain format.
+ *
+ * Accepts `https://` and `wss://` origins (a WebSocket API needs `wss://` in `connect-src`),
+ * their `https://*.` / `wss://*.` wildcard forms, and `http://` / `ws://` origins on a loopback
+ * host (`localhost`, `127.0.0.1`, `[::1]`) for local development.
  */
 export function validateCSPDomain(domain: string): boolean {
-  if (domain.startsWith('https://*.')) {
-    const rest = domain.slice(10);
-    return /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$/.test(rest);
+  // One source token: whitespace, `;` or `,` would end it and start another source or directive
+  if (typeof domain !== 'string' || /[\s;,'"]/.test(domain)) return false;
+
+  if (domain.includes('*')) {
+    const wildcard = /^(?:https|wss):\/\/\*\.(.*)$/.exec(domain);
+    return wildcard !== null && /^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(wildcard[1]);
   }
 
   try {
     const url = new URL(domain);
-    return url.protocol === 'https:';
+    if (url.protocol === 'https:' || url.protocol === 'wss:') return true;
+    return (url.protocol === 'http:' || url.protocol === 'ws:') && LOOPBACK_HOSTS.has(url.hostname);
   } catch {
     return false;
   }
 }
 
+/** Invalid domains already reported, so a widget rendered on every call warns once per domain. */
+const reportedInvalidDomains = new Set<string>();
+
 /**
- * Filter and warn about invalid CSP domains.
+ * Filter out invalid CSP domains, warning once per domain.
  */
 export function sanitizeCSPDomains(domains: string[] | undefined): string[] {
   if (!domains) return [];
@@ -117,8 +130,11 @@ export function sanitizeCSPDomains(domains: string[] | undefined): string[] {
   for (const domain of domains) {
     if (validateCSPDomain(domain)) {
       valid.push(domain);
-    } else {
-      console.warn(`Invalid CSP domain ignored: ${domain}`);
+    } else if (!reportedInvalidDomains.has(domain)) {
+      reportedInvalidDomains.add(domain);
+      console.warn(
+        `Invalid CSP domain ignored: ${domain} (expected an https:// or wss:// origin, or http:// / ws:// on localhost)`,
+      );
     }
   }
 

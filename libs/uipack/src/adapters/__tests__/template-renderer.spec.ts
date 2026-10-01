@@ -420,6 +420,22 @@ describe('renderToolTemplate — function templates (#645)', () => {
     expect(warn).toHaveBeenCalledTimes(2);
   });
 
+  it('warns once per tool, not on every render of the same component (#681)', () => {
+    const warn = jest.fn();
+    function Panel() {
+      throw new Error('Invalid hook call');
+    }
+
+    for (let call = 0; call < 3; call++) {
+      renderToolTemplate({ toolName: 'panel_tool', input: {}, output: { call }, template: Panel, logger: { warn } });
+    }
+    renderToolTemplate({ toolName: 'other_tool', input: {}, output: {}, template: Panel, logger: { warn } });
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0][0]).toContain('panel_tool');
+    expect(warn.mock.calls[1][0]).toContain('other_tool');
+  });
+
   it('converts a Markdown string template to HTML and drops unsafe links', () => {
     const result = renderToolTemplate({
       toolName: 'md',
