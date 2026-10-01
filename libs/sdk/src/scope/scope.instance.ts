@@ -90,6 +90,7 @@ import { describeIgnoredUiOptions } from '../tool/ui/ui-option-warnings';
 import { RedisTransportBus } from '../transport/bus';
 import { createEventStore } from '../transport/event-stores';
 import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/request-state';
+import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import HttpIpFilterFlow from './flows/http.ip-filter.flow';
@@ -287,6 +288,7 @@ export class Scope extends ScopeEntry {
     }
     this.transportService = new TransportService(this, effectivePersistence, transportBus);
     warnIfRequestStateKeyNotShared({ logger: this.logger, metadata: this.metadata });
+    warnIfSessionModeIgnored({ logger: this.logger, transport: transportConfig });
 
     // Orphan session scanner (distributed mode only — scans for dead-pod sessions)
     if (this.haManager && isDistributed && this.transportService.getBackendKind() === 'redis') {

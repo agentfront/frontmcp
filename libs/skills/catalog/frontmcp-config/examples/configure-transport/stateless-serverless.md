@@ -5,7 +5,7 @@ level: basic
 description: 'Configure stateless transport for Vercel, Lambda, or Cloudflare deployments.'
 tags: [config, vercel, lambda, cloudflare, session, transport]
 features:
-  - "Using `sessionMode: 'stateless'` to disable session management"
+  - 'Serving without sessions: whether the server keeps sessions follows `transport.protocol` (`sessionMode` has no effect)'
   - "Using the `'stateless-api'` preset: no SSE, no streaming, pure request/response"
   - 'Each request is standalone with no server-side state between invocations'
   - 'Required for serverless targets (Vercel, Lambda, Cloudflare Workers)'
@@ -48,7 +48,6 @@ class CurrencyApp {}
   info: { name: 'serverless-server', version: '1.0.0' },
   apps: [CurrencyApp],
   transport: {
-    sessionMode: 'stateless',
     protocol: 'stateless-api',
   },
 })
@@ -57,7 +56,7 @@ class Server {}
 
 ## What This Demonstrates
 
-- Using `sessionMode: 'stateless'` to disable session management
+- Serving without sessions: whether the server keeps sessions follows `transport.protocol` (`sessionMode` has no effect)
 - Using the `'stateless-api'` preset: no SSE, no streaming, pure request/response
 - Each request is standalone with no server-side state between invocations
 - Required for serverless targets (Vercel, Lambda, Cloudflare Workers)

@@ -19,7 +19,7 @@ Configure Vercel KV for session storage in serverless Vercel deployments.
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({ name: 'my-app' })
 class MyApp {}
@@ -33,7 +33,6 @@ class MyApp {}
   },
   transport: {
     protocol: 'stateless-api',
-    sessionMode: 'stateless',
   },
 })
 class Server {}

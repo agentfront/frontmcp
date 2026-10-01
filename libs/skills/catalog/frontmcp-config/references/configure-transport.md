@@ -35,7 +35,6 @@ Configure how clients connect to your FrontMCP server — SSE, Streamable HTTP, 
   info: { name: 'my-server', version: '1.0.0' },
   apps: [MyApp],
   transport: {
-    sessionMode: 'stateful', // 'stateful' | 'stateless'
     protocol: 'legacy', // preset or custom ProtocolConfig
     persistence: {
       // false to disable
@@ -157,7 +156,7 @@ curl -X POST http://localhost:3000/ -H 'Content-Type: application/json' -d '{"js
 | Pattern              | Correct                                                                          | Incorrect                                                  | Why                                                                                |
 | -------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Choosing a preset    | `protocol: 'modern'`                                                             | `protocol: { sse: true, streamable: true, legacy: false }` | Use a preset when it matches your needs; custom config is for overrides only       |
-| Serverless transport | `protocol: 'stateless-api'` with `sessionMode: 'stateless'`                      | `protocol: 'legacy'` on Lambda                             | Legacy preset creates sessions that serverless cannot maintain between invocations |
+| Serverless transport | `protocol: 'stateless-api'`                                                      | `protocol: 'legacy'` on Lambda                             | Legacy preset creates sessions that serverless cannot maintain between invocations |
 | Distributed sessions | `distributedMode: true` with Redis `persistence` configured                      | `distributedMode: true` without Redis                      | Distributed mode requires Redis; omitting it causes a startup error                |
 | Event store provider | `provider: 'redis'` for multi-instance, `provider: 'memory'` for single instance | `provider: 'memory'` behind a load balancer                | In-memory event store is not shared across instances, breaking SSE resumability    |
 | Session TTL          | Set `defaultTtlMs` to match your expected session duration                       | Omitting `defaultTtlMs` when using Redis persistence       | Missing TTL can cause sessions to accumulate indefinitely in Redis                 |
@@ -167,12 +166,12 @@ curl -X POST http://localhost:3000/ -H 'Content-Type: application/json' -d '{"js
 ### Transport Protocol
 
 - [ ] Correct preset is chosen for the deployment target (see Target-Specific Recommendations table)
-- [ ] Custom protocol flags, if used, do not conflict with the selected `sessionMode`
+- [ ] Custom protocol flags, if used, match whether the server should keep sessions (`stateless: true` serves without them)
 - [ ] Legacy SSE is disabled when all clients support modern MCP protocol
 
 ### Session and Persistence
 
-- [ ] `sessionMode` is `'stateless'` for serverless deployments
+- [ ] `protocol` is `'stateless-api'` for serverless deployments (sessions follow `protocol`; `sessionMode` has no effect and logs a startup warning when set to anything but `'stateful'`)
 - [ ] `distributedMode` is enabled and Redis is configured for multi-instance deployments
 - [ ] `defaultTtlMs` is set to a reasonable value when persistence is enabled
 
@@ -196,7 +195,7 @@ curl -X POST http://localhost:3000/ -H 'Content-Type: application/json' -d '{"js
 | Server rejects SSE connections         | SSE is disabled in the protocol config or preset                           | Switch to `'legacy'`, `'modern'`, or `'full'` preset, or set `sse: true` in custom config  |
 | `distributedMode` startup error        | Redis persistence is not configured                                        | Add a `persistence.redis` block with valid connection details                              |
 | Clients lose state after reconnect     | Event store is disabled or using in-memory provider behind a load balancer | Enable event store with `provider: 'redis'` for distributed deployments                    |
-| Serverless function times out on SSE   | Using a stateful preset on a serverless target                             | Switch to `'stateless-api'` preset and set `sessionMode: 'stateless'`                      |
+| Serverless function times out on SSE   | Using a stateful preset on a serverless target                             | Switch to the `'stateless-api'` preset                                                     |
 | Session not found after server restart | In-memory sessions do not survive restarts                                 | Enable Redis persistence with `distributedMode: true`                                      |
 | Streamable HTTP returns 404            | Streamable HTTP is not enabled in the current preset                       | Use `'modern'`, `'legacy'`, or `'full'` preset, or set `streamable: true` in custom config |
 
