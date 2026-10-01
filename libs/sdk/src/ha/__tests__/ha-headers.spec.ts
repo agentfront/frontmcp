@@ -1,4 +1,4 @@
-import { applyMachineIdHeader, applyNodeAffinity } from '../ha-headers';
+import { applyMachineIdHeader, applyNodeAffinity, machineIdHeader } from '../ha-headers';
 
 const mockRuntime = { deployment: 'distributed' };
 jest.mock('@frontmcp/utils', () => ({
@@ -25,6 +25,12 @@ describe('ha-headers', () => {
     const res = makeResponse();
     expect(applyMachineIdHeader(res)).toBe(true);
     expect(res.headers.get('X-FrontMCP-Machine-Id')).toBe('node-1');
+  });
+
+  it('describes the header for adapters that build their own responses', () => {
+    expect(machineIdHeader()).toEqual(['X-FrontMCP-Machine-Id', 'node-1']);
+    mockRuntime.deployment = 'standalone';
+    expect(machineIdHeader()).toBeUndefined();
   });
 
   it('does nothing outside distributed mode', () => {

@@ -135,7 +135,7 @@ Each pod subscribes to `mcp:ha:notify:{nodeId}` via Redis Pub/Sub. Cross-pod MCP
 FrontMCP sets:
 
 - **Cookie**: `__frontmcp_node` on Streamable HTTP initialize
-- **Header**: `X-FrontMCP-Machine-Id` on every distributed response (initialize, message POSTs, DELETE, stateless requests and SSE), applied by the hookable `applyNodeHeaders` flow stage
+- **Header**: `X-FrontMCP-Machine-Id` on every distributed response (initialize, message POSTs, DELETE, stateless and MCP 2026-07-28 requests, SSE, `/healthz`, `/readyz`, `/metrics` and 404s). The Express host and the web-fetch handler add it next to the security headers; the session flows also set it in the hookable `applyNodeHeaders` stage. Only distributed mode (`FRONTMCP_DEPLOYMENT_MODE=distributed`) sends it
 
 NGINX sticky session example:
 

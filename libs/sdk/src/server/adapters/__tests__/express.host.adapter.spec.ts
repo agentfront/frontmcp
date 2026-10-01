@@ -1,5 +1,7 @@
 import * as http from 'node:http';
 
+import { getMachineId, resetRuntimeContext } from '@frontmcp/utils';
+
 import { ExpressHostAdapter } from '../express.host.adapter';
 
 // server/adapters/__tests__/express.host.adapter.spec.ts
@@ -238,6 +240,32 @@ describe('ExpressHostAdapter', () => {
       const headers = await fetchHeaders(new ExpressHostAdapter({ securityHeaders: { frameOptions: false } }));
       expect(headers['x-frame-options']).toBeUndefined();
       expect(headers['x-content-type-options']).toBe('nosniff');
+    });
+
+    describe('X-FrontMCP-Machine-Id (#680)', () => {
+      const originalMode = process.env['FRONTMCP_DEPLOYMENT_MODE'];
+      afterEach(() => {
+        if (originalMode === undefined) delete process.env['FRONTMCP_DEPLOYMENT_MODE'];
+        else process.env['FRONTMCP_DEPLOYMENT_MODE'] = originalMode;
+        resetRuntimeContext();
+      });
+
+      it.each([
+        ['a route', '/test'],
+        ['a 404', '/nope'],
+      ])('is sent on %s in distributed mode', async (_label, path) => {
+        process.env['FRONTMCP_DEPLOYMENT_MODE'] = 'distributed';
+        resetRuntimeContext();
+        const headers = await fetchHeaders(new ExpressHostAdapter(), path);
+        expect(headers['x-frontmcp-machine-id']).toBe(getMachineId());
+      });
+
+      it('is not sent outside distributed mode', async () => {
+        delete process.env['FRONTMCP_DEPLOYMENT_MODE'];
+        resetRuntimeContext();
+        const headers = await fetchHeaders(new ExpressHostAdapter(), '/nope');
+        expect(headers['x-frontmcp-machine-id']).toBeUndefined();
+      });
     });
   });
 

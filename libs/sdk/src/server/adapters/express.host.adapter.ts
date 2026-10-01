@@ -15,6 +15,7 @@ import {
 } from '../../common';
 import type { SecurityHeadersOptions, SecurityOptions } from '../../common/types/options/http/interfaces';
 import { PayloadTooLargeError } from '../../errors/mcp.error';
+import { applyMachineIdHeader } from '../../ha/ha-headers';
 import { resolveSecurityHeaders } from '../middleware/csp.middleware';
 import { createHostValidationMiddleware } from '../middleware/host-validation.middleware';
 import { allowedHostsFromEnv, deriveAllowedHosts, shouldEnforceDerivedHosts } from '../security/resolve-allowed-hosts';
@@ -92,11 +93,14 @@ export class ExpressHostAdapter extends HostServerAdapter {
 
     // Never advertise the framework, and send the security headers on every
     // response — including 4xx/5xx from the middleware below (host validation,
-    // 413) — so they are installed first.
+    // 413) — so they are installed first. A distributed instance names itself
+    // on every response the same way (`X-FrontMCP-Machine-Id`, #665): health
+    // probes, metrics, 404s and every MCP protocol revision included.
     this.app.disable('x-powered-by');
     const securityHeaders = resolveSecurityHeaders(options?.securityHeaders);
     this.app.use((_req, res, next) => {
       for (const [name, value] of Object.entries(securityHeaders)) res.setHeader(name, value);
+      applyMachineIdHeader(res);
       next();
     });
 
