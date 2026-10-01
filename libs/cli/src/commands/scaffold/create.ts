@@ -1857,6 +1857,14 @@ function printNextSteps(
  */
 const WRANGLER_VERSION_RANGE = '^4.0.0';
 
+/**
+ * The Lambda entry wraps the server with `@codegenie/serverless-express`;
+ * `frontmcp build --target lambda` refuses to build without it and bundles it
+ * into `dist/lambda/handler.cjs` (#680), so a scaffolded Lambda project needs it
+ * to get past its first build.
+ */
+const SERVERLESS_EXPRESS_VERSION_RANGE = '^5.0.0';
+
 async function upsertPackageJsonWithTarget(
   cwd: string,
   nameOverride: string | undefined,
@@ -1914,6 +1922,7 @@ async function upsertPackageJsonWithTarget(
       tslib: '^2.5.0',
       zod: '^4.0.0',
       'reflect-metadata': '^0.2.2',
+      ...(deploymentTarget === 'lambda' ? { '@codegenie/serverless-express': SERVERLESS_EXPRESS_VERSION_RANGE } : {}),
     },
     devDependencies: {
       ...(deploymentTarget === 'cloudflare' ? { wrangler: WRANGLER_VERSION_RANGE } : {}),

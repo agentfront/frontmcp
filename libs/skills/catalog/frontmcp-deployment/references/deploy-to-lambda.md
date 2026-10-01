@@ -42,7 +42,7 @@ This skill walks you through deploying a FrontMCP server to AWS Lambda with API 
   npm install @codegenie/serverless-express
   ```
 
-  If it isn't installed, `frontmcp build --target lambda` fails with a clear error before producing artifacts.
+  If it isn't installed, `frontmcp build --target lambda` fails with a clear error before producing artifacts. `frontmcp create --target lambda` adds it to `dependencies` for you.
 
 ## Step 1: Build for Lambda
 
