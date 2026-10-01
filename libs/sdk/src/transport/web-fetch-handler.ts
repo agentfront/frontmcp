@@ -19,10 +19,14 @@ import { type HttpMethod, type ServerRequest } from '../common/interfaces/server
 import { type HttpOutput } from '../common/schemas/http-output.schema';
 import { ServerRequestTokens } from '../common/tokens/server.tokens';
 import { type CorsOptions } from '../common/types/options/http/interfaces';
+import { type MetricsOptionsInterface } from '../common/types/options/metrics';
 import { normalizeEntryPrefix, resolveEntryPath } from '../common/utils/path.utils';
 import { PayloadTooLargeError, PublicMcpError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
+import { machineIdHeader } from '../ha/ha-headers';
 import { isReadyzEnabled } from '../health/health.routes';
+import { metricsPath, renderMetricsScrape, type MetricsHttpResult } from '../metrics/metrics.routes';
+import { type MetricsService } from '../metrics/metrics.service';
 import { type Scope } from '../scope/scope.instance';
 import { resolveSecurityHeaders } from '../server/middleware/csp.middleware';
 import { compileHostValidation, validateHostHeaders } from '../server/security/host-validation';
@@ -158,6 +162,18 @@ export interface CreateWebFetchHandlerOptions {
    * in the adapter regardless.
    */
   sessionRouter?: WebFetchSessionRouter;
+  /**
+   * The `/metrics` endpoint (`@FrontMcp({ metrics: { enabled: true } })`).
+   * `createFetchHandler()` passes the server's service here, as the Express
+   * host registers it as a route, so both answer the same scrape.
+   */
+  metrics?: { service: MetricsService; config: MetricsOptionsInterface };
+}
+
+/** Render a metrics scrape as a Web `Response`. */
+function metricsResponse(result: MetricsHttpResult): Response {
+  if (result.kind === 'json') return Response.json(result.body, { status: result.status, headers: result.headers });
+  return new Response(result.body, { status: result.status, headers: result.headers });
 }
 
 /**
@@ -252,10 +268,20 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   };
 
-  /** Merge the resolved security headers into a response without overriding ones the flow already set. */
+  // `/metrics`, when the server enabled it (the same path the Express host registers).
+  const metrics = options.metrics?.config.enabled === true ? options.metrics : undefined;
+  const metricsEndpoint = metrics ? normalizePath(metricsPath(metrics.config)) : undefined;
+
+  /**
+   * Merge the resolved security headers into a response without overriding ones the flow already
+   * set. A distributed instance also names itself on every response (`X-FrontMCP-Machine-Id`),
+   * exactly as the Express host does.
+   */
   const withSecurityHeaders = (response: Response): Response => {
     const headers = new Headers(response.headers);
     for (const [k, v] of Object.entries(securityHeaders)) if (!headers.has(k)) headers.set(k, v);
+    const machineId = machineIdHeader();
+    if (machineId) headers.set(machineId[0], machineId[1]);
     headers.delete('x-powered-by');
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   };
@@ -289,6 +315,11 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
     // CORS preflight — answer OPTIONS directly (transport-adapter concern).
     if (corsEnabled && request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeadersFor(request) });
+    }
+
+    if (metrics && metricsEndpoint === normalizePath(url.pathname) && request.method === 'GET') {
+      const scrape = renderMetricsScrape(metrics.service, metrics.config, request.headers.get('authorization') ?? undefined);
+      return withCors(metricsResponse(scrape), request);
     }
 
     // Liveness/readiness — cheap, no MCP server spin-up.

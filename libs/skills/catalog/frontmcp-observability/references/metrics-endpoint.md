@@ -29,6 +29,8 @@ class Server {}
 
 Then scrape: `curl http://localhost:3000/metrics` (the default port is `PORT`, else 3000) — Content-Type is the canonical Prometheus `text/plain; version=0.0.4; charset=utf-8`.
 
+`FrontMcpInstance.createFetchHandler(config)` (the Web-standard `(Request) => Response` handler) answers `GET /metrics` too — same body, auth and headers as the Express listener (it needs `@frontmcp/observability` installed, like the Express endpoint).
+
 ## Configuration
 
 ```typescript
