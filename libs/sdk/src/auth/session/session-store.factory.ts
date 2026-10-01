@@ -6,7 +6,11 @@
  * Uses @frontmcp/utils storage adapters internally.
  */
 
-import type { SessionStore } from '@frontmcp/auth';
+// Static, not a lazy `require()`: `@frontmcp/auth` is a hard dependency, and a lazy require in
+// the ESM build becomes an opaque `__require("@frontmcp/auth")` that a worker bundler (wrangler)
+// cannot see, so a Cloudflare Worker failed with `No such module "@frontmcp/auth"` (#680). The
+// backends these stores talk to (ioredis, @vercel/kv) are still loaded lazily by @frontmcp/utils.
+import { RedisSessionStore, VercelKvSessionStore, type SessionStore } from '@frontmcp/auth';
 import { RedisStorageAdapter, type StorageAdapter } from '@frontmcp/utils';
 
 import {
@@ -97,9 +101,6 @@ export async function createSessionStore(
  * Create a Redis session store
  */
 async function createRedisSessionStore(options: RedisProviderOptions, logger?: FrontMcpLogger): Promise<SessionStore> {
-  // Lazy require to avoid bundling ioredis when not used
-  const { RedisSessionStore } = require('@frontmcp/auth');
-
   return new RedisSessionStore(
     {
       host: options.host,
@@ -121,9 +122,6 @@ async function createVercelKvSessionStore(
   options: VercelKvProviderOptions,
   logger?: FrontMcpLogger,
 ): Promise<SessionStore> {
-  // Lazy require to avoid bundling @vercel/kv when not used
-  const { VercelKvSessionStore } = require('@frontmcp/auth');
-
   const store = new VercelKvSessionStore(
     {
       url: options.url,
@@ -156,7 +154,6 @@ export function createSessionStoreSync(options: RedisOptions, logger?: FrontMcpL
   }
 
   // Redis only - synchronous creation
-  const { RedisSessionStore } = require('@frontmcp/auth');
   const redisOptions = isRedisProvider(options) ? options : (options as RedisProviderOptions);
 
   return new RedisSessionStore(

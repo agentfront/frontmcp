@@ -24,7 +24,9 @@ const createMockVercelKvClient = () => ({
 });
 
 const mockKvClient = createMockVercelKvClient();
-const mockCreateClient = jest.fn(() => createMockVercelKvClient());
+// Every connect builds its own client (the module's `kv` singleton cannot leave
+// the fetch cache mode unset), so by default it hands back the shared mock.
+const mockCreateClient = jest.fn(() => mockKvClient);
 
 jest.mock('@vercel/kv', () => ({
   kv: mockKvClient,
@@ -39,6 +41,7 @@ describe('VercelKvStorageAdapter', () => {
 
     // Reset mock client
     Object.assign(mockKvClient, createMockVercelKvClient());
+    mockCreateClient.mockImplementation(() => mockKvClient);
 
     // Clear environment variables
     delete process.env['KV_REST_API_URL'];
@@ -106,7 +109,7 @@ describe('VercelKvStorageAdapter', () => {
   });
 
   describe('Connection Lifecycle', () => {
-    it('should connect using default kv singleton when URL matches env', async () => {
+    it('should build a client from the env URL and token, with no fetch cache mode (#680)', async () => {
       process.env['KV_REST_API_URL'] = 'https://example.vercel.storage';
       process.env['KV_REST_API_TOKEN'] = 'token123';
 
@@ -116,7 +119,12 @@ describe('VercelKvStorageAdapter', () => {
 
       expect(await adapter.ping()).toBe(true);
       expect(mockKvClient.exists).toHaveBeenCalledWith('__healthcheck__');
-      expect(mockCreateClient).not.toHaveBeenCalled();
+      expect(mockCreateClient).toHaveBeenCalledTimes(1);
+      const [config] = mockCreateClient.mock.calls[0] as unknown as [Record<string, unknown>];
+      expect(config).toMatchObject({ url: 'https://example.vercel.storage', token: 'token123' });
+      // Cloudflare Workers reject the `cache: 'default'` @vercel/kv would otherwise set.
+      expect(Object.prototype.hasOwnProperty.call(config, 'cache')).toBe(true);
+      expect(config['cache']).toBeUndefined();
     });
 
     it('should connect using createClient when URL differs from env', async () => {
