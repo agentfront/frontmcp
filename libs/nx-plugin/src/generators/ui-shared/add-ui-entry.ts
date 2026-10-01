@@ -1,5 +1,7 @@
 import { updateJson, type Tree } from '@nx/devkit';
 
+import { addTsPathAlias } from '../../utils/project-paths.js';
+
 function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -43,18 +45,7 @@ export function addUiEntry(tree: Tree, options: AddUiEntryOptions): void {
   // 2. Update tsconfig.base.json — add explicit path alias
   //    The wildcard alias already covers resolution, but adding an explicit
   //    entry improves IDE completion and Nx dep graph accuracy.
-  if (tree.exists('tsconfig.base.json')) {
-    updateJson(tree, 'tsconfig.base.json', (json) => {
-      const paths = json.compilerOptions?.paths ?? {};
-      const aliasKey = `${importPath}/${entryName}`;
-      if (!paths[aliasKey]) {
-        paths[aliasKey] = [`${packageRoot}/src/${entryName}/index.ts`];
-      }
-      json.compilerOptions = json.compilerOptions ?? {};
-      json.compilerOptions.paths = paths;
-      return json;
-    });
-  }
+  addTsPathAlias(tree, `${importPath}/${entryName}`, entryPath, { overwrite: false });
 
   // 3. Add re-export to barrel index.ts
   const barrelPath = `${packageRoot}/src/index.ts`;

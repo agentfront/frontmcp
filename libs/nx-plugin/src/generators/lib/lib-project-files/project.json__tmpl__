@@ -6,10 +6,17 @@
   "tags": [<%- parsedTags.map(t => `"${t}"`).join(', ') %>],
   "targets": {
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "executor": "@frontmcp/nx:test",
+      "cache": true,
+      "options": {}
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
       "options": {
-        "jestConfig": "<%= projectRoot %>/jest.config.cjs"
+        "commands": ["tsc --noEmit -p tsconfig.lib.json", "tsc --noEmit -p tsconfig.spec.json"],
+        "parallel": false,
+        "cwd": "{projectRoot}"
       }
     }
   }

@@ -3,6 +3,8 @@ import { join } from 'path';
 
 import { formatFiles, generateFiles, names as nxNames, type GeneratorCallback, type Tree } from '@nx/devkit';
 
+import { addFrontmcpDependencies } from '../../utils/add-dependencies.js';
+import { getLambdaDependencies } from '../../utils/versions.js';
 import { normalizeOptions } from './lib/index.js';
 import type { ServerGeneratorSchema } from './schema.js';
 
@@ -33,9 +35,17 @@ async function serverGeneratorInternal(tree: Tree, schema: ServerGeneratorSchema
     scaffoldCatalogSkills(tree, options.projectRoot, options.deploymentTarget, bundle);
   }
 
+  // The lambda build wraps the server with @codegenie/serverless-express and fails without it.
+  const installTask =
+    options.deploymentTarget === 'lambda'
+      ? addFrontmcpDependencies(tree, getLambdaDependencies(), {}, { keepExistingVersions: true })
+      : undefined;
+
   if (!options.skipFormat) {
     await formatFiles(tree);
   }
+
+  return installTask;
 }
 
 function scaffoldCatalogSkills(tree: Tree, projectRoot: string, target: string, bundle: string): void {

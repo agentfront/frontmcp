@@ -12,8 +12,10 @@ Resources:
   McpFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: dist/
-      Handler: main.handler
+      # `nx build <%= projectName %>` (target lambda) writes dist/lambda/handler.cjs, which exports `handler`.
+      # The bundle requires @codegenie/serverless-express at runtime without bundling it: add a Lambda layer that provides it.
+      CodeUri: dist/lambda/
+      Handler: handler.handler
       Events:
         Api:
           Type: HttpApi

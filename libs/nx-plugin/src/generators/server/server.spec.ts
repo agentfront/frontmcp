@@ -1,6 +1,7 @@
 import { readJson, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
 
+import { getLambdaDependencies } from '../../utils/versions';
 import { appGenerator } from '../app/app';
 import { serverGenerator } from './server';
 
@@ -26,7 +27,35 @@ describe('server generator', () => {
 
       expect(tree.exists('servers/prod/Dockerfile')).toBe(true);
       expect(tree.exists('servers/prod/docker-compose.yml')).toBe(true);
-      expect(tree.exists('servers/prod/.dockerignore')).toBe(true);
+      // The build context is the workspace root, so Docker only reads an ignore file named after the Dockerfile.
+      expect(tree.exists('servers/prod/Dockerfile.dockerignore')).toBe(true);
+      expect(tree.exists('servers/prod/.dockerignore')).toBe(false);
+      expect(tree.read('servers/prod/Dockerfile.dockerignore', 'utf-8')).toContain('**/node_modules');
+    });
+
+    it('runs the bundle the node build writes and listens on every interface', async () => {
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
+
+      const dockerfile = tree.read('servers/prod/Dockerfile', 'utf-8') ?? '';
+      expect(dockerfile).toContain('RUN npx nx build server-prod');
+      expect(dockerfile).toContain('COPY --from=builder /app/servers/prod/dist ./dist');
+      expect(dockerfile).toContain('CMD ["node", "dist/node/server-prod.bundle.js"]');
+      expect(dockerfile).not.toContain('dist/main.js');
+      expect(dockerfile).toContain('ENV FRONTMCP_BIND_ADDRESS=all');
+    });
+
+    it('points docker compose at the workspace root from any depth', async () => {
+      await serverGenerator(tree, {
+        name: 'prod',
+        apps: 'demo',
+        deploymentTarget: 'node',
+        directory: 'servers/eu/prod',
+        skipFormat: true,
+      });
+
+      const compose = tree.read('servers/eu/prod/docker-compose.yml', 'utf-8') ?? '';
+      expect(compose).toContain('context: ../../../');
+      expect(compose).toContain('dockerfile: servers/eu/prod/Dockerfile');
     });
 
     it('should include redis service when redis=docker', async () => {
@@ -52,6 +81,39 @@ describe('server generator', () => {
       const vercelJson = readJson(tree, 'servers/prod/vercel.json');
       expect(vercelJson.version).toBe(2);
     });
+
+    it('builds the Build Output API tree with Nx instead of pointing at a dist/main.js the build never writes', async () => {
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'vercel', skipFormat: true });
+
+      const vercelJson = readJson(tree, 'servers/prod/vercel.json');
+      expect(vercelJson).toEqual({
+        $schema: 'https://openapi.vercel.sh/vercel.json',
+        version: 2,
+        installCommand: 'cd ../../ && npm install',
+        buildCommand: 'cd ../../ && npx nx build server-prod',
+      });
+      expect(vercelJson.builds).toBeUndefined();
+      expect(vercelJson.routes).toBeUndefined();
+    });
+
+    it('runs the workspace package manager', async () => {
+      tree.write('pnpm-lock.yaml', '');
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'vercel', skipFormat: true });
+
+      expect(readJson(tree, 'servers/prod/vercel.json')).toMatchObject({
+        installCommand: 'cd ../../ && pnpm install',
+        buildCommand: 'cd ../../ && pnpm exec nx build server-prod',
+      });
+    });
+
+    it('caches the .vercel/output tree the build writes next to dist', async () => {
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'vercel', skipFormat: true });
+
+      expect(readJson(tree, 'servers/prod/project.json').targets.build.outputs).toEqual([
+        '{projectRoot}/dist',
+        '{projectRoot}/.vercel/output',
+      ]);
+    });
   });
 
   describe('lambda target', () => {
@@ -61,6 +123,37 @@ describe('server generator', () => {
       expect(tree.exists('servers/prod/template.yaml')).toBe(true);
       const template = tree.read('servers/prod/template.yaml', 'utf-8');
       expect(template).toContain('AWS::Serverless');
+    });
+
+    it('installs the serverless-express wrapper the lambda build requires', async () => {
+      const task = await serverGenerator(tree, {
+        name: 'prod',
+        apps: 'demo',
+        deploymentTarget: 'lambda',
+        skipFormat: true,
+      });
+
+      expect(typeof task).toBe('function');
+      expect(readJson(tree, 'package.json').dependencies['@codegenie/serverless-express']).toBe(
+        getLambdaDependencies()['@codegenie/serverless-express'],
+      );
+    });
+
+    it('adds no dependencies for the other targets', async () => {
+      const task = await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
+
+      expect(task).toBeUndefined();
+      expect(readJson(tree, 'package.json').dependencies?.['@codegenie/serverless-express']).toBeUndefined();
+    });
+
+    it('points SAM at the handler the lambda build writes (dist/lambda/handler.cjs)', async () => {
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'lambda', skipFormat: true });
+
+      const template = tree.read('servers/prod/template.yaml', 'utf-8') ?? '';
+      expect(template).toContain('CodeUri: dist/lambda/');
+      expect(template).toContain('Handler: handler.handler');
+      expect(template).not.toContain('main.handler');
+      expect(readJson(tree, 'servers/prod/project.json').targets.build.outputs).toEqual(['{projectRoot}/dist']);
     });
   });
 
@@ -148,6 +241,39 @@ describe('server generator', () => {
       expect(targets.build.options.adapter).toBeUndefined();
       expect(targets.build.options.target).toBe('vercel');
       expect(targets.build.cache).toBe(true);
+    });
+
+    it('has a dev target that serves the composed apps', async () => {
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
+
+      expect(readJson(tree, 'servers/prod/project.json').targets.dev).toEqual({
+        executor: '@frontmcp/nx:dev',
+        options: { entry: '{projectRoot}/src/main.ts' },
+      });
+    });
+
+    it('type-checks with its own target instead of the inferred tsc --build one (TS5069)', async () => {
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
+
+      expect(readJson(tree, 'servers/prod/tsconfig.json').nx).toEqual({ addTypecheckTarget: false });
+      expect(readJson(tree, 'servers/prod/project.json').targets.typecheck).toMatchObject({
+        executor: 'nx:run-commands',
+        options: { command: 'tsc --noEmit -p tsconfig.lib.json', cwd: '{projectRoot}' },
+      });
+    });
+
+    it('compiles from the workspace root with JavaScript output in any workspace', async () => {
+      tree.write('package.json', JSON.stringify({ devDependencies: { typescript: '~6.0.3' } }));
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
+
+      expect(readJson(tree, 'servers/prod/tsconfig.json').compilerOptions).toMatchObject({
+        module: 'commonjs',
+        moduleResolution: 'bundler',
+        rootDir: '../../',
+        composite: false,
+        declarationMap: false,
+        emitDeclarationOnly: false,
+      });
     });
 
     it('extends the base tsconfig from any directory depth', async () => {

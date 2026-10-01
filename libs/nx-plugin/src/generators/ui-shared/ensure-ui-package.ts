@@ -1,8 +1,8 @@
 import { offsetFromRoot, readJson, writeJson, type GeneratorCallback, type Tree } from '@nx/devkit';
 
 import { addFrontmcpDependencies } from '../../utils/add-dependencies.js';
-import { getIgnoreDeprecations } from '../../utils/project-paths.js';
-import { getFrontmcpVersion, getNxVersion } from '../../utils/versions.js';
+import { getModuleResolution } from '../../utils/project-paths.js';
+import { getFrontmcpVersion, getUiBuildDevDependencies } from '../../utils/versions.js';
 
 export interface EnsureUiPackageOptions {
   /** e.g. 'ui/components' */
@@ -75,7 +75,6 @@ export function ensureUiPackage(tree: Tree, options: EnsureUiPackageOptions): Ge
 
   if (!tree.exists(`${packageRoot}/project.json`)) {
     const offset = offsetFromRoot(packageRoot);
-    const ignoreDeprecations = getIgnoreDeprecations(tree);
     // `customConditions` (Nx solution workspaces set it) is only valid with a modern `moduleResolution`
     // (TS5098), so a package that inherits it must inherit the base's `module`/`moduleResolution` too.
     const inheritsModernResolution = Boolean(
@@ -94,8 +93,7 @@ export function ensureUiPackage(tree: Tree, options: EnsureUiPackageOptions): Ge
     writeJson(tree, `${packageRoot}/tsconfig.json`, {
       extends: `${offset}tsconfig.base.json`,
       compilerOptions: {
-        ...(!inheritsModernResolution && { module: 'commonjs', moduleResolution: 'node10' }),
-        ...(!inheritsModernResolution && ignoreDeprecations && { ignoreDeprecations }),
+        ...(!inheritsModernResolution && { module: 'commonjs', moduleResolution: getModuleResolution(tree) }),
         ...(kind === 'react' && { jsx: 'react-jsx' }),
         esModuleInterop: true,
         strict: true,
@@ -128,7 +126,7 @@ export function ensureUiPackage(tree: Tree, options: EnsureUiPackageOptions): Ge
   }
 
   const range = `~${getFrontmcpVersion()}`;
-  const buildDevDependencies = { '@nx/esbuild': getNxVersion(), esbuild: '^0.25.0' };
+  const buildDevDependencies = getUiBuildDevDependencies();
   return kind === 'react'
     ? addFrontmcpDependencies(
         tree,

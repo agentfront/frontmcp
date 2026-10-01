@@ -1,0 +1,14 @@
+import { ExampleTool, <%= className %>Tools } from './<%= fileName %>.tools';
+
+describe('<%= className %>Tools', () => {
+  it('registers the example tool', () => {
+    expect(<%= className %>Tools).toContain(ExampleTool);
+  });
+
+  it('echoes the value', async () => {
+    // execute() holds the tool's logic; build the tool without the request context the server injects.
+    const tool: ExampleTool = Object.create(ExampleTool.prototype);
+
+    await expect(tool.execute({ value: 'ping' })).resolves.toEqual({ result: 'ping' });
+  });
+});

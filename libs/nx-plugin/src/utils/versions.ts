@@ -61,8 +61,37 @@ export function getJestDevDependencies(): Record<string, string> {
 
 const NX_VERSION = '22.6.4';
 
+/**
+ * The esbuild the generated workspace installs. It must satisfy the `esbuild` peer range of
+ * `@frontmcp/uipack` (`>=0.27`) and matches the range the `frontmcp` CLI depends on, so the
+ * workspace resolves a single copy. `versions.spec.ts` checks both against the monorepo.
+ */
+const ESBUILD_VERSION = '^0.27.3';
+
 export function getNxVersion(): string {
   return NX_VERSION;
+}
+
+export function getEsbuildVersion(): string {
+  return ESBUILD_VERSION;
+}
+
+/**
+ * What `frontmcp build --target lambda` needs: the generated handler wraps the server with
+ * `@codegenie/serverless-express`, and the build refuses to run without it.
+ */
+export function getLambdaDependencies(): Record<string, string> {
+  return {
+    '@codegenie/serverless-express': '^5.0.0',
+  };
+}
+
+/** What the `@nx/esbuild` build targets of the generated UI packages need. */
+export function getUiBuildDevDependencies(): Record<string, string> {
+  return {
+    '@nx/esbuild': NX_VERSION,
+    esbuild: ESBUILD_VERSION,
+  };
 }
 
 export function getNxDependencies(): Record<string, string> {

@@ -85,7 +85,7 @@ describe('addUiEntry', () => {
 
       const tsconfig = readJson(tree, 'tsconfig.base.json');
       expect(tsconfig.compilerOptions.paths['@frontmcp/ui-components/LoginForm']).toEqual([
-        'ui/components/src/LoginForm/index.ts',
+        './ui/components/src/LoginForm/index.ts',
       ]);
     });
 
@@ -96,7 +96,7 @@ describe('addUiEntry', () => {
 
       const tsconfig = readJson(tree, 'tsconfig.base.json');
       expect(tsconfig.compilerOptions.paths['@frontmcp/ui-components/LoginForm']).toEqual([
-        'ui/components/src/LoginForm/index.ts',
+        './ui/components/src/LoginForm/index.ts',
       ]);
     });
 
@@ -143,6 +143,18 @@ describe('addUiEntry', () => {
       expect(esmEntries.filter((e: string) => e.includes('LoginForm'))).toHaveLength(1);
     });
 
+    it('keeps an alias the workspace already points elsewhere', () => {
+      tree.write(
+        'tsconfig.base.json',
+        JSON.stringify({ compilerOptions: { paths: { '@frontmcp/ui-components/LoginForm': ['./custom.ts'] } } }),
+      );
+
+      addUiEntry(tree, defaultOptions);
+
+      const tsconfig = readJson(tree, 'tsconfig.base.json');
+      expect(tsconfig.compilerOptions.paths['@frontmcp/ui-components/LoginForm']).toEqual(['./custom.ts']);
+    });
+
     it('should not add duplicate path alias', () => {
       tree.write('tsconfig.base.json', JSON.stringify({ compilerOptions: { paths: {} } }));
 
@@ -151,7 +163,7 @@ describe('addUiEntry', () => {
 
       const tsconfig = readJson(tree, 'tsconfig.base.json');
       expect(tsconfig.compilerOptions.paths['@frontmcp/ui-components/LoginForm']).toEqual([
-        'ui/components/src/LoginForm/index.ts',
+        './ui/components/src/LoginForm/index.ts',
       ]);
     });
 

@@ -57,7 +57,7 @@ describe('ui-component generator', () => {
 
     const tsconfig = readJson(tree, 'tsconfig.base.json');
     expect(tsconfig.compilerOptions.paths['@frontmcp/ui-components/LoginForm']).toEqual([
-      'ui/components/src/LoginForm/index.ts',
+      './ui/components/src/LoginForm/index.ts',
     ]);
   });
 

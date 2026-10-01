@@ -1,6 +1,6 @@
 import { type Tree, names, joinPathFragments } from '@nx/devkit';
 import type { AppGeneratorSchema } from '../schema.js';
-import { getIgnoreDeprecations, resolveProjectPaths } from '../../../utils/project-paths.js';
+import { getProjectTsOptions, resolveProjectPaths, type ProjectModuleResolution } from '../../../utils/project-paths.js';
 
 export interface NormalizedAppOptions {
   name: string;
@@ -11,7 +11,8 @@ export interface NormalizedAppOptions {
   outputRoot: string;
   /** Path from the project back to the workspace root, e.g. `../../`. */
   offset: string;
-  ignoreDeprecations: string;
+  moduleResolution: ProjectModuleResolution;
+  resetCustomConditions: boolean;
   className: string;
   fileName: string;
   propertyName: string;
@@ -31,7 +32,7 @@ export function normalizeOptions(tree: Tree, schema: AppGeneratorSchema): Normal
     projectRoot,
     outputRoot,
     offset,
-    ignoreDeprecations: getIgnoreDeprecations(tree, schema.workspaceRoot),
+    ...getProjectTsOptions(tree, schema.workspaceRoot),
     className,
     fileName,
     propertyName,
