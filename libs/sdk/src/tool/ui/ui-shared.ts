@@ -11,7 +11,7 @@ import {
   type RenderToolTemplateOptions,
 } from '@frontmcp/uipack/adapters';
 import { type ImportResolver } from '@frontmcp/uipack/resolver';
-import { type WidgetSizing } from '@frontmcp/uipack/shell';
+import { validateCSPDomain, type WidgetSizing } from '@frontmcp/uipack/shell';
 
 /**
  * Extract widget sizing config (`preferredHeight` / `minHeight` / `maxHeight` /
@@ -46,6 +46,21 @@ function extractSizing(uiConfig: Record<string, unknown> | undefined): WidgetSiz
     has = true;
   }
   return has ? sizing : undefined;
+}
+
+/**
+ * A tool's `ui.csp` with only the origins the widget page's own Content-Security-Policy can
+ * list. Startup already warned about the others (see `describeIgnoredUiOptions`), so leaving
+ * them out here keeps a render from warning again on every call.
+ */
+function pageCsp(uiConfig: Record<string, unknown> | undefined): UIResourceMeta['csp'] | undefined {
+  const csp = uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined;
+  if (!csp) return undefined;
+  const listable = (domains: unknown): string[] | undefined =>
+    Array.isArray(domains)
+      ? domains.filter((domain): domain is string => typeof domain === 'string' && validateCSPDomain(domain))
+      : undefined;
+  return { connectDomains: listable(csp.connectDomains), resourceDomains: listable(csp.resourceDomains) };
 }
 
 // ============================================
@@ -161,8 +176,11 @@ export class ToolUIRegistry {
   async compileStaticWidgetAsync(options: Record<string, unknown>): Promise<void> {
     const toolName = options['toolName'] as string;
     const template = options['template'];
-    const input = options['input'] ?? {};
-    const output = options['output'] ?? {};
+    // A widget compiled at startup has no call's data: the page injects none (the globals are
+    // null), so the bridge waits for the host's (e.g. `window.openai.toolOutput`) instead of
+    // taking a placeholder `{}` for the result. Template functions still get `{}` (#681).
+    const input = options['input'];
+    const output = options['output'];
     const uiConfig = options['uiConfig'] as Record<string, unknown> | undefined;
     // Prefer ui.resourceMode (configured by the user); fall back to a top-level
     // override on options so tests / programmatic callers can pass it directly.
@@ -190,7 +208,7 @@ export class ToolUIRegistry {
       resolver: this.resolver,
       resourceMode,
       sizing: extractSizing(uiConfig),
-      csp: uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined,
+      csp: pageCsp(uiConfig),
       ...this.stringResultOptions(uiConfig),
     });
 
@@ -287,7 +305,7 @@ export class ToolUIRegistry {
       resolver: this.resolver,
       resourceMode,
       sizing: extractSizing(uiConfig),
-      csp: uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined,
+      csp: pageCsp(uiConfig),
       ...this.stringResultOptions(uiConfig),
     });
 

@@ -323,7 +323,7 @@ createRoot(document.getElementById('root'))
   return `${componentImport}
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-const output = window.__mcpToolOutput;
+const output = window.__mcpToolOutput || {};
 const props = ${propsCode};
 createRoot(document.getElementById('root'))
   .render(React.createElement(Component, props));`;

@@ -39,12 +39,12 @@ That's it. The framework:
 
 ## Template formats
 
-| Format                       | Shape                                   | When                                                                                                                               |
-| ---------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **FileSource (recommended)** | `{ file: widgetPath }`                  | `.tsx` / `.jsx` / `.html` source files. Anchor with `import.meta.url`.                                                             |
-| **Function**                 | `` (ctx) => ctx.helpers.html`…` ``      | Quick demo / one-liner HTML. Annotate `ctx: TemplateContext<In, Out>` ([why](#typescript-gotcha-ts7006)).                          |
-| **HTML / Markdown string**   | `'<div>…</div>'` or `'# Title\n- item'` | A string with both `<` and `>` is HTML as written; any other string is Markdown, converted on the server. MDX is **not** compiled. |
-| **React component**          | `MyWidget`                              | A bare component reference cannot be bundled for the widget; use the `{ file }` form instead.                                      |
+| Format                       | Shape                                   | When                                                                                                                                    |
+| ---------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **FileSource (recommended)** | `{ file: widgetPath }`                  | `.tsx` / `.jsx` / `.html` source files. Anchor with `import.meta.url`.                                                                  |
+| **Function**                 | `` (ctx) => ctx.helpers.html`…` ``      | Quick demo / one-liner HTML. Annotate `ctx: TemplateContext<In, Out>` ([why](#typescript-gotcha-ts7006)).                               |
+| **HTML / Markdown string**   | `'<div>…</div>'` or `'# Title\n- item'` | A string with both `<` and `>` is HTML as written; any other string is Markdown, converted on the server. MDX is **not** compiled.      |
+| **React component**          | `MyWidget`                              | Not supported: a bare component reference cannot be bundled, so the page is an empty root. Startup warns once per tool; use `{ file }`. |
 
 The renderer auto-detects which one you passed.
 
@@ -74,7 +74,7 @@ Or use the FileSource form — it sidesteps the issue.
 | `minHeight` / `maxHeight`                                                                                 | —           | `number` (px) or CSS string. Clamp the widget height; auto-resize never reports outside this range.                                                                                                                                                |
 | `aspectRatio`                                                                                             | —           | CSS `aspect-ratio` (`'16 / 9'` or `1.5`). Hosts that honor it size by ratio instead of measured height.                                                                                                                                            |
 | `autoResize`                                                                                              | `true`      | Report the document height (margins included) to the host after the handshake. Set `false` to opt out (CSS still applies).                                                                                                                         |
-| `csp`                                                                                                     | —           | `{ connectDomains?, resourceDomains? }` — emitted on the resource content's `_meta.ui.csp` (#455). Claude honors CSP only here.                                                                                                                    |
+| `csp`                                                                                                     | —           | `{ connectDomains?, resourceDomains? }` — emitted on the resource content's `_meta.ui.csp` (#455). Claude honors CSP only here. See [CSP origins](#csp-origins).                                                                                   |
 | `contentSecurity`                                                                                         | strict      | **No effect yet.**                                                                                                                                                                                                                                 |
 | `escapeStringResults`                                                                                     | unset       | `true` escapes plain string results of a template function; `html` / `trustedHtml` stay markup. Default in 1.9.                                                                                                                                    |
 | `widgetAccessible`                                                                                        | `false`     | **No effect yet.**                                                                                                                                                                                                                                 |
@@ -117,8 +117,28 @@ export default function Widget({ output }: { output: { id: string } | null }) {
 
 - `resources/read ui://widget/{toolName}.html` serves only what was compiled at startup (`static`, the `hybrid` shell), rendered without caller data, or a data-free placeholder that gets the result through the bridge.
 - An `inline` render embeds the call's input and output. It is returned only in that call's `_meta['ui/html']` and is never cached where `resources/read` can serve it, so one caller can't read another caller's widget (GHSA-rhr9-vhpf-jqp7).
+- A page compiled at startup injects no call data (`window.__mcpToolInput` / `window.__mcpToolOutput` are `null`), so the bridge takes the result from the host: `window.openai.toolOutput` (ChatGPT, read at load and followed after) or `ui/notifications/tool-result` (MCP Apps). A `.tsx` widget renders with `loading: true` until it arrives, and `useToolOutput()` returns `null` until then.
 - Hosts that load the widget via `resources/read` (MCP Apps hosts such as Claude) need `servingMode: 'static'` and a template that reads data from `window.FrontMcpBridge`; set `resourceMode: 'inline'` explicitly for Claude in static mode.
+- With the default `servingMode`, every `tools/call` result carries the page in `_meta['ui/html']` — hosts that load the `ui://` resource don't read it, so use `servingMode: 'static'` to leave it out. A call the widget makes back through `ui/callServerTool` gets the data only.
 - The advertised URI percent-encodes the tool name (`app:tool` → `ui://widget/app%3Atool.html`). Encoded and raw forms both read back; a name that decodes to anything outside `A-Z a-z 0-9 _ - . / : @` is rejected.
+
+## CSP origins
+
+The page FrontMCP writes also carries its own Content-Security-Policy built from `ui.csp`:
+
+- An origin must be `https://` or `wss://` (a WebSocket API needs `wss://` in `connectDomains`), a `https://*.` / `wss://*.` wildcard, or `http://` / `ws://` on `localhost` / `127.0.0.1` / `[::1]`.
+- Declared origins are added to what the page already reaches: the CDNs and `resourceDomains` stay in `connect-src`.
+- Any other origin (bare host, `ftp://`, plain `http://` host) is left out of the page policy; startup logs a warning naming the tool and the origin. The resource `_meta.ui.csp` keeps the origins as written.
+
+```typescript
+ui: {
+  template: { file: widgetPath },
+  csp: {
+    connectDomains: ['https://api.example.com', 'wss://live.example.com'],
+    resourceDomains: ['https://cdn.example.com'],
+  },
+}
+```
 
 ## Trusted markup and escaping template results
 
@@ -193,7 +213,7 @@ Match the version to `@frontmcp/sdk`. Without it, server-side bundling fails wit
 npm install esbuild   # in "dependencies", not "devDependencies"
 ```
 
-Projects created with `frontmcp create` already have it through the `frontmcp` package. `@frontmcp/uipack` declares it as an optional peer dependency (`>=0.27.0 <1`). Without it, the call fails with an error naming the widget.
+Projects created with `frontmcp create` already have it through the `frontmcp` package. `@frontmcp/uipack` declares it as an optional peer dependency (`>=0.27.0 <1`). Without it, the call fails with an error naming the widget. Bundling works the same in CommonJS and ES-module (`"type": "module"`) projects.
 
 ## Widget bridge — `window.FrontMcpBridge`
 
@@ -243,6 +263,8 @@ The page follows the host theme. When an MCP Apps host sends `theme: 'light' | '
 | **Claude (MCP-UI)**  | Widget iframe blocks all external script execution. Use `resourceMode: 'inline'` (auto-detected when you leave it unset) so React bundles in. CSP must be on the resource — framework handles it via `ui.csp` (#455 fix).              |
 | **MCP Inspector**    | Useful for local development. Static mode works fine.                                                                                                                                                                                  |
 | **Gemini / unknown** | `ui` is ignored — JSON output is returned.                                                                                                                                                                                             |
+
+The host is decided when the client connects: a `transport.platformDetection.mappings` entry matching the client name wins; then a client that declares the MCP Apps extension (`io.modelcontextprotocol/ui`) is `ext-apps` whatever its name (`gemini-cli` included); then the client name. Opt a client out of MCP Apps with a mapping: `platformDetection: { mappings: [{ pattern: 'gemini-cli', platform: 'gemini' }] }`.
 
 ## Widget sizing
 

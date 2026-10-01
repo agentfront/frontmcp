@@ -145,6 +145,21 @@ function renderUnwrappedResult(rawResult: unknown, options: RenderToolTemplateOp
   return rawResult;
 }
 
+/** The tools already warned about, per component, so the warning is given once (at startup). */
+const warnedComponentReferences = new WeakMap<object, Set<string>>();
+
+function warnComponentReference(template: object, toolName: string, logger: { warn: (message: string) => void }): void {
+  const warned = warnedComponentReferences.get(template) ?? new Set<string>();
+  if (warned.has(toolName)) return;
+  warned.add(toolName);
+  warnedComponentReferences.set(template, warned);
+  logger.warn(
+    `[FrontMCP] Tool "${toolName}": \`ui.template\` is a React component reference, which cannot be bundled ` +
+      `(there is no source file to compile), so the widget would render an empty page. ` +
+      `Use \`template: { file: './widget.tsx' }\` instead.`,
+  );
+}
+
 function isReactElement(value: unknown): boolean {
   return typeof value === 'object' && value !== null && '$$typeof' in value;
 }
@@ -208,7 +223,8 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     size = result.size;
   } else if (typeof template === 'function') {
     const helpers = createTemplateHelpers();
-    const ctx = { input, output, helpers };
+    // A render without a call's data (a widget compiled at startup) still gives the template objects
+    const ctx = { input: input ?? {}, output: output ?? {}, helpers };
 
     // A capitalized name only *suggests* a React component. A real one (class, memo/forwardRef, or
     // anything that throws or returns an element when called outside React) cannot be bundled from a
@@ -226,11 +242,8 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     }
 
     if (!isHtmlBuilder) {
-      (options.logger ?? console).warn(
-        `[FrontMCP] Tool "${toolName}": \`ui.template\` is a React component reference, which cannot be bundled ` +
-          `(there is no source file to compile), so the widget would render an empty page. ` +
-          `Use \`template: { file: './widget.tsx' }\` instead.`,
-      );
+      // The server compiles each widget at startup, so this warns then, not on every call
+      warnComponentReference(template, toolName, options.logger ?? console);
       const shellResult = buildShell('<div id="root"></div>', shellConfig);
       html = shellResult.html;
       hash = shellResult.hash;

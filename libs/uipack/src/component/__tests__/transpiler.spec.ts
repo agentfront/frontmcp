@@ -331,4 +331,66 @@ describe('bundleFileSource', () => {
     expect(opts.write).toBe(false);
     expect(opts.format).toBe('esm');
   });
+
+  describe('auto-generated mount: initial data (#681)', () => {
+    type Element = { type: unknown; props: Record<string, unknown> | null; children: Element[] };
+    const Provider = 'McpBridgeProvider';
+    const Component = 'Widget';
+
+    /** Run the mount the bundler appends, with React and the DOM stubbed, and return what it rendered. */
+    function runMount(win: Record<string, unknown>): Array<Record<string, unknown>> {
+      const { bundleFileSource: bundle } = require('../transpiler');
+      bundle('const x = 1;', 'widget.tsx', '/app/src', Component);
+      const contents: string = mockBuildSync.mock.calls[0][0].stdin.contents;
+      const mount = contents
+        .slice(contents.indexOf('// --- Auto-generated mount ---'))
+        .split('\n')
+        .filter((line) => !line.startsWith('import '))
+        .join('\n');
+
+      const renders: Array<Record<string, unknown>> = [];
+      const h = (type: unknown, props: Record<string, unknown> | null, ...children: Element[]): Element => ({
+        type,
+        props,
+        children,
+      });
+      const createRoot = () => ({
+        render: (element: Element) => renders.push(element.children[0].props ?? {}),
+      });
+      const doc = { getElementById: () => ({}) };
+      const fakeWindow = { addEventListener: () => undefined, ...win };
+      new Function('__h', 'createRoot', Provider, Component, 'window', 'document', mount)(
+        h,
+        createRoot,
+        Provider,
+        Component,
+        fakeWindow,
+        doc,
+      );
+      return renders;
+    }
+
+    it('renders the OpenAI toolOutput present at load when the page carries no data', () => {
+      const renders = runMount({
+        openai: { toolOutput: { temp: 18 } },
+        __mcpToolInput: null,
+        __mcpToolOutput: null,
+      });
+
+      expect(renders[renders.length - 1]).toEqual(expect.objectContaining({ output: { temp: 18 }, loading: false }));
+    });
+
+    it('stays loading when neither the page nor the host has data yet', () => {
+      const renders = runMount({ __mcpToolOutput: null });
+
+      expect(renders).toHaveLength(1);
+      expect(renders[0]).toEqual(expect.objectContaining({ output: null, loading: true }));
+    });
+
+    it('renders the data a per-call page carries', () => {
+      const renders = runMount({ __mcpToolOutput: { temp: 21 } });
+
+      expect(renders[renders.length - 1]).toEqual(expect.objectContaining({ output: { temp: 21 }, loading: false }));
+    });
+  });
 });

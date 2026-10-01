@@ -9,6 +9,7 @@
  * structured value, not the raw content array. The OpenAI Apps SDK provides the
  * data as `window.openai.toolOutput`, which a static widget must read.
  */
+import { renderToolTemplate } from '../../adapters/template-renderer';
 import { createBridgeFrame, type BridgeFrame, type FrameWindow } from './bridge-frame';
 
 describe.each([
@@ -79,6 +80,30 @@ describe.each([
 
     expect(frame.bridge.getToolOutput()).toEqual({ temp: 18 });
     expect(frame.bridge.getStructuredContent()).toEqual({ temp: 18 });
+  });
+
+  it('reads window.openai.toolOutput in a page compiled without a call (#681)', async () => {
+    // What the server compiles at startup for `ui://widget/{tool}.html`: no call's data
+    const page = renderToolTemplate({ toolName: 'weather', input: undefined, output: undefined, template: '<p></p>' });
+    const dataScript = /<script>\n(window\.__mcpAppsEnabled[\s\S]*?)\n<\/script>/.exec(page.html)?.[1];
+    expect(dataScript).toContain('window.__mcpToolOutput = null');
+
+    frame = createBridgeFrame({
+      minify,
+      bodyHtml: '<div id="root"></div>',
+      beforeBridge: (win: FrameWindow) => {
+        win.eval(dataScript ?? '');
+        (win as unknown as { openai: unknown }).openai = {
+          callTool: () => Promise.resolve({}),
+          toolInput: { city: 'Paris' },
+          toolOutput: { temp: 18 },
+        };
+      },
+    });
+    await frame.settle();
+
+    expect(frame.bridge.getToolOutput()).toEqual({ temp: 18 });
+    expect((frame.bridge as unknown as { getToolInput(): unknown }).getToolInput()).toEqual({ city: 'Paris' });
   });
 
   it('propagates a changed toolInput from openai:set_globals', async () => {

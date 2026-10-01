@@ -29,4 +29,25 @@ describe('describeIgnoredUiOptions (#645)', () => {
     const messages = describeIgnoredUiOptions('t', { servingMode: 'hybrid' });
     expect(messages).toEqual([expect.stringContaining("sends only a reference in `_meta['ui/component']`")]);
   });
+
+  it('names each ui.csp origin the widget page cannot list (#681)', () => {
+    const messages = describeIgnoredUiOptions('live', {
+      csp: {
+        connectDomains: ['wss://live.example.com', 'ftp://files.example.com', 'http://localhost:4000'],
+        resourceDomains: ['cdn.example.com', 42],
+      },
+    });
+
+    expect(messages).toEqual([
+      expect.stringContaining('`ui.csp.connectDomains` origin "ftp://files.example.com"'),
+      expect.stringContaining('`ui.csp.resourceDomains` origin "cdn.example.com"'),
+      expect.stringContaining('`ui.csp.resourceDomains` origin 42'),
+    ]);
+    expect(messages[0]).toContain('Tool "live"');
+  });
+
+  it('accepts a csp without domain lists', () => {
+    expect(describeIgnoredUiOptions('t', { csp: { connectDomains: 'https://x.example.com' } })).toEqual([]);
+    expect(describeIgnoredUiOptions('t', { csp: null })).toEqual([]);
+  });
 });
