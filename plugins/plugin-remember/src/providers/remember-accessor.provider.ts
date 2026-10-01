@@ -44,6 +44,14 @@ function encodeKeyPart(value: string): string {
 }
 
 /**
+ * The whole seconds left until `expiresAt`, as a storage TTL: rounded up, and at least 1, since
+ * stores take a positive integer (and an entry `getEntry()` just read has not expired yet).
+ */
+function remainingSeconds(expiresAt: number, now: number): number {
+  return Math.max(1, Math.ceil((expiresAt - now) / 1000));
+}
+
+/**
  * Context-scoped accessor for remember storage.
  * Provides a human-friendly API for storing and retrieving values.
  *
@@ -233,6 +241,9 @@ export class RememberAccessor {
   /**
    * Update an existing entry's value while preserving metadata.
    *
+   * With a `ttl` the entry expires that many seconds from now; without one it keeps its current
+   * expiry, in the store as well, so `knows()` and `list()` drop it when `get()` does.
+   *
    * @param key - The key to update
    * @param value - The new value
    * @param options - Options (scope, ttl)
@@ -243,11 +254,13 @@ export class RememberAccessor {
 
     if (!existing) return false;
 
+    const now = Date.now();
+    const expiresAt = options.ttl ? now + options.ttl * 1000 : existing.expiresAt;
     const entry: RememberEntry<T> = {
       ...existing,
       value,
-      updatedAt: Date.now(),
-      expiresAt: options.ttl ? Date.now() + options.ttl * 1000 : existing.expiresAt,
+      updatedAt: now,
+      expiresAt,
     };
 
     const storageKey = this.buildStorageKey(key, scope);
@@ -255,7 +268,11 @@ export class RememberAccessor {
       ? await encryptAndSerialize(entry, this.getKeySource(scope))
       : JSON.stringify(entry);
 
-    await this.store.setValue(storageKey, serialized, options.ttl);
+    // Without a new `ttl` the entry keeps its expiry, and the store must keep it too: written back
+    // with no storage TTL it outlived `expiresAt`, so `knows()` and `list()`, which ask the store,
+    // still reported it after `get()` had stopped returning it (#678).
+    const storageTtl = options.ttl ?? (expiresAt !== undefined ? remainingSeconds(expiresAt, now) : undefined);
+    await this.store.setValue(storageKey, serialized, storageTtl);
     return true;
   }
 
