@@ -10,8 +10,8 @@ import {
 import { updateSessionPayload } from '../../auth/session/utils/session-id.utils';
 import { UnsupportedClientVersionError } from '../../errors';
 import {
-  detectAIPlatform,
   detectPlatformFromCapabilities,
+  resolvePlatformType,
   supportsElicitation,
   type ClientCapabilities,
 } from '../../notification';
@@ -92,6 +92,8 @@ export default function initializeRequestHandler({
             sampling: request.params.capabilities.sampling as ClientCapabilities['sampling'],
             // Include experimental capabilities for MCP Apps extension detection
             experimental: request.params.capabilities.experimental as ClientCapabilities['experimental'],
+            // ...and the SEP-2133 extensions, where newer clients declare MCP Apps
+            extensions: (request.params.capabilities as { extensions?: ClientCapabilities['extensions'] }).extensions,
             // Include elicitation capability for interactive user input support
             elicitation: request.params.capabilities.elicitation as ClientCapabilities['elicitation'],
           };
@@ -118,13 +120,14 @@ export default function initializeRequestHandler({
             version: clientVersion,
           });
 
-          // Detect platform directly from client info (don't rely on setClientInfo return)
-          // Use platform detection config from scope if available
-          const platformDetectionConfig = scope.metadata.transport?.platformDetection;
-          const clientInfoPlatform = detectAIPlatform(request.params.clientInfo, platformDetectionConfig);
-
-          // Prefer capability-based detection (ext-apps) over client info detection
-          const finalPlatform = detectedPlatform ?? clientInfoPlatform;
+          // Decide the platform here (don't rely on setClientInfo's return): a configured
+          // `platformDetection.mappings` entry wins, then the MCP Apps capability, then the
+          // client name (see resolvePlatformType)
+          const finalPlatform = resolvePlatformType(
+            request.params.clientInfo,
+            request.params.capabilities as ClientCapabilities | undefined,
+            scope.metadata.transport?.platformDetection,
+          );
 
           // Update the session payload with client name, version, detected platform type, and elicitation support
           // This makes them available via ctx.authInfo.sessionIdPayload for logging, stateless access, and persistence

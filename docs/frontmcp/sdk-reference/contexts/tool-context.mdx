@@ -208,6 +208,8 @@ get platform(): AIPlatformType
 
 Values: `'openai' | 'claude' | 'gemini' | 'cursor' | 'continue' | 'cody' | 'generic-mcp' | 'ext-apps' | 'unknown'`
 
+A `transport.platformDetection.mappings` entry for the client name wins; otherwise a client that declares the MCP Apps extension is `'ext-apps'` whatever its name; otherwise the name decides. See [Session Lifecycle](/frontmcp/servers/server#session-lifecycle).
+
 ```typescript
 if (this.platform === 'claude') {
   // Claude-specific formatting

@@ -79,7 +79,10 @@ Everything else is optional with sensible defaults.
   transport?: {
     // Session lifecycle
     // sessionMode has been removed in v1.0 — configure via transport.protocol presets
-    platformDetection?: { customOnly?: boolean },
+    platformDetection?: {
+      mappings?: { pattern: string | RegExp; platform: AIPlatformType }[],
+      customOnly?: boolean,
+    },
 
     // Protocol configuration (use preset or custom config)
     protocol?: 'legacy' | 'modern' | 'stateless-api' | 'full' | ProtocolConfig,
@@ -354,9 +357,26 @@ The `transport` config controls session lifecycle, protocol presets, and session
 
 ### Session Lifecycle
 
-| Option              | Default     | Description                                                                 |
-| ------------------- | ----------- | --------------------------------------------------------------------------- |
-| `platformDetection` | `undefined` | Platform detection config; set `customOnly: true` to skip built-in mappings |
+| Option              | Default     | Description                                                                     |
+| ------------------- | ----------- | ------------------------------------------------------------------------------- |
+| `platformDetection` | `undefined` | Platform detection config: `mappings` (client name → platform) and `customOnly` |
+
+A client's platform (what `this.platform` returns, and what Tool UI rendering keys off) is decided from its `initialize` request, in this order:
+
+1. A `mappings` entry whose `pattern` matches the client name (a string matches the whole name, case-insensitive; a `RegExp` is tested). Your mapping wins over everything else.
+2. The MCP Apps extension: a client that declares `io.modelcontextprotocol/ui` (under `capabilities.experimental` or `capabilities.extensions`) is `'ext-apps'`, whatever its name.
+3. With `customOnly: true`, nothing else is guessed: `'unknown'`.
+4. Keywords in the client name (`chatgpt` / `openai` → `'openai'`, `claude` → `'claude'`, `gemini` → `'gemini'`, ...).
+
+A mapping is how a client that declares MCP Apps is opted out of it:
+
+```ts
+@FrontMcp({
+  transport: {
+    platformDetection: { mappings: [{ pattern: 'gemini-cli', platform: 'gemini' }] },
+  },
+})
+```
 
 ### Protocol Presets
 
