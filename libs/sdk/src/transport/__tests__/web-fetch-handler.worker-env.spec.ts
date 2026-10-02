@@ -15,10 +15,10 @@ import type { CallToolResult, GetPromptResult, ReadResourceResult } from '@front
 import { Job, Prompt, Resource, Tool } from '../../common';
 import { App } from '../../common/decorators/app.decorator';
 import { JobContext, PromptContext, ResourceContext, ToolContext } from '../../common/interfaces';
-import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { LogLevel } from '../../common/types/options/logging';
-import { type Scope } from '../../scope/scope.instance';
 import { clearCreateCache, create } from '../../direct/create';
+import { FrontMcpInstance } from '../../front-mcp/front-mcp';
+import { type Scope } from '../../scope/scope.instance';
 import { createWebFetchHandler, type WebFetchHandler } from '../web-fetch-handler';
 
 interface FakeKv {
@@ -83,9 +83,7 @@ async function rpc<T>(handler: WebFetchHandler, method: string, params: unknown,
   const res = await handler(request, undefined, workerEnv);
   const text = await res.text();
   const json = (res.headers.get('content-type') ?? '').includes('text/event-stream')
-    ? JSON.parse(
-        (text.split('\n').find((l) => l.startsWith('data:')) ?? 'data: {}').slice('data:'.length).trim(),
-      )
+    ? JSON.parse((text.split('\n').find((l) => l.startsWith('data:')) ?? 'data: {}').slice('data:'.length).trim())
     : JSON.parse(text);
   if (json.error) throw new Error(JSON.stringify(json.error));
   return json.result as T;
