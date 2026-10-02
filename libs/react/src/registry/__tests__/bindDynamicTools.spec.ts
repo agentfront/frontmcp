@@ -171,6 +171,30 @@ describe('bindDynamicTools with a real server', () => {
     unbindOther();
   });
 
+  it('re-registers a tool that a second registrant redefines', async () => {
+    const registerTool = jest.spyOn(server, 'registerTool');
+    unbind = bindDynamicTools(registry, server);
+    registry.registerTool(toolDef());
+    await settle();
+
+    // Same definition from a second registrant: nothing to change on the server
+    registry.registerTool(toolDef());
+    await settle();
+    expect(registerTool).toHaveBeenCalledTimes(1);
+
+    registry.registerTool(toolDef({ description: 'Redefined', annotations: { readOnlyHint: true } }));
+    await settle();
+
+    const { tools } = await server.listTools();
+    expect(tools.find((tool) => tool.name === 'dyn_tool')).toEqual(
+      expect.objectContaining({
+        description: 'Redefined',
+        annotations: expect.objectContaining({ readOnlyHint: true }),
+      }),
+    );
+    expect(registerTool).toHaveBeenCalledTimes(2);
+  });
+
   it('warns on the console when no onError is given', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     unbind = bindDynamicTools(registry, server);

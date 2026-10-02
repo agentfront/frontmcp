@@ -243,7 +243,7 @@ Dynamic tools and resources follow React's effect lifecycle:
 2. **Update**: If dependencies change, the old registration is cleaned up and a new one is created
 3. **Unmount**: The tool/resource is automatically unregistered (and the tool removed from the server)
 
-Changes are applied to the server on a microtask, so React StrictMode's mount → unmount → mount settles into one registration.
+Changes are applied to the server on a microtask, so React StrictMode's mount → unmount → mount settles into one registration. When two mounted components register the same name, the later definition replaces the earlier one on the server too.
 
 This means agents only see tools that correspond to currently rendered UI. When a user navigates away from a page, its tools disappear; when they navigate back, the tools reappear.
 
