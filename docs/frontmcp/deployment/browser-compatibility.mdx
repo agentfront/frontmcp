@@ -78,18 +78,20 @@ const unregister = await server.registerTool({
 unregister();
 ```
 
-| Field           | Description                                                                                                        |
-| --------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `name`          | **Required.** 1–64 characters, unique in the server. A taken name rejects with `ToolNameConflictError`.            |
-| `execute`       | **Required.** `(args, { signal }) => CallToolResult`. `signal` aborts when the call is cancelled or times out.     |
-| `title`         | Human-readable title                                                                                               |
-| `description`   | What the tool does                                                                                                 |
-| `inputSchema`   | JSON Schema of the arguments, as listed. Arguments are **not** validated against it: validate in `execute`.        |
-| `annotations`   | MCP hints (`readOnlyHint`, `destructiveHint`, `openWorldHint`, ...)                                                |
-| `availableWhen` | Where the tool is offered, e.g. `{ surface: ['webmcp'] }`                                                          |
-| `app`           | The app the tool joins. Optional on a server with one app (every `create()` server); required when there are more. |
+| Field           | Description                                                                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`          | **Required.** 1–64 characters, unique in the server. A taken name rejects with `ToolNameConflictError`.                                          |
+| `execute`       | **Required.** `(args, { signal }) => CallToolResult`. `signal` aborts when the call is cancelled or times out.                                   |
+| `title`         | Human-readable title                                                                                                                             |
+| `description`   | What the tool does                                                                                                                               |
+| `inputSchema`   | JSON Schema of the arguments, as listed: an object schema (`type: 'object'`). Arguments are **not** validated against it: validate in `execute`. |
+| `annotations`   | MCP hints (`readOnlyHint`, `destructiveHint`, `openWorldHint`, ...)                                                                              |
+| `availableWhen` | Where the tool is offered, e.g. `{ surface: ['webmcp'] }`                                                                                        |
+| `app`           | The app the tool joins. Optional on a server with one app (every `create()` server); required when there are more.                               |
 
 `execute` runs outside the request's turn, so it may call the server back (`server.callTool(...)`) or wait on the network without holding up other requests.
+
+A definition `tools/list` could not list — an `inputSchema` that is not an object schema, a `title` or `description` that is not a string, malformed `annotations` or `availableWhen` — rejects with `EntryValidationError`, so one bad tool never breaks the listing of the others. Registering on a server that is disposed (or is disposed before the registration completes) rejects with `InternalMcpError`.
 
 ---
 
