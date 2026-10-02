@@ -399,6 +399,16 @@ You usually do not need to set this: when the client's first request 404s and th
 ### Scoping config, parameterised tests, ports and restarts
 
 - `test.use()` is scoped to the `describe` block it is called in. Nested blocks merge over outer ones (`env` key by key); each distinct configuration gets its own server, stopped by the block that configured it. At file level it applies to the whole file.
+- The `env` object is read when the server starts, so a `beforeAll` may fill in values known only later (e.g. the port of an upstream `TestServer` it started).
+- `test.beforeEach` / `test.afterEach` callbacks that take a parameter get the test's fixtures, Playwright-style — the **same** `mcp` / `server` / `auth` as the test. `beforeEach` runs outer blocks first, `afterEach` inner blocks first, and fixtures are torn down after the last `afterEach`. A callback without parameters is a plain Jest hook; `test.beforeAll` / `test.afterAll` never receive fixtures. Jest's `done` style is not supported on `test.beforeEach` / `test.afterEach`.
+
+```typescript
+test.beforeEach(async ({ mcp }) => {
+  await mcp.tools.call('reset_state', {});
+});
+```
+
+- `transport: 'sse'` (in `test.use()` or `server.createClient()`) uses the legacy HTTP+SSE transport: `GET <entryPath>/sse`, messages POSTed to the endpoint the server names, responses read from the stream. The server must enable it (`transport: { protocol: { legacy: true } }`); otherwise connecting fails with the HTTP status.
 - `port: 0` (or omitting `port`) picks any free port. Ports are reserved with a cross-process lock, so parallel Jest workers do not collide.
 - `auth: { mode, type }` reaches the server process as `FRONTMCP_TEST_AUTH_MODE` / `FRONTMCP_TEST_AUTH_TYPE`; `mode: 'public'` also keeps the `mcp` client anonymous.
 - `test.each` / `test.describe.each` pass the row values to the callback (fixtures first for `test.each`):
@@ -518,7 +528,10 @@ In standalone projects driven by `frontmcp test`, prefer `test.esmPackages` in
 `frontmcp.config.ts` — the injected config already carries the pattern above,
 and already transpiles `jose`, `@noble/hashes` and `@noble/ciphers` (CodeCall).
 `frontmcp test` does not set `NODE_OPTIONS=--experimental-vm-modules` (it would make Jest
-load ESM natively and bypass these transforms); use Jest 30 (what `frontmcp create` scaffolds):
+load ESM natively and bypass these transforms); use Jest 30 (what `frontmcp create` scaffolds).
+A server created inside the test process (`FrontMcpInstance.createHandler()`, `createDirect()`,
+`create()`) works without the flag too. `@frontmcp/testing` brings `@swc/jest` and `@swc/core`, so a
+bare project needs only `@frontmcp/testing` and `jest` installed:
 
 ```typescript
 // frontmcp.config.ts

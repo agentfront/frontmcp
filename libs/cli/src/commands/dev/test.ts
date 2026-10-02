@@ -88,6 +88,36 @@ export function buildTransformIgnorePatterns(esmPackages: string[] = []): string
 }
 
 /**
+ * Locate the `@swc/jest` transformer the injected config uses.
+ *
+ * Issue #680: the generated config named `'@swc/jest'`, which Jest resolves from the project root.
+ * A bare project that installed only `@frontmcp/testing` failed with "Module @swc/jest in the
+ * transform option was not found". `@frontmcp/testing` now depends on `@swc/jest`, and the transformer
+ * is resolved here — from the project first (its own pinned version wins), then through
+ * `@frontmcp/testing` — and written into the config as an absolute path, so it also works where the
+ * package manager does not hoist it (pnpm).
+ *
+ * @returns the absolute path to `@swc/jest`, or `undefined` when neither location has it.
+ * @internal
+ */
+export function resolveSwcJestTransformer(
+  cwd: string,
+  resolve: (id: string, options: { paths: string[] }) => string = require.resolve,
+): string | undefined {
+  const tryResolve = (id: string, from: string): string | undefined => {
+    try {
+      return resolve(id, { paths: [from] });
+    } catch {
+      return undefined;
+    }
+  };
+  const fromProject = tryResolve('@swc/jest', cwd);
+  if (fromProject) return fromProject;
+  const testingPackage = tryResolve('@frontmcp/testing/package.json', cwd);
+  return testingPackage ? tryResolve('@swc/jest', path.dirname(testingPackage)) : undefined;
+}
+
+/**
  * Generate Jest configuration programmatically.
  *
  * Issue #402: the original config (a) only ran `e2e/**` and `**\/*.e2e.ts`,
@@ -99,7 +129,12 @@ export function buildTransformIgnorePatterns(esmPackages: string[] = []): string
  *     runtime so React components are usable in tests,
  *   - exposes the helper for unit testing.
  */
-export function generateJestConfig(cwd: string, opts: ParsedArgs, testDefaults?: TestConfig): object {
+export function generateJestConfig(
+  cwd: string,
+  opts: ParsedArgs,
+  testDefaults?: TestConfig,
+  transformer = '@swc/jest',
+): object {
   // Issue #400 — config defaults apply when CLI flags are absent.
   const testTimeout = opts.timeout ?? testDefaults?.timeoutMs ?? 60000;
 
@@ -134,7 +169,7 @@ export function generateJestConfig(cwd: string, opts: ParsedArgs, testDefaults?:
     // additional setup.
     transform: {
       '^.+\\.[tj]sx?$': [
-        '@swc/jest',
+        transformer,
         {
           jsc: {
             target: 'es2022',
@@ -152,7 +187,9 @@ export function generateJestConfig(cwd: string, opts: ParsedArgs, testDefaults?:
               },
             },
             keepClassNames: true,
-            externalHelpers: true,
+            // Inline the helpers: external ones need `@swc/helpers` resolvable from every test file,
+            // which a project that only installed `@frontmcp/testing` does not have.
+            externalHelpers: false,
             loose: true,
           },
           module: {
@@ -299,7 +336,15 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
   // write our generated config to a temp file and point Jest at it.
   let configPath: string | undefined;
   if (!userConfig) {
-    const config = generateJestConfig(cwd, mergedOpts, testDefaults);
+    const transformer = resolveSwcJestTransformer(cwd);
+    if (!transformer) {
+      console.error(c('red', 'frontmcp test needs @swc/jest, which comes with @frontmcp/testing.'));
+      console.error('');
+      console.error('Install the test dependencies in this project:');
+      console.error('  npm install -D @frontmcp/testing jest');
+      process.exit(1);
+    }
+    const config = generateJestConfig(cwd, mergedOpts, testDefaults, transformer);
     const tempDir = os.tmpdir();
     configPath = path.join(tempDir, `frontmcp-jest-config-${Date.now()}.json`);
     await writeFile(configPath, JSON.stringify(config, null, 2));
