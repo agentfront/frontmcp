@@ -63,6 +63,7 @@ import {
   type FormattedToolResult,
   type FormattedTools,
 } from './llm-platform';
+import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 
 /**
  * DirectClient implementation that wraps an MCP client.
@@ -202,7 +203,10 @@ export class DirectClientImpl implements DirectClient {
   private async setupNotificationHandlers(mcpClient: any): Promise<void> {
     try {
       // Dynamic import to handle ESM/CJS compatibility
-      const { ResourceUpdatedNotificationSchema, ElicitRequestSchema } = await import('@frontmcp/protocol');
+      const { ResourceUpdatedNotificationSchema, ElicitRequestSchema } = await importWithRequireFallback(
+        () => import('@frontmcp/protocol'),
+        () => require('@frontmcp/protocol') as typeof import('@frontmcp/protocol'),
+      );
 
       // Handler for resource updated notifications
       if (typeof mcpClient.setNotificationHandler === 'function') {

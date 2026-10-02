@@ -21,6 +21,7 @@ import {
   type ServerRequest,
 } from '../../common';
 import type { SkillsConfigOptions } from '../../common/types/options/skills-http';
+import { importWithRequireFallback } from '../../utils/dynamic-import.utils';
 
 /**
  * Request context for auth validation.
@@ -221,7 +222,10 @@ export class SkillHttpAuthValidator {
 
     try {
       // Lazy import jose to avoid bundling when not used
-      const { jwtVerify, createRemoteJWKSet } = await import('jose');
+      const { jwtVerify, createRemoteJWKSet } = await importWithRequireFallback(
+        () => import('jose'),
+        () => require('jose') as typeof import('jose'),
+      );
 
       const jwksUrl = jwtConfig.jwksUrl ?? `${jwtConfig.issuer}/.well-known/jwks.json`;
       const JWKS = createRemoteJWKSet(new URL(jwksUrl));

@@ -34,6 +34,7 @@ import {
 } from '../transport/web-fetch-handler';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 import { assertStaticStartupConfig } from './static-startup.check';
+import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 
 /**
  * A `@FrontMcp`-decorated server class, or the raw config object it wraps.
@@ -662,7 +663,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const startupCleanups: Array<() => Promise<void> | void> = [];
     try {
       // Dynamically import to avoid bundling issues
-      const { StdioServerTransport, McpServer } = await import('@frontmcp/protocol');
+      const { StdioServerTransport, McpServer } = await importWithRequireFallback(
+        () => import('@frontmcp/protocol'),
+        () => require('@frontmcp/protocol') as typeof import('@frontmcp/protocol'),
+      );
 
       // Parse config: disable the HTTP server, route console logging to
       // stderr, and keep file logging. `serve: false` selects the no-op

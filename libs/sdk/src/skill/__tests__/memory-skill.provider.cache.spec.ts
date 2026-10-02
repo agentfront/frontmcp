@@ -66,11 +66,8 @@ class FakeVectorDb {
 }
 
 async function inject(provider: MemorySkillProvider, db: FakeVectorDb): Promise<void> {
-  // Let the provider's own lazy vectoriadb load settle FIRST (otherwise its
-  // async continuation would clobber our injected fake), then replace it.
-  await (provider as unknown as { vectorDBReady: Promise<void> }).vectorDBReady.catch(() => undefined);
+  // The provider loads vectoriadb on first search only; a DB already in place is used as is.
   (provider as unknown as { vectorDB: unknown }).vectorDB = db;
-  (provider as unknown as { vectorDBReady: Promise<void> }).vectorDBReady = Promise.resolve();
 }
 
 function skill(id: string, text: string): SkillContent {
