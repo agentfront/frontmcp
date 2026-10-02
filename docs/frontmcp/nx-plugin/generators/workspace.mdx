@@ -75,7 +75,7 @@ The `package.json` includes all FrontMCP dependencies:
 }
 ```
 
-The `nx.json` configures the ESLint and Jest plugins, build caching and dependency ordering. Apps, servers and libraries declare their own `build`, `test` and `typecheck` targets, and apps reach libraries through the `tsconfig.base.json` path aliases, so the workspace does not register `@nx/js/typescript`: its inferred `tsc --build` targets need a solution-style root `tsconfig.json` with project references (`[@nx/js:typescript-sync]: Missing root "tsconfig.json"`).
+The `nx.json` configures the ESLint and Jest plugins, build caching and dependency ordering. Generated projects declare their own targets (`build` on apps, servers and [publishable libraries](/frontmcp/nx-plugin/generators/lib#publishable-libraries), `test` on apps and libraries, `typecheck` on all of them), and apps reach libraries through the `tsconfig.base.json` path aliases, so the workspace does not register `@nx/js/typescript`: its inferred `tsc --build` targets need a solution-style root `tsconfig.json` with project references (`[@nx/js:typescript-sync]: Missing root "tsconfig.json"`).
 
 <Note>
   Workspaces created with `@frontmcp/nx` 1.8.7 or earlier register `@nx/js/typescript`, which makes `nx build <app>` fail once a library is in the graph and `nx typecheck` fail with `TS5069`. Remove the `@nx/js/typescript` entry from `plugins` in `nx.json`, then add a `typecheck` target to existing projects (or regenerate them):
@@ -91,4 +91,6 @@ The `nx.json` configures the ESLint and Jest plugins, build caching and dependen
     }
   }
   ```
+
+  A library you publish loses the `build` target `@nx/js/typescript` inferred for it; give it the `build` target and `package.json` of a [publishable library](/frontmcp/nx-plugin/generators/lib#publishable-libraries).
 </Note>

@@ -85,6 +85,7 @@ Creates a shared library in `libs/my-lib/` with TypeScript configuration, Jest s
 
 - `--libType plugin` / `--libType adapter` start from the same class the `plugin` / `adapter` generators write (an adapter declares `options: { name: string } & <Name>AdapterOptions`, which `DynamicAdapter` requires).
 - The library's `test` target runs `@frontmcp/nx:test` (no `@nx/jest` needed), and `typecheck` runs `tsc --noEmit` on `tsconfig.lib.json` and `tsconfig.spec.json`. Libraries need no build target: apps import them through the path alias and `nx build <app>` bundles them.
+- `--publishable` (with `--importPath @my-org/my-lib`) adds what publishing needs: a cached `build` target that runs `tsc -p tsconfig.lib.json` into `libs/my-lib/dist`, and a `package.json` named after the import path with `main`/`types` pointing at `./dist/index.js`/`./dist/index.d.ts`, `files: ["dist"]`, and dependencies on `tslib` and (plugin, adapter, tool-register) `@frontmcp/sdk` at the workspace ranges. `nx build my-lib`, then `npm publish libs/my-lib`.
 - The import path (`@frontmcp/my-lib`, or `--importPath`) is registered in `tsconfig.base.json` as `["./libs/my-lib/src/index.ts"]`. The leading `./` matters: TypeScript rejects a bare `libs/...` target when the base config has no `baseUrl` (TS5090), which is the case in `create-nx-workspace --preset=ts` workspaces.
 
 ### Generate a Server (Deployment Shell)
@@ -97,12 +98,12 @@ Creates a `@FrontMcp`-decorated server class in `servers/my-server/` that compos
 
 `nx build server-my-server` runs `frontmcp build --target <deploymentTarget>` into `servers/my-server/dist`, and the generated deployment files point at what that build writes:
 
-| Target       | Build output                                             | Generated file                                                                                  |
-| ------------ | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `node`       | `dist/node/server-my-server.bundle.js`                   | `Dockerfile` runs it (`CMD ["node", "dist/node/server-my-server.bundle.js"]`, `FRONTMCP_BIND_ADDRESS=all`); build context is the workspace root, ignore rules in `Dockerfile.dockerignore` |
-| `vercel`     | `.vercel/output/` (Build Output API) and `dist/vercel/handler.cjs` | `vercel.json` installs and runs `nx build server-my-server` from the workspace root; set the Vercel Root Directory to `servers/my-server` |
-| `lambda`     | `dist/lambda/handler.cjs`, exporting `handler`           | `template.yaml`: `CodeUri: dist/lambda/`, `Handler: handler.handler`; the generator adds `@codegenie/serverless-express`, which the bundle loads at runtime (provide it with a Lambda layer) |
-| `cloudflare` | `dist/cloudflare/index.js`                               | `wrangler.toml`: `main = "dist/cloudflare/index.js"`                                            |
+| Target       | Build output                                                       | Generated file                                                                                                                                                                               |
+| ------------ | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node`       | `dist/node/server-my-server.bundle.js`                             | `Dockerfile` runs it (`CMD ["node", "dist/node/server-my-server.bundle.js"]`, `FRONTMCP_BIND_ADDRESS=all`); build context is the workspace root, ignore rules in `Dockerfile.dockerignore`   |
+| `vercel`     | `.vercel/output/` (Build Output API) and `dist/vercel/handler.cjs` | `vercel.json` installs and runs `nx build server-my-server` from the workspace root; set the Vercel Root Directory to `servers/my-server`                                                    |
+| `lambda`     | `dist/lambda/handler.cjs`, exporting `handler`                     | `template.yaml`: `CodeUri: dist/lambda/`, `Handler: handler.handler`; the generator adds `@codegenie/serverless-express`, which the bundle loads at runtime (provide it with a Lambda layer) |
+| `cloudflare` | `dist/cloudflare/index.js`                                         | `wrangler.toml`: `main = "dist/cloudflare/index.js"`                                                                                                                                         |
 
 | Option             | Type                                             | Default          | Description                           |
 | ------------------ | ------------------------------------------------ | ---------------- | ------------------------------------- |
@@ -251,7 +252,7 @@ nx typecheck my-app
 
 Runs the project's own `typecheck` target: `tsc --noEmit` on `tsconfig.lib.json` and `tsconfig.spec.json`. The generated `tsconfig.json` sets `"nx": { "addTypecheckTarget": false }`, so a workspace that registers `@nx/js/typescript` does not infer a `tsc --build --emitDeclarationOnly` target for it (which fails with TS5069). It also makes the project build JavaScript on any base config: `module: commonjs` with `moduleResolution: node10` on TypeScript 5 and `bundler` on TypeScript 6+, `rootDir` at the workspace root, and `composite` / `declarationMap` / `emitDeclarationOnly` off for TS-solution bases.
 
-Workspaces generated by `@frontmcp/nx` do not register `@nx/js/typescript`: its `typescript-sync` generator needs a solution-style root `tsconfig.json` and fails builds with `Missing root "tsconfig.json"` once a library is in the graph. A workspace generated by 1.8.7 or earlier should remove that entry from `nx.json` `plugins`.
+Workspaces generated by `@frontmcp/nx` do not register `@nx/js/typescript`: its `typescript-sync` generator needs a solution-style root `tsconfig.json` and fails builds with `Missing root "tsconfig.json"` once a library is in the graph. A workspace generated by 1.8.7 or earlier should remove that entry from `nx.json` `plugins`, and give each library it publishes the `build` target and `package.json` that `--publishable` generates (the inferred `build` goes away with the plugin).
 
 ### Build All Projects
 
@@ -439,18 +440,18 @@ Complete list of all `@frontmcp/nx` generators from `generators.json`:
 
 ## Troubleshooting
 
-| Problem                                        | Cause                                              | Solution                                                                                             |
-| ---------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `Cannot find module '@frontmcp/nx'`            | Plugin not installed                               | Run `yarn add -D @frontmcp/nx` and ensure it appears in `devDependencies`                            |
-| Generator creates files in the wrong directory | Missing or incorrect `--project` flag              | Always pass `--project=<app-name>` for primitive generators; verify the app exists in `apps/`        |
-| `nx affected` runs nothing despite changes     | Base branch not configured or no dependency link   | Check `nx.json` for `defaultBase` setting; verify the changed file belongs to a project in the graph |
-| `[@nx/js:typescript-sync]: Missing root "tsconfig.json"` on `nx build` | Workspace generated by `@frontmcp/nx` 1.8.7 or earlier registers `@nx/js/typescript` | Remove `@nx/js/typescript` from `plugins` in `nx.json`; FrontMCP projects declare their own `build`, `test` and `typecheck` targets |
-| `nx typecheck` fails with TS5069               | Inferred `tsc --build --emitDeclarationOnly` target on a project without `declaration` | Regenerate the project, or add the `typecheck` target (`tsc --noEmit -p tsconfig.lib.json`) and `"nx": { "addTypecheckTarget": false }` in its `tsconfig.json` |
-| TS5090 on a `tsconfig.base.json` path alias   | Alias target written without `./` and no `baseUrl` | Write targets as `./libs/<name>/src/index.ts` (the `lib` and `ui-*` generators do)                  |
-| `ERESOLVE` on `esbuild` after `nx g @frontmcp/nx:ui-shell` | An `esbuild` range below the `>=0.27` peer of `@frontmcp/uipack` | Re-run the UI generator (it raises an older `esbuild` range to `^0.27.3`) or set `esbuild` to `^0.27.3` |
-| Build fails with circular dependency error     | Library A imports from Library B and vice versa    | Use `nx graph` to visualize the cycle; extract shared code into a new library                        |
-| Cache not working (full rebuild every time)    | Executor targets are not marked cacheable          | Run `nx g @frontmcp/nx:init`, or set `cache: true` on the target / in `targetDefaults`               |
-| `Cannot find module '@scope/lib'` in Jest      | Old `jest.config.ts` without the path-alias mapper | Use the generated `jest.config.cjs` (maps `tsconfig.base.json` paths) or add a `moduleNameMapper`    |
+| Problem                                                                | Cause                                                                                  | Solution                                                                                                                                                       |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Cannot find module '@frontmcp/nx'`                                    | Plugin not installed                                                                   | Run `yarn add -D @frontmcp/nx` and ensure it appears in `devDependencies`                                                                                      |
+| Generator creates files in the wrong directory                         | Missing or incorrect `--project` flag                                                  | Always pass `--project=<app-name>` for primitive generators; verify the app exists in `apps/`                                                                  |
+| `nx affected` runs nothing despite changes                             | Base branch not configured or no dependency link                                       | Check `nx.json` for `defaultBase` setting; verify the changed file belongs to a project in the graph                                                           |
+| `[@nx/js:typescript-sync]: Missing root "tsconfig.json"` on `nx build` | Workspace generated by `@frontmcp/nx` 1.8.7 or earlier registers `@nx/js/typescript`   | Remove `@nx/js/typescript` from `plugins` in `nx.json`; FrontMCP projects declare their own `build`, `test` and `typecheck` targets                            |
+| `nx typecheck` fails with TS5069                                       | Inferred `tsc --build --emitDeclarationOnly` target on a project without `declaration` | Regenerate the project, or add the `typecheck` target (`tsc --noEmit -p tsconfig.lib.json`) and `"nx": { "addTypecheckTarget": false }` in its `tsconfig.json` |
+| TS5090 on a `tsconfig.base.json` path alias                            | Alias target written without `./` and no `baseUrl`                                     | Write targets as `./libs/<name>/src/index.ts` (the `lib` and `ui-*` generators do)                                                                             |
+| `ERESOLVE` on `esbuild` after `nx g @frontmcp/nx:ui-shell`             | An `esbuild` range below the `>=0.27` peer of `@frontmcp/uipack`                       | Re-run the UI generator (it raises an older `esbuild` range to `^0.27.3`) or set `esbuild` to `^0.27.3`                                                        |
+| Build fails with circular dependency error                             | Library A imports from Library B and vice versa                                        | Use `nx graph` to visualize the cycle; extract shared code into a new library                                                                                  |
+| Cache not working (full rebuild every time)                            | Executor targets are not marked cacheable                                              | Run `nx g @frontmcp/nx:init`, or set `cache: true` on the target / in `targetDefaults`                                                                         |
+| `Cannot find module '@scope/lib'` in Jest                              | Old `jest.config.ts` without the path-alias mapper                                     | Use the generated `jest.config.cjs` (maps `tsconfig.base.json` paths) or add a `moduleNameMapper`                                                              |
 
 ## Examples
 

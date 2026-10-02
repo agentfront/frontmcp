@@ -4,7 +4,16 @@
   "sourceRoot": "<%= projectRoot %>/src",
   "projectType": "library",
   "tags": [<%- parsedTags.map(t => `"${t}"`).join(', ') %>],
-  "targets": {
+  "targets": {<% if (publishable) { %>
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "outputs": ["{projectRoot}/dist"],
+      "options": {
+        "command": "tsc -p tsconfig.lib.json",
+        "cwd": "{projectRoot}"
+      }
+    },<% } %>
     "test": {
       "executor": "@frontmcp/nx:test",
       "cache": true,
