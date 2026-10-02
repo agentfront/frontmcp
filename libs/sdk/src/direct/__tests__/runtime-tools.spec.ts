@@ -194,6 +194,25 @@ describe('DirectMcpServer.registerTool()', () => {
     await expect(server.registerTool(definition)).rejects.toThrow(EntryValidationError);
   });
 
+  it.each([
+    ['an input schema that is not an object', { ...echoTool(), inputSchema: 'none' }],
+    ['an input schema that is not an object schema', echoTool({ inputSchema: { type: 'array', items: {} } })],
+    [
+      'an input schema whose properties are not schemas',
+      echoTool({ inputSchema: { type: 'object', properties: { a: 1 } } }),
+    ],
+    ['a title that is not a string', { ...echoTool(), title: 42 }],
+    ['malformed annotations', { ...echoTool(), annotations: { readOnlyHint: 'yes' } }],
+    ['an availableWhen that is not a surface list', { ...echoTool(), availableWhen: { surface: 'webmcp' } }],
+  ])('refuses %s, and tools/list keeps working', async (_label, definition) => {
+    await expect(server.registerTool(definition as unknown as RuntimeToolDefinition)).rejects.toThrow(
+      EntryValidationError,
+    );
+
+    const { tools } = await server.listTools();
+    expect(tools.map((tool) => tool.name)).toEqual(['static_tool']);
+  });
+
   it('refuses to register on a disposed server', async () => {
     await server.dispose();
 

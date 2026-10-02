@@ -7,9 +7,16 @@
  */
 
 import { type Token } from '@frontmcp/di';
+import { ToolSchema } from '@frontmcp/protocol';
 import { awaitOutsideRequest } from '@frontmcp/utils';
 
-import { ToolKind, type AppEntry, type ToolFunctionTokenRecord, type ToolMetadata } from '../common';
+import {
+  frontMcpToolMetadataSchema,
+  ToolKind,
+  type AppEntry,
+  type ToolFunctionTokenRecord,
+  type ToolMetadata,
+} from '../common';
 import { EntryValidationError, InternalMcpError, ToolNameConflictError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { type Scope } from '../scope/scope.instance';
@@ -19,9 +26,50 @@ import { type RuntimeToolDefinition } from './direct.types';
 /** The call-tool flow accepts tool names of 1-64 characters. */
 const MAX_TOOL_NAME_LENGTH = 64;
 
+/**
+ * What `tools/list` requires of a listed tool's input schema: an object schema. Checked when the tool
+ * is registered, since one tool listing a schema that fails it would fail every `tools/list`.
+ */
+const listedInputSchema = ToolSchema.shape.inputSchema;
+
 /** What the tool context hands a FUNCTION tool's `provide`. */
 interface RuntimeToolCallContext {
   readonly signal?: AbortSignal;
+}
+
+/** One line per problem zod found, `path: message`. */
+function describeIssues(issues: ReadonlyArray<{ path: PropertyKey[]; message: string }>): string {
+  return issues.map((issue) => `${issue.path.map(String).join('.') || '(root)'}: ${issue.message}`).join('; ');
+}
+
+/**
+ * Check the parts of `definition` that end up in `tools/list` and in `availableWhen` filtering. It
+ * comes from plain JavaScript, past the type checker, and unlike a decorated tool's metadata it is not
+ * parsed anywhere else: a malformed one would make every listing fail instead of this registration.
+ */
+function validateRuntimeToolDefinition(definition: RuntimeToolDefinition): void {
+  const { name, title, description, annotations, availableWhen, inputSchema } = definition;
+  const metadata = frontMcpToolMetadataSchema.safeParse({
+    name,
+    title,
+    description,
+    inputSchema: {},
+    annotations,
+    availableWhen,
+  });
+  if (!metadata.success) {
+    throw new EntryValidationError('Tool', `runtime tool "${name}": ${describeIssues(metadata.error.issues)}`);
+  }
+  // No schema (undefined, or null from plain JavaScript) lists as an empty object schema
+  if (inputSchema !== undefined && inputSchema !== null) {
+    const listed = listedInputSchema.safeParse(inputSchema);
+    if (!listed.success) {
+      throw new EntryValidationError(
+        'Tool',
+        `runtime tool "${name}" input schema must be an object schema: ${describeIssues(listed.error.issues)}`,
+      );
+    }
+  }
 }
 
 /** Refuse to add a tool to a scope that is being (or has been) disposed. */
@@ -64,6 +112,7 @@ export async function registerRuntimeTool(scope: Scope, definition: RuntimeToolD
   if (typeof definition.execute !== 'function') {
     throw new EntryValidationError('Tool', `runtime tool "${name}" has no execute function`);
   }
+  validateRuntimeToolDefinition(definition);
   assertScopeNotDisposed(scope, name);
   const app = appForRuntimeTool(scope, name, definition.app);
   if (scope.tools.listAllInstances().some((tool) => tool.name === name)) {
