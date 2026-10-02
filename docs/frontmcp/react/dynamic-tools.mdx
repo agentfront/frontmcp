@@ -9,7 +9,7 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'react', 'ui', 'frontend
 
 Dynamic tools and resources let React components register MCP capabilities on mount and automatically unregister them on unmount. This enables UI-driven tool availability — tools exist only while the component that defines them is rendered.
 
-A dynamic tool is a **real server tool**. `FrontMcpProvider` registers it with the server through [`server.registerTool()`](/frontmcp/deployment/browser-compatibility#runtime-tools), so it is listed like any other tool, runs through the server's `tools:call-tool` flow (plugin hooks, authorities, quota and `availableWhen` apply), reaches every client — including in-browser agents through the WebMCP plugin — and connected clients get `notifications/tools/list_changed` when it appears or goes away.
+A dynamic tool is a **real server tool**. `FrontMcpProvider` registers it with the server through [`server.registerTool()`](/frontmcp/deployment/browser-compatibility#runtime-tools), so it is listed like any other tool, runs through the server's `tools:call-tool` flow (plugin hooks, authorities, quota and `availableWhen` apply), reaches every client — including in-browser agents through the [WebMCP plugin](/frontmcp/plugins/webmcp-plugin) — and connected clients get `notifications/tools/list_changed` when it appears or goes away.
 
 ## useDynamicTool
 
@@ -103,7 +103,7 @@ A dynamic tool joins one of the server's apps, whose plugin hooks then apply to 
 
 ### Offering a Tool Only to In-Browser Agents
 
-With the WebMCP plugin installed, `availableWhen` decides which callers see a tool:
+With the [WebMCP plugin](/frontmcp/plugins/webmcp-plugin) installed, `availableWhen` decides which callers see a tool:
 
 ```tsx
 useDynamicTool({

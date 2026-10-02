@@ -2061,7 +2061,7 @@
         },
         {
           "name": "official-plugins",
-          "description": "Guide to the 6 official plugins for discovery, memory, auth, caching, flags, and monitoring",
+          "description": "Guide to the 7 official plugins for discovery, memory, auth, caching, flags, monitoring, and WebMCP",
           "examples": [
             {
               "name": "cache-and-feature-flags",
