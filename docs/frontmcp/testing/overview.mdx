@@ -26,11 +26,13 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'testing', 'tests', 'jes
 ## Installation
 
 ```bash
-npm install -D @frontmcp/testing
+npm install -D @frontmcp/testing jest
 ```
 
 <Info>
-  `@frontmcp/testing` requires `@frontmcp/sdk` as a peer dependency and uses Jest as the test runner.
+  `@frontmcp/testing` requires `@frontmcp/sdk` as a peer dependency and uses Jest as the test runner. It brings
+  the `@swc/jest` transformer that `frontmcp test`'s generated config uses, so nothing else is needed — under
+  pnpm too, where `frontmcp test` resolves the transformer through `@frontmcp/testing`.
 </Info>
 
 ---
@@ -64,6 +66,11 @@ need native ESM. The scaffolded project uses Jest 30. Its
 `transformIgnorePatterns` understand every package-manager layout — including
 pnpm, which installs into a symlinked store at
 `node_modules/.pnpm/<name>@<version>/node_modules/<name>`.
+
+A FrontMCP server started inside a spec — `FrontMcpInstance.createHandler()`, `createFetchHandler()`,
+`createDirect()`, `create()` / `connect()` — runs under this config as is, with no
+`--experimental-vm-modules`: the SDK falls back to `require` where Jest's VM refuses a dynamic import, and
+loads the skill search index (`vectoriadb`) only when a skill search runs.
 
 If one of _your_ dependencies ships ESM-only, add it to `test.esmPackages` in
 `frontmcp.config.ts` rather than hand-writing a whole Jest config:

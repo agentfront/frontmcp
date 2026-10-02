@@ -272,6 +272,21 @@ describe('SseTransport (legacy HTTP+SSE)', () => {
     expect(transport.getState()).toBe('error');
   });
 
+  it('times out a stream that never names its endpoint', async () => {
+    const encoder = new TextEncoder();
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(': waiting\n\n'));
+          init?.signal?.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')));
+        },
+      });
+      return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+    }) as typeof fetch;
+    const transport = new SseTransport({ baseUrl: BASE_URL, publicMode: true, timeout: 50 });
+    await expect(transport.connect()).rejects.toThrow(/sent no endpoint event within 50ms/);
+  });
+
   it('fails a stream that ends before naming its endpoint', async () => {
     stubSseServer({ noEndpoint: true });
     const transport = new SseTransport({ baseUrl: BASE_URL, publicMode: true });

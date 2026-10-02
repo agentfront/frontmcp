@@ -324,7 +324,13 @@ export class SseTransport implements McpTransport {
       reader.releaseLock();
     }
     if (!endpointSeen) {
-      onEndpointError(new Error(`SSE stream at ${this.sseUrl()} ended before the server sent its endpoint`));
+      onEndpointError(
+        new Error(
+          controller.signal.aborted
+            ? `SSE stream at ${this.sseUrl()} sent no endpoint event within ${this.timeout}ms`
+            : `SSE stream at ${this.sseUrl()} ended before the server sent its endpoint`,
+        ),
+      );
     }
     // The server closed the stream: nothing pending can be answered any more
     if (this.stream === controller) {
