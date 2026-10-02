@@ -12,6 +12,7 @@ import { type MetricsOptionsInterface } from '../common/types/options/metrics';
 import { registerHealthRoutes, type HealthService } from '../health';
 import { registerMetricsRoutes, type MetricsService } from '../metrics';
 import { type HostServerAdapter } from './adapters/base.host.adapter';
+import { resolveHttpCors } from './middleware/cors-env';
 import { auditSecurityDefaults, logSecurityFindings, resolveBindAddress } from './security/security-audit';
 
 /**
@@ -49,7 +50,9 @@ export class FrontMcpServerInstance extends FrontMcpServer {
     } else if (this.config.hostFactory !== undefined) {
       this.host = this.config.hostFactory;
     } else {
-      const corsConfig = this.config.cors === false ? undefined : (this.config.cors ?? DEFAULT_CORS);
+      // `server.http.cors` from frontmcp.config reaches the server as FRONTMCP_CORS_* defaults
+      const cors = resolveHttpCors(this.config.cors);
+      const corsConfig = cors === false ? undefined : (cors ?? DEFAULT_CORS);
       // Lazy-`require` (not a top-level import) so express — and its module-eval
       // `require('fs')` — is only loaded when an express host is actually
       // constructed (a Node server). On a V8 isolate `FrontMcpServerInstance` is
