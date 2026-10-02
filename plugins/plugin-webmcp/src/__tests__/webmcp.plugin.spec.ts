@@ -5,6 +5,7 @@ import {
   create,
   LogLevel,
   Plugin,
+  PublicMcpError,
   tool,
   Tool,
   ToolContext,
@@ -80,6 +81,13 @@ class WhoAmITool extends ToolContext {
 class ExplodeTool extends ToolContext {
   async execute(): Promise<string> {
     throw new Error('boom');
+  }
+}
+
+@Tool({ name: 'archived_order', description: 'Fails through this.fail()', inputSchema: {} })
+class ArchivedOrderTool extends ToolContext {
+  async execute(): Promise<string> {
+    this.fail(new PublicMcpError('Order is archived'));
   }
 }
 
@@ -334,6 +342,12 @@ describe('WebMcpPlugin', () => {
       await start();
 
       await expect(modelContext.execute('explode')).rejects.toThrow();
+    });
+
+    it('rejects with the message of the error the tool passed to this.fail()', async () => {
+      await start({}, [ArchivedOrderTool]);
+
+      await expect(modelContext.execute('archived_order')).rejects.toThrow(/^Order is archived$/);
     });
 
     it('passes non-object input as no arguments', async () => {

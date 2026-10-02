@@ -4,6 +4,7 @@ import {
   App,
   FlowControl,
   FrontMcpInstance,
+  InternalMcpError,
   LogLevel,
   Tool,
   ToolContext,
@@ -203,6 +204,20 @@ describe('WebMcpBridge', () => {
       bridge.stop();
     });
 
+    it('logs why a listing that ended through FlowControl.fail failed', async () => {
+      const modelContext = new FakeModelContext();
+      jest.spyOn(scope, 'runFlowForOutput').mockImplementationOnce((() => {
+        FlowControl.fail(new Error('listing refused'));
+      }) as never);
+      const bridge = bridgeFor(scope, { modelContext });
+
+      bridge.start();
+      await bridge.whenIdle();
+
+      expect(logger.warn).toHaveBeenCalledWith('WebMCP sync failed: listing refused');
+      bridge.stop();
+    });
+
     it('takes a listing that answers through FlowControl.respond as output', async () => {
       const modelContext = new FakeModelContext();
       jest.spyOn(scope, 'runFlowForOutput').mockImplementation((() => {
@@ -336,6 +351,42 @@ describe('WebMcpBridge', () => {
 
       await expect(ping.execute({}, { signal: new AbortController().signal })).rejects.toThrow(
         /^Internal FrontMCP error$/,
+      );
+      bridge.stop();
+    });
+
+    it('rejects with the error passed to FlowControl.fail, not the empty control envelope', async () => {
+      const { bridge, ping } = await registeredPing();
+      jest.spyOn(scope, 'runFlowForOutput').mockImplementation((() => {
+        FlowControl.fail(new Error('Order is archived'));
+      }) as never);
+
+      await expect(ping.execute({}, { signal: new AbortController().signal })).rejects.toThrow(/^Order is archived$/);
+      bridge.stop();
+    });
+
+    it('rejects with the public message of a server error passed to FlowControl.fail', async () => {
+      const { bridge, ping } = await registeredPing();
+      jest.spyOn(scope, 'runFlowForOutput').mockImplementation((() => {
+        FlowControl.fail(new InternalMcpError('database password rejected'));
+      }) as never);
+
+      await expect(ping.execute({}, { signal: new AbortController().signal })).rejects.toThrow(
+        /^Internal FrontMCP error\. Please contact support with error ID: /,
+      );
+      bridge.stop();
+    });
+
+    it.each([
+      ['a fail control without an original error', new FlowControl('fail', { error: 'lost' })],
+      ['an abort', new FlowControl('abort', 'stopped')],
+      ['a handled control', new FlowControl('handled', null)],
+    ])('rejects with an internal error, not an empty message, for %s', async (_case, control) => {
+      const { bridge, ping } = await registeredPing();
+      jest.spyOn(scope, 'runFlowForOutput').mockRejectedValue(control);
+
+      await expect(ping.execute({}, { signal: new AbortController().signal })).rejects.toThrow(
+        /^Internal FrontMCP error\. Please contact support with error ID: /,
       );
       bridge.stop();
     });
