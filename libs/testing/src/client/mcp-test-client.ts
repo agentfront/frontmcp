@@ -14,6 +14,7 @@ import {
 } from '../interceptor';
 import { errorMessage, isInterceptedError } from '../transport/error-utils';
 import { StreamableHttpTransport } from '../transport/streamable-http.transport';
+import { SseTransport } from '../transport/sse.transport';
 import type { JsonRpcRequest, McpTransport } from '../transport/transport.interface';
 import { McpTestClientBuilder } from './mcp-test-client.builder';
 import type {
@@ -1106,8 +1107,18 @@ export class McpTestClient {
           notificationHandler: this.recordNotification,
         });
       case 'sse':
-        // TODO: Implement SSE transport
-        throw new Error('SSE transport not yet implemented');
+        return new SseTransport({
+          baseUrl,
+          entryPath: this.config.entryPath,
+          timeout: this.config.timeout,
+          auth: this.config.auth,
+          publicMode: this.config.publicMode,
+          debug: this.config.debug,
+          interceptors: this._interceptors,
+          clientInfo: this.config.clientInfo,
+          elicitationHandler: this._elicitationHandler,
+          notificationHandler: this.recordNotification,
+        });
       default:
         throw new Error(`Unknown transport type: ${this.config.transport}`);
     }

@@ -35,7 +35,15 @@ test.skip('skipped test', async ({ mcp }) => {});
 
 // Only run this test
 test.only('focused test', async ({ mcp }) => {});
+
+// Hooks that take a parameter get the test's fixtures (same mcp/server/auth as the test)
+test.beforeEach(async ({ mcp }) => {});
+test.afterEach(async ({ mcp }) => {});
 ```
+
+`test.beforeEach` / `test.afterEach` with a parameter run inside each `test(...)` of the block
+(`beforeEach` outer blocks first, `afterEach` inner blocks first; fixtures are torn down afterwards).
+Without a parameter they are plain Jest hooks. `test.beforeAll` / `test.afterAll` are plain Jest hooks.
 
 ### test.use
 
@@ -49,10 +57,10 @@ test.use(options: TestOptions): void
 | ---------------- | ---------------------------------------- | ------------------- | ------------------------------------------- |
 | `server`         | `string`                                 | —                   | Path to server entry file (required)        |
 | `port`           | `number`                                 | Auto                | Port to run server on (`0` = any free port) |
-| `transport`      | `'sse' \| 'streamable-http'`             | `'streamable-http'` | Transport protocol                          |
+| `transport`      | `'sse' \| 'streamable-http'`             | `'streamable-http'` | Transport (`'sse'`: legacy HTTP+SSE)        |
 | `auth`           | `AuthOptions`                            | —                   | Authentication configuration                |
 | `logLevel`       | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'`            | Server log level                            |
-| `env`            | `Record<string, string>`                 | —                   | Environment variables                       |
+| `env`            | `Record<string, string>`                 | —                   | Environment variables (read at server start) |
 | `startupTimeout` | `number`                                 | `30000`             | Startup timeout in ms                       |
 | `baseUrl`        | `string`                                 | —                   | Connect to existing server                  |
 

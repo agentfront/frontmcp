@@ -12,3 +12,4 @@ export type {
   NotificationHandler,
 } from './transport.interface';
 export { StreamableHttpTransport } from './streamable-http.transport';
+export { SseTransport } from './sse.transport';

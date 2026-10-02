@@ -217,6 +217,12 @@ export interface ServerFixture {
 export type TestFn = (fixtures: TestFixtures) => Promise<void> | void;
 
 /**
+ * `test.beforeEach` / `test.afterEach`: `fn` receives the test's fixtures when it declares a
+ * parameter. Jest's `done` callback style is not supported here; use Jest's own hooks for that.
+ */
+export type FixtureEachHook = (fn: (fixtures: TestFixtures) => unknown, timeout?: number) => void;
+
+/**
  * Enhanced test function with fixture support
  */
 export interface TestWithFixtures {
@@ -231,16 +237,24 @@ export interface TestWithFixtures {
   /** Create a describe block */
   describe: typeof describe;
 
-  /** Run before all tests in the file */
+  /** Run before all tests in the file (a plain Jest hook: it receives no fixtures) */
   beforeAll: typeof beforeAll;
 
-  /** Run before each test */
-  beforeEach: typeof beforeEach;
+  /**
+   * Run before each test. A callback that takes a parameter receives the test's fixtures
+   * (`test.beforeEach(async ({ mcp }) => …)`) — the same `mcp`, `server` and `auth` the test gets —
+   * and runs inside every `test(...)` of the enclosing block, outer blocks first. A callback without
+   * parameters is a plain Jest `beforeEach` (`timeout` applies only to that form).
+   */
+  beforeEach: FixtureEachHook;
 
-  /** Run after each test */
-  afterEach: typeof afterEach;
+  /**
+   * Run after each test, with the same fixtures as `beforeEach` (inner blocks first). Fixtures are
+   * torn down after the last `afterEach`. A callback without parameters is a plain Jest `afterEach`.
+   */
+  afterEach: FixtureEachHook;
 
-  /** Run after all tests in the file */
+  /** Run after all tests in the file (a plain Jest hook: it receives no fixtures) */
   afterAll: typeof afterAll;
 
   /** Skip a named test. */
