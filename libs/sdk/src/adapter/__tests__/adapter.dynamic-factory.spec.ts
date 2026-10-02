@@ -51,6 +51,20 @@ class EchoAdapter extends DynamicAdapter<EchoAdapterOptions> {
   }
 }
 
+/** The same adapter as `EchoAdapter`, as a second bundle of its package would define it: a distinct class. */
+class EchoAdapterFromAnotherBundle extends DynamicAdapter<EchoAdapterOptions> {
+  options: EchoAdapterOptions;
+
+  constructor(options: EchoAdapterOptions) {
+    super();
+    this.options = options;
+  }
+
+  fetch(): FrontMcpAdapterResponse {
+    return { tools: [EchoTool] };
+  }
+}
+
 let nameCounter = 0;
 const uniqueName = (base: string) => `${base}-${++nameCounter}`;
 
@@ -79,6 +93,13 @@ async function install(record: unknown) {
   return registry;
 }
 
+/** Names of the tools the registry's single adapter contributes. */
+function toolNames(registry: AdapterRegistry): string[] {
+  const [adapter] = registry.getAdapters() as AdapterInstance[];
+  const tools = adapter.getTools().getTools(true);
+  return tools.map((t) => t.name);
+}
+
 describe('DynamicAdapter.init({ name, inject, useFactory })', () => {
   const unhandled: unknown[] = [];
   const onUnhandled = (reason: unknown) => unhandled.push(reason);
@@ -104,8 +125,7 @@ describe('DynamicAdapter.init({ name, inject, useFactory })', () => {
     );
 
     expect(constructed).toEqual([{ name, baseUrl: 'https://api.example.com' }]);
-    const [adapter] = registry.getAdapters() as AdapterInstance[];
-    expect(adapter.getTools().getTools(true).map((t) => t.name)).toEqual(['factory_adapter_echo']);
+    expect(toolNames(registry)).toEqual(['factory_adapter_echo']);
   });
 
   it('accepts a factory that resolves the options asynchronously', async () => {
@@ -139,12 +159,46 @@ describe('DynamicAdapter.init({ name, inject, useFactory })', () => {
     const produced = new EchoAdapter({ name, baseUrl: 'https://instance.example.com' });
     constructed.length = 0;
 
+    const registry = await install(EchoAdapter.init({ name, inject: () => [] as const, useFactory: () => produced }));
+
+    expect(constructed).toEqual([]);
+    expect(registry.getAdapters()).toHaveLength(1);
+  });
+
+  it('keeps an adapter instance a factory resolves asynchronously', async () => {
+    const name = uniqueName('async-instance-factory');
+    const produced = new EchoAdapter({ name, baseUrl: 'https://instance.example.com' });
+    constructed.length = 0;
+
     const registry = await install(
-      EchoAdapter.init({ name, inject: () => [] as const, useFactory: () => produced as never }),
+      EchoAdapter.init({ name, inject: () => [] as const, useFactory: async () => produced }),
     );
 
     expect(constructed).toEqual([]);
     expect(registry.getAdapters()).toHaveLength(1);
+  });
+
+  it('keeps an adapter built from another copy of the adapter class instead of rebuilding it from its fields', async () => {
+    const name = uniqueName('other-copy-factory');
+    const produced = new EchoAdapterFromAnotherBundle({ name, baseUrl: 'https://copy.example.com' });
+
+    const registry = await install(EchoAdapter.init({ name, inject: () => [] as const, useFactory: () => produced }));
+
+    expect(constructed).toEqual([]);
+    expect(toolNames(registry)).toEqual(['factory_adapter_echo']);
+  });
+
+  it('fails start-up when a factory returns an adapter named differently from the name given to init', async () => {
+    const name = uniqueName('renamed-instance');
+    const produced = new EchoAdapter({ name: 'some-other-name', baseUrl: 'https://instance.example.com' });
+
+    const started = install(EchoAdapter.init({ name, inject: () => [] as const, useFactory: () => produced }));
+
+    await expect(started).rejects.toThrow(InvalidEntityError);
+    await expect(started).rejects.toThrow(
+      `Invalid adapter '${name}'. Expected useFactory to return an adapter named '${name}', ` +
+        `the name given to init(), not 'some-other-name'.`,
+    );
   });
 
   it('fails start-up with one clear error, and nothing else rejects unhandled, when a factory builds no adapter', async () => {
