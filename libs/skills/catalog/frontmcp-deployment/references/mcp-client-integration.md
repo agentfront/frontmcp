@@ -102,7 +102,7 @@ Wire the client at the bridge:
 
 Bridge guarantees:
 
-- Stdout is 100% JSON-RPC frames; diagnostics go to `.frontmcp/dev.log` in the project root (override with `--log-file`).
+- Stdout is 100% JSON-RPC frames; diagnostics go to `.frontmcp/dev.log` in the project root (override with `--log-file`), start-up notices (port picked, `.env` loaded) to stderr.
 - Same project setup as `frontmcp dev`: `frontmcp.config.*` (from any subfolder), `entry`, `transport.http.port` / `path`, `env` overlays and `.env`. The server gets `PORT` + `FRONTMCP_HTTP_ENTRY_PATH`; with no port chosen anywhere the bridge picks a free loopback port.
 - The server reports the port and MCP path it really serves (`__FRONTMCP_BOOTSTRAP_COMPLETE__ {"port":…,"path":…}` on stderr), so values hard-coded in `@FrontMcp({ http })` work.
 - The client stays connected across reloads: the bridge uses the `mcp-session-id` the server issues, replays the client's `initialize` handshake on the restarted server, then sends `notifications/tools/list_changed` (and resources/prompts when advertised). Server-side session state starts fresh on each reload.

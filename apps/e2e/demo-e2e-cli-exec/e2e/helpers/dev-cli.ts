@@ -132,10 +132,21 @@ export interface JsonRpcMessage {
   error?: { code: number; message: string; data?: unknown };
 }
 
+function parseJsonRpc(line: string): JsonRpcMessage | undefined {
+  try {
+    const parsed = JSON.parse(line) as Partial<JsonRpcMessage> | null;
+    return parsed?.jsonrpc === '2.0' ? (parsed as JsonRpcMessage) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Speaks newline-delimited JSON-RPC to `frontmcp dev --stdio`. */
 export class StdioBridgeClient {
   readonly child: ChildProcess;
   readonly received: JsonRpcMessage[] = [];
+  /** stdout lines that are not JSON-RPC. stdout is the MCP channel: this must stay empty. */
+  readonly stdoutNoise: string[] = [];
   stderr = '';
   private buffer = '';
   private nextId = 1;
@@ -155,7 +166,11 @@ export class StdioBridgeClient {
         const line = this.buffer.slice(0, nl).trim();
         this.buffer = this.buffer.slice(nl + 1);
         if (!line) continue;
-        const message = JSON.parse(line) as JsonRpcMessage;
+        const message = parseJsonRpc(line);
+        if (!message) {
+          this.stdoutNoise.push(line);
+          continue;
+        }
         this.received.push(message);
         if (message.id !== undefined) this.waiters.get(message.id)?.(message);
       }

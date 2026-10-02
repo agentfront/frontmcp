@@ -309,7 +309,7 @@ Wire your client at the bridge — no `mcp-remote` needed:
 
 What the bridge guarantees:
 
-- **Stdout is 100% JSON-RPC frames.** Every diagnostic goes to `.frontmcp/dev.log` in the project root (override with `--log-file <path>`).
+- **Stdout is 100% JSON-RPC frames.** Every diagnostic goes to `.frontmcp/dev.log` in the project root (override with `--log-file <path>`); start-up notices (the port picked, `.env` files loaded) go to stderr.
 - **Same project setup as `frontmcp dev`.** The bridge reads `frontmcp.config.*` (found from any subfolder), `entry`, `transport.http.port` / `transport.http.path`, the `env.shared` ⊕ `env.dev` overlays and `.env` files, and hands the server `PORT` and `FRONTMCP_HTTP_ENTRY_PATH`. Without `--port`, `transport.http.port` or `PORT`, it picks a free loopback port — the client never sees it.
 - **It talks to the port and path the server actually serves.** The server reports them when it is ready (`__FRONTMCP_BOOTSTRAP_COMPLETE__ {"port":…,"path":…}` on stderr), so a port or `entryPath` hard-coded in `@FrontMcp({ http })` works too.
 - **The client stays connected across reloads.** Over the HTTP loopback the bridge uses the `mcp-session-id` the server issues on `initialize`. A restarted server has no sessions, so the bridge replays the client's `initialize` / `notifications/initialized` handshake against it before buffered requests drain, then sends `notifications/tools/list_changed` (and the resources / prompts equivalents the server advertises) so the client re-reads what changed. Server-side session state — auth, subscriptions, memory — starts fresh with each reload.
