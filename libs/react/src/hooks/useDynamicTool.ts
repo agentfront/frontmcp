@@ -25,6 +25,11 @@ interface UseDynamicToolCommonOptions {
   annotations?: DynamicToolDef['annotations'];
   /** Where the tool is offered, e.g. `{ surface: ['webmcp'] }` for in-browser agents only. */
   availableWhen?: DynamicToolDef['availableWhen'];
+  /**
+   * Id of the server app the tool joins. Needed only for a server with more than one local app;
+   * defaults to the provider's `dynamicToolApps` entry for the server.
+   */
+  app?: string;
 }
 
 // ─── Zod-based options ───────────────────────────────────────────────────────
@@ -71,7 +76,7 @@ function stableKey(value: unknown): string {
 }
 
 export function useDynamicTool<S extends z.ZodObject<z.ZodRawShape>>(options: UseDynamicToolOptions<S>): void {
-  const { name, description, enabled = true } = options;
+  const { name, description, app, enabled = true } = options;
   const { getDynamicRegistry } = useContext(FrontMcpContext);
   const dynamicRegistry = getDynamicRegistry(options.server);
 
@@ -136,8 +141,9 @@ export function useDynamicTool<S extends z.ZodObject<z.ZodRawShape>>(options: Us
       execute: stableExecute,
       ...(annotations && { annotations }),
       ...(availableWhen && { availableWhen }),
+      ...(app && { app }),
     });
 
     return unregister;
-  }, [dynamicRegistry, name, description, resolvedInputSchema, annotations, availableWhen, enabled]);
+  }, [dynamicRegistry, name, description, resolvedInputSchema, annotations, availableWhen, app, enabled]);
 }
