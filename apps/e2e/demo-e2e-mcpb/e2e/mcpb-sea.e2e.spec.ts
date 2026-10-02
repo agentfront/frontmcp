@@ -7,8 +7,9 @@
  * `require()` against Node's built-ins only — while `frontmcp mcpb validate`
  * called the archive valid.
  *
- * Building an SEA binary needs `postject` (fetched by npx); when that toolchain
- * is unavailable the build is skipped with a warning, like the CLI SEA specs.
+ * Building an SEA binary needs a host platform MCPB ships binaries for and
+ * `postject` (fetched by npx). Only when that toolchain is positively missing is
+ * the suite skipped; with the toolchain present, a failed build fails it.
  */
 
 import { execFileSync, spawn } from 'child_process';
@@ -26,7 +27,31 @@ const yauzl = require('yauzl') as typeof import('yauzl');
 
 const APP = 'sea-demo';
 const PLATFORM = `${process.platform}-${process.arch}`;
+/** The binary's name in the archive (`bin/<platform>/<name>`): Windows adds `.exe`. */
+const BINARY = process.platform === 'win32' ? `${APP}.exe` : APP;
 const SCRATCH_ROOT = path.resolve(__dirname, '..');
+/** Hosts `frontmcp build --target mcpb --sea` builds a binary for (MCPB platform keys). */
+const SEA_HOSTS = ['darwin-arm64', 'darwin-x64', 'linux-arm64', 'linux-x64', 'win32-x64'];
+
+/** Why this host cannot build an SEA binary, or `undefined` when it can. */
+function missingSeaToolchain(): string | undefined {
+  if (!SEA_HOSTS.includes(PLATFORM)) return `no SEA binary is built for ${PLATFORM}`;
+  try {
+    execFileSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['-y', 'postject', '--help'], {
+      stdio: 'pipe',
+      timeout: 120_000,
+      // Node refuses to spawn a .cmd without a shell.
+      shell: process.platform === 'win32',
+    });
+    return undefined;
+  } catch (err) {
+    return `postject is unavailable: ${String((err as { stderr?: Buffer }).stderr ?? err).slice(0, 300)}`;
+  }
+}
+
+const missingToolchain = missingSeaToolchain();
+if (missingToolchain) console.warn(`[e2e:mcpb-sea] skipping: ${missingToolchain}`);
+const describeWithSeaToolchain = missingToolchain ? describe.skip : describe;
 
 const FILES: Record<string, string> = {
   'frontmcp.config.js': `module.exports = { name: '${APP}', version: '1.0.0', entry: './src/main.ts', deployments: [{ target: 'mcpb' }] };\n`,
@@ -88,7 +113,12 @@ function extractEntry(archivePath: string, entryName: string, dest: string): Pro
 }
 
 /** Send JSON-RPC lines to the binary's stdin and collect the responses by id. */
-function talkStdio(binary: string, home: string, frames: object[], expectedIds: number[]): Promise<Map<number, unknown>> {
+function talkStdio(
+  binary: string,
+  home: string,
+  frames: object[],
+  expectedIds: number[],
+): Promise<Map<number, unknown>> {
   return new Promise((resolve, reject) => {
     const child = spawn(binary, [], {
       env: { ...process.env, FRONTMCP_STDIO: '1', HOME: home },
@@ -124,11 +154,10 @@ function talkStdio(binary: string, home: string, frames: object[], expectedIds: 
   });
 }
 
-describe('frontmcp build --target mcpb --sea (#679)', () => {
+describeWithSeaToolchain('frontmcp build --target mcpb --sea (#679)', () => {
   let projectDir: string;
   let home: string;
   let archive: string;
-  let built = false;
 
   beforeAll(async () => {
     projectDir = await mkdtemp(path.join(SCRATCH_ROOT, '.scratch-mcpb-sea-'));
@@ -138,6 +167,7 @@ describe('frontmcp build --target mcpb --sea (#679)', () => {
     }
     home = await mkdtemp(path.join(os.tmpdir(), 'mcpb-sea-home-'));
     archive = path.join(projectDir, 'dist', 'mcpb', `${APP}-1.0.0.mcpb`);
+    // The toolchain is here: a failed build is a regression, never a skip.
     try {
       execFileSync('node', [getFrontmcpBin(), 'build', '--target', 'mcpb', '--sea'], {
         cwd: projectDir,
@@ -146,9 +176,13 @@ describe('frontmcp build --target mcpb --sea (#679)', () => {
         env: { ...process.env, NODE_ENV: 'production' },
       });
     } catch (err) {
-      console.warn('[e2e:mcpb-sea] SEA build failed — skipping:', String((err as { stderr?: Buffer }).stderr ?? err).slice(0, 500));
+      const output = err as { stdout?: Buffer; stderr?: Buffer };
+      throw new Error(
+        `frontmcp build --target mcpb --sea failed:\n${String(output.stdout ?? '')}\n${String(output.stderr ?? err)}`,
+        { cause: err },
+      );
     }
-    built = await fileExists(archive);
+    if (!(await fileExists(archive))) throw new Error(`the build reported success but wrote no ${archive}`);
   }, 300_000);
 
   afterAll(async () => {
@@ -157,9 +191,8 @@ describe('frontmcp build --target mcpb --sea (#679)', () => {
   });
 
   it('the SEA binary in the archive serves MCP over stdio', async () => {
-    if (!built) return;
-    const binary = path.join(home, APP);
-    await extractEntry(archive, `bin/${PLATFORM}/${APP}`, binary);
+    const binary = path.join(home, BINARY);
+    await extractEntry(archive, `bin/${PLATFORM}/${BINARY}`, binary);
 
     const responses = await talkStdio(
       binary,
@@ -182,7 +215,6 @@ describe('frontmcp build --target mcpb --sea (#679)', () => {
   }, 120_000);
 
   it('frontmcp mcpb validate accepts the archive', async () => {
-    if (!built) return;
     const { exitCode, stdout } = runFrontmcp(['mcpb', 'validate', archive], projectDir);
     expect(stdout).toContain('archive is valid');
     expect(exitCode).toBe(0);
