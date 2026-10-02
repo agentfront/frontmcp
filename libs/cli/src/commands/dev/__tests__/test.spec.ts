@@ -23,6 +23,7 @@ import {
   buildTransformIgnorePatterns,
   findUserJestConfig,
   generateJestConfig,
+  resolveSwcJestTransformer,
 } from '../test';
 
 type JestConfig = {
@@ -367,5 +368,46 @@ describe('buildTestChildEnv (issue #540)', () => {
     const env = buildTestChildEnv({ effectiveEnv: {}, baseEnv: { LOADED_FROM_DOTENV: 'yes' } });
 
     expect(env['LOADED_FROM_DOTENV']).toBe('yes');
+  });
+});
+
+describe('resolveSwcJestTransformer (issue #680)', () => {
+  const resolverFor = (available: Record<string, string>) =>
+    jest.fn((id: string, options: { paths: string[] }) => {
+      const hit = available[`${id}@${options.paths[0]}`];
+      if (!hit) throw new Error(`Cannot find module '${id}'`);
+      return hit;
+    });
+
+  it("prefers the project's own @swc/jest", () => {
+    const resolve = resolverFor({ '@swc/jest@/proj': '/proj/node_modules/@swc/jest/index.js' });
+    expect(resolveSwcJestTransformer('/proj', resolve)).toBe('/proj/node_modules/@swc/jest/index.js');
+  });
+
+  it('falls back to the @swc/jest that @frontmcp/testing brings (bare or pnpm project)', () => {
+    const testingDir = '/proj/node_modules/.pnpm/@frontmcp+testing/node_modules/@frontmcp/testing';
+    const resolve = resolverFor({
+      '@frontmcp/testing/package.json@/proj': `${testingDir}/package.json`,
+      [`@swc/jest@${testingDir}`]: '/proj/node_modules/.pnpm/@swc+jest/node_modules/@swc/jest/index.js',
+    });
+    expect(resolveSwcJestTransformer('/proj', resolve)).toBe(
+      '/proj/node_modules/.pnpm/@swc+jest/node_modules/@swc/jest/index.js',
+    );
+  });
+
+  it('returns undefined when neither the project nor @frontmcp/testing has it', () => {
+    expect(resolveSwcJestTransformer('/proj', resolverFor({}))).toBeUndefined();
+  });
+
+  it('resolves the real transformer of this workspace with the default resolver', () => {
+    expect(resolveSwcJestTransformer(process.cwd())).toMatch(/@swc[/\\]jest/);
+  });
+
+  it('writes the resolved transformer into the config, and inlines SWC helpers', () => {
+    const cfg = generateJestConfig('/proj', makeOpts(), undefined, '/abs/@swc/jest/index.js') as JestConfig;
+    const [transformer, options] = Object.values(cfg.transform)[0];
+    expect(transformer).toBe('/abs/@swc/jest/index.js');
+    // External helpers would need `@swc/helpers` resolvable from every test file
+    expect((options as { jsc: { externalHelpers: boolean } }).jsc.externalHelpers).toBe(false);
   });
 });

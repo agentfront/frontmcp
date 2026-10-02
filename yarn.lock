@@ -2876,6 +2876,8 @@ __metadata:
   dependencies:
     "@frontmcp/protocol": "npm:1.5.7"
     "@frontmcp/utils": "npm:1.5.7"
+    "@swc/core": "npm:~1.15.41"
+    "@swc/jest": "npm:~0.2.38"
     "@types/jest": "npm:^30.0.0"
     jose: "npm:^6.0.11"
     tslib: "npm:^2.3.0"
