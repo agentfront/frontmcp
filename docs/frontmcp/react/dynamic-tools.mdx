@@ -83,10 +83,23 @@ useDynamicTool({
 | `server`        | `string`                            | —       | Target a named server                                     |
 | `annotations`   | `ToolAnnotations`                   | —       | MCP hints, e.g. `{ readOnlyHint: true }`                  |
 | `availableWhen` | `EntryAvailability`                 | —       | Where the tool is offered, e.g. `{ surface: ['webmcp'] }` |
+| `app`           | `string`                            | —       | Server app the tool joins (servers with several apps)     |
 
 ### Name Conflicts
 
 Dynamic tool names share the server's namespace. A dynamic tool whose name a server tool (or another provider's dynamic tool) already has is **not registered**: the provider reports it through its `onError` prop, or with a `console.warn` when there is none, and the component keeps rendering. Names must be 1–64 characters. Registering the tool again (a remount, say) tries it again.
+
+### Servers With Several Apps
+
+A dynamic tool joins one of the server's apps, whose plugin hooks then apply to it. A server made with `create()` has a single app, so there is nothing to choose. A server with several local apps (`FrontMcpInstance.createDirect({ apps: [...] })`) refuses a tool that doesn't say which app it joins, so name the app once per server on the provider. That covers every dynamic tool: `useDynamicTool`, `mcpComponent`, store actions and `useApiClient`.
+
+```tsx
+<FrontMcpProvider server={server} dynamicToolApps={{ default: 'browser' }}>
+  <App /> {/* its dynamic tools join the `browser` app */}
+</FrontMcpProvider>
+```
+
+`dynamicToolApps` is keyed by server name: the primary server goes by the provider's `name` (`'default'` unless set), and each entry of `servers` by its key. A tool can name its own app instead, with `useDynamicTool({ ..., app: 'billing' })`.
 
 ### Offering a Tool Only to In-Browser Agents
 

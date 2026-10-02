@@ -2,13 +2,18 @@
 import 'reflect-metadata';
 
 import {
+  App,
   create,
+  FrontMcpInstance,
   LogLevel,
+  Plugin,
   Tool,
   ToolContext,
+  ToolHook,
   ToolNameConflictError,
   type CallToolResult,
   type DirectMcpServer,
+  type FlowCtxOf,
   type RuntimeToolDefinition,
 } from '@frontmcp/sdk';
 
@@ -242,6 +247,87 @@ describe('bindDynamicTools with a real server', () => {
     const names = await listedNames(server);
     expect(names).not.toContain('dyn_tool');
     expect(names).not.toContain('late_tool');
+  });
+});
+
+describe('bindDynamicTools with a server of several apps', () => {
+  /** Tools the `support` app's call-tool hook saw run. */
+  const supportExecuted: string[] = [];
+
+  @Plugin({ name: 'support-recorder' })
+  class SupportRecorderPlugin {
+    @ToolHook.Will('execute')
+    record(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+      const { tool } = flowCtx.state;
+      if (tool) supportExecuted.push(tool.metadata.name);
+    }
+  }
+
+  @App({ id: 'billing', name: 'Billing', tools: [StaticTool] })
+  class BillingApp {}
+
+  @App({ id: 'support', name: 'Support', plugins: [SupportRecorderPlugin] })
+  class SupportApp {}
+
+  let server: DirectMcpServer;
+  let registry: DynamicRegistry;
+  let unbind: (() => void) | undefined;
+
+  beforeEach(async () => {
+    supportExecuted.length = 0;
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'bind-dynamic-tools-apps', version: '1.0.0' },
+      apps: [BillingApp, SupportApp],
+      logging: { level: LogLevel.Off },
+    });
+    registry = new DynamicRegistry();
+  });
+
+  afterEach(async () => {
+    unbind?.();
+    unbind = undefined;
+    await server.dispose();
+  });
+
+  it('reports a tool that does not say which app it joins', async () => {
+    const onError = jest.fn();
+    unbind = bindDynamicTools(registry, server, { onError });
+
+    registry.registerTool(toolDef());
+    await settle();
+
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringMatching(/must name its app/) }),
+      'dyn_tool',
+    );
+  });
+
+  it("joins the binding's app, or the app a tool names", async () => {
+    const onError = jest.fn();
+    unbind = bindDynamicTools(registry, server, { onError, app: 'billing' });
+
+    registry.registerTool(toolDef({ name: 'billing_dyn' }));
+    registry.registerTool(toolDef({ name: 'support_dyn', app: 'support' }));
+    await settle();
+    await server.callTool('billing_dyn', { q: 'b' });
+    await server.callTool('support_dyn', { q: 's' });
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(await listedNames(server)).toEqual(expect.arrayContaining(['billing_dyn', 'support_dyn']));
+    expect(supportExecuted).toEqual(['support_dyn']);
+  });
+
+  it('moves a tool when the app it names changes', async () => {
+    unbind = bindDynamicTools(registry, server, { app: 'billing' });
+    const unregister = registry.registerTool(toolDef());
+    await settle();
+
+    unregister();
+    registry.registerTool(toolDef({ app: 'support' }));
+    await settle();
+    await server.callTool('dyn_tool', { q: 'x' });
+
+    expect(supportExecuted).toEqual(['dyn_tool']);
   });
 });
 

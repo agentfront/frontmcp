@@ -18,6 +18,11 @@ import type { DynamicRegistry } from './DynamicRegistry';
 export interface BindDynamicToolsOptions {
   /** Called when the server refuses a tool (a name conflict, a name over 64 characters, ...). */
   onError?: (error: Error, toolName: string) => void;
+  /**
+   * Id of the server app that tools join when they don't name one (`DynamicToolDef.app`). Needed
+   * only for a server with more than one local app.
+   */
+  app?: string;
 }
 
 interface MirroredTool {
@@ -28,7 +33,13 @@ interface MirroredTool {
 /** What identifies a registration on the server; a change re-registers the tool. */
 function fingerprintOf(def: DynamicToolDef): string {
   try {
-    return JSON.stringify([def.description, def.inputSchema, def.annotations ?? null, def.availableWhen ?? null]);
+    return JSON.stringify([
+      def.description,
+      def.inputSchema,
+      def.annotations ?? null,
+      def.availableWhen ?? null,
+      def.app ?? null,
+    ]);
   } catch {
     // Not serializable: treat every reconcile as unchanged rather than re-registering forever
     return `unserializable:${def.name}`;
@@ -79,6 +90,7 @@ export function bindDynamicTools(
       inputSchema: def.inputSchema,
       annotations: def.annotations,
       availableWhen: def.availableWhen,
+      app: def.app ?? options.app,
       // The registry holds the latest execute (components swap closures without re-registering)
       execute: (args) => {
         const current = registry.findTool(name);
