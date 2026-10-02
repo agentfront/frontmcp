@@ -7,22 +7,25 @@
  * 4. Optionally auto-connects a client on mount (default: true)
  * 5. Registers all servers into the shared ServerRegistry singleton
  * 6. Creates a DynamicRegistry for dynamic tool/resource registration
- * 7. Wraps the server to overlay dynamic entries on list/call operations
- * 8. All state (status, tools, etc.) lives in the ServerRegistry — context
+ * 7. Mirrors dynamic tools into each server as real tools (bindDynamicTools), and keeps the
+ *    listed tools current from the server's `notifications/tools/list_changed`
+ * 8. Wraps the server to overlay dynamic resources on list/read operations
+ * 9. All state (status, tools, etc.) lives in the ServerRegistry — context
  *    carries only `name`, `registry`, `dynamicRegistry`, and `connect`.
  */
 
-import React, { useCallback, useEffect, useRef, useMemo } from 'react';
-import type { ComponentType } from 'react';
-import type { DirectMcpServer, DirectClient } from '@frontmcp/sdk';
-import type { ToolInfo, ResourceInfo, ResourceTemplateInfo, PromptInfo } from '../types';
+import React, { useCallback, useEffect, useMemo, useRef, type ComponentType } from 'react';
+
+import type { DirectClient, DirectMcpServer } from '@frontmcp/sdk';
+
 import { ComponentRegistry } from '../components/ComponentRegistry';
-import { DynamicRegistry } from '../registry/DynamicRegistry';
+import { bindDynamicTools } from '../registry/bindDynamicTools';
 import { createWrappedServer } from '../registry/createWrappedServer';
-import type { StoreAdapter } from '../types';
-import { FrontMcpContext } from './FrontMcpContext';
+import { DynamicRegistry } from '../registry/DynamicRegistry';
 import { serverRegistry } from '../registry/ServerRegistry';
 import { useStoreRegistration } from '../state/useStoreRegistration';
+import type { PromptInfo, ResourceInfo, ResourceTemplateInfo, StoreAdapter, ToolInfo } from '../types';
+import { FrontMcpContext } from './FrontMcpContext';
 
 export interface FrontMcpProviderProps {
   /** Logical name for the primary server (defaults to 'default') */
@@ -34,6 +37,11 @@ export interface FrontMcpProviderProps {
   components?: Record<string, ComponentType<Record<string, unknown>>>;
   /** Store adapters to register at the provider level (reduxStore, valtioStore, createStore). */
   stores?: StoreAdapter[];
+  /**
+   * Server app that dynamic tools join, by server name (the primary server goes by `name`). Needed
+   * only for a server with more than one local app; a tool's own `app` option takes precedence.
+   */
+  dynamicToolApps?: Record<string, string>;
   autoConnect?: boolean;
   children: React.ReactNode;
   onConnected?: (client: DirectClient) => void;
@@ -46,6 +54,7 @@ export function FrontMcpProvider({
   servers,
   components,
   stores,
+  dynamicToolApps,
   autoConnect = true,
   children,
   onConnected,
@@ -55,6 +64,8 @@ export function FrontMcpProvider({
 
   const mountedRef = useRef(true);
   const clientRef = useRef<DirectClient | null>(null);
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   const registry = useMemo(() => {
     const reg = new ComponentRegistry();
@@ -87,18 +98,45 @@ export function FrontMcpProvider({
   // Wrap the server with the dynamic registry overlay
   const wrappedServer = useMemo(() => createWrappedServer(server, dynamicRegistry), [server, dynamicRegistry]);
 
+  // A tool the server refuses (a name conflict, say) is reported, not thrown: the component that
+  // registered it keeps rendering
+  const reportToolError = useCallback((error: Error, toolName: string) => {
+    const report = onErrorRef.current;
+    if (report) report(new Error(`Dynamic tool "${toolName}" was not registered: ${error.message}`));
+    else console.warn(`[frontmcp] dynamic tool "${toolName}" was not registered: ${error.message}`);
+  }, []);
+
+  // Keyed by content: an inline object is a new value on every render, which would re-bind every tool
+  const dynamicToolAppsKey = JSON.stringify(dynamicToolApps ?? {});
+  const toolApps = useMemo(
+    () => JSON.parse(dynamicToolAppsKey) as Record<string, string | undefined>,
+    [dynamicToolAppsKey],
+  );
+  const primaryToolApp = toolApps[resolvedName];
+
+  // Mirror the primary server's dynamic tools into it as real tools
+  useEffect(
+    () => bindDynamicTools(dynamicRegistry, server, { onError: reportToolError, app: primaryToolApp }),
+    [dynamicRegistry, server, reportToolError, primaryToolApp],
+  );
+
   // Register all servers into the shared ServerRegistry
   useEffect(() => {
+    const unbinds: (() => void)[] = [];
     serverRegistry.register(resolvedName, wrappedServer);
     if (servers) {
       for (const [sName, srv] of Object.entries(servers)) {
         const srvRegistry = getDynamicRegistry(sName);
         const wrappedSrv = createWrappedServer(srv, srvRegistry);
         serverRegistry.register(sName, wrappedSrv);
+        unbinds.push(bindDynamicTools(srvRegistry, srv, { onError: reportToolError, app: toolApps[sName] }));
       }
     }
 
     return () => {
+      unbinds.forEach((unbind) => {
+        unbind();
+      });
       serverRegistry.unregister(resolvedName);
       if (servers) {
         for (const sName of Object.keys(servers)) {
@@ -111,9 +149,10 @@ export function FrontMcpProvider({
         }
       }
     };
-  }, [resolvedName, wrappedServer, servers, getDynamicRegistry]);
+  }, [resolvedName, wrappedServer, servers, getDynamicRegistry, reportToolError, toolApps]);
 
-  // Refresh ServerRegistry entry when dynamic tools/resources change
+  // Refresh ServerRegistry entry when dynamic resources change. Dynamic tools reach the listing
+  // through the server's `notifications/tools/list_changed` (see ServerRegistry.watchToolList).
   useEffect(() => {
     const refreshServerEntry = (name: string) => {
       const entry = serverRegistry.get(name);
@@ -122,17 +161,17 @@ export function FrontMcpProvider({
       const srv = entry.server;
       if (!srv) return;
 
-      Promise.all([srv.listTools(), srv.listResources()])
-        .then(([toolsResult, resourcesResult]) => {
+      srv
+        .listResources()
+        .then((resourcesResult) => {
           if (mountedRef.current) {
             serverRegistry.update(name, {
-              tools: (toolsResult as { tools?: ToolInfo[] }).tools ?? [],
               resources: (resourcesResult as { resources?: ResourceInfo[] }).resources ?? [],
             });
           }
         })
         .catch(() => {
-          // Non-critical — dynamic tools may still work via callTool even if listing fails
+          // Non-critical — dynamic resources may still be read even if listing fails
         });
     };
 
@@ -187,12 +226,7 @@ export function FrontMcpProvider({
       ]);
 
       if (mountedRef.current) {
-        // Merge dynamic tools/resources into the initial listing
-        const dynamicTools = dynamicRegistry.getTools().map((t) => ({
-          name: t.name,
-          description: t.description,
-          inputSchema: t.inputSchema,
-        }));
+        // Merge dynamic resources into the initial listing (dynamic tools are server tools already)
         const dynamicResources = dynamicRegistry.getResources().map((r) => ({
           uri: r.uri,
           name: r.name,
@@ -201,10 +235,6 @@ export function FrontMcpProvider({
         }));
 
         const baseTools = toolsResult as ToolInfo[];
-        const dynamicToolNames = new Set(dynamicTools.map((t) => t.name));
-        const filteredBaseTools = (Array.isArray(baseTools) ? baseTools : []).filter(
-          (t) => !dynamicToolNames.has(t.name),
-        );
 
         const baseResources = (resourcesResult as { resources?: ResourceInfo[] }).resources ?? [];
         const dynamicResourceUris = new Set(dynamicResources.map((r) => r.uri));
@@ -214,13 +244,14 @@ export function FrontMcpProvider({
           client,
           status: 'connected',
           error: null,
-          tools: [...filteredBaseTools, ...dynamicTools],
+          tools: Array.isArray(baseTools) ? baseTools : [],
           resources: [...filteredBaseResources, ...dynamicResources],
           resourceTemplates:
             (templatesResult as { resourceTemplates?: ResourceTemplateInfo[] }).resourceTemplates ?? [],
           prompts: (promptsResult as { prompts?: PromptInfo[] }).prompts ?? [],
         });
 
+        serverRegistry.watchToolList(resolvedName, client);
         onConnected?.(client);
       }
 

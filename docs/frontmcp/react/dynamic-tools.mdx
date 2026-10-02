@@ -9,6 +9,8 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'react', 'ui', 'frontend
 
 Dynamic tools and resources let React components register MCP capabilities on mount and automatically unregister them on unmount. This enables UI-driven tool availability — tools exist only while the component that defines them is rendered.
 
+A dynamic tool is a **real server tool**. `FrontMcpProvider` registers it with the server through [`server.registerTool()`](/frontmcp/deployment/browser-compatibility#runtime-tools), so it is listed like any other tool, runs through the server's `tools:call-tool` flow (plugin hooks, authorities, quota and `availableWhen` apply), reaches every client — including in-browser agents through the WebMCP plugin — and connected clients get `notifications/tools/list_changed` when it appears or goes away.
+
 ## useDynamicTool
 
 Registers an MCP tool for the lifetime of the component. Supports both **zod schemas** (recommended) and raw **JSON Schema**.
@@ -70,15 +72,52 @@ useDynamicTool({
 
 ### Options
 
-| Option        | Type                                | Default | Description                                        |
-| ------------- | ----------------------------------- | ------- | -------------------------------------------------- |
-| `name`        | `string`                            | —       | **Required.** MCP tool name                        |
-| `description` | `string`                            | —       | **Required.** Description for agents               |
-| `schema`      | `z.ZodObject`                       | —       | Zod schema (mutually exclusive with `inputSchema`) |
-| `inputSchema` | `Record<string, unknown>`           | —       | JSON Schema (mutually exclusive with `schema`)     |
-| `execute`     | `(args) => Promise<CallToolResult>` | —       | **Required.** Tool handler                         |
-| `enabled`     | `boolean`                           | `true`  | Conditionally enable/disable                       |
-| `server`      | `string`                            | —       | Target a named server                              |
+| Option          | Type                                | Default | Description                                               |
+| --------------- | ----------------------------------- | ------- | --------------------------------------------------------- |
+| `name`          | `string`                            | —       | **Required.** MCP tool name                               |
+| `description`   | `string`                            | —       | **Required.** Description for agents                      |
+| `schema`        | `z.ZodObject`                       | —       | Zod schema (mutually exclusive with `inputSchema`)        |
+| `inputSchema`   | `Record<string, unknown>`           | —       | JSON Schema (mutually exclusive with `schema`)            |
+| `execute`       | `(args) => Promise<CallToolResult>` | —       | **Required.** Tool handler                                |
+| `enabled`       | `boolean`                           | `true`  | Conditionally enable/disable                              |
+| `server`        | `string`                            | —       | Target a named server                                     |
+| `annotations`   | `ToolAnnotations`                   | —       | MCP hints, e.g. `{ readOnlyHint: true }`                  |
+| `availableWhen` | `EntryAvailability`                 | —       | Where the tool is offered, e.g. `{ surface: ['webmcp'] }` |
+| `app`           | `string`                            | —       | Server app the tool joins (servers with several apps)     |
+
+### Name Conflicts
+
+Dynamic tool names share the server's namespace. A dynamic tool whose name a server tool (or another provider's dynamic tool) already has is **not registered**: the provider reports it through its `onError` prop, or with a `console.warn` when there is none, and the component keeps rendering. Names must be 1–64 characters. Registering the tool again (a remount, say) tries it again.
+
+### Servers With Several Apps
+
+A dynamic tool joins one of the server's apps, whose plugin hooks then apply to it. A server made with `create()` has a single app, so there is nothing to choose. A server with several local apps (`FrontMcpInstance.createDirect({ apps: [...] })`) refuses a tool that doesn't say which app it joins, so name the app once per server on the provider. That covers every dynamic tool: `useDynamicTool`, `mcpComponent`, store actions and `useApiClient`.
+
+```tsx
+<FrontMcpProvider server={server} dynamicToolApps={{ default: 'browser' }}>
+  <App /> {/* its dynamic tools join the `browser` app */}
+</FrontMcpProvider>
+```
+
+`dynamicToolApps` is keyed by server name: the primary server goes by the provider's `name` (`'default'` unless set), and each entry of `servers` by its key. A tool can name its own app instead, with `useDynamicTool({ ..., app: 'billing' })`.
+
+### Offering a Tool Only to In-Browser Agents
+
+With the WebMCP plugin installed, `availableWhen` decides which callers see a tool:
+
+```tsx
+useDynamicTool({
+  name: 'fill_checkout_form',
+  description: 'Fill the checkout form with the given address',
+  schema: z.object({ street: z.string(), city: z.string() }),
+  annotations: { destructiveHint: false },
+  availableWhen: { surface: ['webmcp'] }, // only agents in the browser, not MCP clients
+  execute: async (address) => {
+    form.fill(address);
+    return { content: [{ type: 'text', text: 'Form filled' }] };
+  },
+});
+```
 
 ### Conditional Registration
 
@@ -104,6 +143,10 @@ function AdminTools({ isAdmin }: { isAdmin: boolean }) {
 ### Stale Closure Prevention
 
 The execute function is stored in a ref internally, so it always captures the latest closure values. You don't need to memoize it.
+
+### Execution
+
+A call runs your `execute` through the server's flows, but your code itself runs outside the server's request turn. In a browser build (which has no `AsyncContext`, so the server serves one request at a time) a tool that calls the server back or waits on the network does not block other requests.
 
 ---
 
@@ -209,9 +252,11 @@ Elements with `data-component` attributes use that value as `component`. Others 
 
 Dynamic tools and resources follow React's effect lifecycle:
 
-1. **Mount**: The tool/resource is registered with the `DynamicRegistry`
+1. **Mount**: The tool/resource is registered with the `DynamicRegistry`; the provider registers tools with the server
 2. **Update**: If dependencies change, the old registration is cleaned up and a new one is created
-3. **Unmount**: The tool/resource is automatically unregistered
+3. **Unmount**: The tool/resource is automatically unregistered (and the tool removed from the server)
+
+Changes are applied to the server on a microtask, so React StrictMode's mount → unmount → mount settles into one registration. When two mounted components register the same name, the later definition replaces the earlier one on the server too.
 
 This means agents only see tools that correspond to currently rendered UI. When a user navigates away from a page, its tools disappear; when they navigate back, the tools reappear.
 

@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+
 import { gotoSection } from './helpers';
 
 test.describe('Provider Status', () => {
@@ -18,8 +19,8 @@ test.describe('Provider Status', () => {
 
   test('reports tool count >= 2', async ({ page }) => {
     const toolCount = page.locator('[data-testid="tool-count"]');
-    const text = await toolCount.textContent();
-    expect(Number(text)).toBeGreaterThanOrEqual(2);
+    // The listing arrives once the client connects, after the section renders
+    await expect.poll(async () => Number(await toolCount.textContent()), { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
   });
 
   test('reports resource count', async ({ page }) => {

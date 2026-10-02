@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+
 import { gotoSection } from './helpers';
 
 test.describe('Tool Listing', () => {
@@ -17,7 +18,7 @@ test.describe('Tool Listing', () => {
   test('reports tools count >= 2', async ({ page }) => {
     const count = page.locator('[data-testid="tools-count"]');
     await expect(count).toBeVisible();
-    const text = await count.textContent();
-    expect(Number(text)).toBeGreaterThanOrEqual(2);
+    // The listing arrives once the client connects, after the section renders
+    await expect.poll(async () => Number(await count.textContent()), { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
   });
 });

@@ -1,38 +1,22 @@
 /**
- * createWrappedServer — wraps a DirectMcpServer with a DynamicRegistry overlay.
+ * createWrappedServer — wraps a DirectMcpServer with a DynamicRegistry resource overlay.
  *
- * Intercepts listTools/callTool/listResources/readResource to merge
- * dynamically registered entries. All other methods delegate directly.
+ * Intercepts listResources/readResource to merge dynamically registered resources. Dynamic tools
+ * are not overlaid: `bindDynamicTools` registers them with the server as real tools, so tool
+ * listing and calls go straight to the server's flows. All other methods delegate directly.
  */
 
-import type {
-  DirectCallOptions,
-  DirectClient,
-  DirectMcpServer,
-  ListResourcesResult,
-  ListToolsResult,
-} from '@frontmcp/sdk';
+import type { DirectCallOptions, DirectClient, DirectMcpServer, ListResourcesResult } from '@frontmcp/sdk';
 
-import type { ResourceInfo, ToolInfo } from '../types';
+import type { ResourceInfo } from '../types';
 import type { DynamicRegistry } from './DynamicRegistry';
 
 /**
- * Patch a DirectClient's callTool/readResource to check the DynamicRegistry first, and route
- * resource subscriptions for dynamic URIs to the registry instead of the server.
+ * Patch a DirectClient's readResource to check the DynamicRegistry first, and route resource
+ * subscriptions for dynamic URIs to the registry instead of the server.
  * Modifies the client in-place to preserve identity (important for tests and onConnected).
  */
 function patchClientWithDynamic(client: DirectClient, dynamicRegistry: DynamicRegistry): DirectClient {
-  if (typeof client.callTool === 'function') {
-    const originalCallTool = client.callTool.bind(client);
-    client.callTool = async (name: string, args?: Record<string, unknown>) => {
-      const dynamicTool = dynamicRegistry.findTool(name);
-      if (dynamicTool) {
-        return dynamicTool.execute(args ?? {});
-      }
-      return originalCallTool(name, args);
-    };
-  }
-
   if (typeof client.readResource === 'function') {
     const originalReadResource = client.readResource.bind(client);
     client.readResource = async (uri: string) => {
@@ -77,8 +61,8 @@ function patchClientWithDynamic(client: DirectClient, dynamicRegistry: DynamicRe
 }
 
 /**
- * Create a wrapped DirectMcpServer that overlays dynamic tools and resources.
- * Dynamic entries take precedence over base server entries with the same name/uri.
+ * Create a wrapped DirectMcpServer that overlays dynamic resources.
+ * Dynamic resources take precedence over base server resources with the same uri.
  */
 export function createWrappedServer(base: DirectMcpServer, dynamicRegistry: DynamicRegistry): DirectMcpServer {
   return {
@@ -86,36 +70,11 @@ export function createWrappedServer(base: DirectMcpServer, dynamicRegistry: Dyna
       return base.ready;
     },
 
-    async listTools(options?: DirectCallOptions): Promise<ListToolsResult> {
-      const baseResult = await base.listTools(options);
-      const dynamicTools = dynamicRegistry.getTools();
-
-      if (dynamicTools.length === 0) return baseResult;
-
-      const dynamicNames = new Set(dynamicTools.map((t) => t.name));
-      const baseTools = ((baseResult as { tools?: ToolInfo[] }).tools ?? []).filter((t) => !dynamicNames.has(t.name));
-
-      const mergedTools = [
-        ...baseTools,
-        ...dynamicTools.map((t) => ({
-          name: t.name,
-          description: t.description,
-          inputSchema: t.inputSchema as {
-            type: 'object';
-            properties?: Record<string, object>;
-            required?: string[];
-          },
-        })),
-      ];
-
-      return { ...baseResult, tools: mergedTools } as ListToolsResult;
+    async listTools(options?: DirectCallOptions) {
+      return base.listTools(options);
     },
 
     async callTool(name: string, args?: Record<string, unknown>, options?: DirectCallOptions) {
-      const dynamicTool = dynamicRegistry.findTool(name);
-      if (dynamicTool) {
-        return dynamicTool.execute(args ?? {});
-      }
       return base.callTool(name, args, options);
     },
 

@@ -54,7 +54,7 @@ function StoreProvider() {
 | `getState`  | `() => unknown`                        | —       | **Required.** Returns current state snapshot           |
 | `subscribe` | `(cb: () => void) => () => void`       | —       | **Required.** Subscribe to changes, return unsubscribe |
 | `selectors` | `Record<string, (state) => unknown>`   | —       | Named selectors, each becomes a sub-resource           |
-| `actions`   | `Record<string, (...args) => unknown>` | —       | Named actions, each becomes a tool                     |
+| `actions`   | `Record<string, (...args) => unknown>` | —       | Named actions, each becomes a server tool              |
 | `server`    | `string`                               | —       | Target a named server                                  |
 
 ### Live Updates

@@ -68,57 +68,18 @@ describe('createWrappedServer', () => {
     });
   });
 
-  // ─── listTools ──────────────────────────────────────────────────────────
+  // ─── tools ──────────────────────────────────────────────────────────────
+  // Dynamic tools are registered with the server as real tools (bindDynamicTools), so the wrapper
+  // passes tool operations straight through: the server lists and runs them.
 
   describe('listTools', () => {
-    it('returns base tools when no dynamic tools registered', async () => {
+    it('returns the base listing, even when dynamic tools are registered', async () => {
       const baseTools = [{ name: 'base-tool', description: 'Base' }];
       (base.listTools as jest.Mock).mockResolvedValue({ tools: baseTools });
+      dynamicRegistry.registerTool(createToolDef({ name: 'dyn1' }));
 
       const result = await wrapped.listTools();
       expect(result).toEqual({ tools: baseTools });
-    });
-
-    it('returns only dynamic tools when base has no tools', async () => {
-      (base.listTools as jest.Mock).mockResolvedValue({ tools: [] });
-      dynamicRegistry.registerTool(createToolDef({ name: 'dyn1', description: 'Dynamic 1' }));
-
-      const result = await wrapped.listTools();
-      expect((result as { tools: unknown[] }).tools).toEqual([
-        { name: 'dyn1', description: 'Dynamic 1', inputSchema: { type: 'object' } },
-      ]);
-    });
-
-    it('merges base and dynamic tools', async () => {
-      (base.listTools as jest.Mock).mockResolvedValue({
-        tools: [
-          { name: 'base-only', description: 'Base only tool' },
-          { name: 'shared', description: 'Base version' },
-        ],
-      });
-      dynamicRegistry.registerTool(createToolDef({ name: 'shared', description: 'Dynamic version' }));
-      dynamicRegistry.registerTool(createToolDef({ name: 'dyn-only', description: 'Dynamic only' }));
-
-      const result = await wrapped.listTools();
-      const tools = (result as { tools: Array<{ name: string; description: string }> }).tools;
-
-      expect(tools).toHaveLength(3);
-      expect(tools.find((t) => t.name === 'base-only')?.description).toBe('Base only tool');
-      expect(tools.find((t) => t.name === 'shared')?.description).toBe('Dynamic version');
-      expect(tools.find((t) => t.name === 'dyn-only')?.description).toBe('Dynamic only');
-    });
-
-    it('dynamic tools take precedence on name collision', async () => {
-      (base.listTools as jest.Mock).mockResolvedValue({
-        tools: [{ name: 'collide', description: 'BASE', inputSchema: { type: 'string' } }],
-      });
-      dynamicRegistry.registerTool(createToolDef({ name: 'collide', description: 'DYNAMIC' }));
-
-      const result = await wrapped.listTools();
-      const tools = (result as { tools: Array<{ name: string; description: string }> }).tools;
-
-      expect(tools).toHaveLength(1);
-      expect(tools[0].description).toBe('DYNAMIC');
     });
 
     it('passes options to base listTools', async () => {
@@ -126,83 +87,34 @@ describe('createWrappedServer', () => {
       await wrapped.listTools(opts);
       expect(base.listTools).toHaveBeenCalledWith(opts);
     });
+  });
 
-    it('handles base result without tools field', async () => {
-      (base.listTools as jest.Mock).mockResolvedValue({});
-      dynamicRegistry.registerTool(createToolDef({ name: 'dyn' }));
+  describe('callTool', () => {
+    it('calls the base server, even for a dynamic tool name', async () => {
+      const dynExecute = jest.fn();
+      dynamicRegistry.registerTool(createToolDef({ name: 'dyn', execute: dynExecute }));
+      const baseResult: CallToolResult = { content: [{ type: 'text', text: 'through the server' }] };
+      (base.callTool as jest.Mock).mockResolvedValue(baseResult);
 
-      const result = await wrapped.listTools();
-      const tools = (result as { tools: unknown[] }).tools;
-      expect(tools).toHaveLength(1);
-      expect((tools[0] as { name: string }).name).toBe('dyn');
-    });
+      const result = await wrapped.callTool('dyn', { key: 'val' }, { authContext: { sessionId: 's' } });
 
-    it('maps dynamic tools to ToolInfo shape (name, description, inputSchema only)', async () => {
-      (base.listTools as jest.Mock).mockResolvedValue({ tools: [] });
-      const executeFn = jest.fn();
-      dynamicRegistry.registerTool(
-        createToolDef({
-          name: 'mapped',
-          description: 'desc',
-          inputSchema: { type: 'object', properties: { x: { type: 'number' } } },
-          execute: executeFn,
-        }),
-      );
-
-      const result = await wrapped.listTools();
-      const tools = (result as { tools: unknown[] }).tools;
-
-      expect(tools[0]).toEqual({
-        name: 'mapped',
-        description: 'desc',
-        inputSchema: { type: 'object', properties: { x: { type: 'number' } } },
-      });
-      // execute function should NOT be in the result
-      expect(tools[0]).not.toHaveProperty('execute');
+      expect(base.callTool).toHaveBeenCalledWith('dyn', { key: 'val' }, { authContext: { sessionId: 's' } });
+      expect(result).toBe(baseResult);
+      expect(dynExecute).not.toHaveBeenCalled();
     });
   });
 
-  // ─── callTool ───────────────────────────────────────────────────────────
+  describe('registerTool', () => {
+    it('delegates to the base server', async () => {
+      const unregister = jest.fn();
+      const registerTool = jest.fn().mockResolvedValue(unregister);
+      wrapped = createWrappedServer(createMockBaseServer({ registerTool }), dynamicRegistry);
+      const definition = { name: 'runtime', execute: jest.fn() };
 
-  describe('callTool', () => {
-    it('calls dynamic tool when name matches', async () => {
-      const executeFn = jest.fn().mockResolvedValue({ content: [{ type: 'text', text: 'dynamic-result' }] });
-      dynamicRegistry.registerTool(createToolDef({ name: 'dyn', execute: executeFn }));
+      const result = await wrapped.registerTool(definition);
 
-      const result = await wrapped.callTool('dyn', { key: 'val' });
-
-      expect(executeFn).toHaveBeenCalledWith({ key: 'val' });
-      expect(result).toEqual({ content: [{ type: 'text', text: 'dynamic-result' }] });
-      expect(base.callTool).not.toHaveBeenCalled();
-    });
-
-    it('falls back to base server when no dynamic tool matches', async () => {
-      const baseResult = { content: [{ type: 'text', text: 'base-result' }] };
-      (base.callTool as jest.Mock).mockResolvedValue(baseResult);
-
-      const result = await wrapped.callTool('base-tool', { arg: 1 }, { authContext: { sessionId: 's' } });
-
-      expect(base.callTool).toHaveBeenCalledWith('base-tool', { arg: 1 }, { authContext: { sessionId: 's' } });
-      expect(result).toEqual(baseResult);
-    });
-
-    it('passes empty object to dynamic execute when args is undefined', async () => {
-      const executeFn = jest.fn().mockResolvedValue({ content: [] });
-      dynamicRegistry.registerTool(createToolDef({ name: 'no-args', execute: executeFn }));
-
-      await wrapped.callTool('no-args', undefined);
-
-      expect(executeFn).toHaveBeenCalledWith({});
-    });
-
-    it('dynamic tool takes priority over base tool with same name', async () => {
-      const dynExecute = jest.fn().mockResolvedValue({ content: [{ type: 'text', text: 'dyn' }] });
-      dynamicRegistry.registerTool(createToolDef({ name: 'shared', execute: dynExecute }));
-      (base.callTool as jest.Mock).mockResolvedValue({ content: [{ type: 'text', text: 'base' }] });
-
-      const result = await wrapped.callTool('shared', {});
-      expect((result as CallToolResult).content[0]).toEqual({ type: 'text', text: 'dyn' });
-      expect(base.callTool).not.toHaveBeenCalled();
+      expect(registerTool).toHaveBeenCalledWith(definition);
+      expect(result).toBe(unregister);
     });
   });
 
@@ -463,6 +375,16 @@ describe('createWrappedServer', () => {
       const opts = { sessionId: 's', clientInfo: { name: 'test', version: '1.0' } };
       await wrapped.connect(opts);
       expect(base.connect).toHaveBeenCalledWith(opts);
+    });
+
+    it("leaves the client's callTool alone, so dynamic tools are called through the server", async () => {
+      const callTool = jest.fn();
+      (base.connect as jest.Mock).mockResolvedValue({ callTool });
+      dynamicRegistry.registerTool(createToolDef({ name: 'dyn' }));
+
+      const client = await wrapped.connect();
+
+      expect(client.callTool).toBe(callTool);
     });
   });
 
