@@ -268,8 +268,9 @@ useDynamicTool({
 | `server`        | `string`                            | —       | Target a named server                                     |
 | `annotations`   | `ToolAnnotations`                   | —       | MCP hints, e.g. `{ readOnlyHint: true }`                  |
 | `availableWhen` | `EntryAvailability`                 | —       | Where the tool is offered, e.g. `{ surface: ['webmcp'] }` |
+| `app`           | `string`                            | —       | Server app the tool joins (servers with several apps)     |
 
-A name a server tool already has is refused: the provider reports it through `onError` (or `console.warn`).
+A name a server tool already has is refused: the provider reports it through `onError` (or `console.warn`). On a server with several apps, name the app per tool with `app` or per server with the provider's `dynamicToolApps`.
 
 ---
 

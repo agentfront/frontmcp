@@ -169,7 +169,7 @@ useDynamicTool({
 
 Also supports raw JSON Schema via `inputSchema` for backward compatibility.
 
-The provider registers each dynamic tool with the server as a real tool (`server.registerTool()`), so it runs through the server's flows (plugin hooks, authorities, `availableWhen`) and every client sees it — including in-browser agents through `@frontmcp/plugin-webmcp`. A name a server tool already has is reported through the provider's `onError` instead of shadowing that tool.
+The provider registers each dynamic tool with the server as a real tool (`server.registerTool()`), so it runs through the server's flows (plugin hooks, authorities, `availableWhen`) and every client sees it — including in-browser agents through `@frontmcp/plugin-webmcp`. A name a server tool already has is reported through the provider's `onError` instead of shadowing that tool. On a server with several apps, say which app dynamic tools join with the provider's `dynamicToolApps` (by server name) or a tool's own `app` option.
 
 ## State Management
 
