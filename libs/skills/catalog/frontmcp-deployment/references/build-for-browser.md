@@ -127,7 +127,7 @@ Things that trip people up with `@frontmcp/react`:
 
 For connecting to a remote MCP server (HTTP), create a server-bound `DirectMcpServer` via `connect()` from `@frontmcp/sdk` and pass that instance to the provider.
 
-- `useDynamicTool` registers a **real server tool** (through `server.registerTool()`), so it runs through the server's flows (plugin hooks, authorities, `availableWhen`) and every client sees it. A name a server tool already has is refused and reported through the provider's `onError` (or `console.warn`) — it no longer shadows the server tool. The provider's tool listing follows the server's `notifications/tools/list_changed`.
+- `useDynamicTool` registers a **real server tool** (through `server.registerTool()`), so it runs through the server's flows (plugin hooks, authorities, `availableWhen`) and every client sees it. A name a server tool already has is refused and reported through the provider's `onError` (or `console.warn`) — it no longer shadows the server tool; registering it again (a remount) retries it. The provider's tool listing follows the server's `notifications/tools/list_changed`.
 - Page code can add tools to the running server: `const unregister = await server.registerTool({ name, description, inputSchema, execute })`. The tool joins the server's app, so it is listed and run through the server's flows (plugin hooks, authorities, `availableWhen`). Arguments are not validated against `inputSchema` — validate in `execute`. `execute` runs outside the request's turn, so it may call the server back. A taken name rejects with `ToolNameConflictError`; names are 1–64 characters.
 
 ## Browser vs Node vs SDK Target

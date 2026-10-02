@@ -86,7 +86,7 @@ useDynamicTool({
 
 ### Name Conflicts
 
-Dynamic tool names share the server's namespace. A dynamic tool whose name a server tool (or another provider's dynamic tool) already has is **not registered**: the provider reports it through its `onError` prop, or with a `console.warn` when there is none, and the component keeps rendering. Names must be 1–64 characters.
+Dynamic tool names share the server's namespace. A dynamic tool whose name a server tool (or another provider's dynamic tool) already has is **not registered**: the provider reports it through its `onError` prop, or with a `console.warn` when there is none, and the component keeps rendering. Names must be 1–64 characters. Registering the tool again (a remount, say) tries it again.
 
 ### Offering a Tool Only to In-Browser Agents
 

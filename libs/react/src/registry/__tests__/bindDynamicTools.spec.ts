@@ -171,6 +171,29 @@ describe('bindDynamicTools with a real server', () => {
     unbindOther();
   });
 
+  it('retries a refused tool that is unregistered and registered again in the same tick', async () => {
+    const onError = jest.fn();
+    unbind = bindDynamicTools(registry, server, { onError });
+    const holder = registry.registerTool(toolDef({ name: 'shared_name' }));
+    await settle();
+    const otherRegistry = new DynamicRegistry();
+    const unbindOther = bindDynamicTools(otherRegistry, server, { onError });
+    const otherUnregister = otherRegistry.registerTool(toolDef({ name: 'shared_name', description: 'Other' }));
+    await settle();
+    expect(onError).toHaveBeenCalledTimes(1);
+    holder();
+    await settle();
+
+    // A remount: both notifications land before the binder's microtask runs
+    otherUnregister();
+    otherRegistry.registerTool(toolDef({ name: 'shared_name', description: 'Other' }));
+    await settle();
+
+    const { tools } = await server.listTools();
+    expect(tools.find((tool) => tool.name === 'shared_name')?.description).toBe('Other');
+    unbindOther();
+  });
+
   it('re-registers a tool that a second registrant redefines', async () => {
     const registerTool = jest.spyOn(server, 'registerTool');
     unbind = bindDynamicTools(registry, server);
@@ -297,6 +320,68 @@ describe('bindDynamicTools edge cases', () => {
       'other',
     ]);
     unbind();
+  });
+
+  it('retries a tool registered again while the server was refusing the previous registration', async () => {
+    let refuse: ((error: Error) => void) | undefined;
+    const server = {
+      registerTool: jest
+        .fn()
+        .mockImplementationOnce(() => new Promise((_resolve, reject) => (refuse = reject)))
+        .mockResolvedValue(jest.fn()),
+    } as unknown as DirectMcpServer;
+    const registry = new DynamicRegistry();
+    const onError = jest.fn();
+    const unbind = bindDynamicTools(registry, server, { onError });
+    const unregister = registry.registerTool(toolDef());
+    await settle();
+
+    // A remount while the first registration is still pending, which the server then refuses
+    unregister();
+    registry.registerTool(toolDef());
+    refuse?.(new Error('name taken'));
+    await settle();
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(server.registerTool).toHaveBeenCalledTimes(2);
+    unbind();
+  });
+
+  it('retries a definition the server refused after it had left the registry', async () => {
+    let refuse: ((error: Error) => void) | undefined;
+    const server = {
+      registerTool: jest
+        .fn()
+        .mockImplementationOnce(() => new Promise((_resolve, reject) => (refuse = reject)))
+        .mockResolvedValue(jest.fn()),
+    } as unknown as DirectMcpServer;
+    const registry = new DynamicRegistry();
+    const unbind = bindDynamicTools(registry, server, { onError: jest.fn() });
+    const def = toolDef();
+    const unregister = registry.registerTool(def);
+    await settle();
+
+    // Unmounted while the registration is pending; the refusal lands after
+    unregister();
+    refuse?.(new Error('name taken'));
+    await settle();
+    // Registered again later, with the very same definition object
+    registry.registerTool(def);
+    await settle();
+
+    expect(server.registerTool).toHaveBeenCalledTimes(2);
+    unbind();
+  });
+
+  it('registers nothing when unbound before its first reconcile runs', async () => {
+    const { server } = fakeServer();
+    const registry = new DynamicRegistry();
+    registry.registerTool(toolDef());
+
+    bindDynamicTools(registry, server)();
+    await settle();
+
+    expect(server.registerTool).not.toHaveBeenCalled();
   });
 
   it('reports a non-Error refusal as an Error', async () => {
