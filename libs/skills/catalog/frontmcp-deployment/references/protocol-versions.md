@@ -188,10 +188,14 @@ resolves with the final result either way.
 For a remote app, negotiate per remote:
 
 ```ts
-transportOptions: {
-  protocolVersion: 'auto';
-} // 'legacy' (default) | '2026-07-28' | 'auto'
+App.remote('https://example.com/mcp', {
+  transportOptions: {
+    protocolVersion: 'auto', // 'legacy' (default) | '2026-07-28' | 'auto'
+  },
+});
 ```
+
+`'auto'` probes `server/discover` and falls back to the session transports; `'2026-07-28'` always uses the stateless client and requires a URL remote (other transports are refused at connect time).
 
 ## Deprecated in this revision
 

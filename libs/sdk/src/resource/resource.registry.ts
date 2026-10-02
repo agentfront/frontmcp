@@ -66,10 +66,19 @@ export default class ResourceRegistry extends RegistryAbstract<
   private version = 0;
   private emitter = new ResourceEmitter();
 
-  constructor(providers: ProviderRegistry, list: ResourceType[], owner: EntryOwnerRef) {
+  /**
+   * When false, the registry holds only the entries registered into it and adopts nothing: it
+   * does not pull in the apps or the other registries visible on `providers`. A remote app's
+   * registries are built on the scope's providers, so adopting would copy every other remote
+   * app's resources into them, and the scope would then list those resources twice.
+   */
+  private readonly adopt: boolean;
+
+  constructor(providers: ProviderRegistry, list: ResourceType[], owner: EntryOwnerRef, options: { adopt?: boolean } = {}) {
     // disable auto so subclass fields initialize first
     super('ResourceRegistry', providers, list, false);
     this.owner = owner;
+    this.adopt = options.adopt ?? true;
 
     // now it's safe to run the lifecycle
     this.buildGraph();
@@ -129,12 +138,17 @@ export default class ResourceRegistry extends RegistryAbstract<
 
     // Adopt resources from child app registries
     const scope = this.providers.getActiveScope();
-    const childAppRegistries = this.providers.getRegistries('AppRegistry');
+    const childAppRegistries = this.adopt ? this.providers.getRegistries('AppRegistry') : [];
+    // A remote app builds its registries on the scope's providers, so they also
+    // show up in the generic child-registry pass below. They are adopted here
+    // already; adopting them twice listed every remote template twice.
+    const remoteAppRegistries = new Set<unknown>();
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
         if (app.isRemote) {
           // Remote apps: adopt resources directly from the app's resources registry
+          remoteAppRegistries.add(app.resources);
           this.adoptResourcesFromRemoteApp(app, scope);
         } else {
           // Local apps: adopt from child ResourceRegistry instances
@@ -144,9 +158,9 @@ export default class ResourceRegistry extends RegistryAbstract<
     });
 
     // Adopt resources from other child resource registries
-    const childResourceRegistries = this.providers.getRegistries('ResourceRegistry');
+    const childResourceRegistries = this.adopt ? this.providers.getRegistries('ResourceRegistry') : [];
     childResourceRegistries
-      .filter((r) => r !== this)
+      .filter((r) => r !== this && !remoteAppRegistries.has(r))
       .forEach((resourceRegistry) => {
         this.adoptFromChild(resourceRegistry as ResourceRegistry, resourceRegistry.owner);
       });
@@ -711,6 +725,25 @@ export default class ResourceRegistry extends RegistryAbstract<
     // Rebuild indexes
     this.reindex();
     this.bump('reset');
+  }
+
+  /**
+   * Unregister a resource instance previously added via `registerResourceInstance`.
+   * Returns true if the token was found and removed, false otherwise.
+   *
+   * Used by remote apps to drop the proxies of a previous capability discovery
+   * before registering the fresh ones.
+   */
+  unregisterResourceInstance(token: Token): boolean {
+    const existed = this.instances.delete(token as Token<ResourceInstance>);
+    const before = this.localRows.length;
+    this.localRows = this.localRows.filter((row) => row.token !== token);
+    const removed = existed || this.localRows.length !== before;
+    if (removed) {
+      this.reindex();
+      this.bump('reset');
+    }
+    return removed;
   }
 
   /**
