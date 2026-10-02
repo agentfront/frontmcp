@@ -11,7 +11,7 @@ import * as path from 'path';
 
 import { mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
 
-import { RECOMMENDED_TSCONFIG, readTsconfig, runInit } from '../tsconfig';
+import { readTsconfig, RECOMMENDED_TSCONFIG, runInit } from '../tsconfig';
 
 describe('runInit', () => {
   let dir: string;
@@ -87,8 +87,35 @@ describe('runInit', () => {
     const broken = '{\n  "compilerOptions": { "strict": true,, }\n}\n';
     await writeFile(tsconfigPath, broken);
 
-    await expect(runInit(dir)).rejects.toThrow(/tsconfig\.json is not valid JSON: .* at line 2, column \d+\. It was left unchanged/);
+    await expect(runInit(dir)).rejects.toThrow(
+      /tsconfig\.json is not valid JSON: .* at line 2, column \d+\. It was left unchanged/,
+    );
     expect(await readFile(tsconfigPath)).toBe(broken);
+  });
+
+  it('refuses to "enforce" a required option declared twice, where only the last one counts', async () => {
+    const duplicated = '{ "compilerOptions": { "emitDecoratorMetadata": true, "emitDecoratorMetadata": false } }\n';
+    await writeFile(tsconfigPath, duplicated);
+
+    await expect(runInit(dir)).rejects.toThrow(
+      /tsconfig\.json declares "compilerOptions\.emitDecoratorMetadata" more than once \(lines 1, 1\).*It was left unchanged/,
+    );
+    expect(await readFile(tsconfigPath)).toBe(duplicated);
+  });
+
+  it('enforces the required options when a duplicated key is one it does not edit', async () => {
+    await writeFile(tsconfigPath, '{ "compilerOptions": { "strict": true, "strict": false } }\n');
+
+    await runInit(dir);
+
+    const { config } = (await readTsconfig(tsconfigPath)) ?? { config: {} };
+    expect(config['compilerOptions']).toMatchObject({
+      target: 'es2021',
+      module: 'esnext',
+      emitDecoratorMetadata: true,
+      experimentalDecorators: true,
+      strict: false,
+    });
   });
 
   it('rewrites moduleResolution nodenext so the result has no TS5110 conflict', async () => {
@@ -123,6 +150,8 @@ describe('runInit', () => {
 
 describe('readTsconfig', () => {
   it('returns undefined for a missing file', async () => {
-    await expect(readTsconfig(path.join(os.tmpdir(), 'frontmcp-no-such-dir', 'tsconfig.json'))).resolves.toBeUndefined();
+    await expect(
+      readTsconfig(path.join(os.tmpdir(), 'frontmcp-no-such-dir', 'tsconfig.json')),
+    ).resolves.toBeUndefined();
   });
 });

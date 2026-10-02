@@ -2,7 +2,7 @@ import * as path from 'path';
 
 import { fileExists, readFile, writeFile, writeJSON } from '@frontmcp/utils';
 
-import { JsoncParseError, parseJsoncObject, updateJsoncText } from '../shared/jsonc';
+import { JsoncDuplicateKeyError, JsoncParseError, parseJsoncObject, updateJsoncText } from '../shared/jsonc';
 import { c } from './colors';
 
 export const REQUIRED_DECORATOR_FIELDS = {
@@ -148,6 +148,12 @@ export async function readTsconfig(
   return { text, config: parseJsoncObject(text, path.basename(tsconfigPath)) };
 }
 
+/** A tsconfig.json `init` cannot read or edit safely is left as it is; say so. */
+function leftUnchanged(err: unknown): unknown {
+  if (!(err instanceof JsoncParseError) && !(err instanceof JsoncDuplicateKeyError)) return err;
+  return new Error(`${err.message}. It was left unchanged — fix it, then run "frontmcp init" again.`, { cause: err });
+}
+
 export async function runInit(baseDir?: string): Promise<void> {
   const cwd = baseDir ?? process.cwd();
   const tsconfigPath = path.join(cwd, 'tsconfig.json');
@@ -157,10 +163,7 @@ export async function runInit(baseDir?: string): Promise<void> {
   try {
     current = await readTsconfig(tsconfigPath);
   } catch (err) {
-    if (!(err instanceof JsoncParseError)) throw err;
-    throw new Error(`${err.message}. It was left unchanged — fix it, then run "frontmcp init" again.`, {
-      cause: err,
-    });
+    throw leftUnchanged(err);
   }
 
   if (!current) {
@@ -177,8 +180,15 @@ export async function runInit(baseDir?: string): Promise<void> {
   const { result: withWidgetExcludes, added: addedExcludes } = ensureWidgetExcludes(merged);
   merged = withWidgetExcludes;
 
-  // Edit only the keys that change, so comments and formatting survive.
-  const updated = updateJsoncText(current.text, existing, merged);
+  // Edit only the keys that change, so comments and formatting survive. A
+  // required option declared twice is refused: the edit would land on the
+  // occurrence TypeScript ignores.
+  let updated: string;
+  try {
+    updated = updateJsoncText(current.text, existing, merged, path.basename(tsconfigPath));
+  } catch (err) {
+    throw leftUnchanged(err);
+  }
   if (updated === current.text) {
     console.log(c('green', '✅ tsconfig.json verified (required decorator settings already present).'));
     return;
