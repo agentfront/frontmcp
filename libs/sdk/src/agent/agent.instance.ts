@@ -101,8 +101,12 @@ export const AGENT_ONLY_METADATA_KEYS: ReadonlySet<string> = new Set([
 interface AgentModelTool {
   name: string;
   entry: ToolEntry;
-  /** Where a call runs: the agent's private scope (its own tools), or the scope it is registered in. */
-  via: 'agent-scope' | 'parent-scope';
+  /**
+   * Where a call runs: the agent's private scope (its own tools, through that scope's `tools:call-tool`
+   * flow unless `execution.useToolFlow` is false), that scope's `tools:call-tool` flow whatever
+   * `useToolFlow` says (its nested agents' `invoke_<agent>` tools), or the scope it is registered in.
+   */
+  via: 'agent-scope' | 'nested-agent' | 'parent-scope';
 }
 
 // ============================================================================
@@ -659,6 +663,21 @@ export class AgentInstance<
     return this.agentTools;
   }
 
+  /**
+   * Whether a tool this agent runs in its private scope (one of its own, or a nested agent's
+   * `invoke_<agent>` tool) declares `rateLimit` or `concurrency`, at any depth of nested agents. The
+   * server guards those calls with its guard manager, which it creates for such a limit even without
+   * `throttle.enabled`.
+   */
+  declaresScopedLimits(): boolean {
+    if (!this.agentScope) return false;
+    const declaresLimit = (tool: ToolEntry) => Boolean(tool.metadata.rateLimit || tool.metadata.concurrency);
+    return (
+      this.agentScope.tools.getTools(true).some(declaresLimit) ||
+      this.agentScope.agents.listAllInstances().some((agent) => agent.declaresScopedLimits())
+    );
+  }
+
   // ============================================================================
   // Entry Methods
   // ============================================================================
@@ -761,7 +780,8 @@ export class AgentInstance<
 
   /**
    * The tools this agent's model is offered, each under the name the model calls it by:
-   * 1. the agent's own tools (`tools`, and its nested agents' `invoke_<agent>` tools), run in its private scope;
+   * 1. the agent's own tools (`tools`, and its nested agents' `invoke_<agent>` tools), run in its private scope
+   *    (a nested agent always through that scope's `tools:call-tool` flow, see {@link createToolExecutor});
    * 2. with `swarm.canSeeOtherAgents`, the `invoke_<agent>` tools of the other agents of its scope that it
    *    sees (`swarm.visibleAgents`, and each one's `swarm.isVisible`), run through that scope;
    * 3. with `execution.inheritParentTools`, the tools of the scope it is registered in, other than agents,
@@ -779,12 +799,23 @@ export class AgentInstance<
       tools.push({ name, entry, via });
     };
 
-    for (const tool of this.agentTools) add(tool, 'agent-scope');
+    const nestedAgentTools = this.getNestedAgentTools();
+    for (const tool of this.agentTools) add(tool, nestedAgentTools.has(tool) ? 'nested-agent' : 'agent-scope');
     for (const agent of this.getSwarmAgents()) {
       const tool = agent.getToolInstance();
       if (tool) add(tool, 'parent-scope');
     }
     for (const tool of this.getInheritedTools()) add(tool, 'parent-scope');
+    return tools;
+  }
+
+  /** The `invoke_<agent>` tools of this agent's nested agents (`agents`), which its private scope holds. */
+  private getNestedAgentTools(): Set<ToolEntry> {
+    const tools = new Set<ToolEntry>();
+    for (const agent of this.agentScope?.agents.listAllInstances() ?? []) {
+      const tool = agent.getToolInstance();
+      if (tool) tools.add(tool);
+    }
     return tools;
   }
 
@@ -818,8 +849,11 @@ export class AgentInstance<
    * - MCP-compliant error handling
    *
    * When `execution.useToolFlow` is false, the agent's own tools are executed directly for
-   * performance-critical scenarios. Tools of the parent scope (swarm agents, inherited tools) always
-   * run through the parent scope's call-tool flow, which applies what they declare.
+   * performance-critical scenarios. Its nested agents' `invoke_<agent>` tools still run through its
+   * private scope's call-tool flow: that flow applies the gates a nested agent declares (authorities,
+   * rate limit, concurrency, plugin gates), which the nested agent's `agents:call-agent` flow leaves to
+   * it. Tools of the parent scope (swarm agents, inherited tools) always run through the parent
+   * scope's call-tool flow, which applies what they declare.
    *
    * @param ctx - Extra context including authInfo
    * @param modelTools - The tools the model is offered for this run
@@ -848,8 +882,8 @@ export class AgentInstance<
         return this.callToolThrough(this.scope, tool, args, ctx);
       }
 
-      // Use the agent's private scope if available and useToolFlow is enabled
-      if (useToolFlow && this.agentScope) {
+      // The agent's private scope's flow: for a nested agent always, for its own tools unless useToolFlow is off
+      if (this.agentScope && (useToolFlow || offered.via === 'nested-agent')) {
         return this.callToolThrough(this.agentScope, tool, args, ctx);
       }
 

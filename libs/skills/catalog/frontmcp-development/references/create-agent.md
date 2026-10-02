@@ -339,7 +339,7 @@ Each export must be one of the agent's own `resources`, `prompts` or `providers`
 
 ## Nested Agents (Sub-Agents)
 
-Use the `agents` array to compose agents from smaller, specialized sub-agents. Each sub-agent has its own LLM config, inner tools, and system instructions. The parent's model is offered each one as an `invoke_<id>` tool next to its own tools, and the parent's code can call them with `this.invokeAgent('<id>', input)`. Nested agents are private: clients are not offered them.
+Use the `agents` array to compose agents from smaller, specialized sub-agents. Each sub-agent has its own LLM config, inner tools, and system instructions. The parent's model is offered each one as an `invoke_<id>` tool next to its own tools, and the parent's code can call them with `this.invokeAgent('<id>', input)`. Nested agents are private: clients are not offered them. A call to one runs through its `invoke_<id>` tool's `tools:call-tool` flow in the parent's scope, also when the parent sets `execution.useToolFlow: false`, so the nested agent's `authorities`, `rateLimit`, `concurrency`, `timeout`, plugin gates and hooks apply as for a client's call. A `rateLimit` or `concurrency` declared only on a nested agent is enforced without a `throttle` option.
 
 ```typescript
 @Agent({
@@ -602,9 +602,11 @@ class DocsAgent extends AgentContext {}
 | `execution.timeout`            | `120000` | Max run time in ms                                                                                                                              |
 | `execution.inheritParentTools` | `false`  | Also offer the model the tools of the scope the agent is registered in, other than agents; they run through that scope's `tools:call-tool` flow |
 | `execution.inheritPlugins`     | `false`  | Also run the app's and server's plugin hooks for the agent's own tools                                                                          |
-| `execution.useToolFlow`        | `true`   | Run the agent's own tools through its `tools:call-tool` flow (hooks, authorization); `false` runs them directly                                 |
+| `execution.useToolFlow`        | `true`   | Own tools through its `tools:call-tool` flow (hooks, limits, authorization); `false` runs them directly. Nested agents always use their flow    |
 | `execution.enableAutoProgress` | `false`  | Send progress notifications during the loop                                                                                                     |
 | `execution.enableStreaming`    | `false`  | Not supported yet: the agent replies once the run completes, and `true` is reported at startup                                                  |
+
+Through that flow the agent's own tools get the `rateLimit`, `concurrency` and `timeout` they declare (else the `throttle` defaults), as the app's tools do; a `rateLimit` or `concurrency` there is enforced without a `throttle` option. The calls an agent makes during its run (its model's tool calls, its nested and swarm agents) run inside the `throttle.globalConcurrency` slot of the call that runs the agent.
 
 ## Common Patterns
 
