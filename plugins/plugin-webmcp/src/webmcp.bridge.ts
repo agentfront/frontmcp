@@ -6,7 +6,13 @@
  * `availableWhen`, authorities, hooks and quota apply to an agent's calls as to any other client's.
  */
 
-import { FlowControl, type CallToolResult, type FrontMcpLogger, type ScopeEntry } from '@frontmcp/sdk';
+import {
+  FlowControl,
+  InternalMcpError,
+  type CallToolResult,
+  type FrontMcpLogger,
+  type ScopeEntry,
+} from '@frontmcp/sdk';
 import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
 import type { WebMcpListedTool, WebMcpPluginOptions } from './webmcp.options';
@@ -101,11 +107,23 @@ function textOf(content: CallToolResult['content'] | undefined): string {
     .join('\n');
 }
 
+/**
+ * The error a flow that ended early stands for: the one passed to `this.fail()`, or an internal
+ * error for any other exit. A FlowControl is only the envelope, with an empty message.
+ */
+function errorBehindFlowControl(error: unknown): unknown {
+  if (!(error instanceof FlowControl)) return error;
+  const original = (error as { originalError?: unknown }).originalError;
+  if (error.type === 'fail' && original !== undefined) return original;
+  return new InternalMcpError(`Flow ended with: ${error.type}`);
+}
+
 /** The error an agent sees: what an MCP client would see (public message), never internals. */
 function toAgentError(error: unknown): Error {
-  const publicMessage = (error as { getPublicMessage?: () => string } | null)?.getPublicMessage;
-  if (typeof publicMessage === 'function') return new Error(publicMessage.call(error));
-  return error instanceof Error ? error : new Error(String(error));
+  const failure = errorBehindFlowControl(error);
+  const publicMessage = (failure as { getPublicMessage?: () => string } | null)?.getPublicMessage;
+  if (typeof publicMessage === 'function') return new Error(publicMessage.call(failure));
+  return failure instanceof Error ? failure : new Error(String(failure));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
