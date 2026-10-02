@@ -329,7 +329,7 @@ class PRReviewerAgent extends AgentContext {
   exports: {
     resources: '*', // listed in resources/list, read with resources/read
     prompts: [PipelineReportPrompt], // listed in prompts/list, got with prompts/get
-    providers: [WarehouseClient], // the app's tools can this.get(WarehouseClient)
+    providers: [WarehouseClient], // the app's tools can use this.get(WarehouseClient)
   },
 })
 class DataPipelineAgent extends AgentContext {}
