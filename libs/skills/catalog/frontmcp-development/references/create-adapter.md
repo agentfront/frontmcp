@@ -130,7 +130,7 @@ MyApiAdapter.init({
 });
 ```
 
-A factory may instead return an adapter instance, used as is; anything else fails startup with an `InvalidEntityError`.
+A factory may instead return an adapter instance, used as is when its `options.name` is the `name` given to `init()`; an instance named otherwise, or anything else, fails startup with an `InvalidEntityError`.
 
 ## Nx Generator
 
