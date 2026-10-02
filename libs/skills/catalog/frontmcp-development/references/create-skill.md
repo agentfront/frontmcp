@@ -160,6 +160,8 @@ class ApiStandardsSkill extends SkillContext {}
 
 > **When file and URL instructions are read:** when the server starts, for every skill — the server indexes each skill for `skills/search` and checks its tools then, so a URL is fetched at every start whether or not a client reads the skill. A read that fails is logged (`Failed to load skill <name>: …`) and tried again the first time the skill is loaded; the content is kept once a read succeeds.
 
+> **Search index:** `skills/search` ranks with TF-IDF from the optional peer `vectoriadb`, loaded the first time a search runs — not at server start. Listing and loading skills (`skills/list`, `skills/load`, `skill://` resources) never need it, so a server whose skills are never searched runs without it installed, and a server started inside a Jest test needs no `--experimental-vm-modules`. The first search without the package fails with an error naming it.
+
 ## SkillContext: loadInstructions() and build()
 
 The `SkillContext` class resolves instructions regardless of the source type. When the framework serves a skill, it calls `build()` which internally calls `loadInstructions()`.

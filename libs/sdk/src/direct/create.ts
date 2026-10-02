@@ -27,6 +27,7 @@ import type { FrontMcpConfigInput } from '../common';
 import { FrontMcpLocalAppTokens } from '../common/tokens';
 import type { CreateConfig } from './create.types';
 import type { DirectMcpServer } from './direct.types';
+import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Instance cache (keyed by cacheKey)
@@ -93,6 +94,14 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
   };
 }
 
+/** `@frontmcp/utils`, loaded lazily (see `importWithRequireFallback`). */
+function loadUtils(): Promise<typeof import('@frontmcp/utils')> {
+  return importWithRequireFallback(
+    () => import('@frontmcp/utils'),
+    () => require('@frontmcp/utils') as typeof import('@frontmcp/utils'),
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Factory function
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,7 +152,7 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
     try {
       // Apply machine ID override if provided
       if (machineIdWasSet) {
-        const { setMachineIdOverride } = await import('@frontmcp/utils');
+        const { setMachineIdOverride } = await loadUtils();
         setMachineIdOverride(config.machineId);
       }
 
@@ -160,7 +169,7 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
             instanceCache.delete(cacheKey);
           }
           if (machineIdWasSet) {
-            const { setMachineIdOverride } = await import('@frontmcp/utils');
+            const { setMachineIdOverride } = await loadUtils();
             setMachineIdOverride(undefined);
           }
           return originalDispose();
@@ -174,7 +183,7 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
         instanceCache.delete(cacheKey);
       }
       if (machineIdWasSet) {
-        const { setMachineIdOverride } = await import('@frontmcp/utils');
+        const { setMachineIdOverride } = await loadUtils();
         setMachineIdOverride(undefined);
       }
       throw error;

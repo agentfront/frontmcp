@@ -105,6 +105,7 @@ import type WorkflowRegistry from '../workflow/workflow.registry';
 import HttpIpFilterFlow from './flows/http.ip-filter.flow';
 import HttpRequestFlow from './flows/http.request.flow';
 import { probeOptionalDependency } from './optional-dependency.util';
+import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 
 /**
  * Flows the web-fetch adapter must NOT auto-dispatch by HTTP match: `http:request`
@@ -1127,7 +1128,10 @@ export class Scope extends ScopeEntry {
     }
     try {
       const { dirname } = require('path') as typeof import('path');
-      const { mkdir } = await import('@frontmcp/utils');
+      const { mkdir } = await importWithRequireFallback(
+        () => import('@frontmcp/utils'),
+        () => require('@frontmcp/utils') as typeof import('@frontmcp/utils'),
+      );
       await mkdir(dirname(finalPath), { recursive: true });
     } catch (err) {
       this.logger.warn('[FrontMcp] Could not ensure sqlite parent directory exists', {

@@ -715,6 +715,11 @@ Results are ranked by:
 2. Priority field (higher = earlier)
 3. Tool availability (complete skills rank higher)
 
+The index is built by the optional peer `vectoriadb`, which is loaded the first time a search runs —
+not when the server starts. Listing and loading skills (`skills/list`, `skills/load`, the `skill://`
+resources) never need it, so a server whose skills are never searched runs without it installed;
+the first search on such a server fails with an error that names the package to install.
+
 ---
 
 ## Agent Skills Specification Alignment
