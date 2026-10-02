@@ -152,7 +152,9 @@ export default class App {}
 
       const { stderr, stdout, exitCode } = runFrontmcp(tmp, ['build', '--target', 'cloudflare']);
       expect(exitCode).not.toBe(0);
-      expect(stdout + stderr).toMatch(/redis.*not supported on --target cloudflare/i);
+      // An ioredis config can't be told apart from vercel-kv here; the build says only the
+      // literal `redis: { provider: 'vercel-kv' }` runs on Workers (#680)
+      expect(stdout + stderr).toMatch(/`redis` is configured.*Only the HTTP vercel-kv provider runs on Workers/is);
     });
 
     it('aborts even on unconditional literal sqlite (round-1 case still covered)', async () => {
