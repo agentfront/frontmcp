@@ -315,6 +315,35 @@ Register additional flows.
 registryFlows(...flows: FlowType[]): Promise<void>
 ```
 
+## Lifecycle Hooks
+
+### onServerStarted(callback)
+
+Run `callback` after the HTTP server starts listening. It never fires in direct mode (`create()`, `createDirect()`, `connect()`), where no HTTP server starts.
+
+### onDispose(callback)
+
+Run `callback` when the scope is disposed: `scope.dispose()`, or `dispose()` on the server `create()` returned. Plugins use it to release what they hold outside the scope (timers, subscriptions, browser registrations such as WebMCP tools). Callbacks run once, in reverse order of registration; one that throws is logged and the others still run. A callback registered after the scope was disposed runs right away.
+
+```typescript
+onDispose(callback: () => void | Promise<void>): () => void
+```
+
+```typescript
+{
+  provide: MyBridge,
+  inject: () => [ScopeEntry],
+  useFactory: (scope: ScopeEntry) => {
+    const bridge = new MyBridge(scope);
+    void scope.ready.then(() => bridge.start());
+    scope.onDispose(() => bridge.stop());
+    return bridge;
+  },
+}
+```
+
+The returned function removes the callback.
+
 ## Accessing Scope
 
 ### In Tools/Resources/Agents

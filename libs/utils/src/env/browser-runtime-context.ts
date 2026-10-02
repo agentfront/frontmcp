@@ -26,7 +26,7 @@ export interface RuntimeContext {
   env: string;
 }
 
-export type Surface = 'mcp' | 'cli' | 'http-trigger' | 'job' | 'agent';
+export type Surface = 'mcp' | 'cli' | 'http-trigger' | 'job' | 'agent' | 'webmcp';
 
 export interface CallContext {
   surface?: Surface;
@@ -57,7 +57,7 @@ export const entryAvailabilitySchema = z
     deployment: z.array(z.string().min(1)).optional(),
     provider: z.array(z.string().min(1)).optional(),
     target: z.array(z.string().min(1)).optional(),
-    surface: z.array(z.enum(['mcp', 'cli', 'http-trigger', 'job', 'agent'])).optional(),
+    surface: z.array(z.enum(['mcp', 'cli', 'http-trigger', 'job', 'agent', 'webmcp'])).optional(),
     env: z.array(z.string().min(1)).optional(),
   })
   .strict();

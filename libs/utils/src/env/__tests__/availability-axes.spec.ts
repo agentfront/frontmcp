@@ -5,7 +5,12 @@
  * EntryAvailability schema, plus the back-compat `platform` alias.
  */
 
-import { checkEntryAvailability, isEntryAvailable, type RuntimeContext } from '../runtime-context';
+import {
+  checkEntryAvailability,
+  entryAvailabilitySchema,
+  isEntryAvailable,
+  type RuntimeContext,
+} from '../runtime-context';
 
 function makeCtx(overrides: Partial<RuntimeContext> = {}): RuntimeContext {
   return {
@@ -64,6 +69,14 @@ describe('EntryAvailability with #417 axes', () => {
       // With callCtx → surface gate applies
       expect(isEntryAvailable({ surface: ['mcp'] }, ctx, { surface: 'mcp' })).toBe(true);
       expect(isEntryAvailable({ surface: ['mcp'] }, ctx, { surface: 'cli' })).toBe(false);
+    });
+
+    it("gates the 'webmcp' surface like any other caller", () => {
+      const ctx = makeCtx();
+      expect(isEntryAvailable({ surface: ['webmcp'] }, ctx, { surface: 'webmcp' })).toBe(true);
+      expect(isEntryAvailable({ surface: ['webmcp'] }, ctx, { surface: 'mcp' })).toBe(false);
+      expect(isEntryAvailable({ surface: ['mcp'] }, ctx, { surface: 'webmcp' })).toBe(false);
+      expect(entryAvailabilitySchema.parse({ surface: ['webmcp'] })).toEqual({ surface: ['webmcp'] });
     });
 
     it('empty `surface` array → never available', () => {

@@ -58,6 +58,15 @@ export class EntryValidationError extends InternalMcpError {
 }
 
 /**
+ * Thrown when a tool registered at runtime takes a name another tool in the scope already has.
+ */
+export class ToolNameConflictError extends InternalMcpError {
+  constructor(toolName: string) {
+    super(`A tool named "${toolName}" is already registered`, 'TOOL_NAME_CONFLICT');
+  }
+}
+
+/**
  * Thrown when a flow is not registered in the flow registry.
  */
 export class FlowNotRegisteredError extends InternalMcpError {

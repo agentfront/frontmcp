@@ -119,6 +119,10 @@ export function createWrappedServer(base: DirectMcpServer, dynamicRegistry: Dyna
       return base.callTool(name, args, options);
     },
 
+    async registerTool(definition) {
+      return base.registerTool(definition);
+    },
+
     async listResources(options?: DirectCallOptions): Promise<ListResourcesResult> {
       const baseResult = await base.listResources(options);
       const dynamicResources = dynamicRegistry.getResources();
