@@ -98,13 +98,39 @@ function jestGlobals(): JestApi {
 interface Scope {
   skipped: boolean;
   reason?: string;
+  /** `test.use()` configuration of this scope, without `env` (kept in `envs`) */
   config: TestConfig;
+  /**
+   * The `env` objects passed to `test.use()` here, in call order. Kept by reference and merged
+   * when a server is started, so an object a `beforeAll` fills in later (a port only known once
+   * another server is up) still reaches the server.
+   */
+  envs: Array<Record<string, string>>;
   /** true once `test.use()` was called here — the scope then owns (and stops) servers it starts */
   configured: boolean;
   cleanupRegistered: boolean;
+  /** `test.beforeEach` / `test.afterEach` hooks that take fixtures, run inside each test of the scope */
+  beforeEachHooks: FixtureHook[];
+  afterEachHooks: FixtureHook[];
 }
 
-const scopes: Scope[] = [{ skipped: false, config: {}, configured: false, cleanupRegistered: false }];
+/** A `test.beforeEach` / `test.afterEach` callback that receives the test's fixtures */
+type FixtureHook = (fixtures: TestFixtures) => unknown;
+
+function newScope(parent?: Scope): Scope {
+  return {
+    skipped: parent?.skipped ?? false,
+    reason: parent?.reason,
+    config: {},
+    envs: [],
+    configured: false,
+    cleanupRegistered: false,
+    beforeEachHooks: [],
+    afterEachHooks: [],
+  };
+}
+
+const scopes: Scope[] = [newScope()];
 
 function currentScope(): Scope {
   return scopes[scopes.length - 1];
@@ -126,9 +152,8 @@ const serverEntries = new Map<string, Promise<ServerEntry>>();
 function resolveConfig(chain: readonly Scope[]): TestConfig {
   const merged: TestConfig = {};
   for (const scope of chain) {
-    const { env, ...rest } = scope.config;
-    Object.assign(merged, rest);
-    if (env) merged.env = { ...merged.env, ...env };
+    Object.assign(merged, scope.config);
+    for (const env of scope.envs) merged.env = { ...merged.env, ...env };
   }
   return merged;
 }
@@ -528,16 +553,43 @@ function runWithFixtures(
 ) {
   return async (...extra: unknown[]): Promise<void> => {
     const fixtures = await buildFixtures(chain);
-    let testFailed = false;
+    // The first error wins: a failing test is reported as such even when an afterEach hook fails too.
+    let failure: { error: unknown } | undefined;
     try {
+      // Playwright order: outer `beforeEach` hooks first, the test, then inner `afterEach` hooks
+      // first. Every hook sees the same fixtures as the test; they are torn down after the last one.
+      for (const scope of chain) {
+        for (const hook of scope.beforeEachHooks) await hook(fixtures);
+      }
       await (fn as (fixtures: TestFixtures, ...rest: unknown[]) => Promise<void> | void)(fixtures, ...extra);
     } catch (error) {
-      testFailed = true;
-      throw error;
-    } finally {
-      await cleanupTestFixtures(fixtures, testFailed);
+      failure = { error };
     }
+    try {
+      await runAfterEachHooks(chain, fixtures);
+    } catch (error) {
+      failure ??= { error };
+    }
+    await cleanupTestFixtures(fixtures, failure !== undefined);
+    if (failure) throw failure.error;
   };
+}
+
+/** Run every `afterEach` fixture hook, even after a failure; rethrow the first error. */
+async function runAfterEachHooks(chain: readonly Scope[], fixtures: TestFixtures): Promise<void> {
+  let firstError: unknown;
+  let failed = false;
+  for (let i = chain.length - 1; i >= 0; i--) {
+    for (const hook of chain[i].afterEachHooks) {
+      try {
+        await hook(fixtures);
+      } catch (error) {
+        if (!failed) firstError = error;
+        failed = true;
+      }
+    }
+  }
+  if (failed) throw firstError;
 }
 
 function skipTitle(name: string, scope: Scope): string {
@@ -561,11 +613,9 @@ function testWithFixtures(name: string, fn: TestFn): void {
  */
 function use(config: TestConfig): void {
   const scope = currentScope();
-  scope.config = {
-    ...scope.config,
-    ...config,
-    env: config.env ? { ...scope.config.env, ...config.env } : scope.config.env,
-  };
+  const { env, ...rest } = config;
+  scope.config = { ...scope.config, ...rest };
+  if (env) scope.envs.push(env);
   scope.configured = true;
 
   // The scope that configured the servers stops them once its tests are done
@@ -666,14 +716,7 @@ function each(table: unknown, ...tagged: unknown[]) {
  */
 function withScope<Args extends unknown[]>(fn: (...args: Args) => unknown): (...args: Args) => void {
   return (...args: Args): void => {
-    const parent = currentScope();
-    scopes.push({
-      skipped: parent.skipped,
-      reason: parent.reason,
-      config: {},
-      configured: false,
-      cleanupRegistered: false,
-    });
+    scopes.push(newScope(currentScope()));
     try {
       fn(...args);
     } finally {
@@ -722,6 +765,26 @@ const describeWithScope = Object.assign(
   },
 ) as unknown as jest.Describe;
 
+/**
+ * `test.beforeEach` / `test.afterEach`.
+ *
+ * A callback that declares a parameter receives the test's fixtures, Playwright-style
+ * (`test.beforeEach(async ({ mcp }) => …)`): it runs inside every test of the enclosing block that
+ * is registered with `test(...)`, with the same `mcp` / `server` / `auth` the test gets. Handing such
+ * a callback to Jest would make Jest treat the parameter as a `done` callback and wait for it until
+ * the test times out. A callback without parameters is a plain Jest hook, as before.
+ */
+function eachHook(kind: 'beforeEach' | 'afterEach') {
+  return (fn: FixtureHook | (() => unknown), timeout?: number): void => {
+    if (typeof fn === 'function' && fn.length > 0) {
+      const scope = currentScope();
+      (kind === 'beforeEach' ? scope.beforeEachHooks : scope.afterEachHooks).push(fn as FixtureHook);
+      return;
+    }
+    jestGlobals()[kind](fn as () => unknown, timeout);
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // ATTACH STATIC METHODS
 // ═══════════════════════════════════════════════════════════════════
@@ -735,8 +798,8 @@ test.use = use;
 // Attach Jest lifecycle methods (resolved when called, see jestGlobals)
 test.describe = describeWithScope;
 test.beforeAll = ((...args: Parameters<jest.Lifecycle>) => jestGlobals().beforeAll(...args)) as jest.Lifecycle;
-test.beforeEach = ((...args: Parameters<jest.Lifecycle>) => jestGlobals().beforeEach(...args)) as jest.Lifecycle;
-test.afterEach = ((...args: Parameters<jest.Lifecycle>) => jestGlobals().afterEach(...args)) as jest.Lifecycle;
+test.beforeEach = eachHook('beforeEach') as TestWithFixtures['beforeEach'];
+test.afterEach = eachHook('afterEach') as TestWithFixtures['afterEach'];
 test.afterAll = ((...args: Parameters<jest.Lifecycle>) => jestGlobals().afterAll(...args)) as jest.Lifecycle;
 
 // Attach test modifiers

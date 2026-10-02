@@ -10,6 +10,7 @@ export type {
   AuthFixture,
   ServerFixture,
   TestFn,
+  FixtureEachHook,
   TestWithFixtures,
   TestUser,
 } from './fixture-types';

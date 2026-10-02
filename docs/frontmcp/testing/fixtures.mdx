@@ -56,7 +56,7 @@ test('my test', async ({ mcp }) => {
 | ---------------- | ---------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------ |
 | `server`         | `string`                                 | —                   | Path to server entry file (required)                                                                   |
 | `port`           | `number`                                 | Auto                | Port to run server on                                                                                  |
-| `transport`      | `'sse' \| 'streamable-http'`             | `'streamable-http'` | Transport protocol                                                                                     |
+| `transport`      | `'sse' \| 'streamable-http'`             | `'streamable-http'` | Transport protocol (`'sse'` is the legacy HTTP+SSE transport; see below)                               |
 | `auth`           | `object`                                 | —                   | Auth configuration                                                                                     |
 | `logLevel`       | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'`            | Server log level                                                                                       |
 | `env`            | `Record<string, string>`                 | —                   | Environment variables                                                                                  |
@@ -100,6 +100,49 @@ test.describe('block B', () => {
 ```
 
 `auth: { mode, type }` is passed to the server process as `FRONTMCP_TEST_AUTH_MODE` and `FRONTMCP_TEST_AUTH_TYPE`, which the server entry file can read. `auth.mode: 'public'` also keeps the `mcp` client anonymous.
+
+The `env` object is read when the server starts, not when `test.use()` runs, so a `beforeAll` can fill
+in a value that is only known later — the port of another server it started, for example:
+
+```ts
+const env: Record<string, string> = {};
+beforeAll(async () => {
+  upstream = await TestServer.start({ command: 'npx tsx src/upstream.ts', port: 0 });
+  env.UPSTREAM_PORT = String(upstream.info.port);
+});
+test.use({ server: './src/gateway.ts', env });
+```
+
+### The legacy SSE transport
+
+`transport: 'sse'` connects with the legacy HTTP+SSE transport (MCP 2024-11-05): the client opens
+`GET <entryPath>/sse`, posts its messages to the endpoint the server names in its first event, and reads
+every response and notification from that stream. The server must serve the legacy transport —
+`@FrontMcp({ transport: { protocol: { legacy: true } } })` (or `sse: true`); otherwise the connection
+fails with the HTTP status it got. `server.createClient({ transport: 'sse' })` opens one more such
+client.
+
+### Hooks with fixtures
+
+`test.beforeEach` and `test.afterEach` receive the test's fixtures when their callback takes a
+parameter, as in Playwright. They run inside every `test(...)` of the block they are declared in (and
+nested blocks) with the **same** `mcp`, `server` and `auth` as the test: `beforeEach` hooks outer
+blocks first, `afterEach` hooks inner blocks first, and the fixtures are torn down after the last
+`afterEach`.
+
+```ts
+test.beforeEach(async ({ mcp }) => {
+  await mcp.tools.call('reset_state', {});
+});
+
+test.afterEach(async ({ mcp }) => {
+  expect(mcp.isConnected()).toBe(true); // still connected here
+});
+```
+
+A callback without parameters is a plain Jest hook. `test.beforeAll` / `test.afterAll` are plain Jest
+hooks and receive no fixtures — there is no per-test client yet. Jest's `done` callback style is not
+supported on `test.beforeEach` / `test.afterEach`; use Jest's own `beforeEach` for that.
 
 ### Parameterised tests
 

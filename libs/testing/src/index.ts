@@ -70,6 +70,7 @@ export type {
 
 export type { McpTransport, TransportConfig, TransportState } from './transport/transport.interface';
 export { StreamableHttpTransport } from './transport/streamable-http.transport';
+export { SseTransport } from './transport/sse.transport';
 
 // ═══════════════════════════════════════════════════════════════════
 // AUTH
@@ -164,6 +165,7 @@ export type {
   AuthFixture,
   ServerFixture,
   TestFn,
+  FixtureEachHook,
   TestWithFixtures,
   TestUser,
 } from './fixtures';
