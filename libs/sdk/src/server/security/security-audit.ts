@@ -176,7 +176,8 @@ function auditDnsRebinding(config: SecurityAuditConfig, bindAddress: string): Se
     return {
       level: 'info',
       code: 'DNS_REBINDING_PROTECTED',
-      message: 'DNS rebinding protection is enabled: Host/Origin headers are checked against the configured allow-list.',
+      message:
+        'DNS rebinding protection is enabled: Host/Origin headers are checked against the configured allow-list.',
     };
   }
 
@@ -184,7 +185,8 @@ function auditDnsRebinding(config: SecurityAuditConfig, bindAddress: string): Se
     return {
       level: 'info',
       code: 'DNS_REBINDING_NOT_APPLICABLE',
-      message: 'Server listens on a Unix socket: there is no TCP Host to check; the socket permissions are the boundary.',
+      message:
+        'Server listens on a Unix socket: there is no TCP Host to check; the socket permissions are the boundary.',
     };
   }
 
