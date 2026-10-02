@@ -24,6 +24,12 @@ export type AdapterBuildContext = {
    * the platform has not already defined it.
    */
   haEnv?: Record<string, string>;
+  /**
+   * Run-time defaults from the deployment's `server.http` / `server.cookies`
+   * (`PORT`, `FRONTMCP_CORS_*`, `FRONTMCP_AFFINITY_COOKIE*`, …) and the build target.
+   * The build appends them to the adapter's setup file (#680).
+   */
+  runtimeEnv?: Record<string, string>;
 };
 
 /** Outcome of reconciling an existing platform config file with the build. */

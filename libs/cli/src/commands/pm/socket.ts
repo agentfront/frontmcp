@@ -6,6 +6,7 @@ import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
 import { loadDevEnv } from '../../shared/env';
 import { resolveEntry } from '../../shared/fs';
+import { loadShipEnv } from './ship-env';
 
 function ensureDir(dir: string): void {
   const fs = require('fs');
@@ -96,8 +97,11 @@ export async function runSocket(opts: ParsedArgs): Promise<void> {
   console.log(`${c('gray', 'hint:')} press Ctrl+C to stop`);
   console.log(`${c('gray', 'hint:')} test with: curl --unix-socket ${socketPath} http://localhost/health`);
 
-  // Set environment variables for the child process
+  // Set environment variables for the child process: frontmcp.config `env.shared` ⊕ `env.ship`
+  // under the real environment (incl. .env), which wins
+  const shipEnv = await loadShipEnv(entry, 'pm:socket', typeof opts.config === 'string' ? opts.config : undefined);
   const env: Record<string, string> = {
+    ...shipEnv,
     ...(process.env as Record<string, string>),
     FRONTMCP_DAEMON_SOCKET: socketPath,
   };

@@ -122,14 +122,44 @@ frontmcp build --target vercel
 | `sdk`         | Direct           | Configurable          | Library embedding       |
 | `mcpb`        | stdio            | SQLite, memory        | `.mcpb` MCP bundles     |
 
+### How the settings reach the server
+
+`frontmcp build` writes each target's `server` block (and `env`) into the artifact as environment
+defaults the server reads at start-up — only where the variable is not already set (an operator's env var
+wins), and an explicit `@FrontMcp()` value wins over both:
+
+| Setting                         | Variable                                                        | Applies to                                       |
+| ------------------------------- | --------------------------------------------------------------- | ------------------------------------------------ |
+| `server.http.port`              | `PORT`                                                          | `node`, `distributed` (serverless: ignored, warns) |
+| `server.http.socketPath`        | `FRONTMCP_DAEMON_SOCKET`                                        | `node`, `distributed`                            |
+| `server.http.entryPath`         | `FRONTMCP_HTTP_ENTRY_PATH` (wins over `transport.http.path`)    | every server target                              |
+| `server.http.cors`              | `FRONTMCP_CORS_ORIGINS` (JSON list), `_CREDENTIALS`, `_MAX_AGE` | every server target                              |
+| `server.cookies`                | `FRONTMCP_AFFINITY_COOKIE`, `_DOMAIN`, `_SAMESITE`              | `distributed` (sets the LB affinity cookie)      |
+| `server.csp` / `server.headers` | `FRONTMCP_CSP_*`, `FRONTMCP_HSTS`, …                            | every server target                              |
+| `deployments[].env`             | each key as is                                                  | every target except the `browser` / `sdk` libraries |
+
+`node` / `cli` / `mcpb` bundles set them in a preamble when run as the program; `vercel` / `lambda` /
+`cloudflare` / `distributed` in the generated setup module. Every artifact also sets
+`globalThis.FRONTMCP_BUILD_TARGET` for `availableWhen: { target }` (first one to run wins).
+
 ### Server HTTP Options
 
-| Field          | Type     | Default | Description                  |
-| -------------- | -------- | ------- | ---------------------------- |
-| `port`         | number   | 3000    | Listen port                  |
-| `socketPath`   | string   | ---     | Unix socket (overrides port) |
-| `entryPath`    | string   | `/`     | Base path                    |
-| `cors.origins` | string[] | ---     | CORS allowed origins         |
+| Field          | Type     | Default | Description                                                                      |
+| -------------- | -------- | ------- | -------------------------------------------------------------------------------- |
+| `port`         | number   | 3000    | Listen port (node / distributed)                                                 |
+| `socketPath`   | string   | ---     | Unix socket (overrides port; node / distributed)                                 |
+| `entryPath`    | string   | `/`     | Base path; wins over `transport.http.path` for this deployment                   |
+| `cors.origins` | string[] | ---     | CORS allowed origins (`['*']` = any); none = no CORS headers (the server default) |
+
+`bodyLimit` / `urlencodedLimit` are not `frontmcp.config` fields — set them in `@FrontMcp({ http })`.
+
+### Cookie Options (distributed LB affinity cookie)
+
+| Field      | Default           | Description        |
+| ---------- | ----------------- | ------------------ |
+| `affinity` | `__frontmcp_node` | Cookie name        |
+| `domain`   | ---               | `Domain` attribute |
+| `sameSite` | `'Strict'`        | `SameSite`         |
 
 ### CSP Options
 
@@ -245,13 +275,13 @@ The config is consumed by every `frontmcp` command, not just `build`:
 
 | Command                           | Config fields consumed                                                                              |
 | --------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `build`                           | `name`, `version`, `entry`, `deployments`, `build`, `nodeVersion`                                   |
-| `dev`                             | `entry`, `transport.http.port`, `env.shared` ⊕ `env.dev`                                            |
+| `build`                           | `name`, `version`, `entry`, `deployments` (incl. `server`, `env`), `build`, `nodeVersion`, `transport.http.path` |
+| `dev`                             | `entry`, `transport.http.port`, `env.shared` ⊕ `env.dev`, first deployment's `server.csp` / `headers` / `http.cors` |
 | `test`                            | `test.timeoutMs` / `test.runInBand` / `test.coverage` / `test.testMatch`, `env.shared` ⊕ `env.test` |
 | `inspector`                       | `transport.default`, `transport.http.port`, `transport.stdio`                                       |
-| `pm start` / `socket` / `service` | `name`, `entry`, `transport.http.port`, `transport.http.socketPath`, `env.shared` ⊕ `env.ship`      |
-| `skills install` / `export`       | `skills.provider`, `skills.bundle`, `skills.install`, `skills.exportTarget`                         |
-| `eject-mcp-config <client>`       | `clients.<client>`, `name`, `transport`, `env.ship`                                                 |
+| `pm start` / `socket` / `service` | `env.shared` ⊕ `env.ship` (config found from the entry's folder upwards; the real env wins)         |
+| `skills install` / `export`       | `skills.provider`, `skills.install` (else `skills.bundle`; `'none'` = nothing), `skills.exportTarget` — flags win |
+| `eject-mcp-config <client>`       | `clients.<client>`, `name`, `transport`, `env.shared` ⊕ `env.ship` (stdio `env`, under the client's own `env`) |
 
 See `transport`, `env`, `clients`, `test`, `skills` field reference in [docs/frontmcp/deployment/frontmcp-config](https://docs.agentfront.dev/frontmcp/deployment/frontmcp-config).
 
