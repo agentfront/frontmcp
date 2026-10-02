@@ -155,7 +155,7 @@ export default class GatewayServer {}
 | `namespace`        | `string`                       | Prefix for tool/resource/prompt names (e.g., `mintlify:SearchMintlify`) |
 | `description`      | `string`                       | Human-readable description                                              |
 | `standalone`       | `boolean \| 'includeInParent'` | Isolation mode (default: `false`)                                       |
-| `transportOptions` | `object`                       | Connection settings (timeout, retry attempts)                           |
+| `transportOptions` | `object`                       | Connection settings (timeout, retries, headers, MCP revision)           |
 | `remoteAuth`       | `RemoteAuthConfig`             | Authentication config for the remote server                             |
 | `refreshInterval`  | `number`                       | Interval (ms) to refresh capabilities from the remote server            |
 | `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities                                        |
@@ -165,10 +165,28 @@ export default class GatewayServer {}
 
 ```ts
 transportOptions: {
-  timeout: 60000,      // Request timeout in milliseconds
-  retryAttempts: 3,    // Number of retry attempts on failure
+  timeout: 60000,              // Request timeout in milliseconds
+  retryAttempts: 3,            // Number of retry attempts on failure
+  retryDelayMs: 1000,          // Delay between retries
+  fallbackToSSE: true,         // Fall back to legacy SSE when Streamable HTTP fails
+  headers: { 'x-team': 'a' },  // Sent with every request
+  protocolVersion: 'auto',     // 'legacy' (default) | '2026-07-28' | 'auto'
 }
 ```
+
+`protocolVersion` selects the MCP revision the gateway speaks to the remote:
+
+- `'legacy'` (or omitted) — the session transports with an `initialize` handshake.
+- `'2026-07-28'` — the stateless revision, with no `initialize` and per-request `_meta`. Only for URL
+  remotes; any other `urlType` is refused at connect time.
+- `'auto'` — probe `server/discover` and use 2026-07-28 when the remote lists it, otherwise fall back to
+  the session transports.
+
+See [Protocol versions](/frontmcp/fundamentals/protocol-versions#proxying-a-2026-remote).
+
+Each remote tool, resource, resource template and prompt is listed once. The gateway re-reads the
+remote's lists when `cacheTTL` expires (or the remote reports a change), and replaces what it proxied
+before: entries the remote dropped disappear, and nothing is listed twice.
 
 ### Caching Remote Tools
 

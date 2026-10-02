@@ -62,10 +62,19 @@ export default class PromptRegistry extends RegistryAbstract<
   private version = 0;
   private emitter = new PromptEmitter();
 
-  constructor(providers: ProviderRegistry, list: PromptType[], owner: EntryOwnerRef) {
+  /**
+   * When false, the registry holds only the entries registered into it and adopts nothing: it
+   * does not pull in the apps or the other registries visible on `providers`. A remote app's
+   * registries are built on the scope's providers, so adopting would copy every other remote
+   * app's prompts into them, and the scope would then list those prompts twice.
+   */
+  private readonly adopt: boolean;
+
+  constructor(providers: ProviderRegistry, list: PromptType[], owner: EntryOwnerRef, options: { adopt?: boolean } = {}) {
     // disable auto so subclass fields initialize first
     super('PromptRegistry', providers, list, false);
     this.owner = owner;
+    this.adopt = options.adopt ?? true;
 
     // now it's safe to run the lifecycle
     this.buildGraph();
@@ -125,12 +134,17 @@ export default class PromptRegistry extends RegistryAbstract<
 
     // Adopt prompts from child app registries
     const scope = this.providers.getActiveScope();
-    const childAppRegistries = this.providers.getRegistries('AppRegistry');
+    const childAppRegistries = this.adopt ? this.providers.getRegistries('AppRegistry') : [];
+    // A remote app builds its registries on the scope's providers, so they also
+    // show up in the generic child-registry pass below. They are adopted here
+    // already; adopting them twice listed every remote prompt twice.
+    const remoteAppRegistries = new Set<unknown>();
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
         if (app.isRemote) {
           // Remote apps: adopt prompts directly from the app's prompts registry
+          remoteAppRegistries.add(app.prompts);
           this.adoptPromptsFromRemoteApp(app, scope);
         } else {
           // Local apps: adopt from child PromptRegistry instances
@@ -140,9 +154,9 @@ export default class PromptRegistry extends RegistryAbstract<
     });
 
     // Adopt prompts from other child prompt registries
-    const childPromptRegistries = this.providers.getRegistries('PromptRegistry');
+    const childPromptRegistries = this.adopt ? this.providers.getRegistries('PromptRegistry') : [];
     childPromptRegistries
-      .filter((r) => r !== this)
+      .filter((r) => r !== this && !remoteAppRegistries.has(r))
       .forEach((promptRegistry) => {
         this.adoptFromChild(promptRegistry as PromptRegistry, promptRegistry.owner);
       });
@@ -616,6 +630,25 @@ export default class PromptRegistry extends RegistryAbstract<
     // Rebuild indexes
     this.reindex();
     this.bump('reset');
+  }
+
+  /**
+   * Unregister a prompt instance previously added via `registerPromptInstance`.
+   * Returns true if the token was found and removed, false otherwise.
+   *
+   * Used by remote apps to drop the proxies of a previous capability discovery
+   * before registering the fresh ones.
+   */
+  unregisterPromptInstance(token: Token): boolean {
+    const existed = this.instances.delete(token as Token<PromptInstance>);
+    const before = this.localRows.length;
+    this.localRows = this.localRows.filter((row) => row.token !== token);
+    const removed = existed || this.localRows.length !== before;
+    if (removed) {
+      this.reindex();
+      this.bump('reset');
+    }
+    return removed;
   }
 
   /**

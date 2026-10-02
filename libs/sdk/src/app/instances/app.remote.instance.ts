@@ -6,6 +6,7 @@
  * like local apps, but with lazy capability discovery and TTL-based caching.
  */
 
+import { type Token } from '@frontmcp/di';
 import { idFromString } from '@frontmcp/utils';
 
 import {
@@ -190,6 +191,13 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   // Capability change subscription cleanup
   private _unsubscribeCapability?: () => void;
 
+  // Registry tokens of the proxies registered by the last capability discovery
+  private registeredProxies: { tools: Token[]; resources: Token[]; prompts: Token[] } = {
+    tools: [],
+    resources: [],
+    prompts: [],
+  };
+
   constructor(record: AppRecord, scopeProviders: ProviderRegistry) {
     super(record);
     this.id = this.metadata.id ?? idFromString(this.metadata.name);
@@ -207,9 +215,11 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     this.capabilityCache = new CapabilityCache({ defaultTTL: cacheTTL });
 
     // Initialize standard registries (empty initially - populated lazily)
-    this._tools = new ToolRegistry(this.scopeProviders, [], this.appOwner);
-    this._resources = new ResourceRegistry(this.scopeProviders, [], this.appOwner);
-    this._prompts = new PromptRegistry(this.scopeProviders, [], this.appOwner);
+    // `adopt: false`: these registries share the scope's providers, where they would otherwise
+    // adopt every other remote app — and the scope would list that app's entries twice.
+    this._tools = new ToolRegistry(this.scopeProviders, [], this.appOwner, { adopt: false });
+    this._resources = new ResourceRegistry(this.scopeProviders, [], this.appOwner, { adopt: false });
+    this._prompts = new PromptRegistry(this.scopeProviders, [], this.appOwner, { adopt: false });
     this._plugins = new EmptyPluginRegistry();
     this._adapters = new EmptyAdapterRegistry();
     this._skills = new EmptySkillRegistry();
@@ -421,6 +431,7 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
         retryDelayMs: this.metadata.transportOptions?.retryDelayMs,
         fallbackToSSE: this.metadata.transportOptions?.fallbackToSSE,
         headers: this.metadata.transportOptions?.headers,
+        protocolVersion: this.metadata.transportOptions?.protocolVersion,
       },
       auth: this.mapRemoteAuth(this.metadata.remoteAuth),
       namespace: this.metadata.namespace,
@@ -477,61 +488,80 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
       logger.debug(`Using cached capabilities for remote app ${this.id}`);
     }
 
-    // Register tools using standard ToolInstance with dynamic context class
-    for (const remoteTool of capabilities.tools) {
-      const toolInstance = createRemoteToolInstance(
-        remoteTool,
-        this.mcpClient,
-        this.id,
-        this.scopeProviders,
-        this.appOwner,
-        namespace,
-      );
-      await toolInstance.ready;
-      this._tools.registerToolInstance(toolInstance);
-    }
+    // Build every proxy first, then swap them in synchronously: each discovery
+    // creates fresh context classes (fresh registry tokens), so registering
+    // without dropping the previous discovery's proxies listed every entry
+    // once more each time the capability cache expired.
+    const tools = await Promise.all(
+      capabilities.tools.map(async (remoteTool) => {
+        const instance = createRemoteToolInstance(
+          remoteTool,
+          this.mcpClient,
+          this.id,
+          this.scopeProviders,
+          this.appOwner,
+          namespace,
+        );
+        await instance.ready;
+        return instance;
+      }),
+    );
+    const resources = await Promise.all(
+      [
+        ...capabilities.resources.map((remoteResource) =>
+          createRemoteResourceInstance(
+            remoteResource,
+            this.mcpClient,
+            this.id,
+            this.scopeProviders,
+            this.appOwner,
+            namespace,
+          ),
+        ),
+        ...capabilities.resourceTemplates.map((remoteTemplate) =>
+          createRemoteResourceTemplateInstance(
+            remoteTemplate,
+            this.mcpClient,
+            this.id,
+            this.scopeProviders,
+            this.appOwner,
+            namespace,
+          ),
+        ),
+      ].map(async (instance) => {
+        await instance.ready;
+        return instance;
+      }),
+    );
+    const prompts = await Promise.all(
+      capabilities.prompts.map(async (remotePrompt) => {
+        const instance = createRemotePromptInstance(
+          remotePrompt,
+          this.mcpClient,
+          this.id,
+          this.scopeProviders,
+          this.appOwner,
+          namespace,
+        );
+        await instance.ready;
+        return instance;
+      }),
+    );
 
-    // Register resources using standard ResourceInstance with dynamic context class
-    for (const remoteResource of capabilities.resources) {
-      const resourceInstance = createRemoteResourceInstance(
-        remoteResource,
-        this.mcpClient,
-        this.id,
-        this.scopeProviders,
-        this.appOwner,
-        namespace,
-      );
-      await resourceInstance.ready;
-      this._resources.registerResourceInstance(resourceInstance);
-    }
+    const previous = this.registeredProxies;
+    for (const token of previous.tools) this._tools.unregisterToolInstance(token);
+    for (const token of previous.resources) this._resources.unregisterResourceInstance(token);
+    for (const token of previous.prompts) this._prompts.unregisterPromptInstance(token);
 
-    // Register resource templates using standard ResourceInstance
-    for (const remoteTemplate of capabilities.resourceTemplates) {
-      const templateInstance = createRemoteResourceTemplateInstance(
-        remoteTemplate,
-        this.mcpClient,
-        this.id,
-        this.scopeProviders,
-        this.appOwner,
-        namespace,
-      );
-      await templateInstance.ready;
-      this._resources.registerResourceInstance(templateInstance);
-    }
+    for (const instance of tools) this._tools.registerToolInstance(instance);
+    for (const instance of resources) this._resources.registerResourceInstance(instance);
+    for (const instance of prompts) this._prompts.registerPromptInstance(instance);
 
-    // Register prompts using standard PromptInstance with dynamic context class
-    for (const remotePrompt of capabilities.prompts) {
-      const promptInstance = createRemotePromptInstance(
-        remotePrompt,
-        this.mcpClient,
-        this.id,
-        this.scopeProviders,
-        this.appOwner,
-        namespace,
-      );
-      await promptInstance.ready;
-      this._prompts.registerPromptInstance(promptInstance);
-    }
+    this.registeredProxies = {
+      tools: tools.map((instance) => instance.record.provide),
+      resources: resources.map((instance) => instance.record.provide),
+      prompts: prompts.map((instance) => instance.record.provide),
+    };
 
     logger.info(
       `Remote app ${this.id} capabilities loaded: ${capabilities.tools.length} tools, ` +

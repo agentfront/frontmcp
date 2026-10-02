@@ -138,7 +138,7 @@ export default class Server {}
 | `namespace`        | `string`                       | Namespace prefix for tools, resources, and prompts        |
 | `description`      | `string`                       | Human-readable description                                |
 | `standalone`       | `boolean \| 'includeInParent'` | Scope isolation mode (default: `false`)                   |
-| `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback                   |
+| `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback, MCP revision     |
 | `remoteAuth`       | `RemoteAuthConfig`             | Auth config: `'static'`, `'forward'`, or `'oauth'`        |
 | `refreshInterval`  | `number`                       | Interval (ms) to refresh capabilities from remote         |
 | `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities (default: 60000)         |
@@ -146,13 +146,16 @@ export default class Server {}
 
 `RemoteTransportOptions` fields:
 
-| Field           | Type                     | Default | Description                              |
-| --------------- | ------------------------ | ------- | ---------------------------------------- |
-| `timeout`       | `number`                 | `30000` | Request timeout in ms                    |
-| `retryAttempts` | `number`                 | `3`     | Retry attempts for failed requests       |
-| `retryDelayMs`  | `number`                 | `1000`  | Delay between retries in ms              |
-| `fallbackToSSE` | `boolean`                | `true`  | Fallback to SSE if Streamable HTTP fails |
-| `headers`       | `Record<string, string>` | -       | Additional headers for all requests      |
+| Field             | Type                                  | Default    | Description                                                                                                              |
+| ----------------- | ------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `timeout`         | `number`                              | `30000`    | Request timeout in ms                                                                                                    |
+| `retryAttempts`   | `number`                              | `3`        | Retry attempts for failed requests                                                                                       |
+| `retryDelayMs`    | `number`                              | `1000`     | Delay between retries in ms                                                                                              |
+| `fallbackToSSE`   | `boolean`                             | `true`     | Fallback to SSE if Streamable HTTP fails                                                                                 |
+| `headers`         | `Record<string, string>`              | -          | Additional headers for all requests                                                                                      |
+| `protocolVersion` | `'legacy' \| '2026-07-28' \| 'auto'` | `'legacy'` | MCP revision: session + `initialize`, the stateless 2026-07-28 client (URL remotes only), or probe `server/discover` first |
+
+Each remote tool, resource, resource template and prompt is listed once; when `cacheTTL` expires the gateway re-reads the remote's lists and replaces what it proxied before (dropped entries disappear, nothing is duplicated).
 
 `RemoteAuthConfig` modes:
 

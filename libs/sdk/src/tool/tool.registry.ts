@@ -63,10 +63,19 @@ export default class ToolRegistry extends RegistryAbstract<
   private version = 0;
   private emitter = new ToolEmitter();
 
-  constructor(providers: ProviderRegistry, list: ToolType[], owner: EntryOwnerRef) {
+  /**
+   * When false, the registry holds only the entries registered into it and adopts nothing: it
+   * does not pull in the apps or the other registries visible on `providers`. A remote app's
+   * registries are built on the scope's providers, so adopting would copy every other remote
+   * app's tools into them, and the scope would then list those tools twice.
+   */
+  private readonly adopt: boolean;
+
+  constructor(providers: ProviderRegistry, list: ToolType[], owner: EntryOwnerRef, options: { adopt?: boolean } = {}) {
     // disable auto so subclass fields initialize first
     super('ToolRegistry', providers, list, false);
     this.owner = owner;
+    this.adopt = options.adopt ?? true;
 
     // now it’s safe to run the lifecycle
     this.buildGraph();
@@ -122,13 +131,18 @@ export default class ToolRegistry extends RegistryAbstract<
       this.localRows.push(row);
     }
 
-    const childAppRegistries = this.providers.getRegistries('AppRegistry');
+    const childAppRegistries = this.adopt ? this.providers.getRegistries('AppRegistry') : [];
     const scope = this.providers.getActiveScope();
+    // A remote app builds its registries on the scope's providers, so they also
+    // show up in the generic child-registry pass below. They are adopted here
+    // already; adopting them twice listed every remote entry twice.
+    const remoteAppRegistries = new Set<unknown>();
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
         if (app.isRemote) {
           // Remote apps: adopt tools directly from the app's tools registry
+          remoteAppRegistries.add(app.tools);
           this.adoptToolsFromRemoteApp(app, scope);
         } else {
           // Local apps: adopt from child ToolRegistry instances
@@ -137,9 +151,9 @@ export default class ToolRegistry extends RegistryAbstract<
       }
     });
 
-    const childToolRegistries = this.providers.getRegistries('ToolRegistry');
+    const childToolRegistries = this.adopt ? this.providers.getRegistries('ToolRegistry') : [];
     childToolRegistries
-      .filter((t) => t != this)
+      .filter((t) => t != this && !remoteAppRegistries.has(t))
       .forEach((toolRegistry) => {
         this.adoptFromChild(toolRegistry as ToolRegistry, toolRegistry.owner);
       });

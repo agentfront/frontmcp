@@ -237,6 +237,19 @@ export interface RemoteTransportOptions {
    * Additional headers to include in all requests.
    */
   headers?: Record<string, string>;
+
+  /**
+   * Which MCP revision to speak to the remote server.
+   *
+   * - omitted / `'legacy'` — the session + `initialize` transports.
+   * - `'2026-07-28'` — the stateless revision, through FrontMCP's own client.
+   *   Requires `urlType: 'url'`.
+   * - `'auto'` — probe `server/discover` first and fall back to the session
+   *   transports when the remote does not answer it.
+   *
+   * @default 'legacy'
+   */
+  protocolVersion?: 'legacy' | '2026-07-28' | 'auto';
 }
 
 /**
@@ -451,7 +464,8 @@ const remoteTransportOptionsSchema = z.object({
   retryDelayMs: z.number().optional(),
   fallbackToSSE: z.boolean().optional(),
   headers: z.record(z.string(), z.string()).optional(),
-});
+  protocolVersion: z.enum(['legacy', '2026-07-28', 'auto']).optional(),
+} satisfies RawZodShape<RemoteTransportOptions>);
 
 const remoteStaticCredentialsSchema = z.object({
   type: z.enum(['bearer', 'basic', 'apiKey']),
