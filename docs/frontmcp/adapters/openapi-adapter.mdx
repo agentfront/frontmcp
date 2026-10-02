@@ -1293,6 +1293,24 @@ Creates a new OpenAPI adapter instance.
 
 **Returns:** Adapter instance ready for use in `@App({ adapters: [...] })`
 
+### OpenapiAdapter.init({ name, inject, useFactory })
+
+Builds the options at startup from injected providers. `useFactory` returns `OpenApiAdapterOptions` (or a promise of them), and the adapter is built from them under the `name` given to `init()`:
+
+```ts
+OpenapiAdapter.init({
+  name: 'billing',
+  inject: () => [BillingConfig] as const,
+  useFactory: (config: BillingConfig) => ({
+    name: 'billing',
+    url: config.specUrl,
+    baseUrl: config.baseUrl,
+  }),
+});
+```
+
+Until 1.8.7 this form failed startup with `Cannot read properties of undefined (reading 'name')`, and a second, unhandled rejection (`reading 'description'`) could end a Node process that had no `unhandledRejection` handler.
+
 ### Security Types
 
 ```ts

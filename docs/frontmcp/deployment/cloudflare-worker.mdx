@@ -148,7 +148,7 @@ Worker bindings arrive as an argument to `fetch`, not as environment variables. 
 const sid = process.env.TWILIO_ACCOUNT_SID; // set via `wrangler secret put`
 ```
 
-Non-string bindings (KV, D1, R2, Durable Objects) are objects and stay on `env`, which the entry forwards to the handler. Inside a tool, resource, prompt or agent, read them with `this.workerEnv`:
+Non-string bindings (KV, D1, R2, Durable Objects) are objects and stay on `env`, which the entry forwards to the handler. Inside a tool, resource, prompt, agent or job, read them with `this.workerEnv`:
 
 ```ts
 @Tool({ name: 'cache_get' })
@@ -160,7 +160,9 @@ class CacheGet extends ToolContext {
 }
 ```
 
-`workerEnv` is the Worker `env` of the request being served (read-only), and `undefined` on Node, stdio and other non-Worker runtimes.
+`workerEnv` is the Worker `env` of the request being served (read-only), string bindings included, and `undefined` where the request carries no `env`: Node/Express, stdio, and `create()`/`connect()` direct servers. A job run by `execute_job` reads the `env` of the request that ran it. Up to 1.8.7 a prompt had no `workerEnv` and a job's read `undefined`.
+
+Copying string bindings into `process.env` is the generated entry's doing, not the SDK's: the SDK never writes `process.env`, so an entry you write yourself around `createWebFetchHandler` or `getServerlessHandlerAsync()` leaves it as it is (read `this.workerEnv`, or copy the bindings in your entry), and the opt-out flag below keeps working.
 
 `NODE_ENV` is read live, so a `NODE_ENV = "production"` entry in `wrangler.toml` `[vars]` takes effect for the runtime context even though it only reaches `process.env` on the first request.
 

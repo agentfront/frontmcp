@@ -10,9 +10,17 @@ import {
   pluginMetadataFromOptions,
 } from './dynamic.utils';
 
+/**
+ * `init({ providers })` adds providers to the plugin, unless the plugin has an option of its own
+ * named `providers`: then the key is that option (#678).
+ */
+type ExtraProvidersOption<TInput> = 'providers' extends keyof TInput
+  ? unknown
+  : { providers?: readonly ProviderType[] };
+
 // InitOptions accepts input type (what users provide to init())
 type InitOptions<TInput> =
-  | ((TInput & { useFactory?: never; inject?: never }) & { providers?: readonly ProviderType[] })
+  | (TInput & { useFactory?: never; inject?: never } & ExtraProvidersOption<TInput>)
   | {
       inject: () => readonly Reference<any>[];
       useFactory: (...args: any[]) => TInput;
@@ -95,7 +103,10 @@ export abstract class DynamicPlugin<TOptions extends object, TInput extends obje
       TThis['prototype'] extends { __options_input_brand?: infer I } ? I : never
     > = {} as InitOptions<TThis['prototype'] extends { __options_input_brand?: infer I } ? I : never>,
   ): PluginReturn<TThis['prototype'] extends { __options_brand?: infer O } ? O : never> {
-    const extraProviders = (options as any).providers as readonly ProviderType[] | undefined;
+    // `providers` is a list of extra providers only when it is one; any other value under that name is
+    // the plugin's own option (`{ providers: { a: 1 } }`) and reaches the instance, not the registry (#678).
+    const providersOption: unknown = (options as { providers?: unknown }).providers;
+    const extraProviders = Array.isArray(providersOption) ? (providersOption as readonly ProviderType[]) : [];
     const typedOptions = options as any;
 
     if ('useFactory' in options) {
@@ -104,12 +115,12 @@ export abstract class DynamicPlugin<TOptions extends object, TInput extends obje
         provide: this,
         inject: options.inject as () => Reference<any>[],
         useFactory: options.useFactory as any,
-        providers: dedupePluginProviders(extraProviders ?? []),
+        providers: dedupePluginProviders(extraProviders),
       };
     }
 
     const dyn = collectDynamicProviders(this, typedOptions);
-    const mergedProviders = dedupePluginProviders([...(dyn ?? []), ...(extraProviders ?? [])]);
+    const mergedProviders = dedupePluginProviders([...(dyn ?? []), ...extraProviders]);
     const dynamicTools = collectDynamicTools(this, typedOptions);
     const instance = new this(options);
     initOptionsByInstance.set(instance, options);

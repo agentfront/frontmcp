@@ -349,6 +349,7 @@ clear the legacy prefixes manually if you want the storage back.
 
 `tools.prefix` renames them (`prefix: 'memory_'` gives `memory_recall`, ...; each description names the prefixed siblings) and
 `tools.allowedScopes` rejects any other `scope` (including the default `session` when a call omits it) with a public `REMEMBER_SCOPE_NOT_ALLOWED` error that lists the allowed scopes. With `enabled` unset or `false` none is registered.
+With `RememberPlugin.init({ inject, useFactory })`, `tools` is read from the options the factory returns, at startup.
 
 All four take an optional `scope` (default `session`) and describe it to the model the same way:
 `session` is this session, or without one (stateless HTTP, MCP 2026-07-28) the signed-in caller
@@ -719,7 +720,8 @@ That matters because a listing is not an access control. Clients cache listings 
 resource URIs and prompt names from earlier sessions, so anything gated only at list time
 stays reachable by name. The refusal is a public `FeatureFlagDisabledError` (`FEATURE_FLAG_DISABLED`, 403)
 that names the capability and the flag. `FeatureFlagPlugin.init()` with no (or an unknown) `adapter` throws a
-`FeatureFlagConfigurationError` at startup. If the adapter is unavailable the gate uses the ref's
+`FeatureFlagConfigurationError` at startup, and so does `adapter: 'custom'` without an `adapterInstance` that has
+`isEnabled()`, `getVariant()` and `evaluateFlags()` (it used to start and answer every request with a 500). If the adapter is unavailable the gate uses the ref's
 `defaultValue`, and a bare string ref (no default) fails closed.
 
 ### Installation
@@ -797,7 +799,7 @@ class CustomFlagServer {}
 - `splitio` -- Split.io integration. Requires `@splitsoftware/splitio` package.
 - `launchdarkly` -- LaunchDarkly integration. Requires `launchdarkly-node-server-sdk` package.
 - `unleash` -- Unleash integration. Requires `unleash-client` package.
-- `custom` -- Provide your own adapter instance implementing the `FeatureFlagAdapter` interface.
+- `custom` -- Provide your own adapter instance (`adapterInstance`, required) implementing the `FeatureFlagAdapter` interface.
 
 ### Using `this.featureFlags` in Tools
 

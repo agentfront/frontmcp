@@ -1,4 +1,4 @@
-import { type Ctor, type Reference } from '@frontmcp/di';
+import { tokenName, type Ctor, type Reference } from '@frontmcp/di';
 
 import {
   AdapterEntry,
@@ -9,7 +9,8 @@ import {
   type EntryOwnerRef,
   type FrontMcpAdapterResponse,
 } from '../common';
-import { InvalidRegistryKindError, RegistryNotInitializedError } from '../errors';
+import { isAdapterInstance } from '../common/dynamic/dynamic.utils';
+import { InvalidEntityError, InvalidRegistryKindError, RegistryNotInitializedError } from '../errors';
 import PromptRegistry from '../prompt/prompt.registry';
 import type ProviderRegistry from '../provider/provider.registry';
 import ResourceRegistry from '../resource/resource.registry';
@@ -71,11 +72,22 @@ export class AdapterInstance extends AdapterEntry {
       const deps = [...rec.inject()];
       const args: any[] = [];
       for (const d of deps) args.push(await this.globalProviders.resolveBootstrapDep(d));
-      adapter = rec.useFactory(...args);
+      adapter = await rec.useFactory(...args);
     } else if (rec.kind === AdapterKind.VALUE) {
       adapter = rec.useValue;
     } else {
       throw new InvalidRegistryKindError('adapter', (rec as { kind?: string }).kind);
+    }
+
+    if (!isAdapterInstance(adapter)) {
+      // A factory that returns options instead of an adapter (a hand-written `{ provide, useFactory }`)
+      // fails here, with an error that says so, instead of on the first property read (#678).
+      throw new InvalidEntityError(
+        'adapter',
+        rec.metadata?.name ?? tokenName(rec.provide),
+        'an adapter: an object with `options.name` and `fetch()`. ' +
+          "To build one from options, use SomeAdapter.init({ name, inject, useFactory }) and return the adapter's options from useFactory",
+      );
     }
 
     this.logger?.debug(`Adapter constructed (kind=${rec.kind})`);

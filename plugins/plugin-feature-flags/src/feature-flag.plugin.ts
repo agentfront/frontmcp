@@ -42,6 +42,31 @@ const FilterSkillsHook = FlowHooksOf('skills:filter');
 
 const SUPPORTED_ADAPTERS: readonly string[] = ['static', 'splitio', 'launchdarkly', 'unleash', 'custom'];
 
+/** The adapter methods the plugin and `this.featureFlags` call on every request. */
+const REQUIRED_ADAPTER_METHODS = ['isEnabled', 'getVariant', 'evaluateFlags'] as const;
+
+/**
+ * `adapter: 'custom'` serves flags from `adapterInstance`. Without a usable one the server started
+ * and answered every request with 500 (#678); it fails at `init()` (or, for `init({ useFactory })`,
+ * at startup) instead, naming the option.
+ */
+function assertCustomAdapter(adapterInstance: unknown): asserts adapterInstance is FeatureFlagAdapter {
+  let problem: string | undefined;
+  if (typeof adapterInstance !== 'object' || adapterInstance === null) {
+    problem = `got ${adapterInstance === undefined ? 'undefined' : JSON.stringify(adapterInstance)}`;
+  } else {
+    const instance = adapterInstance as Record<string, unknown>;
+    const missing = REQUIRED_ADAPTER_METHODS.filter((method) => typeof instance[method] !== 'function');
+    if (missing.length > 0) problem = `missing ${missing.map((m) => `${m}()`).join(', ')}`;
+  }
+  if (problem === undefined) return;
+
+  throw new FeatureFlagConfigurationError(
+    "FeatureFlagPlugin.init({ adapter: 'custom' }) requires an `adapterInstance` option: an object " +
+      `implementing FeatureFlagAdapter (${REQUIRED_ADAPTER_METHODS.map((m) => `${m}()`).join(', ')}); ${problem}.`,
+  );
+}
+
 /**
  * FeatureFlagPlugin - Dynamic capability gating for FrontMCP.
  *
@@ -152,6 +177,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
         break;
 
       case 'custom':
+        assertCustomAdapter(options.adapterInstance);
         providers.push({
           name: 'feature-flags:adapter:custom',
           provide: FeatureFlagAdapterToken,

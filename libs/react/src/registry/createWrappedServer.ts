@@ -6,7 +6,13 @@
  * listing and calls go straight to the server's flows. All other methods delegate directly.
  */
 
-import type { DirectCallOptions, DirectClient, DirectMcpServer, ListResourcesResult } from '@frontmcp/sdk';
+import type {
+  DirectCallOptions,
+  DirectClient,
+  DirectListOptions,
+  DirectMcpServer,
+  ListResourcesResult,
+} from '@frontmcp/sdk';
 
 import type { ResourceInfo } from '../types';
 import type { DynamicRegistry } from './DynamicRegistry';
@@ -70,7 +76,7 @@ export function createWrappedServer(base: DirectMcpServer, dynamicRegistry: Dyna
       return base.ready;
     },
 
-    async listTools(options?: DirectCallOptions) {
+    async listTools(options?: DirectListOptions) {
       return base.listTools(options);
     },
 
@@ -82,7 +88,7 @@ export function createWrappedServer(base: DirectMcpServer, dynamicRegistry: Dyna
       return base.registerTool(definition);
     },
 
-    async listResources(options?: DirectCallOptions): Promise<ListResourcesResult> {
+    async listResources(options?: DirectListOptions): Promise<ListResourcesResult> {
       const baseResult = await base.listResources(options);
       const dynamicResources = dynamicRegistry.getResources();
 
@@ -92,10 +98,12 @@ export function createWrappedServer(base: DirectMcpServer, dynamicRegistry: Dyna
       const baseResources = ((baseResult as { resources?: ResourceInfo[] }).resources ?? []).filter(
         (r) => !dynamicUris.has(r.uri),
       );
+      // Paging through the list, the dynamic resources join the first page only, so each is listed once.
+      const laterPage = options?.cursor !== undefined;
 
       const mergedResources = [
         ...baseResources,
-        ...dynamicResources.map((r) => ({
+        ...(laterPage ? [] : dynamicResources).map((r) => ({
           uri: r.uri,
           name: r.name ?? r.uri,
           description: r.description,
@@ -106,7 +114,7 @@ export function createWrappedServer(base: DirectMcpServer, dynamicRegistry: Dyna
       return { ...baseResult, resources: mergedResources } as ListResourcesResult;
     },
 
-    async listResourceTemplates(options?: DirectCallOptions) {
+    async listResourceTemplates(options?: DirectListOptions) {
       return base.listResourceTemplates(options);
     },
 
@@ -118,7 +126,7 @@ export function createWrappedServer(base: DirectMcpServer, dynamicRegistry: Dyna
       return base.readResource(uri, options);
     },
 
-    async listPrompts(options?: DirectCallOptions) {
+    async listPrompts(options?: DirectListOptions) {
       return base.listPrompts(options);
     },
 

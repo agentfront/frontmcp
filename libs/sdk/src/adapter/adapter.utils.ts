@@ -38,7 +38,7 @@ export function normalizeAdapter(item: AdapterType): AdapterRecord {
         kind: AdapterKind.CLASS,
         provide,
         useClass,
-        metadata: (item as any).metadata,
+        metadata: (item as any).metadata ?? collectAdapterMetadata(useClass),
       };
     }
 
@@ -52,7 +52,8 @@ export function normalizeAdapter(item: AdapterType): AdapterRecord {
         provide,
         inject: inj,
         useFactory,
-        metadata: (item as any).metadata,
+        // `SomeAdapter.init({ name, inject, useFactory })` records carry the adapter's name, not metadata (#678).
+        metadata: (item as any).metadata ?? factoryAdapterMetadata(item as { name?: unknown }, provide),
       };
     }
 
@@ -69,6 +70,12 @@ export function normalizeAdapter(item: AdapterType): AdapterRecord {
 
   const name = (item as any)?.name ?? String(item);
   throw new InvalidEntityError('adapter', name, 'a class or an adapter object');
+}
+
+/** Metadata for a factory record that names no metadata of its own: its `name`, else its token's name. */
+function factoryAdapterMetadata(item: { name?: unknown; description?: unknown }, provide: Token): AdapterMetadata {
+  const name = typeof item.name === 'string' && item.name ? item.name : tokenName(provide);
+  return typeof item.description === 'string' ? { name, description: item.description } : { name };
 }
 
 /**

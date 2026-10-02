@@ -7,6 +7,7 @@ import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/ut
 
 import { ConfigService } from '../../builtin/config/providers/config.service';
 import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../context';
+import { workerEnvOf } from '../../context/frontmcp-context-storage';
 import { RequestContextNotAvailableError } from '../../errors/mcp.error';
 import { type CallSurface } from '../availability';
 import { type ScopeEntry } from '../entries';
@@ -325,9 +326,14 @@ export abstract class ExecutionContextBase<Out = unknown> {
   /**
    * The hosting platform's bindings for the current request — on a Cloudflare Worker, the `env`
    * object holding KV namespaces, D1 databases, R2 buckets, Durable Object namespaces, `[vars]`
-   * and secrets. `undefined` on Node/Express, where no such object exists.
+   * and secrets. `undefined` where the request carries no such object: Node/Express, stdio, and
+   * `create()`/`connect()` direct servers.
    *
-   * Only string bindings are mirrored into `process.env`; use this for the rest.
+   * The SDK never writes `process.env`. The Worker entry that `frontmcp build --target cloudflare`
+   * generates copies string bindings into it on the first request (unless the worker sets
+   * `nodejs_compat_do_not_populate_process_env`); an entry you write yourself around
+   * `createWebFetchHandler` or `getServerlessHandlerAsync()` does not. Every binding, string or
+   * not, is here.
    *
    * @example
    * ```typescript
@@ -335,8 +341,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * ```
    */
   get workerEnv(): Readonly<Record<string, unknown>> | undefined {
-    const env = this.tryGetContext()?.platformEnv;
-    return env !== null && typeof env === 'object' ? (env as Readonly<Record<string, unknown>>) : undefined;
+    return workerEnvOf(this.tryGetContext());
   }
 
   // ---- Runtime context helpers ----
