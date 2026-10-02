@@ -10,7 +10,7 @@ import { type Token } from '@frontmcp/di';
 import { awaitOutsideRequest } from '@frontmcp/utils';
 
 import { ToolKind, type AppEntry, type ToolFunctionTokenRecord, type ToolMetadata } from '../common';
-import { EntryValidationError, ToolNameConflictError } from '../errors';
+import { EntryValidationError, InternalMcpError, ToolNameConflictError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { type Scope } from '../scope/scope.instance';
 import { ToolInstance } from '../tool/tool.instance';
@@ -22,6 +22,13 @@ const MAX_TOOL_NAME_LENGTH = 64;
 /** What the tool context hands a FUNCTION tool's `provide`. */
 interface RuntimeToolCallContext {
   readonly signal?: AbortSignal;
+}
+
+/** Refuse to add a tool to a scope that is being (or has been) disposed. */
+function assertScopeNotDisposed(scope: Scope, name: string): void {
+  if (scope.isDisposed) {
+    throw new InternalMcpError(`runtime tool "${name}" was not registered: the server has been disposed`);
+  }
 }
 
 /**
@@ -57,6 +64,7 @@ export async function registerRuntimeTool(scope: Scope, definition: RuntimeToolD
   if (typeof definition.execute !== 'function') {
     throw new EntryValidationError('Tool', `runtime tool "${name}" has no execute function`);
   }
+  assertScopeNotDisposed(scope, name);
   const app = appForRuntimeTool(scope, name, definition.app);
   if (scope.tools.listAllInstances().some((tool) => tool.name === name)) {
     throw new ToolNameConflictError(name);
@@ -87,7 +95,9 @@ export async function registerRuntimeTool(scope: Scope, definition: RuntimeToolD
   const instance = new ToolInstance(record, app.providers as unknown as ProviderRegistry, appTools.owner);
   await instance.ready;
 
-  // Checked again: another registration may have taken the name while this one initialized
+  // Checked again: the server may have been disposed, or another registration may have taken the
+  // name, while this one initialized
+  assertScopeNotDisposed(scope, name);
   if (scope.tools.listAllInstances().some((tool) => tool.name === name)) {
     throw new ToolNameConflictError(name);
   }

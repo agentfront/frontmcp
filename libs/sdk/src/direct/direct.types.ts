@@ -163,6 +163,7 @@ export interface DirectMcpServer {
    * @throws ToolNameConflictError if a tool with that name is already registered
    * @throws EntryValidationError if the name is empty or longer than 64 characters, or the app to
    *   join is unknown (or ambiguous: a server with several apps needs `definition.app`)
+   * @throws InternalMcpError if the server is disposed, or is disposed before the tool is added
    *
    * @example
    * ```typescript

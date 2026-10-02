@@ -4,9 +4,11 @@ import { App, LogLevel, Plugin, Tool, ToolContext, type FlowCtxOf } from '../../
 import { EntryValidationError, InternalMcpError, ToolNameConflictError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { ToolHook } from '../../index';
+import { type Scope } from '../../scope/scope.instance';
 import { type DirectClient } from '../client.types';
 import { create } from '../create';
 import { type DirectMcpServer, type RuntimeToolDefinition } from '../direct.types';
+import { registerRuntimeTool } from '../runtime-tools';
 
 /**
  * `server.registerTool()` adds a tool to a running server, for code outside it (a React component,
@@ -198,6 +200,13 @@ describe('DirectMcpServer.registerTool()', () => {
     await expect(server.registerTool(echoTool())).rejects.toThrow(InternalMcpError);
   });
 
+  it('refuses a registration the server is disposed during', async () => {
+    const registering = server.registerTool(echoTool());
+    await server.dispose();
+
+    await expect(registering).rejects.toThrow(InternalMcpError);
+  });
+
   describe('a connected client', () => {
     let client: DirectClient;
     const notifications: string[] = [];
@@ -285,5 +294,26 @@ describe('DirectMcpServer.registerTool() on a server with several apps', () => {
 
   it('refuses an app that is not there', async () => {
     await expect(server.registerTool(echoTool({ app: 'shipping' }))).rejects.toThrow(EntryValidationError);
+  });
+});
+
+describe('registerRuntimeTool() on a scope that is disposed meanwhile', () => {
+  @App({ id: 'only', name: 'Only', tools: [StaticTool] })
+  class OnlyApp {}
+
+  it('leaves the tool out of the registry and rejects', async () => {
+    const [scope] = (
+      await FrontMcpInstance.createForGraph({
+        info: { name: 'runtime-tools-dispose', version: '1.0.0' },
+        apps: [OnlyApp],
+        logging: { level: LogLevel.Off },
+      })
+    ).getScopes() as Scope[];
+
+    const registering = registerRuntimeTool(scope, echoTool());
+    await scope.dispose();
+
+    await expect(registering).rejects.toThrow(InternalMcpError);
+    expect(scope.tools.listAllInstances().map((tool) => tool.name)).not.toContain('echo');
   });
 });

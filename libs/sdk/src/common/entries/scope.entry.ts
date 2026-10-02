@@ -130,6 +130,15 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   private disposeEmitted = false;
 
   /**
+   * Whether disposal has begun. Code that adds to the scope after an `await` checks it, so nothing is
+   * added to a scope disposed in the meantime.
+   * @internal
+   */
+  get isDisposed(): boolean {
+    return this.disposeEmitted;
+  }
+
+  /**
    * Register a callback to run when the scope is disposed: `Scope.dispose()`, or `dispose()` on the
    * `DirectMcpServer` that `create()` returned. Plugins use it to release what they hold outside the
    * scope (timers, subscriptions, browser registrations). Unlike onServerStarted(), it also fires in
