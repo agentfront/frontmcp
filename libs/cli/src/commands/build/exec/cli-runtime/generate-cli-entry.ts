@@ -9,6 +9,7 @@ import { type CliConfig, type OAuthConfig } from '../config';
 import { EXTRACT_PUBLIC_MESSAGE_SNIPPET } from './extract-public-message.snippet';
 import { type ExtractedSchema, type ExtractedTool, type ExtractedPrompt, type ExtractedResourceTemplate, type ExtractedCapabilities, type ExtractedJob, SYSTEM_TOOL_NAMES } from './schema-extractor';
 import { schemaToCommander, generateOptionCode, camelToKebab } from './schema-to-commander';
+import { envDefaultStatements } from '../../../../config/deployment-env';
 
 export const RESERVED_COMMANDS = new Set([
   'resource', 'template', 'prompt', 'subscribe',
@@ -33,6 +34,8 @@ export interface CliEntryOptions {
   oauthConfig?: OAuthConfig;
   /** When true, generate static requires that esbuild can resolve (for SEA builds). */
   selfContained?: boolean;
+  /** `deployments[].env` of the cli target: defaults set before anything runs (#680). */
+  env?: Record<string, string>;
 }
 
 /**
@@ -72,7 +75,7 @@ export function generateCliEntry(options: CliEntryOptions): string {
   const selfContained = !!options.selfContained;
 
   const sections: string[] = [
-    generateHeader(appName, appVersion, description, serverBundleFilename, outputDefault, authRequired, capabilities, oauthConfig, selfContained),
+    generateHeader(appName, appVersion, description, serverBundleFilename, outputDefault, authRequired, capabilities, oauthConfig, selfContained, options.env),
     generateToolCommands(filteredTools, appName),
     generateResourceCommands(schema),
     generateTemplateCommands(schema.resourceTemplates),
@@ -106,6 +109,7 @@ function generateHeader(
   capabilities: ExtractedCapabilities,
   oauthConfig?: OAuthConfig,
   selfContained?: boolean,
+  env?: Record<string, string>,
 ): string {
   const hasOAuth = !!oauthConfig;
 
@@ -128,7 +132,9 @@ function generateHeader(
   groupEntries.push(`      'System': []`);
 
   return `'use strict';
-${selfContained ? `
+// Build target for \`availableWhen: { target: ['cli'] }\` — set before the server bundle loads (#680).
+globalThis.FRONTMCP_BUILD_TARGET = globalThis.FRONTMCP_BUILD_TARGET || 'cli';
+${envDefaultStatements(env ?? {})}${selfContained ? `
 // SEA daemon mode: when spawned by 'daemon start', run the server directly
 // using the inlined (bundled) server code — no external requires needed.
 if (process.env.__FRONTMCP_DAEMON_MODE === '1') {

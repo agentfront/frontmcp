@@ -177,7 +177,7 @@ If Redis cannot be reached while the server starts, session persistence is disab
 
 FrontMCP sets two identifiers on both Streamable HTTP and SSE responses for load balancer routing:
 
-- **Cookie**: `__frontmcp_node` --- set during the initialize handshake
+- **Cookie**: `__frontmcp_node` --- set during the initialize handshake. Its name, `Domain` and `SameSite` come from the deployment's [`server.cookies`](/frontmcp/deployment/frontmcp-config#cookie-options) (`affinity`, `domain`, `sameSite`) — keep the load balancer's cookie name in step with `affinity`
 - **Header**: `X-FrontMCP-Machine-Id` --- set on every response in distributed mode (`FRONTMCP_DEPLOYMENT_MODE=distributed`, which `frontmcp build --target distributed` sets): initialize, message POSTs, DELETE, stateless and MCP 2026-07-28 requests, SSE, `/healthz`, `/readyz`, `/metrics` and 404s. The host adapters (Express and the web-fetch handler) add it where they add the security headers, so no response path misses it; the streamable-HTTP and stateless flows also set it in a hookable `applyNodeHeaders` stage, so plugins can observe or wrap it. Standalone and serverless instances do not send it.
 
 ### NGINX Sticky Sessions

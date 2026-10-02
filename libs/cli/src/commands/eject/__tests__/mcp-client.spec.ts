@@ -219,3 +219,23 @@ describe('mergeClientConfig (#642)', () => {
     expect(JSON.parse(emitClientSnippet('cursor', config))).toEqual(buildClientPayload('cursor', config));
   });
 });
+
+describe('env.shared / env.ship in stdio snippets (#680)', () => {
+  it('passes env.shared ⊕ env.ship to the spawned server, with the client env winning', () => {
+    const config = baseConfig({
+      env: { shared: { LOG_LEVEL: 'info', API: 'shared' }, ship: { NODE_ENV: 'production', API: 'ship' }, dev: { X: '1' } },
+      clients: { 'claude-desktop': { transport: 'stdio', env: { API: 'client' } } },
+    } as Partial<FrontMcpConfigParsed>);
+    const entry = buildClientPayload('claude-desktop', config).mcpServers['demo'];
+    expect(entry.env).toEqual({ LOG_LEVEL: 'info', NODE_ENV: 'production', API: 'client' });
+  });
+
+  it('adds nothing to an http snippet (the client does not start the server)', () => {
+    const config = baseConfig({
+      env: { ship: { NODE_ENV: 'production' } },
+      clients: { cursor: { transport: 'http', url: 'http://127.0.0.1:3000/mcp' } },
+    } as Partial<FrontMcpConfigParsed>);
+    expect(buildClientPayload('cursor', config).mcpServers['demo'].env).toBeUndefined();
+  });
+});
+

@@ -148,7 +148,7 @@ those flags select skills in bulk.
 
 | Flag                        | Description                                                                                            | Default  |
 | --------------------------- | ------------------------------------------------------------------------------------------------------ | -------- |
-| `-p, --provider <provider>` | Target provider: `claude` or `codex`                                                                   | `claude` |
+| `-p, --provider <provider>` | Target provider: `claude` or `codex`                                                                   | `skills.provider` in `frontmcp.config`, else `claude` |
 | `-d, --dir <directory>`     | Custom install directory (overrides provider default)                                                  | —        |
 | `-a, --all`                 | Install **every** skill in the catalog (or every `@Skill` entry when `--from-*` is set)                | `false`  |
 | `-t, --tag <tag>`           | Install every skill matching a tag (catalog only)                                                      | —        |
@@ -172,6 +172,19 @@ frontmcp skills install --from-entry src/main.ts --all -p claude
 frontmcp skills install --from-package my-frontmcp-server my-skill -p claude
 ```
 
+With no name and no `--all` / `--tag` / `--category` / `--from-*`, the command installs the
+`skills.install` list of the nearest `frontmcp.config`, or else the catalog skills of `skills.bundle`
+(`'none'` installs nothing). Explicit flags always win.
+
+```ts
+// frontmcp.config.ts
+export default defineConfig({
+  name: 'my-server',
+  deployments: [{ target: 'node' }],
+  skills: { provider: 'claude', install: ['create-tool', 'setup-testing'], exportTarget: 'cursor' },
+});
+```
+
 ### `frontmcp skills export`
 
 Convert one or many catalog skills into a rule file for IDEs that
@@ -180,7 +193,7 @@ emitted file lives in the current directory by default.
 
 | Flag                    | Description                                           | Default  |
 | ----------------------- | ----------------------------------------------------- | -------- |
-| `-t, --target <target>` | Target IDE: `cursor`, `windsurf`, or `copilot`        | `cursor` |
+| `-t, --target <target>` | Target IDE: `cursor`, `windsurf`, or `copilot`        | `skills.exportTarget` in `frontmcp.config`, else `cursor` |
 | `-n, --name <name>`     | Skill name to export (required unless `--all` is set) | —        |
 | `-a, --all`             | Export **every** skill in the catalog                 | `false`  |
 | `-d, --out <directory>` | Output directory                                      | `cwd`    |

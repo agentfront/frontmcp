@@ -84,13 +84,13 @@ Example: `frontmcp dev --port 5000` always wins, regardless of `transport.http.p
 
 | Command                           | Config fields consumed                                                                                               |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `build`                           | `name`, `version`, `entry`, `deployments`, `build`, `nodeVersion`                                                    |
-| `dev`                             | `entry`, `transport.http.port`, `env.shared` ⊕ `env.dev`                                                             |
+| `build`                           | `name`, `version`, `entry`, `deployments` (incl. each target's `server` block, see [Server Configuration](#server-configuration)), `build`, `nodeVersion`, `transport.http.path` |
+| `dev`                             | `entry`, `transport.http.port`, `env.shared` ⊕ `env.dev`, the first deployment's `server.csp` / `server.headers` / `server.http.cors` |
 | `test`                            | `test.timeoutMs`, `test.runInBand`, `test.coverage`, `test.testMatch`, `test.esmPackages`, `env.shared` ⊕ `env.test` |
 | `inspector`                       | `transport.default`, `transport.http.port`, `transport.stdio.command/args`                                           |
-| `pm start` / `socket` / `service` | `name`, `entry`, `transport.http.port`, `transport.http.socketPath`, `env.shared` ⊕ `env.ship`                       |
-| `skills install` / `export`       | `skills.provider`, `skills.bundle`, `skills.install`, `skills.exportTarget`                                          |
-| `eject-mcp-config <client>`       | `clients.<client>`, `name`, `transport`, `env.ship`                                                                  |
+| `pm start` / `socket` / `service` | `env.shared` ⊕ `env.ship` (the config is found from the entry's folder upwards, or `--config`)                       |
+| `skills install` / `export`       | `skills.provider`, `skills.bundle`, `skills.install`, `skills.exportTarget` (see [Skills defaults](#skills-defaults)) |
+| `eject-mcp-config <client>`       | `clients.<client>`, `name`, `transport`, `env.shared` ⊕ `env.ship` (stdio snippets), a single deployment's `server.http.port` |
 
 ## Transport defaults
 
@@ -126,6 +126,27 @@ env: {
 ```
 
 Note: `.env` and `.env.local` (loaded by `dev`) still win over config overlays — file-based env is the deployment escape hatch.
+
+`ship` is the overlay of the shipped server. `frontmcp start` / `socket` (and the services `frontmcp service`
+installs, which run `frontmcp start`) pass `env.shared` ⊕ `env.ship` to the server they spawn, under the real
+environment (OS, CI, `.env`), which wins. `frontmcp eject-mcp-config` writes the same overlay into a stdio
+client's `env`, under that client's own `clients.<client>.env`. `frontmcp build` does not bake `env` into the
+artifact: the deployment's environment is the platform's.
+
+## Skills defaults
+
+```ts
+skills: {
+  provider: 'claude',            // 'claude' | 'codex' — where `skills install` writes
+  install: ['create-tool', 'setup-testing'], // what `frontmcp skills install` installs with no argument
+  bundle: 'recommended',         // 'recommended' | 'minimal' | 'full' | 'none' — used when `install` is not set
+  exportTarget: 'cursor',        // 'cursor' | 'windsurf' | 'copilot' — default of `skills export --target`
+}
+```
+
+`frontmcp skills install` with no skill name, `--all`, `--tag` or `--category` installs `skills.install`, or
+else the catalog skills of `skills.bundle` (`'none'` installs nothing). Explicit flags always win
+(`--provider`, a skill name, `--target` on `export`).
 
 ## Client snippets
 
@@ -174,7 +195,7 @@ Each entry in `deployments` defines a build target with independent settings:
 | `ha`     | HaConfig     | HA settings (distributed target only)                     |
 | `cli`    | CliConfig    | CLI-specific settings (cli target only)                   |
 | `js`     | boolean      | Generate .js bundle instead of native binary (cli target) |
-| `env`    | Record       | Per-target environment variables                          |
+| `env`    | Record       | Per-target environment variables, carried by the artifact as defaults (an env var set at run time wins); `browser` and `sdk` builds are libraries and carry none |
 
 ### MCPB-Only Fields
 
@@ -241,16 +262,53 @@ export default defineConfig({
 });
 ```
 
+### How the settings reach the server
+
+`frontmcp.config` describes a deployment; `@FrontMcp()` configures the server. `frontmcp build` writes each
+target's `server` block into the artifact as environment defaults the server reads when it starts — only
+where the variable is not already set, so an operator's env var wins, and an explicit `@FrontMcp()` value
+wins over both:
+
+| Setting                         | Variable                                                          | Applies to                                                              |
+| ------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `server.http.port`              | `PORT`                                                            | `node`, `distributed` (serverless platforms pick the port; the build warns) |
+| `server.http.socketPath`        | `FRONTMCP_DAEMON_SOCKET` (listen on the socket instead of a port) | `node`, `distributed`                                                   |
+| `server.http.entryPath`         | `FRONTMCP_HTTP_ENTRY_PATH` (wins over `transport.http.path`)      | every server target                                                     |
+| `server.http.cors`              | `FRONTMCP_CORS_ORIGINS` (JSON list), `_CREDENTIALS`, `_MAX_AGE`   | every server target                                                     |
+| `server.cookies`                | `FRONTMCP_AFFINITY_COOKIE`, `_DOMAIN`, `_SAMESITE`                | `distributed` (the only target that sets the affinity cookie)           |
+| `server.csp` / `server.headers` | `FRONTMCP_CSP_*`, `FRONTMCP_HSTS`, …                              | every server target                                                     |
+
+Where they are written: a `node` / `cli` / `mcpb` bundle sets them in a preamble when it is the program
+being run (`node dist/node/<name>.bundle.js`, the runner script, a single executable); `vercel`, `lambda`,
+`cloudflare` and `distributed` set them in the generated setup module that loads before your entry.
+`frontmcp dev` applies the first deployment's `server.csp`, `server.headers` and `server.http.cors` too.
+
+Every artifact also records its target for [`availableWhen: { target }`](/frontmcp/features/environment-awareness)
+(`globalThis.FRONTMCP_BUILD_TARGET`).
+
 ### HTTP Options
 
-| Field             | Type             | Default                   | Description                                                                                                                                                                                                                                                              |
-| ----------------- | ---------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `port`            | number           | 3000                      | HTTP listen port (node / distributed only)                                                                                                                                                                                                                               |
-| `socketPath`      | string           | ---                       | Unix socket path (alternative to port; node / distributed only)                                                                                                                                                                                                          |
-| `entryPath`       | string           | `''`                      | Base path for the MCP endpoint (e.g. `'/mcp'`)                                                                                                                                                                                                                           |
-| `cors`            | object           | ---                       | CORS configuration — `{ origins?, credentials?, maxAge? }`                                                                                                                                                                                                               |
-| `bodyLimit`       | number \| string | `'4mb'`                   | Max body size for `express.json()`. Bytes (number) or body-parser string (`'4mb'`, `'500kb'`, …). Oversized requests get HTTP 413 with a JSON-RPC envelope. See [Transport Security → Request Body Limits](/frontmcp/deployment/transport-security#request-body-limits). |
-| `urlencodedLimit` | number \| string | falls back to `bodyLimit` | Max body size for `application/x-www-form-urlencoded`.                                                                                                                                                                                                                   |
+| Field        | Type   | Default | Description                                                                                         |
+| ------------ | ------ | ------- | --------------------------------------------------------------------------------------------------- |
+| `port`       | number | 3000    | HTTP listen port (node / distributed only); `@FrontMcp({ http: { port } })` wins                    |
+| `socketPath` | string | ---     | Unix socket path (alternative to port; node / distributed only)                                     |
+| `entryPath`  | string | `''`    | Base path for the MCP endpoint (e.g. `'/mcp'`); wins over `transport.http.path` for this deployment |
+| `cors`       | object | ---     | CORS — `{ origins?, credentials?, maxAge? }`. `origins: ['*']` allows any origin; without origins no CORS headers are sent (the server default) |
+
+Request body limits (`bodyLimit`, `urlencodedLimit`) are server options: set them in
+`@FrontMcp({ http: { bodyLimit } })`. See [Transport Security → Request Body Limits](/frontmcp/deployment/transport-security#request-body-limits).
+
+### Cookie Options
+
+The load-balancer affinity cookie a `distributed` deployment sets on the initialize response (see
+[High Availability](/frontmcp/deployment/high-availability#load-balancer-affinity)). Other targets set no
+affinity cookie, so these fields have no effect there.
+
+| Field      | Type                            | Default           | Description                 |
+| ---------- | ------------------------------- | ----------------- | --------------------------- |
+| `affinity` | string                          | `__frontmcp_node` | Cookie name                 |
+| `domain`   | string                          | ---               | `Domain` attribute          |
+| `sameSite` | `'Strict'` \| `'Lax'` \| `'None'` | `'Strict'`        | `SameSite` attribute        |
 
 ### CSP Options
 

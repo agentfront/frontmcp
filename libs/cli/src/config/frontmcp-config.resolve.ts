@@ -102,6 +102,17 @@ function modeToEnvKey(mode: ResolveMode): 'dev' | 'test' | 'ship' | undefined {
 }
 
 /**
+ * The `env` overlay of `mode` alone: `env.shared` ⊕ `env.<mode key>` (later wins),
+ * without the process environment. Callers that spawn a server layer the real
+ * environment on top, so OS / CI / `.env` values keep winning (#680).
+ */
+export function envOverlayFor(config: FrontMcpConfigParsed | undefined, mode: ResolveMode): Record<string, string> {
+  const overlay = config?.env;
+  const modeKey = modeToEnvKey(mode);
+  return { ...(overlay?.shared ?? {}), ...((modeKey && overlay?.[modeKey]) ?? {}) };
+}
+
+/**
  * Resolve the config + env for the current command.
  *
  * Side-effect-free — call sites apply the returned `effectiveEnv` to the
@@ -164,17 +175,13 @@ export async function resolveConfig(options: ResolveConfigOptions): Promise<Reso
   }
 
   // ── Compose effective env ──
-  const overlay = config?.env;
-  const modeKey = modeToEnvKey(options.mode);
-  const fromShared = overlay?.shared ?? {};
-  const fromMode = (modeKey && overlay?.[modeKey]) ?? {};
   // Start from `process.env` so OS / CI / shell env still apply, then layer
   // shared + mode overlays + CLI-supplied env (later wins).
   const effectiveEnv: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
     if (typeof value === 'string') effectiveEnv[key] = value;
   }
-  Object.assign(effectiveEnv, fromShared, fromMode, cliEnv);
+  Object.assign(effectiveEnv, envOverlayFor(config, options.mode), cliEnv);
 
   return { config, configDir, configPath, configSource, effectiveEnv };
 }

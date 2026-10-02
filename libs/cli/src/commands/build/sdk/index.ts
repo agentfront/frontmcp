@@ -4,6 +4,7 @@ import { c } from '../../../core/colors';
 import { ensureDir } from '@frontmcp/utils';
 import { runTsc } from '../../../shared/tsc';
 import { resolveEntry } from '../../../shared/fs';
+import { buildTargetStatement } from '../../../config/deployment-env';
 
 /**
  * Build a direct-client SDK library for Node.js applications.
@@ -43,6 +44,8 @@ export async function buildSdk(opts: ParsedArgs): Promise<void> {
 
   const sharedBuildOptions: import('esbuild').BuildOptions = {
     entryPoints: [entry],
+    // `getBuildTarget()` reports 'sdk' unless the host application set its own target first (#680)
+    banner: { js: buildTargetStatement('sdk') },
     bundle: true,
     platform: 'node',
     target: 'node22',

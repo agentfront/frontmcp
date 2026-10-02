@@ -123,7 +123,13 @@ Build target produced by `frontmcp build --target <x>`. Always `'unknown'` in de
 | `'sdk'`         | `frontmcp build --target sdk`             |
 | `'mcpb'`        | `frontmcp build --target mcpb`            |
 
-Resolution order: `globalThis.FRONTMCP_BUILD_TARGET` (inlined by the adapter) → `process.env.FRONTMCP_BUILD_TARGET` → `'unknown'`.
+Resolution order: `globalThis.FRONTMCP_BUILD_TARGET` → `process.env.FRONTMCP_BUILD_TARGET` → `'unknown'`.
+
+Every artifact `frontmcp build` produces sets `globalThis.FRONTMCP_BUILD_TARGET` before your code runs: the
+`node`, `cli` and `mcpb` bundles in a preamble, the `vercel`, `lambda`, `cloudflare` and `distributed`
+builds in their generated setup module, and the `browser` / `sdk` library bundles at load. The first one to
+run wins, so a `--target cli` binary that loads its server bundle reports `'cli'`, and a host application
+built for `node` that imports a library built with `--target sdk` reports `'node'`.
 
 ### `surface` (issue #417)
 

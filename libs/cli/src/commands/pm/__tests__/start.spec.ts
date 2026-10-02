@@ -17,6 +17,8 @@ jest.mock('../keep-alive', () => ({ superviseUntilSignalled: jest.fn().mockResol
 jest.mock('../../package/registry', () => ({ getRegisteredApp: jest.fn() }));
 jest.mock('../../../shared/fs', () => ({ resolveEntry: jest.fn(async () => '/project/src/main.ts') }));
 jest.mock('../../../shared/env', () => ({ loadDevEnv: jest.fn() }));
+const mockShipEnv = jest.fn(async () => ({}) as Record<string, string>);
+jest.mock('../ship-env', () => ({ loadShipEnv: (...args: unknown[]) => mockShipEnv(...(args as [])) }));
 
 describe('runStart — installed apps (#642)', () => {
   let dir: string;
@@ -81,3 +83,29 @@ describe('runStart — installed apps (#642)', () => {
     expect(mockStart).toHaveBeenCalledWith(expect.objectContaining({ entry: '/project/src/main.ts' }));
   });
 });
+
+describe('runStart — frontmcp.config env.shared / env.ship (#680)', () => {
+  beforeEach(() => {
+    jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    jest.clearAllMocks();
+    mockStart.mockResolvedValue({ name: 'demo', pid: 1, port: 4100 });
+    (getRegisteredApp as jest.Mock).mockReturnValue(undefined);
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    delete process.env['SHIP_WINS_TEST'];
+  });
+
+  it('starts the server with the ship overlay under the real environment', async () => {
+    process.env['SHIP_WINS_TEST'] = 'real';
+    mockShipEnv.mockResolvedValue({ FROM_SHIP: 'ship', SHIP_WINS_TEST: 'ship' });
+
+    await runStart({ _: ['start', 'demo'], entry: './src/main.ts' } as ParsedArgs);
+
+    expect(mockShipEnv).toHaveBeenCalledWith('/project/src/main.ts', 'pm:start', undefined);
+    const env = (mockStart.mock.calls[0][0] as { env: Record<string, string> }).env;
+    expect(env['FROM_SHIP']).toBe('ship');
+    expect(env['SHIP_WINS_TEST']).toBe('real');
+  });
+});
+
