@@ -20,9 +20,9 @@ import { type AuthInfo } from '@frontmcp/protocol';
 import { randomUUID } from '@frontmcp/utils';
 
 import { type Scope } from '../scope/scope.instance';
+import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { buildScopedServerOptions, type ScopedServerOptions } from './build-scoped-server-options';
 import { type PersistentSessionOwnerStore } from './persistent-session-owner';
-import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 
 /** A persistent MCP server + transport bound to one session (Durable Object). */
 export interface WebStandardMcpPair {

@@ -48,7 +48,11 @@ function defaultAnswer(message: RpcMessage): unknown {
       return {
         jsonrpc: '2.0',
         id: message.id,
-        result: { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'sse', version: '1' } },
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: { tools: {} },
+          serverInfo: { name: 'sse', version: '1' },
+        },
       };
     case 'tools/list':
       return { jsonrpc: '2.0', id: message.id, result: { tools: [{ name: 'echo', inputSchema: { type: 'object' } }] } };

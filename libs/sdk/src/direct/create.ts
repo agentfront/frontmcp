@@ -25,9 +25,9 @@ import 'reflect-metadata';
 
 import type { FrontMcpConfigInput } from '../common';
 import { FrontMcpLocalAppTokens } from '../common/tokens';
+import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type { CreateConfig } from './create.types';
 import type { DirectMcpServer } from './direct.types';
-import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Instance cache (keyed by cacheKey)

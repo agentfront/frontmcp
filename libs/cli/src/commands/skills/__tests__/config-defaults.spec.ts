@@ -18,7 +18,14 @@ jest.mock('../catalog', () => ({
   loadCatalog: () => ({
     version: 1,
     skills: [
-      { name: 'alpha', path: 'alpha', description: 'Alpha', tags: [], category: 'dev', bundle: ['recommended', 'full'] },
+      {
+        name: 'alpha',
+        path: 'alpha',
+        description: 'Alpha',
+        tags: [],
+        category: 'dev',
+        bundle: ['recommended', 'full'],
+      },
       { name: 'beta', path: 'beta', description: 'Beta', tags: [], category: 'dev', bundle: ['full'] },
       { name: 'gamma', path: 'gamma', description: 'Gamma', tags: [], category: 'dev', bundle: ['minimal', 'full'] },
     ],
@@ -66,9 +73,9 @@ describe('installSkill with frontmcp.config selectors', () => {
   });
 
   it('refuses names that are not in the catalog, and says which', async () => {
-    await expect(installSkill(undefined, { provider: 'codex', dir: '/tmp/x', names: ['alpha', 'nope'] })).rejects.toThrow(
-      ExitError,
-    );
+    await expect(
+      installSkill(undefined, { provider: 'codex', dir: '/tmp/x', names: ['alpha', 'nope'] }),
+    ).rejects.toThrow(ExitError);
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('nope'));
   });
 
@@ -99,7 +106,11 @@ describe('loadSkillsDefaults', () => {
   it('reads the skills block of the nearest frontmcp.config', async () => {
     fs.writeFileSync(
       path.join(dir, 'frontmcp.config.json'),
-      JSON.stringify({ name: 'demo', deployments: [{ target: 'node' }], skills: { provider: 'codex', bundle: 'minimal' } }),
+      JSON.stringify({
+        name: 'demo',
+        deployments: [{ target: 'node' }],
+        skills: { provider: 'codex', bundle: 'minimal' },
+      }),
     );
     process.chdir(dir);
     expect(await loadSkillsDefaults()).toEqual({ provider: 'codex', bundle: 'minimal' });

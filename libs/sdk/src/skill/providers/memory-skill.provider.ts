@@ -7,6 +7,7 @@ import { sha256Hex } from '@frontmcp/utils';
 import { type SkillContent } from '../../common/interfaces';
 import { type SkillMetadata, type SkillVisibility } from '../../common/metadata';
 import { importOptionalPeer } from '../../scope/optional-dependency.util';
+import { importWithRequireFallback } from '../../utils/dynamic-import.utils';
 import { type SkillIndexCache, type SkillIndexScoring } from '../skill-index-cache.interface';
 import {
   type MutableSkillStorageProvider,
@@ -18,7 +19,6 @@ import {
   type SkillStorageProviderType,
 } from '../skill-storage.interface';
 import { type SkillToolValidator, type ToolValidationResult } from '../skill-validator';
-import { importWithRequireFallback } from '../../utils/dynamic-import.utils';
 
 /**
  * Stop words to filter from search queries and indexing.

@@ -26,6 +26,7 @@ import {
   SkillsLoadResultSchema,
   SkillsSearchResultSchema,
 } from '../transport/mcp-handlers/skills-mcp.types';
+import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type {
   ClientInfo,
   CompleteOptions,
@@ -63,7 +64,6 @@ import {
   type FormattedToolResult,
   type FormattedTools,
 } from './llm-platform';
-import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 
 /**
  * DirectClient implementation that wraps an MCP client.

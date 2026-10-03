@@ -74,7 +74,12 @@ export default class ResourceRegistry extends RegistryAbstract<
    */
   private readonly adopt: boolean;
 
-  constructor(providers: ProviderRegistry, list: ResourceType[], owner: EntryOwnerRef, options: { adopt?: boolean } = {}) {
+  constructor(
+    providers: ProviderRegistry,
+    list: ResourceType[],
+    owner: EntryOwnerRef,
+    options: { adopt?: boolean } = {},
+  ) {
     // disable auto so subclass fields initialize first
     super('ResourceRegistry', providers, list, false);
     this.owner = owner;

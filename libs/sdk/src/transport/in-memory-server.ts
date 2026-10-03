@@ -9,8 +9,8 @@ import { type AuthInfo, type Transport } from '@frontmcp/protocol';
 import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
 import { type Scope } from '../scope/scope.instance';
-import { buildScopedServerOptions } from './build-scoped-server-options';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
+import { buildScopedServerOptions } from './build-scoped-server-options';
 
 /**
  * Options for creating an in-memory MCP server.

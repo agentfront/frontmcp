@@ -131,7 +131,9 @@ describe('frontmcp.config run-time defaults (#680)', () => {
     });
 
     it('lets an explicit environment variable win', () => {
-      expect(run(bundleWith(serverBundleBanner({ target: 'node', server })), { PORT: '7000' }).env['PORT']).toBe('7000');
+      expect(run(bundleWith(serverBundleBanner({ target: 'node', server })), { PORT: '7000' }).env['PORT']).toBe(
+        '7000',
+      );
     });
 
     it('changes nothing when the bundle is require()d (schema extraction, the cli binary)', () => {
