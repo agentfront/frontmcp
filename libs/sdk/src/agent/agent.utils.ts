@@ -25,10 +25,13 @@ export function isAgentClass(value: unknown): value is new (...args: unknown[]) 
   return Reflect.getMetadata(FrontMcpAgentTokens.type, value) === true;
 }
 
+/** A function-based agent created with `agent(options)(handler)`: calling it returns the handler. */
+type AgentFunction = (() => (input: unknown, ctx: unknown) => unknown) & { [key: symbol]: unknown };
+
 /**
  * Check if a value is a function-based agent created with agent().
  */
-export function isAgentFunction(value: unknown): value is (() => void) & { [key: symbol]: unknown } {
+export function isAgentFunction(value: unknown): value is AgentFunction {
   if (typeof value !== 'function') return false;
   const fn = value as unknown as Record<symbol, unknown>;
   return fn[FrontMcpAgentTokens.type] === 'function-agent';
@@ -77,7 +80,7 @@ export function extractAgentClassMetadata(cls: Function): AgentMetadata {
 /**
  * Extract metadata from a function-based agent.
  */
-export function extractAgentFunctionMetadata(fn: (() => void) & { [key: symbol]: unknown }): AgentMetadata {
+export function extractAgentFunctionMetadata(fn: AgentFunction): AgentMetadata {
   const record = fn as unknown as Record<symbol, unknown>;
   return record[FrontMcpAgentTokens.metadata] as AgentMetadata;
 }
@@ -163,21 +166,13 @@ export function normalizeAgent(agent: AgentType): AgentRecord {
 /**
  * Get dependencies needed for agent discovery.
  *
- * Returns the tokens that should be resolved before the agent can be instantiated.
+ * Returns the tokens the agent's registry must already provide before the agent can be instantiated.
+ * The agent's own `providers` are not among them: the agent provides those itself, in its private
+ * scope (they used to be listed here, so an agent declaring a provider its app didn't also register
+ * stopped the server from starting).
  */
 export function agentDiscoveryDeps(record: AgentRecord): Token[] {
   const deps: Token[] = [];
-
-  // Add providers that need resolution
-  if (record.providers) {
-    for (const provider of record.providers) {
-      if (typeof provider === 'function') {
-        deps.push(provider);
-      } else if (typeof provider === 'object' && provider !== null && 'provide' in provider) {
-        deps.push((provider as { provide: Token }).provide);
-      }
-    }
-  }
 
   // Add factory inject dependencies
   if (record.kind === AgentKind.FACTORY && 'inject' in record && record.inject) {

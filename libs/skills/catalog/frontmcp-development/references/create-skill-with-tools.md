@@ -82,7 +82,9 @@ The `tools` array in `@Skill` metadata supports three ways to reference tools th
 
 ### 1. Class Reference
 
-Pass the tool class directly. The framework resolves the tool name and validates it exists in the registry.
+Pass the tool class directly (or `{ tool: ToolClass, purpose?, required? }`). The framework resolves the tool name (the tool's `id` when it declares one, else its `name`) and validates it exists in the registry. The class is only a reference: register the tool in the `tools` of the `@App` or `@FrontMcp` too. A class that isn't a `@Tool` stops the server from starting with `Invalid tool class '<ClassName>'`.
+
+Up to 1.8.7 a class reference itself stopped the server from starting (the class lost its `@Tool` name while the skill's options were validated); on those versions, reference the tool by name.
 
 ```typescript
 @Skill({
@@ -169,6 +171,8 @@ class StrictWorkflowSkill extends SkillContext {}
 | `'strict'` | Throws an error if any referenced tool is not registered. Use for production workflows where missing tools would cause failures. |
 | `'warn'`   | Logs a warning for missing tools but continues. Use during development when tools may not all be available yet.                  |
 | `'ignore'` | Silently ignores missing tools. Use for optional tool references or cross-server skills.                                         |
+
+In `'strict'` mode the server refuses to start, with `SkillValidationError: Skill '<name>' failed tool validation: missing tools [...]`. Up to 1.8.7 it started anyway, silently.
 
 When a caller loads the skill (`skills/load`, the `skills:load` flow, `GET /skills/{id}`, `/llm_full.txt`), a referenced tool that `availableWhen.surface` doesn't offer that caller (an agent-only tool, for an MCP client) is reported as missing, without its input schema, just as `tools/list` leaves it out. The same skill loaded by an agent lists it as available.
 
@@ -755,6 +759,7 @@ class DeployServiceSkill extends SkillContext {}
 | -------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | Skill not appearing in `/llm.txt`            | `visibility` is set to `'mcp'`                              | Change to `'both'` or `'http'` to include HTTP discovery                               |
 | `toolValidation: 'strict'` throws at startup | A referenced tool is not registered in the scope            | Register all referenced tools in the `tools` array of `@App` or `@FrontMcp`            |
+| `Invalid tool class` at startup              | A class in `tools` isn't decorated with `@Tool`             | Reference a `@Tool` class, or the tool's name                                          |
 | `skillDir()` fails to load                   | `SKILL.md` file missing or frontmatter is invalid YAML      | Ensure the directory contains a `SKILL.md` with valid `---` delimited YAML frontmatter |
 | Instructions are empty at runtime            | `{ file: './path.md' }` path is relative to wrong directory | Use a path relative to the skill file's location, not the project root                 |
 | Parameters not visible to AI client          | `parameters` defined as a plain object instead of an array  | Use array format: `[{ name, description, type, required }]`                            |

@@ -33,7 +33,7 @@ Unlike other context classes, `AgentContext` is not abstract and provides a defa
 
 | Property             | Type                      | Description          |
 | -------------------- | ------------------------- | -------------------- |
-| `metadata`           | `AgentMetadata`           | Agent metadata       |
+| `metadata`           | `AgentMetadata`           | The `@Agent` options |
 | `input`              | `In`                      | Agent input          |
 | `output`             | `Out \| undefined`        | Agent output         |
 | `llmAdapter`         | `AgentLlmAdapter`         | LLM provider adapter |
@@ -43,6 +43,8 @@ Unlike other context classes, `AgentContext` is not abstract and provides a defa
 | `agentId`            | `string`                  | Agent ID             |
 | `platform`           | `AIPlatformType`          | Detected AI platform |
 | `clientInfo`         | `ClientInfo \| undefined` | Client information   |
+
+`metadata` holds the options given to `@Agent`, with their defaults applied (there is no `this.options`).
 
 ## Default Behavior
 
@@ -176,7 +178,7 @@ for await (const chunk of this.streamCompletion(prompt)) {
 
 #### executeTool(name, args)
 
-Execute a tool by name.
+Execute a tool by name. Every tool call of the model in the default loop goes through it, so an override sees them all. The default runs one of the tools the model is offered (see [Agents](/frontmcp/servers/agents)).
 
 ```typescript
 protected executeTool(
@@ -194,7 +196,14 @@ protected async executeTool(name, args) {
 
 #### invokeAgent(agentId, input)
 
-Invoke another agent.
+Invoke another agent by id (or name) and return its output. The agent must be one of this agent's nested agents (`agents`), or, with `swarm.canSeeOtherAgents`, another agent of its scope that it sees. `input` is the called agent's arguments object. The call runs through the called agent's `invoke_<agent>` tool, so everything that agent declares applies.
+
+| Throws                        | When                                                      |
+| ----------------------------- | --------------------------------------------------------- |
+| `AgentVisibilityError`        | The agent exists but this agent doesn't see it            |
+| `AgentNotFoundError`          | No such agent                                             |
+| `AgentCallDepthExceededError` | The call would go deeper than `swarm.maxCallDepth` allows |
+| `InvalidInputError`           | `input` is not an object                                  |
 
 ```typescript
 protected invokeAgent(
@@ -317,6 +326,8 @@ Provide a comprehensive summary with sources.`;
   name: 'orchestrator',
   description: 'Coordinates multiple specialized agents',
   llm: { provider: 'openai', model: 'gpt-4o' },
+  // The agents it calls, registered in the same app
+  swarm: { canSeeOtherAgents: true, visibleAgents: ['research-agent', 'writer-agent', 'reviewer-agent'] },
   systemInstructions: `You orchestrate tasks across specialized agents:
 - research-agent: For information gathering
 - writer-agent: For content creation

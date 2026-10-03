@@ -1,6 +1,6 @@
 // file: libs/sdk/src/errors/agent.errors.ts
 
-import { PublicMcpError, InternalMcpError } from './mcp.error';
+import { InternalMcpError, PublicMcpError } from './mcp.error';
 
 // ============================================================================
 // Agent Errors
@@ -88,6 +88,30 @@ export class AgentVisibilityError extends PublicMcpError {
     );
     this.requestingAgentId = requestingAgentId;
     this.targetAgentId = targetAgentId;
+  }
+}
+
+/**
+ * Agent call depth exceeded - thrown when an agent calls another agent (through its model, a nested
+ * agent, `invokeAgent()` or `callTool('invoke_<agent>')`) and the chain of running agents is already
+ * as deep as one of them allows (`swarm.maxCallDepth`).
+ */
+export class AgentCallDepthExceededError extends PublicMcpError {
+  readonly targetAgentId: string;
+  /** The agents running when the call was made, outermost first. */
+  readonly callChain: string[];
+  readonly maxCallDepth: number;
+
+  constructor(targetAgentId: string, callChain: string[], maxCallDepth: number) {
+    super(
+      `Agent "${targetAgentId}" can't be called from ${callChain.map((id) => `"${id}"`).join(' -> ')}: ` +
+        `that would be agent call ${callChain.length}, deeper than maxCallDepth ${maxCallDepth}`,
+      'AGENT_CALL_DEPTH_EXCEEDED',
+      400,
+    );
+    this.targetAgentId = targetAgentId;
+    this.callChain = callChain;
+    this.maxCallDepth = maxCallDepth;
   }
 }
 

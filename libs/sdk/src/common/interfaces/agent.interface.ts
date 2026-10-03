@@ -40,6 +40,11 @@ type HistoryEntry<T> = {
 };
 
 /**
+ * Calls another agent by id and returns its output; what `AgentContext.invokeAgent()` runs.
+ */
+export type AgentInvoker = (agentId: string, input: unknown) => Promise<unknown>;
+
+/**
  * Constructor arguments for AgentContext.
  */
 export type AgentCtorArgs<In> = ExecutionContextBaseArgs & {
@@ -51,6 +56,8 @@ export type AgentCtorArgs<In> = ExecutionContextBaseArgs & {
   toolDefinitions?: AgentToolDefinition[];
   /** Function to execute tools - provided by AgentInstance */
   toolExecutor?: ToolExecutor;
+  /** Function to call another agent (`invokeAgent()`) - provided by AgentInstance */
+  agentInvoker?: AgentInvoker;
   /** Progress token from the request's _meta, used for progress notifications */
   progressToken?: string | number;
 };
@@ -119,6 +126,9 @@ export class AgentContext<
   /** Function to execute tools - provided by AgentInstance */
   protected readonly toolExecutor?: ToolExecutor;
 
+  /** Function to call another agent - provided by AgentInstance */
+  private readonly agentInvoker?: AgentInvoker;
+
   // ---- Internal fields for fallback elicitation support
   /** @internal Agent name for fallback elicitation - set by CallAgentFlow */
   _agentNameInternal?: string;
@@ -141,8 +151,18 @@ export class AgentContext<
   private readonly _progressToken?: string | number;
 
   constructor(args: AgentCtorArgs<In>) {
-    const { metadata, input, providers, logger, llmAdapter, agentScope, toolDefinitions, toolExecutor, progressToken } =
-      args;
+    const {
+      metadata,
+      input,
+      providers,
+      logger,
+      llmAdapter,
+      agentScope,
+      toolDefinitions,
+      toolExecutor,
+      agentInvoker,
+      progressToken,
+    } = args;
     super({
       providers,
       logger: logger.child(`agent:${metadata.id ?? metadata.name}`),
@@ -157,6 +177,7 @@ export class AgentContext<
     this.systemInstructions = metadata.systemInstructions ?? '';
     this.toolDefinitions = toolDefinitions ?? [];
     this.toolExecutor = toolExecutor;
+    this.agentInvoker = agentInvoker;
     this._progressToken = progressToken;
   }
 
@@ -285,8 +306,8 @@ export class AgentContext<
       },
     });
 
-    // Create tool executor that uses the provided executor or falls back to executeTool
-    const executor: ToolExecutor = this.toolExecutor ?? (async (name, args) => this.executeTool(name, args));
+    // Every tool call of the model goes through executeTool(), so an override of it sees them all
+    const executor: ToolExecutor = async (name, args) => this.executeTool(name, args);
 
     // Run the loop
     const result = await loop.run(userMessage, executor);
@@ -429,19 +450,31 @@ export class AgentContext<
    * - Tool call interception
    */
   protected async executeTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-    // This will be implemented by AgentInstance which has access to ToolRegistry
-    throw new AgentMethodNotAvailableError('executeTool', name);
+    if (!this.toolExecutor) {
+      throw new AgentMethodNotAvailableError('executeTool', this.agentName);
+    }
+    return this.toolExecutor(name, args);
   }
 
   /**
-   * Invoke another agent by ID.
+   * Invoke another agent by id (or name) and return its output.
    *
-   * Only available if `swarm.canSeeOtherAgents` is true or the target agent
-   * is in `swarm.visibleAgents`.
+   * The agent called must be one this agent's model could call too: one of its nested agents
+   * (`agents: [...]`), or, with `swarm.canSeeOtherAgents`, another agent of its scope that it sees
+   * (`swarm.visibleAgents`, when set, lists them; an agent with `swarm.isVisible: false` is never
+   * seen). The call runs through the called agent's `invoke_<agent>` tool, so everything that agent
+   * declares (authorities, rate limit, concurrency, timeout, hooks) applies, and counts toward
+   * `swarm.maxCallDepth`.
+   *
+   * @throws AgentVisibilityError when the agent exists but this agent doesn't see it
+   * @throws AgentNotFoundError when no such agent exists
+   * @throws AgentToolExecutionError when the called agent fails
    */
   protected async invokeAgent(agentId: string, input: unknown): Promise<unknown> {
-    // This will be implemented by AgentInstance which has access to AgentRegistry
-    throw new AgentMethodNotAvailableError('invokeAgent', agentId);
+    if (!this.agentInvoker) {
+      throw new AgentMethodNotAvailableError('invokeAgent', this.agentName);
+    }
+    return this.agentInvoker(agentId, input);
   }
 
   /** An agent calls tools on the `'agent'` surface, as its model's tool calls do. */

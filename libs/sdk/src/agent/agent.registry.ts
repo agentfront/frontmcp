@@ -174,17 +174,20 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
     // Wait for all agent instances to be ready
     await Promise.all([...this.instances.values()].map((ai) => ai.ready));
 
-    // Register agent tools in the parent scope's ToolRegistry
-    // Only do this for scope-level registries - app-level registries don't have
-    // scope.tools available yet (tools registry is created after apps).
-    // The scope-level AgentRegistry will register all agents (local + adopted).
-    if (this.owner.kind === 'scope') {
+    // Register agent tools (and exported resources and prompts) in the parent scope's registries.
+    // Only scope-level registries do this - app-level registries don't have scope.tools available
+    // yet (tools registry is created after apps); the scope-level AgentRegistry registers all agents
+    // (local + adopted). A nested agents' registry (`@Agent({ agents })`, owner kind 'agent') does it
+    // in its agent's private scope, so the agent's model gets the nested agents as tools.
+    if (this.owner.kind === 'scope' || this.owner.kind === 'agent') {
       await this.registerAgentToolsInParentScope();
     }
   }
 
   /**
-   * Register each agent's ToolInstance in the parent scope's ToolRegistry.
+   * Register each agent's ToolInstance in the parent scope's ToolRegistry, and the resources and
+   * prompts it exports (`exports`) in the parent scope's ResourceRegistry and PromptRegistry, so they
+   * are listed (`resources/list`, `prompts/list`), read and got like the scope's own.
    *
    * This enables:
    * - Agents to be called like any other tool through tools:call-tool flow
@@ -221,6 +224,13 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
             }`,
           );
         }
+      }
+
+      for (const resource of agentInstance.getExportedResources()) {
+        scope.resources?.registerResourceInstance(resource);
+      }
+      for (const prompt of agentInstance.getExportedPrompts()) {
+        scope.prompts?.registerPromptInstance(prompt);
       }
     }
   }
@@ -390,7 +400,7 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
   /**
    * Get tool definitions for all agents.
    *
-   * Each agent is exposed as a tool with name `use-agent:<agent_id>`.
+   * Each agent is exposed as a tool with name `invoke_<agent_id>`.
    */
   getAgentsAsTools(): Tool[] {
     return this.getAvailableInstances()

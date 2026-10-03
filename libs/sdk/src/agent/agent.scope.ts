@@ -3,6 +3,7 @@
 import 'reflect-metadata';
 
 import { ProviderScope, type Token, type Type } from '@frontmcp/di';
+import type { GuardManager } from '@frontmcp/guard';
 
 import AdapterRegistry from '../adapter/adapter.registry';
 import {
@@ -29,6 +30,16 @@ import { ToolInstance } from '../tool/tool.instance';
 import ToolRegistry from '../tool/tool.registry';
 import { normalizeTool } from '../tool/tool.utils';
 import AgentRegistry from './agent.registry';
+import CallAgentFlow from './flows/call-agent.flow';
+
+/** What an {@link AgentScope} takes from the agent it belongs to, besides its metadata. */
+export interface AgentScopeOptions {
+  /**
+   * The owner (app, plugin, scope or parent agent) the agent is registered under. With
+   * `execution.inheritPlugins`, the agent's tools get the parent scope's hooks for entries of this owner.
+   */
+  ownerId: string;
+}
 
 /**
  * AgentScope provides an isolated, private scope for agent execution.
@@ -88,6 +99,7 @@ export class AgentScope {
     agentId: string,
     private readonly metadata: AgentMetadata,
     agentToken: Token,
+    private readonly options?: AgentScopeOptions,
   ) {
     this.parentScope = parentScope;
     this.id = `agent:${agentId}`;
@@ -147,12 +159,16 @@ export class AgentScope {
 
     await this.agentProviders.ready;
 
-    // Initialize hooks registry (agent's own hooks only)
+    // Initialize hooks registry: the hooks of the agent's own plugins, and with `execution.inheritPlugins`
+    // also those of the plugins on the agent's app and on the server
     this.agentHooks = new HookRegistry(this.agentProviders, []);
     await this.agentHooks.ready;
+    if (this.metadata.execution?.inheritPlugins === true && this.options) {
+      this.agentHooks.inheritFrom(this.parentScope.hooks, this.options.ownerId);
+    }
 
-    // Initialize flow registry with call-tool flow
-    this.agentFlows = new FlowRegistry(this.agentProviders, [CallToolFlow]);
+    // The flows the agent's tools and nested agents (`agents: [...]`) run through
+    this.agentFlows = new FlowRegistry(this.agentProviders, [CallToolFlow, CallAgentFlow]);
     await this.agentFlows.ready;
 
     // Initialize plugins (they can register providers, tools, etc.)
@@ -194,7 +210,8 @@ export class AgentScope {
     this.agentPrompts = new PromptRegistry(this.agentProviders, this.metadata.prompts ?? [], this.agentOwner);
     await this.agentPrompts.ready;
 
-    // Initialize nested agents
+    // Initialize nested agents. Their registry adds each one's `invoke_<agent>` tool to this scope's
+    // tools, so the agent's model can call them, and their exported resources and prompts to this scope.
     this.agentAgents = new AgentRegistry(this.agentProviders, this.metadata.agents ?? [], this.agentOwner);
     await this.agentAgents.ready;
 
@@ -284,6 +301,16 @@ export class AgentScope {
   /** The server's mapping from authority denials to OAuth scope challenges. */
   get authoritiesScopeMapping() {
     return this.parentScope.authoritiesScopeMapping;
+  }
+
+  /**
+   * The server's guard manager: the agent's tools and its nested agents' `invoke_<agent>` tools take
+   * their `rateLimit` and `concurrency` from it in this scope's `tools:call-tool` flow, like every
+   * other tool. Read when a call runs: the server creates it after its agents when only they declare
+   * limits.
+   */
+  get rateLimitManager(): GuardManager | undefined {
+    return this.parentScope.rateLimitManager;
   }
 
   // ============================================================================
@@ -387,8 +414,9 @@ class AgentScopeEntry {
     return undefined;
   }
 
-  get rateLimitManager(): undefined {
-    return undefined;
+  /** See {@link AgentScope.rateLimitManager}. */
+  get rateLimitManager(): GuardManager | undefined {
+    return this.agentScope.rateLimitManager;
   }
 
   get elicitationStore(): undefined {

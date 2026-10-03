@@ -898,6 +898,10 @@ auth: {
 </Note>
 
 <Note>
+  An agent is offered as its `invoke_<agent>` tool. The tools declared inside an `@Agent` and its nested agents are never offered, and the consent given to the agent covers them; the other agents and server tools an agent calls (`swarm`, `execution.inheritParentTools`) are offered and need their own consent.
+</Note>
+
+<Note>
   **Federated (multi-provider) logins** show the consent screen AFTER the last
   provider is linked (in the provider-callback flow), then complete the mint —
   so consent applies uniformly to single-operator and federated logins.

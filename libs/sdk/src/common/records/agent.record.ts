@@ -57,9 +57,11 @@ export interface AgentClassTokenRecord {
  */
 export interface AgentFunctionTokenRecord {
   kind: AgentKind.FUNCTION;
-  // NOTE: `any` is intentional - function providers must be loosely typed
-  // to support various input/output schema combinations at runtime
-  provide: (...args: any[]) => any | Promise<any>;
+  /**
+   * The function `agent(options)` returned: calling it (with no arguments) returns the handler, which
+   * takes the agent's input and context and returns (or resolves to) its output.
+   */
+  provide: () => (input: unknown, ctx: unknown) => unknown;
   metadata: AgentMetadata;
   providers?: ProviderType[];
 }
