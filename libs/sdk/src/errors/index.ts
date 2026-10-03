@@ -200,6 +200,7 @@ export {
   UnsupportedContentTypeError,
   TransportServiceNotAvailableError,
   SessionClaimConflictError,
+  SessionOwnerUnreachableError,
 } from './transport.errors';
 
 // Export auth internal errors

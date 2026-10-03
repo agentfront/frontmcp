@@ -18,6 +18,12 @@ export type AdapterBuildContext = {
    * platform has not already defined it.
    */
   securityHeadersEnv?: Record<string, string>;
+  /**
+   * `FRONTMCP_HA_*` variables derived from the `ha` block of a distributed
+   * deployment. The distributed adapter's setup file sets each one only when
+   * the platform has not already defined it.
+   */
+  haEnv?: Record<string, string>;
 };
 
 /** Outcome of reconciling an existing platform config file with the build. */

@@ -135,6 +135,12 @@ spec:
               value: distributed
             - name: REDIS_HOST
               value: redis
+            # Same secret on every pod: session ids are encrypted with it.
+            - name: MCP_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mcp-server
+                  key: session-secret
           ports:
             - containerPort: 3000
           livenessProbe:
@@ -211,9 +217,14 @@ kubectl exec -it deploy/redis -- redis-cli KEYS "mcp:ha:heartbeat:*"
 # 2) "mcp:ha:heartbeat:mcp-server-7b8f9-def34"
 # 3) "mcp:ha:heartbeat:mcp-server-7b8f9-ghi56"
 
+# Every pod listens on its relay channel: a request that reaches a pod which
+# does not own the session is relayed to the owner and answered from there.
+kubectl exec -it deploy/redis -- redis-cli PUBSUB CHANNELS "mcp:ha:notify:*"
+
 # Kill a pod and watch takeover
 kubectl delete pod mcp-server-7b8f9-abc12
-# After ~30s, its heartbeat expires and sessions are claimed by surviving pods
+# Until its heartbeat expires (~30s) its sessions answer 503 + Retry-After;
+# then surviving pods take them over and serve them.
 ```
 
 ## What This Demonstrates

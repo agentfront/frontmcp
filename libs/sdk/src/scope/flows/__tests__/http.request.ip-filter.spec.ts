@@ -95,7 +95,13 @@ describe('http:request checkIpFilter — ipFilter enforcement (GHSA-hwfp-xv2f-fr
   it('runs before the rate-limit and authorization stages', () => {
     const plan = Reflect.getMetadata(FrontMcpFlowTokens.plan, HttpRequestFlow) as { pre: string[] };
 
-    expect(plan.pre.slice(0, 4)).toEqual(['traceRequest', 'checkIpFilter', 'acquireQuota', 'acquireSemaphore']);
+    expect(plan.pre.slice(0, 5)).toEqual([
+      'traceRequest',
+      'checkIpFilter',
+      'relayToSessionOwner',
+      'acquireQuota',
+      'acquireSemaphore',
+    ]);
     expect(plan.pre.indexOf('checkIpFilter')).toBeLessThan(plan.pre.indexOf('checkAuthorization'));
   });
 

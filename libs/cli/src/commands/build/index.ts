@@ -7,6 +7,7 @@ import { runTsc } from '../../shared/tsc';
 import { cleanOutDir } from '../../shared/clean-out-dir';
 import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
 import { ADAPTERS } from './adapters';
+import { haEnv } from '../../config/ha-env';
 import { securityHeadersEnv } from '../../config/security-headers-env';
 import { type AdapterBuildContext, type AdapterName } from './types';
 import { bundleForServerless } from './bundler';
@@ -370,6 +371,7 @@ async function runAdapterBuild(
   const context: AdapterBuildContext = {
     transportHttpPath,
     securityHeadersEnv: securityHeadersEnv(deployment && 'server' in deployment ? deployment.server : undefined),
+    haEnv: haEnv(deployment && 'ha' in deployment ? deployment.ha : undefined),
   };
 
   if (

@@ -52,4 +52,6 @@ export interface TakeoverResult {
   claimed: boolean;
   sessionId: string;
   previousNodeId?: string;
+  /** When the session was claimed (epoch ms), as recorded in its `reassignedAt`. */
+  reassignedAt?: number;
 }
