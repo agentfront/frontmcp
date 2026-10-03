@@ -7,7 +7,7 @@
  * `require()` against Node's built-ins only — while `frontmcp mcpb validate`
  * called the archive valid.
  *
- * Skipped only when the SEA toolchain is missing; otherwise a failed build fails it.
+ * Skipped only on a host without SEA binaries or without npx; any other preflight or build failure fails it.
  */
 
 import { execFileSync, spawn } from 'child_process';
@@ -31,7 +31,7 @@ const SCRATCH_ROOT = path.resolve(__dirname, '..');
 /** Hosts `frontmcp build --target mcpb --sea` builds a binary for (MCPB platform keys). */
 const SEA_HOSTS = ['darwin-arm64', 'darwin-x64', 'linux-arm64', 'linux-x64', 'win32-x64'];
 
-/** Why this host cannot build an SEA binary, or `undefined` when it can. */
+/** Why this host cannot build an SEA binary, or `undefined` when it can; any other preflight failure throws. */
 function missingSeaToolchain(): string | undefined {
   if (!SEA_HOSTS.includes(PLATFORM)) return `no SEA binary is built for ${PLATFORM}`;
   try {
@@ -43,7 +43,9 @@ function missingSeaToolchain(): string | undefined {
     });
     return undefined;
   } catch (err) {
-    return `postject is unavailable: ${String((err as { stderr?: Buffer }).stderr ?? err).slice(0, 300)}`;
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return 'npx is not installed';
+    const stderr = String((err as { stderr?: Buffer }).stderr ?? '');
+    throw new Error(`the postject preflight failed: ${String(err)}\n${stderr}`, { cause: err });
   }
 }
 
@@ -110,46 +112,73 @@ function extractEntry(archivePath: string, entryName: string, dest: string): Pro
   });
 }
 
-/** Send JSON-RPC lines to the binary's stdin and collect the responses by id. */
-function talkStdio(
-  binary: string,
-  home: string,
-  frames: object[],
-  expectedIds: number[],
-): Promise<Map<number, unknown>> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(binary, [], {
-      env: { ...process.env, FRONTMCP_STDIO: '1', HOME: home },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    const responses = new Map<number, unknown>();
-    let stdout = '';
-    let stderr = '';
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-      reject(new Error(`no responses within 60s; stderr:\n${stderr}`));
-    }, 60_000);
-    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString();
-      for (const line of stdout.split('\n').slice(0, -1)) {
-        const message = JSON.parse(line) as { id?: number };
-        if (typeof message.id === 'number') responses.set(message.id, message);
-      }
-      stdout = stdout.slice(stdout.lastIndexOf('\n') + 1);
-      if (expectedIds.every((id) => responses.has(id))) {
-        clearTimeout(timer);
-        child.kill('SIGTERM');
-        resolve(responses);
-      }
-    });
-    child.once('exit', (code) => {
-      if (expectedIds.every((id) => responses.has(id))) return;
-      clearTimeout(timer);
-      reject(new Error(`binary exited with ${String(code)} before answering; stderr:\n${stderr}`));
-    });
-    for (const frame of frames) child.stdin.write(`${JSON.stringify(frame)}\n`);
+interface JsonRpcRequest {
+  jsonrpc: '2.0';
+  id: number;
+  method: string;
+  params?: unknown;
+}
+
+interface StdioSession {
+  request(frame: JsonRpcRequest): Promise<{ id: number; result?: unknown; error?: unknown }>;
+  notify(method: string): void;
+  close(): void;
+}
+
+/** Run the binary as an MCP stdio server; `request` resolves with the response carrying its id. */
+function openStdio(binary: string, home: string): StdioSession {
+  const child = spawn(binary, [], {
+    env: { ...process.env, FRONTMCP_STDIO: '1', HOME: home },
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
+  type Waiter = { resolve: (message: { id: number }) => void; reject: (err: Error) => void };
+  const waiters = new Map<number, Waiter>();
+  let stdout = '';
+  let stderr = '';
+  child.stdin.on('error', () => undefined);
+  child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+  child.stdout.on('data', (chunk: Buffer) => {
+    const lines = (stdout + chunk.toString()).split('\n');
+    stdout = lines.pop() ?? '';
+    for (const line of lines.filter((candidate) => candidate.trim())) {
+      const message = JSON.parse(line) as { id?: number };
+      if (typeof message.id === 'number') waiters.get(message.id)?.resolve({ ...message, id: message.id });
+    }
+  });
+  child.once('exit', (code) => {
+    const exited = new Error(`binary exited with ${String(code)} before answering; stderr:\n${stderr}`);
+    for (const waiter of waiters.values()) waiter.reject(exited);
+    waiters.clear();
+  });
+  const write = (frame: object): void => {
+    child.stdin.write(`${JSON.stringify(frame)}\n`);
+  };
+  return {
+    request: (frame) =>
+      new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          waiters.delete(frame.id);
+          reject(new Error(`no response to ${frame.method} within 60s; stderr:\n${stderr}`));
+        }, 60_000);
+        const settle = (): void => {
+          clearTimeout(timer);
+          waiters.delete(frame.id);
+        };
+        waiters.set(frame.id, {
+          resolve: (message) => {
+            settle();
+            resolve(message);
+          },
+          reject: (err) => {
+            settle();
+            reject(err);
+          },
+        });
+        write(frame);
+      }),
+    notify: (method) => write({ jsonrpc: '2.0', method }),
+    close: () => child.kill('SIGTERM'),
+  };
 }
 
 describeWithSeaToolchain('frontmcp build --target mcpb --sea (#679)', () => {
@@ -191,24 +220,28 @@ describeWithSeaToolchain('frontmcp build --target mcpb --sea (#679)', () => {
     const binary = path.join(home, BINARY);
     await extractEntry(archive, `bin/${PLATFORM}/${BINARY}`, binary);
 
-    const responses = await talkStdio(
-      binary,
-      home,
-      [
-        {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'e2e', version: '1' } },
-        },
-        { jsonrpc: '2.0', method: 'notifications/initialized' },
-        { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'echo', arguments: { message: 'from-sea' } } },
-      ],
-      [1, 2],
-    );
+    const session = openStdio(binary, home);
+    try {
+      const initialized = await session.request({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'e2e', version: '1' } },
+      });
+      expect(initialized).toMatchObject({ result: { serverInfo: { name: APP } } });
 
-    expect(responses.get(1)).toMatchObject({ result: { serverInfo: { name: APP } } });
-    expect(JSON.stringify(responses.get(2))).toContain('from-sea');
+      session.notify('notifications/initialized');
+      const call = await session.request({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: { name: 'echo', arguments: { message: 'from-sea' } },
+      });
+      expect(call.error).toBeUndefined();
+      expect(JSON.stringify(call.result)).toContain('from-sea');
+    } finally {
+      session.close();
+    }
   }, 120_000);
 
   it('frontmcp mcpb validate accepts the archive', async () => {
