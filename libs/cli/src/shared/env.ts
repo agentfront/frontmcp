@@ -121,19 +121,22 @@ export function populateProcessEnv(env: Record<string, string>, override = false
  *
  * @param cwd - Current working directory.
  * @param label - Command name used in the log line (`dev`, `test`, …).
+ * @param log - Where the notice goes (stdout by default; `dev --stdio` passes stderr).
  * @returns The variables read from the files, for callers that also need to
  *   forward them into a child process.
  */
-export function loadCommandEnv(cwd: string, label = 'dev'): Record<string, string> {
+export function loadCommandEnv(
+  cwd: string,
+  label = 'dev',
+  log: (msg: string) => void = (msg) => console.log(msg),
+): Record<string, string> {
   try {
     const env = loadEnvFilesSync(cwd, '.env', '.env.local');
     const count = Object.keys(env).length;
 
     if (count > 0) {
       populateProcessEnv(env, false);
-      console.log(
-        `${c('cyan', `[${label}]`)} loaded ${count} environment variable${count === 1 ? '' : 's'} from .env files`,
-      );
+      log(`${c('cyan', `[${label}]`)} loaded ${count} environment variable${count === 1 ? '' : 's'} from .env files`);
     }
     return env;
   } catch (err) {
@@ -148,7 +151,8 @@ export function loadCommandEnv(cwd: string, label = 'dev'): Record<string, strin
  * Logs the number of loaded variables.
  *
  * @param cwd - Current working directory
+ * @param log - Where the notice goes (see {@link loadCommandEnv}).
  */
-export function loadDevEnv(cwd: string): void {
-  loadCommandEnv(cwd, 'dev');
+export function loadDevEnv(cwd: string, log?: (msg: string) => void): void {
+  loadCommandEnv(cwd, 'dev', log);
 }

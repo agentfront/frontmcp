@@ -7,7 +7,7 @@
  * the Node-only branch in the worker output. The source-level scanner
  * captures the property names regardless of value evaluation.
  */
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import Module = require('node:module');
@@ -157,6 +157,42 @@ export default class App {}
       expect(requiredEntryDirectly).toBe(false);
     } finally {
       requireSpy.mockRestore();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('loadEntryDecoratorInfo — entries that import other TypeScript files (#679)', () => {
+  it('reads a config that comes from a relative .ts import', async () => {
+    const { dir, entry } = await makeEntry(`
+import { http } from './http-options';
+import { apps } from './nested/apps';
+
+export default { http, apps };
+`);
+    await writeFile(path.join(dir, 'http-options.ts'), `export const http: { entryPath: string } = { entryPath: '/decorated' };\n`);
+    await mkdir(path.join(dir, 'nested'));
+    await writeFile(path.join(dir, 'nested', 'apps.ts'), `export const apps: string[] = ['one'];\n`);
+    try {
+      const info = await loadEntryDecoratorInfo(entry);
+      expect(info.decoratorConfig).toEqual({ http: { entryPath: '/decorated' }, apps: ['one'] });
+      expect(info.loadError).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports why the config could not be read instead of failing silently', async () => {
+    const { dir, entry } = await makeEntry(`
+import { http } from './missing-file';
+
+export default { http };
+`);
+    try {
+      const info = await loadEntryDecoratorInfo(entry);
+      expect(info.decoratorConfig).toBeUndefined();
+      expect(info.loadError).toMatch(/missing-file/);
+    } finally {
       await rm(dir, { recursive: true, force: true });
     }
   });

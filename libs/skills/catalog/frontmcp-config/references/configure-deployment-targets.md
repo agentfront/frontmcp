@@ -217,6 +217,8 @@ Per-invocation precedence (issue #400):
 3. Upward walk from `cwd` to the nearest ancestor containing a `frontmcp.config.*` (caps at 10 levels — monorepo nested apps work without `cd <repo-root>`).
 4. Fallback: `package.json` (derives name, default node target).
 
+When the upward walk finds the file in a **parent** folder, `frontmcp build` and `frontmcp dev` run from that folder (the project root): `entry`, `deployments[].outDir`, `tsconfig.json`, `package.json` and `.env` resolve there, so building from `src/` writes `dist/` next to the config. Paths passed as flags (`--entry`, `--out-dir`, `--icon`, `--merge-from`, `--log-file`) still resolve from the folder the command ran in. An explicit `--config` / `FRONTMCP_CONFIG` does not change the working folder.
+
 Within a directory:
 
 1. `frontmcp.config.ts`

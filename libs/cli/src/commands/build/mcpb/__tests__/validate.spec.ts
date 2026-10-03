@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { createDeterministicZip } from '../zip';
-import { validateMcpb } from '../validate';
+import { createRuntimeRequireScanner, findRuntimeRequires, validateMcpb } from '../validate';
 
 async function makeArchive(
   fileMap: Record<string, string>,
@@ -208,5 +208,65 @@ describe('validateMcpb', () => {
     const result = await validateMcpb(archive);
     expect(result.ok).toBe(false);
     expect(result.errors.some((e) => e.includes('darwin-arm64'))).toBe(true);
+  });
+
+  // #679 — `--sea` binaries left reflect-metadata external and died with
+  // "No such built-in module: reflect-metadata", yet validated as fine.
+  it('fails when an SEA binary requires runtime packages it cannot load', async () => {
+    const manifest = baseManifest() as unknown as Record<string, unknown>;
+    (manifest.server as { mcp_config: Record<string, unknown> }).mcp_config.platform_overrides = {
+      'darwin-arm64': { command: '${__dirname}/bin/darwin-arm64/demo', args: [] },
+    };
+    const archive = path.join(tmp, 'sea-externals.mcpb');
+    const binary = `\u0000ELF-ish header\u0000${'x'.repeat(70_000)}require("reflect-metadata");\u0000tail`;
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(manifest),
+        'server/index.js': 'console.log("self-contained")',
+        'bin/darwin-arm64/demo': binary,
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual([
+      expect.stringMatching(/^bin\/darwin-arm64\/demo requires "reflect-metadata", which a single-executable binary/),
+    ]);
+  });
+
+  it('accepts an SEA binary with the runtime inlined', async () => {
+    const manifest = baseManifest() as unknown as Record<string, unknown>;
+    (manifest.server as { mcp_config: Record<string, unknown> }).mcp_config.platform_overrides = {
+      'darwin-arm64': { command: '${__dirname}/bin/darwin-arm64/demo', args: [] },
+    };
+    const archive = path.join(tmp, 'sea-ok.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(manifest),
+        'server/index.js': 'console.log("self-contained")',
+        'bin/darwin-arm64/demo': 'binary with require("node:fs") and a "@frontmcp/sdk" string only',
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.errors).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe('runtime require scanning', () => {
+  it('finds bare and subpath requires with either quote style', () => {
+    expect(findRuntimeRequires(`require('@frontmcp/di'); require("@frontmcp/utils/fs")`)).toEqual([
+      '@frontmcp/di',
+      '@frontmcp/utils',
+    ]);
+    expect(findRuntimeRequires('require("node:path")')).toEqual([]);
+  });
+
+  it('finds a require split across two streamed chunks', () => {
+    const scanner = createRuntimeRequireScanner();
+    scanner.push(Buffer.from('....require("reflect-me'));
+    scanner.push(Buffer.from('tadata");....'));
+    expect(scanner.found()).toEqual(['reflect-metadata']);
   });
 });

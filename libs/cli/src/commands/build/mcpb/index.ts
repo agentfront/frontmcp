@@ -124,7 +124,6 @@ export async function buildMcpb(
   // packages. The externalized bundle above is only used for schema extraction.
   const shippedBundle = await bundleWithEsbuild(compiledEntry, outDir, execConfig, {
     selfContained: true,
-    bundleRuntime: true,
     outputName: `${execConfig.name}.server`,
   });
   console.log(

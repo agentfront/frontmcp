@@ -404,6 +404,19 @@ frontmcp dev --show-conflict
 > `http.port: 4000` in metadata makes the child bind to 4000 regardless of
 > `--port`/`PORT`, so the pre-flight probe becomes advisory only.
 
+Ctrl+C, or `SIGINT` / `SIGTERM` sent to the `frontmcp dev` process alone
+(`kill <pid>`), stops the whole tree — tsx, the server it forks and the type
+checker — and the command returns once the port is free.
+
+`frontmcp dev` and `frontmcp build` work from any subfolder: they find
+`frontmcp.config.*` by walking up and run from its folder, so `entry`,
+`tsconfig.json` and `.env` resolve from the project root.
+
+`frontmcp init` edits `tsconfig.json` in place, keeping comments and trailing
+commas; a file that is not valid JSON(C) is reported (line and column) and left
+untouched, never overwritten. So is one that declares an option `init` must set
+more than once — only the last occurrence takes effect, so remove the duplicate.
+
 Test with curl:
 
 ```bash

@@ -309,21 +309,27 @@ Wire your client at the bridge — no `mcp-remote` needed:
 
 What the bridge guarantees:
 
-- **Stdout is 100% JSON-RPC frames.** Every diagnostic goes to `./.frontmcp/dev.log` (override with `--log-file <path>`).
-- **The session id survives reload.** The bridge pins a uuid via `FRONTMCP_DEV_FORCE_SESSION_ID`; the child re-uses it on every restart so in-flight session state (auth, subscriptions) carries over.
-- **Buffered RPCs during reload drain in FIFO order** when the new child reports ready (sentinel `__FRONTMCP_BOOTSTRAP_COMPLETE__` on stderr, or TCP probe in HTTP mode).
+- **Stdout is 100% JSON-RPC frames.** Every diagnostic goes to `.frontmcp/dev.log` in the project root (override with `--log-file <path>`); start-up notices (the port picked, `.env` files loaded) go to stderr.
+- **Same project setup as `frontmcp dev`.** The bridge reads `frontmcp.config.*` (found from any subfolder), `entry`, `transport.http.port` / `transport.http.path`, the `env.shared` ⊕ `env.dev` overlays and `.env` files, and hands the server `PORT` and `FRONTMCP_HTTP_ENTRY_PATH`. Without `--port`, `transport.http.port` or `PORT`, it picks a free loopback port — the client never sees it.
+- **It talks to the port and path the server actually serves.** The server reports them when it is ready (`__FRONTMCP_BOOTSTRAP_COMPLETE__ {"port":…,"path":…}` on stderr), so a port or `entryPath` hard-coded in `@FrontMcp({ http })` works too.
+- **The client stays connected across reloads.** Over the HTTP loopback the bridge uses the `mcp-session-id` the server issues on `initialize`. A restarted server has no sessions, so the bridge replays the client's `initialize` / `notifications/initialized` handshake against it before buffered requests drain, then sends `notifications/tools/list_changed` (and the resources / prompts equivalents the server advertises) so the client re-reads what changed. Server-side session state — auth, subscriptions, memory — starts fresh with each reload.
+- **Buffered RPCs during reload drain in FIFO order** once the new server is ready and initialized. A server that rejects the replayed handshake counts as a failed reload: it is stopped, and buffered RPCs wait for the next save or answer `dev_reload_deadline`.
 - **Structured errors instead of hangs.** When the reload exceeds `--reload-deadline-ms` (default 30 000) or the buffer exceeds `--buffer-size` (default 8), the bridge synthesises `dev_server_unreachable` / `dev_buffer_full` / `dev_reload_deadline` (codes -32099 / -32098 / -32097) so the client spinner clears immediately.
+- **Nothing is left running.** When the client closes stdin, or the bridge gets `SIGINT` / `SIGTERM`, the server and everything it started are stopped.
+
+`--serve` runs the entry with the project's `tsx` (`node --import tsx`), so the server process itself owns the IPC channel; install `tsx` as a dev dependency (scaffolded projects have it). The HTTP loopback falls back to `npx tsx` when the project has none.
 
 Flags:
 
-| Flag                        | Default               | Description                                             |
-| --------------------------- | --------------------- | ------------------------------------------------------- |
-| `--stdio`                   | off                   | Enable bridge mode.                                     |
-| `--serve`                   | off                   | Use stdio-over-pipe to the child (skips HTTP loopback). |
-| `--log-file <path>`         | `./.frontmcp/dev.log` | Bridge log destination.                                 |
-| `--buffer-size <n>`         | 8                     | Max RPCs buffered during reload.                        |
-| `--reload-deadline-ms <ms>` | 30000                 | Bound on how long the bridge waits for the child.       |
-| `-p, --port <port>`         | 3000                  | HTTP-mode loopback port. Ignored with `--serve`.        |
+| Flag                        | Default                             | Description                                                                     |
+| --------------------------- | ----------------------------------- | ------------------------------------------------------------------------------- |
+| `--stdio`                   | off                                 | Enable bridge mode.                                                             |
+| `--serve`                   | off                                 | Use stdio-over-pipe to the child (skips HTTP loopback).                         |
+| `--log-file <path>`         | `.frontmcp/dev.log` (project root)  | Bridge log destination.                                                         |
+| `--buffer-size <n>`         | 8                                   | Max RPCs buffered during reload.                                                |
+| `--reload-deadline-ms <ms>` | 30000                               | Bound on how long the bridge waits for the child.                               |
+| `-p, --port <port>`         | `transport.http.port`, `PORT`, free | HTTP-mode loopback port. Ignored with `--serve`.                                |
+| `--auto-port`               | off                                 | If an explicitly chosen port is busy, use the next free one instead of exiting. |
 
 ### Why HTTP (Not Stdio) for Development
 

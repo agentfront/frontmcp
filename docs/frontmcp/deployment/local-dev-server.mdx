@@ -41,7 +41,7 @@ Install and initialize in your current repo:
 
 <CodeGroup>```bash universal npm i -D frontmcp @types/node@^24 npx frontmcp init ```</CodeGroup>
 
-`init` adds the required scripts and updates **tsconfig.json** automatically.
+`init` adds the required scripts and updates **tsconfig.json** automatically. It edits the file in place: comments, trailing commas and formatting are kept, and only the settings FrontMCP requires change. A `tsconfig.json` that is not valid JSON(C) is reported with its line and column and left untouched.
 
 ---
 
@@ -235,6 +235,28 @@ As with `PORT`, an explicit `@FrontMcp({ http: { entryPath } })` in your metadat
 wins over `transport.http.path` / the env var. Keep the two in sync, or omit
 `entryPath` from metadata and let `transport.http.path` drive the mount.
 </Warning>
+
+### Stopping the dev server
+
+Press **Ctrl+C**, or send `SIGINT` / `SIGTERM` to the `frontmcp dev` process
+(`kill <pid>`). Either way the CLI stops everything it started — the `tsx --watch`
+runner, the server it forks and the `tsc --watch` type-checker — and waits until
+they have exited (up to 2 seconds, then `SIGKILL`) before it exits, so the port is
+free when the command returns.
+
+### Running from a subfolder
+
+`frontmcp dev` and `frontmcp build` find `frontmcp.config.*` by walking up from the
+current folder. When it sits in a parent folder they run from there, so `entry`,
+`tsconfig.json` and `.env` resolve from the project root:
+
+```text
+$ cd src && frontmcp dev
+[dev] project root: /work/my-app (frontmcp.config found above /work/my-app/src)
+[dev] using entry: src/main.ts
+```
+
+A `--entry` you pass still resolves from the folder you typed it in.
 
 ---
 
