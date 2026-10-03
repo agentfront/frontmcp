@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugin-webmcp",
-  "version": "1.5.7",
+  "version": "1.9.0",
   "description": "WebMCP plugin for FrontMCP - expose an in-browser FrontMCP server's tools to browser agents through document.modelContext",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -50,11 +50,11 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "1.5.7",
-    "@frontmcp/utils": "1.5.7"
+    "@frontmcp/sdk": "1.9.0",
+    "@frontmcp/utils": "1.9.0"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.5.7"
+    "@frontmcp/lazy-zod": "1.9.0"
   },
   "devDependencies": {
     "reflect-metadata": "^0.2.2"
