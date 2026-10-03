@@ -121,7 +121,7 @@ describe('server-level adapters', () => {
 interface FeedOptions {
   name: string;
   feed: string;
-  failOn?: 'unsubscribe' | 'stopPolling';
+  failOn?: 'fetch' | 'unsubscribe' | 'stopPolling';
 }
 
 const feedAdapters: FeedAdapter[] = [];
@@ -140,6 +140,7 @@ class FeedAdapter extends DynamicAdapter<FeedOptions> {
 
   async fetch(): Promise<FrontMcpAdapterResponse> {
     this.events.push('fetch');
+    this.failIf('fetch');
     return {};
   }
 
@@ -272,6 +273,16 @@ describe('server-level adapter lifecycle', () => {
     await server.dispose();
 
     expect(failing.adapter.events).toEqual(['fetch', 'start', 'stop']);
+    expect(healthy.adapter.events).toEqual(['fetch', 'start', 'stop']);
+    expect(healthy.adapter.subscribers).toBe(0);
+  });
+
+  it('stops the adapters that started when another adapter fails to start', async () => {
+    const healthy = feedAdapter({ name: 'feed-before-bad-fetch', feed: 'h' });
+    const failing = feedAdapter({ name: 'feed-bad-fetch', feed: 'f', failOn: 'fetch' });
+
+    await expect(serverWith(healthy.record, failing.record)).rejects.toThrow('feed-bad-fetch: fetch failed');
+
     expect(healthy.adapter.events).toEqual(['fetch', 'start', 'stop']);
     expect(healthy.adapter.subscribers).toBe(0);
   });
