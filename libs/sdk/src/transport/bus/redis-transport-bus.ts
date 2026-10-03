@@ -17,9 +17,7 @@ import type { RemoteLocation, TransportBus, TransportKey } from '../transport.ty
  * Subset of ioredis — allows plugging any compatible client.
  */
 export interface BusRedisClient {
-  hset(key: string, ...fieldValues: string[]): Promise<number>;
   hgetall(key: string): Promise<Record<string, string>>;
-  expire(key: string, seconds: number): Promise<number>;
   del(key: string): Promise<number>;
   publish(channel: string, message: string): Promise<number>;
   eval(script: string, numkeys: number, ...args: (string | number)[]): Promise<unknown>;
@@ -33,6 +31,16 @@ const DEFAULT_BUS_TTL_SECONDS = 3600;
 
 /** `Retry-After` for a request that cannot be relayed (the default heartbeat TTL). */
 const DEFAULT_RETRY_AFTER_SECONDS = 30;
+
+/**
+ * Lua script for atomic advertise: the entry never exists without its TTL.
+ * KEYS[1] = bus key, ARGV = nodeId, channel, type, tokenHash, TTL (seconds)
+ */
+const ADVERTISE_LUA = `
+redis.call('HSET', KEYS[1], 'nodeId', ARGV[1], 'channel', ARGV[2], 'type', ARGV[3], 'tokenHash', ARGV[4])
+redis.call('EXPIRE', KEYS[1], ARGV[5])
+return 1
+`;
 
 /**
  * Lua CAS script for atomic revoke: only delete if nodeId still matches.
@@ -120,23 +128,19 @@ export class RedisTransportBus implements TransportBus {
 
   /**
    * Advertise that this node owns a session.
-   * Stores the nodeId, relay channel, type and token hash in a Redis Hash.
+   * Stores the nodeId, relay channel, type and token hash in a Redis Hash, with its TTL, atomically.
    */
   async advertise(key: TransportKey): Promise<void> {
-    const redisKey = this.busKey(key.sessionId);
-
-    await this.redis.hset(
-      redisKey,
-      'nodeId',
+    await this.redis.eval(
+      ADVERTISE_LUA,
+      1,
+      this.busKey(key.sessionId),
       this.machineId,
-      'channel',
       this.channelOf(this.machineId),
-      'type',
       key.type,
-      'tokenHash',
       key.tokenHash,
+      this.ttlSeconds,
     );
-    await this.redis.expire(redisKey, this.ttlSeconds);
 
     this.logger?.debug('[TransportBus] Advertised session', {
       sessionId: key.sessionId.slice(0, 20),
