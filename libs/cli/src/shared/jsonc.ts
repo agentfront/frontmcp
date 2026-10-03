@@ -13,9 +13,11 @@ import {
   applyEdits,
   modify,
   parse,
+  parseTree,
   printParseErrorCode,
   type FormattingOptions,
   type JSONPath,
+  type Node,
   type ParseError,
 } from 'jsonc-parser';
 
@@ -30,6 +32,18 @@ export class JsoncParseError extends Error {
   ) {
     super(`${file} is not valid JSON: ${reason} at line ${line}, column ${column}`);
     this.name = 'JsoncParseError';
+  }
+}
+
+/** A key to edit is declared more than once: the parser keeps the last, `modify()` edits the first. */
+export class JsoncDuplicateKeyError extends Error {
+  constructor(
+    readonly file: string,
+    readonly key: string,
+    readonly lines: number[],
+  ) {
+    super(`${file} declares "${key}" more than once (lines ${lines.join(', ')}) and only the last one takes effect`);
+    this.name = 'JsoncDuplicateKeyError';
   }
 }
 
@@ -92,16 +106,46 @@ function eolOf(text: string): string {
   return text.includes('\r\n') ? '\r\n' : '\n';
 }
 
+/** The first key on `keyPath` that its object declares more than once, with every occurrence's offset. */
+function duplicateKeyOn(root: Node | undefined, keyPath: JSONPath): { key: string; offsets: number[] } | undefined {
+  let node = root;
+  for (let depth = 0; depth < keyPath.length; depth++) {
+    if (node?.type !== 'object') return undefined;
+    const segment = keyPath[depth];
+    const properties = (node.children ?? []).filter((property) => property.children?.[0]?.value === segment);
+    if (properties.length > 1) {
+      return { key: keyPath.slice(0, depth + 1).join('.'), offsets: properties.map((property) => property.offset) };
+    }
+    node = properties[0]?.children?.[1];
+  }
+  return undefined;
+}
+
 /**
  * Rewrite `text` so it holds `after`, touching only the keys whose values
  * differ from `before` (the parsed `text`). Keys `after` drops are left alone.
  * Comments, key order and formatting elsewhere are kept.
+ * Throws {@link JsoncDuplicateKeyError} when a key to edit is declared more than once.
  */
-export function updateJsoncText(text: string, before: Record<string, unknown>, after: Record<string, unknown>): string {
+export function updateJsoncText(
+  text: string,
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  file: string,
+): string {
   const hasBom = text.startsWith(BOM);
   let source = hasBom ? text.slice(BOM.length) : text;
   const changes: Array<{ path: JSONPath; value: unknown }> = [];
   collectChanges(before, after, [], changes);
+  if (changes.length === 0) return text;
+  const tree = parseTree(source, undefined, { allowTrailingComma: true, disallowComments: false });
+  for (const change of changes) {
+    const duplicate = duplicateKeyOn(tree, change.path);
+    if (duplicate) {
+      const lines = duplicate.offsets.map((offset) => lineAndColumn(source, offset).line);
+      throw new JsoncDuplicateKeyError(file, duplicate.key, lines);
+    }
+  }
   const formattingOptions = detectFormatting(source);
   for (const change of changes) {
     source = applyEdits(source, modify(source, change.path, change.value, { formattingOptions }));

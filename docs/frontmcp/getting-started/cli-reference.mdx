@@ -31,7 +31,7 @@ Commands for building, testing, and debugging your FrontMCP server.
 | `create [name]`        | Scaffold a new FrontMCP project (interactive if name omitted) |
 | `socket <entry>`       | Start Unix socket daemon for local MCP server                 |
 
-`dev` and `build` locate `frontmcp.config.*` by walking up from the current folder and run from the folder that holds it, so they work from any subfolder of the project (paths passed as flags still resolve from where you typed them). `dev` stops its whole process tree on Ctrl+C, `SIGINT` or `SIGTERM`. `init` edits `tsconfig.json` in place, keeping comments and trailing commas, and never overwrites a file it cannot parse.
+`dev` and `build` locate `frontmcp.config.*` by walking up from the current folder and run from the folder that holds it, so they work from any subfolder of the project (paths passed as flags still resolve from where you typed them). `dev` stops its whole process tree on Ctrl+C, `SIGINT` or `SIGTERM`. `init` edits `tsconfig.json` in place, keeping comments and trailing commas, and never overwrites a file it cannot parse — or one that declares an option it must set more than once, since only the last occurrence takes effect.
 
 ---
 

@@ -48,13 +48,19 @@ const FALLBACK_RANGES: Record<string, string> = {
   tslib: '^2.3.0',
 };
 
+/** Declared ranges by name, with npm's precedence: optionalDependencies > dependencies > dev/peer. */
 function readDeclaredRanges(packageDir: string): Record<string, string> {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8')) as Record<
       string,
       Record<string, string> | undefined
     >;
-    return { ...pkg['peerDependencies'], ...pkg['devDependencies'], ...pkg['dependencies'] };
+    return {
+      ...pkg['peerDependencies'],
+      ...pkg['devDependencies'],
+      ...pkg['dependencies'],
+      ...pkg['optionalDependencies'],
+    };
   } catch {
     return {};
   }

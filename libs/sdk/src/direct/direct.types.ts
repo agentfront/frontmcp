@@ -99,8 +99,8 @@ export interface RuntimeToolDefinition {
   /** What the tool does, for the model choosing it. */
   description?: string;
   /**
-   * JSON Schema of the arguments, as listed by `tools/list`. The server does not validate arguments
-   * against it: `execute` receives them as sent, so validate there.
+   * JSON Schema of the arguments, as listed by `tools/list`: an object schema (`type: 'object'`). The
+   * server does not validate arguments against it: `execute` receives them as sent, so validate there.
    */
   inputSchema?: Record<string, unknown>;
   /** MCP behavioral hints (`readOnlyHint`, `destructiveHint`, ...). */
@@ -179,8 +179,11 @@ export interface DirectMcpServer {
    * @param definition - The tool's name, schema and `execute` function
    * @returns A function that removes the tool again
    * @throws ToolNameConflictError if a tool with that name is already registered
-   * @throws EntryValidationError if the name is empty or longer than 64 characters, or the app to
-   *   join is unknown (or ambiguous: a server with several apps needs `definition.app`)
+   * @throws EntryValidationError if the name is empty or longer than 64 characters, the definition
+   *   could not be listed (`inputSchema` not an object schema, malformed `title`, `description`,
+   *   `annotations` or `availableWhen`), or the app to join is unknown (or ambiguous: a server with
+   *   several apps needs `definition.app`)
+   * @throws InternalMcpError if the server is disposed, or is disposed before the tool is added
    *
    * @example
    * ```typescript
