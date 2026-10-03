@@ -128,7 +128,7 @@ The page FrontMCP writes also carries its own Content-Security-Policy built from
 
 - An origin must be `https://` or `wss://` (a WebSocket API needs `wss://` in `connectDomains`), a `https://*.` / `wss://*.` wildcard, or `http://` / `ws://` on `localhost` / `127.0.0.1` / `[::1]`.
 - Declared origins are added to what the page already reaches: the CDNs and `resourceDomains` stay in `connect-src`.
-- Any other origin (bare host, `ftp://`, plain `http://` host) is left out of the page policy; startup logs a warning naming the tool and the origin. The resource `_meta.ui.csp` keeps the origins as written.
+- Any other origin (bare host, `ftp://`, plain `http://` host, a value with a `?query` or `#fragment`) is left out of the page policy; startup logs a warning naming the tool and the origin. The resource `_meta.ui.csp` keeps the origins as written.
 
 ```typescript
 ui: {
