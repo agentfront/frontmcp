@@ -300,6 +300,9 @@ describe('redis: { url } (#680)', () => {
     ['http://localhost:6379', 'redis:// or rediss://'],
     ['redis://alice:pw@localhost', 'ACL user "alice"'],
     ['redis://localhost/abc', 'database "abc"'],
+    ['redis://:p%ZZ@localhost', 'password has a malformed percent-escape'],
+    ['redis://:%E0%A4%A@localhost', 'password has a malformed percent-escape'],
+    ['redis://us%ZZer:pw@localhost', 'username has a malformed percent-escape'],
   ])('rejects %p with a message that says why', (url, message) => {
     const result = redisOptionsSchema.safeParse({ url });
     expect(result.success).toBe(false);
@@ -329,5 +332,11 @@ describe('parseRedisUrl', () => {
   it('returns the problem as a string', () => {
     expect(parseRedisUrl('redis://')).toEqual(expect.any(String));
     expect(parseRedisUrl('redis://h:1/0')).toEqual({ host: 'h', port: 1, db: 0, tls: false });
+  });
+
+  it('reports a malformed credential escape without echoing the credential', () => {
+    const problem = parseRedisUrl('redis://:secret%ZZ@localhost');
+    expect(problem).toEqual(expect.stringContaining('malformed percent-escape'));
+    expect(problem).not.toEqual(expect.stringContaining('secret'));
   });
 });
