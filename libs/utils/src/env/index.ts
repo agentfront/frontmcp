@@ -1,6 +1,7 @@
 export {
   getEnv,
   getCwd,
+  getNodeEnv,
   isProduction,
   isDevelopment,
   getEnvFlag,

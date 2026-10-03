@@ -206,6 +206,7 @@ export { EventEmitter } from './event-emitter';
 // Environment utilities (cross-platform)
 export {
   getEnv,
+  getNodeEnv,
   getCwd,
   isProduction,
   isDevelopment,

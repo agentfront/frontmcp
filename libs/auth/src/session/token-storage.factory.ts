@@ -68,6 +68,7 @@ export async function createTokenStorageAdapter(config: TokenStorageConfig | und
       encryption: config.sqlite.encryption,
       ttlCleanupIntervalMs: config.sqlite.ttlCleanupIntervalMs ?? 60000,
       walMode: config.sqlite.walMode ?? true,
+      busyTimeoutMs: config.sqlite.busyTimeoutMs,
     });
     await adapter.connect();
     return adapter;

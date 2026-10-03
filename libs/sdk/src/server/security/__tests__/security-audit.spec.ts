@@ -112,6 +112,77 @@ describe('auditSecurityDefaults()', () => {
       const dnsFinding = findings.find((f) => f.code === 'DNS_REBINDING_PROTECTED');
       expect(dnsFinding).toBeDefined();
     });
+
+    describe('reports what the host adapter enforces (#680)', () => {
+      const originalAllowedHosts = process.env['FRONTMCP_ALLOWED_HOSTS'];
+      afterEach(() => {
+        if (originalAllowedHosts === undefined) delete process.env['FRONTMCP_ALLOWED_HOSTS'];
+        else process.env['FRONTMCP_ALLOWED_HOSTS'] = originalAllowedHosts;
+      });
+
+      const dnsFinding = (config: SecurityAuditConfig) =>
+        auditSecurityDefaults(config, true).find((f) => f.code.startsWith('DNS_REBINDING'));
+
+      it.each(['0.0.0.0', '::', '10.0.0.5'])(
+        'does not claim protection on a routable bind (%s) with no allowed hosts',
+        (address) => {
+          delete process.env['FRONTMCP_ALLOWED_HOSTS'];
+          const finding = dnsFinding({ resolvedBindAddress: address });
+          expect(finding?.code).toBe('DNS_REBINDING_NOT_ENFORCED');
+          expect(finding?.message).toContain(address);
+          expect(finding?.recommendation).toContain('allowedHosts');
+        },
+      );
+
+      it('reports protection on a routable bind once allowedHosts is configured', () => {
+        const finding = dnsFinding({
+          resolvedBindAddress: '0.0.0.0',
+          security: { dnsRebindingProtection: { allowedHosts: ['mcp.example.com'] } },
+        });
+        expect(finding?.code).toBe('DNS_REBINDING_PROTECTED');
+      });
+
+      it('reports protection on a routable bind when only allowedOrigins is configured', () => {
+        const finding = dnsFinding({
+          resolvedBindAddress: '0.0.0.0',
+          security: { dnsRebindingProtection: { allowedOrigins: ['https://app.example.com'] } },
+        });
+        expect(finding?.code).toBe('DNS_REBINDING_PROTECTED');
+      });
+
+      it('reports protection on a routable bind when FRONTMCP_ALLOWED_HOSTS is set', () => {
+        process.env['FRONTMCP_ALLOWED_HOSTS'] = 'mcp.example.com';
+        expect(dnsFinding({ resolvedBindAddress: '0.0.0.0' })?.code).toBe('DNS_REBINDING_PROTECTED');
+      });
+
+      it('reports the derived loopback allow-list on a loopback bind', () => {
+        delete process.env['FRONTMCP_ALLOWED_HOSTS'];
+        const finding = dnsFinding({ resolvedBindAddress: '127.0.0.1' });
+        expect(finding?.code).toBe('DNS_REBINDING_PROTECTED');
+        expect(finding?.message).toContain('loopback');
+      });
+
+      it('says a Unix socket has no Host to check', () => {
+        delete process.env['FRONTMCP_ALLOWED_HOSTS'];
+        const finding = dnsFinding({ resolvedBindAddress: '127.0.0.1', socketPath: '/tmp/mcp.sock' });
+        expect(finding?.code).toBe('DNS_REBINDING_NOT_APPLICABLE');
+      });
+
+      it('keeps the explicit opt-out a warning', () => {
+        expect(
+          dnsFinding({ resolvedBindAddress: '0.0.0.0', security: { dnsRebindingProtection: { enabled: false } } }),
+        ).toMatchObject({ code: 'DNS_REBINDING_UNPROTECTED', level: 'warn' });
+      });
+
+      it('does not offer allowedHosts as a way out of the opt-out, which the adapter ignores', () => {
+        const finding = dnsFinding({
+          resolvedBindAddress: '0.0.0.0',
+          security: { dnsRebindingProtection: { enabled: false } },
+        });
+        expect(finding?.recommendation).toMatch(/^Remove `enabled: false`/);
+        expect(finding?.recommendation).not.toMatch(/\bor set security\.dnsRebindingProtection\.allowedHosts/);
+      });
+    });
   });
 
   describe('strict mode', () => {

@@ -29,6 +29,8 @@ class Server {}
 
 Then scrape: `curl http://localhost:3000/metrics` (the default port is `PORT`, else 3000) — Content-Type is the canonical Prometheus `text/plain; version=0.0.4; charset=utf-8`.
 
+`FrontMcpInstance.createFetchHandler(config)` (the Web-standard `(Request) => Response` handler) answers `GET /metrics` too — same body, auth and headers as the Express listener (it needs `@frontmcp/observability` installed, like the Express endpoint).
+
 ## Configuration
 
 ```typescript
@@ -105,7 +107,7 @@ Keep label values bounded (status codes, enum members, tool names) — unbounded
 
 ## Path conflict guard
 
-`metrics.path` MUST NOT collide with MCP transport paths (`/mcp`, `/sse`, `/messages`). The service constructor throws `MetricsPathConflictError` at startup if it detects an overlap.
+`metrics.path` MUST NOT collide with MCP transport paths (`/mcp`, `/sse`, `/messages`). The service constructor throws `MetricsPathConflictError` at startup if it detects an overlap. `createFetchHandler()` also throws `MetricsPathConflictError` when `metrics.path` equals its MCP entry path (`http.entryPath`, `/` when unset), since the metrics route would otherwise answer the MCP `GET` that opens the event stream.
 
 ## Common Patterns
 

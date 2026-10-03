@@ -24,7 +24,7 @@ frontmcp build --target node
 npm install -g pm2
 
 # Start with cluster mode (one instance per CPU core)
-pm2 start dist/main.js --name frontmcp-server -i max
+pm2 start dist/node/my-server.bundle.js --name frontmcp-server -i max
 
 # Save the process list for auto-restart on reboot
 pm2 save

@@ -189,9 +189,9 @@ itself before any framework initialization:
 }
 ```
 
-> Do not run the raw `--target node` bundle as `node dist/node/my-server.bundle.js --stdio`
-> — that bundle is your `@FrontMcp` server module and starts the HTTP server on
-> import. Use the runner above, or set `FRONTMCP_STDIO=1` before the bundle loads.
+> The bundle itself honors the flag too: `node dist/node/my-server.bundle.js --stdio`
+> serves stdio and binds no port (and, run directly, it serves MCP at
+> `transport.http.path` like the runner does).
 
 ## HTTP Transport
 

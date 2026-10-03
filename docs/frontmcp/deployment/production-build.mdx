@@ -31,27 +31,32 @@ See the [Serverless Deployment](/frontmcp/deployment/serverless) guide.
 
 </CodeGroup>
 
-This compiles TypeScript to `dist/` using your project's `tsconfig.json` (the
-CLI passes `--project tsconfig.json` when present, otherwise falls back to
-inline `tsc` flags).
+This runs `frontmcp build`, which compiles TypeScript using your project's
+`tsconfig.json` (the CLI passes `--project tsconfig.json` when present,
+otherwise falls back to inline `tsc` flags) and writes each target to
+`dist/<target>/` — `dist/node/` for the default `node` target. A deployment's
+`outDir` in `frontmcp.config` replaces that directory.
 
 ## Start
 
 `frontmcp create` and `frontmcp init` don't add a `start` script by default —
 run the compiled bundle directly. The default `node` target emits a CommonJS
-single-file bundle at `dist/{name}.bundle.js` (where `{name}` is your
-`package.json` name):
+single-file bundle at `dist/node/{name}.bundle.js`, where `{name}` is the `name`
+in `frontmcp.config` (or, without a config file, your `package.json` name with
+any scope removed):
 
 ```bash
-NODE_ENV=production PORT=8080 node dist/my-server.bundle.js
+NODE_ENV=production PORT=8080 node dist/node/my-server.bundle.js
 ```
+
+Run this way, the bundle applies what the generated `dist/node/<name>` runner script does: it serves MCP at `transport.http.path` from `frontmcp.config` (unless `FRONTMCP_HTTP_ENTRY_PATH` is set) and `--stdio` serves over stdin/stdout instead of HTTP. The generated Dockerfile's `CMD ["node", "dist/node/<name>.bundle.js"]` relies on this.
 
 If you prefer a script, add one to `package.json`:
 
 ```json
 {
   "scripts": {
-    "start": "node dist/my-server.bundle.js"
+    "start": "node dist/node/my-server.bundle.js"
   }
 }
 ```

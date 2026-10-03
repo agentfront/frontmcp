@@ -40,6 +40,66 @@ function readAuthorizationHeader(
 }
 
 /**
+ * One scrape of the metrics endpoint, independent of the HTTP server that
+ * sends it — the Express route and the web-fetch handler render the same
+ * result, so the two transports cannot answer `/metrics` differently.
+ */
+export type MetricsHttpResult =
+  | { status: number; headers: Record<string, string>; kind: 'json'; body: unknown }
+  | { status: number; headers: Record<string, string>; kind: 'text'; body: string };
+
+/** The metrics endpoint's path (`metrics.path`, default `/metrics`). */
+export function metricsPath(config: MetricsOptionsInterface): string {
+  return config.path ?? '/metrics';
+}
+
+/**
+ * Answer one `GET <path>` scrape: check the `Authorization` header against the
+ * configured policy, then render the metrics in the configured format.
+ */
+export function renderMetricsScrape(
+  service: MetricsService,
+  config: MetricsOptionsInterface,
+  authorizationHeader: string | undefined,
+): MetricsHttpResult {
+  const status = service.authorize(authorizationHeader);
+  if (status !== 200) {
+    return {
+      status,
+      headers: { 'Cache-Control': 'no-store' },
+      kind: 'json',
+      body: {
+        error: status === 401 ? 'unauthorized' : 'forbidden',
+        message:
+          status === 401
+            ? 'Missing or malformed Authorization header'
+            : 'Bearer token did not match the configured metrics token',
+      },
+    };
+  }
+
+  const result = service.getMetrics();
+  const headers = { 'Cache-Control': 'no-store', 'Content-Type': result.contentType };
+  if ((config.format ?? 'prometheus') !== 'json') {
+    return { status: 200, headers, kind: 'text', body: result.body };
+  }
+  try {
+    return { status: 200, headers, kind: 'json', body: JSON.parse(result.body) };
+  } catch {
+    // `getMetrics()` builds the JSON via `JSON.stringify`, so this
+    // branch should be unreachable — but if a downstream override
+    // produces malformed JSON we surface a 500 rather than letting
+    // the parse exception escape the route handler.
+    return {
+      status: 500,
+      headers,
+      kind: 'json',
+      body: { error: 'internal_error', message: 'Failed to serialise metrics JSON' },
+    };
+  }
+}
+
+/**
  * Register the `GET <path>` metrics endpoint. No-op when the config has
  * `enabled !== true` — callers should already have gated this call but the
  * extra guard keeps `prepare()` simple.
@@ -50,43 +110,17 @@ export function registerMetricsRoutes(
   config: MetricsOptionsInterface,
 ): void {
   if (config.enabled !== true) return;
-  const path = config.path ?? '/metrics';
 
-  server.registerRoute('GET', path, async (req, res) => {
-    const status = service.authorize(readAuthorizationHeader(req.headers));
-    if (status !== 200) {
-      res.setHeader?.('Cache-Control', 'no-store');
-      res.status(status).json({
-        error: status === 401 ? 'unauthorized' : 'forbidden',
-        message:
-          status === 401
-            ? 'Missing or malformed Authorization header'
-            : 'Bearer token did not match the configured metrics token',
-      });
-      return;
-    }
+  server.registerRoute('GET', metricsPath(config), async (req, res) => {
+    const result = renderMetricsScrape(service, config, readAuthorizationHeader(req.headers));
+    for (const [name, value] of Object.entries(result.headers)) res.setHeader?.(name, value);
 
-    const result = service.getMetrics();
-    res.setHeader?.('Cache-Control', 'no-store');
-    res.setHeader?.('Content-Type', result.contentType);
-
-    if ((config.format ?? 'prometheus') === 'json') {
-      try {
-        res.status(200).json(JSON.parse(result.body));
-      } catch {
-        // `getMetrics()` builds the JSON via `JSON.stringify`, so this
-        // branch should be unreachable — but if a downstream override
-        // produces malformed JSON we surface a 500 rather than letting
-        // the parse exception escape the route handler.
-        res.status(500).json({
-          error: 'internal_error',
-          message: 'Failed to serialise metrics JSON',
-        });
-      }
+    if (result.kind === 'json') {
+      res.status(result.status).json(result.body);
       return;
     }
     if (typeof res.send === 'function') {
-      res.status(200);
+      res.status(result.status);
       res.send(result.body);
       return;
     }

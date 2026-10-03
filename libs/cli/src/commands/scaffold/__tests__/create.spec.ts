@@ -186,6 +186,16 @@ describe('runCreate', () => {
       expect(template).not.toContain('main.handler');
     });
 
+    it('adds @codegenie/serverless-express for the lambda target only (#680)', async () => {
+      await runCreate('sam-deps', { yes: true, target: 'lambda' });
+      const lambdaPkg = JSON.parse(readFileSync(path.join(tempDir, 'sam-deps', 'package.json'), 'utf8'));
+      expect(lambdaPkg.dependencies['@codegenie/serverless-express']).toBeDefined();
+
+      await runCreate('node-deps', { yes: true, target: 'node' });
+      const nodePkg = JSON.parse(readFileSync(path.join(tempDir, 'node-deps', 'package.json'), 'utf8'));
+      expect(nodePkg.dependencies['@codegenie/serverless-express']).toBeUndefined();
+    });
+
     it('should create Vercel target files', async () => {
       await runCreate('vercel-project', { yes: true, target: 'vercel' });
 

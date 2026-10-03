@@ -204,6 +204,8 @@ export interface TokenStorageSqliteConfig {
   ttlCleanupIntervalMs?: number;
   /** Enable WAL mode for better read concurrency (default true). */
   walMode?: boolean;
+  /** Ms to wait for a lock held by another process before `SQLITE_BUSY` (default 5000). */
+  busyTimeoutMs?: number;
 }
 
 /**

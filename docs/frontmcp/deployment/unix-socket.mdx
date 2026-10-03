@@ -118,12 +118,13 @@ const handle = await FrontMcpInstance.runUnixSocket({
 
 ### SQLite Options
 
-| Option                 | Type      | Default    | Description                                           |
-| ---------------------- | --------- | ---------- | ----------------------------------------------------- |
-| `path`                 | `string`  | _required_ | Path to the `.sqlite` database file                   |
-| `encryption.secret`    | `string`  | —          | Secret key for AES-256-GCM encryption via HKDF-SHA256 |
-| `walMode`              | `boolean` | `true`     | Enable WAL mode for better read concurrency           |
-| `ttlCleanupIntervalMs` | `number`  | `60000`    | Interval in ms for purging expired keys               |
+| Option                 | Type      | Default    | Description                                                                |
+| ---------------------- | --------- | ---------- | -------------------------------------------------------------------------- |
+| `path`                 | `string`  | _required_ | Path to the `.sqlite` database file                                        |
+| `encryption.secret`    | `string`  | —          | Secret key for AES-256-GCM encryption via HKDF-SHA256                      |
+| `walMode`              | `boolean` | `true`     | Enable WAL mode for better read concurrency                                |
+| `busyTimeoutMs`        | `number`  | `5000`     | Ms to wait for a lock held by another process before failing `SQLITE_BUSY` |
+| `ttlCleanupIntervalMs` | `number`  | `60000`    | Interval in ms for purging expired keys                                    |
 
 ---
 

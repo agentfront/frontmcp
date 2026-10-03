@@ -218,15 +218,25 @@ export class FrontMcpInstance implements FrontMcpInterface {
     if (typeof serverInstance.setMetricsService !== 'function') return;
 
     const metricsConfig = this.config.metrics;
-    if (!metricsConfig || metricsConfig.enabled !== true) {
+    const service = this.createMetricsService();
+    if (!metricsConfig || !service) {
       serverInstance.setMetricsConfig(metricsConfig ?? {});
       return;
     }
+    serverInstance.setMetricsService(service, metricsConfig);
+  }
 
+  /**
+   * The `/metrics` service when `metrics.enabled: true`, `undefined` otherwise.
+   * Shared by the Express host (`wireMetricsService`) and `createFetchHandler()`,
+   * so both transports serve the endpoint from the same config.
+   */
+  private createMetricsService(): MetricsService | undefined {
+    const metricsConfig = this.config.metrics;
+    if (!metricsConfig || metricsConfig.enabled !== true) return undefined;
     try {
       const processCollector = createProcessStatsCollectorIfEnabled(metricsConfig);
-      const service = new MetricsService(metricsConfig, processCollector);
-      serverInstance.setMetricsService(service, metricsConfig);
+      return new MetricsService(metricsConfig, processCollector);
     } catch (err) {
       this.log?.error?.('Failed to wire /metrics endpoint', err as Error);
       throw err;
@@ -330,8 +340,15 @@ export class FrontMcpInstance implements FrontMcpInterface {
       if (!scope) {
         throw new ServerNotFoundError();
       }
+      // `/metrics` is served by the handler too (#680 — it answered 404), from the same service
+      // the Express host registers as a route.
+      const metricsService = frontMcp.createMetricsService();
+      const metricsConfig = frontMcp.config.metrics;
       frontMcp.log?.info('FrontMCP fetch handler created (web-standard transport)');
-      return createWebFetchHandler(scope);
+      return createWebFetchHandler(
+        scope,
+        metricsService && metricsConfig ? { metrics: { service: metricsService, config: metricsConfig } } : {},
+      );
     };
 
     // Where the runtime allows it, build now, so a misconfigured server fails where it is created.

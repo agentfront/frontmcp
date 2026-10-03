@@ -36,13 +36,13 @@ This skill walks you through deploying a FrontMCP server to AWS Lambda with API 
 - SAM CLI installed: `brew install aws-sam-cli` (macOS) or see AWS docs
 - Node.js 24 or later
 - A FrontMCP project ready to build
-- **Peer dependency:** `@codegenie/serverless-express` installed in your project. The Lambda adapter externalizes it at bundle time and validates its presence at build time:
+- **Peer dependency:** `@codegenie/serverless-express` installed in your project. The Lambda adapter validates its presence at build time and bundles it into `handler.cjs`, so `dist/lambda/` deploys on its own (`CodeUri: dist/lambda/`, no `node_modules` or Layer needed):
 
   ```bash
   npm install @codegenie/serverless-express
   ```
 
-  If it isn't installed, `frontmcp build --target lambda` fails with a clear error before producing artifacts.
+  If it isn't installed, `frontmcp build --target lambda` fails with a clear error before producing artifacts. `frontmcp create --target lambda` adds it to `dependencies` for you.
 
 ## Step 1: Build for Lambda
 

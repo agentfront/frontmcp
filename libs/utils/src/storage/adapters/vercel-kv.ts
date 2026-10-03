@@ -28,15 +28,29 @@ type VercelKvClient = {
   keys: (pattern: string) => Promise<string[]>;
 };
 
+/** The part of `@vercel/kv` the adapter uses. */
+interface VercelKvModule {
+  createClient: (config: { url: string; token: string; cache?: undefined }) => VercelKvClient;
+}
+
 /**
- * Lazy-load @vercel/kv to avoid bundling when not used.
+ * Load `@vercel/kv` when the adapter connects, so a server that never uses it
+ * does not need it installed.
+ *
+ * A dynamic `import()`, not `require()`: in this package's ESM build a lazy
+ * `require()` is an opaque runtime call that a bundler consuming the build
+ * (wrangler for Cloudflare Workers, edge builds) cannot follow, so a Worker
+ * failed to load `@vercel/kv` even with it installed (#680). An `import()` of
+ * a string literal is bundled when the package is installed and left alone,
+ * inside this try block, when it is not.
  */
-function getVercelKv(): {
-  kv: VercelKvClient;
-  createClient: (config: { url: string; token: string }) => VercelKvClient;
-} {
+async function loadVercelKv(): Promise<VercelKvModule> {
   try {
-    return require('@vercel/kv');
+    const mod = (await import('@vercel/kv')) as unknown as Partial<VercelKvModule> & { default?: VercelKvModule };
+    // Node's ESM view of the CommonJS build exposes the exports on `default` too.
+    const resolved = typeof mod.createClient === 'function' ? mod : mod.default;
+    if (!resolved || typeof resolved.createClient !== 'function') throw new Error('createClient missing');
+    return resolved as VercelKvModule;
   } catch {
     throw new Error('@vercel/kv is required for Vercel KV storage adapter. Install it with: npm install @vercel/kv');
   }
@@ -100,19 +114,19 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
     if (this.connected) return;
 
     try {
-      const { createClient, kv } = getVercelKv();
-
-      // Use default kv if no custom config, otherwise create client
-      if (this.options.url === process.env['KV_REST_API_URL']) {
-        this.client = kv;
-      } else {
-        const url = this.options.url;
-        const token = this.options.token;
-        if (!url || !token) {
-          throw new StorageConfigError('vercel-kv', 'URL and token are required');
-        }
-        this.client = createClient({ url, token });
+      const { createClient } = await loadVercelKv();
+      const url = this.options.url;
+      const token = this.options.token;
+      if (!url || !token) {
+        throw new StorageConfigError('vercel-kv', 'URL and token are required');
       }
+      // `@vercel/kv` sets `cache: 'default'` on every request, which Cloudflare
+      // Workers reject ("The 'cache' field on 'RequestInitializerDict' is not
+      // implemented" / "Unsupported cache mode: default"). Leave the fetch cache
+      // mode unset instead — the value `@vercel/kv` itself calls equivalent.
+      // The module's `kv` singleton cannot take this option, so even an
+      // env-configured adapter builds its own client from the same URL and token.
+      this.client = createClient({ url, token, cache: undefined });
 
       // Test connection with a simple operation
       await this.client.exists('__healthcheck__');

@@ -11,6 +11,8 @@
  */
 import 'reflect-metadata';
 
+import { GuardStorageUnavailableError } from '@frontmcp/guard';
+
 import { FlowControl, FrontMcpFlowTokens } from '../../../common';
 import HttpRequestFlow from '../http.request.flow';
 
@@ -22,9 +24,13 @@ function createStage(options: {
   global?: unknown;
   clientIp?: string;
   rateLimitAllowed?: boolean;
+  rateLimitError?: Error;
 }) {
   const checkIpFilter = jest.fn(() => options.ipFilterResult);
-  const checkGlobalRateLimit = jest.fn(async () => ({ allowed: options.rateLimitAllowed ?? true }));
+  const checkGlobalRateLimit = jest.fn(async () => {
+    if (options.rateLimitError) throw options.rateLimitError;
+    return { allowed: options.rateLimitAllowed ?? true };
+  });
 
   const responded: Responded[] = [];
   const stage = Object.create(HttpRequestFlow.prototype) as HttpRequestFlow & Record<string, unknown>;
@@ -105,6 +111,34 @@ describe('http:request checkIpFilter — ipFilter enforcement (GHSA-hwfp-xv2f-fr
     expect(responded).toHaveLength(1);
     expect(responded[0].status).toBe(429);
     expect(responded[0].body).toMatchObject({ jsonrpc: '2.0', id: 7 });
+  });
+
+  it('answers a public 503 when the limit store is down mid-run (#680)', async () => {
+    const { stage, responded } = createStage({
+      ipFilterResult: { allowed: true },
+      global: { maxRequests: 10, windowMs: 60_000 },
+      rateLimitError: new GuardStorageUnavailableError('redis', new Error('connect ECONNREFUSED'), 'runtime'),
+    });
+
+    await runStage(() => (stage as any).acquireQuota(), responded);
+
+    expect(responded).toHaveLength(1);
+    expect(responded[0]).toMatchObject({
+      status: 503,
+      headers: { 'Retry-After': '1' },
+      body: { jsonrpc: '2.0', id: 7, error: { code: -32603, data: { code: 'GUARD_STORAGE_UNAVAILABLE' } } },
+    });
+    // The store's own address stays in the server log, not in the response.
+    expect(JSON.stringify(responded[0].body)).not.toContain('ECONNREFUSED');
+  });
+
+  it('lets any other rate-limit failure propagate', async () => {
+    const { stage, responded } = createStage({
+      global: { maxRequests: 10, windowMs: 60_000 },
+      rateLimitError: new Error('boom'),
+    });
+
+    await expect(runStage(() => (stage as any).acquireQuota(), responded)).rejects.toThrow('boom');
   });
 
   it('is a no-op when no filter is configured and no global limit is set', async () => {

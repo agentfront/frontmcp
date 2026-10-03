@@ -1,13 +1,14 @@
 import {
-  getEnv,
   getCwd,
-  isProduction,
-  isDevelopment,
+  getEnv,
   getEnvFlag,
+  getNodeEnv,
   isDebug,
-  setEnv,
+  isDevelopment,
   isEdgeRuntime,
+  isProduction,
   isServerless,
+  setEnv,
   supportsAnsi,
 } from '../browser-env';
 
@@ -22,6 +23,12 @@ describe('Browser env polyfill', () => {
     it('should return default value when provided', () => {
       expect(getEnv('NODE_ENV', 'fallback')).toBe('fallback');
       expect(getEnv('MISSING', 'default')).toBe('default');
+    });
+  });
+
+  describe('getNodeEnv', () => {
+    it('reports no NODE_ENV in a browser', () => {
+      expect(getNodeEnv()).toBeUndefined();
     });
   });
 

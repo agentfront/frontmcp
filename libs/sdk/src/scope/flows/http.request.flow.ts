@@ -6,7 +6,7 @@ import {
   type OrchestratedProviderState,
   type OrchestratedTokenStore,
 } from '@frontmcp/auth';
-import { type GuardManager } from '@frontmcp/guard';
+import { GuardStorageUnavailableError, type GuardManager } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
@@ -213,7 +213,30 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
 
   private async enforceGlobalRateLimit(manager: GuardManager): Promise<void> {
     const context = this.tryGetContext();
-    const result = await manager.checkGlobalRateLimit(buildPartitionContext(context));
+    let result: Awaited<ReturnType<GuardManager['checkGlobalRateLimit']>>;
+    try {
+      result = await manager.checkGlobalRateLimit(buildPartitionContext(context));
+    } catch (error) {
+      // The limit store went away while the server runs. Rate limits fail closed, but the
+      // refusal is the public 503 the guard documents, not an unhandled flow error (a bare 500).
+      if (!(error instanceof GuardStorageUnavailableError)) throw error;
+      this.logger.warn(`[${this.requestId}] acquireQuota: ${error.message}`);
+      this.respond(
+        httpRespond.json(
+          {
+            jsonrpc: '2.0',
+            id: this.jsonRpcRequestId(),
+            error: {
+              code: -32603,
+              message: 'Service temporarily unavailable: the rate-limit store cannot be reached',
+              data: { code: error.code },
+            },
+          },
+          { status: error.statusCode, headers: { 'Retry-After': '1' } },
+        ),
+      );
+      return;
+    }
     context?.set(GLOBAL_RATE_LIMIT_CHECKED, true);
     if (result.allowed) return;
 

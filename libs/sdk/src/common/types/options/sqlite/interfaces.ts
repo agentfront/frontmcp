@@ -32,4 +32,13 @@ export interface SqliteOptionsInterface {
    * @default true
    */
   walMode?: boolean;
+
+  /**
+   * Milliseconds a connection waits for a lock held by another process (or
+   * another FrontMCP instance sharing the file) before the write fails with
+   * `SQLITE_BUSY`. Applies to every store built from this block — sessions,
+   * elicitation, tasks and the event store.
+   * @default 5000
+   */
+  busyTimeoutMs?: number;
 }

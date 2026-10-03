@@ -1,6 +1,13 @@
 // common/types/options/__tests__/redis.options.spec.ts
 
-import { redisOptionsSchema, RedisOptions, RedisOptionsInput } from '../redis';
+import { frontMcpMetadataSchema } from '../../../metadata/front-mcp.metadata';
+import {
+  parseRedisUrl,
+  pubsubOptionsSchema,
+  redisOptionsSchema,
+  type RedisOptions,
+  type RedisOptionsInput,
+} from '../redis';
 
 // Helper to safely access redis properties (handles union type with Vercel KV)
 function getRedisProperty<K extends string>(redis: RedisOptions | undefined, key: K): unknown {
@@ -230,5 +237,106 @@ describe('redisOptionsSchema', () => {
         expect(result.success).toBe(true);
       });
     });
+  });
+});
+
+describe('redis: { url } (#680)', () => {
+  it('reads host, port, password and db from a redis:// URL', () => {
+    const result = redisOptionsSchema.parse({ url: 'redis://:s3cret@cache.internal:6380/2' });
+    expect(result).toEqual({
+      provider: 'redis',
+      host: 'cache.internal',
+      port: 6380,
+      password: 's3cret',
+      db: 2,
+      tls: false,
+      keyPrefix: 'mcp:',
+      defaultTtlMs: 3600000,
+    });
+  });
+
+  it('turns TLS on for rediss:// and accepts the default ACL user', () => {
+    const result = redisOptionsSchema.parse({ url: 'rediss://default:p%40ss@redis.example.com' });
+    expect(result).toMatchObject({
+      provider: 'redis',
+      host: 'redis.example.com',
+      port: 6379,
+      password: 'p@ss',
+      tls: true,
+    });
+  });
+
+  it('defaults port and db and omits the password when the URL has none', () => {
+    const result = redisOptionsSchema.parse({ url: 'redis://localhost' }) as Record<string, unknown>;
+    expect(result).toMatchObject({ host: 'localhost', port: 6379, db: 0, tls: false });
+    expect(result).not.toHaveProperty('password');
+  });
+
+  it('reads the database from ?db= when the path has none', () => {
+    expect(redisOptionsSchema.parse({ url: 'redis://localhost:6379?db=4' })).toMatchObject({ db: 4 });
+  });
+
+  it('unwraps an IPv6 literal', () => {
+    expect(redisOptionsSchema.parse({ url: 'redis://[::1]:6379' })).toMatchObject({ host: '::1' });
+  });
+
+  it('keeps keyPrefix and defaultTtlMs next to the url', () => {
+    const result = redisOptionsSchema.parse({
+      provider: 'redis',
+      url: 'redis://localhost',
+      keyPrefix: 'app:',
+      defaultTtlMs: 1000,
+    });
+    expect(result).toMatchObject({ provider: 'redis', keyPrefix: 'app:', defaultTtlMs: 1000 });
+  });
+
+  it('still parses a vercel-kv url as Vercel KV', () => {
+    const result = redisOptionsSchema.parse({ provider: 'vercel-kv', url: 'https://kv.example.com', token: 't' });
+    expect(result).toMatchObject({ provider: 'vercel-kv', url: 'https://kv.example.com' });
+  });
+
+  it.each([
+    ['not a url', 'not a valid URL'],
+    ['http://localhost:6379', 'redis:// or rediss://'],
+    ['redis://alice:pw@localhost', 'ACL user "alice"'],
+    ['redis://localhost/abc', 'database "abc"'],
+    ['redis://:p%ZZ@localhost', 'password has a malformed percent-escape'],
+    ['redis://:%E0%A4%A@localhost', 'password has a malformed percent-escape'],
+    ['redis://us%ZZer:pw@localhost', 'username has a malformed percent-escape'],
+  ])('rejects %p with a message that says why', (url, message) => {
+    const result = redisOptionsSchema.safeParse({ url });
+    expect(result.success).toBe(false);
+    const issues = result.success ? [] : result.error.issues.map((issue) => issue.message).join('\n');
+    expect(issues).toContain(message);
+  });
+
+  it('parses a url on pubsub and on the top-level @FrontMcp config', () => {
+    expect(pubsubOptionsSchema.parse({ url: 'redis://localhost:7000' })).toMatchObject({
+      host: 'localhost',
+      port: 7000,
+    });
+
+    const config = frontMcpMetadataSchema.parse({
+      info: { name: 'redis-url', version: '1.0.0' },
+      apps: [],
+      redis: { url: 'redis://:pw@redis.internal:6390/1' },
+    }) as { redis?: unknown; transport?: { persistence?: { redis?: unknown } } };
+    const expected = { provider: 'redis', host: 'redis.internal', port: 6390, password: 'pw', db: 1 };
+    expect(config.redis).toMatchObject(expected);
+    // Transport persistence auto-enables from the top-level block — with the parsed connection.
+    expect(config.transport?.persistence?.redis).toMatchObject(expected);
+  });
+});
+
+describe('parseRedisUrl', () => {
+  it('returns the problem as a string', () => {
+    expect(parseRedisUrl('redis://')).toEqual(expect.any(String));
+    expect(parseRedisUrl('redis://h:1/0')).toEqual({ host: 'h', port: 1, db: 0, tls: false });
+  });
+
+  it('reports a malformed credential escape without echoing the credential', () => {
+    const problem = parseRedisUrl('redis://:secret%ZZ@localhost');
+    expect(problem).toEqual(expect.stringContaining('malformed percent-escape'));
+    expect(problem).not.toEqual(expect.stringContaining('secret'));
   });
 });

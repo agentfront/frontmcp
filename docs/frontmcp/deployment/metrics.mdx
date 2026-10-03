@@ -41,6 +41,8 @@ frontmcp_skills_bundle_pulls_total{source="npm"} 3
 
 The Content-Type is the canonical Prometheus `text/plain; version=0.0.4; charset=utf-8`.
 
+The Web-standard handler serves the same endpoint: `FrontMcpInstance.createFetchHandler(config)` (Bun, Deno, a Node `fetch` server) answers `GET /metrics` (or `metrics.path`) with the same body, auth and headers as the Express listener. Like the Express endpoint, it reads the counters through `@frontmcp/observability`, which must be installed.
+
 ## What the endpoint exposes
 
 When enabled, every scrape returns:
@@ -141,6 +143,8 @@ Omit `include` to emit every category.
 metrics: { enabled: true, path: '/mcp' }
 // → throws MetricsPathConflictError at boot
 ```
+
+`createFetchHandler()` also refuses a `metrics.path` equal to its MCP entry path (`http.entryPath`, `/` when unset), with the same `MetricsPathConflictError`, because the metrics route would otherwise answer the `GET` that MCP clients use to open the event stream.
 
 ## Off-by-default rationale
 

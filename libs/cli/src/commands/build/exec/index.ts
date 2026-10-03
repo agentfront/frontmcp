@@ -22,6 +22,7 @@ import { loadExecConfig, normalizeConfig } from './config';
 import { bundleWithEsbuild, formatSize } from './esbuild-bundler';
 import { generateManifest } from './manifest';
 import { generateRunnerScript } from './runner-script';
+import { generateServerBundleBanner } from './server-bundle-banner';
 import { generateInstallerScript } from './installer-script';
 import { validateStepGraph } from './setup';
 import { ensureDir, fileExists } from '@frontmcp/utils';
@@ -146,8 +147,15 @@ export async function buildExec(
   console.log(`${c('cyan', '[build:exec]')} bundling with esbuild...`);
   const { compiledEntry, emittedEntryDir } = resolveEmittedEntry(outDir, entry);
 
-  // Always build non-self-contained first (schema extraction needs host SDK)
-  const bundleResult = await bundleWithEsbuild(compiledEntry, outDir, config);
+  // Always build non-self-contained first (schema extraction needs host SDK).
+  // A `--target node` bundle also runs on its own (`node <name>.bundle.js`, the
+  // generated Dockerfile's CMD), so it carries the runner's defaults (#680).
+  const bundleResult = await bundleWithEsbuild(
+    compiledEntry,
+    outDir,
+    config,
+    cliEnabled ? undefined : { banner: generateServerBundleBanner(config, { mainOnly: true }) },
+  );
   console.log(
     `${c('green', '[build:exec]')} bundle created: ${path.relative(cwd, bundleResult.bundlePath)} (${formatSize(bundleResult.bundleSize)})`,
   );
@@ -351,6 +359,7 @@ export async function buildExec(
       const seaBundle = await bundleWithEsbuild(compiledEntry, outDir, config, {
         selfContained: true,
         outputName: seaTempName,
+        banner: generateServerBundleBanner(config, { mainOnly: false }),
       });
 
       console.log(`${c('cyan', '[build:sea]')} building server SEA binary...`);

@@ -1,7 +1,20 @@
 // server/__tests__/server.instance.spec.ts
 
+import { isProduction } from '@frontmcp/utils';
+
 import { type FrontMcpServer } from '../../common';
+import { auditSecurityDefaults } from '../security/security-audit';
 import { FrontMcpServerInstance } from '../server.instance';
+
+jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual('@frontmcp/utils');
+  return { ...actual, isProduction: jest.fn(actual.isProduction) };
+});
+
+jest.mock('../security/security-audit', () => {
+  const actual = jest.requireActual('../security/security-audit');
+  return { ...actual, auditSecurityDefaults: jest.fn(actual.auditSecurityDefaults), logSecurityFindings: jest.fn() };
+});
 
 // Capture constructor args passed to ExpressHostAdapter
 let capturedAdapterArgs: unknown[] = [];
@@ -104,6 +117,15 @@ describe('FrontMcpServerInstance', () => {
       await new FrontMcpServerInstance({ port: 3001, entryPath: '', security: { bindAddress: 'all' } }).start();
 
       expect(capturedStartArgs).toEqual([3001, '0.0.0.0']);
+    });
+
+    it('audits for production from the NODE_ENV the deployment sets, not a bundler-folded read', async () => {
+      jest.mocked(isProduction).mockReturnValueOnce(true);
+
+      await new FrontMcpServerInstance({ port: 3001, entryPath: '' }).start();
+
+      expect(process.env['NODE_ENV']).not.toBe('production');
+      expect(auditSecurityDefaults).toHaveBeenLastCalledWith(expect.any(Object), true);
     });
 
     it('does not hand the adapter a predicted listener', () => {

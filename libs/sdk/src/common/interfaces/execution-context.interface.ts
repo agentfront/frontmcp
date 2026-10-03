@@ -1,6 +1,6 @@
 // file: libs/sdk/src/common/interfaces/execution-context.interface.ts
 
-import { type FrontMcpAuthContext, type FrontMcpFetchInit } from '@frontmcp/auth';
+import { buildAuthContext, type FrontMcpAuthContext, type FrontMcpFetchInit } from '@frontmcp/auth';
 import { type Token } from '@frontmcp/di';
 import { type AuthInfo, type CallToolResult } from '@frontmcp/protocol';
 import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/utils';
@@ -14,12 +14,6 @@ import { type ScopeEntry } from '../entries';
 import { FlowControl } from './flow.interface';
 import { type ProviderRegistryInterface } from './internal';
 import { type FrontMcpLogger } from './logger.interface';
-
-/** `@frontmcp/auth`, loaded on first use. */
-function loadAuthModule(): typeof import('@frontmcp/auth') {
-  const rawAuth = require('@frontmcp/auth');
-  return (rawAuth.default ?? rawAuth) as typeof import('@frontmcp/auth');
-}
 
 /**
  * Base constructor arguments for all execution contexts.
@@ -101,10 +95,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
 
     // The request context is the source of truth (it is populated as the request is authenticated);
     // the constructor's copy only fills what the request context does not carry.
-    this._authContext = loadAuthModule().buildAuthContext(
-      this.resolveAuthSource(),
-      this.scope.metadata.authorities?.claimsMapping,
-    );
+    this._authContext = buildAuthContext(this.resolveAuthSource(), this.scope.metadata.authorities?.claimsMapping);
     if (this.scope.metadata.authorities?.pipes?.length) {
       this.logger.warn(
         '`this.auth` was read before the `authorities.pipes` ran for this context; the fields they add are undefined.',
@@ -125,11 +116,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
     const authorities = this.scope.metadata.authorities;
     const pipes = authorities?.pipes;
     if (!pipes?.length) return;
-    this._authContext = await loadAuthModule().buildAuthContext(
-      this.resolveAuthSource(),
-      authorities?.claimsMapping,
-      pipes,
-    );
+    this._authContext = await buildAuthContext(this.resolveAuthSource(), authorities?.claimsMapping, pipes);
   }
 
   private resolveAuthSource(): Partial<AuthInfo> {

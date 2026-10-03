@@ -145,6 +145,7 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
           encryption?: { secret: string };
           walMode?: boolean;
           ttlCleanupIntervalMs?: number;
+          busyTimeoutMs?: number;
         }),
         maxEvents,
         ttlMs,

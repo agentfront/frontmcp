@@ -44,6 +44,7 @@ export interface TaskStoreOptions {
     encryption?: { secret: string };
     walMode?: boolean;
     ttlCleanupIntervalMs?: number;
+    busyTimeoutMs?: number;
   };
 }
 
@@ -117,6 +118,7 @@ export async function createTaskStore(options: TaskStoreOptions = {}): Promise<T
       encryption: sqlite.encryption,
       walMode: sqlite.walMode ?? true,
       ttlCleanupIntervalMs: sqlite.ttlCleanupIntervalMs ?? 60_000,
+      busyTimeoutMs: sqlite.busyTimeoutMs,
       logger: logger
         ? {
             debug: (m, meta) => logger.debug(m, meta),

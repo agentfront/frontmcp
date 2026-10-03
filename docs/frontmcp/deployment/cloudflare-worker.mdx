@@ -166,6 +166,10 @@ Copying string bindings into `process.env` is the generated entry's doing, not t
 
 `NODE_ENV` is read live, so a `NODE_ENV = "production"` entry in `wrangler.toml` `[vars]` takes effect for the runtime context even though it only reaches `process.env` on the first request.
 
+<Note>
+Wrangler replaces the literal `process.env.NODE_ENV` in the bundle at build time — with `"development"` under `wrangler dev` and `"production"` under `wrangler deploy`, unless the shell running wrangler sets `NODE_ENV`. FrontMCP reads the deployment's value past that replacement, so `this.runtimeContext.env`, `this.isEnv('production')` and the SDK's own production checks follow `[vars] NODE_ENV` under `wrangler dev` too, and fall back to wrangler's value when `[vars]` sets none. A `process.env.NODE_ENV` you write in your own code is still wrangler's constant: read `this.runtimeContext.env` instead, or run `NODE_ENV=production wrangler dev` to change the constant.
+</Note>
+
 <Warning>
 The copy happens on the **first request**, so a value read at module-eval time — inside the `@FrontMcp({...})` argument itself — is still `undefined`. Read configuration inside `execute()` / `read()`, or rely on `nodejs_compat_populate_process_env` (the build emits it by default), which populates `process.env` before your module evaluates.
 </Warning>
@@ -203,6 +207,8 @@ A failed build is kept, and requests are refused with it, until a retry delay pa
 ### Background tasks
 
 Cloudflare storage: `redis: { provider: 'vercel-kv' }` (the HTTP-based Upstash/Vercel KV client) is accepted by `--target cloudflare`; only TCP `redis` and `sqlite` configs are rejected at build time, since Workers cannot open raw sockets or load native modules.
+
+To use it for sessions, install `@vercel/kv` in the project (the build bundles it into the worker), set `KV_REST_API_URL` / `KV_REST_API_TOKEN` as `[vars]` or secrets, and set `compatibility_date` to `2024-11-11` or later: the Upstash client sends `cache: 'no-store'` on every request, which Workers reject before that date (`The 'cache' field on 'RequestInitializerDict' is not implemented`). The build accepts the provider when it can read it, either from the evaluated config or written literally as `redis: { provider: 'vercel-kv' }` in `@FrontMcp({...})`; a `redis` whose provider it can read neither way is refused, and the error says so.
 
 Background tasks need a store that outlives a single request and is shared between isolates, which an edge runtime cannot provide in-process. FrontMCP disables them automatically when no distributed store is configured, and the worker serves normally without them — no `tasks: { enabled: false }` opt-out is needed. Setting `tasks: { enabled: true }` without `tasks.redis` fails the build rather than the deployed worker.
 
