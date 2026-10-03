@@ -13,6 +13,7 @@ export type {
   ApiOperation,
   ApiParameter,
   ApiParameterLocation,
+  ApiParameterStyle,
   ApiClientOptions,
   HttpClient,
   HttpRequestConfig,

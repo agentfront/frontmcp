@@ -48,21 +48,30 @@ const FALLBACK_RANGES: Record<string, string> = {
   tslib: '^2.3.0',
 };
 
+interface DeclaredRanges {
+  ranges: Record<string, string>;
+  optional: Set<string>;
+}
+
 /** Declared ranges by name, with npm's precedence: optionalDependencies > dependencies > dev/peer. */
-function readDeclaredRanges(packageDir: string): Record<string, string> {
+function readDeclaredRanges(packageDir: string): DeclaredRanges {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8')) as Record<
       string,
       Record<string, string> | undefined
     >;
+    const optionalDependencies = pkg['optionalDependencies'] ?? {};
     return {
-      ...pkg['peerDependencies'],
-      ...pkg['devDependencies'],
-      ...pkg['dependencies'],
-      ...pkg['optionalDependencies'],
+      ranges: {
+        ...pkg['peerDependencies'],
+        ...pkg['devDependencies'],
+        ...pkg['dependencies'],
+        ...optionalDependencies,
+      },
+      optional: new Set(Object.keys(optionalDependencies)),
     };
   } catch {
-    return {};
+    return { ranges: {}, optional: new Set() };
   }
 }
 
@@ -88,15 +97,22 @@ function normalizeRange(name: string, range: string, packageDir: string): string
   return range;
 }
 
+export interface RuntimePackageSpecs {
+  required: string[];
+  optional: string[];
+}
+
 /** `name@range` specs for the runtime packages, preferring the versions the project declares. */
-export function resolveRuntimePackageSpecs(packageDir: string): string[] {
-  const declared = readDeclaredRanges(packageDir);
+export function resolveRuntimePackageSpecs(packageDir: string): RuntimePackageSpecs {
+  const { ranges, optional } = readDeclaredRanges(packageDir);
   const required = REQUIRED_PACKAGES.map((name) => {
-    const range = declared[name];
+    const range = ranges[name];
     return `${name}@${range ? normalizeRange(name, range, packageDir) : defaultRange(name)}`;
   });
-  const optional = OPTIONAL_SDK_PEERS.filter((name) => declared[name]).map(
-    (name) => `${name}@${normalizeRange(name, declared[name], packageDir)}`,
-  );
-  return [...required, ...optional];
+  const declaredPeers = OPTIONAL_SDK_PEERS.filter((name) => ranges[name]);
+  const specOf = (name: string): string => `${name}@${normalizeRange(name, ranges[name], packageDir)}`;
+  return {
+    required: [...required, ...declaredPeers.filter((name) => !optional.has(name)).map(specOf)],
+    optional: declaredPeers.filter((name) => optional.has(name)).map(specOf),
+  };
 }

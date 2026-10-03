@@ -210,6 +210,29 @@ describe('parseOpenApiSpec', () => {
       ]);
     });
 
+    it('keeps the serialization style and explode flag a parameter declares', () => {
+      const spec = {
+        paths: {
+          '/items': {
+            get: {
+              operationId: 'listItems',
+              parameters: [
+                { name: 'ids', in: 'query', style: 'pipeDelimited', explode: false },
+                { name: 'filter', in: 'query', style: 'deepObject', explode: true },
+                { name: 'odd', in: 'query', style: 'matrix', explode: 'yes' },
+              ],
+            },
+          },
+        },
+      };
+
+      expect(parseOpenApiSpec(spec)[0].parameters).toEqual([
+        { name: 'ids', in: 'query', style: 'pipeDelimited', explode: false },
+        { name: 'filter', in: 'query', style: 'deepObject', explode: true },
+        { name: 'odd', in: 'query' },
+      ]);
+    });
+
     it('marks required parameters in required array', () => {
       const spec = {
         paths: {

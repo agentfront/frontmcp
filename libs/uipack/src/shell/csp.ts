@@ -97,11 +97,14 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
  *
  * Accepts `https://` and `wss://` origins (a WebSocket API needs `wss://` in `connect-src`),
  * their `https://*.` / `wss://*.` wildcard forms, and `http://` / `ws://` origins on a loopback
- * host (`localhost`, `127.0.0.1`, `[::1]`) for local development.
+ * host (`localhost`, `127.0.0.1`, `[::1]`) for local development. A value with a query or a
+ * fragment is rejected.
  */
 export function validateCSPDomain(domain: string): boolean {
   // One source token: whitespace, `;` or `,` would end it and start another source or directive
   if (typeof domain !== 'string' || /[\s;,'"]/.test(domain)) return false;
+  // A CSP source is `scheme://host[:port][/path]`: it has no query or fragment
+  if (/[?#]/.test(domain)) return false;
 
   if (domain.includes('*')) {
     const wildcard = /^(?:https|wss):\/\/\*\.(.*)$/.exec(domain);
