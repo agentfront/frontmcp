@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react';
+import { act, render, renderHook } from '@testing-library/react';
 import React from 'react';
 
 import { ComponentRegistry } from '../../components/ComponentRegistry';
@@ -482,6 +482,33 @@ describe('useApiClient', () => {
       await ctx.dynamicRegistry.getTools()[0].execute({ id: '7' });
 
       expect((client.request as jest.Mock).mock.calls[0][0].url).toBe('https://b.example.com/users/7');
+    });
+
+    it('keeps calling the committed base URL while a newer render is suspended', async () => {
+      const ctx = createMockContext();
+      const client: HttpClient = { request: jest.fn().mockResolvedValue({ status: 200, data: null }) };
+      const neverSettles = new Promise<never>(() => undefined);
+      function ApiTools({ baseUrl, suspend }: { baseUrl: string; suspend: boolean }) {
+        useApiClient({ baseUrl, operations: sampleOps, client });
+        if (suspend) throw neverSettles;
+        return null;
+      }
+      const Wrapper = createWrapper(ctx);
+      const tree = (baseUrl: string, suspend: boolean) => (
+        <Wrapper>
+          <React.Suspense fallback={null}>
+            <ApiTools baseUrl={baseUrl} suspend={suspend} />
+          </React.Suspense>
+        </Wrapper>
+      );
+      const { rerender } = render(tree('https://a.example.com', false));
+
+      await act(async () => {
+        React.startTransition(() => rerender(tree('https://b.example.com', true)));
+      });
+      await ctx.dynamicRegistry.getTools()[0].execute({ id: '7' });
+
+      expect((client.request as jest.Mock).mock.calls[0][0].url).toBe('https://a.example.com/users/7');
     });
 
     it('registers the tools again when an operation changes', () => {
