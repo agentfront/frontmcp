@@ -523,7 +523,10 @@ if (!updated) {
 </ParamField>
 
 <ParamField path="knows(key, options?)" type="Promise<boolean>">
-  Check if a key exists and has not expired
+  Check if a key exists and has not expired: `true` exactly when `get()` would return its value. It reads the entry and
+  checks its own expiry, so it never reports an entry past its expiry while the store has yet to drop the key. Up to
+  1.8.7 it asked the store only, so it could report an expired entry the store still held, or one `get()` could not
+  read.
 
 ```ts
 if (await this.remember.knows('onboarded', { scope: 'user' })) {
@@ -543,7 +546,8 @@ await this.remember.forget('temp_token', { scope: 'session' });
 </ParamField>
 
 <ParamField path="list(options?)" type="Promise<string[]>">
-  List keys with optional pattern matching
+  List keys with optional pattern matching: the keys `get()` would return a value for, with each entry's expiry checked
+  the same way as `knows()`
 
 ```ts
 const keys = await this.remember.list({

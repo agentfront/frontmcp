@@ -300,7 +300,9 @@ class MyTool extends ToolContext {
 
 `update(key, value, { ttl? })` returns `false` for a key that does not exist. Without a `ttl` the entry keeps its
 current expiry, and `knows()` and `list()` stop reporting it once that passes, the same as `get()`; up to 1.8.7 an
-entry updated without a `ttl` stayed in `knows()` and `list()` after it expired.
+entry updated without a `ttl` stayed in `knows()` and `list()` after it expired. `knows()` and `list()` read each entry
+and check its own expiry, so they report exactly the keys `get()` returns a value for, even while the store still holds
+an expired key for up to a second.
 
 ### Memory Scopes
 

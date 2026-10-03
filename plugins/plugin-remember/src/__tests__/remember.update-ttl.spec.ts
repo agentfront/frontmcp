@@ -55,6 +55,29 @@ describe('RememberAccessor.update() and the entry TTL (#678)', () => {
     await expect(remember.get('draft')).resolves.toBeUndefined();
   });
 
+  it('stops reporting it the moment its expiry passes, though the store keeps the key up to a second longer', async () => {
+    await remember.set('draft', 'v1', { ttl: 60 });
+    now += 30_500;
+    await remember.update('draft', 'v2');
+
+    now += 29_700;
+
+    await expect(store.keys('remember:*')).resolves.toHaveLength(1);
+    await expect(remember.knows('draft')).resolves.toBe(false);
+    await expect(remember.list()).resolves.toEqual([]);
+    await expect(remember.get('draft')).resolves.toBeUndefined();
+  });
+
+  it('reports neither in knows() nor in list() an entry get() cannot read', async () => {
+    await remember.set('draft', 'v1');
+    const [storageKey] = await store.keys('remember:*');
+    await store.setValue(storageKey, 'not an entry');
+
+    await expect(remember.get('draft')).resolves.toBeUndefined();
+    await expect(remember.knows('draft')).resolves.toBe(false);
+    await expect(remember.list()).resolves.toEqual([]);
+  });
+
   it('keeps it, updated, until then', async () => {
     await remember.set('draft', 'v1', { ttl: 60 });
     now += 30_000;
