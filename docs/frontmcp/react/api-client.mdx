@@ -39,7 +39,7 @@ useApiClient({
 });
 ```
 
-Query parameters and header parameters are sent from the operation's `parameters`: an argument declared `in: 'query'` goes into the query string (an array repeats the key, an object is sent as JSON) and one declared `in: 'header'` becomes a request header. `{param}` placeholders in `path` are filled from the arguments and `body` is the request body. [`parseOpenApiSpec`](#parseopenapispec) fills `parameters` from the spec; a hand-written operation lists them itself:
+Query parameters and header parameters are sent from the operation's `parameters`: an argument declared `in: 'query'` goes into the query string and one declared `in: 'header'` becomes a request header. Arrays and objects follow the parameter's OpenAPI `style` and `explode`: a query argument defaults to `form` (an array repeats the key, an object sends each property as its own parameter) and may set `style` to `spaceDelimited`, `pipeDelimited` or `deepObject` (`filter[owner]=ada`); a header argument is comma-separated (`x,y`, or `a=1,b=2` with `explode: true`). `{param}` placeholders in `path` are filled from the arguments and `body` is the request body. [`parseOpenApiSpec`](#parseopenapispec) fills `parameters` from the spec; a hand-written operation lists them itself:
 
 ```tsx
 useApiClient({
@@ -227,7 +227,7 @@ useApiClient({
 - **method**: HTTP method (uppercase)
 - **path**: URL path with `{param}` placeholders
 - **inputSchema**: JSON Schema built from parameters + requestBody
-- **parameters**: where each parameter goes (`path`, `query`, `header`, `cookie`), so `useApiClient` sends query and header parameters (cookie parameters are not sent)
+- **parameters**: where each parameter goes (`path`, `query`, `header`, `cookie`) and the `style` / `explode` it declares, so `useApiClient` sends query and header parameters as the spec lays them out (cookie parameters are not sent)
 
 ### Headers Factory
 
