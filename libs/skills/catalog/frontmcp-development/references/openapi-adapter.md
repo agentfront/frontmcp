@@ -217,10 +217,44 @@ Until 1.8.7 this form failed startup with `Cannot read properties of undefined (
 
 ## Filtering Operations
 
-Control which API operations become MCP tools:
+Control which API operations become MCP tools. Every `generateOptions` field is passed to `mcp-from-openapi`'s generator, and an operation becomes a tool only when it passes every filter you set:
 
 ```typescript
-// Filter by path prefix
+// Filter by OpenAPI tag
+OpenapiAdapter.init({
+  name: 'billing-api',
+  url: 'https://api.example.com/openapi.json',
+  generateOptions: {
+    includeTags: ['invoices', 'customers'], // carries one of these tags
+    excludeTags: ['internal'], // carries none of these
+  },
+});
+
+// Filter by path glob (`*` = within a segment, `**` = across segments, `?` = one character)
+OpenapiAdapter.init({
+  name: 'billing-api',
+  url: 'https://api.example.com/openapi.json',
+  generateOptions: {
+    includePaths: ['/invoices/**', '/customers/*'],
+    excludePaths: ['/invoices/*/admin/**'],
+  },
+});
+
+// Read-only tools only (annotations say readOnlyHint: true — GET/HEAD/OPTIONS/TRACE unless overridden)
+OpenapiAdapter.init({
+  name: 'billing-api',
+  url: 'https://api.example.com/openapi.json',
+  generateOptions: { readOnlyOnly: true },
+});
+
+// Filter by HTTP method (lower-case names)
+OpenapiAdapter.init({
+  name: 'billing-api',
+  url: 'https://api.example.com/openapi.json',
+  generateOptions: { excludeMethods: ['delete', 'put'] }, // or includeMethods: ['get']
+});
+
+// Custom filter (runs after every other filter)
 OpenapiAdapter.init({
   name: 'billing-api',
   url: 'https://api.example.com/openapi.json',
@@ -247,6 +281,8 @@ OpenapiAdapter.init({
   },
 });
 ```
+
+The adapter's own defaults are `preferredStatusCodes: [200, 201, 202, 204]`, `includeDeprecated: false` and `includeAllResponses: true`; every other generator option (`maxToolNameLength`, `descriptionStrategy`, `target`, …) takes the value you set.
 
 ## Input Transforms
 

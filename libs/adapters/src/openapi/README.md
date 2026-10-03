@@ -110,9 +110,13 @@ const adapter = new OpenapiAdapter({
   baseUrl: 'https://api.example.com',
 
   generateOptions: {
-    // Filter operations
+    // Filter operations (an operation must pass every filter set)
     includeOperations: ['getUser', 'createUser'], // Only these operations
     excludeOperations: ['deleteUser'], // Exclude these operations
+    includeTags: ['users'], // Only operations carrying one of these tags (excludeTags: the opposite)
+    excludeMethods: ['delete'], // Drop these lower-case HTTP methods (includeMethods: keep only these)
+    includePaths: ['/users/**'], // Only paths matching a glob (excludePaths: the opposite)
+    readOnlyOnly: false, // Only operations annotated readOnlyHint: true (GET/HEAD/... by default)
     includeDeprecated: false, // Include deprecated ops (default: false)
 
     // Custom filter
