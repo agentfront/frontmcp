@@ -558,6 +558,28 @@ describe('useApiClient', () => {
       expect((client.request as jest.Mock).mock.calls[0][0].url).toBe('https://b.example.com/users/7');
     });
 
+    it('calls the fetch of the latest render when no client is given', async () => {
+      const ctx = createMockContext();
+      const fetchResponse = { status: 200, statusText: 'OK', ok: true, text: () => Promise.resolve('null') };
+      const firstFetch = jest.fn().mockResolvedValue(fetchResponse);
+      const latestFetch = jest.fn().mockResolvedValue(fetchResponse);
+      const { rerender } = renderHook(
+        ({ fetchFn }: { fetchFn: jest.Mock }) =>
+          useApiClient({
+            baseUrl: 'https://api.example.com',
+            operations: sampleOps,
+            fetch: fetchFn as unknown as typeof globalThis.fetch,
+          }),
+        { wrapper: createWrapper(ctx), initialProps: { fetchFn: firstFetch } },
+      );
+
+      rerender({ fetchFn: latestFetch });
+      await ctx.dynamicRegistry.getTools()[0].execute({ id: '7' });
+
+      expect(firstFetch).not.toHaveBeenCalled();
+      expect(latestFetch).toHaveBeenCalledWith('https://api.example.com/users/7', expect.anything());
+    });
+
     it('keeps calling the committed base URL while a newer render is suspended', async () => {
       const ctx = createMockContext();
       const client: HttpClient = { request: jest.fn().mockResolvedValue({ status: 200, data: null }) };
