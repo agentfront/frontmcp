@@ -147,24 +147,8 @@ export class RememberAccessor {
    */
   async get<T>(key: string, options: RememberGetOptions<T> = {}): Promise<T | undefined> {
     const scope = options.scope ?? 'session';
-    const storageKey = this.buildStorageKey(key, scope);
-
-    const raw = await this.store.getValue<string>(storageKey);
-    if (!raw) return options.defaultValue;
-
-    const entry = this.encryptionEnabled
-      ? await deserializeAndDecrypt<RememberEntry<T>>(raw, this.getKeySource(scope))
-      : this.parseEntry<T>(raw);
-
-    if (!entry) return options.defaultValue;
-
-    // Check if entry has expired (double-check beyond storage TTL)
-    if (entry.expiresAt && Date.now() > entry.expiresAt) {
-      await this.forget(key, { scope });
-      return options.defaultValue;
-    }
-
-    return entry.value;
+    const entry = await this.readEntry<T>(this.buildStorageKey(key, scope), scope);
+    return entry ? entry.value : options.defaultValue;
   }
 
   /**
@@ -176,24 +160,7 @@ export class RememberAccessor {
    */
   async getEntry<T>(key: string, options: { scope?: RememberScope } = {}): Promise<RememberEntry<T> | undefined> {
     const scope = options.scope ?? 'session';
-    const storageKey = this.buildStorageKey(key, scope);
-
-    const raw = await this.store.getValue<string>(storageKey);
-    if (!raw) return undefined;
-
-    const entry = this.encryptionEnabled
-      ? await deserializeAndDecrypt<RememberEntry<T>>(raw, this.getKeySource(scope))
-      : this.parseEntry<T>(raw);
-
-    if (!entry) return undefined;
-
-    // Check expiration
-    if (entry.expiresAt && Date.now() > entry.expiresAt) {
-      await this.forget(key, { scope });
-      return undefined;
-    }
-
-    return entry;
+    return this.readEntry<T>(this.buildStorageKey(key, scope), scope);
   }
 
   /**
@@ -209,20 +176,19 @@ export class RememberAccessor {
   }
 
   /**
-   * Check if a key is remembered (exists and not expired).
+   * Check if a key is remembered: true exactly when `get()` would return its value.
    *
    * @param key - The key to check
    * @param options - Options (scope)
-   * @returns true if the key exists
+   * @returns true if the key exists and has not expired
    */
   async knows(key: string, options: RememberKnowsOptions = {}): Promise<boolean> {
     const scope = options.scope ?? 'session';
-    const storageKey = this.buildStorageKey(key, scope);
-    return this.store.exists(storageKey);
+    return (await this.readEntry(this.buildStorageKey(key, scope), scope)) !== undefined;
   }
 
   /**
-   * List all remembered keys for a scope.
+   * List all remembered keys for a scope: the keys `get()` would return a value for.
    *
    * @param options - Options (scope, pattern)
    * @returns Array of keys (without the scope prefix)
@@ -230,19 +196,19 @@ export class RememberAccessor {
   async list(options: RememberListOptions = {}): Promise<string[]> {
     const scope = options.scope ?? 'session';
     const scopePrefix = this.buildScopePrefix(scope);
-    const fullPattern = scopePrefix + (options.pattern ?? '*');
+    const storageKeys = await this.store.keys(scopePrefix + (options.pattern ?? '*'));
+    const entries = await Promise.all(storageKeys.map((storageKey) => this.readEntry(storageKey, scope)));
 
-    const keys = await this.store.keys(fullPattern);
-
-    // Strip the scope prefix from returned keys
-    return keys.map((k) => k.slice(scopePrefix.length));
+    return storageKeys
+      .filter((_storageKey, index) => entries[index] !== undefined)
+      .map((storageKey) => storageKey.slice(scopePrefix.length));
   }
 
   /**
    * Update an existing entry's value while preserving metadata.
    *
    * With a `ttl` the entry expires that many seconds from now; without one it keeps its current
-   * expiry, in the store as well, so `knows()` and `list()` drop it when `get()` does.
+   * expiry, in the store as well, so the store does not keep it past that (rounded up to a second).
    *
    * @param key - The key to update
    * @param value - The new value
@@ -268,9 +234,7 @@ export class RememberAccessor {
       ? await encryptAndSerialize(entry, this.getKeySource(scope))
       : JSON.stringify(entry);
 
-    // Without a new `ttl` the entry keeps its expiry, and the store must keep it too: written back
-    // with no storage TTL it outlived `expiresAt`, so `knows()` and `list()`, which ask the store,
-    // still reported it after `get()` had stopped returning it (#678).
+    // Written back with no storage TTL, an entry updated without a `ttl` stayed in the store forever (#678).
     const storageTtl = options.ttl ?? (expiresAt !== undefined ? remainingSeconds(expiresAt, now) : undefined);
     await this.store.setValue(storageKey, serialized, storageTtl);
     return true;
@@ -424,6 +388,23 @@ export class RememberAccessor {
       userId: this.userId,
       toolName: scope === 'tool' ? this.toolName : undefined,
     });
+  }
+
+  /** The entry stored under `storageKey`, if readable and unexpired; an expired one is deleted. */
+  private async readEntry<T>(storageKey: string, scope: RememberScope): Promise<RememberEntry<T> | undefined> {
+    const raw = await this.store.getValue<string>(storageKey);
+    if (!raw) return undefined;
+
+    const entry = this.encryptionEnabled
+      ? await deserializeAndDecrypt<RememberEntry<T>>(raw, this.getKeySource(scope))
+      : this.parseEntry<T>(raw);
+    if (!entry) return undefined;
+
+    if (entry.expiresAt && Date.now() > entry.expiresAt) {
+      await this.store.delete(storageKey);
+      return undefined;
+    }
+    return entry;
   }
 
   /**
