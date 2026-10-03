@@ -2476,7 +2476,7 @@
         },
         {
           "name": "distributed-ha",
-          "description": "Deploy FrontMCP across multiple pods with heartbeat, session takeover, and notification relay for zero-downtime failover",
+          "description": "Deploy FrontMCP across multiple pods with heartbeat, cross-pod request relay, session takeover, and notification relay for zero-downtime failover",
           "examples": [
             {
               "name": "ha-kubernetes-3-replicas",

@@ -55,7 +55,7 @@ import { SendElicitationResultTool } from '../elicitation/send-elicitation-resul
 import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors';
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
-import { HaManager } from '../ha';
+import { HaManager, resolveHaConfigFromEnv } from '../ha';
 import { HealthService } from '../health';
 import HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils';
@@ -98,6 +98,7 @@ import { describeIgnoredUiOptions } from '../tool/ui/ui-option-warnings';
 import { RedisTransportBus } from '../transport/bus';
 import { createEventStore } from '../transport/event-stores';
 import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/request-state';
+import { wireSessionRelay, type SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
@@ -133,6 +134,12 @@ export class Scope extends ScopeEntry {
   declare haManager?: HaManager;
   /** ioredis client owned by the HA manager and transport bus; closed in shutdown(). */
   private haRedisClient?: { quit(): Promise<unknown>; disconnect(): void };
+  /** Dedicated ioredis connection for the HA relay channel subscription; closed in shutdown(). */
+  private haSubscriberClient?: { quit(): Promise<unknown>; disconnect(): void };
+  /** Distributed session registry (distributed deployments with HA only). */
+  private transportBus?: RedisTransportBus;
+  /** Request relay between nodes (distributed deployments with HA only). */
+  private sessionRelayHandle?: SessionRelayHandle;
   private toolUIRegistry: ToolUIRegistry;
   private authUiRegistry?: AuthUiRegistry;
   readonly entryPath: string;
@@ -254,9 +261,14 @@ export class Scope extends ScopeEntry {
     if (isDistributed && this.metadata.redis && !this.cliMode) {
       try {
         const haRedis = this.createHaRedisClient();
+        // The relay channel needs its own connection: a subscribed ioredis client runs no other commands.
+        const haSubscriber = this.createHaRedisClient('ha-subscriber');
         this.haManager = HaManager.create({
           redis: haRedis as never,
+          pubsubPublisher: haRedis as never,
+          pubsubSubscriber: haSubscriber as never,
           nodeId: getMachineId(),
+          config: resolveHaConfigFromEnv(),
           logger: this.logger,
         });
         await this.haManager.start();
@@ -271,9 +283,13 @@ export class Scope extends ScopeEntry {
     // Transport bus (distributed mode only — requires HA Manager + Redis)
     let transportBus: InstanceType<typeof RedisTransportBus> | undefined;
     if (this.haManager && this.haRedisClient && isDistributed) {
+      const haConfig = this.haManager.getConfig();
       transportBus = new RedisTransportBus(this.haRedisClient as never, getMachineId(), {
+        haKeyPrefix: haConfig.redisKeyPrefix,
+        retryAfterSeconds: Math.ceil(haConfig.heartbeatTtlMs / 1000),
         logger: this.logger,
       });
+      this.transportBus = transportBus;
       this.logger.info('[HA] Transport bus created for distributed session routing');
     }
 
@@ -298,15 +314,14 @@ export class Scope extends ScopeEntry {
     warnIfRequestStateKeyNotShared({ logger: this.logger, metadata: this.metadata });
     warnIfSessionModeIgnored({ logger: this.logger, transport: transportConfig });
 
-    // Orphan session scanner (distributed mode only — scans for dead-pod sessions)
+    // Orphan session scanner (distributed mode only — scans for dead-pod sessions).
+    // A claimed session is re-advertised on the bus, so every node relays its requests here.
     if (this.haManager && isDistributed && this.transportService.getBackendKind() === 'redis') {
+      const transportService = this.transportService;
       this.haManager.startOrphanScanner({
-        sessionKeyPrefix: this.transportService.getSessionKeyPrefix(),
-        onOrphan: (sessionId, previousNodeId) => {
-          this.logger.info(
-            `[HA] Orphaned session ${sessionId.slice(0, 20)} from ${previousNodeId} — available for recreation`,
-          );
-        },
+        sessionKeyPrefix: transportService.getSessionKeyPrefix(),
+        onOrphan: (sessionId, previousNodeId, session) =>
+          transportService.adoptClaimedSession(sessionId, previousNodeId, session),
       });
     }
 
@@ -1000,6 +1015,21 @@ export class Scope extends ScopeEntry {
 
     await this.auth.ready;
     await this.transportService.ready;
+
+    // Distributed: serve requests relayed by other nodes, and relay ours to session owners.
+    // Wired once every flow and the notification service exist — a relayed request runs
+    // through this scope's `http:request` flow.
+    if (this.haManager && this.transportBus) {
+      this.sessionRelayHandle = wireSessionRelay({
+        nodeId: getMachineId(),
+        haManager: this.haManager,
+        bus: this.transportBus,
+        transportService: this.transportService,
+        notifications: this.notificationService,
+        flows: { runFlow: (name, input) => this.runFlow(name, input) },
+        logger: this.logger,
+      });
+    }
 
     // Register first-class custom HTTP routes (issue #465). Runs after auth is
     // ready so `auth: true` routes can dispatch the `session:verify` flow. The
@@ -1830,28 +1860,32 @@ export class Scope extends ScopeEntry {
    * Build the ioredis client shared by the HA manager and the transport bus from `metadata.redis`.
    * The client reconnects on its own and has a permanent, rate-limited 'error' listener.
    */
-  private createHaRedisClient(): NonNullable<typeof this.haRedisClient> {
+  private createHaRedisClient(label: 'ha' | 'ha-subscriber' = 'ha'): NonNullable<typeof this.haRedisClient> {
     const redis = this.metadata.redis as
       | { provider?: string; url?: string; host?: string; port?: number; password?: string; db?: number; tls?: boolean }
       | undefined;
     if (!redis || redis.provider === 'vercel-kv') {
       throw new Error('Distributed HA requires a TCP Redis (ioredis); Vercel KV over REST has no Lua/pub-sub support');
     }
-    const client = createRedisClient({ ...redis, label: 'ha', logger: this.logger }) as never as NonNullable<
+    const client = createRedisClient({ ...redis, label, logger: this.logger }) as never as NonNullable<
       typeof this.haRedisClient
     >;
-    this.haRedisClient = client;
+    if (label === 'ha-subscriber') this.haSubscriberClient = client;
+    else this.haRedisClient = client;
     return client;
   }
 
   private async closeHaRedisClient(): Promise<void> {
-    const client = this.haRedisClient;
-    if (!client) return;
+    const clients = [this.haRedisClient, this.haSubscriberClient];
     this.haRedisClient = undefined;
-    try {
-      await client.quit();
-    } catch {
-      client.disconnect();
+    this.haSubscriberClient = undefined;
+    for (const client of clients) {
+      if (!client) continue;
+      try {
+        await client.quit();
+      } catch {
+        client.disconnect();
+      }
     }
   }
 
@@ -1861,6 +1895,14 @@ export class Scope extends ScopeEntry {
    * and clears the channel event bus.
    */
   async shutdown(): Promise<void> {
+    if (this.sessionRelayHandle) {
+      try {
+        await this.sessionRelayHandle.close();
+      } catch (err) {
+        this.logger.error('[HA] Session relay shutdown failed', { error: err });
+      }
+      this.sessionRelayHandle = undefined;
+    }
     if (this.haManager) {
       try {
         await this.haManager.stop();

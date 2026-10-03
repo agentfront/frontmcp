@@ -18,7 +18,12 @@ const fakeClient = {
   hset: jest.fn().mockResolvedValue(1),
   hget: jest.fn().mockResolvedValue(null),
   expire: jest.fn().mockResolvedValue(1),
+  hgetall: jest.fn().mockResolvedValue({}),
   publish: jest.fn().mockResolvedValue(0),
+  subscribe: jest.fn().mockResolvedValue(1),
+  unsubscribe: jest.fn().mockResolvedValue(1),
+  removeListener: jest.fn(),
+  removeAllListeners: jest.fn(),
   quit: jest.fn().mockResolvedValue('OK'),
   disconnect: jest.fn(),
   on: jest.fn(),
@@ -65,8 +70,16 @@ describe('Scope HA Redis client (#646)', () => {
     const [scope] = instance.getScopes() as unknown as HaScope[];
     scopes.push(scope);
 
-    expect(createRedisClient).toHaveBeenCalledWith(expect.objectContaining({ host: 'redis.internal', port: 6380 }));
+    expect(createRedisClient).toHaveBeenCalledWith(
+      expect.objectContaining({ host: 'redis.internal', port: 6380, label: 'ha' }),
+    );
+    // A second connection carries the relay channel subscription.
+    expect(createRedisClient).toHaveBeenCalledWith(
+      expect.objectContaining({ host: 'redis.internal', port: 6380, label: 'ha-subscriber' }),
+    );
     expect(scope.haManager).toBeDefined();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(fakeClient.subscribe).toHaveBeenCalledWith(expect.stringMatching(/^mcp:ha:notify:/));
     // Heartbeat wrote through the client, not through the config object.
     expect(fakeClient.set).toHaveBeenCalledWith(
       expect.stringContaining('heartbeat'),
@@ -76,7 +89,7 @@ describe('Scope HA Redis client (#646)', () => {
     );
 
     await scope.shutdown();
-    expect(fakeClient.quit).toHaveBeenCalledTimes(1);
+    expect(fakeClient.quit).toHaveBeenCalledTimes(2);
   });
 
   it('runs without HA for Vercel KV instead of passing the config to HaManager', async () => {

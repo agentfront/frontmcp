@@ -10,12 +10,27 @@ import { HaConfigurationError } from '../errors';
 import { DEFAULT_HA_CONFIG, type HaConfig, type TakeoverResult } from './ha.types';
 import { HeartbeatService, type HeartbeatRedisClient } from './heartbeat.service';
 import { NotificationRelay, type RelayHandler, type RelayRedisClient } from './notification-relay';
+import type { HaRelayMessage } from './relay-messages';
 import { attemptSessionTakeover, type TakeoverRedisClient } from './session-takeover';
+
+/**
+ * What the orphan scanner read from a session record it claimed.
+ */
+export interface ClaimedSessionInfo {
+  /** Transport protocol of the session (e.g. `streamable-http`). */
+  protocol?: string;
+  /** Token hash the session is bound to. */
+  authorizationId?: string;
+}
 
 /**
  * Callback invoked when an orphaned session is successfully claimed.
  */
-export type OrphanHandler = (sessionId: string, previousNodeId: string) => void | Promise<void>;
+export type OrphanHandler = (
+  sessionId: string,
+  previousNodeId: string,
+  session: ClaimedSessionInfo,
+) => void | Promise<void>;
 
 /**
  * Options for the orphan session scanner.
@@ -181,6 +196,11 @@ export class HaManager {
     return this.heartbeat.isAlive(nodeId);
   }
 
+  /** This node's liveness generation (see {@link HeartbeatService.livenessGeneration}). */
+  livenessGeneration(): number | undefined {
+    return this.heartbeat.livenessGeneration();
+  }
+
   /** Get all alive node IDs. */
   async getAliveNodes(): Promise<string[]> {
     return this.heartbeat.getAliveNodes();
@@ -191,11 +211,31 @@ export class HaManager {
     return this.relay;
   }
 
-  /** Subscribe to relay messages (for cross-pod notification delivery). */
+  /** Subscribe to this pod's relay channel (notifications, session destroys, relayed requests). */
   async subscribeRelay(handler: RelayHandler): Promise<void> {
     if (this.relay) {
       await this.relay.subscribe(handler);
     }
+  }
+
+  /**
+   * Publish a message to another pod's relay channel.
+   * @returns How many subscribers received it — 0 when that pod does not listen, or when
+   *   pub/sub is not configured on this pod.
+   */
+  async publishToNode(nodeId: string, message: HaRelayMessage): Promise<number> {
+    if (!this.relay) return 0;
+    return this.relay.send(nodeId, message);
+  }
+
+  /** The relay channel name of a pod. */
+  relayChannelOf(nodeId: string): string {
+    return `${this.config.redisKeyPrefix}notify:${nodeId}`;
+  }
+
+  /** The effective HA configuration (defaults merged with overrides). */
+  getConfig(): Readonly<HaConfig> {
+    return this.config;
   }
 
   /** Update the heartbeat with current session count. */
@@ -265,10 +305,16 @@ export class HaManager {
             claimed++;
             const sessionId = key.slice(sessionKeyPrefix.length);
             this.logger?.info(`[HA] Orphan scan: claimed session ${sessionId.slice(0, 20)} from ${sessionNodeId}`);
+            const authorizationId = data?.session?.authorizationId ?? data?.authorizationId;
 
             // Fire callback (best-effort)
             try {
-              await Promise.resolve(onOrphan(sessionId, sessionNodeId));
+              await Promise.resolve(
+                onOrphan(sessionId, sessionNodeId, {
+                  protocol: typeof protocol === 'string' ? protocol : undefined,
+                  authorizationId: typeof authorizationId === 'string' ? authorizationId : undefined,
+                }),
+              );
             } catch (err) {
               this.logger?.warn(`[HA] Orphan handler error for ${sessionId.slice(0, 20)}: ${err}`);
             }

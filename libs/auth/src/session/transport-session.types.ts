@@ -171,6 +171,10 @@ export interface StoredSession {
   maxLifetimeAt?: number;
   /** Client capabilities from the MCP initialize request, persisted for session recreation */
   clientCapabilities?: Record<string, unknown>;
+  /** When another node took the session over from a stopped one (epoch ms) */
+  reassignedAt?: number;
+  /** The stopped node the session was taken over from */
+  reassignedFrom?: string;
 }
 
 /**
@@ -384,6 +388,8 @@ export const storedSessionSchema = z.object({
   initialized: z.boolean().optional(),
   maxLifetimeAt: z.number().optional(),
   clientCapabilities: z.record(z.string(), z.unknown()).optional(),
+  reassignedAt: z.number().optional(),
+  reassignedFrom: z.string().optional(),
 });
 
 export const redisConfigSchema = z.object({

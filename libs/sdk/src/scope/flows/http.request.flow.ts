@@ -39,7 +39,7 @@ import {
   type ServerRequest,
 } from '../../common';
 import { toLegacyProtocolFlags } from '../../common/types/options/transport/schema';
-import { SessionVerificationFailedError } from '../../errors';
+import { SessionOwnerUnreachableError, SessionVerificationFailedError } from '../../errors';
 import { isProtocol20260728Request } from '../../transport/mcp-20260728';
 import { type PersistentSessionOwnerStore } from '../../transport/persistent-session-owner';
 import { type Scope } from '../scope.instance';
@@ -51,6 +51,8 @@ const plan = {
     'traceRequest',
     // throttle.ipFilter, before any other guard work and before authentication
     'checkIpFilter',
+    // distributed deployments: serve a session's request on the node that owns it
+    'relayToSessionOwner',
     // rate limiting / concurrency
     'acquireQuota',
     'acquireSemaphore',
@@ -193,6 +195,42 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         { status: 403 },
       ),
     );
+  }
+
+  /**
+   * Distributed deployments: a request for an MCP session that another live node owns
+   * is relayed to that node, which runs it through its own `http:request` flow (auth,
+   * quota, routing, transport, hooks) and streams the response back through this one.
+   * Runs before quota and authentication so the owner does that work once.
+   *
+   * A session whose owner stopped is served here instead: the transport stages take it
+   * over from the session store. When the owner is alive but does not answer, the client
+   * gets a retryable 503 rather than a session it cannot use.
+   */
+  @Stage('relayToSessionOwner')
+  async relayToSessionOwner() {
+    const transportService = this.scope.transportService;
+    if (!transportService) return;
+    const { request, response } = this.rawInput;
+
+    const owner = await transportService.findRemoteSessionOwner(request);
+    if (!owner) return;
+
+    this.logger.verbose(`[${this.requestId}] relaying to session owner ${owner.nodeId}`);
+    try {
+      await transportService.relayToSessionOwner(owner, request, response);
+    } catch (error) {
+      if (!(error instanceof SessionOwnerUnreachableError)) throw error;
+      this.logger.warn(`[${this.requestId}] session owner unreachable: ${error.reason}`, { owner: owner.nodeId });
+      this.respond(
+        httpRespond.json(
+          { jsonrpc: '2.0', id: this.jsonRpcRequestId(), error: { code: -32000, message: error.getPublicMessage() } },
+          { status: error.statusCode, headers: { 'Retry-After': String(error.retryAfterSeconds) } },
+        ),
+      );
+      return;
+    }
+    this.handled();
   }
 
   @Stage('acquireQuota')

@@ -515,6 +515,17 @@ describe('Build Adapters', () => {
       expect(setup).toContain("process.env.FRONTMCP_DEPLOYMENT_MODE = 'distributed'");
     });
 
+    it('carries the ha block of frontmcp.config to the pods (#680)', () => {
+      const setup = distributedAdapter.getSetupTemplate?.({
+        haEnv: { FRONTMCP_HA_HEARTBEAT_INTERVAL_MS: '5000', FRONTMCP_HA_KEY_PREFIX: 'app:ha:' },
+      });
+      expect(setup).toContain(
+        'if (process.env.FRONTMCP_HA_HEARTBEAT_INTERVAL_MS === undefined) process.env.FRONTMCP_HA_HEARTBEAT_INTERVAL_MS = "5000";',
+      );
+      expect(setup).toContain('process.env.FRONTMCP_HA_KEY_PREFIX = "app:ha:"');
+      expect(distributedAdapter.getSetupTemplate?.({})).not.toContain('FRONTMCP_HA_');
+    });
+
     it('uses commonjs module format', () => {
       expect(distributedAdapter.moduleFormat).toBe('commonjs');
     });

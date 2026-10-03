@@ -80,6 +80,15 @@ describe('HaManager', () => {
     await manager.stop();
   });
 
+  it("reports this node's liveness generation", async () => {
+    const manager = HaManager.create({ redis: createMockRedis() as never, nodeId: 'pod-a' });
+    await manager.start();
+
+    expect(manager.livenessGeneration()).toBe(0);
+
+    await manager.stop();
+  });
+
   it('should update session count', async () => {
     const redis = createMockRedis();
     const manager = HaManager.create({ redis: redis as never, nodeId: 'pod-a' });
@@ -97,6 +106,73 @@ describe('HaManager', () => {
     const redis = createMockRedis();
     const manager = HaManager.create({ redis: redis as never, nodeId: 'pod-a' });
     expect(manager.getRelay()).toBeUndefined();
+  });
+
+  describe('relay channel', () => {
+    function createPubSub() {
+      return {
+        subscribe: jest.fn().mockResolvedValue(1),
+        unsubscribe: jest.fn().mockResolvedValue(1),
+        publish: jest.fn().mockResolvedValue(1),
+        on: jest.fn(),
+        removeAllListeners: jest.fn(),
+        removeListener: jest.fn(),
+      };
+    }
+
+    it('publishes to another pod and reports how many pods received it', async () => {
+      const pubsub = createPubSub();
+      const manager = HaManager.create({
+        redis: createMockRedis() as never,
+        pubsubSubscriber: pubsub,
+        pubsubPublisher: pubsub,
+        nodeId: 'pod-a',
+        config: { redisKeyPrefix: 'x:ha:' },
+      });
+
+      const received = await manager.publishToNode('pod-b', {
+        kind: 'relay-cancel',
+        requestId: 'r1',
+        sourceNodeId: 'pod-a',
+      });
+
+      expect(received).toBe(1);
+      expect(pubsub.publish).toHaveBeenCalledWith('x:ha:notify:pod-b', expect.stringContaining('"relay-cancel"'));
+      expect(manager.relayChannelOf('pod-b')).toBe('x:ha:notify:pod-b');
+    });
+
+    it('reports no receivers when pub/sub is not configured', async () => {
+      const manager = HaManager.create({ redis: createMockRedis() as never, nodeId: 'pod-a' });
+      await expect(
+        manager.publishToNode('pod-b', { kind: 'relay-cancel', requestId: 'r1', sourceNodeId: 'pod-a' }),
+      ).resolves.toBe(0);
+    });
+
+    it('subscribes to its own channel only when pub/sub is configured', async () => {
+      const pubsub = createPubSub();
+      const withRelay = HaManager.create({
+        redis: createMockRedis() as never,
+        pubsubSubscriber: pubsub,
+        pubsubPublisher: pubsub,
+        nodeId: 'pod-a',
+      });
+      await withRelay.subscribeRelay(jest.fn());
+      expect(pubsub.subscribe).toHaveBeenCalledWith('mcp:ha:notify:pod-a');
+
+      const withoutRelay = HaManager.create({ redis: createMockRedis() as never, nodeId: 'pod-a' });
+      await expect(withoutRelay.subscribeRelay(jest.fn())).resolves.toBeUndefined();
+    });
+
+    it('exposes the effective configuration', () => {
+      const manager = HaManager.create({
+        redis: createMockRedis() as never,
+        nodeId: 'pod-a',
+        config: { heartbeatTtlMs: 9000 },
+      });
+      expect(manager.getConfig()).toEqual(
+        expect.objectContaining({ heartbeatTtlMs: 9000, heartbeatIntervalMs: 10_000 }),
+      );
+    });
   });
 
   it('should accept custom config', async () => {
@@ -215,8 +291,37 @@ describe('HaManager', () => {
       // Wait for initial delay (intervalMs + gracePeriodMs) + scan to run
       await new Promise((r) => setTimeout(r, 200));
 
-      expect(onOrphan).toHaveBeenCalledWith('sess-1', 'pod-a');
+      expect(onOrphan).toHaveBeenCalledWith('sess-1', 'pod-a', {
+        protocol: 'streamable-http',
+        authorizationId: 'hash123',
+      });
 
+      await manager.stop();
+    });
+
+    it('passes undefined claim details when the record does not carry them', async () => {
+      const redis = createMockRedis();
+      const manager = HaManager.create({
+        redis: redis as never,
+        nodeId: 'pod-b',
+        config: { heartbeatIntervalMs: 50, heartbeatTtlMs: 200, takeoverGracePeriodMs: 0 },
+      });
+      await manager.start();
+
+      redis.store.set('mcp:transport:sess-legacy', {
+        value: JSON.stringify({ nodeId: 'pod-gone' }),
+        expiresAt: Date.now() + 60_000,
+      });
+      redis.eval.mockResolvedValueOnce(1);
+
+      const onOrphan = jest.fn();
+      manager.startOrphanScanner({ sessionKeyPrefix: 'mcp:transport:', onOrphan });
+      await new Promise((r) => setTimeout(r, 200));
+
+      expect(onOrphan).toHaveBeenCalledWith('sess-legacy', 'pod-gone', {
+        protocol: undefined,
+        authorizationId: undefined,
+      });
       await manager.stop();
     });
 

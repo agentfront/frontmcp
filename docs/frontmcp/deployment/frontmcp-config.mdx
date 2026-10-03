@@ -278,6 +278,8 @@ export default defineConfig({
 | `takeoverGracePeriodMs` | number | 5000      | Grace period before takeover  |
 | `redisKeyPrefix`        | string | `mcp:ha:` | Redis key prefix              |
 
+`frontmcp build --target distributed` writes these to `FRONTMCP_HA_HEARTBEAT_INTERVAL_MS`, `FRONTMCP_HA_HEARTBEAT_TTL_MS`, `FRONTMCP_HA_TAKEOVER_GRACE_MS` and `FRONTMCP_HA_KEY_PREFIX` in the generated setup file (each only when the platform has not set it), which every pod reads at startup. See [High Availability](/frontmcp/deployment/high-availability#configuration).
+
 ## Multi-Target Example
 
 Deploy the same server to Node.js, distributed, and Vercel:
