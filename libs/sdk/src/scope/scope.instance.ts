@@ -723,8 +723,10 @@ export class Scope extends ScopeEntry {
     // `@FrontMcp({ adapters })`: the entries each adapter fetches register in this scope's providers,
     // so the scope registries below adopt them and every app serves them (#678).
     if (this.metadata.adapters?.length) {
-      this.scopeAdapters = new AdapterRegistry(this.scopeProviders, this.metadata.adapters);
-      await this.scopeAdapters.ready;
+      const scopeAdapters = new AdapterRegistry(this.scopeProviders, this.metadata.adapters);
+      this.scopeAdapters = scopeAdapters;
+      await scopeAdapters.ready;
+      this.onDispose(() => scopeAdapters.dispose());
     }
 
     // Initialize authorities engine from metadata config (built-in, no plugin needed)

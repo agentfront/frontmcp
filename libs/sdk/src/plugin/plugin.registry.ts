@@ -185,6 +185,7 @@ export default class PluginRegistry
 
       const adapters = new AdapterRegistry(providers, rec.metadata.adapters ?? []);
       await adapters.ready;
+      if (adapters.getAdapters().length > 0) this.scope.onDispose(() => adapters.dispose());
 
       const tools = new ToolRegistry(providers, [...(rec.metadata.tools ?? []), ...dynamicTools], pluginOwner);
       const resources = new ResourceRegistry(providers, rec.metadata.resources ?? [], pluginOwner);

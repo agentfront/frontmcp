@@ -102,4 +102,9 @@ export default class AdapterRegistry
   getAdapters(): AdapterEntry[] {
     return [...this.instances.values()];
   }
+
+  /** Stop the adapters' polling and update subscriptions; the owning scope calls it when disposed. */
+  dispose(): void {
+    for (const instance of this.instances.values()) instance.dispose();
+  }
 }

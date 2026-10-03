@@ -26,6 +26,14 @@ type AdapterReturn<T> = AdapterType;
 /** Tracks adapter names per class to detect duplicates at registration time */
 const usedAdapterNames = new WeakMap<object, Set<string>>();
 
+/** The options each `init(options)` adapter was built with. */
+const initOptionsByAdapter = new WeakMap<object, object>();
+
+/** The options `SomeAdapter.init(options)` built `adapter` with, or `undefined` for an adapter `init` did not build. */
+export function adapterInitOptionsOf(adapter: object): object | undefined {
+  return initOptionsByAdapter.get(adapter);
+}
+
 /**
  * The adapter an `init({ name, inject, useFactory })` factory result stands for: an adapter the
  * factory built itself is kept; options build one, named by the `name` given to `init`, which is
@@ -126,10 +134,12 @@ export abstract class DynamicAdapter<TOptions extends object> implements Adapter
         useFactory: (...args: unknown[]) => adapterFromFactoryResult(adapterClass, adapterName, factory(...args)),
       };
     }
+    const adapter = new this(options);
+    initOptionsByAdapter.set(adapter, options);
     return {
       ...typedOptions,
       provide: uniqueToken,
-      useValue: new this(options),
+      useValue: adapter,
     };
   }
 

@@ -144,9 +144,9 @@ export interface FrontMcpBaseMetadata {
 
   /**
    * Server-level adapters (e.g. `OpenapiAdapter.init({ ... })`). The tools, resources and prompts each
-   * adapter fetches are served by every app, like the entries of a server-level plugin. Like
-   * server-level plugins, each scope (a standalone or `splitByApp` app gets its own) instantiates
-   * them, so each runs its own `fetch()`.
+   * adapter fetches are served by every app, like the entries of a server-level plugin. Each scope (a
+   * standalone or `splitByApp` app gets its own) builds its own adapter from an `init()` record and runs
+   * its `fetch()`; a hand-written `{ provide, useValue }` record is one adapter that every scope shares.
    */
   adapters?: AdapterType[];
 
