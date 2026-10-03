@@ -6,7 +6,7 @@
  * - Non-cached tool returns fresh result every time
  * - Execution counts verify actual vs cached executions
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Cache E2E', () => {
   test.use({

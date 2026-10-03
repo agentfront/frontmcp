@@ -91,7 +91,7 @@
         }
       }
     },
-    "build-esm-browser": {
+    "build-browser": {
       "executor": "@nx/esbuild:esbuild",
       "dependsOn": ["build-cjs"],
       "outputs": ["{options.outputPath}"],
@@ -99,7 +99,7 @@
         "outputPath": "libs/sdk/dist/browser",
         "main": "libs/sdk/src/index.ts",
         "tsConfig": "libs/sdk/tsconfig.lib.json",
-        "format": ["esm"],
+        "format": ["esm", "cjs"],
         "declaration": false,
         "bundle": true,
         "thirdParty": false,
@@ -136,7 +136,7 @@
     },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-cjs", "build-esm", "build-esm-browser"],
+      "dependsOn": ["build-cjs", "build-esm", "build-browser"],
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/sdk/dist/package.json",

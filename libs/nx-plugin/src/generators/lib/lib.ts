@@ -1,8 +1,9 @@
 import { join } from 'path';
 
-import { formatFiles, generateFiles, type GeneratorCallback, type Tree } from '@nx/devkit';
+import { formatFiles, generateFiles, readJson, writeJson, type GeneratorCallback, type Tree } from '@nx/devkit';
 
 import { addTsPathAlias } from '../../utils/project-paths.js';
+import { getFrontmcpVersion } from '../../utils/versions.js';
 import { normalizeOptions, type NormalizedLibOptions } from './lib/index.js';
 import type { LibGeneratorSchema } from './schema.js';
 
@@ -14,6 +15,38 @@ const CLASS_GENERATOR: Partial<Record<NormalizedLibOptions['libType'], string>> 
   plugin: 'plugin',
   adapter: 'adapter',
 };
+
+interface WorkspacePackageJson {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+}
+
+/**
+ * A publishable library is published from its own folder after its `build` target compiles
+ * `tsconfig.lib.json` into `dist/`, so the manifest points there and lists what the emitted JavaScript
+ * requires: tslib (the base config sets `importHelpers`) and, for the FrontMCP library types, the SDK.
+ * Both use the workspace's range when it declares one.
+ */
+function writePublishablePackageJson(tree: Tree, options: NormalizedLibOptions): void {
+  const workspace = tree.exists('package.json') ? readJson<WorkspacePackageJson>(tree, 'package.json') : {};
+  const workspaceRange = (name: string): string | undefined =>
+    workspace.dependencies?.[name] ?? workspace.devDependencies?.[name];
+
+  writeJson(tree, `${options.projectRoot}/package.json`, {
+    name: options.importPath,
+    version: '0.0.1',
+    type: 'commonjs',
+    main: './dist/index.js',
+    types: './dist/index.d.ts',
+    files: ['dist'],
+    dependencies: {
+      ...(options.libType !== 'generic' && {
+        '@frontmcp/sdk': workspaceRange('@frontmcp/sdk') ?? `~${getFrontmcpVersion()}`,
+      }),
+      tslib: workspaceRange('tslib') ?? '^2.3.0',
+    },
+  });
+}
 
 export async function libGenerator(tree: Tree, schema: LibGeneratorSchema): Promise<GeneratorCallback | void> {
   return libGeneratorInternal(tree, schema);
@@ -36,6 +69,10 @@ async function libGeneratorInternal(tree: Tree, schema: LibGeneratorSchema): Pro
     // The plugin generator's opt-in context extension is not part of a new library.
     const contextExtension = join(srcDir, `${options.fileName}.context-extension.ts`);
     if (tree.exists(contextExtension)) tree.delete(contextExtension);
+  }
+
+  if (options.publishable) {
+    writePublishablePackageJson(tree, options);
   }
 
   addTsPathAlias(tree, options.importPath, `${options.projectRoot}/src/index.ts`);

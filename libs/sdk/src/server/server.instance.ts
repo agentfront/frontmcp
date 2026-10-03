@@ -1,4 +1,4 @@
-import { getRuntimeContext } from '@frontmcp/utils';
+import { getRuntimeContext, isProduction } from '@frontmcp/utils';
 
 import {
   FrontMcpServer,
@@ -151,7 +151,6 @@ export class FrontMcpServerInstance extends FrontMcpServer {
     const bindAddress = resolveBindAddress(this.config.security, deploymentMode);
 
     // Run security audit (warns in production/distributed mode)
-    const isProduction = process.env['NODE_ENV'] === 'production';
     const findings = auditSecurityDefaults(
       {
         cors: this.config.cors,
@@ -160,7 +159,7 @@ export class FrontMcpServerInstance extends FrontMcpServer {
         socketPath: this.config.socketPath,
         deploymentMode,
       },
-      isProduction,
+      isProduction(),
     );
     logSecurityFindings(findings, console);
 

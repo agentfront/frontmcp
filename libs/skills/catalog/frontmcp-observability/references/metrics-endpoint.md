@@ -107,7 +107,7 @@ Keep label values bounded (status codes, enum members, tool names) — unbounded
 
 ## Path conflict guard
 
-`metrics.path` MUST NOT collide with MCP transport paths (`/mcp`, `/sse`, `/messages`). The service constructor throws `MetricsPathConflictError` at startup if it detects an overlap.
+`metrics.path` MUST NOT collide with MCP transport paths (`/mcp`, `/sse`, `/messages`). The service constructor throws `MetricsPathConflictError` at startup if it detects an overlap. `createFetchHandler()` also throws `MetricsPathConflictError` when `metrics.path` equals its MCP entry path (`http.entryPath`, `/` when unset), since the metrics route would otherwise answer the MCP `GET` that opens the event stream.
 
 ## Common Patterns
 

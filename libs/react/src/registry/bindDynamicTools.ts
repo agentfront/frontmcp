@@ -18,6 +18,11 @@ import type { DynamicRegistry } from './DynamicRegistry';
 export interface BindDynamicToolsOptions {
   /** Called when the server refuses a tool (a name conflict, a name over 64 characters, ...). */
   onError?: (error: Error, toolName: string) => void;
+  /**
+   * Id of the server app that tools join when they don't name one (`DynamicToolDef.app`). Needed
+   * only for a server with more than one local app.
+   */
+  app?: string;
 }
 
 interface MirroredTool {
@@ -28,7 +33,13 @@ interface MirroredTool {
 /** What identifies a registration on the server; a change re-registers the tool. */
 function fingerprintOf(def: DynamicToolDef): string {
   try {
-    return JSON.stringify([def.description, def.inputSchema, def.annotations ?? null, def.availableWhen ?? null]);
+    return JSON.stringify([
+      def.description,
+      def.inputSchema,
+      def.annotations ?? null,
+      def.availableWhen ?? null,
+      def.app ?? null,
+    ]);
   } catch {
     // Not serializable: treat every reconcile as unchanged rather than re-registering forever
     return `unserializable:${def.name}`;
@@ -61,8 +72,12 @@ export function bindDynamicTools(
   }
 
   const mirrored = new Map<string, MirroredTool>();
-  /** Registrations the server refused, by fingerprint, so an unchanged tool is not retried in a loop. */
-  const refused = new Map<string, string>();
+  /**
+   * The definition the server refused, by name, so the same registration is not retried on every
+   * reconcile. A new registration of the name (a remount, a second registrant) puts a new definition
+   * in the registry, which is tried again.
+   */
+  const refused = new Map<string, DynamicToolDef>();
   let disposed = false;
   let scheduled = false;
   let reconciling: Promise<void> = Promise.resolve();
@@ -75,6 +90,7 @@ export function bindDynamicTools(
       inputSchema: def.inputSchema,
       annotations: def.annotations,
       availableWhen: def.availableWhen,
+      app: def.app ?? options.app,
       // The registry holds the latest execute (components swap closures without re-registering)
       execute: (args) => {
         const current = registry.findTool(name);
@@ -90,7 +106,7 @@ export function bindDynamicTools(
       mirrored.set(name, { fingerprint, unregister });
       refused.delete(name);
     } catch (error) {
-      refused.set(name, fingerprint);
+      refused.set(name, def);
       report(error, name);
     }
   };
@@ -113,15 +129,20 @@ export function bindDynamicTools(
     const pending: Promise<void>[] = [];
     for (const [name, def] of wanted) {
       if (mirrored.has(name)) continue;
-      const fingerprint = fingerprintOf(def);
-      if (refused.get(name) === fingerprint) continue;
-      pending.push(register(def, fingerprint));
+      if (refused.get(name) === def) continue;
+      pending.push(register(def, fingerprintOf(def)));
     }
     await Promise.all(pending);
   };
 
+  // Runs on every registry notification until unbound (reconcile itself checks `disposed`)
   const schedule = () => {
-    if (scheduled || disposed) return;
+    // A refused tool that left the registry is tried again when it comes back, even when it comes
+    // back before the queued reconcile runs (and with the very same definition object)
+    for (const name of refused.keys()) {
+      if (!registry.hasTool(name)) refused.delete(name);
+    }
+    if (scheduled) return;
     scheduled = true;
     queueMicrotask(() => {
       scheduled = false;

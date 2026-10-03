@@ -82,6 +82,14 @@ CodeCallPlugin.init({
   `visibleInListTools: true`.
 </Note>
 
+<Note>
+  Installed on an app, `CodeCallPlugin` judges that app's tools and those of apps without a CodeCall plugin of their
+  own; installed on the server, it judges every tool. A tool is hidden from `list_tools` and refused on a direct
+  `tools/call` by the same plugins, so with a CodeCall plugin on each of two apps, each app's tools are listed and
+  called by its own plugin's mode. Releases up to 1.8.7 let one app's `codecall_only` plugin hide the other app's tools
+  from `list_tools` while the other app's plugin still let clients call them directly.
+</Note>
+
 ### `codecall_opt_in`
 
 Tools must explicitly opt into CodeCall. All tools visible in `list_tools` by default.

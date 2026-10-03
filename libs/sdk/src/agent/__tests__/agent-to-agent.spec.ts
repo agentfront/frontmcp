@@ -5,13 +5,29 @@
  * agent's private scope but never gave them to its model, `swarm.canSeeOtherAgents` gave the model no
  * other agent, `this.invokeAgent()` always threw `Agent method "invokeAgent" is not available`, and
  * nothing limited how deep agents calling each other could go.
+ *
+ * A nested agent is called through its `invoke_<agent>` tool's flow in its parent's scope, so the
+ * `rateLimit`, `concurrency` and plugin gates it declares apply there, whatever the parent's
+ * `execution.useToolFlow` says.
  */
 import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
 import type { CallToolResult } from '@frontmcp/protocol';
 
-import { Agent, AgentContext, App, LogLevel, type AgentPrompt, type AgentToolDefinition } from '../../common';
+import {
+  Agent,
+  AgentContext,
+  App,
+  FlowHooksOf,
+  LogLevel,
+  Plugin,
+  Tool,
+  ToolContext,
+  type AgentPrompt,
+  type AgentToolDefinition,
+  type FlowCtxOf,
+} from '../../common';
 import { type DirectMcpServer } from '../../direct/direct.types';
 import { AgentCallDepthExceededError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
@@ -356,3 +372,210 @@ describe('one agent calling another', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------- the gates a nested agent declares
+
+const ToolHook = FlowHooksOf('tools:call-tool');
+
+/** The tools whose `tools:call-tool` flow `QuayAuditPlugin` hooked. */
+const hooked: string[] = [];
+
+/** Installed on an agent: records the tools whose `tools:call-tool` flow it hooks. */
+@Plugin({ name: 'quay-audit' })
+class QuayAuditPlugin {
+  @ToolHook.Will('execute')
+  audit(ctx: FlowCtxOf<'tools:call-tool'>) {
+    hooked.push(ctx.state.tool?.name ?? '?');
+  }
+}
+
+/** One call a minute: in its server, only nested agents declare a limit. */
+@Agent({
+  name: 'tally_clerk',
+  inputSchema: {},
+  llm: { adapter: answering },
+  rateLimit: { maxRequests: 1, windowMs: 60_000 },
+})
+class TallyClerkAgent extends AgentContext {
+  override async execute(_input: Record<string, never>) {
+    runs.push('tally_clerk');
+    return { tallied: true };
+  }
+}
+
+@Agent({
+  name: 'tally_master',
+  inputSchema: {},
+  llm: { adapter: callingModel('tally_master', 'invoke_tally_clerk') },
+  agents: [TallyClerkAgent],
+})
+class TallyMasterAgent extends AgentContext {}
+
+let releaseCrane: () => void = () => undefined;
+const craneGate = new Promise<void>((resolve) => {
+  releaseCrane = resolve;
+});
+
+/** One run at a time, no queue. */
+@Agent({
+  name: 'crane_operator',
+  inputSchema: {},
+  llm: { adapter: answering },
+  concurrency: { maxConcurrent: 1, queueTimeoutMs: 0 },
+})
+class CraneOperatorAgent extends AgentContext {
+  override async execute(_input: Record<string, never>) {
+    runs.push('crane_operator');
+    await craneGate;
+    return { lifted: true };
+  }
+}
+
+@Agent({
+  name: 'crane_master',
+  inputSchema: {},
+  llm: { adapter: callingModel('crane_master', 'invoke_crane_operator') },
+  agents: [CraneOperatorAgent],
+})
+class CraneMasterAgent extends AgentContext {}
+
+/** One call a minute, nested in an agent that runs its own tools directly. */
+@Agent({
+  name: 'swift_clerk',
+  inputSchema: {},
+  llm: { adapter: answering },
+  rateLimit: { maxRequests: 1, windowMs: 60_000 },
+})
+class SwiftClerkAgent extends AgentContext {
+  override async execute(_input: Record<string, never>) {
+    runs.push('swift_clerk');
+    return { tallied: true };
+  }
+}
+
+/** Runs its own tools directly (`useToolFlow: false`); its plugin hooks `tools:call-tool`. */
+@Agent({
+  name: 'swift_master',
+  inputSchema: {},
+  llm: { adapter: callingModel('swift_master', 'invoke_swift_clerk') },
+  agents: [SwiftClerkAgent],
+  plugins: [QuayAuditPlugin],
+  execution: { useToolFlow: false },
+})
+class SwiftMasterAgent extends AgentContext {}
+
+@App({ id: 'quay', name: 'Quay', agents: [TallyMasterAgent, CraneMasterAgent, SwiftMasterAgent] })
+class QuayApp {}
+
+@Tool({ name: 'hoist', inputSchema: {} })
+class HoistTool extends ToolContext {
+  async execute() {
+    runs.push('hoist');
+    return { hoisted: true };
+  }
+}
+
+/** Its model calls its own tool `hoist`. */
+@Agent({ name: 'rigger', inputSchema: {}, llm: { adapter: callingModel('rigger', 'hoist') }, tools: [HoistTool] })
+class RiggerAgent extends AgentContext {}
+
+/** Its model calls its nested agent `rigger`, whose model calls its own tool. */
+@Agent({
+  name: 'boatswain',
+  inputSchema: {},
+  llm: { adapter: callingModel('boatswain', 'invoke_rigger') },
+  agents: [RiggerAgent],
+})
+class BoatswainAgent extends AgentContext {}
+
+@App({ id: 'deck', name: 'Deck', agents: [BoatswainAgent] })
+class DeckApp {}
+
+describe('the gates a nested agent declares', () => {
+  let server: DirectMcpServer;
+
+  beforeAll(async () => {
+    // No `throttle`, and nothing but nested agents declares a limit
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'nested-agent-gates', version: '1.0.0' },
+      apps: [QuayApp],
+      logging: { level: LogLevel.Off },
+    });
+  });
+
+  afterAll(async () => {
+    await server.dispose();
+  });
+
+  beforeEach(() => {
+    runs.length = 0;
+    hooked.length = 0;
+  });
+
+  it("apply its rateLimit when its parent's model calls it", async () => {
+    const first = await server.callTool('invoke_tally_master', {});
+    const second = await server.callTool('invoke_tally_master', {});
+
+    expect(first.structuredContent).toEqual({ tallied: true });
+    expect(JSON.stringify(second.structuredContent)).toContain('Rate limit exceeded');
+    expect(runs).toEqual(['tally_clerk']);
+  });
+
+  it("apply its concurrency when its parent's model calls it", async () => {
+    const first = server.callTool('invoke_crane_master', {});
+    await until(() => runs.length === 1);
+
+    const second = server.callTool('invoke_crane_master', {});
+    // Without the limit the second call starts the nested agent too, and waits on the same gate.
+    const settled = await Promise.race([second, until(() => runs.length === 2).then(() => 'started' as const)]);
+    releaseCrane();
+    const [firstResult] = await Promise.all([first, second]);
+
+    expect(settled === 'started' ? settled : JSON.stringify(settled.structuredContent)).toContain(
+      'Concurrency limit reached for \\"invoke_crane_operator\\" (max: 1)',
+    );
+    expect(firstResult.structuredContent).toEqual({ lifted: true });
+    expect(runs).toEqual(['crane_operator']);
+  });
+
+  it('run through its invoke_<agent> tool flow when the parent runs its own tools directly (useToolFlow: false)', async () => {
+    const first = await server.callTool('invoke_swift_master', {});
+    const second = await server.callTool('invoke_swift_master', {});
+
+    expect(first.structuredContent).toEqual({ tallied: true });
+    expect(JSON.stringify(second.structuredContent)).toContain('Rate limit exceeded');
+    expect(runs).toEqual(['swift_clerk']);
+    // The parent agent's plugin hooks the nested agent's tool flow
+    expect(hooked).toEqual(['invoke_swift_clerk']);
+  });
+});
+
+describe('calls an agent makes during its run', () => {
+  it("run inside the global concurrency slot of the agent's call", async () => {
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'agent-global-slot', version: '1.0.0' },
+      apps: [DeckApp],
+      logging: { level: LogLevel.Off },
+      throttle: { enabled: true, globalConcurrency: { maxConcurrent: 1, queueTimeoutMs: 0 } },
+    });
+    try {
+      runs.length = 0;
+      const result = await server.callTool('invoke_boatswain', {});
+
+      // boatswain holds the only global slot while its nested agent and that agent's tool run
+      expect(result.structuredContent).toEqual({ hoisted: true });
+      expect(runs).toEqual(['hoist']);
+    } finally {
+      await server.dispose();
+    }
+  });
+});
+
+/** Resolves once `condition` holds, or after about a second; never rejects. */
+async function until(condition: () => boolean): Promise<boolean> {
+  for (let i = 0; i < 100; i++) {
+    if (condition()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 10).unref());
+  }
+  return condition();
+}

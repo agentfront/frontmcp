@@ -153,7 +153,7 @@ A managed Redis usually hands you a single connection URL. Pass it as `url` inst
 })
 ```
 
-The URL is read into `host`, `port`, `password` and `db` when the config is parsed; `rediss://` turns `tls` on, and `?db=2` works when the path carries no database. The user part may be empty or `default` (Redis ACL users other than `default` are refused with a validation error). `keyPrefix` and `defaultTtlMs` go next to `url` as usual.
+The URL is read into `host`, `port`, `password` and `db` when the config is parsed; `rediss://` turns `tls` on, and `?db=2` works when the path carries no database. The user part may be empty or `default` (Redis ACL users other than `default` are refused with a validation error). Percent-encode reserved characters in the password (`@` as `%40`, `%` as `%25`); a malformed escape such as `%ZZ` is a validation error that does not echo the password. `keyPrefix` and `defaultTtlMs` go next to `url` as usual.
 
 ### Running more than one instance
 

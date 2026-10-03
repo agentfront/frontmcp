@@ -173,6 +173,15 @@ describe('auditSecurityDefaults()', () => {
           dnsFinding({ resolvedBindAddress: '0.0.0.0', security: { dnsRebindingProtection: { enabled: false } } }),
         ).toMatchObject({ code: 'DNS_REBINDING_UNPROTECTED', level: 'warn' });
       });
+
+      it('does not offer allowedHosts as a way out of the opt-out, which the adapter ignores', () => {
+        const finding = dnsFinding({
+          resolvedBindAddress: '0.0.0.0',
+          security: { dnsRebindingProtection: { enabled: false } },
+        });
+        expect(finding?.recommendation).toMatch(/^Remove `enabled: false`/);
+        expect(finding?.recommendation).not.toMatch(/\bor set security\.dnsRebindingProtection\.allowedHosts/);
+      });
     });
   });
 

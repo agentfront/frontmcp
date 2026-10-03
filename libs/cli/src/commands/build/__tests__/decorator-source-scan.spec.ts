@@ -2,7 +2,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { readFile } from '@frontmcp/utils';
+
 import { readDecoratorStringLiteral, readEntryDecoratorStringLiteral } from '../decorator-source-scan';
+
+jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual('@frontmcp/utils');
+  return { ...actual, readFile: jest.fn(actual.readFile) };
+});
 
 const PATH = ['redis', 'provider'] as const;
 
@@ -61,15 +68,22 @@ describe('readDecoratorStringLiteral (#680)', () => {
     expect(readDecoratorStringLiteral(`@FrontMcp({ redis: {} })`, [])).toBeUndefined();
   });
 
-  it('reads the entry file, and answers undefined when it is missing', () => {
+  it('reads the entry file, and answers undefined when it is missing', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'decorator-scan-'));
     try {
       const entry = path.join(dir, 'main.ts');
       fs.writeFileSync(entry, `@FrontMcp({ redis: { provider: 'vercel-kv' } }) class S {}`);
-      expect(readEntryDecoratorStringLiteral(entry, PATH)).toBe('vercel-kv');
-      expect(readEntryDecoratorStringLiteral(path.join(dir, 'missing.ts'), PATH)).toBeUndefined();
+      await expect(readEntryDecoratorStringLiteral(entry, PATH)).resolves.toBe('vercel-kv');
+      await expect(readEntryDecoratorStringLiteral(path.join(dir, 'missing.ts'), PATH)).resolves.toBeUndefined();
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('reads the entry through the @frontmcp/utils filesystem helpers', async () => {
+    jest.mocked(readFile).mockResolvedValueOnce(`@FrontMcp({ redis: { provider: 'vercel-kv' } }) class S {}`);
+
+    await expect(readEntryDecoratorStringLiteral('/virtual/main.ts', PATH)).resolves.toBe('vercel-kv');
+    expect(readFile).toHaveBeenCalledWith('/virtual/main.ts', 'utf8');
   });
 });

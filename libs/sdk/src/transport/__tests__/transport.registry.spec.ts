@@ -251,10 +251,7 @@ describe('TransportService', () => {
           '[TransportService] Failed to persist session to SQLite',
           expect.objectContaining({ error: 'SQLITE_BUSY: database is locked' }),
         );
-        expect(mockScope.logger.warn).not.toHaveBeenCalledWith(
-          expect.stringContaining('Redis'),
-          expect.anything(),
-        );
+        expect(mockScope.logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Redis'), expect.anything());
       });
     });
   });

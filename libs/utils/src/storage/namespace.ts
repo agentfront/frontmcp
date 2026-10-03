@@ -5,7 +5,8 @@
  * All operations automatically prefix keys with the namespace path.
  */
 
-import type { StorageAdapter, NamespacedStorage, SetOptions, SetEntry, MessageHandler, Unsubscribe } from './types';
+import { StorageNotSupportedError } from './errors';
+import type { MessageHandler, NamespacedStorage, SetEntry, SetOptions, StorageAdapter, Unsubscribe } from './types';
 
 /**
  * Separator used between namespace segments.
@@ -187,6 +188,13 @@ export class NamespacedStorageImpl implements NamespacedStorage {
 
   async incrBy(key: string, amount: number): Promise<number> {
     return this.adapter.incrBy(this.prefixKey(key), amount);
+  }
+
+  async deleteIfEquals(key: string, expectedValue: string): Promise<boolean> {
+    if (!this.adapter.deleteIfEquals) {
+      throw new StorageNotSupportedError('deleteIfEquals', 'this storage adapter');
+    }
+    return this.adapter.deleteIfEquals(this.prefixKey(key), expectedValue);
   }
 
   // ============================================

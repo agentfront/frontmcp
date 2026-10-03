@@ -132,7 +132,7 @@ export function resolveChildCommand(
     // The IPC channel only reaches a process we spawn directly; through npx it
     // stops at npm and the server exits during boot.
     throw new Error(
-      '`frontmcp dev --stdio --serve` runs a TypeScript entry with the project\'s tsx, which is not installed. ' +
+      "`frontmcp dev --stdio --serve` runs a TypeScript entry with the project's tsx, which is not installed. " +
         'Install it (`npm i -D tsx`) or drop `--serve` to use the HTTP loopback.',
     );
   }

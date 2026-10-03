@@ -68,6 +68,28 @@ describe('resolveRuntimePackageSpecs', () => {
     expect(specs).toHaveLength(6);
   });
 
+  it('adds an optional SDK peer declared only in optionalDependencies', () => {
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({ optionalDependencies: { '@frontmcp/storage-sqlite': '^1.8.7' } }),
+    );
+    expect(resolveRuntimePackageSpecs(dir)).toContain('@frontmcp/storage-sqlite@^1.8.7');
+  });
+
+  it('prefers optionalDependencies over dependencies for the same name, as npm does', () => {
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        dependencies: { '@frontmcp/storage-sqlite': '1.8.0', vectoriadb: '2.3.0' },
+        optionalDependencies: { '@frontmcp/storage-sqlite': '1.8.7', vectoriadb: '2.3.2' },
+      }),
+    );
+    const specs = resolveRuntimePackageSpecs(dir);
+    expect(specs).toContain('@frontmcp/storage-sqlite@1.8.7');
+    expect(specs).toContain('vectoriadb@2.3.2');
+    expect(specs.some((spec) => spec.endsWith('@1.8.0') || spec.endsWith('@2.3.0'))).toBe(false);
+  });
+
   it("lists every optional peer of @frontmcp/sdk except vectoriadb (kept in sync with the SDK's package.json)", () => {
     const sdk = JSON.parse(fs.readFileSync(SDK_PACKAGE_JSON, 'utf-8')) as {
       peerDependenciesMeta?: Record<string, { optional?: boolean }>;

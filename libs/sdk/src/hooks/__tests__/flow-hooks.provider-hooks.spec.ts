@@ -2,13 +2,27 @@
  * Hooks declared on providers run like the hooks of an app's GLOBAL providers (#678):
  * - a server-level provider (`@FrontMcp({ providers })`) hooks every app's entries;
  * - a CONTEXT-scoped provider's hook runs on the instance built for the request, the same instance
- *   the request's tools resolve.
+ *   the request's tools resolve;
+ * - the providers a plugin derives from its options (`dynamicProviders()`, `init({ providers })`) hook
+ *   like the providers it declares.
  */
 import 'reflect-metadata';
 
 import { type DirectMcpServer } from '../../direct/direct.types';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
-import { App, LogLevel, Provider, ProviderScope, Tool, ToolContext, ToolHook, type FlowCtxOf } from '../../index';
+import {
+  App,
+  DynamicPlugin,
+  LogLevel,
+  Plugin,
+  Provider,
+  ProviderScope,
+  Tool,
+  ToolContext,
+  ToolHook,
+  type FlowCtxOf,
+  type ProviderType,
+} from '../../index';
 
 const runs: string[] = [];
 
@@ -34,6 +48,40 @@ class RequestTrace {
   }
 }
 
+@Provider({ name: 'option-trace', scope: ProviderScope.CONTEXT })
+class OptionTrace {
+  @ToolHook.Will('execute')
+  beforeExecute(ctx: FlowCtxOf<'tools:call-tool'>) {
+    runs.push(`option-context:${ctx.state.tool?.name}`);
+  }
+}
+
+@Provider({ name: 'option-audit' })
+class OptionAudit {
+  @ToolHook.Will('execute')
+  beforeExecute(ctx: FlowCtxOf<'tools:call-tool'>) {
+    runs.push(`option-global:${ctx.state.tool?.name}`);
+  }
+}
+
+interface TracingOptions {
+  label: string;
+}
+
+@Plugin({ name: 'option-tracing' })
+class OptionTracingPlugin extends DynamicPlugin<TracingOptions> {
+  readonly options: TracingOptions;
+
+  constructor(options: TracingOptions) {
+    super();
+    this.options = options;
+  }
+
+  static override dynamicProviders(): ProviderType[] {
+    return [OptionTrace];
+  }
+}
+
 @Tool({ name: 'traced', inputSchema: {} })
 class TracedTool extends ToolContext {
   async execute() {
@@ -49,7 +97,13 @@ class PlainTool extends ToolContext {
   }
 }
 
-@App({ id: 'traced', name: 'Traced', providers: [RequestTrace], tools: [TracedTool] })
+@App({
+  id: 'traced',
+  name: 'Traced',
+  providers: [RequestTrace],
+  plugins: [OptionTracingPlugin.init({ label: 'traced', providers: [OptionAudit] })],
+  tools: [TracedTool],
+})
 class TracedApp {}
 
 @App({ id: 'plain', name: 'Plain', tools: [PlainTool] })
@@ -96,6 +150,16 @@ describe('hooks declared on providers', () => {
     await server.callTool('plain', {}, CALLER);
 
     expect(runs.filter((run) => run.startsWith('context:'))).toEqual([]);
+  });
+
+  it('run the hooks of the providers a plugin derives from its options, for its own app only', async () => {
+    await server.callTool('traced', {}, CALLER);
+    await server.callTool('plain', {}, CALLER);
+
+    expect(runs.filter((run) => run.startsWith('option-')).sort()).toEqual([
+      'option-context:traced',
+      'option-global:traced',
+    ]);
   });
 
   it('run a CONTEXT-scoped provider hook on the instance of each session', async () => {
