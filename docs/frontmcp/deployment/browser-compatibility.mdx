@@ -18,6 +18,7 @@ FrontMCP supports browser environments for client-side use cases like JWT verifi
 | **Storage adapters**    | `MemoryStorageAdapter`, `IndexedDBStorageAdapter`, `LocalStorageAdapter` |
 | **Agent adapters**      | `OpenAIAdapter`, `AnthropicAdapter` (HTTP-based, no Node dependencies)   |
 | **MCP client**          | Direct client connections                                                |
+| **Runtime tools**       | `server.registerTool()` adds page-defined tools to a running server      |
 | **ESM Dynamic Loading** | In-memory cache mode, Blob URL module evaluation via `App.esm()`         |
 
 ## What's Node-only
@@ -45,12 +46,52 @@ In `'serialized'` mode:
 - A request that waits on its client (an elicitation answer, a `roots/list` reply, the elicitation fallback) steps aside while it waits, so the client can call the server before answering.
 - Concurrent calls **inside one request** (a tool that starts two tool calls with `Promise.all`) cannot be told apart once they overlap. They are refused with `AsyncContextOverlapError` instead of reading each other's context. Run such calls one after another.
 - A workflow runs its ready steps **one at a time**, whatever its `maxConcurrency`: steps running at once would overlap in the workflow's turn. Each step runs once, and the workflow takes about the sum of its steps.
-- A tool must not call its own server through a `DirectClient` or `DirectMcpServer`; it would wait for its own turn. Call other tools through `this.scope` flows instead. A request that waits more than 10 seconds for its turn logs a warning that says so.
+- A tool must not call its own server through a `DirectClient` or `DirectMcpServer`; it would wait for its own turn. Call other tools through `this.scope` flows instead. A request that waits more than 10 seconds for its turn logs a warning that says so. [Runtime tools](#runtime-tools) are the exception: their `execute` runs outside the turn.
 - Timers and promises a tool starts without awaiting run in whichever request holds the turn, so they must not read request context.
 
 <Note>
 Up to 1.8.3, the browser build shared one context stack between all requests, so a request that awaited could continue with another request's session, auth info and running tool.
 </Note>
+
+---
+
+## Runtime Tools
+
+`server.registerTool()` adds a tool to the server `create()` returned, while it runs. It is the way page code — a React component, a form, a store — gives agents something to do: the tool becomes a regular tool of the server's app, listed by `tools/list`, run by the `tools:call-tool` flow (so the app's plugin hooks, authorities, quota and `availableWhen` apply), and announced to connected clients with `notifications/tools/list_changed`. [`useDynamicTool`](/frontmcp/react/dynamic-tools) is built on it.
+
+```typescript
+import { create } from '@frontmcp/sdk';
+
+const server = await create({ info: { name: 'shop', version: '1.0.0' } });
+
+const unregister = await server.registerTool({
+  name: 'get_cart',
+  description: 'Items in the shopping cart',
+  inputSchema: { type: 'object', properties: {} },
+  annotations: { readOnlyHint: true },
+  execute: async (args, { signal }) => ({
+    content: [{ type: 'text', text: JSON.stringify(cart.items) }],
+  }),
+});
+
+// later, when the page no longer offers it
+unregister();
+```
+
+| Field           | Description                                                                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`          | **Required.** 1–64 characters, unique in the server. A taken name rejects with `ToolNameConflictError`.                                          |
+| `execute`       | **Required.** `(args, { signal }) => CallToolResult`. `signal` aborts when the call is cancelled or times out.                                   |
+| `title`         | Human-readable title                                                                                                                             |
+| `description`   | What the tool does                                                                                                                               |
+| `inputSchema`   | JSON Schema of the arguments, as listed: an object schema (`type: 'object'`). Arguments are **not** validated against it: validate in `execute`. |
+| `annotations`   | MCP hints (`readOnlyHint`, `destructiveHint`, `openWorldHint`, ...)                                                                              |
+| `availableWhen` | Where the tool is offered, e.g. `{ surface: ['webmcp'] }`                                                                                        |
+| `app`           | The app the tool joins. Optional on a server with one app (every `create()` server); required when there are more.                               |
+
+`execute` runs outside the request's turn, so it may call the server back (`server.callTool(...)`) or wait on the network without holding up other requests.
+
+A definition `tools/list` could not list — an `inputSchema` that is not an object schema, a `title` or `description` that is not a string, malformed `annotations` or `availableWhen` — rejects with `EntryValidationError`, so one bad tool never breaks the listing of the others. Registering on a server that is disposed (or is disposed before the registration completes) rejects with `InternalMcpError`.
 
 ---
 

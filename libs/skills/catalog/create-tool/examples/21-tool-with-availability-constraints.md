@@ -83,7 +83,7 @@ export class RotateSecretsTool extends ToolContext {
 | `deployment` | `'serverless'`, `'standalone'`, `'distributed'`, `'browser'`                                    |
 | `provider`   | `'bare'`, `'docker'`, `'vercel'`, `'lambda'`, `'cloudflare'`, …                                 |
 | `target`     | `'cli'`, `'node'`, `'vercel'`, `'lambda'`, `'cloudflare'`, … (set by `frontmcp build --target`) |
-| `surface`    | `'mcp'`, `'cli'`, `'agent'`, `'job'`, `'http-trigger'` — per-call axis                          |
+| `surface`    | `'mcp'`, `'cli'`, `'agent'`, `'job'`, `'http-trigger'`, `'webmcp'` — per-call axis              |
 | `env`        | `'production'`, `'development'`, `'test'`                                                       |
 
 Multiple axes are AND-ed. Multiple values within an axis are OR-ed.

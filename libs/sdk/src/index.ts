@@ -435,7 +435,14 @@ export type {
 } from './direct';
 
 // Direct MCP Server - legacy programmatic access without HTTP transport
-export type { DirectMcpServer, DirectAuthContext, DirectCallOptions, DirectRequestMetadata } from './direct';
+export type {
+  DirectMcpServer,
+  DirectAuthContext,
+  DirectCallOptions,
+  DirectRequestMetadata,
+  RuntimeToolDefinition,
+  RuntimeToolExecuteContext,
+} from './direct';
 
 // create() factory — flat-config direct server creation
 export { create, clearCreateCache } from './direct';

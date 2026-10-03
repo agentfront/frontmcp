@@ -26,7 +26,7 @@ jest.mock('../direct-client', () => ({
 }));
 
 /** Minimal Scope interface required by DirectMcpServerImpl */
-type MockScope = Pick<Scope, 'runFlowForOutput' | 'transportService' | 'logger'>;
+type MockScope = Pick<Scope, 'runFlowForOutput' | 'transportService' | 'logger' | 'emitDispose'>;
 
 describe('DirectMcpServerImpl', () => {
   // Mock Scope with type-safe partial
@@ -36,6 +36,7 @@ describe('DirectMcpServerImpl', () => {
       destroy: jest.fn().mockResolvedValue(undefined),
     } as unknown as Scope['transportService'],
     logger: { child: () => ({ error: jest.fn(), warn: jest.fn() }) } as unknown as Scope['logger'],
+    emitDispose: jest.fn().mockResolvedValue(undefined),
   });
 
   beforeEach(() => {
@@ -336,6 +337,7 @@ describe('DirectMcpServerImpl', () => {
       const mockScope = {
         runFlowForOutput: jest.fn(),
         transportService: undefined,
+        emitDispose: jest.fn().mockResolvedValue(undefined),
       };
       const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
 
@@ -362,6 +364,23 @@ describe('DirectMcpServerImpl', () => {
       await server.dispose();
 
       expect(mockScope.transportService.destroy).toHaveBeenCalledTimes(1);
+      expect(mockScope.emitDispose).toHaveBeenCalledTimes(1);
+    });
+
+    it("should run the scope's dispose callbacks before destroying the transport service", async () => {
+      const mockScope = createMockScope();
+      const order: string[] = [];
+      mockScope.emitDispose.mockImplementation(async () => {
+        order.push('emitDispose');
+      });
+      mockScope.transportService.destroy.mockImplementation(async () => {
+        order.push('destroy');
+      });
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
+
+      await server.dispose();
+
+      expect(order).toEqual(['emitDispose', 'destroy']);
     });
 
     it('should throw InternalMcpError when calling methods after dispose', async () => {

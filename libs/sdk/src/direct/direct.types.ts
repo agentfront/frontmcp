@@ -6,15 +6,18 @@
  */
 
 import type {
-  ListToolsResult,
   CallToolResult,
-  ListResourcesResult,
-  ReadResourceResult,
-  ListPromptsResult,
   GetPromptResult,
+  ListPromptsResult,
+  ListResourcesResult,
   ListResourceTemplatesResult,
+  ListToolsResult,
+  ReadResourceResult,
 } from '@frontmcp/protocol';
-import type { DirectClient, ConnectOptions } from './client.types';
+import type { EntryAvailability } from '@frontmcp/utils';
+
+import type { ToolAnnotations } from '../common/metadata/tool.metadata';
+import type { ConnectOptions, DirectClient } from './client.types';
 
 /**
  * Auth context for direct server invocation.
@@ -54,6 +57,48 @@ export interface DirectCallOptions {
   authContext?: DirectAuthContext;
   /** Request metadata */
   metadata?: DirectRequestMetadata;
+}
+
+/**
+ * What a runtime tool's `execute` receives besides its arguments.
+ */
+export interface RuntimeToolExecuteContext {
+  /** Aborted when the call is cancelled or times out. */
+  signal: AbortSignal;
+}
+
+/**
+ * A tool defined at runtime by code outside the server, such as a React component, and added with
+ * {@link DirectMcpServer.registerTool}. It becomes a regular tool of the server: listed by
+ * `tools/list`, called through the `tools:call-tool` flow (hooks, authorities, quota and
+ * `availableWhen` apply), and announced with `notifications/tools/list_changed`.
+ */
+export interface RuntimeToolDefinition {
+  /** Tool name: 1-64 characters, unique in the server. */
+  name: string;
+  /** Human-readable title. */
+  title?: string;
+  /** What the tool does, for the model choosing it. */
+  description?: string;
+  /**
+   * JSON Schema of the arguments, as listed by `tools/list`: an object schema (`type: 'object'`). The
+   * server does not validate arguments against it: `execute` receives them as sent, so validate there.
+   */
+  inputSchema?: Record<string, unknown>;
+  /** MCP behavioral hints (`readOnlyHint`, `destructiveHint`, ...). */
+  annotations?: ToolAnnotations;
+  /** Where the tool is offered, e.g. `{ surface: ['webmcp'] }` for in-browser agents only. */
+  availableWhen?: EntryAvailability;
+  /**
+   * Id of the app the tool joins; its plugins' hooks apply to the tool. Optional when the server has
+   * a single local app, as a `create()` server does.
+   */
+  app?: string;
+  /**
+   * Run the tool. The server waits for it without holding its request turn, so it may call the
+   * server (or take long) without blocking other requests.
+   */
+  execute(args: Record<string, unknown>, context: RuntimeToolExecuteContext): Promise<CallToolResult> | CallToolResult;
 }
 
 /**
@@ -108,6 +153,33 @@ export interface DirectMcpServer {
    * @returns Tool execution result
    */
   callTool(name: string, args?: Record<string, unknown>, options?: DirectCallOptions): Promise<CallToolResult>;
+
+  /**
+   * Add a tool to the running server. It is listed and called like any other tool, through the
+   * server's flows, and connected clients get `notifications/tools/list_changed`.
+   *
+   * @param definition - The tool's name, schema and `execute` function
+   * @returns A function that removes the tool again
+   * @throws ToolNameConflictError if a tool with that name is already registered
+   * @throws EntryValidationError if the name is empty or longer than 64 characters, the definition
+   *   could not be listed (`inputSchema` not an object schema, malformed `title`, `description`,
+   *   `annotations` or `availableWhen`), or the app to join is unknown (or ambiguous: a server with
+   *   several apps needs `definition.app`)
+   * @throws InternalMcpError if the server is disposed, or is disposed before the tool is added
+   *
+   * @example
+   * ```typescript
+   * const unregister = await server.registerTool({
+   *   name: 'get_cart',
+   *   description: 'Items in the shopping cart',
+   *   inputSchema: { type: 'object', properties: {} },
+   *   execute: () => ({ content: [{ type: 'text', text: JSON.stringify(cart.items) }] }),
+   * });
+   * // later
+   * unregister();
+   * ```
+   */
+  registerTool(definition: RuntimeToolDefinition): Promise<() => void>;
 
   // ─────────────────────────────────────────────────────────────────
   // Resource Operations

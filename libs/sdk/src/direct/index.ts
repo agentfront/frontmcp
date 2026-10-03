@@ -82,7 +82,14 @@ export type {
 // Legacy Direct Server (bypasses transport, invokes flows directly)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type { DirectMcpServer, DirectAuthContext, DirectCallOptions, DirectRequestMetadata } from './direct.types';
+export type {
+  DirectMcpServer,
+  DirectAuthContext,
+  DirectCallOptions,
+  DirectRequestMetadata,
+  RuntimeToolDefinition,
+  RuntimeToolExecuteContext,
+} from './direct.types';
 
 export { DirectMcpServerImpl } from './direct-server';
 

@@ -19,6 +19,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { ListToolsRequestSchema, ListToolsResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import { buildCDNInfoForUIType, type AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/adapters';
 import { isUIType, type UIType } from '@frontmcp/uipack/types';
+import { base64Decode, base64Encode } from '@frontmcp/utils';
 
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { DEFAULT_TOOL_PAGINATION, type ToolPaginationOptions } from '../../common/types/options/pagination';
@@ -136,7 +137,8 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
    */
   private parseCursor(cursor: string): number {
     try {
-      const decoded = Buffer.from(cursor, 'base64').toString('utf8');
+      // Not Node's Buffer: a browser build lists tools through this flow too
+      const decoded = new TextDecoder().decode(base64Decode(cursor));
       const parsed = JSON.parse(decoded);
       const offset = parsed?.offset;
 
@@ -161,7 +163,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
    * Encode an offset into a cursor string.
    */
   private encodeCursor(offset: number): string {
-    return Buffer.from(JSON.stringify({ offset })).toString('base64');
+    return base64Encode(new TextEncoder().encode(JSON.stringify({ offset })));
   }
 
   @Stage('parseInput')

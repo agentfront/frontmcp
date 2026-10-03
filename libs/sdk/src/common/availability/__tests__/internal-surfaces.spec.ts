@@ -27,17 +27,17 @@ import {
 } from '../../index';
 
 /**
- * `availableWhen.surface` names who is calling: `'mcp'`, `'cli'`, `'agent'`, `'job'` or
- * `'http-trigger'`. Each caller tags its calls, so a tool listing only `'mcp'` is out of reach of an
- * agent's model, a job (or workflow step) and an HTTP trigger, and a tool listing only one of those
- * is reached by it. Code running for a call reads the call's surface with `getCallSurface()`, in a
+ * `availableWhen.surface` names who is calling: `'mcp'`, `'cli'`, `'agent'`, `'job'`, `'http-trigger'`
+ * or `'webmcp'`. Each caller tags its calls, so a tool listing only `'mcp'` is out of reach of an
+ * agent's model, a job (or workflow step), an HTTP trigger and an in-browser agent calling through
+ * WebMCP, and a tool listing only one of those is reached by it. Code running for a call reads the call's surface with `getCallSurface()`, in a
  * prompt too. A tool's own `this.callTool()` stays in-process dispatch, which no surface restricts.
  */
 
 /** Every run of a tool below, with the surface its code saw. */
 const runs: Array<{ tool: string; surface: string | null }> = [];
 
-function surfaceTool(name: string, surface: Array<'mcp' | 'agent' | 'job' | 'http-trigger'>) {
+function surfaceTool(name: string, surface: Array<'mcp' | 'agent' | 'job' | 'http-trigger' | 'webmcp'>) {
   @Tool({ name, inputSchema: {}, availableWhen: { surface } })
   class SurfaceTool extends ToolContext {
     async execute() {
@@ -52,6 +52,7 @@ const McpOnlyTool = surfaceTool('mcp_only', ['mcp']);
 const AgentOnlyTool = surfaceTool('agent_only', ['agent']);
 const JobOnlyTool = surfaceTool('job_only', ['job']);
 const TriggerOnlyTool = surfaceTool('trigger_only', ['http-trigger']);
+const WebMcpOnlyTool = surfaceTool('webmcp_only', ['webmcp']);
 
 /** A tool an MCP client calls, whose own code composes with the agent-only tool. */
 @Tool({ name: 'compose', inputSchema: {} })
@@ -160,7 +161,7 @@ class WhereAmIPrompt extends PromptContext {
 @App({
   id: 'desk',
   name: 'Desk',
-  tools: [McpOnlyTool, AgentOnlyTool, JobOnlyTool, TriggerOnlyTool, ComposeTool],
+  tools: [McpOnlyTool, AgentOnlyTool, JobOnlyTool, TriggerOnlyTool, WebMcpOnlyTool, ComposeTool],
   agents: [TriageAgent, TriageDirectAgent],
   jobs: [SyncJob],
   workflows: [SyncMcpOnlyWorkflow, SyncJobOnlyWorkflow],
@@ -278,6 +279,57 @@ describe('surfaces other than MCP', () => {
       await deliver('mcp_only');
 
       expect({ triggered, runs }).toEqual({ triggered: [{ tool: 'mcp_only', outcome: 'refused' }], runs: [] });
+    });
+  });
+
+  describe('a WebMCP caller', () => {
+    let scope: Scope;
+    const ctx = { authInfo: { sessionId: 'webmcp:test' }, surface: 'webmcp' as const };
+
+    beforeAll(async () => {
+      [scope] = (await FrontMcpInstance.createForGraph(serverConfig)).getScopes() as Scope[];
+    });
+
+    afterAll(async () => {
+      await scope.shutdown();
+    });
+
+    function callOnWebMcp(name: string) {
+      return scope.runFlowForOutput('tools:call-tool', {
+        request: { method: 'tools/call', params: { name, arguments: {} } },
+        ctx,
+      });
+    }
+
+    it("is offered only the tools whose surface lists 'webmcp' (or no surface)", async () => {
+      const { tools } = await scope.runFlowForOutput('tools:list-tools', {
+        request: { method: 'tools/list', params: {} },
+        ctx,
+      });
+
+      const names = tools.map((tool) => tool.name);
+      expect(names).toContain('webmcp_only');
+      expect(names).toContain('compose');
+      expect(names).not.toContain('mcp_only');
+      expect(names).not.toContain('agent_only');
+    });
+
+    it("runs a tool that lists 'webmcp', on the 'webmcp' surface", async () => {
+      await callOnWebMcp('webmcp_only');
+
+      expect(runs).toEqual([{ tool: 'webmcp_only', surface: 'webmcp' }]);
+    });
+
+    it("cannot run a tool whose surface leaves out 'webmcp'", async () => {
+      await expect(callOnWebMcp('mcp_only')).rejects.toThrow(/not found/i);
+
+      expect(runs).toEqual([]);
+    });
+
+    it("is out of reach of an MCP client when it lists only 'webmcp'", async () => {
+      const tools = (await client.listTools()) as Array<{ name: string }>;
+
+      expect(tools.map((tool) => tool.name)).not.toContain('webmcp_only');
     });
   });
 
