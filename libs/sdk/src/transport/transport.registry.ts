@@ -687,6 +687,7 @@ export class TransportService {
     // and taken over atomically once it has stopped.
     const currentNodeId = getMachineId();
     const ownerNodeId = storedSession.session.nodeId;
+    let latestSession = storedSession;
     if (this.scope.haManager && ownerNodeId && ownerNodeId !== currentNodeId) {
       const remote = await this.remoteOwnerTransporter(key, ownerNodeId);
       if (remote) return remote;
@@ -694,6 +695,7 @@ export class TransportService {
       const sessionKey = `${this.getSessionKeyPrefix()}${sessionId}`;
       const result = await this.scope.haManager.attemptTakeover(sessionKey, ownerNodeId);
       if (result.claimed) {
+        latestSession = { ...storedSession, reassignedAt: result.reassignedAt, reassignedFrom: ownerNodeId };
         this.scope.logger.info('[HA] Took over session from a stopped node', {
           sessionId: sessionId.slice(0, 20),
           previousNodeId: ownerNodeId,
@@ -709,6 +711,7 @@ export class TransportService {
           this.scope.logger.debug('[HA] Session already claimed by another pod', { sessionId: sessionId.slice(0, 20) });
           throw new SessionClaimConflictError(sessionId);
         }
+        if (current) latestSession = current;
       }
     }
 
@@ -753,12 +756,12 @@ export class TransportService {
       });
     }
 
-    // Update session access time in Redis. The record names this node as the owner: writing
-    // back the record read before a takeover would hand the session back to the stopped node.
+    // Update session access time in Redis. The record names this node as the owner and keeps the
+    // takeover's audit fields: writing back the record read before a takeover would lose both.
     if (sessionStore) {
       const updatedSession: StoredSession = {
-        ...storedSession,
-        session: { ...storedSession.session, nodeId: currentNodeId },
+        ...latestSession,
+        session: { ...latestSession.session, nodeId: currentNodeId },
         lastAccessedAt: Date.now(),
       };
       sessionStore.set(sessionId, updatedSession, defaultTtlMs).catch((err) => {

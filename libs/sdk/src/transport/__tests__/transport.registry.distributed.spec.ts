@@ -219,6 +219,7 @@ describe('TransportService — distributed sessions (#680)', () => {
 
     it('takes over the session of a stopped node and advertises it', async () => {
       const haManager = createHaManager();
+      haManager.attemptTakeover.mockResolvedValue({ claimed: true, reassignedAt: 1234 });
       const bus = createBus();
       const { service, scope } = await createService({ haManager, bus });
 
@@ -232,10 +233,15 @@ describe('TransportService — distributed sessions (#680)', () => {
 
       expect(transporter).not.toBeInstanceOf(RemoteTransporter);
       expect(haManager.attemptTakeover).toHaveBeenCalledWith('mcp:transport:session:sess-1', 'node-dead');
-      // The record written back names this node — not the stopped one it was read from.
+      // The record written back names this node — not the stopped one it was read from — and
+      // keeps the audit fields the takeover recorded.
       expect(mockStore.set).toHaveBeenCalledWith(
         'sess-1',
-        expect.objectContaining({ session: expect.objectContaining({ nodeId: 'node-local' }) }),
+        expect.objectContaining({
+          session: expect.objectContaining({ nodeId: 'node-local' }),
+          reassignedAt: 1234,
+          reassignedFrom: 'node-dead',
+        }),
         expect.any(Number),
       );
       expect(bus.advertise).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'sess-1' }));
@@ -265,7 +271,11 @@ describe('TransportService — distributed sessions (#680)', () => {
     it("serves the session when this node's orphan scanner claimed it first", async () => {
       const haManager = createHaManager();
       haManager.attemptTakeover.mockResolvedValue({ claimed: false });
-      mockStore.get.mockResolvedValue(storedSession('node-local'));
+      mockStore.get.mockResolvedValue({
+        ...storedSession('node-local'),
+        reassignedAt: 99,
+        reassignedFrom: 'node-dead',
+      });
       const { service } = await createService({ haManager, bus: createBus() });
 
       const transporter = await service.recreateTransporter(
@@ -277,6 +287,11 @@ describe('TransportService — distributed sessions (#680)', () => {
       );
 
       expect(transporter).not.toBeInstanceOf(RemoteTransporter);
+      expect(mockStore.set).toHaveBeenCalledWith(
+        'sess-1',
+        expect.objectContaining({ reassignedAt: 99, reassignedFrom: 'node-dead' }),
+        expect.any(Number),
+      );
     });
 
     it('reports a conflict when the session vanished or its new owner is gone too', async () => {

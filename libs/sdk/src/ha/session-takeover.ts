@@ -71,11 +71,14 @@ export async function attemptSessionTakeover(
   expectedOldNodeId: string,
   newNodeId: string,
 ): Promise<TakeoverResult> {
-  const result = await redis.eval(TAKEOVER_LUA, 1, sessionKey, expectedOldNodeId, newNodeId, Date.now().toString());
+  const reassignedAt = Date.now();
+  const result = await redis.eval(TAKEOVER_LUA, 1, sessionKey, expectedOldNodeId, newNodeId, reassignedAt.toString());
+  const claimed = result === 1;
 
   return {
-    claimed: result === 1,
+    claimed,
     sessionId: sessionKey,
-    previousNodeId: result === 1 ? expectedOldNodeId : undefined,
+    previousNodeId: claimed ? expectedOldNodeId : undefined,
+    reassignedAt: claimed ? reassignedAt : undefined,
   };
 }
