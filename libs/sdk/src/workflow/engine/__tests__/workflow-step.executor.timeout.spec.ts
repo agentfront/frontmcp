@@ -57,4 +57,19 @@ describe('WorkflowStepExecutor — step timeout', () => {
     await expect(executor.executeStep(step, {})).resolves.toEqual({ outputs: { ok: true }, state: 'completed' });
     expect(execute).toHaveBeenCalledTimes(1);
   });
+
+  it('does not start the job when its auth pipes settle after the attempt timed out', async () => {
+    let finishAuthLoad: () => void = () => undefined;
+    const lateLoad = () => new Promise<void>((resolve) => (finishAuthLoad = resolve));
+    const execute = jest.fn();
+    const job = jobWithAuthLoads([lateLoad], execute);
+    const step = { id: 'step-1', jobName: 'piped', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;
+    const executor = new WorkflowStepExecutor(registryWith(job), logger, { authInfo: {} });
+
+    await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
+    finishAuthLoad();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(execute).not.toHaveBeenCalled();
+  });
 });
