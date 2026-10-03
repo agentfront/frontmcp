@@ -138,6 +138,12 @@ export class TransportService {
   /** Session ids with a transport on this node (any type / token), with their transport count. */
   private readonly localSessionIds = new Map<string, number>();
 
+  /** The HA liveness generation in which this node last confirmed it owns a local session, by session id. */
+  private readonly ownershipGeneration = new Map<string, number>();
+
+  /** Sessions whose local transports are being dropped because another node owns them now. */
+  private readonly relinquishing = new Set<string>();
+
   /**
    * Redis key prefix under which session records are stored.
    * The session store appends `session:` to the transport key prefix.
@@ -296,6 +302,7 @@ export class TransportService {
     }
     this.lastTtlRefreshAt.clear();
     this.lastBusRefreshAt.clear();
+    this.ownershipGeneration.clear();
     await this.teardownSessionStore();
   }
 
@@ -406,7 +413,7 @@ export class TransportService {
 
     // 1. Check local in-memory cache first
     const local = this.lookupLocal(key);
-    if (local) {
+    if (local && (await this.holdsLocalSession(sessionId))) {
       this.refreshStoredSessionTtl(sessionId);
       this.refreshBusAdvertisement(key);
       return local;
@@ -449,9 +456,9 @@ export class TransportService {
     const sessionId = sessionIdPresentedBy(request);
     if (!sessionId || sessionId.length > MAX_ROUTABLE_SESSION_ID_LENGTH) return undefined;
     if (!isDeploymentSessionId(sessionId)) return undefined;
-    if (this.localSessionIds.has(sessionId)) return undefined;
 
     try {
+      if (this.localSessionIds.has(sessionId) && (await this.holdsLocalSession(sessionId))) return undefined;
       const owner = await this.lookupSessionOwner(sessionId);
       if (!owner || owner.nodeId === getMachineId()) return undefined;
       return (await this.isNodeAlive(owner.nodeId)) ? owner : undefined;
@@ -521,6 +528,50 @@ export class TransportService {
       }
     }
     return found;
+  }
+
+  /**
+   * Whether this node still owns a session it holds a transport for. After a gap in this node's
+   * heartbeat another node may have taken the session over: the persisted record decides, once per
+   * liveness generation, and a session that moved is dropped here (its record is left to the new owner).
+   * When the record cannot be read the session is served here, and checked again on its next request.
+   */
+  private async holdsLocalSession(sessionId: string): Promise<boolean> {
+    const haManager = this.scope.haManager;
+    const store = this.sessionStore;
+    if (!this.distributed || !haManager || !store) return true;
+    const generation = haManager.livenessGeneration();
+    if (generation !== undefined && this.ownershipGeneration.get(sessionId) === generation) return true;
+
+    let ownerNodeId: string | undefined;
+    try {
+      ownerNodeId = (await store.get(sessionId))?.session?.nodeId;
+    } catch (error) {
+      this.scope.logger.warn('[HA] Could not confirm this node still owns the session — serving it here', {
+        sessionId: sessionId.slice(0, 20),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return true;
+    }
+    if (!ownerNodeId || ownerNodeId === getMachineId()) {
+      if (generation !== undefined) this.ownershipGeneration.set(sessionId, generation);
+      return true;
+    }
+
+    this.scope.logger.warn(
+      '[HA] Another node took this session over while this node was unreachable — dropping it here',
+      {
+        sessionId: sessionId.slice(0, 20),
+        ownerNodeId,
+      },
+    );
+    this.relinquishing.add(sessionId);
+    try {
+      await this.destroyLocalSession(sessionId, 'the session moved to another node');
+    } finally {
+      this.relinquishing.delete(sessionId);
+    }
+    return false;
   }
 
   /** Whether a node's heartbeat is present (`true` when liveness cannot be determined). */
@@ -725,17 +776,9 @@ export class TransportService {
     const defaultTtlMs = this.getDefaultTtlMs();
 
     // Create new transport
-    const transporter = new LocalTransporter(this.scope, key, res, () => {
-      key.sessionId = sessionId;
-      this.evictLocal(key);
-      if (this.distributed && this.bus) {
-        this.bus.revoke(key).catch(() => void 0);
-      }
-      // Remove from Redis on dispose
-      if (sessionStore) {
-        sessionStore.delete(sessionId).catch(() => void 0);
-      }
-    });
+    const transporter = new LocalTransporter(this.scope, key, res, () =>
+      this.onSessionTransportDisposed(key, sessionId, sessionStore),
+    );
 
     await transporter.ready();
 
@@ -829,17 +872,9 @@ export class TransportService {
     const sessionStore = this.sessionStore;
     const defaultTtlMs = this.getDefaultTtlMs();
 
-    const transporter = new LocalTransporter(this.scope, key, res, () => {
-      key.sessionId = sessionId;
-      this.evictLocal(key);
-      if (this.distributed && this.bus) {
-        this.bus.revoke(key).catch(() => void 0);
-      }
-      // Remove from Redis on dispose
-      if (sessionStore) {
-        sessionStore.delete(sessionId).catch(() => void 0);
-      }
-    });
+    const transporter = new LocalTransporter(this.scope, key, res, () =>
+      this.onSessionTransportDisposed(key, sessionId, sessionStore),
+    );
 
     await transporter.ready();
 
@@ -873,6 +908,18 @@ export class TransportService {
     }
 
     return transporter;
+  }
+
+  /** A session transport went away: forget it, and its bus entry and stored record unless another node owns them now. */
+  private onSessionTransportDisposed(key: TransportKey, sessionId: string, sessionStore?: SessionStore): void {
+    key.sessionId = sessionId;
+    this.evictLocal(key);
+    if (this.distributed && this.bus) {
+      this.bus.revoke(key).catch(() => void 0);
+    }
+    if (sessionStore && !this.relinquishing.has(sessionId)) {
+      sessionStore.delete(sessionId).catch(() => void 0);
+    }
   }
 
   async destroyTransporter(type: TransportType, token: string, sessionId: string, reason?: string): Promise<void> {
@@ -1104,6 +1151,8 @@ export class TransportService {
       this.localSessionIds.set(key.sessionId, (this.localSessionIds.get(key.sessionId) ?? 0) + 1);
     }
     tokenBucket.set(key.sessionId, t);
+    const generation = this.distributed ? this.scope.haManager?.livenessGeneration() : undefined;
+    if (generation !== undefined) this.ownershipGeneration.set(key.sessionId, generation);
 
     // Record session creation in history for HTTP 404 detection
     const historyKey = this.makeHistoryKey(key.type, key.tokenHash, key.sessionId);
@@ -1163,7 +1212,10 @@ export class TransportService {
     if (tokenBucket.delete(key.sessionId)) {
       const remaining = (this.localSessionIds.get(key.sessionId) ?? 1) - 1;
       if (remaining > 0) this.localSessionIds.set(key.sessionId, remaining);
-      else this.localSessionIds.delete(key.sessionId);
+      else {
+        this.localSessionIds.delete(key.sessionId);
+        this.ownershipGeneration.delete(key.sessionId);
+      }
     }
     if (tokenBucket.size === 0) typeBucket.delete(key.tokenHash);
     if (typeBucket.size === 0) this.byType.delete(key.type);
