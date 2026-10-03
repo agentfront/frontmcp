@@ -542,8 +542,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // invoking another tool) bypasses consent: the user consented to the entry
     // tool, and inner composition is an implementation detail — mirroring the
     // internal-visibility bypass in `findTool`.
-    const consentCtx = this.input.ctx as { internalCall?: boolean } | undefined;
-    if (!consentCtx?.internalCall) {
+    const consentCtx = this.input.ctx as { internalCall?: boolean; agentPrivateCall?: boolean } | undefined;
+    // An agent's own tools and nested agents are covered by the consent given to the agent.
+    if (!consentCtx?.internalCall && !consentCtx?.agentPrivateCall) {
       const consentedToolIds = getConsentedToolIds(authInfo);
       if (consentedToolIds && tool) {
         // SECURITY: the consent claim keys tools by their bare effective id
@@ -996,7 +997,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     const { tool } = this.state.required;
     const partitionCtx = buildPartitionContext(this.tryGetContext());
-    const isNestedCall = (this.input.ctx as { internalCall?: boolean } | undefined)?.internalCall === true;
+    // A call from another tool (`this.callTool()`) or from an agent during its run (the agent surface:
+    // its model's tool calls, its nested and swarm agents) runs inside its caller's global slot.
+    const isNestedCall =
+      (this.input.ctx as { internalCall?: boolean } | undefined)?.internalCall === true ||
+      callSurfaceOf(this.input.ctx) === 'agent';
     const ticket = await acquireConcurrencySlots(manager, tool.metadata.name, tool.metadata.concurrency, partitionCtx, {
       skipGlobal: isNestedCall,
     });

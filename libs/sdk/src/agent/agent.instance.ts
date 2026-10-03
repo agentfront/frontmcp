@@ -15,12 +15,14 @@ import {
   type AgentCtorArgs,
   type AgentFunctionTokenRecord,
   type AgentInputOf,
+  type AgentInvoker,
   type AgentLlmAdapter,
   type AgentOutputOf,
   type AgentRecord,
-  type AgentToolDefinition,
   type EntryOwnerRef,
   type ParsedAgentResult,
+  type PromptEntry,
+  type ResourceEntry,
   type SafeTransformResult,
   type ScopeEntry,
   type ToolCallExtra,
@@ -35,14 +37,21 @@ import { runOnSurface } from '../context/call-surface';
 import { runAsTool } from '../context/running-tool';
 import {
   AgentConfigKeyNotFoundError,
+  AgentConfigurationError,
   AgentNotConfiguredError,
+  AgentNotFoundError,
   AgentToolExecutionError,
   AgentToolNotFoundError,
+  AgentVisibilityError,
   InvalidHookFlowError,
+  InvalidInputError,
 } from '../errors';
 import type HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import { normalizePrompt } from '../prompt/prompt.utils';
 import type ProviderRegistry from '../provider/provider.registry';
+import { normalizeProvider } from '../provider/provider.utils';
+import { isResourceTemplate, normalizeResource, normalizeResourceTemplate } from '../resource/resource.utils';
 import { ToolInstance } from '../tool/tool.instance';
 import { buildAgentToolDefinitions, buildParsedToolResult, normalizeTool } from '../tool/tool.utils';
 import { createAdapter, type ConfigResolver, type CreateAdapterOptions } from './adapters';
@@ -87,6 +96,18 @@ export const AGENT_ONLY_METADATA_KEYS: ReadonlySet<string> = new Set([
   'tags',
   'hideFromDiscovery',
 ]);
+
+/** A tool the agent's model is offered, under the name the model calls it by. */
+interface AgentModelTool {
+  name: string;
+  entry: ToolEntry;
+  /**
+   * Where a call runs: the agent's private scope (its own tools, through that scope's `tools:call-tool`
+   * flow unless `execution.useToolFlow` is false), that scope's `tools:call-tool` flow whatever
+   * `useToolFlow` says (its nested agents' `invoke_<agent>` tools), or the scope it is registered in.
+   */
+  via: 'agent-scope' | 'nested-agent' | 'parent-scope';
+}
 
 // ============================================================================
 // Agent Instance
@@ -140,10 +161,14 @@ export class AgentInstance<
 
   /**
    * The agent exposed as a standard tool for registration in parent scope.
-   * This allows the agent to be called like any other tool (use-agent:*) and
+   * This allows the agent to be called like any other tool (invoke_<agent>) and
    * go through the standard tools:call-tool flow with all plugins/hooks.
    */
   private agentToolInstance: ToolInstance | null = null;
+
+  /** The resources and prompts this agent exports to its parent scope (`exports`). */
+  private exportedResources: ResourceEntry[] = [];
+  private exportedPrompts: PromptEntry[] = [];
 
   constructor(record: AgentRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
@@ -183,6 +208,42 @@ export class AgentInstance<
 
     // Create the agent as a standard tool for parent scope registration
     await this.createAgentAsTool();
+
+    // Say so at startup when the agent declares something nothing acts on
+    this.warnAboutUnusedOptions();
+  }
+
+  /**
+   * Options the agent accepts that have no effect yet, logged at startup instead of being dropped
+   * silently: `execution.enableStreaming`, and resources or prompts nothing reads (the agent's model
+   * is sent tools only, so its resources and prompts reach nothing unless they are exported).
+   */
+  private warnAboutUnusedOptions(): void {
+    const metadata = this.record.metadata;
+    const logger = this.scope.logger;
+
+    if (metadata.execution?.enableStreaming === true) {
+      logger.warn(
+        `Agent "${this.name}": execution.enableStreaming is not supported yet and has no effect; ` +
+          `the agent replies once its run completes. Use enableAutoProgress for progress notifications during the run.`,
+      );
+    }
+
+    const exported = new Set<unknown>([...this.exportedResources, ...this.exportedPrompts]);
+    const unread = (entries: readonly (ResourceEntry | PromptEntry)[]) =>
+      entries.filter((entry) => !exported.has(entry)).map((entry) => entry.name);
+    const unreadResources = unread(this.agentScope?.resources.getInlineResources() ?? []);
+    const unreadPrompts = unread(this.agentScope?.prompts.getInlinePrompts() ?? []);
+    if (unreadResources.length > 0 || unreadPrompts.length > 0) {
+      const listed = [
+        ...(unreadResources.length > 0 ? [`resources [${unreadResources.join(', ')}]`] : []),
+        ...(unreadPrompts.length > 0 ? [`prompts [${unreadPrompts.join(', ')}]`] : []),
+      ].join(' and ');
+      logger.warn(
+        `Agent "${this.name}" declares ${listed} that nothing reads: its model is sent tools only. ` +
+          `List them in the agent's \`exports\` to serve them to clients (resources/list, prompts/list).`,
+      );
+    }
   }
 
   /**
@@ -212,22 +273,99 @@ export class AgentInstance<
 
     // Only create AgentScope if the agent has any scoped components
     if (!hasTools && !hasPlugins && !hasAdapters && !hasProviders && !hasResources && !hasPrompts && !hasAgents) {
+      // With nothing of its own, everything it exports is something it doesn't declare
+      this.resolveExports(undefined);
       return;
     }
 
     // Create the agent's private scope
-    this.agentScope = new AgentScope(this.scope, this.id, metadata, this.record.provide);
+    this.agentScope = new AgentScope(this.scope, this.id, metadata, this.record.provide, { ownerId: this.owner.id });
 
     await this.agentScope.ready;
 
-    // Get tool instances from the agent scope for tool definitions
+    // Get tool instances from the agent scope for tool definitions (its own tools, and its nested
+    // agents' `invoke_<agent>` tools)
     this.agentTools = this.agentScope.tools.getTools(true);
+
+    // What it exports to its parent scope (`exports`)
+    this.resolveExports(this.agentScope);
 
     this.scope.logger.info(
       `Agent ${this.name} initialized with AgentScope: ${this.agentTools.length} tool(s), ${
         metadata.plugins?.length ?? 0
       } plugin(s)`,
     );
+  }
+
+  /**
+   * Resolve `exports`: the providers are added to the registry this agent was registered with (its
+   * app's, or its parent agent's), so the entries there can inject them; the resources and prompts
+   * are kept for the parent scope's registries (see {@link getExportedResources}). Fails when an
+   * export is not one of the agent's own resources, prompts or providers.
+   */
+  private resolveExports(agentScope: AgentScope | undefined): void {
+    const exportsConfig = this.record.metadata.exports;
+    if (!exportsConfig) return;
+
+    const resources = agentScope?.resources.getInlineResources() ?? [];
+    if (exportsConfig.resources === '*') {
+      this.exportedResources = resources;
+    } else if (exportsConfig.resources) {
+      this.exportedResources = exportsConfig.resources.map((item) => {
+        const token = (isResourceTemplate(item) ? normalizeResourceTemplate(item) : normalizeResource(item)).provide;
+        const entry = resources.find((resource) => resource.record.provide === token);
+        if (!entry) throw this.undeclaredExportError('resources', token);
+        return entry;
+      });
+    }
+
+    const prompts = agentScope?.prompts.getInlinePrompts() ?? [];
+    if (exportsConfig.prompts === '*') {
+      this.exportedPrompts = prompts;
+    } else if (exportsConfig.prompts) {
+      this.exportedPrompts = exportsConfig.prompts.map((item) => {
+        const token = normalizePrompt(item).provide;
+        const entry = prompts.find((prompt) => prompt.record.provide === token);
+        if (!entry) throw this.undeclaredExportError('prompts', token);
+        return entry;
+      });
+    }
+
+    if (exportsConfig.providers && exportsConfig.providers.length > 0) {
+      const declared = new Set((this.record.metadata.providers ?? []).map((item) => normalizeProvider(item).provide));
+      const tokens = exportsConfig.providers.map((item) => {
+        const token = normalizeProvider(item).provide;
+        if (!declared.has(token) || !agentScope) throw this.undeclaredExportError('providers', token);
+        return token;
+      });
+      if (agentScope) {
+        const exported = tokens.map((token) => agentScope.providers.getProviderInfo(token));
+        this.providerRegistry.mergeFromRegistry(agentScope.providers, exported);
+      }
+    }
+  }
+
+  private undeclaredExportError(kind: 'resources' | 'prompts' | 'providers', token: unknown): AgentConfigurationError {
+    const label =
+      typeof token === 'function'
+        ? token.name || '(anonymous)'
+        : typeof token === 'symbol'
+          ? (token.description ?? token.toString())
+          : String(token);
+    return new AgentConfigurationError(
+      `Agent "${this.name}" exports ${kind} "${label}", which is not one of its own ${kind} (\`${kind}: [...]\`)`,
+      { agentId: this.id },
+    );
+  }
+
+  /** The resources this agent exports to its parent scope (`exports.resources`). */
+  getExportedResources(): readonly ResourceEntry[] {
+    return this.exportedResources;
+  }
+
+  /** The prompts this agent exports to its parent scope (`exports.prompts`). */
+  getExportedPrompts(): readonly PromptEntry[] {
+    return this.exportedPrompts;
   }
 
   /**
@@ -384,7 +522,7 @@ export class AgentInstance<
     if (!this.llmAdapter) {
       this.scope.logger.debug(
         `Agent ${this.name} has no LLM adapter configured - skipping tool registration. ` +
-          `Agent will not be callable as a tool via use-agent:${this.id}.`,
+          `Agent will not be callable as a tool via invoke_${this.id}.`,
       );
       return;
     }
@@ -525,6 +663,21 @@ export class AgentInstance<
     return this.agentTools;
   }
 
+  /**
+   * Whether a tool this agent runs in its private scope (one of its own, or a nested agent's
+   * `invoke_<agent>` tool) declares `rateLimit` or `concurrency`, at any depth of nested agents. The
+   * server guards those calls with its guard manager, which it creates for such a limit even without
+   * `throttle.enabled`.
+   */
+  declaresScopedLimits(): boolean {
+    if (!this.agentScope) return false;
+    const declaresLimit = (tool: ToolEntry) => Boolean(tool.metadata.rateLimit || tool.metadata.concurrency);
+    return (
+      this.agentScope.tools.getTools(true).some(declaresLimit) ||
+      this.agentScope.agents.listAllInstances().some((agent) => agent.declaresScopedLimits())
+    );
+  }
+
   // ============================================================================
   // Entry Methods
   // ============================================================================
@@ -606,6 +759,8 @@ export class AgentInstance<
     llmAdapter: AgentLlmAdapter,
   ): AgentCtorArgs<In> {
     const scope = this.providerRegistry.getActiveScope();
+    // The tools the model is offered for this run, and how each is called
+    const modelTools = this.getModelTools();
 
     return {
       metadata: this.metadata,
@@ -616,34 +771,76 @@ export class AgentInstance<
       logger: scope.logger,
       authInfo: ctx.authInfo,
       llmAdapter,
-      toolDefinitions: this.getToolDefinitions(),
-      toolExecutor: this.createToolExecutor(ctx),
+      toolDefinitions: buildAgentToolDefinitions(modelTools.map((tool) => tool.entry)),
+      toolExecutor: this.createToolExecutor(ctx, modelTools),
+      agentInvoker: this.createAgentInvoker(ctx),
       progressToken: ctx.progressToken,
     };
   }
 
   /**
-   * Get tool definitions available to this agent.
-   * Returns only the agent's own tools (from @Agent({ tools: [...] })) that are offered to it.
+   * The tools this agent's model is offered, each under the name the model calls it by:
+   * 1. the agent's own tools (`tools`, and its nested agents' `invoke_<agent>` tools), run in its private scope
+   *    (a nested agent always through that scope's `tools:call-tool` flow, see {@link createToolExecutor});
+   * 2. with `swarm.canSeeOtherAgents`, the `invoke_<agent>` tools of the other agents of its scope that it
+   *    sees (`swarm.visibleAgents`, and each one's `swarm.isVisible`), run through that scope;
+   * 3. with `execution.inheritParentTools`, the tools of the scope it is registered in, other than agents,
+   *    run through that scope.
+   * A name already taken by an earlier tool is not offered again. Only tools whose `availableWhen.surface`
+   * offers them to agents are included.
    */
-  private getToolDefinitions(): AgentToolDefinition[] {
-    // Use only the agent's own tools (not scope tools)
-    return buildAgentToolDefinitions(this.getOfferedTools());
+  private getModelTools(): AgentModelTool[] {
+    const tools: AgentModelTool[] = [];
+    const names = new Set<string>();
+    const add = (entry: ToolEntry, via: AgentModelTool['via']) => {
+      const name = entry.metadata.id ?? entry.metadata.name;
+      if (names.has(name) || !isOfferedOnSurface(entry.metadata.availableWhen, AGENT_SURFACE)) return;
+      names.add(name);
+      tools.push({ name, entry, via });
+    };
+
+    const nestedAgentTools = this.getNestedAgentTools();
+    for (const tool of this.agentTools) add(tool, nestedAgentTools.has(tool) ? 'nested-agent' : 'agent-scope');
+    for (const agent of this.getSwarmAgents()) {
+      const tool = agent.getToolInstance();
+      if (tool) add(tool, 'parent-scope');
+    }
+    for (const tool of this.getInheritedTools()) add(tool, 'parent-scope');
+    return tools;
+  }
+
+  /** The `invoke_<agent>` tools of this agent's nested agents (`agents`), which its private scope holds. */
+  private getNestedAgentTools(): Set<ToolEntry> {
+    const tools = new Set<ToolEntry>();
+    for (const agent of this.agentScope?.agents.listAllInstances() ?? []) {
+      const tool = agent.getToolInstance();
+      if (tool) tools.add(tool);
+    }
+    return tools;
+  }
+
+  /** The agents of the scope this agent is registered in that it may call (`swarm`). */
+  private getSwarmAgents(): AgentInstance[] {
+    if (!this.canSeeSwarm()) return [];
+    return this.scope.agents?.getVisibleAgentsFor(this.id) ?? [];
+  }
+
+  /** With `execution.inheritParentTools`, the tools of the scope this agent is registered in, other than agents. */
+  private getInheritedTools(): ToolEntry[] {
+    if (this.record.metadata.execution?.inheritParentTools !== true) return [];
+    const agentTools = new Set<ToolEntry>();
+    for (const agent of this.scope.agents?.listAllInstances() ?? []) {
+      const tool = agent.getToolInstance();
+      if (tool) agentTools.add(tool);
+    }
+    return (this.scope.tools?.getTools() ?? []).filter((tool) => !agentTools.has(tool));
   }
 
   /**
-   * The agent's tools its model may call: those whose `availableWhen.surface` offers them on the
-   * `'agent'` surface. The others are neither shown to the model nor run for it.
-   */
-  private getOfferedTools(): ToolEntry[] {
-    return this.agentTools.filter((tool) => isOfferedOnSurface(tool.metadata.availableWhen, AGENT_SURFACE));
-  }
-
-  /**
-   * Create a tool executor for agent-scoped tools.
+   * Create the executor of the model's tool calls.
    *
-   * When `execution.useToolFlow` is enabled (default: true), tool calls are routed
-   * through the agent's private scope's call-tool flow. This enables full lifecycle
+   * The agent's own tools: when `execution.useToolFlow` is enabled (default: true), tool calls are
+   * routed through the agent's private scope's call-tool flow. This enables full lifecycle
    * support including:
    * - Plugin integration (cache, PII, rate limiting, etc.)
    * - Hook execution (will/did/around stages)
@@ -651,45 +848,43 @@ export class AgentInstance<
    * - UI rendering
    * - MCP-compliant error handling
    *
-   * When `execution.useToolFlow` is false, tools are executed directly for
-   * performance-critical scenarios.
+   * When `execution.useToolFlow` is false, the agent's own tools are executed directly for
+   * performance-critical scenarios. Its nested agents' `invoke_<agent>` tools still run through its
+   * private scope's call-tool flow: that flow applies the gates a nested agent declares (authorities,
+   * rate limit, concurrency, plugin gates), which the nested agent's `agents:call-agent` flow leaves to
+   * it. Tools of the parent scope (swarm agents, inherited tools) always run through the parent
+   * scope's call-tool flow, which applies what they declare.
    *
    * @param ctx - Extra context including authInfo
+   * @param modelTools - The tools the model is offered for this run
    * @returns A function that executes tools by name
    */
-  private createToolExecutor(ctx: AgentCallExtra): ToolExecutor {
+  private createToolExecutor(ctx: AgentCallExtra, modelTools: readonly AgentModelTool[]): ToolExecutor {
     const useToolFlow = this.record.metadata.execution?.useToolFlow !== false;
 
     return async (toolName: string, args: Record<string, unknown>): Promise<unknown> => {
-      // A tool whose `surface` leaves out agents answers the model as a tool the agent doesn't have.
-      const offeredTools = this.getOfferedTools();
-      const tool = offeredTools.find((t) => t.name === toolName || t.fullName === toolName);
+      // A tool the model isn't offered (one whose `surface` leaves out agents, say) answers the model
+      // as a tool the agent doesn't have.
+      const offered = modelTools.find(
+        (t) => t.name === toolName || t.entry.name === toolName || t.entry.fullName === toolName,
+      );
 
-      if (!tool) {
+      if (!offered) {
         throw new AgentToolNotFoundError(
           this.name,
           toolName,
-          offeredTools.map((t) => t.name),
+          modelTools.map((t) => t.name),
         );
       }
 
-      // Use the agent's private scope if available and useToolFlow is enabled
-      if (useToolFlow && this.agentScope) {
-        // Route through the agent scope's call-tool flow for full lifecycle support
-        const result = await this.agentScope.runFlowForOutput('tools:call-tool', {
-          request: {
-            method: 'tools/call',
-            params: { name: tool.fullName, arguments: args },
-          },
-          ctx: {
-            authInfo: ctx.authInfo,
-            _skipUI: true, // Skip UI rendering - agent returns structured data
-            surface: AGENT_SURFACE,
-          },
-        });
+      const tool = offered.entry;
+      if (offered.via === 'parent-scope') {
+        return this.callToolThrough(this.scope, tool, args, ctx);
+      }
 
-        // Extract the actual result from MCP CallToolResult format
-        return this.extractToolResult(result);
+      // The agent's private scope's flow: for a nested agent always, for its own tools unless useToolFlow is off
+      if (this.agentScope && (useToolFlow || offered.via === 'nested-agent')) {
+        return this.callToolThrough(this.agentScope, tool, args, ctx);
       }
 
       // Direct execution - faster but bypasses plugins/hooks, never the tool's `authorities`
@@ -702,6 +897,70 @@ export class AgentInstance<
         const toolContext = runAsTool(runningTool, () => tool.create(args, toolCtx as ToolCallExtra));
         return runAsTool(runningTool, () => Promise.resolve(toolContext.execute(args)));
       });
+    };
+  }
+
+  /**
+   * Call `tool` through `scope`'s `tools:call-tool` flow on the agent surface, and return what it
+   * produced (see {@link extractToolResult}).
+   */
+  private async callToolThrough(
+    scope: Pick<ScopeEntry, 'runFlowForOutput'>,
+    tool: ToolEntry,
+    args: Record<string, unknown>,
+    ctx: AgentCallExtra,
+  ): Promise<unknown> {
+    const result = await scope.runFlowForOutput('tools:call-tool', {
+      request: {
+        method: 'tools/call',
+        params: { name: tool.fullName, arguments: args },
+      },
+      ctx: {
+        authInfo: ctx.authInfo,
+        _skipUI: true, // Skip UI rendering - agent returns structured data
+        surface: AGENT_SURFACE,
+        ...(this.isAgentPrivateScope(scope) && { agentPrivateCall: true }),
+      },
+    });
+
+    // Extract the actual result from MCP CallToolResult format
+    return this.extractToolResult(result);
+  }
+
+  /** This agent's private scope, or that of the agent it is nested in: the consent screen offers neither. */
+  private isAgentPrivateScope(scope: Pick<ScopeEntry, 'runFlowForOutput'>): boolean {
+    return scope === this.agentScope || (scope === this.scope && this.owner.kind === 'agent');
+  }
+
+  /**
+   * Create the agent's `invokeAgent(agentId, input)`: it calls one of the agent's nested agents
+   * (`agents`), or an agent of its scope the agent sees (`swarm`), through that agent's
+   * `invoke_<agent>` tool, and returns the agent's output. The agent called must be one the model
+   * could call too.
+   */
+  private createAgentInvoker(ctx: AgentCallExtra): AgentInvoker {
+    return async (agentId: string, input: unknown): Promise<unknown> => {
+      if (input !== undefined && (typeof input !== 'object' || input === null || Array.isArray(input))) {
+        throw new InvalidInputError(`invokeAgent("${agentId}"): the input must be an object of the agent's arguments`);
+      }
+      const args = (input ?? {}) as Record<string, unknown>;
+      const matches = (agent: AgentInstance) => agent.id === agentId || agent.name === agentId;
+
+      const nested = this.agentScope?.agents.listAllInstances().find(matches);
+      const nestedTool = nested?.getToolInstance();
+      if (this.agentScope && nestedTool) {
+        return this.callToolThrough(this.agentScope, nestedTool, args, ctx);
+      }
+
+      const visibleTool = this.getSwarmAgents().find(matches)?.getToolInstance();
+      if (visibleTool) {
+        return this.callToolThrough(this.scope, visibleTool, args, ctx);
+      }
+
+      if (this.scope.agents?.listAllInstances().some(matches)) {
+        throw new AgentVisibilityError(this.id, agentId);
+      }
+      throw new AgentNotFoundError(agentId);
     };
   }
 
@@ -892,7 +1151,9 @@ class FunctionAgentContext<
     super(args);
   }
 
+  /** Runs the handler given to `agent(options)(handler)`, which `record.provide()` returns. */
   override async execute(input: In): Promise<Out> {
-    return this.record.provide(input, this);
+    const handler = this.record.provide();
+    return (await handler(input, this)) as Out;
   }
 }

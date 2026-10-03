@@ -123,7 +123,7 @@ class MyServer {}
 | `tools?`         | Array of tool classes or function-built tools                                                                                      |
 | `resources?`     | Array of resource classes or function-built resources                                                                              |
 | `prompts?`       | Array of prompt classes or function-built prompts                                                                                  |
-| `agents?`        | Array of agent classes (each exposed as `use-agent:<name>` tool)                                                                   |
+| `agents?`        | Array of agent classes (each exposed as an `invoke_<id>` tool)                                                                     |
 | `skills?`        | Array of skill definitions                                                                                                         |
 | `plugins?`       | App-scoped plugins                                                                                                                 |
 | `providers?`     | App-scoped DI providers                                                                                                            |
@@ -331,10 +331,11 @@ class UserProfileResource extends ResourceContext {
 | `llm`           | LLM configuration (model, provider, temperature, etc.) |
 | `inputSchema?`  | Zod raw shape for agent input                          |
 | `outputSchema?` | Zod schema for structured output                       |
-| `tools?`        | Tools available to this agent                          |
-| `agents?`       | Sub-agents for delegation                              |
-| `exports?`      | What capabilities to expose externally                 |
-| `swarm?`        | Multi-agent swarm configuration                        |
+| `tools?`        | Tools offered to this agent's model                    |
+| `agents?`       | Nested agents, offered to its model as `invoke_<id>`   |
+| `exports?`      | `{ resources?, prompts?, providers? }` shared with app |
+| `swarm?`        | Which other agents it can call, and how deep           |
+| `execution?`    | Loop limits, `inheritParentTools`, `inheritPlugins`    |
 
 ```typescript
 import { Agent, AgentContext, z } from '@frontmcp/sdk';
@@ -348,11 +349,7 @@ import { Agent, AgentContext, z } from '@frontmcp/sdk';
   },
   tools: [WebSearchTool, SummarizeTool],
 })
-class ResearchAgent extends AgentContext {
-  async execute(input: { topic: string }) {
-    return this.run(`Research and summarize: ${input.topic}`);
-  }
-}
+class ResearchAgent extends AgentContext {} // the default execute() runs the LLM loop
 ```
 
 ---
@@ -383,6 +380,8 @@ class ResearchAgent extends AgentContext {
 | `specMetadata?`      | Arbitrary key-value map (Agent Skills spec `metadata` field)                   |
 | `allowedTools?`      | Space-delimited pre-approved tool names (Agent Skills spec)                    |
 | `resources?`         | Bundled dirs: `{ scripts?, references?, assets? }` (Agent Skills spec)         |
+
+`toolValidation: 'strict'` makes the server refuse to start when a referenced tool isn't registered.
 
 ```typescript
 import { Skill } from '@frontmcp/sdk';

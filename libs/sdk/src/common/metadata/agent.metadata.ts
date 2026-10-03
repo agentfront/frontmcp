@@ -233,7 +233,8 @@ export type AgentLlmConfig = AgentLlmBuiltinConfig | AgentLlmAdapterConfig | Tok
  */
 export interface AgentSwarmConfig {
   /**
-   * Whether this agent can see and invoke other agents as tools.
+   * Whether this agent can see and invoke the other agents of its scope: its model is offered each
+   * one it sees as an `invoke_<agent>` tool, and `this.invokeAgent(id, input)` calls them.
    * @default false (agents are isolated by default)
    */
   canSeeOtherAgents?: boolean;
@@ -251,7 +252,10 @@ export interface AgentSwarmConfig {
   isVisible?: boolean;
 
   /**
-   * Maximum depth for agent-to-agent calls (prevents infinite loops).
+   * How many agent-to-agent calls deep a chain this agent runs in may go (prevents infinite loops):
+   * the call an agent makes from a client's call is call 1. With several agents in the chain, the
+   * smallest of their `maxCallDepth` applies; a deeper call fails with `AgentCallDepthExceededError`.
+   * Applies to agents without `swarm` too.
    * @default 3
    */
   maxCallDepth?: number;
@@ -278,7 +282,10 @@ export interface AgentExecutionConfig {
   maxIterations?: number;
 
   /**
-   * Enable streaming responses via SSE/WebSocket.
+   * Stream the agent's reply as it is generated.
+   *
+   * Not supported yet: the agent replies once its run completes, and an agent that sets it `true` is
+   * reported at startup. Use `enableAutoProgress` for progress notifications during the run.
    * @default false
    */
   enableStreaming?: boolean;
@@ -296,8 +303,12 @@ export interface AgentExecutionConfig {
   notificationInterval?: number;
 
   /**
-   * Whether to inherit parent scope's tools.
-   * @default true
+   * Also offer the agent's model the tools of the scope the agent is registered in (its server's
+   * tools, or its parent agent's for a nested agent), other than agents (`swarm` decides which
+   * agents it can call). They run through that scope's `tools:call-tool` flow, with the hooks and
+   * gates that apply there. Only tools whose `availableWhen.surface` offers them to agents are
+   * offered, and the agent's own tools win a name clash.
+   * @default false (the model is offered the agent's own tools only)
    */
   inheritParentTools?: boolean;
 
@@ -310,10 +321,11 @@ export interface AgentExecutionConfig {
   useToolFlow?: boolean;
 
   /**
-   * Whether to inherit plugins from the parent scope.
-   * When true, the agent's tools will benefit from standard plugin extensions
-   * (e.g., cache, codecall) registered in the parent scope.
-   * @default true
+   * Whether the agent's own tools also get the hooks of the plugins installed on the agent's app
+   * and on the server (cache, audit, approval, ...), besides those of the plugins installed on the
+   * agent (`plugins`). A plugin installed both on the agent and above it runs once, as installed on
+   * the agent. The agent itself (its `invoke_<agent>` tool) always runs those plugins.
+   * @default false
    */
   inheritPlugins?: boolean;
 
@@ -332,23 +344,25 @@ export interface AgentExecutionConfig {
 // ============================================================================
 
 /**
- * Configuration for exporting agent resources/prompts to parent scope.
+ * Configuration for exporting agent resources/prompts/providers to the parent scope (the server's,
+ * or the parent agent's for a nested agent). Each must be one of the agent's own; the server refuses
+ * to start otherwise.
  */
 export interface AgentExportsConfig {
   /**
-   * Resources to export to parent scope.
+   * Resources to export: they are listed (`resources/list`) and read like the scope's own.
    * Use '*' to export all resources.
    */
   resources?: ResourceType[] | '*';
 
   /**
-   * Prompts to export to parent scope.
+   * Prompts to export: they are listed (`prompts/list`) and got like the scope's own.
    * Use '*' to export all prompts.
    */
   prompts?: PromptType[] | '*';
 
   /**
-   * Providers to export to parent scope.
+   * Providers to export: the entries of the agent's app (or parent agent) can inject them.
    */
   providers?: ProviderType[];
 }
@@ -387,7 +401,7 @@ export interface AgentMetadata<
 > extends ExtendFrontMcpAgentMetadata {
   /**
    * Unique identifier for the agent.
-   * Used for tool routing (use-agent:<id>) and swarm discovery.
+   * Used for tool routing (invoke_<id>) and swarm discovery.
    * If omitted, derived from the class name or 'name' property.
    */
   id?: string;
@@ -446,8 +460,8 @@ export interface AgentMetadata<
   adapters?: AdapterType[];
 
   /**
-   * Nested agents - agents inside this agent!
-   * Nested agents are automatically registered as tools within the parent agent's scope.
+   * Nested agents, private to this agent: its model is offered each one as an `invoke_<agent>` tool,
+   * and `this.invokeAgent(id, input)` calls them. Clients are not offered them.
    */
   agents?: AgentType[];
 
@@ -457,12 +471,14 @@ export interface AgentMetadata<
   tools?: ToolType[];
 
   /**
-   * Agent-scoped resources.
+   * Agent-scoped resources. The agent's model is sent tools only, so these reach clients only when
+   * exported (`exports.resources`); one that isn't is reported at startup.
    */
   resources?: ResourceType[];
 
   /**
-   * Agent-scoped prompts.
+   * Agent-scoped prompts. The agent's model is sent tools only, so these reach clients only when
+   * exported (`exports.prompts`); one that isn't is reported at startup.
    */
   prompts?: PromptType[];
 
@@ -575,20 +591,24 @@ const executionConfigSchema = z.object({
   enableStreaming: z.boolean().optional().default(false),
   enableNotifications: z.boolean().optional().default(true),
   notificationInterval: z.number().positive().optional().default(1000),
-  inheritParentTools: z.boolean().optional().default(true),
+  // Opt-in: the model is offered the agent's own tools only unless the agent asks for its scope's
+  inheritParentTools: z.boolean().optional().default(false),
   useToolFlow: z.boolean().optional().default(true),
   // Default false: inner agent tools use agent's own plugins only.
-  // The agent itself (as use-agent:* tool) goes through parent scope's plugins.
+  // The agent itself (as its invoke_<agent> tool) goes through parent scope's plugins.
   inheritPlugins: z.boolean().optional().default(false),
   // Opt-in: agents must explicitly enable auto progress notifications
   enableAutoProgress: z.boolean().optional().default(false),
 });
 
-const exportsConfigSchema = z.object({
-  resources: z.union([z.array(z.any()), z.literal('*')]).optional(),
-  prompts: z.union([z.array(z.any()), z.literal('*')]).optional(),
-  providers: z.array(z.any()).optional(),
-});
+// Strict: anything else (`exports: { tools }`, say) is refused instead of being dropped silently
+const exportsConfigSchema = z
+  .object({
+    resources: z.union([z.array(z.any()), z.literal('*')]).optional(),
+    prompts: z.union([z.array(z.any()), z.literal('*')]).optional(),
+    providers: z.array(z.any()).optional(),
+  })
+  .strict();
 
 /**
  * Zod schema for validating AgentMetadata at runtime.

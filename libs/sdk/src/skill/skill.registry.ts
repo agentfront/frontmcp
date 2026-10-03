@@ -111,10 +111,12 @@ export interface SkillRegistryOptions {
   defaultToolValidation?: SkillToolValidationMode;
 
   /**
-   * Whether to fail the entire registry initialization if any skill fails validation.
-   * Only applies when toolValidation is 'strict'.
+   * Whether a skill that fails `toolValidation: 'strict'` (a referenced tool is not registered) makes
+   * {@link SkillRegistry.validateAllTools} throw, which stops the server from starting. Set `false` to
+   * only report such skills (status `'failed'` in the validation report) and log them as errors.
+   * Skills in `'warn'` or `'ignore'` mode never fail.
    *
-   * @default false
+   * @default true
    */
   failOnInvalidSkills?: boolean;
 
@@ -296,7 +298,7 @@ export interface SkillRegistryInterface {
    * Should be called after all tools (including from plugins/adapters) are registered.
    *
    * @returns Validation report for all skills
-   * @throws SkillValidationError if failOnInvalidSkills is true and any skill fails
+   * @throws SkillValidationError if a skill in 'strict' mode references a missing tool (unless `failOnInvalidSkills: false`)
    */
   validateAllTools(): Promise<SkillValidationReport>;
 
@@ -1295,10 +1297,10 @@ export default class SkillRegistry
    * 1. Checks each skill's tool references against the tool registry
    * 2. Respects per-skill and registry-level validation modes
    * 3. Emits a 'validated' event with results
-   * 4. Optionally throws if failOnInvalidSkills is enabled
+   * 4. Throws when a 'strict' skill failed, unless failOnInvalidSkills is false
    *
    * @returns Validation report for all skills
-   * @throws SkillValidationError if failOnInvalidSkills is true and any skill fails
+   * @throws SkillValidationError if a skill in 'strict' mode references a missing tool (unless `failOnInvalidSkills: false`)
    */
   async validateAllTools(): Promise<SkillValidationReport> {
     const results: SkillValidationResult[] = [];
@@ -1337,6 +1339,11 @@ export default class SkillRegistry
             if (warning) {
               this.scope.logger.warn(warning);
             }
+          } else if (this.options.failOnInvalidSkills === false) {
+            // 'strict' but told not to stop startup: never silent
+            this.scope.logger.error(
+              `Skill "${instance.name}" (toolValidation: 'strict') references missing tools: ${validation.missing.join(', ')}`,
+            );
           }
 
           results.push({
@@ -1390,8 +1397,8 @@ export default class SkillRegistry
       validationReport: report,
     });
 
-    // Throw if failOnInvalidSkills is enabled and there are failures
-    if (this.options.failOnInvalidSkills && failedCount > 0) {
+    // A skill in 'strict' mode with a missing tool stops startup, unless the registry opted out
+    if (this.options.failOnInvalidSkills !== false && failedCount > 0) {
       throw SkillValidationError.fromReport(report);
     }
 

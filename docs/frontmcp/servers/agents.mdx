@@ -103,7 +103,7 @@ class CustomAgent extends AgentContext {
 
 ### Function Style
 
-For simpler agents, use the functional builder:
+For simpler agents, use the functional builder. The handler is the agent's `execute()`: it gets the validated input and the agent's context, and what it returns is the agent's output.
 
 ```ts
 import { agent } from '@frontmcp/sdk';
@@ -122,6 +122,14 @@ const EchoAgent = agent({
   },
 })(({ message }) => ({ echoed: `Echo: ${message}` }));
 ```
+
+<Note>
+Up to 1.8.7 the handler never ran: every call failed output validation with a list of Zod issues.
+</Note>
+
+### The Agent's Options
+
+Inside the agent (a class's `execute()`, or the context a function agent's handler gets), the options given to `@Agent` are `this.metadata`, with their defaults applied: `this.metadata.swarm`, `this.metadata.execution?.maxIterations`, and so on.
 
 ### Invocation, Hooks and Request Context
 
@@ -379,10 +387,31 @@ Agents can have their own isolated tools, resources, prompts, and providers:
   // Agent-scoped providers
   providers: [DatabaseService],
 
+  // Shared with the app
+  exports: { resources: [AgentConfig], prompts: '*', providers: [DatabaseService] },
+
   llm: { ... },
 })
 class IsolatedAgent extends AgentContext { ... }
 ```
+
+| Option      | Who sees it                                                                                                                                                                                    |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tools`     | The agent's model, which is offered them as tools. Clients aren't.                                                                                                                             |
+| `providers` | The agent's tools (`this.get(DatabaseService)`). They don't have to be registered in the app too: up to 1.8.7 an agent provider the app didn't also register stopped the server from starting. |
+| `resources` | Nobody, unless exported: the agent's model is sent tools only. A resource that isn't exported is reported at startup.                                                                          |
+| `prompts`   | Nobody, unless exported, as for resources.                                                                                                                                                     |
+| `agents`    | The agent's model (see [Nested Agents](#nested-agents)).                                                                                                                                       |
+
+### Exports
+
+`exports` shares some of the agent's own entries with the scope it is registered in (the server, or its parent agent for a nested agent):
+
+- `resources` (a list, or `'*'` for all of them): listed in `resources/list` and read with `resources/read` like the app's own.
+- `prompts` (a list, or `'*'`): listed in `prompts/list` and got with `prompts/get`.
+- `providers`: the app's tools, resources and prompts can inject them.
+
+Each export must be one of the agent's own `resources`, `prompts` or `providers`; otherwise the server refuses to start with `AgentConfigurationError` (`Agent "isolated-agent" exports prompts "X", which is not one of its own prompts`). Any other key, such as `exports: { tools }`, is refused when the agent is decorated. Up to 1.8.7 nothing was exported.
 
 ---
 
@@ -410,6 +439,25 @@ class OrchestratorAgent extends AgentContext {
   }
 }
 ```
+
+With `canSeeOtherAgents: true`, the agent sees the other agents registered in the same scope: those in `visibleAgents` when it is set, all of them otherwise, never itself and never one with `isVisible: false`.
+
+- Its **model** is offered each agent it sees as that agent's `invoke_<agent-id>` tool, next to its own tools, so the model decides when to delegate.
+- **`this.invokeAgent(agentId, input)`** calls an agent it sees, or one of its [nested agents](#nested-agents), and returns that agent's output. `input` is the called agent's arguments object. An agent that exists but isn't seen fails with `AgentVisibilityError` (`AGENT_VISIBILITY_DENIED`), an unknown one with `AgentNotFoundError`.
+
+Either way the call runs through the called agent's `invoke_<agent-id>` tool, so its `authorities`, `rateLimit`, `concurrency`, `timeout` and hooks apply, as for a client's call.
+
+### Call Depth
+
+`maxCallDepth` (1 to 10, default 3) limits how many agent-to-agent calls deep a chain may go: an agent called by a client that calls another makes call 1. It counts every way one agent reaches another: through its model, `this.invokeAgent()`, or `this.callTool('invoke_<agent-id>')`. When several agents are running in the chain, the smallest of their `maxCallDepth` applies, and agents without `swarm` count with the default of 3. A deeper call fails with `AgentCallDepthExceededError` (`AGENT_CALL_DEPTH_EXCEEDED`):
+
+```text
+Agent "pong" can't be called from "ping" -> "pong" -> "ping": that would be agent call 3, deeper than maxCallDepth 2
+```
+
+<Note>
+Up to 1.8.7 `swarm` was accepted and ignored: the model was offered no other agent, `this.invokeAgent()` always threw `Agent method "invokeAgent" is not available`, and nothing limited the depth.
+</Note>
 
 ### Visibility Patterns
 
@@ -444,16 +492,24 @@ Control agent execution behavior:
   execution: {
     maxIterations: 10,          // Max tool call rounds (default: 10)
     timeout: 120000,            // Timeout in ms (default: 120000)
-    enableStreaming: false,     // Stream responses
     enableNotifications: true,  // Send progress notifications
     enableAutoProgress: false,  // Auto progress during LLM calls (default: false)
-    inheritParentTools: true,   // Include parent scope tools (default: true)
+    inheritParentTools: false,  // Also offer the model the app's tools (default: false)
+    inheritPlugins: false,      // Also run the app's and server's plugins for the agent's tools (default: false)
     useToolFlow: true,          // Execute tools through call-tool flow (default: true)
   },
   llm: { ... },
 })
 class LongRunningAgent extends AgentContext { ... }
 ```
+
+### Inheriting the App's Tools
+
+With `inheritParentTools: true`, the model is also offered the tools of the scope the agent is registered in (the server's tools, which include its app's; a nested agent gets its parent agent's), other than agents: which agents it can call is `swarm`'s to decide. Those tools run through that scope's `tools:call-tool` flow, with the hooks and gates that apply there, whatever `useToolFlow` says. Only tools whose `availableWhen.surface` offers them to agents are included, and the agent's own tools win a name clash. By default the model is offered the agent's own tools only.
+
+<Note>
+`enableStreaming` is not supported yet: the agent replies once its run completes, and an agent that sets `enableStreaming: true` is reported with a warning at startup. Use `enableAutoProgress` for progress notifications during the run. Up to 1.8.7 `enableStreaming`, `inheritParentTools` and `inheritPlugins` were accepted and ignored, and the documented default of `inheritParentTools` was `true`.
+</Note>
 
 ### Tool Execution Mode
 
@@ -463,7 +519,9 @@ By default, agents execute tools through the full `call-tool` flow, which includ
 - Authorization checks
 - Tool middleware and transformations
 
-The plugin hooks are those of the plugins installed on the agent (`@Agent({ plugins })`), which apply to the agent's own tools the way an app's plugins apply to the app's tools. Plugins on the server or the app don't reach them. Up to 1.8.2, a plugin on an agent with a hook of its own (such as `FeatureFlagPlugin`) made every tool call of that agent fail with `Unsupported hook owner kind: "agent"`.
+The plugin hooks are those of the plugins installed on the agent (`@Agent({ plugins })`), which apply to the agent's own tools the way an app's plugins apply to the app's tools. Plugins on the server or the app don't reach them unless the agent sets `execution.inheritPlugins: true`: its tools then also get the hooks of the plugins installed on its app and on the server, ordered with its own by priority (its own first among equals). A plugin installed both on the agent and above it runs once, as installed on the agent. Up to 1.8.2, a plugin on an agent with a hook of its own (such as `FeatureFlagPlugin`) made every tool call of that agent fail with `Unsupported hook owner kind: "agent"`.
+
+The agent's own tools also get the `rateLimit`, `concurrency` and `timeout` they declare (else `throttle.defaultRateLimit`, `defaultConcurrency` and `defaultTimeout`), as the app's tools do; a `rateLimit` or `concurrency` there is enforced without a `throttle` option. The calls an agent makes during its run (its model's tool calls, its nested and swarm agents) run inside the `throttle.globalConcurrency` slot of the call that runs the agent. Up to 1.8.7 the `rateLimit` and `concurrency` of an agent's own tools were ignored.
 
 For performance-critical scenarios, you can disable flow execution:
 
@@ -479,7 +537,7 @@ class FastAgent extends AgentContext { ... }
 ```
 
 <Warning>
-Setting `useToolFlow: false` bypasses all plugin hooks and middleware. Only use this when you need maximum performance and don't require plugin features.
+Setting `useToolFlow: false` bypasses all plugin hooks and middleware, and the tools' `rateLimit`, `concurrency` and `timeout`, for the agent's own tools (their `authorities` still apply). Its [nested agents](#nested-agents) still run through their `invoke_` tool's flow. Only use this when you need maximum performance and don't require plugin features.
 </Warning>
 
 ---
@@ -499,7 +557,7 @@ class CustomAgent extends AgentContext {
     return result;
   }
 
-  // Override tool execution for logging/caching
+  // Override tool execution for logging/caching: every tool call of the model goes through it
   protected override async executeTool(name: string, args: Record<string, unknown>) {
     this.logger.info(`Executing tool: ${name}`);
     return super.executeTool(name, args);
@@ -510,6 +568,8 @@ class CustomAgent extends AgentContext {
   }
 }
 ```
+
+Up to 1.8.7 an `executeTool()` override never saw the model's tool calls: the loop called the tools without it.
 
 ---
 
@@ -626,7 +686,7 @@ Agents can contain other agents, creating hierarchical structures:
   name: 'parent-agent',
   description: 'Parent with nested child agents',
 
-  // Nested agents — registered as tools within this agent
+  // Nested agents — offered to this agent's model as tools
   agents: [ChildAgentA, ChildAgentB],
 
   // Parent's own tools
@@ -636,8 +696,14 @@ Agents can contain other agents, creating hierarchical structures:
 })
 class ParentAgent extends AgentContext {
   async execute({ task }: { task: string }) {
-    // LLM can call: invoke_child-agent-a, invoke_child-agent-b, planning-tool
-    return { result: '...' };
+    // The model can call: invoke_child-agent-a, invoke_child-agent-b, planning-tool
+    const plan = await super.execute({ task });
+
+    // The agent's own code can call a nested agent too
+    const review = await this.invokeAgent('child-agent-b', { plan });
+    return { plan, review };
   }
 }
 ```
+
+Nested agents are private to their agent: clients aren't offered their `invoke_` tools. A call to one runs through its `invoke_` tool's `tools:call-tool` flow and then the `agents:call-agent` flow, both in the parent agent's scope, also when the parent sets `execution.useToolFlow: false`: the nested agent's `authorities`, `rateLimit`, `concurrency`, `timeout`, plugin gates and hooks apply as for a client's call, its `exports` reach that scope, and the call counts toward [`maxCallDepth`](#call-depth). A `rateLimit` or `concurrency` declared only on a nested agent is enforced without a `throttle` option, as a tool's is. Under [consent](/frontmcp/authentication/local#consent-and-tool-authorization), the consent given to the agent covers its own tools and nested agents, which the consent screen never offers. Up to 1.8.7 nested agents were created but never offered to the model.

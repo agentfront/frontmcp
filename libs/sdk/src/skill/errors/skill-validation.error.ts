@@ -1,6 +1,6 @@
 // file: libs/sdk/src/skill/errors/skill-validation.error.ts
 
-import { PublicMcpError, MCP_ERROR_CODES } from '../../errors';
+import { MCP_ERROR_CODES, PublicMcpError } from '../../errors';
 
 /**
  * Result of validating a single skill's tool references.
@@ -73,10 +73,10 @@ export interface SkillValidationReport {
 /**
  * Error thrown when skill tool validation fails in strict mode.
  *
- * This error is thrown during skill registry initialization when:
+ * This error is thrown during skill registry initialization (and so stops the server from starting) when:
  * 1. A skill references tools that don't exist in the tool registry
  * 2. The skill's toolValidation mode is 'strict'
- * 3. failOnInvalidSkills is enabled (registry-level)
+ * 3. The registry wasn't built with `failOnInvalidSkills: false`
  *
  * @example
  * ```typescript
@@ -114,11 +114,12 @@ export class SkillValidationError extends PublicMcpError {
    */
   static fromReport(report: SkillValidationReport): SkillValidationError {
     const failedSkills = report.results.filter((r) => r.status === 'failed');
-    const skillNames = failedSkills.map((s) => s.skillName).join(', ');
     const message =
       failedSkills.length === 1
         ? `Skill '${failedSkills[0].skillName}' failed tool validation: missing tools [${failedSkills[0].missingTools.join(', ')}]`
-        : `${failedSkills.length} skill(s) failed tool validation: ${skillNames}`;
+        : `${failedSkills.length} skill(s) failed tool validation: ${failedSkills
+            .map((s) => `'${s.skillName}' (missing tools [${s.missingTools.join(', ')}])`)
+            .join(', ')}`;
 
     return new SkillValidationError(message, report);
   }

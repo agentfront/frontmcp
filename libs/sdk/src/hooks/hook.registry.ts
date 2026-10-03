@@ -69,6 +69,9 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
   private hooksByFlow: Map<FlowName, HookEntry[]> = new Map();
   private hooksByFlowStage: Map<FlowName, Map<string, HookEntry[]>> = new Map();
 
+  /** The registry whose flow hooks this one serves too (see {@link inheritFrom}). */
+  private inherited?: { registry: HookRegistry; ownerId: string };
+
   constructor(providers: ProviderRegistry, list: HookType[]) {
     super('HookRegistry', providers, list);
     this.scope = this.providers.getActiveScope();
@@ -188,8 +191,36 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
     return Promise.all(readyArr);
   }
 
+  /**
+   * Also serve the flow hooks `parent` runs for entries of `ownerId`, after this registry's own hooks
+   * of the same priority. An `@Agent` with `execution.inheritPlugins` uses it: its tools run in the
+   * agent's private scope, and then get the hooks of the plugins installed on the agent's app and on
+   * the server too. A hook of a plugin class installed both here and there runs once, as installed here.
+   */
+  inheritFrom(parent: HookRegistry, ownerId: string): void {
+    this.inherited = { registry: parent, ownerId };
+  }
+
   /** Hooks for a given *flow*, filtered by owner if provided, sorted by priority (desc). */
   getFlowHooksForOwner<Name extends FlowName>(
+    flow: Name,
+    ownerId?: string,
+  ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[] {
+    const own = this.getOwnFlowHooksForOwner(flow, ownerId);
+    if (!this.inherited) return own;
+
+    const inherited = this.inherited.registry
+      .getFlowHooksForOwner(flow, this.inherited.ownerId)
+      .filter((hook) => !own.some((ownHook) => isSameHook(ownHook, hook)));
+    if (inherited.length === 0) return own;
+
+    const merged = [...own];
+    for (const hook of inherited) this.insertSorted(merged as HookEntry[], hook as HookEntry);
+    return merged;
+  }
+
+  /** This registry's own hooks for a given *flow*, filtered by owner if provided, sorted by priority (desc). */
+  private getOwnFlowHooksForOwner<Name extends FlowName>(
     flow: Name,
     ownerId?: string,
   ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[] {

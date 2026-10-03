@@ -53,6 +53,8 @@ Create a class extending `SkillContext` and decorate it with `@Skill`. The decor
 | `allowedTools`      | `string`                                        | No       | Space-delimited pre-approved tool names (Agent Skills spec)    |
 | `resources`         | `SkillResources`                                | No       | Bundled dirs: `{ scripts?, references?, assets? }`             |
 
+With `toolValidation: 'strict'`, the server refuses to start when a referenced tool isn't registered (`SkillValidationError`).
+
 ### Basic Example
 
 ```typescript

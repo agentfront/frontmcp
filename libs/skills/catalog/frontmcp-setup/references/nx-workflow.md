@@ -150,7 +150,7 @@ Creates a `SKILL.md`-based skill directory in `apps/my-app/src/skills/my-skill/`
 nx g @frontmcp/nx:agent my-agent --project=my-app
 ```
 
-Creates an `@Agent`-decorated class in `apps/my-app/src/agents/`. Agents are autonomous AI components with their own LLM providers and isolated scopes, automatically exposed as `use-agent:<agent_id>` tools. The generated `llm` block picks `anthropic` (`ANTHROPIC_API_KEY`) for `claude*` models and `openai` (`OPENAI_API_KEY`) otherwise, and `--tools a,b` imports each tool class from `../tools/<name>.tool` (de-duplicated) instead of using string names.
+Creates an `@Agent`-decorated class in `apps/my-app/src/agents/`. Agents are autonomous AI components with their own LLM providers and isolated scopes, automatically exposed as `invoke_<agent_id>` tools. The generated `llm` block picks `anthropic` (`ANTHROPIC_API_KEY`) for `claude*` models and `openai` (`OPENAI_API_KEY`) otherwise, and `--tools a,b` imports each tool class from `../tools/<name>.tool` (de-duplicated) instead of using string names.
 
 ### Plugin
 

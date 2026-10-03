@@ -323,22 +323,21 @@ export default class ExpensePlannerAgent extends AgentContext {}
 
 ---
 
-## Using Agents as Tools
+## Using Agents from Agents
 
-Agents can be used by other agents, creating hierarchical workflows:
+Agents can be used by other agents, creating hierarchical workflows. List them in `agents`: the planner's model is offered each one as an `invoke_<agent>` tool, next to its own tools.
 
 ```typescript
 @Agent({
   name: 'trip-planner',
-  tools: [
-    WeatherSummaryAgent,  // Another agent as a tool
-    FlightSearchTool,
-    HotelSearchTool,
-  ],
+  agents: [WeatherSummaryAgent], // Another agent, offered to the model as invoke_weather-summary
+  tools: [FlightSearchTool, HotelSearchTool],
   // ...
 })
 export default class TripPlannerAgent extends AgentContext {}
 ```
+
+To let an agent call agents registered next to it in the app instead, use [`swarm`](/frontmcp/servers/agents#swarm-configuration).
 
 ---
 

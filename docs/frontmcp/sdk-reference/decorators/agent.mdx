@@ -68,15 +68,25 @@ Agents can use the default `execute()` from `AgentContext` (which runs the LLM a
 
 ### Optional Properties
 
-| Property             | Type         | Description                  |
-| -------------------- | ------------ | ---------------------------- |
-| `description`        | `string`     | Agent description            |
-| `inputSchema`        | `ZodShape`   | Input validation schema      |
-| `outputSchema`       | `ZodType`    | Output validation schema     |
-| `tools`              | `ToolType[]` | Tools available to the agent |
-| `systemInstructions` | `string`     | System prompt for the agent  |
-| `id`                 | `string`     | Stable identifier            |
-| `tags`               | `string[]`   | Categorization tags          |
+| Property             | Type                   | Description                                                                                                       |
+| -------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `description`        | `string`               | Agent description                                                                                                 |
+| `inputSchema`        | `ZodShape`             | Input validation schema                                                                                           |
+| `outputSchema`       | `ZodType`              | Output validation schema                                                                                          |
+| `tools`              | `ToolType[]`           | Tools offered to the agent's model                                                                                |
+| `agents`             | `AgentType[]`          | Nested agents, offered to the agent's model as `invoke_<agent>` tools and callable with `this.invokeAgent()`      |
+| `providers`          | `ProviderType[]`       | Providers for the agent's tools                                                                                   |
+| `plugins`            | `PluginType[]`         | Plugins whose hooks run for the agent's tools                                                                     |
+| `resources`          | `ResourceType[]`       | Agent-scoped resources (not sent to the model; served to clients when exported)                                   |
+| `prompts`            | `PromptType[]`         | Agent-scoped prompts (not sent to the model; served to clients when exported)                                     |
+| `exports`            | `AgentExportsConfig`   | `{ resources?, prompts?, providers? }` shared with the scope the agent is registered in                           |
+| `swarm`              | `AgentSwarmConfig`     | `{ canSeeOtherAgents?, visibleAgents?, isVisible?, maxCallDepth? }`: which other agents it can call, and how deep |
+| `execution`          | `AgentExecutionConfig` | `{ maxIterations?, timeout?, inheritParentTools?, inheritPlugins?, useToolFlow?, enableAutoProgress?, ... }`      |
+| `systemInstructions` | `string`               | System prompt for the agent                                                                                       |
+| `id`                 | `string`               | Stable identifier                                                                                                 |
+| `tags`               | `string[]`             | Categorization tags                                                                                               |
+
+See [Agents](/frontmcp/servers/agents) for what each one does. `execution.enableStreaming` is not supported yet and is reported at startup when set.
 
 ### LLM Configuration
 
@@ -321,22 +331,25 @@ protected async elicit<S extends ZodType>(
 
 ## Agent Visibility
 
-Agents can invoke other agents:
+Agents can invoke other agents: their nested agents (`agents`), and with `swarm.canSeeOtherAgents` the other agents of their scope they see. An agent is never a tool: `tools: [ResearchAgent]` is refused.
 
 ```typescript
 @Agent({
   name: 'orchestrator',
   llm: { provider: 'openai', model: 'gpt-4o', apiKey: { env: 'OPENAI_API_KEY' } },
-  tools: [ResearchAgent, WriterAgent], // Agents as tools
+  agents: [ResearchAgent], // Nested: private to the orchestrator
+  swarm: { canSeeOtherAgents: true, visibleAgents: ['writer-agent'] }, // Registered in the same app
 })
 class OrchestratorAgent extends AgentContext {
   async execute(input: { task: string }) {
-    // Can invoke sub-agents
+    // Its model is offered invoke_research-agent and invoke_writer-agent; its code can call them too
     const research = await this.invokeAgent('research-agent', { topic: input.task });
-    return research;
+    return this.invokeAgent('writer-agent', { research });
   }
 }
 ```
+
+A call that would go deeper than `swarm.maxCallDepth` (default 3) fails with `AgentCallDepthExceededError`; see [Call Depth](/frontmcp/servers/agents#call-depth).
 
 ## Full Example
 

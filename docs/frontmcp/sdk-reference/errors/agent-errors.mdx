@@ -143,6 +143,33 @@ import { AgentVisibilityError } from '@frontmcp/sdk';
 throw new AgentVisibilityError('assistant', 'admin-agent');
 ```
 
+`this.invokeAgent()` throws it for an agent that exists but that the calling agent doesn't see (see [swarm](/frontmcp/servers/agents#swarm-configuration)).
+
+---
+
+### AgentCallDepthExceededError
+
+Thrown when an agent calls another agent (through its model, a nested agent, `this.invokeAgent()` or `this.callTool('invoke_<agent>')`) and the chain of running agents is already as deep as one of them allows (`swarm.maxCallDepth`, 3 by default). It stops agents that call each other from looping forever.
+
+| Property        | Type       | Value                                     |
+| --------------- | ---------- | ----------------------------------------- |
+| `code`          | `string`   | `AGENT_CALL_DEPTH_EXCEEDED`               |
+| `statusCode`    | `number`   | `400`                                     |
+| `isPublic`      | `boolean`  | `true`                                    |
+| `targetAgentId` | `string`   | The agent that was being called           |
+| `callChain`     | `string[]` | The agents running, outermost first       |
+| `maxCallDepth`  | `number`   | The smallest `maxCallDepth` in that chain |
+
+```typescript
+new AgentCallDepthExceededError(targetAgentId: string, callChain: string[], maxCallDepth: number)
+```
+
+**Example message:**
+
+```text
+Agent "pong" can't be called from "ping" -> "pong" -> "ping": that would be agent call 3, deeper than maxCallDepth 2
+```
+
 ---
 
 ### AgentLlmError
