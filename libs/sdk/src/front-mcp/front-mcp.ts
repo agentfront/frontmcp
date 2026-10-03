@@ -32,9 +32,9 @@ import {
   type FetchHandlerCtx,
   type WebFetchHandler,
 } from '../transport/web-fetch-handler';
+import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 import { assertStaticStartupConfig } from './static-startup.check';
-import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 
 /**
  * A `@FrontMcp`-decorated server class, or the raw config object it wraps.

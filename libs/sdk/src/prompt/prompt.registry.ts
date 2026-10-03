@@ -70,7 +70,12 @@ export default class PromptRegistry extends RegistryAbstract<
    */
   private readonly adopt: boolean;
 
-  constructor(providers: ProviderRegistry, list: PromptType[], owner: EntryOwnerRef, options: { adopt?: boolean } = {}) {
+  constructor(
+    providers: ProviderRegistry,
+    list: PromptType[],
+    owner: EntryOwnerRef,
+    options: { adopt?: boolean } = {},
+  ) {
     // disable auto so subclass fields initialize first
     super('PromptRegistry', providers, list, false);
     this.owner = owner;

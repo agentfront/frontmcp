@@ -122,7 +122,10 @@ export default class Server {}
 
   it('builds, and the bundle records the node target', async () => {
     const { exitCode, stderr, stdout } = runFrontmcpCli(['build', '--target', 'node'], undefined, projectDir);
-    expect({ exitCode, stderr: stderr.split('\n').filter((l) => /error/i.test(l)) }).toEqual({ exitCode: 0, stderr: [] });
+    expect({ exitCode, stderr: stderr.split('\n').filter((l) => /error/i.test(l)) }).toEqual({
+      exitCode: 0,
+      stderr: [],
+    });
     expect(stdout).toBeDefined();
     const bundle = await readFile(path.join(projectDir, 'dist', 'node', 'runtime-demo.bundle.js'));
     expect(bundle).toContain('globalThis.FRONTMCP_BUILD_TARGET || "node"');

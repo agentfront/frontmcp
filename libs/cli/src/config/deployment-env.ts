@@ -44,7 +44,10 @@ export function buildTargetStatement(target: BuildTargetName): string {
  * `http.entryPath` is not here: it travels with `transport.http.path` as
  * `FRONTMCP_HTTP_ENTRY_PATH` (see {@link deploymentHttpPath}).
  */
-export function serverRuntimeEnv(server: ServerDefaults | undefined, options: { listens: boolean }): Record<string, string> {
+export function serverRuntimeEnv(
+  server: ServerDefaults | undefined,
+  options: { listens: boolean },
+): Record<string, string> {
   const env: Record<string, string> = {};
   const http = server?.http;
   if (options.listens) {
@@ -78,7 +81,10 @@ export function deploymentHttpPath(
 /** Statements that set each variable only when it is not already defined. */
 export function envDefaultStatements(env: Record<string, string>): string {
   return Object.entries(env)
-    .map(([key, value]) => `if (process.env[${JSON.stringify(key)}] === undefined) process.env[${JSON.stringify(key)}] = ${JSON.stringify(value)};\n`)
+    .map(
+      ([key, value]) =>
+        `if (process.env[${JSON.stringify(key)}] === undefined) process.env[${JSON.stringify(key)}] = ${JSON.stringify(value)};\n`,
+    )
     .join('');
 }
 

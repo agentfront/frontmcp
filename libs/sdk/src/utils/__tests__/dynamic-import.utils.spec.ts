@@ -9,9 +9,12 @@ describe('importWithRequireFallback (issue #680)', () => {
   });
 
   it("falls back to require when the runtime refuses the dynamic import (Jest's VM without the flag)", async () => {
-    const vmError = Object.assign(new TypeError('A dynamic import callback was invoked without --experimental-vm-modules'), {
-      code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG',
-    });
+    const vmError = Object.assign(
+      new TypeError('A dynamic import callback was invoked without --experimental-vm-modules'),
+      {
+        code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG',
+      },
+    );
     const mod = await importWithRequireFallback(
       () => Promise.reject(vmError),
       () => ({ from: 'require' }),

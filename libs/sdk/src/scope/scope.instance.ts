@@ -1,5 +1,16 @@
 import 'reflect-metadata';
 
+// A static import, not a lazy `require()`: a lazy require of this hard dependency becomes an
+// opaque `__require("@frontmcp/auth")` in the ESM build that a worker bundler cannot follow, so
+// the authorities engine failed to load on Cloudflare Workers (#680).
+import {
+  AuthoritiesContextBuilder,
+  AuthoritiesEngine,
+  AuthoritiesEvaluatorRegistry,
+  AuthoritiesProfileRegistry,
+  type AuthoritiesEvaluator,
+  type AuthoritiesPolicyMetadata,
+} from '@frontmcp/auth';
 import { createGuardManager, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
 import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
@@ -14,17 +25,6 @@ import { type ChannelNotificationService } from '../channel/channel-notification
 import { registerChannelCapabilities } from '../channel/channel-scope.helper';
 import type ChannelRegistry from '../channel/channel.registry';
 import { type ChannelEventBus } from '../channel/sources/app-event.source';
-// A static import, not a lazy `require()`: a lazy require of this hard dependency becomes an
-// opaque `__require("@frontmcp/auth")` in the ESM build that a worker bundler cannot follow, so
-// the authorities engine failed to load on Cloudflare Workers (#680).
-import {
-  AuthoritiesContextBuilder,
-  AuthoritiesEngine,
-  AuthoritiesEvaluatorRegistry,
-  AuthoritiesProfileRegistry,
-  type AuthoritiesEvaluator,
-  type AuthoritiesPolicyMetadata,
-} from '@frontmcp/auth';
 import {
   FrontMcpLogger,
   FrontMcpServer,
@@ -101,11 +101,11 @@ import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/reques
 import { wireSessionRelay, type SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import { TransportService } from '../transport/transport.registry';
+import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import HttpIpFilterFlow from './flows/http.ip-filter.flow';
 import HttpRequestFlow from './flows/http.request.flow';
 import { probeOptionalDependency } from './optional-dependency.util';
-import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 
 /**
  * Flows the web-fetch adapter must NOT auto-dispatch by HTTP match: `http:request`

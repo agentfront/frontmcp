@@ -13,8 +13,8 @@ import {
   type ResponseInterceptor,
 } from '../interceptor';
 import { errorMessage, isInterceptedError } from '../transport/error-utils';
-import { StreamableHttpTransport } from '../transport/streamable-http.transport';
 import { SseTransport } from '../transport/sse.transport';
+import { StreamableHttpTransport } from '../transport/streamable-http.transport';
 import type { JsonRpcRequest, McpTransport } from '../transport/transport.interface';
 import { McpTestClientBuilder } from './mcp-test-client.builder';
 import type {

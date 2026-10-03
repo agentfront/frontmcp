@@ -108,4 +108,3 @@ describe('runStart — frontmcp.config env.shared / env.ship (#680)', () => {
     expect(env['SHIP_WINS_TEST']).toBe('real');
   });
 });
-

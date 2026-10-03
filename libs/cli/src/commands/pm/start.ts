@@ -34,7 +34,9 @@ export async function runStart(opts: ParsedArgs): Promise<void> {
   // Load environment variables
   loadDevEnv(cwd);
   // frontmcp.config `env.shared` ⊕ `env.ship`; the real environment (incl. .env) still wins
-  const shipEnv = installed ? {} : await loadShipEnv(entry, 'pm:start', typeof opts.config === 'string' ? opts.config : undefined);
+  const shipEnv = installed
+    ? {}
+    : await loadShipEnv(entry, 'pm:start', typeof opts.config === 'string' ? opts.config : undefined);
 
   const pm = new ProcessManager();
 

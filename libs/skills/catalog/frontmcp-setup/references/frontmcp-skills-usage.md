@@ -146,15 +146,15 @@ Install one or many skills to a provider-specific directory. `[name]` is
 optional when one of `--all`, `--tag`, or `--category` is supplied —
 those flags select skills in bulk.
 
-| Flag                        | Description                                                                                            | Default  |
-| --------------------------- | ------------------------------------------------------------------------------------------------------ | -------- |
+| Flag                        | Description                                                                                            | Default                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
 | `-p, --provider <provider>` | Target provider: `claude` or `codex`                                                                   | `skills.provider` in `frontmcp.config`, else `claude` |
-| `-d, --dir <directory>`     | Custom install directory (overrides provider default)                                                  | —        |
-| `-a, --all`                 | Install **every** skill in the catalog (or every `@Skill` entry when `--from-*` is set)                | `false`  |
-| `-t, --tag <tag>`           | Install every skill matching a tag (catalog only)                                                      | —        |
-| `-c, --category <c>`        | Install every skill in a category (catalog only)                                                       | —        |
-| `--from-entry <path>`       | Install `@Skill` entries discovered in a **local project entry file** instead of the framework catalog | —        |
-| `--from-package <pkg>`      | Install `@Skill` entries discovered in a **published package's** main entry                            | —        |
+| `-d, --dir <directory>`     | Custom install directory (overrides provider default)                                                  | —                                                     |
+| `-a, --all`                 | Install **every** skill in the catalog (or every `@Skill` entry when `--from-*` is set)                | `false`                                               |
+| `-t, --tag <tag>`           | Install every skill matching a tag (catalog only)                                                      | —                                                     |
+| `-c, --category <c>`        | Install every skill in a category (catalog only)                                                       | —                                                     |
+| `--from-entry <path>`       | Install `@Skill` entries discovered in a **local project entry file** instead of the framework catalog | —                                                     |
+| `--from-package <pkg>`      | Install `@Skill` entries discovered in a **published package's** main entry                            | —                                                     |
 
 ```bash
 # Single-skill install (positional name)
@@ -191,12 +191,12 @@ Convert one or many catalog skills into a rule file for IDEs that
 **don't** speak the skills protocol (Cursor, Windsurf, Copilot). The
 emitted file lives in the current directory by default.
 
-| Flag                    | Description                                           | Default  |
-| ----------------------- | ----------------------------------------------------- | -------- |
+| Flag                    | Description                                           | Default                                                   |
+| ----------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
 | `-t, --target <target>` | Target IDE: `cursor`, `windsurf`, or `copilot`        | `skills.exportTarget` in `frontmcp.config`, else `cursor` |
-| `-n, --name <name>`     | Skill name to export (required unless `--all` is set) | —        |
-| `-a, --all`             | Export **every** skill in the catalog                 | `false`  |
-| `-d, --out <directory>` | Output directory                                      | `cwd`    |
+| `-n, --name <name>`     | Skill name to export (required unless `--all` is set) | —                                                         |
+| `-a, --all`             | Export **every** skill in the catalog                 | `false`                                                   |
+| `-d, --out <directory>` | Output directory                                      | `cwd`                                                     |
 
 ```bash
 frontmcp skills export --name frontmcp-development --target cursor

@@ -1,3 +1,6 @@
+import { type SkillContent } from '../../common/interfaces';
+import { MemorySkillProvider } from '../providers/memory-skill.provider';
+
 /**
  * Regression guard: `vectoriadb` is an OPTIONAL peer of the SDK and MUST be
  * loaded lazily (issue 05 — "SDK eagerly imports its optional peer vectoriadb").
@@ -29,9 +32,6 @@
 jest.mock('vectoriadb', () => {
   throw new Error("Cannot find package 'vectoriadb' (ERR_MODULE_NOT_FOUND)");
 });
-
-import { MemorySkillProvider } from '../providers/memory-skill.provider';
-import { SkillContent } from '../../common/interfaces';
 
 const createTestSkill = (): SkillContent => ({
   id: 'guard-skill',

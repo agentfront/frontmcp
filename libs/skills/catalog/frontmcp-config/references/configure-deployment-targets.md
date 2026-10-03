@@ -128,14 +128,14 @@ frontmcp build --target vercel
 defaults the server reads at start-up — only where the variable is not already set (an operator's env var
 wins), and an explicit `@FrontMcp()` value wins over both:
 
-| Setting                         | Variable                                                        | Applies to                                       |
-| ------------------------------- | --------------------------------------------------------------- | ------------------------------------------------ |
-| `server.http.port`              | `PORT`                                                          | `node`, `distributed` (serverless: ignored, warns) |
-| `server.http.socketPath`        | `FRONTMCP_DAEMON_SOCKET`                                        | `node`, `distributed`                            |
-| `server.http.entryPath`         | `FRONTMCP_HTTP_ENTRY_PATH` (wins over `transport.http.path`)    | every server target                              |
-| `server.http.cors`              | `FRONTMCP_CORS_ORIGINS` (JSON list), `_CREDENTIALS`, `_MAX_AGE` | every server target                              |
-| `server.cookies`                | `FRONTMCP_AFFINITY_COOKIE`, `_DOMAIN`, `_SAMESITE`              | `distributed` (sets the LB affinity cookie)      |
-| `server.csp` / `server.headers` | `FRONTMCP_CSP_*`, `FRONTMCP_HSTS`, …                            | every server target                              |
+| Setting                         | Variable                                                        | Applies to                                          |
+| ------------------------------- | --------------------------------------------------------------- | --------------------------------------------------- |
+| `server.http.port`              | `PORT`                                                          | `node`, `distributed` (serverless: ignored, warns)  |
+| `server.http.socketPath`        | `FRONTMCP_DAEMON_SOCKET`                                        | `node`, `distributed`                               |
+| `server.http.entryPath`         | `FRONTMCP_HTTP_ENTRY_PATH` (wins over `transport.http.path`)    | every server target                                 |
+| `server.http.cors`              | `FRONTMCP_CORS_ORIGINS` (JSON list), `_CREDENTIALS`, `_MAX_AGE` | every server target                                 |
+| `server.cookies`                | `FRONTMCP_AFFINITY_COOKIE`, `_DOMAIN`, `_SAMESITE`              | `distributed` (sets the LB affinity cookie)         |
+| `server.csp` / `server.headers` | `FRONTMCP_CSP_*`, `FRONTMCP_HSTS`, …                            | every server target                                 |
 | `deployments[].env`             | each key as is                                                  | every target except the `browser` / `sdk` libraries |
 
 `node` / `cli` / `mcpb` bundles set them in a preamble when run as the program; `vercel` / `lambda` /
@@ -144,11 +144,11 @@ wins), and an explicit `@FrontMcp()` value wins over both:
 
 ### Server HTTP Options
 
-| Field          | Type     | Default | Description                                                                      |
-| -------------- | -------- | ------- | -------------------------------------------------------------------------------- |
-| `port`         | number   | 3000    | Listen port (node / distributed)                                                 |
-| `socketPath`   | string   | ---     | Unix socket (overrides port; node / distributed)                                 |
-| `entryPath`    | string   | `/`     | Base path; wins over `transport.http.path` for this deployment                   |
+| Field          | Type     | Default | Description                                                                       |
+| -------------- | -------- | ------- | --------------------------------------------------------------------------------- |
+| `port`         | number   | 3000    | Listen port (node / distributed)                                                  |
+| `socketPath`   | string   | ---     | Unix socket (overrides port; node / distributed)                                  |
+| `entryPath`    | string   | `/`     | Base path; wins over `transport.http.path` for this deployment                    |
 | `cors.origins` | string[] | ---     | CORS allowed origins (`['*']` = any); none = no CORS headers (the server default) |
 
 `bodyLimit` / `urlencodedLimit` are not `frontmcp.config` fields — set them in `@FrontMcp({ http })`.
@@ -273,15 +273,15 @@ There are no per-field `FRONTMCP_<NAME>` environment overrides. The only environ
 
 The config is consumed by every `frontmcp` command, not just `build`:
 
-| Command                           | Config fields consumed                                                                              |
-| --------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `build`                           | `name`, `version`, `entry`, `deployments` (incl. `server`, `env`), `build`, `nodeVersion`, `transport.http.path` |
+| Command                           | Config fields consumed                                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `build`                           | `name`, `version`, `entry`, `deployments` (incl. `server`, `env`), `build`, `nodeVersion`, `transport.http.path`    |
 | `dev`                             | `entry`, `transport.http.port`, `env.shared` ⊕ `env.dev`, first deployment's `server.csp` / `headers` / `http.cors` |
-| `test`                            | `test.timeoutMs` / `test.runInBand` / `test.coverage` / `test.testMatch`, `env.shared` ⊕ `env.test` |
-| `inspector`                       | `transport.default`, `transport.http.port`, `transport.stdio`                                       |
-| `pm start` / `socket` / `service` | `env.shared` ⊕ `env.ship` (config found from the entry's folder upwards; the real env wins)         |
-| `skills install` / `export`       | `skills.provider`, `skills.install` (else `skills.bundle`; `'none'` = nothing), `skills.exportTarget` — flags win |
-| `eject-mcp-config <client>`       | `clients.<client>`, `name`, `transport`, `env.shared` ⊕ `env.ship` (stdio `env`, under the client's own `env`) |
+| `test`                            | `test.timeoutMs` / `test.runInBand` / `test.coverage` / `test.testMatch`, `env.shared` ⊕ `env.test`                 |
+| `inspector`                       | `transport.default`, `transport.http.port`, `transport.stdio`                                                       |
+| `pm start` / `socket` / `service` | `env.shared` ⊕ `env.ship` (config found from the entry's folder upwards; the real env wins)                         |
+| `skills install` / `export`       | `skills.provider`, `skills.install` (else `skills.bundle`; `'none'` = nothing), `skills.exportTarget` — flags win   |
+| `eject-mcp-config <client>`       | `clients.<client>`, `name`, `transport`, `env.shared` ⊕ `env.ship` (stdio `env`, under the client's own `env`)      |
 
 See `transport`, `env`, `clients`, `test`, `skills` field reference in [docs/frontmcp/deployment/frontmcp-config](https://docs.agentfront.dev/frontmcp/deployment/frontmcp-config).
 

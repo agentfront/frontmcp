@@ -7,9 +7,9 @@
 // The DB is a faithful fake injected into the provider so the logic is tested
 // independently of which `vectoriadb` version is installed in node_modules.
 
+import type { SkillContent } from '../../common/interfaces';
 import { MemorySkillProvider } from '../providers/memory-skill.provider';
 import type { SkillIndexCache } from '../skill-index-cache.interface';
-import type { SkillContent } from '../../common/interfaces';
 
 interface FakeDoc {
   id: string;

@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { ParsedArgs } from '../../../core/args';
+import { type ParsedArgs } from '../../../core/args';
 import { c } from '../../../core/colors';
 import { ensureDir } from '@frontmcp/utils';
 import { resolveEntry } from '../../../shared/fs';
