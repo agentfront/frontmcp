@@ -116,11 +116,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
     const authorities = this.scope.metadata.authorities;
     const pipes = authorities?.pipes;
     if (!pipes?.length) return;
-    this._authContext = await buildAuthContext(
-      this.resolveAuthSource(),
-      authorities?.claimsMapping,
-      pipes,
-    );
+    this._authContext = await buildAuthContext(this.resolveAuthSource(), authorities?.claimsMapping, pipes);
   }
 
   private resolveAuthSource(): Partial<AuthInfo> {

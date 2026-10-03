@@ -5,10 +5,10 @@
  * NOTE: Vercel KV does NOT support pub/sub. Use Upstash adapter instead.
  */
 
-import { BaseStorageAdapter } from './base';
-import type { VercelKvAdapterOptions, SetOptions } from '../types';
-import { StorageConnectionError, StorageConfigError } from '../errors';
+import { StorageConfigError, StorageConnectionError } from '../errors';
+import type { SetOptions, VercelKvAdapterOptions } from '../types';
 import { validateTTL } from '../utils/ttl';
+import { BaseStorageAdapter } from './base';
 
 // Type for @vercel/kv client
 type VercelKvClient = {

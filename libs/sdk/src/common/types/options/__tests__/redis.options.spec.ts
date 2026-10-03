@@ -1,7 +1,13 @@
 // common/types/options/__tests__/redis.options.spec.ts
 
 import { frontMcpMetadataSchema } from '../../../metadata/front-mcp.metadata';
-import { parseRedisUrl, pubsubOptionsSchema, redisOptionsSchema, RedisOptions, RedisOptionsInput } from '../redis';
+import {
+  parseRedisUrl,
+  pubsubOptionsSchema,
+  redisOptionsSchema,
+  type RedisOptions,
+  type RedisOptionsInput,
+} from '../redis';
 
 // Helper to safely access redis properties (handles union type with Vercel KV)
 function getRedisProperty<K extends string>(redis: RedisOptions | undefined, key: K): unknown {
@@ -251,7 +257,13 @@ describe('redis: { url } (#680)', () => {
 
   it('turns TLS on for rediss:// and accepts the default ACL user', () => {
     const result = redisOptionsSchema.parse({ url: 'rediss://default:p%40ss@redis.example.com' });
-    expect(result).toMatchObject({ provider: 'redis', host: 'redis.example.com', port: 6379, password: 'p@ss', tls: true });
+    expect(result).toMatchObject({
+      provider: 'redis',
+      host: 'redis.example.com',
+      port: 6379,
+      password: 'p@ss',
+      tls: true,
+    });
   });
 
   it('defaults port and db and omits the password when the URL has none', () => {
@@ -296,7 +308,10 @@ describe('redis: { url } (#680)', () => {
   });
 
   it('parses a url on pubsub and on the top-level @FrontMcp config', () => {
-    expect(pubsubOptionsSchema.parse({ url: 'redis://localhost:7000' })).toMatchObject({ host: 'localhost', port: 7000 });
+    expect(pubsubOptionsSchema.parse({ url: 'redis://localhost:7000' })).toMatchObject({
+      host: 'localhost',
+      port: 7000,
+    });
 
     const config = frontMcpMetadataSchema.parse({
       info: { name: 'redis-url', version: '1.0.0' },

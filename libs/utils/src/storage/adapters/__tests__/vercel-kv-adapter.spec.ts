@@ -4,8 +4,8 @@
  * Comprehensive tests for VercelKvStorageAdapter with mocked @vercel/kv.
  */
 
-import { VercelKvStorageAdapter } from '../vercel-kv';
 import { StorageConfigError, StorageConnectionError } from '../../errors';
+import { VercelKvStorageAdapter } from '../vercel-kv';
 
 // Mock Vercel KV client
 const createMockVercelKvClient = () => ({

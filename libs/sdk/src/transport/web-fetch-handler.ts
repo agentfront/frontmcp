@@ -318,7 +318,11 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
     }
 
     if (metrics && metricsEndpoint === normalizePath(url.pathname) && request.method === 'GET') {
-      const scrape = renderMetricsScrape(metrics.service, metrics.config, request.headers.get('authorization') ?? undefined);
+      const scrape = renderMetricsScrape(
+        metrics.service,
+        metrics.config,
+        request.headers.get('authorization') ?? undefined,
+      );
       return withCors(metricsResponse(scrape), request);
     }
 
