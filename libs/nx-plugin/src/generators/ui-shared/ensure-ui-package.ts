@@ -1,4 +1,4 @@
-import { offsetFromRoot, readJson, writeJson, type GeneratorCallback, type Tree } from '@nx/devkit';
+import { offsetFromRoot, readJson, runTasksInSerial, writeJson, type GeneratorCallback, type Tree } from '@nx/devkit';
 
 import { addFrontmcpDependencies } from '../../utils/add-dependencies.js';
 import { getModuleResolution } from '../../utils/project-paths.js';
@@ -126,15 +126,21 @@ export function ensureUiPackage(tree: Tree, options: EnsureUiPackageOptions): Ge
   }
 
   const range = `~${getFrontmcpVersion()}`;
-  const buildDevDependencies = getUiBuildDevDependencies();
-  return kind === 'react'
-    ? addFrontmcpDependencies(
-        tree,
-        REACT_DEPENDENCIES,
-        { ...REACT_DEV_DEPENDENCIES, ...buildDevDependencies },
-        { keepExistingVersions: true },
-      )
-    : addFrontmcpDependencies(tree, { '@frontmcp/uipack': range }, buildDevDependencies, {
-        keepExistingVersions: true,
-      });
+  const { esbuild, ...buildDevDependencies } = getUiBuildDevDependencies();
+  const installUiDependencies =
+    kind === 'react'
+      ? addFrontmcpDependencies(
+          tree,
+          REACT_DEPENDENCIES,
+          { ...REACT_DEV_DEPENDENCIES, ...buildDevDependencies },
+          { keepExistingVersions: true },
+        )
+      : addFrontmcpDependencies(tree, { '@frontmcp/uipack': range }, buildDevDependencies, {
+          keepExistingVersions: true,
+        });
+  // An existing esbuild range is raised rather than kept when it is older than ours: the `^0.25.0` earlier
+  // versions of these generators wrote is below the `>=0.27` peer range of @frontmcp/uipack (npm ERESOLVE).
+  // A range at or above ours stays, in whichever section it is in.
+  const installEsbuild = addFrontmcpDependencies(tree, {}, { esbuild }, { keepExistingVersions: false });
+  return runTasksInSerial(installUiDependencies, installEsbuild);
 }

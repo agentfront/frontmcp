@@ -4,9 +4,11 @@ import { App, LogLevel, Plugin, Tool, ToolContext, type FlowCtxOf } from '../../
 import { EntryValidationError, InternalMcpError, ToolNameConflictError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { ToolHook } from '../../index';
+import { type Scope } from '../../scope/scope.instance';
 import { type DirectClient } from '../client.types';
 import { create } from '../create';
 import { type DirectMcpServer, type RuntimeToolDefinition } from '../direct.types';
+import { registerRuntimeTool } from '../runtime-tools';
 
 /**
  * `server.registerTool()` adds a tool to a running server, for code outside it (a React component,
@@ -192,10 +194,36 @@ describe('DirectMcpServer.registerTool()', () => {
     await expect(server.registerTool(definition)).rejects.toThrow(EntryValidationError);
   });
 
+  it.each([
+    ['an input schema that is not an object', { ...echoTool(), inputSchema: 'none' }],
+    ['an input schema that is not an object schema', echoTool({ inputSchema: { type: 'array', items: {} } })],
+    [
+      'an input schema whose properties are not schemas',
+      echoTool({ inputSchema: { type: 'object', properties: { a: 1 } } }),
+    ],
+    ['a title that is not a string', { ...echoTool(), title: 42 }],
+    ['malformed annotations', { ...echoTool(), annotations: { readOnlyHint: 'yes' } }],
+    ['an availableWhen that is not a surface list', { ...echoTool(), availableWhen: { surface: 'webmcp' } }],
+  ])('refuses %s, and tools/list keeps working', async (_label, definition) => {
+    await expect(server.registerTool(definition as unknown as RuntimeToolDefinition)).rejects.toThrow(
+      EntryValidationError,
+    );
+
+    const { tools } = await server.listTools();
+    expect(tools.map((tool) => tool.name)).toEqual(['static_tool']);
+  });
+
   it('refuses to register on a disposed server', async () => {
     await server.dispose();
 
     await expect(server.registerTool(echoTool())).rejects.toThrow(InternalMcpError);
+  });
+
+  it('refuses a registration the server is disposed during', async () => {
+    const registering = server.registerTool(echoTool());
+    await server.dispose();
+
+    await expect(registering).rejects.toThrow(InternalMcpError);
   });
 
   describe('a connected client', () => {
@@ -285,5 +313,26 @@ describe('DirectMcpServer.registerTool() on a server with several apps', () => {
 
   it('refuses an app that is not there', async () => {
     await expect(server.registerTool(echoTool({ app: 'shipping' }))).rejects.toThrow(EntryValidationError);
+  });
+});
+
+describe('registerRuntimeTool() on a scope that is disposed meanwhile', () => {
+  @App({ id: 'only', name: 'Only', tools: [StaticTool] })
+  class OnlyApp {}
+
+  it('leaves the tool out of the registry and rejects', async () => {
+    const [scope] = (
+      await FrontMcpInstance.createForGraph({
+        info: { name: 'runtime-tools-dispose', version: '1.0.0' },
+        apps: [OnlyApp],
+        logging: { level: LogLevel.Off },
+      })
+    ).getScopes() as Scope[];
+
+    const registering = registerRuntimeTool(scope, echoTool());
+    await scope.dispose();
+
+    await expect(registering).rejects.toThrow(InternalMcpError);
+    expect(scope.tools.listAllInstances().map((tool) => tool.name)).not.toContain('echo');
   });
 });

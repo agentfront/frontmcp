@@ -5,10 +5,11 @@
  * Supports pub/sub via Upstash's REST API with polling mechanism.
  */
 
-import { BaseStorageAdapter } from './base';
-import type { UpstashAdapterOptions, SetOptions, MessageHandler, Unsubscribe } from '../types';
-import { StorageConnectionError, StorageConfigError } from '../errors';
+import { StorageConfigError, StorageConnectionError } from '../errors';
+import type { MessageHandler, SetOptions, Unsubscribe, UpstashAdapterOptions } from '../types';
+import { COMPARE_AND_DELETE_SCRIPT } from '../utils/compare-and-delete';
 import { validateTTL } from '../utils/ttl';
+import { BaseStorageAdapter } from './base';
 
 // Type for @upstash/redis client
 type UpstashRedis = {
@@ -22,6 +23,7 @@ type UpstashRedis = {
   incr: (key: string) => Promise<number>;
   decr: (key: string) => Promise<number>;
   incrby: (key: string, increment: number) => Promise<number>;
+  eval: (script: string, keys: string[], args: string[]) => Promise<unknown>;
   scan: (cursor: number, options?: { match?: string; count?: number }) => Promise<[string, string[]]>;
   publish: (channel: string, message: string) => Promise<number>;
   lpush: (key: string, ...values: string[]) => Promise<number>;
@@ -201,6 +203,15 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
   async delete(key: string): Promise<boolean> {
     const result = await this.getConnectedClient().del(this.prefixKey(key));
     return result > 0;
+  }
+
+  override async deleteIfEquals(key: string, expectedValue: string): Promise<boolean> {
+    const deleted = await this.getConnectedClient().eval(
+      COMPARE_AND_DELETE_SCRIPT,
+      [this.prefixKey(key)],
+      [expectedValue],
+    );
+    return deleted === 1;
   }
 
   async exists(key: string): Promise<boolean> {

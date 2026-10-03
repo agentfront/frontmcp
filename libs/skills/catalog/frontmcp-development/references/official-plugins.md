@@ -116,7 +116,7 @@ CodeCallPlugin.init({
 });
 ```
 
-Without `appIds`, `codecall_only` mode hides ALL tools in the server. With `appIds`, only tools from the specified apps are hidden — tools from other apps remain directly callable.
+Without `appIds`, `codecall_only` mode hides every tool the plugin judges: all tools of the server when it is installed on the server, or its own app's tools and those of apps without a CodeCall plugin of their own when it is installed on an app. With `appIds`, only tools from the specified apps are hidden — tools from other apps remain directly callable. An app with its own CodeCall plugin is judged by that plugin alone, in `list_tools` and on a direct `tools/call` alike; up to 1.8.7 another app's `codecall_only` plugin hid its tools from `list_tools` while its own plugin still let clients call them.
 
 ### Hidden Tools Are Not Directly Callable
 
@@ -300,7 +300,9 @@ class MyTool extends ToolContext {
 
 `update(key, value, { ttl? })` returns `false` for a key that does not exist. Without a `ttl` the entry keeps its
 current expiry, and `knows()` and `list()` stop reporting it once that passes, the same as `get()`; up to 1.8.7 an
-entry updated without a `ttl` stayed in `knows()` and `list()` after it expired.
+entry updated without a `ttl` stayed in `knows()` and `list()` after it expired. `knows()` and `list()` read each entry
+and check its own expiry, so they report exactly the keys `get()` returns a value for, even while the store still holds
+an expired key for up to a second.
 
 ### Memory Scopes
 
@@ -462,9 +464,13 @@ authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectI
    call (only one of two concurrent calls gets it), so the next call needs a new one.
 5. Otherwise refused with state `pending` (or `expired`).
 
-Releases up to 1.8.7 refused every call of an `alwaysPrompt` tool, approved or not. A custom
-`ApprovalStore` should implement `consumeApproval()` (delete exactly that record, resolve `true` only
-for the call that deleted it); without it the gate revokes the caller's approvals of the tool instead.
+Releases up to 1.8.7 refused every call of an `alwaysPrompt` tool, approved or not. The built-in store
+uses up an approval with the storage's atomic `deleteIfEquals()` (memory, Redis, Upstash, Vercel KV), so
+a denial or new approval recorded in the meantime is kept; a backend without it (Cloudflare KV, the
+filesystem, SQLite) has the approval deleted directly. A custom `ApprovalStore` should implement
+`consumeApproval()` (delete exactly that record, and only while it is still stored, in one step; resolve
+`true` only for the call that deleted it); without it the gate revokes the caller's approvals of the tool
+instead.
 
 A refused call throws `ApprovalRequiredError`; the client receives an error result whose text is
 exactly the tool's `approvalMessage` (or the default `Tool "<full name>" requires approval to

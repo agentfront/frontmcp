@@ -86,12 +86,13 @@ export interface TscResult {
  * zod types through a portable path (TS2742), which a real install never hits.
  */
 export function typecheck(cwd: string, project: string): TscResult {
+  return tsc(cwd, ['--noEmit', '--declaration', 'false', '-p', project]);
+}
+
+/** Run the repo's `tsc` with the given arguments, the way a generated `nx:run-commands` target does. */
+export function tsc(cwd: string, args: string[]): TscResult {
   try {
-    const output = execFileSync(process.execPath, [TSC, '--noEmit', '--declaration', 'false', '-p', project], {
-      cwd,
-      encoding: 'utf8',
-      stdio: 'pipe',
-    });
+    const output = execFileSync(process.execPath, [TSC, ...args], { cwd, encoding: 'utf8', stdio: 'pipe' });
     return { ok: true, output };
   } catch (err) {
     const e = err as { stdout?: string; stderr?: string };

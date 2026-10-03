@@ -9,6 +9,7 @@ import {
   createMemoryStorage,
   createNamespacedStorage,
   createStorage,
+  StorageNotSupportedError,
   type NamespacedStorage,
   type RootStorage,
   type StorageConfig,
@@ -395,7 +396,8 @@ export class ApprovalStorageStore implements ApprovalStore {
 
   /**
    * Deletes the key that holds `record`, if it still does, and reports whether this call deleted
-   * it. Two calls racing for one approval both find it, but the store's delete succeeds for one.
+   * it. Two calls racing for one approval both find it, but only one deletes it, and a denial or
+   * approval written to the key after it was read is kept.
    */
   async consumeApproval(
     record: ApprovalRecord,
@@ -406,12 +408,23 @@ export class ApprovalStorageStore implements ApprovalStore {
     this.ensureInitialized();
 
     for (const key of this.callerKeys(record.toolId, sessionId, userId, context)) {
-      const stored = this.parseRecord(await this.storage.get(key));
-      if (stored && isSameRecord(stored, record)) {
-        return this.storage.delete(key);
+      const storedValue = await this.storage.get(key);
+      const stored = this.parseRecord(storedValue);
+      if (storedValue !== null && stored && isSameRecord(stored, record)) {
+        return this.deleteIfUnchanged(key, storedValue);
       }
     }
     return false;
+  }
+
+  /** Deletes `key` only while it still holds `storedValue`, in one step where the backend allows. */
+  private async deleteIfUnchanged(key: string, storedValue: string): Promise<boolean> {
+    try {
+      return await this.storage.deleteIfEquals(key, storedValue);
+    } catch (error) {
+      if (!(error instanceof StorageNotSupportedError)) throw error;
+      return this.storage.delete(key);
+    }
   }
 
   async getRevocations(

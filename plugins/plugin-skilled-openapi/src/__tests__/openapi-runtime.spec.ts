@@ -395,6 +395,95 @@ describe('executeOperation', () => {
   });
 });
 
+describe('executeOperation — a passthrough caller token and the URL the request goes to', () => {
+  const SERVICE_URL = 'http://localhost:9999/v1';
+  const callerJwt = jwtWith({ sub: 'u1', resource: SERVICE_URL });
+
+  /** `GET {baseUrl}{pathTemplate}` through a bearer binding that forwards the caller's token. */
+  const passthroughEntry = (pathTemplate: string, baseUrl = SERVICE_URL): HiddenOpEntry => {
+    const entry = buildEntry({
+      httpMethod: 'GET',
+      pathTemplate,
+      mapper: [{ inputKey: 'id', type: 'path', key: 'id', required: true }],
+    });
+    entry.service = { id: 'svc', baseUrl };
+    entry.authBinding = { kind: 'bearer', vaultRef: 'unused', passthroughCallerToken: true };
+    return entry;
+  };
+
+  const call = async (entry: HiddenOpEntry, id: string, callerToken = callerJwt) => {
+    const sent: { url: string; headers?: Headers }[] = [];
+    const fetchImpl = jest.fn(makeFetch({ body: {}, capture: (c) => sent.push(c) }));
+    const result = await executeOperation({
+      entry,
+      bundleId: 'acme',
+      input: { id },
+      callerToken,
+      deps: buildDeps({ resolver: new MemoryCredentialResolver({}), fetchImpl: fetchImpl as never }),
+    });
+    return { result, sent, fetchImpl };
+  };
+
+  it.each([
+    ['acct_1', 'http://localhost:9999/v1/acct_1/me'],
+    ['a/b', 'http://localhost:9999/v1/a%2Fb/me'],
+    ['inv...1', 'http://localhost:9999/v1/inv...1/me'],
+  ])('forwards the token for an id of %j', async (id, url) => {
+    const { result, sent } = await call(passthroughEntry('/{id}/me'), id);
+
+    expect(result.ok).toBe(true);
+    expect(sent).toEqual([expect.objectContaining({ url })]);
+    expect(sent[0]?.headers?.get('Authorization')).toBe(`Bearer ${callerJwt}`);
+  });
+
+  it('sends nothing when an id of ".." takes the request above the API the token was issued for', async () => {
+    // `/v1/../me` is `/me` once the URL is parsed, and `/me` is what fetch would request.
+    const { result, fetchImpl } = await call(passthroughEntry('/{id}/me'), '..');
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe(
+      'auth resolution failed: passthrough caller token refused: the caller token was not issued for ' +
+        'http://localhost:9999/me (no resource or aud claim names it)',
+    );
+  });
+
+  it.each([
+    ['an encoded slash', '../..'],
+    ['an encoded backslash', '..\\..'],
+    ['double encoding', '%2e%2e'],
+    ['a path parameter', '..;'],
+  ])('sends nothing when the id hides a ".." segment behind %s', async (_case, id) => {
+    const { result, fetchImpl } = await call(passthroughEntry('/{id}/me'), id);
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(
+      /^auth resolution failed: passthrough caller token refused: the request path .* has a "\.\." segment once percent-decoded/,
+    );
+  });
+
+  it('sends nothing when a "%2e%2e" template segment resolves above the API', async () => {
+    const { result, fetchImpl } = await call(passthroughEntry('/%2e%2e/admin/{id}'), 'x');
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result.error).toMatch(/the caller token was not issued for http:\/\/localhost:9999\/admin\/x /);
+  });
+
+  it('sends nothing when the request leaves the origin the token was issued for', async () => {
+    // A template without a leading `/` (which the bundle schema refuses) lets a path parameter
+    // extend the host; the token names `http://localhost`, so only the final URL check can stop it.
+    const { result, fetchImpl } = await call(
+      passthroughEntry('{id}/me', 'http://localhost'),
+      '.evil.example',
+      jwtWith({ sub: 'u1', resource: 'http://localhost' }),
+    );
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result.error).toMatch(/the caller token was not issued for http:\/\/localhost\.evil\.example\/me /);
+  });
+});
+
 describe('executeOperation — IPv6-literal service hosts (GHSA-4r57-gvgj-5crm)', () => {
   it.each([
     ['https://[::ffff:169.254.169.254]', true],

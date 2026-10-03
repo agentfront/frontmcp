@@ -27,9 +27,12 @@ function bypasses(plugin: CachePlugin, customHeaders: Record<string, string>): b
 
 describe('CachePlugin — bypassHeader (#678)', () => {
   describe('configuration', () => {
-    it.each(['x-no-cache', 'cache-control', 'X-Disable-Cache', ''])('refuses %j, which never reaches the plugin', (name) => {
-      expect(() => CachePlugin.init({ type: 'memory', bypassHeader: name })).toThrow(CachePluginConfigurationError);
-    });
+    it.each(['x-no-cache', 'cache-control', 'X-Disable-Cache', ''])(
+      'refuses %j, which never reaches the plugin',
+      (name) => {
+        expect(() => CachePlugin.init({ type: 'memory', bypassHeader: name })).toThrow(CachePluginConfigurationError);
+      },
+    );
 
     it('names the header and the required prefix', () => {
       expect(() => new CachePlugin({ type: 'memory', bypassHeader: 'x-no-cache' })).toThrow(

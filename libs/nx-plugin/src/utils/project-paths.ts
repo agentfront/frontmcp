@@ -102,12 +102,7 @@ export function getProjectTsOptions(tree: Tree, workspaceRoot?: string): Project
  * relative (`./libs/x/src/index.ts`): without a `baseUrl` — Nx TS-solution workspaces, TypeScript 6 —
  * a bare `libs/...` target is an error (TS5090), and with `baseUrl: "."` both spellings resolve alike.
  */
-export function addTsPathAlias(
-  tree: Tree,
-  alias: string,
-  target: string,
-  options: { overwrite?: boolean } = {},
-): void {
+export function addTsPathAlias(tree: Tree, alias: string, target: string, options: { overwrite?: boolean } = {}): void {
   if (!tree.exists('tsconfig.base.json')) return;
   const relativeTarget = target.startsWith('./') || target.startsWith('../') ? target : `./${target}`;
   updateJson(tree, 'tsconfig.base.json', (json: { compilerOptions?: { paths?: Record<string, string[]> } }) => {

@@ -36,9 +36,11 @@ nx g @frontmcp/nx:lib shared-db
 ```typescript
 // servers/public-gateway/src/main.ts
 import 'reflect-metadata';
-import { FrontMcp } from '@frontmcp/sdk';
+
 import { BillingApp } from '@my-workspace/billing';
 import { CrmApp } from '@my-workspace/crm';
+
+import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'public-gateway', version: '1.0.0' },
@@ -58,8 +60,10 @@ export default PublicGateway;
 ```typescript
 // servers/admin-portal/src/main.ts
 import 'reflect-metadata';
-import { FrontMcp } from '@frontmcp/sdk';
+
 import { AdminApp } from '@my-workspace/admin';
+
+import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'admin-portal', version: '1.0.0' },

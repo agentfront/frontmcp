@@ -6,11 +6,12 @@
  */
 
 import { EventEmitter } from '#event-emitter';
-import { BaseStorageAdapter } from './base';
-import type { MemoryAdapterOptions, SetOptions, MessageHandler, Unsubscribe } from '../types';
+
 import { StorageOperationError } from '../errors';
+import type { MemoryAdapterOptions, MessageHandler, SetOptions, Unsubscribe } from '../types';
 import { globToRegex } from '../utils/pattern';
-import { ttlToExpiresAt, isExpired, expiresAtToTTL, validateTTL } from '../utils/ttl';
+import { expiresAtToTTL, isExpired, ttlToExpiresAt, validateTTL } from '../utils/ttl';
+import { BaseStorageAdapter } from './base';
 
 /**
  * Internal entry structure for memory storage.
@@ -176,6 +177,13 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
 
   async delete(key: string): Promise<boolean> {
     this.ensureConnected();
+    return this.deleteEntry(key);
+  }
+
+  override async deleteIfEquals(key: string, expectedValue: string): Promise<boolean> {
+    this.ensureConnected();
+    const entry = this.store.get(key);
+    if (!entry || isExpired(entry.expiresAt) || entry.value !== expectedValue) return false;
     return this.deleteEntry(key);
   }
 

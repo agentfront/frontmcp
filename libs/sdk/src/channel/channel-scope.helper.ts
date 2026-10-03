@@ -64,6 +64,8 @@ export interface ChannelCapabilitiesResult {
   channelRegistry: ChannelRegistry;
   channelNotificationService: ChannelNotificationService;
   channelEventBus: ChannelEventBus;
+  /** Runs each service channel's `onConnect()`: call it once the scope serves the registry and notification service. */
+  connectServices: () => Promise<void>;
   /** Teardown function: disconnects services and cleans up subscriptions */
   teardown: () => Promise<void>;
 }
@@ -177,7 +179,7 @@ export async function registerChannelCapabilities(
         break;
       case 'service':
       case 'file-watcher':
-        // Service connectors and file watchers are connected in step 9 via onConnect()
+        // Service connectors and file watchers connect through connectServices() (onConnect())
         break;
     }
   }
@@ -223,27 +225,7 @@ export async function registerChannelCapabilities(
     logger.info(`Registered ${channelToolCount} tool(s) from channel declarations`);
   }
 
-  // 9. Connect service connector channels (persistent connections)
   const serviceChannels = channelRegistry.getChannelInstances().filter((ch) => ch.isServiceConnector);
-  const connectedServices: typeof serviceChannels = [];
-  for (const instance of serviceChannels) {
-    try {
-      await instance.connectService();
-      connectedServices.push(instance);
-    } catch (err) {
-      // Rollback already-connected services before rethrowing
-      for (const connected of connectedServices) {
-        try {
-          await connected.disconnectService();
-        } catch {
-          /* best-effort */
-        }
-      }
-      for (const unsub of unsubscribers) unsub();
-      channelEventBus.clear();
-      throw err;
-    }
-  }
 
   logger.info(
     `Channel system initialized: ${channelRegistry.size} channel(s)` +
@@ -252,20 +234,30 @@ export async function registerChannelCapabilities(
       (serviceChannels.length > 0 ? `, ${serviceChannels.length} service connector(s)` : ''),
   );
 
+  const teardown = async () => {
+    // Disconnect service connectors (best-effort — don't abort on first failure)
+    const results = await Promise.allSettled(serviceChannels.map((instance) => instance.disconnectService()));
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        logger.error('Channel disconnect failed during teardown', { error: result.reason });
+      }
+    }
+    for (const unsub of unsubscribers) unsub();
+    channelEventBus.clear();
+  };
+
   return {
     channelRegistry,
     channelNotificationService,
     channelEventBus,
-    teardown: async () => {
-      // Disconnect service connectors (best-effort — don't abort on first failure)
-      const results = await Promise.allSettled(serviceChannels.map((instance) => instance.disconnectService()));
-      for (const result of results) {
-        if (result.status === 'rejected') {
-          logger.error('Channel disconnect failed during teardown', { error: result.reason });
-        }
+    connectServices: async () => {
+      try {
+        for (const instance of serviceChannels) await instance.connectService();
+      } catch (err) {
+        await teardown();
+        throw err;
       }
-      for (const unsub of unsubscribers) unsub();
-      channelEventBus.clear();
     },
+    teardown,
   };
 }

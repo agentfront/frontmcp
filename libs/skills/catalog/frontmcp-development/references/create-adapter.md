@@ -92,7 +92,7 @@ class MyApiAdapter extends DynamicAdapter<MyAdapterOptions> {
 class MyApp {}
 ```
 
-To serve the adapter's tools, resources and prompts from every app, register it on the server instead with `@FrontMcp({ adapters: [MyApiAdapter.init({ ... })] })`. Like a server-level plugin, each scope (a standalone or `splitByApp` app gets its own) instantiates it and runs `fetch()`. Up to 1.8.7 `@FrontMcp({ adapters })` was silently dropped.
+To serve the adapter's tools, resources and prompts from every app, register it on the server instead with `@FrontMcp({ adapters: [MyApiAdapter.init({ ... })] })`. Like a server-level plugin, each scope (a standalone or `splitByApp` app gets its own) builds its own adapter from the `init()` options and runs `fetch()`; a hand-written `{ provide, useValue }` record is one adapter that every scope shares. Disposing the server calls each adapter's `stopPolling()` and drops its `onUpdate()` subscription. Up to 1.8.7 `@FrontMcp({ adapters })` was silently dropped, and disposing did not stop adapter polling.
 
 ## FrontMcpAdapterResponse
 
@@ -132,7 +132,7 @@ MyApiAdapter.init({
 });
 ```
 
-A factory may instead return an adapter instance, used as is; anything else fails startup with an `InvalidEntityError`.
+A factory may instead return an adapter instance, used as is when its `options.name` is the `name` given to `init()`; an instance named otherwise, or anything else, fails startup with an `InvalidEntityError`.
 
 ## Nx Generator
 

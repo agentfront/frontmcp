@@ -10,7 +10,6 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import type { BridgeLogger } from '../log';
 import {
   createChildSupervisor,
   parseReadySentinel,
@@ -19,6 +18,7 @@ import {
   resolveProjectTsxLoader,
   type ChildReadyInfo,
 } from '../child-supervisor';
+import type { BridgeLogger } from '../log';
 
 function silentLog(): BridgeLogger {
   return {

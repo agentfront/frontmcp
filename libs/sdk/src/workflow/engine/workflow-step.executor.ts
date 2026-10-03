@@ -97,8 +97,6 @@ export class WorkflowStepExecutor {
     const ctx = job.create(parsedInput, {
       ...this.extra,
     });
-    // `authorities.pipes` may be async: run them before execute() reads `this.auth`.
-    await ctx.loadAuthContext();
 
     // Race a timer against the job promise. Note: this does NOT cancel the
     // underlying job execution — it only rejects the caller early on timeout.
@@ -107,8 +105,11 @@ export class WorkflowStepExecutor {
         reject(new WorkflowJobTimeoutError(job.name, timeout));
       }, timeout);
 
-      // The step's job runs on the 'job' surface, which `getCallSurface()` reports and its tool calls carry.
-      runOnSurface('job', async () => ctx.execute(parsedInput))
+      // Async `authorities.pipes` load `this.auth` within the timed attempt, so a hung pipe times out like a hung job.
+      ctx
+        .loadAuthContext()
+        // The step's job runs on the 'job' surface, which `getCallSurface()` reports and its tool calls carry.
+        .then(() => runOnSurface('job', async () => ctx.execute(parsedInput)))
         .then((result) => {
           clearTimeout(timer);
           resolve(result);

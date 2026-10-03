@@ -72,7 +72,9 @@ describe('CodeCallPlugin.refuseDirectCallOfHiddenTool', () => {
   }
 
   it("refuses a client's direct call of a hidden tool as an unknown tool, by the name it used", async () => {
-    const refusal = pluginFor().refuseDirectCallOfHiddenTool(flowCtxFor(hiddenTool, { surface: 'mcp' }, 'crm:users:list'));
+    const refusal = pluginFor().refuseDirectCallOfHiddenTool(
+      flowCtxFor(hiddenTool, { surface: 'mcp' }, 'crm:users:list'),
+    );
 
     await expect(refusal).rejects.toBeInstanceOf(ToolNotFoundError);
     await expect(refusal).rejects.toThrow('Tool "crm:users:list" not found');
@@ -95,11 +97,17 @@ describe('CodeCallPlugin.refuseDirectCallOfHiddenTool', () => {
   });
 
   it('lets every default tool through in codecall_opt_in mode', async () => {
-    await expect(pluginFor('codecall_opt_in').refuseDirectCallOfHiddenTool(flowCtxFor(hiddenTool, {}))).resolves.toBeUndefined();
+    await expect(
+      pluginFor('codecall_opt_in').refuseDirectCallOfHiddenTool(flowCtxFor(hiddenTool, {})),
+    ).resolves.toBeUndefined();
   });
 
   it("never refuses the server's own system tools", async () => {
-    const systemTool = { name: 'sendElicitationResult', fullName: 'sendElicitationResult', owner: { kind: 'scope', id: '_system' } };
+    const systemTool = {
+      name: 'sendElicitationResult',
+      fullName: 'sendElicitationResult',
+      owner: { kind: 'scope', id: '_system' },
+    };
     await expect(pluginFor().refuseDirectCallOfHiddenTool(flowCtxFor(systemTool, {}))).resolves.toBeUndefined();
   });
 

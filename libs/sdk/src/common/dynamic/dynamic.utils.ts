@@ -1,4 +1,15 @@
-import { type ProviderType, type ToolType } from '../interfaces';
+import { type AdapterInterface, type ProviderType, type ToolType } from '../interfaces';
+
+/**
+ * Whether a value is an adapter the registry can start: an object with `options.name` and
+ * `fetch()`. Checked by shape rather than `instanceof`, so an adapter built from another copy of
+ * its class (a second bundle of the same package) is still recognised as one.
+ */
+export function isAdapterInstance(value: unknown): value is AdapterInterface {
+  if (!value || typeof value !== 'object') return false;
+  const { options, fetch } = value as Partial<AdapterInterface>;
+  return !!options && typeof options === 'object' && typeof options.name === 'string' && typeof fetch === 'function';
+}
 
 export function collectDynamicProviders<T>(klass: any, options: T): ProviderType[] {
   // walk the prototype chain so parent plugins can contribute

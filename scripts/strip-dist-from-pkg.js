@@ -181,10 +181,10 @@ if (fs.existsSync(esmDir)) {
   }
 }
 
-// A browser-conditioned ESM build (dist/browser, the `browser` export of @frontmcp/sdk) needs no
-// package.json of its own: its `#` imports were resolved when it was built, and the .mjs extension
-// signals ESM. The build copies the source package.json there (source paths, "development"
-// conditions), so remove it and let dist/package.json apply.
+// A browser-conditioned build (dist/browser, the `browser` export of @frontmcp/sdk) needs no
+// package.json of its own: its `#` imports were resolved when it was built, and the .mjs / .cjs
+// extensions give the module format. The build copies the source package.json there (source paths,
+// "development" conditions), so remove it and let dist/package.json apply.
 const browserPkgPath = path.join(path.dirname(pkgPath), 'browser', 'package.json');
 if (fs.existsSync(browserPkgPath)) {
   fs.unlinkSync(browserPkgPath);
