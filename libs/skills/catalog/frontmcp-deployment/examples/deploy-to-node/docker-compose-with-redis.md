@@ -79,7 +79,7 @@ RUN yarn install --frozen-lockfile --production && yarn cache clean
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
   CMD wget -qO- http://localhost:3000/healthz || exit 1
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/node/my-server.bundle.js"]
 ```
 
 ```bash
