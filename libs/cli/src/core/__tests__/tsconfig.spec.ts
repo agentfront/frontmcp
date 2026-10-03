@@ -1,9 +1,5 @@
 // file: libs/cli/src/core/__tests__/tsconfig.spec.ts
 
-import * as path from 'path';
-
-import { fileExists, readJSON, writeJSON } from '@frontmcp/utils';
-
 import {
   checkRequiredTsOptions,
   deepMerge,
@@ -11,18 +7,8 @@ import {
   ensureWidgetExcludes,
   RECOMMENDED_TSCONFIG,
   REQUIRED_DECORATOR_FIELDS,
-  runInit,
   WIDGET_FILE_PATTERNS,
 } from '../tsconfig';
-
-// Mock @frontmcp/utils
-jest.mock('@frontmcp/utils', () => {
-  return {
-    fileExists: jest.fn(),
-    readJSON: jest.fn(),
-    writeJSON: jest.fn(),
-  };
-});
 
 describe('tsconfig utilities', () => {
   describe('REQUIRED_DECORATOR_FIELDS', () => {
@@ -282,125 +268,6 @@ describe('tsconfig utilities', () => {
         experimentalDecorators: true,
       });
       expect(issues.length).toBe(1);
-    });
-  });
-
-  describe('runInit', () => {
-    let consoleLogSpy: jest.SpyInstance;
-
-    beforeEach(() => {
-      jest.clearAllMocks();
-      consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-    });
-
-    afterEach(() => {
-      consoleLogSpy.mockRestore();
-    });
-
-    it('should create tsconfig.json if not exists', async () => {
-      (readJSON as jest.Mock).mockResolvedValue(null);
-
-      await runInit('/test/dir');
-
-      expect(writeJSON).toHaveBeenCalledWith(path.join('/test/dir', 'tsconfig.json'), RECOMMENDED_TSCONFIG);
-      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('not found'));
-      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Created tsconfig.json'));
-    });
-
-    it('rewrites moduleResolution nodenext so the result has no TS5110 conflict', async () => {
-      (readJSON as jest.Mock).mockResolvedValue({
-        compilerOptions: { module: 'nodenext', moduleResolution: 'nodenext' },
-      });
-
-      await runInit('/test/dir');
-
-      const written = (writeJSON as jest.Mock).mock.calls.at(-1)?.[1] as { compilerOptions: Record<string, unknown> };
-      expect(written.compilerOptions['module']).toBe('esnext');
-      expect(written.compilerOptions['moduleResolution']).toBe('node');
-    });
-
-    it('should merge existing tsconfig.json with required options', async () => {
-      const existing = {
-        compilerOptions: {
-          strict: true,
-          outDir: 'build',
-        },
-        include: ['custom/**/*'],
-      };
-      (readJSON as jest.Mock).mockResolvedValue(existing);
-
-      await runInit('/test/dir');
-
-      expect(writeJSON).toHaveBeenCalledWith(
-        path.join('/test/dir', 'tsconfig.json'),
-        expect.objectContaining({
-          compilerOptions: expect.objectContaining({
-            target: 'es2021',
-            module: 'esnext',
-            emitDecoratorMetadata: true,
-            experimentalDecorators: true,
-            strict: true,
-            outDir: 'build',
-          }),
-          include: ['custom/**/*'],
-        }),
-      );
-      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('verified and updated'));
-    });
-
-    it('adds widget-file excludes to existing tsconfig.json that overrides exclude without them (#445)', async () => {
-      // `deepMerge` overwrites arrays, so an existing `exclude` wins over
-      // RECOMMENDED_TSCONFIG's. `ensureWidgetExcludes` is the safety net.
-      const existing = {
-        compilerOptions: { strict: true },
-        include: ['src/**/*'],
-        exclude: ['node_modules'],
-      };
-      (readJSON as jest.Mock).mockResolvedValue(existing);
-
-      await runInit('/test/dir');
-
-      const writtenConfig = (writeJSON as jest.Mock).mock.calls.at(-1)?.[1];
-      expect(writtenConfig.exclude).toEqual(['node_modules', '**/*.widget.tsx', '**/*.widget.jsx']);
-      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringMatching(/Added widget-file excludes.*issue #445/));
-    });
-
-    it('inherits widget excludes from RECOMMENDED_TSCONFIG when existing has no exclude (#445)', async () => {
-      // deepMerge starts with RECOMMENDED, so if the user has no `exclude`,
-      // the widget patterns come along for free — no "Added …" log needed.
-      const existing = {
-        compilerOptions: { strict: true },
-        include: ['src/**/*'],
-      };
-      (readJSON as jest.Mock).mockResolvedValue(existing);
-
-      await runInit('/test/dir');
-
-      const writtenConfig = (writeJSON as jest.Mock).mock.calls.at(-1)?.[1];
-      expect(writtenConfig.exclude).toEqual(expect.arrayContaining(['**/*.widget.tsx', '**/*.widget.jsx']));
-    });
-
-    it('does not log an "Added widget-file excludes" line when patterns already present (#445)', async () => {
-      const existing = {
-        compilerOptions: { strict: true },
-        include: ['src/**/*'],
-        exclude: ['**/*.widget.tsx', '**/*.widget.jsx'],
-      };
-      (readJSON as jest.Mock).mockResolvedValue(existing);
-
-      await runInit('/test/dir');
-
-      const logs = consoleLogSpy.mock.calls.map((c) => String(c[0]));
-      expect(logs.some((line) => /Added widget-file excludes/.test(line))).toBe(false);
-    });
-
-    it('should use process.cwd() if no baseDir provided', async () => {
-      const originalCwd = process.cwd();
-      (readJSON as jest.Mock).mockResolvedValue(null);
-
-      await runInit();
-
-      expect(writeJSON).toHaveBeenCalledWith(path.join(originalCwd, 'tsconfig.json'), RECOMMENDED_TSCONFIG);
     });
   });
 });

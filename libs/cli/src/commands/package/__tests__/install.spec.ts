@@ -183,6 +183,27 @@ describe('runInstall', () => {
       expect(registerApp).toHaveBeenCalledWith('demo-app', expect.anything());
     });
 
+    // #679 — `frontmcp start` runs the bundle as a server: the node target's
+    // manifest (with its port) must win over dist/cli, which sorts first.
+    it('prefers dist/node over the other per-target directories', async () => {
+      writePackage(
+        { name: 'demo-app', bundle: 'cli.bundle.js' },
+        { 'cli.bundle.js': '1;' },
+        path.join(packageDir, 'dist', 'cli'),
+      );
+      writePackage(
+        { name: 'demo-app', bundle: 'node.bundle.js', network: { defaultPort: 3456, supportsSocket: true } },
+        { 'node.bundle.js': '1;' },
+        path.join(packageDir, 'dist', 'node'),
+      );
+
+      await install();
+
+      expect(fs.existsSync(path.join(appsDir, 'demo-app', 'node.bundle.js'))).toBe(true);
+      expect(fs.existsSync(path.join(appsDir, 'demo-app', 'cli.bundle.js'))).toBe(false);
+      expect(registerApp).toHaveBeenCalledWith('demo-app', expect.objectContaining({ port: 3456 }));
+    });
+
     it.each(['frontmcp.config.ts', 'frontmcp.config.mjs', 'frontmcp.config.cjs', 'frontmcp.config.json'])(
       'builds from %s when no manifest is present',
       async (configName) => {
@@ -335,7 +356,13 @@ describe('runInstall', () => {
       expect(installCall).toBeDefined();
       const specs: string[] = installCall[1];
       expect(specs).toEqual(
-        expect.arrayContaining([expect.stringMatching(/^@frontmcp\/sdk@/), 'reflect-metadata@^0.2.2']),
+        expect.arrayContaining([
+          expect.stringMatching(/^@frontmcp\/sdk@/),
+          'reflect-metadata@^0.2.2',
+          // #679 — loaded by the SDK's skill registry at start-up (and its undeclared tslib)
+          expect.stringMatching(/^vectoriadb@/),
+          expect.stringMatching(/^tslib@/),
+        ]),
       );
       expect(installCall[2]).toEqual({ cwd: installDir });
     });
@@ -354,6 +381,50 @@ describe('runInstall', () => {
         ([cmd, args]) => cmd === 'npm' && args[0] === 'install',
       );
       expect(installCall[1]).toEqual(expect.arrayContaining(['@frontmcp/sdk@1.8.3', 'reflect-metadata@^0.2.1']));
+    });
+
+    it('installs SDK peers declared in optionalDependencies as optional, apart from the required packages', async () => {
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({ optionalDependencies: { '@frontmcp/storage-sqlite': '^1.8.7' } }),
+        'utf-8',
+      );
+
+      await install();
+
+      const installDir = path.join(appsDir, 'demo-app');
+      const installCalls = (runCmd as jest.Mock).mock.calls.filter(
+        ([cmd, args]) => cmd === 'npm' && args[0] === 'install',
+      );
+      expect(installCalls).toHaveLength(2);
+      expect(installCalls[0][1]).toContain('--save');
+      expect(installCalls[0][1].some((arg: string) => arg.startsWith('@frontmcp/storage-sqlite@'))).toBe(false);
+      expect(installCalls[1]).toEqual([
+        'npm',
+        ['install', '@frontmcp/storage-sqlite@^1.8.7', '--save-optional', '--silent'],
+        { cwd: installDir },
+      ]);
+    });
+
+    it('finishes the install when an optional SDK peer fails to install', async () => {
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({ optionalDependencies: { '@frontmcp/storage-sqlite': '^1.8.7' } }),
+        'utf-8',
+      );
+      (runCmd as jest.Mock).mockImplementation(async (_cmd: string, args: string[]) => {
+        if (args.includes('--save-optional')) throw new Error('gyp ERR! build error');
+      });
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+      await install();
+
+      expect(registerApp).toHaveBeenCalledWith('demo-app', expect.anything());
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('skipped optional dependency @frontmcp/storage-sqlite@^1.8.7: gyp ERR! build error'),
+      );
     });
 
     it('does not re-init an install dir that already has a package.json', async () => {

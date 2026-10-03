@@ -31,6 +31,8 @@ Commands for building, testing, and debugging your FrontMCP server.
 | `create [name]`        | Scaffold a new FrontMCP project (interactive if name omitted) |
 | `socket <entry>`       | Start Unix socket daemon for local MCP server                 |
 
+`dev` and `build` locate `frontmcp.config.*` by walking up from the current folder and run from the folder that holds it, so they work from any subfolder of the project (paths passed as flags still resolve from where you typed them). `dev` stops its whole process tree on Ctrl+C, `SIGINT` or `SIGTERM`. `init` edits `tsconfig.json` in place, keeping comments and trailing commas, and never overwrites a file it cannot parse — or one that declares an option it must set more than once, since only the last occurrence takes effect.
+
 ---
 
 ## Process Manager Commands
@@ -61,7 +63,7 @@ Install, configure, and manage MCP apps from npm, local paths, or git repositori
 | `uninstall <name>` | Remove an installed MCP app                     |
 | `configure <name>` | Re-run setup questionnaire for an installed app |
 
-`install` accepts a project directory, its `dist/` folder or a per-target folder such as `dist/node` (the manifest is searched in all of them; a directory holding a `frontmcp.config.*` is installed after `npm install` when it has no `node_modules`). It installs the runtime packages the bundle keeps external (for example `@frontmcp/sdk`) at the versions the project depends on, plus any native addons the manifest lists.
+`install` accepts a project directory, its `dist/` folder or a per-target folder such as `dist/node` (the manifest is searched in all of them, and `dist/node` — the server `start` runs — wins over other targets such as `dist/cli`; a directory holding a `frontmcp.config.*` is installed after `npm install` when it has no `node_modules`). It installs, at the versions the project depends on, the runtime packages the bundle keeps external (`@frontmcp/sdk`, `reflect-metadata`), `vectoriadb` and `tslib` (the SDK's skill registry loads `vectoriadb` at start-up, and `vectoriadb` requires `tslib`), any other optional SDK peer the project declares (such as `@frontmcp/storage-sqlite` or `@frontmcp/observability`), plus any native addons the manifest lists. Peers the project lists in `optionalDependencies` stay optional: they are saved as optional dependencies, and one that fails to install is skipped with a warning.
 
 ---
 

@@ -31,6 +31,8 @@ FrontMCP locates the config file in this precedence order (issue #400):
 3. Upward walk from `cwd` to the nearest ancestor containing a `frontmcp.config.*` file (caps at 10 levels — monorepo nested apps no longer require `cd <repo-root>`).
 4. Fallback: derives minimal config from `package.json` (name, default node target).
 
+When the file is found by the upward walk in a **parent** folder, `frontmcp build` and `frontmcp dev` run from that folder — the project root. Its `entry`, `deployments[].outDir`, `tsconfig.json`, `package.json` and `.env` files resolve there, so building from `src/` writes `dist/` next to the config, not inside `src/`. Paths you pass on the command line (`--entry`, `--out-dir`, `--icon`, `--merge-from`, `--log-file`) still resolve from the folder you ran the command in. An explicit `--config <path>` / `FRONTMCP_CONFIG` does not change the working folder.
+
 Within a directory, the matching extensions are tried in this order:
 
 1. `frontmcp.config.ts`
@@ -108,7 +110,7 @@ transport: {
 | `vercel`, `lambda`, `distributed` | the generated setup file assigns `process.env.FRONTMCP_HTTP_ENTRY_PATH` before the server loads    |
 | `cloudflare`                      | the generated worker setup assigns it the same way                                                 |
 
-A `@FrontMcp({ http: { entryPath } })` value still wins over the config. When the two differ, `frontmcp build` warns.
+A `@FrontMcp({ http: { entryPath } })` value still wins over the config. When the two differ, `frontmcp build` warns. To read the decorator, the build evaluates the entry with its relative imports bundled in (`main.ts` importing `./apps/...` works); when the entry cannot be evaluated, the build says so and the served path it prints is only a default.
 
 ## Env overlays
 

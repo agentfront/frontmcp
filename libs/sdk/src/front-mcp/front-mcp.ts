@@ -126,12 +126,22 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
     // Issue #399 — dev bridge bootstrap sentinel. When `frontmcp dev
     // --stdio` spawns this process, it sets FRONTMCP_DEV_BOOTSTRAP_SENTINEL=1
-    // and watches stderr for this exact line to decide "the child is
-    // ready, drain the buffered RPCs." Written to stderr because stdout
-    // is reserved for JSON-RPC frames in stdio mode.
+    // and watches stderr for this line to decide "the child is ready, drain
+    // the buffered RPCs." Written to stderr because stdout is reserved for
+    // JSON-RPC frames in stdio mode. #679 — the line carries the port and MCP
+    // path this server actually listens on: `@FrontMcp({ http })` can
+    // hard-code either, and the bridge must not guess.
     if (process.env['FRONTMCP_DEV_BOOTSTRAP_SENTINEL'] === '1') {
-      process.stderr.write('__FRONTMCP_BOOTSTRAP_COMPLETE__\n');
+      process.stderr.write(`__FRONTMCP_BOOTSTRAP_COMPLETE__ ${JSON.stringify(this.devListenerInfo(server))}\n`);
     }
+  }
+
+  /** Where this server serves MCP, as reported to the `frontmcp dev --stdio` bridge. */
+  private devListenerInfo(server: FrontMcpServer): { port?: number; socketPath?: string; path: string } {
+    const http = (server as Partial<FrontMcpServerInstance>).config;
+    const path = this.getPrimaryScope()?.fullPath || '/';
+    if (http?.socketPath) return { socketPath: http.socketPath, path };
+    return typeof http?.port === 'number' ? { port: http.port, path } : { path };
   }
 
   /**

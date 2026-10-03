@@ -41,6 +41,7 @@
     "@rspack/core": "^1.7.6",
     "commander": "^13.0.0",
     "esbuild": "^0.27.3",
+    "jsonc-parser": "^3.2.0",
     "tslib": "^2.3.0",
     "vectoriadb": "^2.3.2",
     "yauzl": "^3.2.0",

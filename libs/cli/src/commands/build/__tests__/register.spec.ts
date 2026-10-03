@@ -30,9 +30,18 @@ describe('registerBuildCommands', () => {
     expect(runBuild.mock.calls[0][0].config).toBeUndefined();
   });
 
-  it('defaults outDir to dist and passes -e as entry', async () => {
+  // runBuild applies the `dist` default from the project root, which is not the
+  // cwd when frontmcp.config sits in a parent folder (#679).
+  it('leaves outDir unset unless given, and passes -e as entry', async () => {
     await makeProgram().parseAsync(['node', 'frontmcp', 'build', '-e', 'src/other.ts']);
 
-    expect(runBuild.mock.calls[0][0]).toMatchObject({ outDir: 'dist', entry: 'src/other.ts' });
+    expect(runBuild.mock.calls[0][0]).toMatchObject({ entry: 'src/other.ts' });
+    expect(runBuild.mock.calls[0][0].outDir).toBeUndefined();
+  });
+
+  it('passes an explicit --out-dir through', async () => {
+    await makeProgram().parseAsync(['node', 'frontmcp', 'build', '--out-dir', 'out']);
+
+    expect(runBuild.mock.calls[0][0]).toMatchObject({ outDir: 'out' });
   });
 });

@@ -14,6 +14,8 @@
  *   9. Warnings on large archives, absolute-path args, node_modules presence
  *  10. The server entry does not `require()` runtime packages that the archive
  *      does not ship (the archive has no node_modules, so it could not start)
+ *  11. Neither does any SEA binary under `bin/` — an SEA binary resolves a bare
+ *      `require()` against Node's built-in modules only (#679)
  */
 
 import * as fs from 'fs';
@@ -122,6 +124,14 @@ export async function validateMcpb(archivePath: string): Promise<ValidateResult>
     }
   }
 
+  for (const [binary, packages] of Object.entries(archive.binaryRequires ?? {})) {
+    for (const pkg of packages) {
+      result.errors.push(
+        `${binary} requires "${pkg}", which a single-executable binary cannot load (it resolves only Node's built-in modules) — the binary dies at start-up. Rebuild with \`frontmcp build --target mcpb --sea\` so runtime packages are bundled into it`,
+      );
+    }
+  }
+
   result.ok = result.errors.length === 0;
   return result;
 }
@@ -130,17 +140,44 @@ export async function validateMcpb(archivePath: string): Promise<ValidateResult>
 // `.mcpb` (there is no node_modules), so they must be inlined into the bundle.
 const REQUIRED_INLINE_PACKAGES = ['@frontmcp/sdk', '@frontmcp/di', '@frontmcp/utils', '@frontmcp/auth', 'reflect-metadata'];
 
+/** `require("<pkg>")` / `require('<pkg>/sub')` for each runtime package. */
+const RUNTIME_REQUIRE_PATTERNS = REQUIRED_INLINE_PACKAGES.map((pkg) => {
+  const escaped = pkg.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+  return { pkg, pattern: new RegExp(`require\\((["'])${escaped}(?:/[^"']*)?\\1\\)`) };
+});
+
+/** Longest text a runtime `require()` can span — the overlap kept between chunks. */
+const REQUIRE_SCAN_OVERLAP = 256;
+
+/** Runtime packages `text` requires. */
+export function findRuntimeRequires(text: string): string[] {
+  return RUNTIME_REQUIRE_PATTERNS.filter(({ pattern }) => pattern.test(text)).map(({ pkg }) => pkg);
+}
+
+/** Incremental {@link findRuntimeRequires} over a binary streamed in chunks. */
+export function createRuntimeRequireScanner(): { push(chunk: Buffer): void; found(): string[] } {
+  const found = new Set<string>();
+  let tail = '';
+  return {
+    push(chunk) {
+      // latin1 maps every byte to one char, so the JS source embedded in a
+      // binary survives intact and offsets stay byte-aligned.
+      const text = tail + chunk.toString('latin1');
+      for (const pkg of findRuntimeRequires(text)) found.add(pkg);
+      tail = text.slice(-REQUIRE_SCAN_OVERLAP);
+    },
+    found: () => REQUIRED_INLINE_PACKAGES.filter((pkg) => found.has(pkg)),
+  };
+}
+
 function checkServerRuntime(entryPoint: string, archive: RawArchive, result: ValidateResult): void {
   const source = archive.serverFiles?.[entryPoint];
   if (source === undefined) return;
   if (archive.entries.some((e) => e.startsWith('server/node_modules/'))) return;
-  for (const pkg of REQUIRED_INLINE_PACKAGES) {
-    const escaped = pkg.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
-    if (new RegExp(`require\\((["'])${escaped}(?:/[^"']*)?\\1\\)`).test(source)) {
-      result.errors.push(
-        `${entryPoint} requires "${pkg}" but the archive has no node_modules — the server cannot start. Rebuild with \`frontmcp build --target mcpb\` so runtime packages are bundled`,
-      );
-    }
+  for (const pkg of findRuntimeRequires(source)) {
+    result.errors.push(
+      `${entryPoint} requires "${pkg}" but the archive has no node_modules — the server cannot start. Rebuild with \`frontmcp build --target mcpb\` so runtime packages are bundled`,
+    );
   }
 }
 
@@ -202,7 +239,11 @@ interface RawArchive {
   size: number;
   /** Source of top-level `server/*.js` files, keyed by archive path. */
   serverFiles?: Record<string, string>;
+  /** Runtime packages each `bin/<platform>/<file>` binary requires, keyed by archive path. */
+  binaryRequires?: Record<string, string[]>;
 }
+
+const BINARY_ENTRY = /^bin\/[^/]+\/[^/]+$/;
 
 function readArchive(archivePath: string): Promise<RawArchive> {
   const yauzl = require('yauzl') as typeof import('yauzl');
@@ -219,6 +260,7 @@ function readArchive(archivePath: string): Promise<RawArchive> {
       const entries: string[] = [];
       let manifestRaw: string | undefined;
       const serverFiles: Record<string, string> = {};
+      const binaryRequires: Record<string, string[]> = {};
       let settled = false;
       const settle = (fn: () => void): void => {
         if (settled) return;
@@ -236,7 +278,23 @@ function readArchive(archivePath: string): Promise<RawArchive> {
         entries.push(entry.fileName);
         const isManifest = entry.fileName === 'manifest.json';
         const isServerScript = /^server\/[^/]+\.js$/.test(entry.fileName);
-        if (isManifest || isServerScript) {
+        if (BINARY_ENTRY.test(entry.fileName)) {
+          // Binaries are large: scan them as they stream instead of buffering.
+          zip.openReadStream(entry, (streamErr: Error | null, stream: NodeJS.ReadableStream | undefined) => {
+            if (streamErr || !stream) {
+              settle(() => reject(streamErr || new Error(`Failed to open ${entry.fileName}`)));
+              return;
+            }
+            const scanner = createRuntimeRequireScanner();
+            stream.on('data', (chunk: Buffer) => scanner.push(chunk));
+            stream.on('end', () => {
+              const found = scanner.found();
+              if (found.length > 0) binaryRequires[entry.fileName] = found;
+              zip.readEntry();
+            });
+            stream.on('error', (e: Error) => settle(() => reject(e)));
+          });
+        } else if (isManifest || isServerScript) {
           zip.openReadStream(entry, (streamErr: Error | null, stream: NodeJS.ReadableStream | undefined) => {
             if (streamErr || !stream) {
               settle(() => reject(streamErr || new Error(`Failed to open ${entry.fileName}`)));
@@ -257,7 +315,7 @@ function readArchive(archivePath: string): Promise<RawArchive> {
         }
       });
       zip.on('end', () => {
-        settle(() => resolve({ entries, manifestRaw, size, serverFiles }));
+        settle(() => resolve({ entries, manifestRaw, size, serverFiles, binaryRequires }));
       });
       zip.on('error', (e: Error) => settle(() => reject(e)));
     });
