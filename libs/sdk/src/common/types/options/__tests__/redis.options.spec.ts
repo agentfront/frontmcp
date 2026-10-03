@@ -300,6 +300,7 @@ describe('redis: { url } (#680)', () => {
     ['http://localhost:6379', 'redis:// or rediss://'],
     ['redis://alice:pw@localhost', 'ACL user "alice"'],
     ['redis://localhost/abc', 'database "abc"'],
+    ['redis://localhost:0', 'port must be between 1 and 65535'],
     ['redis://:p%ZZ@localhost', 'password has a malformed percent-escape'],
     ['redis://:%E0%A4%A@localhost', 'password has a malformed percent-escape'],
     ['redis://us%ZZer:pw@localhost', 'username has a malformed percent-escape'],

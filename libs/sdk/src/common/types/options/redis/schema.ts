@@ -185,6 +185,7 @@ export function parseRedisUrl(raw: string): ParsedRedisUrl | string {
   if (!Number.isInteger(db) || db < 0) return `redis.url database "${dbText}" is not a non-negative integer`;
 
   const port = url.port ? Number(url.port) : 6379;
+  if (port === 0) return 'redis.url port must be between 1 and 65535';
   const password = url.password ? decodeUrlCredential(url.password) : undefined;
   if (url.password && password === undefined) return malformedEscapeProblem('password');
   return { host, port, ...(password !== undefined ? { password } : {}), db, tls: url.protocol === 'rediss:' };
