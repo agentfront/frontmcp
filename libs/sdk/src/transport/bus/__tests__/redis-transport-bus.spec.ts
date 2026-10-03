@@ -7,9 +7,7 @@ import { RedisTransportBus, type BusRedisClient } from '../redis-transport-bus';
 
 function createMockRedis(): jest.Mocked<BusRedisClient> {
   return {
-    hset: jest.fn().mockResolvedValue(1),
     hgetall: jest.fn().mockResolvedValue({}),
-    expire: jest.fn().mockResolvedValue(1),
     del: jest.fn().mockResolvedValue(1),
     publish: jest.fn().mockResolvedValue(1),
     eval: jest.fn().mockResolvedValue(1),
@@ -46,22 +44,21 @@ describe('RedisTransportBus', () => {
   });
 
   describe('advertise()', () => {
-    it('stores owner, channel, type and token hash under the session id, with a TTL', async () => {
+    it('stores owner, channel, type and token hash under the session id with its TTL, in one atomic script', async () => {
       await bus.advertise(createKey());
 
-      const expectedRedisKey = 'mcp:bus:session:session-001';
-      expect(redis.hset).toHaveBeenCalledWith(
-        expectedRedisKey,
-        'nodeId',
+      expect(redis.eval).toHaveBeenCalledTimes(1);
+      const [script, numKeys, ...args] = redis.eval.mock.calls[0];
+      expect(script).toMatch(/HSET[\s\S]*EXPIRE/);
+      expect(numKeys).toBe(1);
+      expect(args).toEqual([
+        'mcp:bus:session:session-001',
         'node-1',
-        'channel',
         'mcp:ha:notify:node-1',
-        'type',
         'streamable-http',
-        'tokenHash',
         'abc123hash',
-      );
-      expect(redis.expire).toHaveBeenCalledWith(expectedRedisKey, 3600);
+        3600,
+      ]);
     });
 
     it('uses custom key prefix and TTL', async () => {
@@ -73,18 +70,16 @@ describe('RedisTransportBus', () => {
 
       await bus.advertise(createKey());
 
-      expect(redis.hset).toHaveBeenCalledWith(
+      expect(redis.eval).toHaveBeenCalledWith(
+        expect.stringContaining('HSET'),
+        1,
         'custom:bus:session:session-001',
-        'nodeId',
         'node-2',
-        'channel',
         'custom:ha:notify:node-2',
-        'type',
         'streamable-http',
-        'tokenHash',
         'abc123hash',
+        7200,
       );
-      expect(redis.expire).toHaveBeenCalledWith('custom:bus:session:session-001', 7200);
       expect(bus.channelOf('node-9')).toBe('custom:ha:notify:node-9');
     });
 
