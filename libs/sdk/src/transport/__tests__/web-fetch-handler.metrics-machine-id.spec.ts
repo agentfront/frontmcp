@@ -79,6 +79,13 @@ describe('createFetchHandler: /metrics', () => {
     expect(res.status).toBe(404);
   });
 
+  it('answers a health probe path with the probe, as the Express host does, when metrics share it', async () => {
+    const handler = await handlerFor({ metrics: { enabled: true, path: '/healthz' } });
+    const res = await handler(new Request(`${BASE}/healthz`));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(expect.objectContaining({ status: 'ok', transport: 'web-fetch' }));
+  });
+
   it('refuses a metrics path that is also the MCP entry path, so it cannot take over GET on the entry', async () => {
     await expect(
       handlerFor({ http: { entryPath: '/api' }, metrics: { enabled: true, path: '/api/' } }),

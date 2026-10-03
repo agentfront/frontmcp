@@ -321,15 +321,6 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
       return new Response(null, { status: 204, headers: corsHeadersFor(request) });
     }
 
-    if (metrics && metricsEndpoint === normalizePath(url.pathname) && request.method === 'GET') {
-      const scrape = renderMetricsScrape(
-        metrics.service,
-        metrics.config,
-        request.headers.get('authorization') ?? undefined,
-      );
-      return withCors(metricsResponse(scrape), request);
-    }
-
     // Liveness/readiness — cheap, no MCP server spin-up.
     if (options.healthPaths ? options.healthPaths.includes(url.pathname) : healthEnabled) {
       const isReadyz = !options.healthPaths && url.pathname === readyzPath && readyzEnabled;
@@ -355,6 +346,16 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
           request,
         );
       }
+    }
+
+    // After the health probes, which the Express host also registers first.
+    if (metrics && metricsEndpoint === normalizePath(url.pathname) && request.method === 'GET') {
+      const scrape = renderMetricsScrape(
+        metrics.service,
+        metrics.config,
+        request.headers.get('authorization') ?? undefined,
+      );
+      return withCors(metricsResponse(scrape), request);
     }
 
     // MCP is served only at the configured entry path(s). Everything else is
