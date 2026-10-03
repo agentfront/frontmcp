@@ -116,7 +116,7 @@ CodeCallPlugin.init({
 });
 ```
 
-Without `appIds`, `codecall_only` mode hides ALL tools in the server. With `appIds`, only tools from the specified apps are hidden — tools from other apps remain directly callable.
+Without `appIds`, `codecall_only` mode hides every tool the plugin judges: all tools of the server when it is installed on the server, or its own app's tools and those of apps without a CodeCall plugin of their own when it is installed on an app. With `appIds`, only tools from the specified apps are hidden — tools from other apps remain directly callable. An app with its own CodeCall plugin is judged by that plugin alone, in `list_tools` and on a direct `tools/call` alike; up to 1.8.7 another app's `codecall_only` plugin hid its tools from `list_tools` while its own plugin still let clients call them.
 
 ### Hidden Tools Are Not Directly Callable
 

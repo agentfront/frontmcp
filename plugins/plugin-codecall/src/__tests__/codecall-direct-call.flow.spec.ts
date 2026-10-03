@@ -243,6 +243,52 @@ describe('CodeCall — direct tools/call of a tool it hides (#678)', () => {
     });
   });
 
+  describe('with a CodeCall plugin on each of two apps', () => {
+    let server: Awaited<ReturnType<typeof connectTo>>;
+
+    beforeAll(async () => {
+      @App({
+        id: 'crm',
+        name: 'CRM',
+        tools: [ListUsersTool, GetUserTool],
+        plugins: [CodeCallPlugin.init({ mode: 'codecall_only' })],
+      })
+      class CrmApp {}
+
+      @App({
+        id: 'billing',
+        name: 'Billing',
+        tools: [ListInvoicesTool, VoidInvoiceTool],
+        plugins: [CodeCallPlugin.init({ mode: 'metadata_driven' })],
+      })
+      class BillingApp {}
+
+      server = await connectTo([CrmApp, BillingApp]);
+    });
+
+    afterAll(async () => {
+      await server.close();
+    });
+
+    beforeEach(() => {
+      executedTools.length = 0;
+    });
+
+    it('lists exactly the tools a client can call directly, each judged by its own app', async () => {
+      const tools = ['users:list', 'users:get', 'invoices:list', 'invoices:void'];
+      const listed = await server.listed();
+      const callable: string[] = [];
+      for (const name of tools) {
+        if (!(await server.call(name)).isError) callable.push(name);
+      }
+
+      expect({ listed: tools.filter((name) => listed.includes(name)), callable }).toEqual({
+        listed: ['users:get', 'invoices:list'],
+        callable: ['users:get', 'invoices:list'],
+      });
+    });
+  });
+
   describe('in metadata_driven mode', () => {
     let server: Awaited<ReturnType<typeof connectTo>>;
 
