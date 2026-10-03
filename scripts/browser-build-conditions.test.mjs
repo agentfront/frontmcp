@@ -37,17 +37,45 @@ for (const pkgDir of ['libs/utils', 'libs/protocol']) {
   }
 }
 
+function resolveExport(target, conditions) {
+  if (typeof target === 'string') return target;
+  if (!target || typeof target !== 'object') return undefined;
+  for (const [condition, value] of Object.entries(target)) {
+    if (condition !== 'default' && !conditions.includes(condition)) continue;
+    const resolved = resolveExport(value, conditions);
+    if (resolved !== undefined) return resolved;
+  }
+  return undefined;
+}
+
+const SDK_RESOLUTIONS = [
+  ['an ESM import in a browser bundler', ['import', 'module', 'browser'], './dist/browser/index.mjs'],
+  ['a require() in a browser bundler', ['require', 'module', 'browser'], './dist/browser/index.mjs'],
+  ['an ESM import without the module condition', ['import', 'browser'], './dist/browser/index.mjs'],
+  ['a require() without the module condition', ['require', 'browser'], './dist/browser/index.cjs'],
+  ['a require() in jest-environment-jsdom', ['require', 'node', 'browser'], './dist/browser/index.cjs'],
+  ['a require() in Node', ['require', 'node'], './dist/index.js'],
+  ['an ESM import in Node', ['import', 'node'], './dist/esm/index.mjs'],
+];
+
+for (const [consumer, conditions, expected] of SDK_RESOLUTIONS) {
+  test(`libs/sdk: ${consumer} resolves ${expected}`, () => {
+    assert.equal(resolveExport(read('libs/sdk/package.json').exports['.'], conditions), expected);
+  });
+}
+
 test('libs/sdk: a browser bundler gets the browser-conditioned bundle', () => {
   const pkg = read('libs/sdk/package.json');
   const project = read('libs/sdk/project.json');
-  const root = pkg.exports['.'];
-  const keys = Object.keys(root);
+  const keys = Object.keys(pkg.exports['.']);
 
-  assert.equal(root.browser?.import, './dist/browser/index.mjs');
+  assert.ok(keys.indexOf('browser') < keys.indexOf('require'), '"browser" must come before "require"');
   assert.ok(keys.indexOf('browser') < keys.indexOf('import'), '"browser" must come before "import"');
 
-  const browserBuild = project.targets['build-esm-browser'];
+  const browserBuild = project.targets['build-browser'];
   assert.equal(browserBuild.options.outputPath, 'libs/sdk/dist/browser');
+  assert.deepEqual(browserBuild.options.format, ['esm', 'cjs'], 'emits index.mjs and index.cjs');
+  assert.deepEqual(browserBuild.options.esbuildOptions.outExtension, { '.js': '.mjs' });
   assert.ok(browserBuild.options.esbuildOptions.conditions.includes('browser'));
   assert.deepEqual(
     [...browserBuild.options.esbuildOptions.external].sort(),
@@ -56,6 +84,6 @@ test('libs/sdk: a browser bundler gets the browser-conditioned bundle', () => {
   );
 
   const build = project.targets.build;
-  assert.ok(build.dependsOn.includes('build-esm-browser'));
+  assert.ok(build.dependsOn.includes('build-browser'));
   assert.ok(build.options.commands.some((cmd) => /inject-esm-require-banner\.js .*libs\/sdk\/dist\/browser/.test(cmd)));
 });

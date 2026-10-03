@@ -129,7 +129,7 @@ export interface ResolveDevLaunchOptions {
    * busy-port check instead of refusing to start over a port nobody uses.
    */
   listens?: boolean;
-  /** Where port notices go (`--stdio` keeps stdout for JSON-RPC). */
+  /** Where notices (port, `.env`) go; `--stdio` keeps stdout for JSON-RPC. */
   log?: (msg: string) => void;
 }
 
@@ -159,7 +159,7 @@ export async function resolveDevLaunch(opts: ParsedArgs, options: ResolveDevLaun
   // Load .env and .env.local files (these win over config env overlays for
   // parity with existing behavior — file-based env is the deployment escape
   // hatch and shouldn't be silently overridden by committed config).
-  loadDevEnv(cwd);
+  loadDevEnv(cwd, options.log);
 
   // Resolve the port BEFORE spawning tsx so EADDRINUSE produces a clean
   // one-line error instead of a raw node:net stack trace (issue #398).

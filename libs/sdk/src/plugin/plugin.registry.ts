@@ -158,14 +158,14 @@ export default class PluginRegistry
 
       const providers = new ProviderRegistry(rec.metadata.providers ?? [], this.providers);
       await providers.ready;
-      // Collected before nested plugins copy their exports in, since those register their own hooks.
-      const providerHooks = normalizeHooksFromProviders(providers);
 
       // Registered before nested plugins so they can inject the providers this plugin derives from its options.
       const { pluginInstance, dynamicProviders, dynamicTools } = await this.instantiatePlugin(rec, deps);
       if (dynamicProviders) {
         await providers.addDynamicProviders(dynamicProviders);
       }
+      // Collected after the option-derived providers join and before nested plugins copy in their own hooked exports.
+      const providerHooks = normalizeHooksFromProviders(providers);
 
       // Create a plugin-specific owner (NOT the parent's owner)
       // This ensures plugin tools have kind='plugin' for proper filtering in adoption
@@ -185,6 +185,7 @@ export default class PluginRegistry
 
       const adapters = new AdapterRegistry(providers, rec.metadata.adapters ?? []);
       await adapters.ready;
+      if (adapters.getAdapters().length > 0) this.scope.onDispose(() => adapters.dispose());
 
       const tools = new ToolRegistry(providers, [...(rec.metadata.tools ?? []), ...dynamicTools], pluginOwner);
       const resources = new ResourceRegistry(providers, rec.metadata.resources ?? [], pluginOwner);

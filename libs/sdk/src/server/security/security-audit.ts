@@ -167,7 +167,8 @@ function auditDnsRebinding(config: SecurityAuditConfig, bindAddress: string): Se
       code: 'DNS_REBINDING_UNPROTECTED',
       message: 'DNS rebinding protection is disabled (security.dnsRebindingProtection.enabled is false).',
       recommendation:
-        'Remove `enabled: false`, or set security.dnsRebindingProtection.allowedHosts, to prevent DNS rebinding attacks.',
+        'Remove `enabled: false` to turn DNS rebinding protection back on (an allowedHosts list is ignored while it is set). ' +
+        'On a routable bind, also set security.dnsRebindingProtection.allowedHosts (or FRONTMCP_ALLOWED_HOSTS) to your public hostname(s).',
     };
   }
 

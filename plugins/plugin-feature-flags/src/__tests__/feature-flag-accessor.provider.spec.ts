@@ -1,7 +1,8 @@
-import { FeatureFlagAccessor } from '../providers/feature-flag-accessor.provider';
+import type { FrontMcpContext } from '@frontmcp/sdk';
+
 import type { FeatureFlagAdapter } from '../adapters/feature-flag-adapter.interface';
 import type { FeatureFlagPluginOptions } from '../feature-flag.types';
-import type { FrontMcpContext } from '@frontmcp/sdk';
+import { FeatureFlagAccessor } from '../providers/feature-flag-accessor.provider';
 
 function createMockAdapter(overrides: Partial<FeatureFlagAdapter> = {}): FeatureFlagAdapter {
   return {

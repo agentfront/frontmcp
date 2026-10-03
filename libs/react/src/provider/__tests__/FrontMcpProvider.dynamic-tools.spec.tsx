@@ -60,7 +60,7 @@ function serverDouble(baseTools: string[] = ['static_tool']) {
   return { server, registered, unregisters };
 }
 
-function AddTool({ name = 'add', server }: { name?: string; server?: string }) {
+function AddTool({ name = 'add', server, app }: { name?: string; server?: string; app?: string }) {
   useDynamicTool({
     name,
     description: 'Adds two numbers',
@@ -68,6 +68,7 @@ function AddTool({ name = 'add', server }: { name?: string; server?: string }) {
     annotations: { readOnlyHint: true },
     availableWhen: { surface: ['webmcp'] },
     server,
+    app,
     execute: async ({ a, b }) => ({ content: [{ type: 'text', text: String(a + b) }] }),
   });
   return null;
@@ -187,5 +188,39 @@ describe('FrontMcpProvider dynamic tools', () => {
 
     view.unmount();
     expect(second.unregisters.get('second_add')).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers tools into each server's app from dynamicToolApps, unless a tool names its own", async () => {
+    const primary = serverDouble();
+    const second = serverDouble([]);
+    const servers = { second: second.server };
+    const tree = () =>
+      React.createElement(
+        FrontMcpProvider,
+        {
+          server: primary.server,
+          servers,
+          // A new object on every render, with the same content
+          dynamicToolApps: { default: 'billing', second: 'analytics' },
+          autoConnect: false,
+        },
+        React.createElement(AddTool),
+        React.createElement(AddTool, { name: 'support_add', app: 'support' }),
+        React.createElement(AddTool, { name: 'second_add', server: 'second' }),
+      );
+
+    const view = render(tree());
+    await waitFor(() => expect(second.registered.has('second_add')).toBe(true));
+    await waitFor(() => expect(primary.registered.has('support_add')).toBe(true));
+    await act(async () => {
+      view.rerender(tree());
+    });
+
+    expect(primary.registered.get('add')?.app).toBe('billing');
+    expect(primary.registered.get('support_add')?.app).toBe('support');
+    expect(second.registered.get('second_add')?.app).toBe('analytics');
+    expect(primary.server.registerTool).toHaveBeenCalledTimes(2);
+    expect(second.server.registerTool).toHaveBeenCalledTimes(1);
+    view.unmount();
   });
 });

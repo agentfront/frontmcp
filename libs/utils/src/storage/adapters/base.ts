@@ -5,8 +5,8 @@
  * Provides common validation and default implementations.
  */
 
-import type { StorageAdapter, SetOptions, SetEntry, MessageHandler, Unsubscribe } from '../types';
 import { StorageNotConnectedError, StorageNotSupportedError } from '../errors';
+import type { MessageHandler, SetEntry, SetOptions, StorageAdapter, Unsubscribe } from '../types';
 import { validateOptionalTTL } from '../utils/ttl';
 
 /**
@@ -129,6 +129,18 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
   abstract incr(key: string): Promise<number>;
   abstract decr(key: string): Promise<number>;
   abstract incrBy(key: string, amount: number): Promise<number>;
+
+  /**
+   * Default: not supported, since a read followed by a delete is not atomic.
+   * Override in adapters whose backend can compare and delete in one step.
+   */
+  async deleteIfEquals(_key: string, _expectedValue: string): Promise<boolean> {
+    throw new StorageNotSupportedError(
+      'deleteIfEquals',
+      this.backendName,
+      'Use the memory, Redis, Upstash or Vercel KV adapter for an atomic compare-and-delete.',
+    );
+  }
 
   // ============================================
   // Pub/Sub (default: not supported)

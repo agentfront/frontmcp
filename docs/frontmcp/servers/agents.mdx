@@ -521,6 +521,8 @@ By default, agents execute tools through the full `call-tool` flow, which includ
 
 The plugin hooks are those of the plugins installed on the agent (`@Agent({ plugins })`), which apply to the agent's own tools the way an app's plugins apply to the app's tools. Plugins on the server or the app don't reach them unless the agent sets `execution.inheritPlugins: true`: its tools then also get the hooks of the plugins installed on its app and on the server, ordered with its own by priority (its own first among equals). A plugin installed both on the agent and above it runs once, as installed on the agent. Up to 1.8.2, a plugin on an agent with a hook of its own (such as `FeatureFlagPlugin`) made every tool call of that agent fail with `Unsupported hook owner kind: "agent"`.
 
+The agent's own tools also get the `rateLimit`, `concurrency` and `timeout` they declare (else `throttle.defaultRateLimit`, `defaultConcurrency` and `defaultTimeout`), as the app's tools do; a `rateLimit` or `concurrency` there is enforced without a `throttle` option. The calls an agent makes during its run (its model's tool calls, its nested and swarm agents) run inside the `throttle.globalConcurrency` slot of the call that runs the agent. Up to 1.8.7 the `rateLimit` and `concurrency` of an agent's own tools were ignored.
+
 For performance-critical scenarios, you can disable flow execution:
 
 ```ts
@@ -535,7 +537,7 @@ class FastAgent extends AgentContext { ... }
 ```
 
 <Warning>
-Setting `useToolFlow: false` bypasses all plugin hooks and middleware. Only use this when you need maximum performance and don't require plugin features.
+Setting `useToolFlow: false` bypasses all plugin hooks and middleware, and the tools' `rateLimit`, `concurrency` and `timeout`, for the agent's own tools (their `authorities` still apply). Its [nested agents](#nested-agents) still run through their `invoke_` tool's flow. Only use this when you need maximum performance and don't require plugin features.
 </Warning>
 
 ---
@@ -704,4 +706,4 @@ class ParentAgent extends AgentContext {
 }
 ```
 
-Nested agents are private to their agent: clients aren't offered their `invoke_` tools. A call to one runs the `agents:call-agent` flow in the parent agent's scope, so the nested agent's hooks, gates and `exports` apply there, and it counts toward [`maxCallDepth`](#call-depth). Up to 1.8.7 nested agents were created but never offered to the model.
+Nested agents are private to their agent: clients aren't offered their `invoke_` tools. A call to one runs through its `invoke_` tool's `tools:call-tool` flow and then the `agents:call-agent` flow, both in the parent agent's scope, also when the parent sets `execution.useToolFlow: false`: the nested agent's `authorities`, `rateLimit`, `concurrency`, `timeout`, plugin gates and hooks apply as for a client's call, its `exports` reach that scope, and the call counts toward [`maxCallDepth`](#call-depth). A `rateLimit` or `concurrency` declared only on a nested agent is enforced without a `throttle` option, as a tool's is. Up to 1.8.7 nested agents were created but never offered to the model.

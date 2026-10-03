@@ -14,10 +14,15 @@
  *
  * Failure handling on the relaying node:
  * - the owner does not listen on its channel (publish reached no subscriber) or does
- *   not acknowledge within `ackTimeoutMs`, or its heartbeat expires while it serves:
- *   before any byte reached the client the request fails with
- *   {@link SessionOwnerUnreachableError} (503, retryable); after, the response is ended;
+ *   not acknowledge within `ackTimeoutMs`, its heartbeat expires while it serves, or no
+ *   frame (a `keepalive` included) arrives for three owner-check intervals: before any
+ *   byte reached the client the request fails with {@link SessionOwnerUnreachableError}
+ *   (503, retryable); after, the response is ended;
  * - the client goes away: the owner is told to cancel, which aborts the response there.
+ *
+ * On the owner, a response frame that cannot be published (Redis error, or the relaying
+ * node no longer listens) aborts the response and reports an `error` frame: a response
+ * with a lost frame is never completed.
  */
 
 import { randomUUID } from '@frontmcp/utils';
@@ -64,7 +69,10 @@ export interface SessionRelayOptions {
   serve(request: ServerRequest, response: ServerResponse): Promise<void>;
   /** How long the relaying node waits for the owner to acknowledge a request. @default 5000 */
   ackTimeoutMs?: number;
-  /** How often the relaying node checks the owner's heartbeat while it serves. @default 10000 */
+  /**
+   * How often the relaying node checks the owner's heartbeat while it serves, and how often
+   * the owner sends a `keepalive` frame. @default 10000
+   */
   ownerCheckIntervalMs?: number;
   /** `Retry-After` given to a client whose request could not be relayed. @default 30 */
   retryAfterSeconds?: number;
@@ -86,9 +94,27 @@ interface ServingRelay {
 const DEFAULT_ACK_TIMEOUT_MS = 5_000;
 const DEFAULT_OWNER_CHECK_INTERVAL_MS = 10_000;
 const DEFAULT_RETRY_AFTER_SECONDS = 30;
+const MIN_KEEPALIVE_MS = 100;
+const SILENT_CHECKS_BEFORE_FAILURE = 3;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isServableRequest(message: RequestRelayMessage): boolean {
+  return (
+    typeof message.requestId === 'string' &&
+    typeof message.sourceNodeId === 'string' &&
+    typeof message.sessionId === 'string' &&
+    typeof message.request === 'object' &&
+    message.request !== null
+  );
+}
+
+function keepaliveIntervalOf(message: RequestRelayMessage): number {
+  const requested = message.keepaliveMs;
+  if (typeof requested !== 'number' || !Number.isFinite(requested)) return DEFAULT_OWNER_CHECK_INTERVAL_MS;
+  return Math.max(MIN_KEEPALIVE_MS, requested);
 }
 
 export class SessionRelay {
@@ -148,6 +174,7 @@ export class SessionRelay {
       let acked = false;
       let headWritten = false;
       let done = false;
+      let lastFrameAt = Date.now();
       let ownerTimer: ReturnType<typeof setInterval> | undefined;
 
       const cleanup = (): void => {
@@ -192,6 +219,10 @@ export class SessionRelay {
       };
 
       const checkOwner = async (): Promise<void> => {
+        if (Date.now() - lastFrameAt >= this.ownerCheckIntervalMs * SILENT_CHECKS_BEFORE_FAILURE) {
+          fail('the owner stopped sending the response');
+          return;
+        }
         try {
           if (!(await this.options.isNodeAlive(ownerNodeId))) fail('the owner stopped while serving the request');
         } catch {
@@ -209,9 +240,12 @@ export class SessionRelay {
 
       const onFrame = (frame: ResponseRelayMessage): void => {
         if (done) return;
+        lastFrameAt = Date.now();
         switch (frame.event) {
           case 'ack':
             markAcked();
+            return;
+          case 'keepalive':
             return;
           case 'head':
             markAcked();
@@ -250,6 +284,7 @@ export class SessionRelay {
         sessionId,
         request,
         timestamp: Date.now(),
+        keepaliveMs: this.ownerCheckIntervalMs,
       };
       this.logger?.verbose?.('[HA] Relaying request to session owner', { sessionId: sessionLabel, ownerNodeId });
       this.options.publish(ownerNodeId, message).then(
@@ -265,7 +300,13 @@ export class SessionRelay {
   handleMessage(message: HaRelayMessage): void {
     switch (message.kind) {
       case 'relay-request':
-        void this.serveRelayed(message);
+        if (!isServableRequest(message)) {
+          this.logger?.warn('[HA] Dropped a malformed relayed request');
+          return;
+        }
+        this.serveRelayed(message).catch((error: unknown) => {
+          this.logger?.warn('[HA] Serving a relayed request failed', { error: errorMessage(error) });
+        });
         return;
       case 'relay-response': {
         const pending = this.pending.get(message.requestId);
@@ -302,27 +343,40 @@ export class SessionRelay {
   /** Owner side: serve a request another node relayed here, streaming the response back. */
   private async serveRelayed(message: RequestRelayMessage): Promise<void> {
     const { requestId, sourceNodeId } = message;
-    const send = (event: RelayResponseEvent): void => {
+    let undeliverable = false;
+    const publishFrame = (event: RelayResponseEvent): Promise<number> => {
       const frame = { kind: 'relay-response', requestId, sourceNodeId: this.nodeId, ...event } as ResponseRelayMessage;
-      this.options.publish(sourceNodeId, frame).catch((error: unknown) => {
-        this.logger?.warn('[HA] Failed to publish a relayed response frame', {
-          error: errorMessage(error),
-          targetNodeId: sourceNodeId,
-        });
-      });
+      return this.options.publish(sourceNodeId, frame);
     };
+    const abandon = (reason: string): void => {
+      if (undeliverable) return;
+      undeliverable = true;
+      this.logger?.warn('[HA] Failed to publish a relayed response frame', { reason, targetNodeId: sourceNodeId });
+      publishFrame({ event: 'error', message: reason }).catch(() => undefined);
+      response.destroy();
+    };
+    const send = (event: RelayResponseEvent): void => {
+      if (undeliverable) return;
+      publishFrame(event).then(
+        (receivers) => {
+          if (receivers === 0) abandon('the relaying node no longer listens');
+        },
+        (error: unknown) => abandon(`publishing a response frame failed: ${errorMessage(error)}`),
+      );
+    };
+    const response = new RelayServerResponse({
+      head: (status, headers) => send({ event: 'head', status, headers }),
+      data: (chunk) => send({ event: 'data', ...chunk }),
+      end: () => send({ event: 'end' }),
+    });
 
     if (this.closed) {
       send({ event: 'error', message: 'the owner is shutting down' });
       return;
     }
     send({ event: 'ack' });
-
-    const response = new RelayServerResponse({
-      head: (status, headers) => send({ event: 'head', status, headers }),
-      data: (chunk) => send({ event: 'data', ...chunk }),
-      end: () => send({ event: 'end' }),
-    });
+    const keepaliveTimer = setInterval(() => send({ event: 'keepalive' }), keepaliveIntervalOf(message));
+    keepaliveTimer.unref?.();
     this.serving.set(requestId, { sourceNodeId, response, send });
 
     try {
@@ -338,6 +392,7 @@ export class SessionRelay {
         response.status(500).json(rpcError('Internal error'));
       }
     } finally {
+      clearInterval(keepaliveTimer);
       if (!response.writableEnded && !response.destroyed) response.end();
       this.serving.delete(requestId);
     }

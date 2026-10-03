@@ -186,7 +186,12 @@ describe('createWrappedServer', () => {
     it('adds the dynamic resources to the first page only when paging (#678)', async () => {
       (base.listResources as jest.Mock)
         .mockResolvedValueOnce({ resources: [{ uri: 'base://1', name: 'B1' }], nextCursor: 'page-2' })
-        .mockResolvedValueOnce({ resources: [{ uri: 'base://2', name: 'B2' }, { uri: 'dyn://r', name: 'Shadowed' }] });
+        .mockResolvedValueOnce({
+          resources: [
+            { uri: 'base://2', name: 'B2' },
+            { uri: 'dyn://r', name: 'Shadowed' },
+          ],
+        });
       dynamicRegistry.registerResource(createResourceDef({ uri: 'dyn://r', name: 'Dyn' }));
 
       const first = (await wrapped.listResources({ paginate: true })) as {

@@ -151,4 +151,59 @@ describe('HeartbeatService', () => {
 
     await service.stop();
   });
+
+  describe('livenessGeneration', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('stays the same while heartbeats are written', async () => {
+      jest.useFakeTimers();
+      const service = new HeartbeatService(createMockRedis(), 'pod-a', {
+        heartbeatIntervalMs: 1000,
+        heartbeatTtlMs: 3000,
+      });
+      service.start();
+
+      await jest.advanceTimersByTimeAsync(10_000);
+
+      expect(service.livenessGeneration()).toBe(0);
+      await service.stop();
+    });
+
+    it('is undefined while the heartbeat may have expired, and moves on once a heartbeat is written again', async () => {
+      jest.useFakeTimers();
+      const redis = createMockRedis();
+      const service = new HeartbeatService(redis, 'pod-a', { heartbeatIntervalMs: 1000, heartbeatTtlMs: 3000 });
+      service.start();
+      await jest.advanceTimersByTimeAsync(0);
+
+      jest.mocked(redis.set).mockRejectedValue(new Error('redis unreachable'));
+      await jest.advanceTimersByTimeAsync(2000);
+      expect(service.livenessGeneration()).toBe(0);
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(service.livenessGeneration()).toBeUndefined();
+
+      jest.mocked(redis.set).mockResolvedValue('OK');
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(service.livenessGeneration()).toBe(1);
+      await service.stop();
+    });
+
+    it('counts a node whose first heartbeat came late as having lapsed', async () => {
+      jest.useFakeTimers();
+      const redis = createMockRedis();
+      jest.mocked(redis.set).mockRejectedValue(new Error('redis unreachable'));
+      const service = new HeartbeatService(redis, 'pod-a', { heartbeatIntervalMs: 1000, heartbeatTtlMs: 3000 });
+      service.start();
+
+      await jest.advanceTimersByTimeAsync(3000);
+      expect(service.livenessGeneration()).toBeUndefined();
+
+      jest.mocked(redis.set).mockResolvedValue('OK');
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(service.livenessGeneration()).toBe(1);
+      await service.stop();
+    });
+  });
 });

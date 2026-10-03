@@ -196,6 +196,11 @@ export class HaManager {
     return this.heartbeat.isAlive(nodeId);
   }
 
+  /** This node's liveness generation (see {@link HeartbeatService.livenessGeneration}). */
+  livenessGeneration(): number | undefined {
+    return this.heartbeat.livenessGeneration();
+  }
+
   /** Get all alive node IDs. */
   async getAliveNodes(): Promise<string[]> {
     return this.heartbeat.getAliveNodes();

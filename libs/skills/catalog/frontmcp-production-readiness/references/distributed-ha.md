@@ -80,7 +80,7 @@ export default defineConfig({
 
 ```bash
 export FRONTMCP_DEPLOYMENT_MODE=distributed
-export MCP_SESSION_SECRET=<same value on every pod>
+export MCP_SESSION_SECRET='<same value on every pod>'  # replace with your shared secret
 frontmcp build --target distributed
 ```
 
@@ -118,7 +118,7 @@ Each pod writes `mcp:ha:heartbeat:{nodeId}` to Redis every `heartbeatIntervalMs`
 
 ### Request Relay
 
-The owner of each session is recorded on the transport bus (`mcp:bus:session:{sessionId}`) and in the persisted session record. The hookable `relayToSessionOwner` stage of `http:request` (after the IP filter, before quota and auth) finds it; when it is another **live** pod the request (method, URL, headers, parsed body, client address) is published to `mcp:ha:notify:{ownerNodeId}`. The owner runs it through its own full `http:request` flow — auth, quota, transport and hooks run there — and streams the response (status, headers, each chunk, end; SSE included) back. A client disconnect aborts it on the owner. An owner that does not listen, does not acknowledge within 5s, or loses its heartbeat mid-request yields `503` + `Retry-After` (`SessionOwnerUnreachableError`), never a 500. A relayed request is never relayed again.
+The owner of each session is recorded on the transport bus (`mcp:bus:session:{sessionId}`) and in the persisted session record. The hookable `relayToSessionOwner` stage of `http:request` (after the IP filter, before quota and auth) finds it — only for session ids the deployment minted (they decrypt under `MCP_SESSION_SECRET`), so other ids cost no Redis lookup; when it is another **live** pod the request (method, URL, headers, parsed body, client address) is published to `mcp:ha:notify:{ownerNodeId}`. The owner runs it through its own full `http:request` flow — auth, quota, transport and hooks run there — and streams the response (status, headers, each chunk, end; SSE included, with keepalive frames while it is quiet) back. A client disconnect aborts it on the owner. An owner that does not listen, does not acknowledge within 5s, loses its heartbeat mid-request, or sends nothing for three heartbeat intervals yields `503` + `Retry-After` (`SessionOwnerUnreachableError`), never a 500 (a response already started is ended). A response frame the owner cannot publish aborts the response there and ends it on the relaying pod. A relayed request is never relayed again.
 
 ### Session Takeover
 
@@ -126,7 +126,9 @@ When a request arrives for a session owned by a dead pod:
 
 1. The live pod checks if the owner's heartbeat key exists
 2. If missing, runs an atomic Lua CAS script: verifies `expectedOldNodeId`, updates `nodeId` + `reassignedAt`
-3. On success it recreates the transport from the persisted session, records itself as owner on the bus, and serves the request; if another pod won the race, it relays the request to that pod
+3. On success it recreates the transport from the persisted session (keeping `reassignedAt` / `reassignedFrom`), records itself as owner on the bus, and serves the request; if another pod won the race, it relays the request to that pod
+
+A pod whose heartbeat lapsed (Redis unreachable for `heartbeatTtlMs`) may have lost sessions it still holds. Before serving one again it re-reads the persisted record (once per lapse); if another pod owns it now, it drops its transport, leaves the record to the new owner, and relays the request there. While Redis stays unreachable it keeps serving what it holds.
 
 Takeover needs `transport.persistence` (Streamable HTTP only — an SSE stream cannot move to another pod).
 

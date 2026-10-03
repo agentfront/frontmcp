@@ -24,6 +24,7 @@ import { PayloadTooLargeError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
 import { machineIdHeader } from '../ha/ha-headers';
 import { isReadyzEnabled } from '../health/health.routes';
+import { MetricsPathConflictError } from '../metrics/metrics.errors';
 import { metricsPath, renderMetricsScrape, type MetricsHttpResult } from '../metrics/metrics.routes';
 import { type MetricsService } from '../metrics/metrics.service';
 import { type Scope } from '../scope/scope.instance';
@@ -272,6 +273,9 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
   // `/metrics`, when the server enabled it (the same path the Express host registers).
   const metrics = options.metrics?.config.enabled === true ? options.metrics : undefined;
   const metricsEndpoint = metrics ? normalizePath(metricsPath(metrics.config)) : undefined;
+  if (metrics && metricsEndpoint && entryPaths.has(metricsEndpoint)) {
+    throw new MetricsPathConflictError(metricsPath(metrics.config));
+  }
 
   /**
    * Merge the resolved security headers into a response without overriding ones the flow already

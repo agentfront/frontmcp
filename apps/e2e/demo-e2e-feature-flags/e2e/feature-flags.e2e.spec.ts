@@ -11,7 +11,7 @@
  * - Resources with flags are filtered
  * - Prompts with flags are filtered
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Feature Flags E2E', () => {
   test.use({

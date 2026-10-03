@@ -41,7 +41,7 @@ This skill walks you through deploying a FrontMCP server as a standalone Node.js
 frontmcp build --target node
 ```
 
-This compiles your TypeScript source, bundles dependencies, and produces a production-ready output in `dist/`. The build output includes compiled JavaScript optimized for Node.js, a `package.json` with production dependencies only, and any static assets.
+This compiles your TypeScript source, bundles dependencies, and writes the output to `dist/node/`: a CommonJS single-file bundle at `dist/node/<name>.bundle.js` (`<name>` is the `name` in `frontmcp.config`, or the unscoped `package.json` name without a config file), a `dist/node/<name>` runner script, and any static assets. The examples below use `my-server` as `<name>`.
 
 ## Step 2: Dockerfile (Multi-Stage)
 
@@ -66,7 +66,7 @@ RUN yarn install --frozen-lockfile --production && yarn cache clean
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
   CMD wget -qO- http://localhost:3000/healthz || exit 1
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/node/my-server.bundle.js"]
 ```
 
 The first stage installs all dependencies and builds the project. The second stage copies only the compiled output and production dependencies into a slim image.
@@ -173,7 +173,7 @@ When running without Docker, use PM2 as a process manager:
 npm install -g pm2
 
 # Start the server with cluster mode (one instance per CPU core)
-pm2 start dist/main.js --name frontmcp-server -i max
+pm2 start dist/node/my-server.bundle.js --name frontmcp-server -i max
 
 # Save the process list for auto-restart on reboot
 pm2 save
@@ -223,20 +223,20 @@ services:
 
 ## Common Patterns
 
-| Pattern                   | Correct                              | Incorrect                                        | Why                                                                 |
-| ------------------------- | ------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------- |
-| Build command             | `frontmcp build --target node`       | `tsc && node dist/main.js`                       | The FrontMCP build bundles deps and produces an optimized output    |
-| Docker base image         | `node:24-alpine` (multi-stage)       | `node:24` (single stage with dev deps)           | Multi-stage keeps the production image small and secure             |
-| Process manager           | PM2 with `-i max` cluster mode       | Running `node dist/main.js` directly via `nohup` | PM2 handles restarts, logging, and multi-core clustering            |
-| Redis hostname in Compose | Service name `redis`                 | `localhost` or `127.0.0.1`                       | Containers communicate via Docker's internal DNS, not localhost     |
-| Environment config        | `.env` file or orchestrator env vars | Hardcoded values in source code                  | Keeps secrets out of the codebase and allows per-environment config |
+| Pattern                   | Correct                              | Incorrect                               | Why                                                                 |
+| ------------------------- | ------------------------------------ | --------------------------------------- | ------------------------------------------------------------------- |
+| Build command             | `frontmcp build --target node`       | `tsc && node dist/main.js`              | The FrontMCP build bundles deps and produces an optimized output    |
+| Docker base image         | `node:24-alpine` (multi-stage)       | `node:24` (single stage with dev deps)  | Multi-stage keeps the production image small and secure             |
+| Process manager           | PM2 with `-i max` cluster mode       | Running the bundle directly via `nohup` | PM2 handles restarts, logging, and multi-core clustering            |
+| Redis hostname in Compose | Service name `redis`                 | `localhost` or `127.0.0.1`              | Containers communicate via Docker's internal DNS, not localhost     |
+| Environment config        | `.env` file or orchestrator env vars | Hardcoded values in source code         | Keeps secrets out of the codebase and allows per-environment config |
 
 ## Verification Checklist
 
 **Build**
 
 - [ ] `frontmcp build --target node` completes without errors
-- [ ] `dist/main.js` exists and is runnable with `node dist/main.js`
+- [ ] `dist/node/<name>.bundle.js` exists and is runnable with `node dist/node/<name>.bundle.js`
 
 **Docker**
 

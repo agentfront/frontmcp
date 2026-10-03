@@ -14,7 +14,7 @@
  * Anything computed (a variable, a ternary, a call, a template with `${}`)
  * yields `undefined`, which callers treat as "unknown".
  */
-import * as fs from 'fs';
+import { readFile } from '@frontmcp/utils';
 
 type Token = { kind: 'punct'; value: string } | { kind: 'ident'; value: string } | { kind: 'string'; value?: string };
 
@@ -133,10 +133,13 @@ export function readDecoratorStringLiteral(source: string, path: readonly string
 }
 
 /** {@link readDecoratorStringLiteral} on the entry file; `undefined` when it cannot be read. */
-export function readEntryDecoratorStringLiteral(entry: string, path: readonly string[]): string | undefined {
+export async function readEntryDecoratorStringLiteral(
+  entry: string,
+  path: readonly string[],
+): Promise<string | undefined> {
   let source: string;
   try {
-    source = fs.readFileSync(entry, 'utf-8');
+    source = await readFile(entry, 'utf8');
   } catch {
     return undefined;
   }

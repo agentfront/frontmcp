@@ -3,6 +3,7 @@
  * is relayed to it, a session whose owner stopped is taken over, and a session the
  * orphan scanner claimed is re-advertised so every node routes it to its new owner.
  */
+import { encryptJson } from '@frontmcp/auth';
 import { sha256Hex } from '@frontmcp/utils';
 
 import type { ServerRequest, ServerResponse } from '../../common';
@@ -50,6 +51,12 @@ jest.mock('../flows/handle.mcp-20260728.flow', () => ({}));
 const TOKEN = 'tok';
 const TOKEN_HASH = sha256Hex(TOKEN);
 
+function mintSessionId(uuid: string): string {
+  return encryptJson({ nodeId: 'node-x', authSig: 'public', uuid, iat: 1 });
+}
+
+const SESSION_ID = mintSessionId('session-1');
+
 function createLogger() {
   const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), verbose: jest.fn(), debug: jest.fn() };
   return { ...logger, child: jest.fn(() => logger) };
@@ -68,6 +75,7 @@ function createHaManager(alive: Record<string, boolean> = {}) {
   return {
     isNodeAlive: jest.fn(async (nodeId: string) => alive[nodeId] ?? false),
     attemptTakeover: jest.fn().mockResolvedValue({ claimed: true }),
+    livenessGeneration: jest.fn((): number | undefined => 0),
   };
 }
 
@@ -96,7 +104,7 @@ function storedSession(nodeId: string | undefined, protocol: 'streamable-http' |
   };
 }
 
-function request(headers: Record<string, string> = { 'mcp-session-id': 'sess-1' }, extra = {}): ServerRequest {
+function request(headers: Record<string, string> = { 'mcp-session-id': SESSION_ID }, extra = {}): ServerRequest {
   return { headers, query: {}, ...extra } as unknown as ServerRequest;
 }
 
@@ -219,6 +227,7 @@ describe('TransportService — distributed sessions (#680)', () => {
 
     it('takes over the session of a stopped node and advertises it', async () => {
       const haManager = createHaManager();
+      haManager.attemptTakeover.mockResolvedValue({ claimed: true, reassignedAt: 1234 });
       const bus = createBus();
       const { service, scope } = await createService({ haManager, bus });
 
@@ -232,10 +241,15 @@ describe('TransportService — distributed sessions (#680)', () => {
 
       expect(transporter).not.toBeInstanceOf(RemoteTransporter);
       expect(haManager.attemptTakeover).toHaveBeenCalledWith('mcp:transport:session:sess-1', 'node-dead');
-      // The record written back names this node — not the stopped one it was read from.
+      // The record written back names this node — not the stopped one it was read from — and
+      // keeps the audit fields the takeover recorded.
       expect(mockStore.set).toHaveBeenCalledWith(
         'sess-1',
-        expect.objectContaining({ session: expect.objectContaining({ nodeId: 'node-local' }) }),
+        expect.objectContaining({
+          session: expect.objectContaining({ nodeId: 'node-local' }),
+          reassignedAt: 1234,
+          reassignedFrom: 'node-dead',
+        }),
         expect.any(Number),
       );
       expect(bus.advertise).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'sess-1' }));
@@ -265,7 +279,11 @@ describe('TransportService — distributed sessions (#680)', () => {
     it("serves the session when this node's orphan scanner claimed it first", async () => {
       const haManager = createHaManager();
       haManager.attemptTakeover.mockResolvedValue({ claimed: false });
-      mockStore.get.mockResolvedValue(storedSession('node-local'));
+      mockStore.get.mockResolvedValue({
+        ...storedSession('node-local'),
+        reassignedAt: 99,
+        reassignedFrom: 'node-dead',
+      });
       const { service } = await createService({ haManager, bus: createBus() });
 
       const transporter = await service.recreateTransporter(
@@ -277,6 +295,11 @@ describe('TransportService — distributed sessions (#680)', () => {
       );
 
       expect(transporter).not.toBeInstanceOf(RemoteTransporter);
+      expect(mockStore.set).toHaveBeenCalledWith(
+        'sess-1',
+        expect.objectContaining({ reassignedAt: 99, reassignedFrom: 'node-dead' }),
+        expect.any(Number),
+      );
     });
 
     it('reports a conflict when the session vanished or its new owner is gone too', async () => {
@@ -301,15 +324,30 @@ describe('TransportService — distributed sessions (#680)', () => {
       const { service } = await createService({ haManager: createHaManager({ 'node-a': true }), bus });
 
       await expect(service.findRemoteSessionOwner(request())).resolves.toEqual({ nodeId: 'node-a', channel: 'c-a' });
-      expect(bus.lookupOwner).toHaveBeenCalledWith('sess-1');
+      expect(bus.lookupOwner).toHaveBeenCalledWith(SESSION_ID);
     });
 
     it('finds the session id of a legacy SSE message in the query', async () => {
       const bus = createBus({ lookupOwner: jest.fn().mockResolvedValue({ nodeId: 'node-a', channel: 'c-a' }) });
       const { service } = await createService({ haManager: createHaManager({ 'node-a': true }), bus });
+      const sseSessionId = mintSessionId('sse-1');
 
-      await service.findRemoteSessionOwner(request({}, { query: { sessionId: 'sse-1' } }));
-      expect(bus.lookupOwner).toHaveBeenCalledWith('sse-1');
+      await service.findRemoteSessionOwner(request({}, { query: { sessionId: sseSessionId } }));
+      expect(bus.lookupOwner).toHaveBeenCalledWith(sseSessionId);
+    });
+
+    it('does not look up a session id this deployment did not mint', async () => {
+      const bus = createBus({ lookupOwner: jest.fn().mockResolvedValue({ nodeId: 'node-a', channel: 'c-a' }) });
+      const { service } = await createService({ haManager: createHaManager({ 'node-a': true }), bus });
+
+      await expect(
+        service.findRemoteSessionOwner(request({ 'mcp-session-id': 'attacker-chosen-id' })),
+      ).resolves.toBeUndefined();
+      await expect(
+        service.findRemoteSessionOwner(request({ 'mcp-session-id': `${SESSION_ID.slice(0, -2)}AA` })),
+      ).resolves.toBeUndefined();
+      expect(bus.lookupOwner).not.toHaveBeenCalled();
+      expect(mockStore.get).not.toHaveBeenCalled();
     });
 
     it('falls back to the persisted session record', async () => {
@@ -351,10 +389,11 @@ describe('TransportService — distributed sessions (#680)', () => {
     it('serves a session it holds without asking Redis', async () => {
       const bus = createBus({ lookupOwner: jest.fn().mockResolvedValue({ nodeId: 'node-a', channel: 'c' }) });
       const { service } = await createService({ haManager: createHaManager({ 'node-a': true }), bus });
-      await service.createTransporter('streamable-http', TOKEN, 'sess-1', response);
+      await service.createTransporter('streamable-http', TOKEN, SESSION_ID, response);
 
       await expect(service.findRemoteSessionOwner(request())).resolves.toBeUndefined();
       expect(bus.lookupOwner).not.toHaveBeenCalled();
+      expect(mockStore.get).not.toHaveBeenCalled();
     });
 
     it('does not route outside a distributed deployment or before the relay is ready', async () => {
@@ -384,6 +423,80 @@ describe('TransportService — distributed sessions (#680)', () => {
     });
   });
 
+  describe("after a gap in this node's heartbeat", () => {
+    async function holdLocalSession(alive: Record<string, boolean> = {}) {
+      const haManager = createHaManager(alive);
+      const bus = createBus({
+        lookup: jest.fn().mockResolvedValue({ nodeId: 'node-b', channel: 'c-b' }),
+        lookupOwner: jest.fn().mockResolvedValue({ nodeId: 'node-b', channel: 'c-b' }),
+      });
+      const created = await createService({ haManager, bus });
+      const local = await created.service.createTransporter('streamable-http', TOKEN, SESSION_ID, response);
+      bus.advertise.mockClear();
+      haManager.livenessGeneration.mockReturnValue(1);
+      return { ...created, haManager, bus, local };
+    }
+
+    it('drops a local session another node took over, and relays its requests there', async () => {
+      const { service, bus, local } = await holdLocalSession({ 'node-b': true });
+      mockStore.get.mockResolvedValue(storedSession('node-b'));
+
+      await expect(service.findRemoteSessionOwner(request())).resolves.toEqual({ nodeId: 'node-b', channel: 'c-b' });
+
+      expect(local.destroy).toHaveBeenCalledWith('the session moved to another node');
+      expect(mockStore.delete).not.toHaveBeenCalled();
+      expect(bus.advertise).not.toHaveBeenCalled();
+    });
+
+    it('serves a moved session through its new owner instead of re-advertising it', async () => {
+      const { service, bus } = await holdLocalSession({ 'node-b': true });
+      mockStore.get.mockResolvedValue(storedSession('node-b'));
+
+      const transporter = await service.getTransporter('streamable-http', TOKEN, SESSION_ID);
+
+      expect((transporter as RemoteTransporter).ownerNodeId).toBe('node-b');
+      expect(bus.advertise).not.toHaveBeenCalled();
+      expect(mockStore.delete).not.toHaveBeenCalled();
+    });
+
+    it('keeps serving a session it still owns, checking once per generation', async () => {
+      const { service, bus, local } = await holdLocalSession();
+      mockStore.get.mockResolvedValue(storedSession('node-local'));
+
+      await expect(service.findRemoteSessionOwner(request())).resolves.toBeUndefined();
+      await expect(service.findRemoteSessionOwner(request())).resolves.toBeUndefined();
+
+      expect(mockStore.get).toHaveBeenCalledTimes(1);
+      expect(bus.lookupOwner).not.toHaveBeenCalled();
+      expect(local.destroy).not.toHaveBeenCalled();
+    });
+
+    it('checks every request while its heartbeat may still be expired', async () => {
+      const { service, haManager } = await holdLocalSession();
+      haManager.livenessGeneration.mockReturnValue(undefined);
+      mockStore.get.mockResolvedValue(storedSession('node-local'));
+
+      await service.findRemoteSessionOwner(request());
+      await service.findRemoteSessionOwner(request());
+
+      expect(mockStore.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('serves the session here when its record cannot be read, and checks again next time', async () => {
+      const { service, scope, local } = await holdLocalSession();
+      mockStore.get.mockRejectedValueOnce(new Error('redis down')).mockResolvedValue(storedSession('node-local'));
+
+      await expect(service.getTransporter('streamable-http', TOKEN, SESSION_ID)).resolves.toBe(local);
+      expect(scope.logger.warn).toHaveBeenCalledWith(
+        '[HA] Could not confirm this node still owns the session — serving it here',
+        expect.objectContaining({ error: 'redis down' }),
+      );
+
+      await expect(service.findRemoteSessionOwner(request())).resolves.toBeUndefined();
+      expect(local.destroy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('lookupSessionOwner', () => {
     it('needs the bus, and reads the store only when the bus does not know the session', async () => {
       const noBus = await createService({ haManager: createHaManager() });
@@ -403,7 +516,7 @@ describe('TransportService — distributed sessions (#680)', () => {
       const req = request();
 
       await service.relayToSessionOwner(location, req, response);
-      expect(bus.proxyRequest).toHaveBeenCalledWith(location, 'sess-1', req, response);
+      expect(bus.proxyRequest).toHaveBeenCalledWith(location, SESSION_ID, req, response);
 
       await service.relayToSessionOwner(location, request({}), response);
       expect(bus.proxyRequest).toHaveBeenLastCalledWith(location, '', expect.anything(), response);
@@ -458,20 +571,21 @@ describe('TransportService — distributed sessions (#680)', () => {
     it("destroys this node's transports for a session", async () => {
       const bus = createBus();
       const { service } = await createService({ haManager: createHaManager(), bus });
-      const streamable = await service.createTransporter('streamable-http', TOKEN, 'sess-1', response);
-      const other = await service.createTransporter('streamable-http', 'other-token', 'sess-1', response);
+      const streamable = await service.createTransporter('streamable-http', TOKEN, SESSION_ID, response);
+      const other = await service.createTransporter('streamable-http', 'other-token', SESSION_ID, response);
       await service.getOrCreateAuthenticatedStatelessTransport('stateless-http', TOKEN, response);
 
-      await expect(service.destroyLocalSession('sess-1', 'remote destroy')).resolves.toBe(true);
+      await expect(service.destroyLocalSession(SESSION_ID, 'remote destroy')).resolves.toBe(true);
 
       expect(streamable.destroy).toHaveBeenCalledWith('remote destroy');
       expect(other.destroy).toHaveBeenCalledWith('remote destroy');
       expect(bus.revoke).toHaveBeenCalled();
-      await expect(service.destroyLocalSession('sess-1')).resolves.toBe(false);
+      expect(mockStore.delete).toHaveBeenCalledWith(SESSION_ID);
+      await expect(service.destroyLocalSession(SESSION_ID)).resolves.toBe(false);
       // Once gone, the session is routed again.
       bus.lookupOwner.mockResolvedValueOnce(null);
       await service.findRemoteSessionOwner(request());
-      expect(bus.lookupOwner).toHaveBeenCalledWith('sess-1');
+      expect(bus.lookupOwner).toHaveBeenCalledWith(SESSION_ID);
     });
   });
 });

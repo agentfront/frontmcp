@@ -12,6 +12,7 @@ import {
   extractSessionFromCookie,
   generateSessionCookie,
   getSessionClientInfo,
+  isDeploymentSessionId,
   parseSessionHeader,
   updateSessionPayload,
 } from '../utils/session-id.utils';
@@ -494,6 +495,29 @@ describe('session-id.utils', () => {
       const result = getSessionClientInfo(id);
 
       expect(result).toEqual({ name: undefined, version: undefined });
+    });
+  });
+
+  describe('isDeploymentSessionId', () => {
+    it('accepts a session id this process minted', () => {
+      mockEncryptJson.mockReturnValue('minted-iv.minted-tag.minted-data');
+      const { id } = createSessionId('streamable-http', TEST_TOKEN);
+
+      expect(isDeploymentSessionId(id)).toBe(true);
+      expect(mockSafeDecrypt).not.toHaveBeenCalled();
+    });
+
+    it('accepts a session id that decrypts to a session payload', () => {
+      mockSafeDecrypt.mockReturnValue({ nodeId: 'peer', authSig: 'public', uuid: 'u', iat: 1 });
+
+      expect(isDeploymentSessionId('peer-iv.peer-tag.peer-data')).toBe(true);
+    });
+
+    it('rejects a session id that does not decrypt to a session payload', () => {
+      expect(isDeploymentSessionId('forged')).toBe(false);
+
+      mockSafeDecrypt.mockReturnValue({ nodeId: 'peer' });
+      expect(isDeploymentSessionId('other-iv.other-tag.other-data')).toBe(false);
     });
   });
 

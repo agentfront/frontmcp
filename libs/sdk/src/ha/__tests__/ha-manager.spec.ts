@@ -80,6 +80,15 @@ describe('HaManager', () => {
     await manager.stop();
   });
 
+  it("reports this node's liveness generation", async () => {
+    const manager = HaManager.create({ redis: createMockRedis() as never, nodeId: 'pod-a' });
+    await manager.start();
+
+    expect(manager.livenessGeneration()).toBe(0);
+
+    await manager.stop();
+  });
+
   it('should update session count', async () => {
     const redis = createMockRedis();
     const manager = HaManager.create({ redis: redis as never, nodeId: 'pod-a' });

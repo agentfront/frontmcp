@@ -307,11 +307,11 @@ Wire your client at the bridge — no `mcp-remote` needed:
 
 What the bridge guarantees:
 
-- **Stdout is 100% JSON-RPC frames.** Every diagnostic goes to `.frontmcp/dev.log` in the project root (override with `--log-file <path>`).
+- **Stdout is 100% JSON-RPC frames.** Every diagnostic goes to `.frontmcp/dev.log` in the project root (override with `--log-file <path>`); start-up notices (the port picked, `.env` files loaded) go to stderr.
 - **Same project setup as `frontmcp dev`.** The bridge reads `frontmcp.config.*` (found from any subfolder), `entry`, `transport.http.port` / `transport.http.path`, the `env.shared` ⊕ `env.dev` overlays and `.env` files, and hands the server `PORT` and `FRONTMCP_HTTP_ENTRY_PATH`. Without `--port`, `transport.http.port` or `PORT`, it picks a free loopback port — the client never sees it.
 - **It talks to the port and path the server actually serves.** The server reports them when it is ready (`__FRONTMCP_BOOTSTRAP_COMPLETE__ {"port":…,"path":…}` on stderr), so a port or `entryPath` hard-coded in `@FrontMcp({ http })` works too.
 - **The client stays connected across reloads.** Over the HTTP loopback the bridge uses the `mcp-session-id` the server issues on `initialize`. A restarted server has no sessions, so the bridge replays the client's `initialize` / `notifications/initialized` handshake against it before buffered requests drain, then sends `notifications/tools/list_changed` (and the resources / prompts equivalents the server advertises) so the client re-reads what changed. Server-side session state — auth, subscriptions, memory — starts fresh with each reload.
-- **Buffered RPCs during reload drain in FIFO order** once the new server is ready and initialized.
+- **Buffered RPCs during reload drain in FIFO order** once the new server is ready and initialized. A server that rejects the replayed handshake counts as a failed reload: it is stopped, and buffered RPCs wait for the next save or answer `dev_reload_deadline`.
 - **Structured errors instead of hangs.** When the reload exceeds `--reload-deadline-ms` (default 30 000) or the buffer exceeds `--buffer-size` (default 8), the bridge synthesises `dev_server_unreachable` / `dev_buffer_full` / `dev_reload_deadline` (codes -32099 / -32098 / -32097) so the client spinner clears immediately.
 - **Nothing is left running.** When the client closes stdin, or the bridge gets `SIGINT` / `SIGTERM`, the server and everything it started are stopped.
 

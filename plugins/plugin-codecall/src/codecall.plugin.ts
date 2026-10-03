@@ -4,12 +4,14 @@ import CachePlugin from '@frontmcp/plugin-cache';
 import {
   DynamicPlugin,
   FrontMcpLogger,
+  isEntryGatedBy,
   ListToolsHook,
   Plugin,
   ScopeEntry,
   ToolHook,
   ToolNotFoundError,
   type FlowCtxOf,
+  type HookGatedEntry,
   type ProviderType,
   type ToolEntry,
 } from '@frontmcp/sdk';
@@ -144,6 +146,8 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
    *
    * CodeCall meta-tools (codecall:search, codecall:describe, codecall:execute, codecall:invoke)
    * are ALWAYS visible regardless of mode.
+   *
+   * List hooks run for every app's tools; each instance judges only the tools its direct-call gate judges.
    */
   @ListToolsHook.Did('resolveConflicts', { priority: 1000 })
   async adjustListTools(flowCtx: FlowCtxOf<'tools:list-tools'>) {
@@ -157,10 +161,10 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
       return;
     }
 
-    // Filter tools based on mode
-    const filteredTools = resolvedTools.filter(({ tool }) => {
-      return this.shouldShowInListTools(tool, this.options.mode);
-    });
+    const scope = this.tryGetScope();
+    const filteredTools = resolvedTools.filter(
+      ({ tool }) => !this.judges(scope, { tool }) || this.shouldShowInListTools(tool, this.options.mode),
+    );
 
     logger.verbose('adjustListTools: tools after filter', { count: filteredTools.length });
 
@@ -193,6 +197,19 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
 
     this.getLogger().verbose('refused a direct tools/call of a tool CodeCall hides', { tool: tool.fullName });
     throw new ToolNotFoundError(flowCtx.state.input?.name ?? tool.name);
+  }
+
+  /** Whether this instance's direct-call gate runs for the tool, so the listing hides only what that gate refuses. */
+  private judges(scope: ScopeEntry | undefined, entry: HookGatedEntry): boolean {
+    return !scope?.hooks || isEntryGatedBy(scope, entry, this);
+  }
+
+  private tryGetScope(): ScopeEntry | undefined {
+    try {
+      return this.get(ScopeEntry) as ScopeEntry | undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   /**

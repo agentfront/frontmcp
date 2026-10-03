@@ -50,7 +50,12 @@ describe('task-store.factory', () => {
     });
     expect(type).toBe('sqlite');
     expect(SqliteTaskStore).toHaveBeenCalledWith(
-      expect.objectContaining({ path: '/tmp/tasks.sqlite', walMode: false, ttlCleanupIntervalMs: 1000, busyTimeoutMs: 40 }),
+      expect.objectContaining({
+        path: '/tmp/tasks.sqlite',
+        walMode: false,
+        ttlCleanupIntervalMs: 1000,
+        busyTimeoutMs: 40,
+      }),
     );
   });
 

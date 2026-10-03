@@ -198,6 +198,8 @@ To turn it off entirely:
 security: { dnsRebindingProtection: { enabled: false } }
 ```
 
+`enabled: false` wins over any `allowedHosts` / `allowedOrigins` (and `FRONTMCP_ALLOWED_HOSTS`): no header is checked while it is set, so remove it to turn protection back on.
+
 ### Semantics
 
 - **`allowedHosts`**: matched against `Host`, and against every hop of `X-Forwarded-Host` when present. A poisoned forwarded host is rejected even when `Host` itself is valid, because issuer and OAuth-discovery URLs can be derived from it.

@@ -143,6 +143,18 @@ export interface ParsedRedisUrl {
   tls: boolean;
 }
 
+function decodeUrlCredential(encoded: string): string | undefined {
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return undefined;
+  }
+}
+
+function malformedEscapeProblem(field: 'username' | 'password'): string {
+  return `redis.url ${field} has a malformed percent-escape (write a literal "%" as %25)`;
+}
+
 /**
  * Read `redis://[[user]:password@]host[:port][/db]` (or `rediss://` for TLS)
  * into the connection fields every Redis consumer takes. Returns a string
@@ -162,7 +174,8 @@ export function parseRedisUrl(raw: string): ParsedRedisUrl | string {
   const host = url.hostname.replace(/^\[(.*)\]$/, '$1');
   if (!host) return 'redis.url has no host';
 
-  const username = decodeURIComponent(url.username);
+  const username = decodeUrlCredential(url.username);
+  if (username === undefined) return malformedEscapeProblem('username');
   if (username && username !== 'default') {
     return `redis.url names the ACL user "${username}"; only the default user is supported — use redis://:password@host`;
   }
@@ -172,7 +185,8 @@ export function parseRedisUrl(raw: string): ParsedRedisUrl | string {
   if (!Number.isInteger(db) || db < 0) return `redis.url database "${dbText}" is not a non-negative integer`;
 
   const port = url.port ? Number(url.port) : 6379;
-  const password = url.password ? decodeURIComponent(url.password) : undefined;
+  const password = url.password ? decodeUrlCredential(url.password) : undefined;
+  if (url.password && password === undefined) return malformedEscapeProblem('password');
   return { host, port, ...(password !== undefined ? { password } : {}), db, tls: url.protocol === 'rediss:' };
 }
 

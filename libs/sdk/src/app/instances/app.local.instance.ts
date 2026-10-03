@@ -75,8 +75,10 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
     await this.appPlugins.ready; // wait for plugins and it's providers/adapters/tools/resource/prompts to be ready
     this.logger?.verbose(`App ${this.metadata.name}: ${this.appPlugins.getPlugins().length} plugin(s) registered`);
 
-    this.appAdapters = new AdapterRegistry(this.appProviders, this.metadata.adapters ?? []);
-    await this.appAdapters.ready;
+    const appAdapters = new AdapterRegistry(this.appProviders, this.metadata.adapters ?? []);
+    this.appAdapters = appAdapters;
+    await appAdapters.ready;
+    if (appAdapters.getAdapters().length > 0) scopeInfo.ownScope.onDispose(() => appAdapters.dispose());
     this.logger?.verbose(`App ${this.metadata.name}: ${this.appAdapters.getAdapters().length} adapter(s) found`);
 
     // Initialize tools FIRST to ensure they're available when skills validate tool references

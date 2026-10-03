@@ -116,11 +116,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
     const authorities = this.scope.metadata.authorities;
     const pipes = authorities?.pipes;
     if (!pipes?.length) return;
-    this._authContext = await buildAuthContext(
-      this.resolveAuthSource(),
-      authorities?.claimsMapping,
-      pipes,
-    );
+    this._authContext = await buildAuthContext(this.resolveAuthSource(), authorities?.claimsMapping, pipes);
   }
 
   private resolveAuthSource(): Partial<AuthInfo> {
@@ -352,7 +348,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * and secrets. `undefined` where the request carries no such object: Node/Express, stdio, and
    * `create()`/`connect()` direct servers.
    *
-   * The SDK never writes `process.env`. The Worker entry `frontmcp build --target cloudflare`
+   * The SDK never writes `process.env`. The Worker entry that `frontmcp build --target cloudflare`
    * generates copies string bindings into it on the first request (unless the worker sets
    * `nodejs_compat_do_not_populate_process_env`); an entry you write yourself around
    * `createWebFetchHandler` or `getServerlessHandlerAsync()` does not. Every binding, string or

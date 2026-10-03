@@ -369,6 +369,17 @@ describe('loadCommandEnv (issue #540)', () => {
     expect(logs.join('\n')).toContain('[test]');
   });
 
+  it('sends its notice to the given logger instead of stdout (dev --stdio, #679)', () => {
+    const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const log = jest.fn();
+
+    loadCommandEnv('/project', 'dev', log);
+
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('loaded 2 environment variables'));
+    expect(consoleLog).not.toHaveBeenCalled();
+    consoleLog.mockRestore();
+  });
+
   it('degrades to an empty result when the files cannot be read', () => {
     (fs.readFileSync as unknown as jest.Mock).mockImplementation(() => {
       throw new Error('EACCES');

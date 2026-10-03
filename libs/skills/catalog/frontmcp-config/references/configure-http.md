@@ -164,7 +164,9 @@ there and needs no configuration. A rebound browser cannot reach a unix socket a
 **explicit** `allowedHosts` / `allowedOrigins` still applies to a socket server, and because the
 client's `Host` is a placeholder it will reject every request — leave it unset.
 
-To turn it off entirely: `dnsRebindingProtection: { enabled: false }`.
+To turn it off entirely: `dnsRebindingProtection: { enabled: false }`. It wins over any `allowedHosts` /
+`allowedOrigins` (and `FRONTMCP_ALLOWED_HOSTS`): no header is checked while it is set, so remove it to
+turn protection back on.
 
 A request with **no** `Origin` header is allowed through — non-browser clients never send one, and a
 rebound page always does. Rejecting the absent case breaks every CLI client and adds nothing.

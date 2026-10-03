@@ -169,7 +169,11 @@ class FakeIpcChild extends EventEmitter {
   connected = true;
   sent: JsonRpcFrame[] = [];
   /** Answers every request it is sent. */
-  respond: (frame: JsonRpcFrame) => unknown = (frame) => ({ jsonrpc: '2.0', id: frame.id, result: { echo: frame.method } });
+  respond: (frame: JsonRpcFrame) => unknown = (frame) => ({
+    jsonrpc: '2.0',
+    id: frame.id,
+    result: { echo: frame.method },
+  });
 
   send(frame: JsonRpcFrame, callback: (err: Error | null) => void): boolean {
     this.sent.push(frame);
@@ -216,7 +220,11 @@ describe('createPipeUpstream', () => {
   it('surfaces an error answer to the replayed initialize', async () => {
     const child = new FakeIpcChild();
     child.respond = (frame) => ({ jsonrpc: '2.0', id: frame.id, error: { code: -32600, message: 'nope' } });
-    const upstream = createPipeUpstream({ child: child as unknown as ChildProcess, log: silentLog(), onFrame: jest.fn() });
+    const upstream = createPipeUpstream({
+      child: child as unknown as ChildProcess,
+      log: silentLog(),
+      onFrame: jest.fn(),
+    });
 
     await expect(upstream.reinitialize(initialize, true)).rejects.toThrow('replayed initialize failed: nope');
   });
@@ -241,7 +249,11 @@ describe('createPipeUpstream', () => {
   it('rejects sends once the IPC channel is gone', async () => {
     const child = new FakeIpcChild();
     child.connected = false;
-    const upstream = createPipeUpstream({ child: child as unknown as ChildProcess, log: silentLog(), onFrame: jest.fn() });
+    const upstream = createPipeUpstream({
+      child: child as unknown as ChildProcess,
+      log: silentLog(),
+      onFrame: jest.fn(),
+    });
 
     await expect(upstream.send({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).rejects.toThrow(
       'pipe upstream disconnected for tools/list',
