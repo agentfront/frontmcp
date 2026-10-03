@@ -288,6 +288,34 @@ describe('ApprovalPlugin installed on the server and on an app, each with its ow
     expect(executedDeployments).toEqual(['beta']);
   });
 
+  // One approval is enough (#678): the tool needed one in each store, so a grant through
+  // `this.approval` in the app's own tool never let it run.
+  it('runs the tool once the app store approves it', async () => {
+    await grantThrough(server, 'beta_grant', BETA_DEPLOY_ID);
+
+    const result = await callTool(server, 'beta_deploy');
+
+    expect(result).not.toBeInstanceOf(Error);
+    expect(executedDeployments).toEqual(['beta']);
+  });
+
+  it('runs the tool once the server store approves it', async () => {
+    await grantThrough(server, 'server_grant', BETA_DEPLOY_ID);
+
+    const result = await callTool(server, 'beta_deploy');
+
+    expect(result).not.toBeInstanceOf(Error);
+    expect(executedDeployments).toEqual(['beta']);
+  });
+
+  it('refuses the tool while neither store approves it', async () => {
+    const result = await callTool(server, 'beta_deploy');
+
+    expect(result).toBeInstanceOf(ApprovalRequiredError);
+    expect((result as ApprovalRequiredError).details.state).toBe('pending');
+    expect(executedDeployments).toEqual([]);
+  });
+
   it('writes a grant made through this.approval in a server plugin tool to the server store only', async () => {
     await grantThrough(server, 'server_grant', BETA_DEPLOY_ID);
 

@@ -656,7 +656,7 @@ class AuditServer {}
 
 ## CodeCall Compatibility
 
-When the `CodeCallPlugin` is active in `codecall_only` mode, all tools registered on the server are hidden from `list_tools`. The AI client only sees the three CodeCall meta-tools (`codecall:search`, `codecall:describe`, `codecall:execute`). This means skill instructions that reference tool names directly (e.g., "Use the `build_project` tool") become misleading -- the AI cannot call those tools because they do not appear in the tool listing.
+When the `CodeCallPlugin` is active in `codecall_only` mode, all tools registered on the server are hidden from `list_tools`. The AI client only sees the three CodeCall meta-tools (`codecall:search`, `codecall:describe`, `codecall:execute`). This means skill instructions that reference tool names directly (e.g., "Use the `build_project` tool") become misleading -- the AI cannot call those tools: they do not appear in the tool listing, and a direct `tools/call` of a hidden tool is refused as for an unknown tool.
 
 ### When This Matters
 

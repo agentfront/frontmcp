@@ -11,7 +11,7 @@
  * - Resources with flags are filtered
  * - Prompts with flags are filtered
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Feature Flags E2E', () => {
   test.use({
@@ -134,6 +134,20 @@ test.describe('Feature Flags E2E', () => {
 
     test('should return false for unknown flags', async ({ mcp }) => {
       const result = await mcp.tools.call('check-flag', { flagKey: 'nonexistent' });
+
+      expect(result).toBeSuccessful();
+      expect(result).toHaveTextContent('"isEnabled":false');
+    });
+
+    test('should return the defaultValue for an unknown flag (#678)', async ({ mcp }) => {
+      const result = await mcp.tools.call('check-flag', { flagKey: 'nonexistent', defaultValue: true });
+
+      expect(result).toBeSuccessful();
+      expect(result).toHaveTextContent('"isEnabled":true');
+    });
+
+    test('should keep a disabled flag disabled whatever the defaultValue', async ({ mcp }) => {
+      const result = await mcp.tools.call('check-flag', { flagKey: 'experimental-agent', defaultValue: true });
 
       expect(result).toBeSuccessful();
       expect(result).toHaveTextContent('"isEnabled":false');

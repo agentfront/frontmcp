@@ -9,6 +9,7 @@ import {
   createMemoryStorage,
   createNamespacedStorage,
   createStorage,
+  StorageNotSupportedError,
   type NamespacedStorage,
   type RootStorage,
   type StorageConfig,
@@ -34,6 +35,20 @@ import type {
  */
 function escapePattern(str: string): string {
   return str.replace(/[*?[\]\\]/g, '\\$&');
+}
+
+/** Whether two records are the same grant (or denial) of the same tool to the same caller. */
+function isSameRecord(a: ApprovalRecord, b: ApprovalRecord): boolean {
+  return (
+    a.toolId === b.toolId &&
+    a.state === b.state &&
+    a.scope === b.scope &&
+    a.grantedAt === b.grantedAt &&
+    a.sessionId === b.sessionId &&
+    a.userId === b.userId &&
+    a.context?.type === b.context?.type &&
+    a.context?.identifier === b.context?.identifier
+  );
 }
 
 /** How long a revocation stays readable through `getRevocations()`. */
@@ -377,6 +392,39 @@ export class ApprovalStorageStore implements ApprovalStore {
     }
     await this.storage.mdelete(keysToDelete);
     return true;
+  }
+
+  /**
+   * Deletes the key that holds `record`, if it still does, and reports whether this call deleted
+   * it. Two calls racing for one approval both find it, but only one deletes it, and a denial or
+   * approval written to the key after it was read is kept.
+   */
+  async consumeApproval(
+    record: ApprovalRecord,
+    sessionId: string,
+    userId?: string,
+    context?: ApprovalContext,
+  ): Promise<boolean> {
+    this.ensureInitialized();
+
+    for (const key of this.callerKeys(record.toolId, sessionId, userId, context)) {
+      const storedValue = await this.storage.get(key);
+      const stored = this.parseRecord(storedValue);
+      if (storedValue !== null && stored && isSameRecord(stored, record)) {
+        return this.deleteIfUnchanged(key, storedValue);
+      }
+    }
+    return false;
+  }
+
+  /** Deletes `key` only while it still holds `storedValue`, in one step where the backend allows. */
+  private async deleteIfUnchanged(key: string, storedValue: string): Promise<boolean> {
+    try {
+      return await this.storage.deleteIfEquals(key, storedValue);
+    } catch (error) {
+      if (!(error instanceof StorageNotSupportedError)) throw error;
+      return this.storage.delete(key);
+    }
   }
 
   async getRevocations(

@@ -12,6 +12,7 @@ import {
 } from '../errors';
 import CodeCallConfig from '../providers/code-call.config';
 import {
+  asCodeCallDispatch,
   assertNotSelfReference,
   checkCodeCallToolAccess,
   checkCodeCallToolPolicy,
@@ -175,11 +176,12 @@ export default class ExecuteTool extends ToolContext {
             },
           };
 
-          // Build context with auth info and the caller's surface
-          const ctx = {
+          // Build context with auth info and the caller's surface, marked as CodeCall's own call,
+          // which may reach a tool CodeCall hides from a client's direct tools/call
+          const ctx = asCodeCallDispatch({
             authInfo: this.authInfo,
             surface: callerSurface,
-          };
+          });
 
           // Execute through the flow system - this runs all stages:
           // PRE: parseInput → findTool → createToolCallContext → acquireQuota → acquireSemaphore

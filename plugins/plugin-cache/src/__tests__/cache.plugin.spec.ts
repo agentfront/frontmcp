@@ -1,7 +1,5 @@
 import 'reflect-metadata';
 
-import type { ProviderFactoryType } from '@frontmcp/sdk';
-
 import CachePlugin from '../cache.plugin';
 import { CacheStoreToken } from '../cache.symbol';
 import CacheMemoryProvider from '../providers/cache-memory.provider';
@@ -277,9 +275,9 @@ describe('CachePlugin', () => {
     it('should accept bypassHeader option', () => {
       const plugin = new CachePlugin({
         type: 'memory',
-        bypassHeader: 'x-no-cache',
+        bypassHeader: 'x-frontmcp-no-cache',
       });
-      expect(plugin.options.bypassHeader).toBe('x-no-cache');
+      expect(plugin.options.bypassHeader).toBe('x-frontmcp-no-cache');
     });
   });
 
@@ -409,11 +407,11 @@ describe('CachePlugin', () => {
     });
 
     it('should use custom bypass header', () => {
-      const plugin = new CachePlugin({ type: 'memory', bypassHeader: 'x-custom-bypass' });
+      const plugin = new CachePlugin({ type: 'memory', bypassHeader: 'x-frontmcp-custom-bypass' });
       (plugin as any).get = () => ({
         getStore: () => ({
           metadata: {
-            customHeaders: { 'x-custom-bypass': 'true' },
+            customHeaders: { 'x-frontmcp-custom-bypass': 'true' },
           },
         }),
       });

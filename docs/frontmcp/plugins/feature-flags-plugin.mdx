@@ -299,7 +299,9 @@ A skill's `skill://<path>/SKILL.md` entry in `resources/list` is gated by the sk
 
 ### Object Form
 
-Use the object form to specify a `defaultValue` — the fallback when the adapter throws or the flag is unknown:
+Use the object form to specify a `defaultValue` — the fallback when the adapter throws or the flag is unknown (the
+adapter has no answer for it: a key the `static` adapter was not given, or one a custom adapter's `evaluateFlags()`
+omits; Split.io, LaunchDarkly and Unleash answer every key with the service's own default):
 
 ```ts
 @Tool({
@@ -310,10 +312,10 @@ Use the object form to specify a `defaultValue` — the fallback when the adapte
 
 ### FeatureFlagRef Fields
 
-| Field          | Type      | Description                                             |
-| -------------- | --------- | ------------------------------------------------------- |
-| `key`          | `string`  | The flag key to evaluate                                |
-| `defaultValue` | `boolean` | Fallback value when evaluation fails (default: `false`) |
+| Field          | Type      | Description                                                                    |
+| -------------- | --------- | ------------------------------------------------------------------------------ |
+| `key`          | `string`  | The flag key to evaluate                                                       |
+| `defaultValue` | `boolean` | Fallback value when evaluation fails or the flag is unknown (default: `false`) |
 
 When using the string shorthand (`featureFlag: 'key'`), `defaultValue` is `false`.
 
@@ -346,7 +348,9 @@ When using the string shorthand (`featureFlag: 'key'`), `defaultValue` is `false
 </ParamField>
 
 <ParamField path="defaultValue" type="boolean" default="false">
-  Global fallback when the adapter throws an error during evaluation
+  Global fallback for `this.featureFlags.isEnabled()` when the adapter throws an error during evaluation or has no
+  answer for the flag, and the call passes no `defaultValue` of its own. The gates on tools, resources and prompts use
+  their ref's `defaultValue` instead (`false` for the string form).
 </ParamField>
 
 <ParamField path="cacheStrategy" type="'session' | 'request' | 'none'" default="'none'">
@@ -379,7 +383,10 @@ The evaluation context's `sessionId` is the session the server verified (`authIn
 Access via `this.featureFlags` in any execution context (ToolContext, AgentContext, etc.).
 
 <ParamField path="isEnabled(flagKey, defaultValue?)" type="Promise<boolean>">
-  Check if a feature flag is enabled. Uses caching if configured.
+  Check if a feature flag is enabled. Uses caching if configured. `defaultValue` (else the plugin's `defaultValue`, else
+  `false`) is the answer when the adapter throws or has no answer for the flag, the same rule the gates apply; a flag
+  the adapter answers keeps its answer, `false` included. Up to 1.8.7 the default applied only when the adapter threw,
+  so `isEnabled('unknown-flag', true)` was `false`.
 
 ```ts
 const enabled = await this.featureFlags.isEnabled('beta-feature');

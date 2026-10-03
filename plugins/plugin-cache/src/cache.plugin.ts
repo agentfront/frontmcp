@@ -12,6 +12,7 @@ import {
 } from '@frontmcp/sdk';
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
 
+import { CachePluginConfigurationError } from './cache.errors';
 import { CacheStoreToken } from './cache.symbol';
 import { type CachePluginOptions, type GlobalStoreCachePluginOptions } from './cache.types';
 import CacheMemoryProvider from './providers/cache-memory.provider';
@@ -23,6 +24,26 @@ import CacheVercelKvProvider from './providers/cache-vercel-kv.provider';
  * Uses x-frontmcp-* prefix to match the header extraction pattern in FrontMcpContextStorage.
  */
 const DEFAULT_BYPASS_HEADER = 'x-frontmcp-disable-cache';
+
+/** The only request headers the request context keeps, so the only ones a bypass header can be. */
+const BYPASS_HEADER_PREFIX = 'x-frontmcp-';
+
+/**
+ * Refuse a `bypassHeader` the plugin can never see (#678).
+ *
+ * The header is read from the request context, which keeps a request's `x-frontmcp-*` headers and
+ * no others. Any other name (`x-no-cache`, as the docs once showed) started a server whose bypass
+ * header was silently ignored.
+ */
+function assertReadableBypassHeader(bypassHeader: string | undefined): void {
+  if (bypassHeader === undefined) return;
+  const name = bypassHeader.toLowerCase();
+  if (name.startsWith(BYPASS_HEADER_PREFIX) && name.length > BYPASS_HEADER_PREFIX.length) return;
+  throw new CachePluginConfigurationError(
+    `CachePlugin bypassHeader "${bypassHeader}" is never seen by the plugin: only request headers that start ` +
+      `with "${BYPASS_HEADER_PREFIX}" reach it. Rename it, e.g. "${BYPASS_HEADER_PREFIX}no-cache".`,
+  );
+}
 
 /**
  * Check if a tool name matches any of the provided patterns.
@@ -124,6 +145,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 
   constructor(options: CachePluginOptions = CachePlugin.defaultOptions) {
     super();
+    assertReadableBypassHeader(options.bypassHeader);
     this.options = {
       defaultTTL: 60 * 60 * 24,
       ...options,
@@ -213,18 +235,20 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     const cached = await cacheStore.getValue(hash);
 
     if (cached !== undefined && cached !== null) {
-      const cacheConfig = typeof cache === 'object' ? cache : undefined;
-      if (cache === true || (cacheConfig?.ttl && cacheConfig?.slideWindow)) {
-        const ttl = this.getTtl(cache);
-        await cacheStore.setValue(hash, cached, ttl);
-      }
-
       /**
-       * double check if cache still valid based on tool output schema
+       * Double check the entry is still a result to serve: one that no longer matches the tool's
+       * output schema, or an error result an earlier version cached, is dropped and the tool runs.
        */
-      if (!tool.safeParseOutput(cached).success) {
+      if (isErrorResult(cached) || !tool.safeParseOutput(cached).success) {
         await cacheStore.delete(hash);
         return;
+      }
+
+      // Only `slideWindow: true` refreshes the TTL on a read, over the tool's `ttl` or the plugin's
+      // `defaultTTL`. `cache: true` is the plugin defaults, and `slideWindow` defaults to false: it
+      // used to slide on every hit, so an entry read often enough never expired (#678).
+      if (typeof cache === 'object' && cache.slideWindow) {
+        await cacheStore.setValue(hash, cached, this.getTtl(cache));
       }
 
       /**
@@ -261,6 +285,13 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     // Check both fullName (includes app owner) and name (just namespace:tool) for pattern matching
     const shouldCache = this.shouldCacheTool(tool.fullName, cache) || this.shouldCacheTool(tool.name, cache);
     if (!shouldCache || typeof toolContext.input === 'undefined') {
+      return;
+    }
+
+    // A result the tool returned with `isError: true` reports a failure (a timeout upstream, a
+    // missing record); caching it answered every later call with that failure until the TTL ran
+    // out, without running the tool again (#678).
+    if (isErrorResult(toolContext.output)) {
       return;
     }
 
@@ -328,6 +359,16 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   isCacheable(toolName: string): boolean {
     return matchesToolPattern(toolName, this.options.toolPatterns ?? []);
   }
+}
+
+/**
+ * Whether a tool's output is an MCP result the tool returned as a failure: a `CallToolResult`
+ * (a `content` array, the shape the SDK passes through as-is) with `isError: true`.
+ */
+function isErrorResult(output: unknown): boolean {
+  if (typeof output !== 'object' || output === null) return false;
+  const result = output as { content?: unknown; isError?: unknown };
+  return result.isError === true && Array.isArray(result.content);
 }
 
 /**
