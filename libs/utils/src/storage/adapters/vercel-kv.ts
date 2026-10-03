@@ -7,6 +7,7 @@
 
 import { StorageConfigError, StorageConnectionError } from '../errors';
 import type { SetOptions, VercelKvAdapterOptions } from '../types';
+import { COMPARE_AND_DELETE_SCRIPT } from '../utils/compare-and-delete';
 import { validateTTL } from '../utils/ttl';
 import { BaseStorageAdapter } from './base';
 
