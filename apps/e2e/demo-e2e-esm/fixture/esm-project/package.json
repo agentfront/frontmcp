@@ -1,0 +1,6 @@
+{
+  "name": "esm-project-fixture",
+  "private": true,
+  "type": "module",
+  "description": "An ES-module FrontMCP server with a .tsx widget and a custom auth.ui login page (#681)"
+}

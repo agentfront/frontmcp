@@ -13,6 +13,7 @@ export {
   detectAIPlatform,
   detectPlatformFromUserAgent,
   detectPlatformFromCapabilities,
+  resolvePlatformType,
   hasMcpAppsExtension,
   MCP_APPS_EXTENSION_KEY,
   supportsElicitation,

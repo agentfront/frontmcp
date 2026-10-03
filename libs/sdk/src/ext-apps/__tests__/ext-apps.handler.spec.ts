@@ -4,15 +4,14 @@
  */
 
 import {
-  ExtAppsMessageHandler,
   createExtAppsMessageHandler,
-  ExtAppsMethodNotFoundError,
   ExtAppsInvalidParamsError,
+  ExtAppsMessageHandler,
+  ExtAppsMethodNotFoundError,
   ExtAppsNotSupportedError,
   type ExtAppsHandlerContext,
 } from '../ext-apps.handler';
-import { EXT_APPS_ERROR_CODES } from '../ext-apps.types';
-import type { ExtAppsJsonRpcRequest } from '../ext-apps.types';
+import { EXT_APPS_ERROR_CODES, type ExtAppsJsonRpcRequest } from '../ext-apps.types';
 
 describe('ExtAppsMessageHandler', () => {
   // Mock logger with all FrontMcpLogger methods
@@ -327,6 +326,18 @@ describe('ExtAppsMessageHandler', () => {
         expect(response.error).toBeUndefined();
         expect(mockLogger.child).toHaveBeenCalled();
         expect(mockLogger.verbose).toHaveBeenCalledWith('Test debug message', { extra: 'data' });
+      });
+
+      it('answers with an empty result, so the JSON-RPC response carries `result` (#681)', async () => {
+        const handler = new ExtAppsMessageHandler({
+          context: createMockContext(),
+          hostCapabilities: { logging: true },
+        });
+
+        const response = await handler.handleRequest(createRequest('ui/log', { level: 'info', message: 'hi' }));
+
+        expect(response).toEqual({ jsonrpc: '2.0', id: expect.anything(), result: {} });
+        expect(JSON.parse(JSON.stringify(response))).toHaveProperty('result', {});
       });
 
       it('should log info messages using info', async () => {

@@ -17,6 +17,18 @@ describe('httpOptionsSchema', () => {
       }
     });
 
+    it('reads PORT when the options are parsed, not when the module loads (#681)', () => {
+      const originalPort = process.env['PORT'];
+      process.env['PORT'] = '4123';
+      try {
+        expect(httpOptionsSchema.parse({}).port).toBe(4123);
+        expect(httpOptionsSchema.parse({ port: 5000 }).port).toBe(5000);
+      } finally {
+        if (originalPort === undefined) delete process.env['PORT'];
+        else process.env['PORT'] = originalPort;
+      }
+    });
+
     it('should apply default entryPath of empty string', () => {
       const result = httpOptionsSchema.parse({});
       expect(result.entryPath).toBe('');

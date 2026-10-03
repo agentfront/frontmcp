@@ -119,6 +119,12 @@ function ToolUI() {
 
 Things that trip people up with `@frontmcp/react`:
 
+- A plain Vite app (7 or 8, build and dev server) bundles `@frontmcp/sdk` + `@frontmcp/react` from npm with no Node polyfills, no `process` define and no `express` alias: the bundler resolves the SDK's `browser` export condition to its browser build, for an `import` and for a CommonJS `require()` alike. Don't add `vite-plugin-node-polyfills` for FrontMCP.
+- With Vite 7 (Rollup), don't `await create()` at the top level of the entry module — call it from a function or `.then()`. Rollup can put modules the SDK imports lazily in a chunk that imports the entry back, and the top-level `await` then waits on itself.
+- Hook options may be written inline. `useStoreResource` / `useReduxResource` / `useValtioResource` and `useApiClient` register again only when the store name, the server, the set of selector / action names (not their order), or what an API operation declares changes; functions are read from the latest render.
+- `useApiClient` sends the arguments an operation declares `in: 'query'` as the query string and `in: 'header'` as headers. `parseOpenApiSpec` fills `operation.parameters`; a hand-written operation lists them itself (`parameters: [{ name: 'limit', in: 'query' }]`), or its non-path, non-`body` arguments are not sent. Arrays and objects follow the parameter's OpenAPI `style` / `explode` (which `parseOpenApiSpec` keeps): a query array repeats the key and a query object sends each property as its own parameter by default (`spaceDelimited`, `pipeDelimited` and `deepObject` are honored); a header array or object is comma-separated.
+- `ToolForm` shows an optional enum without a default as unset (an empty choice), and leaves it out of the arguments until the user picks a value.
+
 - `useCallTool`'s `data` is the whole MCP `CallToolResult` (`content`, `structuredContent`, `isError`), not the tool's return value. Render `data.structuredContent ?? data.content`, never `String(data)`. A tool-side failure resolves with `data.isError === true`; `error` is only set when the call throws (for example when the client is not connected).
 - `z` is re-exported from `@frontmcp/react`, but `zod` remains a required peer dependency of `@frontmcp/lazy-zod` and must be installed in the consuming project.
 - `create({ resources })` takes `@Resource` classes or `resource(...)(handler)` / `resourceTemplate(...)(handler)` values. A plain `{ uri, name, read }` object is rejected with "Expected a class or a resource function".
@@ -201,15 +207,16 @@ ls dist/browser/
 
 ## Troubleshooting
 
-| Problem                     | Cause                                     | Solution                                                         |
-| --------------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
-| `Module not found: fs`      | Node.js module imported in browser bundle | Use a separate browser entry point that avoids Node-only imports |
-| `crypto is not defined`     | Using `node:crypto` instead of WebCrypto  | Switch to `@frontmcp/utils` crypto functions                     |
-| CORS errors on tool calls   | MCP server missing CORS headers           | Configure CORS middleware on the MCP server                      |
-| Bundle too large            | All server-side code included             | Use `--target browser` and a dedicated client entry file         |
-| `@frontmcp/utils` fs throws | File system ops called in browser         | Remove fs calls; use API endpoints or in-memory alternatives     |
-| `AsyncContextOverlapError`  | Concurrent tool calls inside one request  | Await the calls one after another (no `AsyncContext` in browser) |
-| A call never returns        | A tool calls its own server via a client  | Call other tools through `this.scope` flows                      |
+| Problem                           | Cause                                          | Solution                                                         |
+| --------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------- |
+| `Module not found: fs`            | Node.js module imported in browser bundle      | Use a separate browser entry point that avoids Node-only imports |
+| `crypto is not defined`           | Using `node:crypto` instead of WebCrypto       | Switch to `@frontmcp/utils` crypto functions                     |
+| CORS errors on tool calls         | MCP server missing CORS headers                | Configure CORS middleware on the MCP server                      |
+| Bundle too large                  | All server-side code included                  | Use `--target browser` and a dedicated client entry file         |
+| `@frontmcp/utils` fs throws       | File system ops called in browser              | Remove fs calls; use API endpoints or in-memory alternatives     |
+| `AsyncContextOverlapError`        | Concurrent tool calls inside one request       | Await the calls one after another (no `AsyncContext` in browser) |
+| A call never returns              | A tool calls its own server via a client       | Call other tools through `this.scope` flows                      |
+| `create()` never settles (Vite 7) | Top-level `await create()` in the entry module | Call `create()` from a function or `.then()`                     |
 
 ## Examples
 

@@ -183,6 +183,56 @@ describe('parseOpenApiSpec', () => {
       });
     });
 
+    it('records where each parameter goes, so the client can send query and header parameters', () => {
+      const spec = {
+        paths: {
+          '/users/{id}': {
+            parameters: [{ name: 'X-Tenant', in: 'header' }],
+            get: {
+              operationId: 'getUser',
+              parameters: [
+                { name: 'id', in: 'path', required: true },
+                { name: 'fields', in: 'query' },
+                { name: 'sid', in: 'cookie' },
+                { name: 'odd', in: 'matrix' },
+              ],
+            },
+          },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec);
+      expect(ops[0].parameters).toEqual([
+        { name: 'X-Tenant', in: 'header' },
+        { name: 'id', in: 'path' },
+        { name: 'fields', in: 'query' },
+        { name: 'sid', in: 'cookie' },
+      ]);
+    });
+
+    it('keeps the serialization style and explode flag a parameter declares', () => {
+      const spec = {
+        paths: {
+          '/items': {
+            get: {
+              operationId: 'listItems',
+              parameters: [
+                { name: 'ids', in: 'query', style: 'pipeDelimited', explode: false },
+                { name: 'filter', in: 'query', style: 'deepObject', explode: true },
+                { name: 'odd', in: 'query', style: 'matrix', explode: 'yes' },
+              ],
+            },
+          },
+        },
+      };
+
+      expect(parseOpenApiSpec(spec)[0].parameters).toEqual([
+        { name: 'ids', in: 'query', style: 'pipeDelimited', explode: false },
+        { name: 'filter', in: 'query', style: 'deepObject', explode: true },
+        { name: 'odd', in: 'query' },
+      ]);
+    });
+
     it('marks required parameters in required array', () => {
       const spec = {
         paths: {

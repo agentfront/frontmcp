@@ -9,23 +9,24 @@
  */
 
 import { isDevelopment } from '@frontmcp/utils';
+
 import type { FrontMcpLogger } from '../common';
-import type {
-  ExtAppsCallServerToolParams,
-  ExtAppsUpdateModelContextParams,
-  ExtAppsOpenLinkParams,
-  ExtAppsSetDisplayModeParams,
-  ExtAppsCloseParams,
-  ExtAppsLogParams,
-  ExtAppsRegisterToolParams,
-  ExtAppsUnregisterToolParams,
-  ExtAppsJsonRpcRequest,
-  ExtAppsJsonRpcResponse,
-  ExtAppsHostCapabilities,
-  ExtAppsInitializeParams,
-  ExtAppsInitializeResult,
+import {
+  EXT_APPS_ERROR_CODES,
+  type ExtAppsCallServerToolParams,
+  type ExtAppsCloseParams,
+  type ExtAppsHostCapabilities,
+  type ExtAppsInitializeParams,
+  type ExtAppsInitializeResult,
+  type ExtAppsJsonRpcRequest,
+  type ExtAppsJsonRpcResponse,
+  type ExtAppsLogParams,
+  type ExtAppsOpenLinkParams,
+  type ExtAppsRegisterToolParams,
+  type ExtAppsSetDisplayModeParams,
+  type ExtAppsUnregisterToolParams,
+  type ExtAppsUpdateModelContextParams,
 } from './ext-apps.types';
-import { EXT_APPS_ERROR_CODES } from './ext-apps.types';
 
 /**
  * Context for handling ext-apps messages.
@@ -129,10 +130,13 @@ export class ExtAppsMessageHandler {
 
     try {
       const result = await this.routeMethod(method, params);
+      // A JSON-RPC success response must carry `result`. Methods that return nothing (ui/log,
+      // ui/close, ...) answer with an empty object, as MCP does, rather than a response
+      // serialized without `result`.
       return {
         jsonrpc: '2.0',
         id,
-        result,
+        result: result === undefined ? {} : result,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

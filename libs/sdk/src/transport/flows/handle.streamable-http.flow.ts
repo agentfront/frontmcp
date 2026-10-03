@@ -796,6 +796,8 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
         callTool: async (name, args) => {
           // Route through CallToolFlow with session's authInfo. The widget runs in the MCP client,
           // so its call is on that client's surface, as the client's own `tools/call` is.
+          // The widget that makes the call is already on screen and wants the data only, so the
+          // flow's applyUI stage does not render the tool's page into this result (#681).
           const result = await this.scope.runFlow('tools:call-tool', {
             request: { method: 'tools/call', params: { name, arguments: args } },
             ctx: {
@@ -805,6 +807,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
                 token,
               },
               surface: mcpRequestSurface(this.scope),
+              _skipUI: true,
             },
           });
           // Parse and return the tool result

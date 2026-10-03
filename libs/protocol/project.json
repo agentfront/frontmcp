@@ -24,7 +24,11 @@
           "libs/protocol/src/node-mcp-streamable-http.ts",
           "libs/protocol/src/browser-mcp-streamable-http.ts",
           "libs/protocol/src/node-server-types.ts",
-          "libs/protocol/src/browser-server-types.ts"
+          "libs/protocol/src/browser-server-types.ts",
+          "libs/protocol/src/node-stdio-client.ts",
+          "libs/protocol/src/browser-stdio-client.ts",
+          "libs/protocol/src/node-stdio-server.ts",
+          "libs/protocol/src/browser-stdio-server.ts"
         ],
         "assets": ["libs/protocol/README.md", "libs/protocol/CHANGELOG.md", "LICENSE", "libs/protocol/package.json"],
         "esbuildOptions": {
@@ -36,7 +40,9 @@
             "@modelcontextprotocol/sdk",
             "#mcp-streamable-http",
             "#mcp-server",
-            "#server-types"
+            "#server-types",
+            "#stdio-client",
+            "#stdio-server"
           ]
         }
       },
@@ -61,7 +67,11 @@
           "libs/protocol/src/node-mcp-streamable-http.ts",
           "libs/protocol/src/browser-mcp-streamable-http.ts",
           "libs/protocol/src/node-server-types.ts",
-          "libs/protocol/src/browser-server-types.ts"
+          "libs/protocol/src/browser-server-types.ts",
+          "libs/protocol/src/node-stdio-client.ts",
+          "libs/protocol/src/browser-stdio-client.ts",
+          "libs/protocol/src/node-stdio-server.ts",
+          "libs/protocol/src/browser-stdio-server.ts"
         ],
         "esbuildOptions": {
           "outExtension": {
@@ -72,7 +82,9 @@
             "@modelcontextprotocol/sdk",
             "#mcp-streamable-http",
             "#mcp-server",
-            "#server-types"
+            "#server-types",
+            "#stdio-client",
+            "#stdio-server"
           ]
         }
       }

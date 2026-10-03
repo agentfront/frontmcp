@@ -32,6 +32,10 @@ FrontMCP supports browser environments for client-side use cases like JWT verifi
 | **Redis/TCP storage**     | `ioredis` requires TCP sockets                                         |
 | **CLI and Nx Plugin**     | Node-only tooling                                                      |
 
+## Bundling for the Browser
+
+Use the packages from npm in a browser bundler that honors the `browser` export condition — Vite 7 and 8, build and dev server — without Node polyfills, `process` defines or an `express` alias. A bundler that resolves the `browser` condition gets `@frontmcp/sdk`'s browser build for an `import` and for a CommonJS `require()` alike (bundlers through the `module` condition; a CommonJS runtime with the `browser` condition, such as `jest-environment-jsdom`, gets a CommonJS copy of it), in which the Express host and the legacy SSE transport are stubs that throw if constructed, and the browser variants of `@frontmcp/protocol` (no stdio transports) and `@frontmcp/utils` (runtime context, paths, crypto, env). Node, and bundlers targeting Node, keep resolving the Node builds.
+
 ## Request Context in the Browser
 
 Every request runs in its own `FrontMcpContext` (auth info, session, request-scoped providers), and tools see the tool they run as and the surface they were called on. On Node and Workers, `AsyncLocalStorage` keeps these apart for overlapping requests. A browser has no `AsyncLocalStorage`, so the browser build of `@frontmcp/utils` picks one of two modes (`getAsyncContextMode()`):

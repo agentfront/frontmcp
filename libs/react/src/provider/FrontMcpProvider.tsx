@@ -22,7 +22,7 @@ import { ComponentRegistry } from '../components/ComponentRegistry';
 import { bindDynamicTools } from '../registry/bindDynamicTools';
 import { createWrappedServer } from '../registry/createWrappedServer';
 import { DynamicRegistry } from '../registry/DynamicRegistry';
-import { serverRegistry } from '../registry/ServerRegistry';
+import { sameListing, serverRegistry } from '../registry/ServerRegistry';
 import { useStoreRegistration } from '../state/useStoreRegistration';
 import type { PromptInfo, ResourceInfo, ResourceTemplateInfo, StoreAdapter, ToolInfo } from '../types';
 import { FrontMcpContext } from './FrontMcpContext';
@@ -164,10 +164,12 @@ export function FrontMcpProvider({
       srv
         .listResources()
         .then((resourcesResult) => {
-          if (mountedRef.current) {
-            serverRegistry.update(name, {
-              resources: (resourcesResult as { resources?: ResourceInfo[] }).resources ?? [],
-            });
+          const resources = (resourcesResult as { resources?: ResourceInfo[] }).resources ?? [];
+          // A resource registered again unchanged (an effect re-running) is not a change: updating
+          // anyway re-renders every reader of the server, which can run that effect again, forever
+          const current = serverRegistry.get(name);
+          if (mountedRef.current && current && !sameListing(current.resources, resources)) {
+            serverRegistry.update(name, { resources });
           }
         })
         .catch(() => {

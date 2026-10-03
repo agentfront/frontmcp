@@ -39,6 +39,33 @@ useApiClient({
 });
 ```
 
+Query parameters and header parameters are sent from the operation's `parameters`: an argument declared `in: 'query'` goes into the query string and one declared `in: 'header'` becomes a request header. Arrays and objects follow the parameter's OpenAPI `style` and `explode`: a query argument defaults to `form` (an array repeats the key, an object sends each property as its own parameter) and may set `style` to `spaceDelimited`, `pipeDelimited` or `deepObject` (`filter[owner]=ada`); a header argument is comma-separated (`x,y`, or `a=1,b=2` with `explode: true`). `{param}` placeholders in `path` are filled from the arguments and `body` is the request body. [`parseOpenApiSpec`](#parseopenapispec) fills `parameters` from the spec; a hand-written operation lists them itself:
+
+```tsx
+useApiClient({
+  baseUrl: 'https://api.example.com',
+  operations: [
+    {
+      operationId: 'searchUsers',
+      description: 'Search users',
+      method: 'GET',
+      path: '/users',
+      inputSchema: {
+        type: 'object',
+        properties: { q: { type: 'string' }, limit: { type: 'integer' } },
+      },
+      parameters: [
+        { name: 'q', in: 'query' },
+        { name: 'limit', in: 'query' },
+      ],
+    },
+  ],
+});
+// api_searchUsers({ q: 'ada', limit: 5 }) → GET https://api.example.com/users?q=ada&limit=5
+```
+
+The options may be written inline: the tools are registered again only when `prefix`, `server`, or what an operation declares (id, description, method, path, input schema, parameters) changes. `baseUrl`, `headers`, `client` and `fetch` are read when a tool runs.
+
 ### Options
 
 | Option       | Type                                                     | Default | Description                                        |
@@ -200,6 +227,7 @@ useApiClient({
 - **method**: HTTP method (uppercase)
 - **path**: URL path with `{param}` placeholders
 - **inputSchema**: JSON Schema built from parameters + requestBody
+- **parameters**: where each parameter goes (`path`, `query`, `header`, `cookie`) and the `style` / `explode` it declares, so `useApiClient` sends query and header parameters as the spec lays them out (cookie parameters are not sent)
 
 ### Headers Factory
 

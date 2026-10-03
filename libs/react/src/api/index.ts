@@ -9,4 +9,13 @@
 export { useApiClient } from './useApiClient';
 export { parseOpenApiSpec } from './parseOpenApiSpec';
 export { createFetchClient } from './createFetchClient';
-export type { ApiOperation, ApiClientOptions, HttpClient, HttpRequestConfig, HttpResponse } from './api.types';
+export type {
+  ApiOperation,
+  ApiParameter,
+  ApiParameterLocation,
+  ApiParameterStyle,
+  ApiClientOptions,
+  HttpClient,
+  HttpRequestConfig,
+  HttpResponse,
+} from './api.types';

@@ -1,10 +1,11 @@
+import { act, renderHook } from '@testing-library/react';
 import React from 'react';
-import { renderHook, act } from '@testing-library/react';
-import { useReduxResource } from '../useReduxResource';
+
+import { ComponentRegistry } from '../../components/ComponentRegistry';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
-import { ComponentRegistry } from '../../components/ComponentRegistry';
 import type { FrontMcpContextValue } from '../../types';
+import { useReduxResource } from '../useReduxResource';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -373,6 +374,24 @@ describe('useReduxResource', () => {
       expect(dynamicRegistry.hasResource('state://app')).toBe(false);
       expect(dynamicRegistry.hasResource('state://app/count')).toBe(false);
       expect(dynamicRegistry.hasTool('app_increment')).toBe(false);
+    });
+  });
+
+  describe('re-renders (#681)', () => {
+    it('subscribes to the store once, however often the component renders', () => {
+      const store = createMockReduxStore({ count: 0 });
+      const subscribe = jest.spyOn(store, 'subscribe');
+      const options = { store, name: 'once' };
+
+      const { rerender } = renderHook(() => useReduxResource(options), {
+        wrapper: createWrapper(dynamicRegistry),
+      });
+      const version = dynamicRegistry.getVersion();
+      rerender();
+      rerender();
+
+      expect(subscribe).toHaveBeenCalledTimes(1);
+      expect(dynamicRegistry.getVersion()).toBe(version);
     });
   });
 });

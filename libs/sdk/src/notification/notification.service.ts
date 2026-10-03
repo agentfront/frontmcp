@@ -151,8 +151,8 @@ function matchCustomMappings(clientName: string, mappings?: PlatformMappingEntry
         return mapping.platform;
       }
     } else {
-      // RegExp match
-      if (mapping.pattern.test(clientName)) {
+      // RegExp match: search() starts at 0 and leaves lastIndex alone, so a g or y pattern matches every time
+      if (clientName.search(mapping.pattern) !== -1) {
         return mapping.platform;
       }
     }
@@ -267,6 +267,32 @@ export function detectAIPlatform(clientInfo?: ClientInfo, config?: PlatformDetec
 
   // Fall back to default keyword-based detection
   return defaultPlatformDetection(clientInfo.name);
+}
+
+/**
+ * Decide a client's AI platform from its `initialize` request, in this order:
+ *
+ * 1. A `platformDetection.mappings` entry that matches the client name: the server's own
+ *    configuration wins over everything else, so a mapping can opt a client out of MCP Apps.
+ * 2. A client that declares the MCP Apps extension (`io.modelcontextprotocol/ui`) is `'ext-apps'`,
+ *    whatever its name: it said it renders `ui://` widgets.
+ * 3. With `customOnly: true`, nothing else is guessed: `'unknown'`.
+ * 4. Keyword detection on the client name (`chatgpt` → `'openai'`, `claude` → `'claude'`, ...).
+ *
+ * @param clientInfo - Client info from the initialize request (may be absent)
+ * @param capabilities - Client capabilities from the initialize request (may be absent)
+ * @param config - The server's `transport.platformDetection` configuration
+ */
+export function resolvePlatformType(
+  clientInfo: ClientInfo | undefined,
+  capabilities: ClientCapabilities | undefined,
+  config?: PlatformDetectionConfig,
+): AIPlatformType {
+  const mapped = clientInfo?.name ? matchCustomMappings(clientInfo.name, config?.mappings) : undefined;
+  if (mapped) return mapped;
+  const fromCapabilities = detectPlatformFromCapabilities(capabilities);
+  if (fromCapabilities) return fromCapabilities;
+  return detectAIPlatform(clientInfo, config);
 }
 
 /**
@@ -1015,9 +1041,10 @@ export class NotificationService {
     }
 
     registered.clientInfo = clientInfo;
-    // Use platform detection config from scope if available
+    // Use platform detection config from scope if available, with the capabilities the client
+    // declared (stored first by the initialize handler), as the session's platform is decided
     const platformDetectionConfig = this.scope.metadata.transport?.platformDetection;
-    registered.platformType = detectAIPlatform(clientInfo, platformDetectionConfig);
+    registered.platformType = resolvePlatformType(clientInfo, registered.clientCapabilities, platformDetectionConfig);
     this.logger.verbose(
       `Set client info for session ${sessionId.slice(0, 20)}...: name=${clientInfo.name}, version=${
         clientInfo.version

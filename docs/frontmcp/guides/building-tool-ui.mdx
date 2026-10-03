@@ -201,14 +201,14 @@ ui: {
 <ParamField path="ui.servingMode" type="'auto' | 'inline' | 'static' | 'hybrid' | 'direct-url' | 'custom-url'">
   How the HTML is delivered to the client (default: `auto`):
   - `auto` - Auto-select per host (OpenAI / Claude / unknown)
-  - `inline` - Embedded in tool response `_meta['ui/html']` (works everywhere)
+  - `inline` - Embedded in tool response `_meta['ui/html']` on every call (a call the widget makes back through `ui/callServerTool` gets the data only)
   - `static` - Pre-compiled at startup; client fetches `ui://widget/{toolName}.html` via `resources/read`
   - `hybrid` - Shell pre-compiled at startup; each call carries only a **reference** in `_meta['ui/component']` (`{ type, hash, toolName }`) — no component code and no data. The widget is still rendered from its `ui://` resource
   - `direct-url` / `custom-url` - **Not implemented.** Accepted by the schema, but the widget is served inline, as with `inline`; startup logs a warning
 </ParamField>
 
 <Note>
-**`resources/read` never returns another call's render.** `ui://widget/{toolName}.html` serves only HTML compiled at startup (`static`, and the `hybrid` shell), rendered without any caller's data; for other modes it serves a data-free placeholder that receives the result through the bridge. A per-call `inline` render embeds that call's input and output, so it is returned only in that call's `_meta['ui/html']` and is never stored where `resources/read` can reach it. Hosts that load the widget with `resources/read` (MCP Apps hosts such as Claude) should use `servingMode: 'static'` with a template that reads its data from `window.FrontMcpBridge`.
+**`resources/read` never returns another call's render.** `ui://widget/{toolName}.html` serves only HTML compiled at startup (`static`, and the `hybrid` shell), rendered without any caller's data (the page's `window.__mcpToolOutput` is `null`, so the bridge reads the host's result, such as `window.openai.toolOutput`); for other modes it serves a data-free placeholder that receives the result through the bridge. A per-call `inline` render embeds that call's input and output, so it is returned only in that call's `_meta['ui/html']` and is never stored where `resources/read` can reach it. Hosts that load the widget with `resources/read` (MCP Apps hosts such as Claude) should use `servingMode: 'static'` with a template that reads its data from `window.FrontMcpBridge`.
 
 The tool name in the URI is percent-encoded, as `tools/list` advertises it: a namespaced `app:tool` is `ui://widget/app%3Atool.html`. Both the encoded and the raw form read back; a name that decodes to anything other than tool-name characters (letters, digits, `_ - . / : @`) is rejected.
 
@@ -475,6 +475,8 @@ Different MCP hosts have different capabilities and network policies:
 - **Claude (MCP-UI)** — **only `cdnjs.cloudflare.com` is reachable**; prefer `resourceMode: 'inline'` so the widget shell is self-contained, and pin any `externals` to cdnjs URLs via `dependencies`
 - **MCP Inspector** — useful for local development; honors `servingMode: 'static'`
 - **Gemini / unknown hosts** — `ui` is ignored; the tool returns JSON only
+
+The host is identified when the client connects, in this order: a [`transport.platformDetection.mappings`](/frontmcp/servers/server#session-lifecycle) entry that matches the client name; then the MCP Apps capability — a client that declares `io.modelcontextprotocol/ui` is treated as an MCP Apps host (`ext-apps`) whatever its name, `gemini-cli` included; then the client name. Map a client to opt it out of MCP Apps: `platformDetection: { mappings: [{ pattern: 'gemini-cli', platform: 'gemini' }] }`.
 
 The default `servingMode: 'auto'` selects the right mode per host. See the [Tool UI reference](/frontmcp/servers/tools#tool-ui) for the full surface: serving modes, CSP, the `window.FrontMcpBridge` runtime, file-based `.tsx` widgets, and platform-specific troubleshooting.
 
