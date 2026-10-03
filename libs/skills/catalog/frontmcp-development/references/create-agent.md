@@ -416,6 +416,8 @@ class TriageAgent extends AgentContext {}
   name: 'billing_agent',
   description: 'Handles billing and payment inquiries',
   llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
+  // The arguments of its invoke_billing_agent tool: an agent without an inputSchema receives {}.
+  inputSchema: { request: z.string().describe('The billing request') },
   tools: [LookupInvoiceTool, ProcessRefundTool],
   // Specialist is visible to peers but does not see others.
   swarm: { isVisible: true },
