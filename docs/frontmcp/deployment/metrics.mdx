@@ -144,6 +144,8 @@ metrics: { enabled: true, path: '/mcp' }
 // → throws MetricsPathConflictError at boot
 ```
 
+`createFetchHandler()` also refuses a `metrics.path` equal to its MCP entry path (`http.entryPath`, `/` when unset), with the same `MetricsPathConflictError`, because the metrics route would otherwise answer the `GET` that MCP clients use to open the event stream.
+
 ## Off-by-default rationale
 
 The endpoint is opt-in because process metrics, framework counter names, and tool vocabularies can hint at deployment scale and feature usage (e.g. `frontmcp_skills_signature_failures_total` reveals a signing infra exists, `frontmcp_auth_checks_total{result="denied"}` correlates to attack attempts). Recommendations:

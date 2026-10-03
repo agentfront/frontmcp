@@ -13,6 +13,7 @@ import { getMachineId, resetRuntimeContext } from '@frontmcp/utils';
 import { Tool, ToolContext } from '../../common';
 import { App } from '../../common/decorators/app.decorator';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
+import { MetricsPathConflictError } from '../../metrics';
 import { type WebFetchHandler } from '../web-fetch-handler';
 
 const echoInput = { message: z.string() };
@@ -76,6 +77,12 @@ describe('createFetchHandler: /metrics', () => {
     const handler = await handlerFor({ metrics: { enabled: true } });
     const res = await handler(new Request(`${BASE}/metrics`, { method: 'POST', body: '{}' }));
     expect(res.status).toBe(404);
+  });
+
+  it('refuses a metrics path that is also the MCP entry path, so it cannot take over GET on the entry', async () => {
+    await expect(
+      handlerFor({ http: { entryPath: '/api' }, metrics: { enabled: true, path: '/api/' } }),
+    ).rejects.toBeInstanceOf(MetricsPathConflictError);
   });
 });
 
