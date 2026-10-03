@@ -5,7 +5,8 @@
  * - a session that initializes with the `claude/channel` capability subscribes to the channels the
  *   hookable `channels:list` flow returns;
  * - an `onReply()` that throws makes `channel-reply` answer an error instead of "sent successfully";
- * - disposing the server (`dispose()` on what `create()` returns) calls `onDisconnect()`.
+ * - disposing the server (`dispose()` on what `create()` returns) calls `onDisconnect()`;
+ * - a notification a service channel pushes while `onConnect()` runs goes through the flow like any other.
  */
 import 'reflect-metadata';
 
@@ -31,6 +32,7 @@ import { type ChannelInstance } from '../channel.instance';
 
 const lifecycle: string[] = [];
 const sends: Array<{ channel: string; content: string }> = [];
+const startupSends: Array<{ channel: string; content: string }> = [];
 
 @Channel({ name: 'chat', source: { type: 'service', service: 'chat' }, twoWay: true, meta: { room: 'ops' } })
 class ChatChannel extends ChannelContext {
@@ -49,6 +51,18 @@ class ChatChannel extends ChannelContext {
   override async onReply(reply: string): Promise<void> {
     if (reply === 'boom') throw new Error('chat service refused the reply');
     lifecycle.push(`reply:${reply}`);
+  }
+}
+
+@Channel({ name: 'presence', source: { type: 'service', service: 'presence' }, replay: { enabled: true } })
+class PresenceChannel extends ChannelContext {
+  override async onConnect(): Promise<void> {
+    this.pushIncoming({ text: 'presence online' });
+    await settle();
+  }
+
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    return { content: String((payload as { text: string }).text) };
   }
 }
 
@@ -81,6 +95,7 @@ class ChannelPolicyPlugin {
   beforeSend(ctx: FlowCtxOf<'channels:send-notification'>) {
     const { channelName, content } = ctx.state.required;
     sends.push({ channel: channelName, content });
+    startupSends.push({ channel: channelName, content });
     if (content.includes('classified')) ctx.respond({ sent: false, channelName });
   }
 
@@ -98,7 +113,7 @@ class ChannelPolicyPlugin {
   name: 'Desk',
   plugins: [ChannelPolicyPlugin],
   tools: [RaiseTool],
-  channels: [ChatChannel, AlertsChannel, MutedChannel],
+  channels: [ChatChannel, PresenceChannel, AlertsChannel, MutedChannel],
 })
 class DeskApp {}
 
@@ -144,6 +159,13 @@ describe('channels', () => {
   beforeEach(() => {
     received.length = 0;
     sends.length = 0;
+  });
+
+  it('runs the flow for a notification a service channel pushes while it connects', () => {
+    expect(startupSends).toContainEqual({ channel: 'presence', content: 'presence online' });
+    expect(channelOf(server, 'presence').replayBuffer).toEqual([
+      { content: 'presence online', meta: { server: 'desk', room: 'default', source: 'presence' } },
+    ]);
   });
 
   it('runs channels:send-notification for each notification a channel pushes', async () => {
@@ -232,5 +254,51 @@ describe('channels', () => {
     await server.dispose();
 
     expect(lifecycle).toContain('disconnect');
+  });
+});
+
+describe('a service channel that fails to connect', () => {
+  const steps: string[] = [];
+
+  @Channel({ name: 'ledger', source: { type: 'service', service: 'ledger' } })
+  class LedgerChannel extends ChannelContext {
+    override async onConnect(): Promise<void> {
+      steps.push('ledger:connect');
+    }
+
+    override async onDisconnect(): Promise<void> {
+      steps.push('ledger:disconnect');
+    }
+
+    async onEvent(payload: unknown): Promise<ChannelNotification> {
+      return { content: String(payload) };
+    }
+  }
+
+  @Channel({ name: 'broken', source: { type: 'service', service: 'broken' } })
+  class BrokenChannel extends ChannelContext {
+    override async onConnect(): Promise<void> {
+      throw new Error('broken service is down');
+    }
+
+    async onEvent(payload: unknown): Promise<ChannelNotification> {
+      return { content: String(payload) };
+    }
+  }
+
+  @App({ id: 'ops', name: 'Ops', channels: [LedgerChannel, BrokenChannel] })
+  class OpsApp {}
+
+  it('fails startup and disconnects the channels that had connected', async () => {
+    await expect(
+      FrontMcpInstance.createDirect({
+        info: { name: 'channel-connect-failure', version: '1.0.0' },
+        apps: [OpsApp],
+        logging: { level: LogLevel.Off },
+        channels: { enabled: true },
+      }),
+    ).rejects.toThrow('broken service is down');
+
+    expect(steps).toEqual(['ledger:connect', 'ledger:disconnect']);
   });
 });
