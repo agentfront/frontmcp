@@ -3,12 +3,13 @@
  */
 
 import 'reflect-metadata';
-import AdapterRegistry from '../adapter.registry';
-import { AdapterInstance } from '../adapter.instance';
-import { AdapterInterface, FrontMcpAdapterResponse, FrontMcpLogger, AdapterKind } from '../../common';
+
+import { addProviderToMock, createMockProviderRegistry } from '../../__test-utils__';
+import { AdapterKind, FrontMcpLogger, type AdapterInterface, type FrontMcpAdapterResponse } from '../../common';
 import { Adapter } from '../../common/decorators/adapter.decorator';
-import { createMockProviderRegistry, addProviderToMock } from '../../__test-utils__';
 import { GenericServerError } from '../../errors';
+import { AdapterInstance } from '../adapter.instance';
+import AdapterRegistry from '../adapter.registry';
 
 // Track instances created
 let mockAdapterInstances: unknown[] = [];
@@ -28,6 +29,7 @@ jest.mock('../adapter.instance', () => {
       this.getTools = jest.fn().mockReturnValue({ getTools: () => [] });
       this.getResources = jest.fn().mockReturnValue({ getResources: () => [] });
       this.getPrompts = jest.fn().mockReturnValue({ getPrompts: () => [] });
+      this.dispose = jest.fn();
       mockAdapterInstances.push(this);
     }),
   };
@@ -340,6 +342,31 @@ describe('AdapterRegistry', () => {
       await registry.ready;
 
       expect(logger.verbose).toHaveBeenCalledWith(expect.stringContaining('initialization complete'));
+    });
+  });
+
+  describe('Disposal', () => {
+    it('disposes every adapter and logs the one that fails', async () => {
+      const logger = createMockLogger();
+      addProviderToMock(mockProviders, FrontMcpLogger, logger);
+
+      @Adapter({ name: 'BrokenStop' })
+      class BrokenStop extends StubAdapter {}
+
+      @Adapter({ name: 'CleanStop' })
+      class CleanStop extends StubAdapter {}
+
+      const registry = new AdapterRegistry(mockProviders, [BrokenStop, CleanStop]);
+      await registry.ready;
+      const [broken, clean] = mockAdapterInstances as Array<{ dispose: jest.Mock }>;
+      broken.dispose.mockImplementation(() => {
+        throw new Error('stopPolling failed');
+      });
+
+      registry.dispose();
+
+      expect(clean.dispose).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('stopPolling failed'));
     });
   });
 });

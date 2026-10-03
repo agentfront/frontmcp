@@ -89,13 +89,13 @@ export default class AdapterRegistry
         readyArr.push(instance.ready);
         this.logger?.verbose(`AdapterRegistry: initialized adapter '${rec.metadata?.name ?? tokenName(token)}'`);
       }
+      await Promise.all(readyArr);
     } catch (err) {
-      // Adapters already started settle here, so a failure of theirs is not an unhandled rejection
-      // that ends the process; the start-up error is this one (#678).
+      // Every adapter settles and those that started stop again, so a failed start-up leaves none polling (#678).
       await Promise.allSettled(readyArr);
+      this.dispose();
       throw err;
     }
-    await Promise.all(readyArr);
     this.logger?.verbose(`AdapterRegistry: initialization complete (${this.instances.size} adapter(s))`);
   }
 
@@ -105,6 +105,14 @@ export default class AdapterRegistry
 
   /** Stop the adapters' polling and update subscriptions; the owning scope calls it when disposed. */
   dispose(): void {
-    for (const instance of this.instances.values()) instance.dispose();
+    for (const [token, instance] of this.instances) {
+      try {
+        instance.dispose();
+      } catch (error) {
+        const adapterName = instance.metadata?.name ?? tokenName(token);
+        const reason = error instanceof Error ? error.message : String(error);
+        this.logger?.warn(`AdapterRegistry: disposing adapter '${adapterName}' failed: ${reason}`);
+      }
+    }
   }
 }

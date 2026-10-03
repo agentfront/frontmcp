@@ -383,6 +383,50 @@ describe('runInstall', () => {
       expect(installCall[1]).toEqual(expect.arrayContaining(['@frontmcp/sdk@1.8.3', 'reflect-metadata@^0.2.1']));
     });
 
+    it('installs SDK peers declared in optionalDependencies as optional, apart from the required packages', async () => {
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({ optionalDependencies: { '@frontmcp/storage-sqlite': '^1.8.7' } }),
+        'utf-8',
+      );
+
+      await install();
+
+      const installDir = path.join(appsDir, 'demo-app');
+      const installCalls = (runCmd as jest.Mock).mock.calls.filter(
+        ([cmd, args]) => cmd === 'npm' && args[0] === 'install',
+      );
+      expect(installCalls).toHaveLength(2);
+      expect(installCalls[0][1]).toContain('--save');
+      expect(installCalls[0][1].some((arg: string) => arg.startsWith('@frontmcp/storage-sqlite@'))).toBe(false);
+      expect(installCalls[1]).toEqual([
+        'npm',
+        ['install', '@frontmcp/storage-sqlite@^1.8.7', '--save-optional', '--silent'],
+        { cwd: installDir },
+      ]);
+    });
+
+    it('finishes the install when an optional SDK peer fails to install', async () => {
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({ optionalDependencies: { '@frontmcp/storage-sqlite': '^1.8.7' } }),
+        'utf-8',
+      );
+      (runCmd as jest.Mock).mockImplementation(async (_cmd: string, args: string[]) => {
+        if (args.includes('--save-optional')) throw new Error('gyp ERR! build error');
+      });
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+      await install();
+
+      expect(registerApp).toHaveBeenCalledWith('demo-app', expect.anything());
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('skipped optional dependency @frontmcp/storage-sqlite@^1.8.7: gyp ERR! build error'),
+      );
+    });
+
     it('does not re-init an install dir that already has a package.json', async () => {
       writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
       const installDir = path.join(appsDir, 'demo-app');

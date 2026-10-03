@@ -138,8 +138,6 @@ export default class ResourceRegistry extends RegistryAbstract<
       const row = this.makeRow(token, ri, lineage, this);
       this.localRows.push(row);
     }
-    // An entry class that declares hooks it cannot run fails here, so startup fails with it (#678).
-    await Promise.all([...this.instances.values()].map((ri) => ri.ready));
 
     // Adopt resources from child app registries
     const scope = this.providers.getActiveScope();
@@ -177,6 +175,9 @@ export default class ResourceRegistry extends RegistryAbstract<
     logAvailabilityFiltering('ResourceRegistry', this.listAllInstances(), scope.logger);
 
     this.bump('reset');
+
+    // An entry whose hooks cannot run fails startup here, after the synchronous adoption that keeps siblings acyclic (#678).
+    await Promise.all([...this.instances.values()].map((ri) => ri.ready));
 
     // Register resource flows with the scope (scope already declared above)
     await scope.registryFlows(

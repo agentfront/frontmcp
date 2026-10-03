@@ -130,8 +130,6 @@ export default class ToolRegistry extends RegistryAbstract<
       const row = this.makeRow(token, ti, lineage, this);
       this.localRows.push(row);
     }
-    // An entry class that declares hooks it cannot run fails here, so startup fails with it (#678).
-    await Promise.all([...this.instances.values()].map((ti) => ti.ready));
 
     const childAppRegistries = this.adopt ? this.providers.getRegistries('AppRegistry') : [];
     const scope = this.providers.getActiveScope();
@@ -168,6 +166,9 @@ export default class ToolRegistry extends RegistryAbstract<
     logAvailabilityFiltering('ToolRegistry', this.listAllInstances(), scope.logger);
 
     this.bump('reset');
+
+    // An entry whose hooks cannot run fails startup here, after the synchronous adoption that keeps siblings acyclic (#678).
+    await Promise.all([...this.instances.values()].map((ti) => ti.ready));
 
     await scope.registryFlows(ToolsListFlow, CallToolFlow);
   }

@@ -339,7 +339,7 @@ Each export must be one of the agent's own `resources`, `prompts` or `providers`
 
 ## Nested Agents (Sub-Agents)
 
-Use the `agents` array to compose agents from smaller, specialized sub-agents. Each sub-agent has its own LLM config, inner tools, and system instructions. The parent's model is offered each one as an `invoke_<id>` tool next to its own tools, and the parent's code can call them with `this.invokeAgent('<id>', input)`. Nested agents are private: clients are not offered them. A call to one runs through its `invoke_<id>` tool's `tools:call-tool` flow in the parent's scope, also when the parent sets `execution.useToolFlow: false`, so the nested agent's `authorities`, `rateLimit`, `concurrency`, `timeout`, plugin gates and hooks apply as for a client's call. A `rateLimit` or `concurrency` declared only on a nested agent is enforced without a `throttle` option.
+Use the `agents` array to compose agents from smaller, specialized sub-agents. Each sub-agent has its own LLM config, inner tools, and system instructions. The parent's model is offered each one as an `invoke_<id>` tool next to its own tools, and the parent's code can call them with `this.invokeAgent('<id>', input)`. Nested agents are private: clients are not offered them. A call to one runs through its `invoke_<id>` tool's `tools:call-tool` flow in the parent's scope, also when the parent sets `execution.useToolFlow: false`, so the nested agent's `authorities`, `rateLimit`, `concurrency`, `timeout`, plugin gates and hooks apply as for a client's call. A `rateLimit` or `concurrency` declared only on a nested agent is enforced without a `throttle` option. Under `auth.consent`, the consent given to the parent agent covers its own tools and nested agents, which the consent screen never offers.
 
 ```typescript
 @Agent({
@@ -416,6 +416,8 @@ class TriageAgent extends AgentContext {}
   name: 'billing_agent',
   description: 'Handles billing and payment inquiries',
   llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
+  // The arguments of its invoke_billing_agent tool: an agent without an inputSchema receives {}.
+  inputSchema: { request: z.string().describe('The billing request') },
   tools: [LookupInvoiceTool, ProcessRefundTool],
   // Specialist is visible to peers but does not see others.
   swarm: { isVisible: true },

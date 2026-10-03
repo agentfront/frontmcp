@@ -1,11 +1,11 @@
-import { renderHook } from '@testing-library/react';
+import { act, render, renderHook } from '@testing-library/react';
 import React from 'react';
 
 import { ComponentRegistry } from '../../components/ComponentRegistry';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
 import type { FrontMcpContextValue } from '../../types';
-import type { ApiClientOptions, ApiOperation, HttpClient } from '../api.types';
+import type { ApiClientOptions, ApiOperation, ApiParameter, HttpClient, HttpRequestConfig } from '../api.types';
 import { parseOpenApiSpec } from '../parseOpenApiSpec';
 import { useApiClient } from '../useApiClient';
 
@@ -399,7 +399,8 @@ describe('useApiClient', () => {
       expect(url.pathname).toBe('/orgs/acme%20co/users');
       expect(url.searchParams.get('q')).toBe('a&b');
       expect(url.searchParams.getAll('tag')).toEqual(['x', 'y']);
-      expect(url.searchParams.get('filter')).toBe('{"active":true}');
+      expect(url.searchParams.get('active')).toBe('true');
+      expect(url.searchParams.has('filter')).toBe(false);
       expect(url.searchParams.get('limit')).toBe('5');
       expect(url.searchParams.has('session')).toBe(false);
       expect(config.headers).toEqual({ 'Content-Type': 'application/json', 'X-Trace': 't-1' });
@@ -447,6 +448,79 @@ describe('useApiClient', () => {
     });
   });
 
+  describe('OpenAPI parameter serialization', () => {
+    async function requestFor(parameter: ApiParameter, value: unknown): Promise<HttpRequestConfig> {
+      const ctx = createMockContext();
+      const client: HttpClient = { request: jest.fn().mockResolvedValue({ status: 200, data: null }) };
+      const operation: ApiOperation = {
+        operationId: 'listItems',
+        description: 'List items',
+        method: 'GET',
+        path: '/items',
+        inputSchema: { type: 'object' },
+        parameters: [parameter],
+      };
+      renderHook(() => useApiClient({ baseUrl: 'https://api.example.com', operations: [operation], client }), {
+        wrapper: createWrapper(ctx),
+      });
+      await ctx.dynamicRegistry.getTools()[0].execute({ [parameter.name]: value });
+      return (client.request as jest.Mock).mock.calls[0][0];
+    }
+
+    type Serialization = Pick<ApiParameter, 'style' | 'explode'>;
+
+    it.each<[string, Serialization, unknown, string]>([
+      ['form array', {}, ['x', 'y'], 'v=x&v=y'],
+      ['form object', {}, { a: 1, b: 'c d' }, 'a=1&b=c%20d'],
+      ['non-exploded form array', { explode: false }, ['a,b', 'c'], 'v=a%2Cb,c'],
+      ['non-exploded form object', { explode: false }, { a: 1, b: 2 }, 'v=a,1,b,2'],
+      ['spaceDelimited array', { style: 'spaceDelimited' }, ['x', 'y'], 'v=x%20y'],
+      ['pipeDelimited array', { style: 'pipeDelimited' }, ['x', 'y'], 'v=x%7Cy'],
+      ['deepObject object', { style: 'deepObject', explode: true }, { role: 'admin' }, 'v%5Brole%5D=admin'],
+    ])('writes a %s query argument', async (_label, serialization, value, expectedQuery) => {
+      const config = await requestFor({ name: 'v', in: 'query', ...serialization }, value);
+
+      expect(config.url).toBe(`https://api.example.com/items?${expectedQuery}`);
+    });
+
+    it.each<[string, Serialization, unknown, string]>([
+      ['array', {}, ['x', 'y'], 'x,y'],
+      ['object', {}, { a: 1, b: 2 }, 'a,1,b,2'],
+      ['exploded object', { explode: true }, { a: 1, b: 2 }, 'a=1,b=2'],
+    ])('writes a %s header argument comma-separated', async (_label, serialization, value, expectedHeader) => {
+      const config = await requestFor({ name: 'X-Values', in: 'header', ...serialization }, value);
+
+      expect(config.headers['X-Values']).toBe(expectedHeader);
+    });
+
+    it('uses the style an OpenAPI spec declares', async () => {
+      const ctx = createMockContext();
+      const client: HttpClient = { request: jest.fn().mockResolvedValue({ status: 200, data: null }) };
+      const operations = parseOpenApiSpec({
+        paths: {
+          '/items': {
+            get: {
+              operationId: 'listItems',
+              parameters: [
+                { name: 'filter', in: 'query', style: 'deepObject', explode: true, schema: { type: 'object' } },
+                { name: 'X-Ids', in: 'header', schema: { type: 'array', items: { type: 'string' } } },
+              ],
+            },
+          },
+        },
+      });
+      renderHook(() => useApiClient({ baseUrl: 'https://api.example.com', operations, client }), {
+        wrapper: createWrapper(ctx),
+      });
+
+      await ctx.dynamicRegistry.getTools()[0].execute({ filter: { owner: 'ada' }, 'X-Ids': ['1', '2'] });
+
+      const config = (client.request as jest.Mock).mock.calls[0][0];
+      expect(config.url).toBe('https://api.example.com/items?filter%5Bowner%5D=ada');
+      expect(config.headers['X-Ids']).toBe('1,2');
+    });
+  });
+
   // ─── Inline options (#681) ────────────────────────────────────────────
 
   describe('inline options', () => {
@@ -482,6 +556,55 @@ describe('useApiClient', () => {
       await ctx.dynamicRegistry.getTools()[0].execute({ id: '7' });
 
       expect((client.request as jest.Mock).mock.calls[0][0].url).toBe('https://b.example.com/users/7');
+    });
+
+    it('calls the fetch of the latest render when no client is given', async () => {
+      const ctx = createMockContext();
+      const fetchResponse = { status: 200, statusText: 'OK', ok: true, text: () => Promise.resolve('null') };
+      const firstFetch = jest.fn().mockResolvedValue(fetchResponse);
+      const latestFetch = jest.fn().mockResolvedValue(fetchResponse);
+      const { rerender } = renderHook(
+        ({ fetchFn }: { fetchFn: jest.Mock }) =>
+          useApiClient({
+            baseUrl: 'https://api.example.com',
+            operations: sampleOps,
+            fetch: fetchFn as unknown as typeof globalThis.fetch,
+          }),
+        { wrapper: createWrapper(ctx), initialProps: { fetchFn: firstFetch } },
+      );
+
+      rerender({ fetchFn: latestFetch });
+      await ctx.dynamicRegistry.getTools()[0].execute({ id: '7' });
+
+      expect(firstFetch).not.toHaveBeenCalled();
+      expect(latestFetch).toHaveBeenCalledWith('https://api.example.com/users/7', expect.anything());
+    });
+
+    it('keeps calling the committed base URL while a newer render is suspended', async () => {
+      const ctx = createMockContext();
+      const client: HttpClient = { request: jest.fn().mockResolvedValue({ status: 200, data: null }) };
+      const neverSettles = new Promise<never>(() => undefined);
+      function ApiTools({ baseUrl, suspend }: { baseUrl: string; suspend: boolean }) {
+        useApiClient({ baseUrl, operations: sampleOps, client });
+        if (suspend) throw neverSettles;
+        return null;
+      }
+      const Wrapper = createWrapper(ctx);
+      const tree = (baseUrl: string, suspend: boolean) => (
+        <Wrapper>
+          <React.Suspense fallback={null}>
+            <ApiTools baseUrl={baseUrl} suspend={suspend} />
+          </React.Suspense>
+        </Wrapper>
+      );
+      const { rerender } = render(tree('https://a.example.com', false));
+
+      await act(async () => {
+        React.startTransition(() => rerender(tree('https://b.example.com', true)));
+      });
+      await ctx.dynamicRegistry.getTools()[0].execute({ id: '7' });
+
+      expect((client.request as jest.Mock).mock.calls[0][0].url).toBe('https://a.example.com/users/7');
     });
 
     it('registers the tools again when an operation changes', () => {

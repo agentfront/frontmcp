@@ -927,11 +927,17 @@ export class AgentInstance<
         authInfo: ctx.authInfo,
         _skipUI: true, // Skip UI rendering - agent returns structured data
         surface: AGENT_SURFACE,
+        ...(this.isAgentPrivateScope(scope) && { agentPrivateCall: true }),
       },
     });
 
     // Extract the actual result from MCP CallToolResult format
     return this.extractToolResult(result);
+  }
+
+  /** This agent's private scope, or that of the agent it is nested in: the consent screen offers neither. */
+  private isAgentPrivateScope(scope: Pick<ScopeEntry, 'runFlowForOutput'>): boolean {
+    return scope === this.agentScope || (scope === this.scope && this.owner.kind === 'agent');
   }
 
   /**

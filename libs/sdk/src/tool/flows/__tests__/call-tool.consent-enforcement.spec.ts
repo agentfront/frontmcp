@@ -5,7 +5,8 @@
  * - a tool NOT in the consented set is rejected with ToolNotConsentedError,
  * - a tool IN the consented set is allowed,
  * - a token with NO consent metadata allows everything (default preserved),
- * - trusted internal dispatch (`internalCall: true`) bypasses consent.
+ * - trusted internal dispatch (`internalCall: true`) bypasses consent,
+ * - so does an agent's call into its private scope (`agentPrivateCall: true`).
  */
 import 'reflect-metadata';
 
@@ -96,6 +97,16 @@ describe('call-tool consent enforcement', () => {
       ctx: { internalCall: true },
     });
     // Internal calls are not subject to the user's consent selection.
+    await expect(flow.checkToolAuthorization()).resolves.toBeUndefined();
+  });
+
+  it("bypasses consent for a call into an agent's private scope (agentPrivateCall: true)", async () => {
+    const flow = makeFlow({
+      tool: TOOL,
+      authInfo: { extra: { user: { consent: { enabled: true, selectedTools: ['notes:list'] } } } },
+      ctx: { agentPrivateCall: true },
+    });
+
     await expect(flow.checkToolAuthorization()).resolves.toBeUndefined();
   });
 
