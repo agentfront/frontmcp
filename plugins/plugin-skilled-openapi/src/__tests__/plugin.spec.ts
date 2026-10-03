@@ -58,10 +58,46 @@ describe('SkilledOpenApiPlugin', () => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
       try {
         new SkilledOpenApiPlugin({ source: { type: 'static', path: '/x' }, dev: true });
-        expect(warn).toHaveBeenCalledWith(expect.stringMatching(/dev=true/));
+        expect(warn).toHaveBeenCalledWith(expect.stringMatching(/dev=true: signature verification BYPASSED/));
       } finally {
         warn.mockRestore();
       }
+    });
+
+    // In 1.8.7 `dev: true` left `requireSignature` at its default `true`, so an unsigned bundle
+    // was still rejected.
+    it('turns the signature requirement off with dev=true', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const plugin = new SkilledOpenApiPlugin({ source: { type: 'static', path: '/x' }, dev: true });
+        expect(plugin.options.requireSignature).toBe(false);
+        expect(plugin.options.outbound.allowHttp).toBe(true);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('keeps an explicit requireSignature=true with dev=true, and says so', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const plugin = new SkilledOpenApiPlugin({
+          source: { type: 'static', path: '/x' },
+          dev: true,
+          requireSignature: true,
+        });
+        expect(plugin.options.requireSignature).toBe(true);
+        expect(warn).toHaveBeenCalledWith(expect.stringMatching(/dev=true: signature verification kept/));
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('resolves the requirement in the config the providers share', () => {
+      const providers = SkilledOpenApiPlugin.dynamicProviders({ source: { type: 'static', path: '/x' }, dev: true });
+      const config = providers.find((p: { provide: unknown }) => p.provide === SkilledOpenApiConfig) as {
+        useValue: SkilledOpenApiConfig;
+      };
+      expect(config.useValue.options.requireSignature).toBe(false);
     });
 
     it('warns on requireSignature=false without dev=true', () => {
@@ -293,39 +329,89 @@ describe('SkilledOpenApiPlugin', () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
-    it('warns when exposeOperationsAsInternalTools=true but scope.tools is unavailable', async () => {
-      const providers = SkilledOpenApiPlugin.dynamicProviders({
-        source: { type: 'static', path: '/this/does/not/exist' },
-        requireSignature: false,
-        dev: true,
-        exposeOperationsAsInternalTools: true,
+    // The server builds plugin providers while its plugins initialize, BEFORE it creates the scope's
+    // tool registry. In 1.8.7 the factory read `scope.tools` right then, found nothing, and turned
+    // the per-operation tools off for good.
+    describe('when scope.tools does not exist yet as the factory runs', () => {
+      const bundleWithOp = {
+        ...validBundle,
+        skills: [{ id: 'invoices', name: 'Invoices', description: 'd', instructions: 'i', operationIds: ['getInv'] }],
+        operations: {
+          getInv: {
+            operationId: 'getInv',
+            serviceId: 'svc',
+            httpMethod: 'GET',
+            pathTemplate: '/v1/invoices',
+            inputSchema: {},
+            outputSchema: {},
+            mapper: [],
+            authBindingRef: 'def',
+          },
+        },
+      };
+      const silentLogger = () => {
+        const logger = {
+          warn: jest.fn(),
+          info: jest.fn(),
+          error: jest.fn(),
+          debug: jest.fn(),
+          verbose: jest.fn(),
+          child: jest.fn(() => logger),
+        };
+        return logger;
+      };
+      const buildSync = async (scope: Record<string, unknown>) => {
+        const providers = SkilledOpenApiPlugin.dynamicProviders({
+          source: { type: 'inline', content: bundleWithOp },
+          dev: true,
+          exposeOperationsAsInternalTools: true,
+        });
+        const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+          useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
+        };
+        return syncProvider.useFactory(scope, new HiddenOpRegistry(), new BundleStore());
+      };
+
+      it('registers the operation tools in the registry the scope has by the time the bundle applies', async () => {
+        const logger = silentLogger();
+        const scope: Record<string, unknown> = {
+          logger,
+          skills: { registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })) },
+          tools: undefined,
+          providers: { getActiveScope: () => ({ logger, hooks: { registerHooks: jest.fn() } }) },
+        };
+        const sync = await buildSync(scope);
+        const tools = { registerToolInstance: jest.fn(), unregisterToolInstance: jest.fn(() => true) };
+        scope['tools'] = tools; // the scope creates its tool registry after the plugins
+
+        await sync.ensureReady();
+
+        expect(tools.registerToolInstance).toHaveBeenCalledTimes(1);
+        expect(logger.warn).not.toHaveBeenCalled();
       });
-      const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
-        useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
-      };
-      const sharedWarn = jest.fn();
-      const childLogger = {
-        warn: sharedWarn,
-        info: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn(),
-        verbose: jest.fn(),
-        child: jest.fn(function self(): unknown {
-          return this;
-        }),
-      };
-      const fakeLogger = {
-        warn: sharedWarn,
-        info: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn(),
-        verbose: jest.fn(),
-        child: jest.fn(() => childLogger),
-      };
-      const fakeScope = { logger: fakeLogger, skills: { registerSkillContent: jest.fn() }, tools: undefined };
-      const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
-      expect(sync).toBeInstanceOf(BundleSyncService);
-      expect(sharedWarn).toHaveBeenCalledWith(expect.stringMatching(/scope\.tools is unavailable/));
+
+      it('logs, and still applies the bundle, when the scope never gets a tool registry', async () => {
+        const logger = silentLogger();
+        const scope = {
+          logger,
+          skills: { registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })) },
+          providers: { getActiveScope: () => ({ logger, hooks: { registerHooks: jest.fn() } }) },
+        };
+        const bundleStore = new BundleStore();
+        const providers = SkilledOpenApiPlugin.dynamicProviders({
+          source: { type: 'inline', content: bundleWithOp },
+          dev: true,
+        });
+        const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+          useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
+        };
+        const sync = await syncProvider.useFactory(scope, new HiddenOpRegistry(), bundleStore);
+
+        await sync.ensureReady();
+
+        expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/scope\.tools not available/));
+        expect(bundleStore.current()?.bundleId).toBe('plugin:test');
+      });
     });
 
     it('skips OperationToolFactory wiring when exposeOperationsAsInternalTools=false', async () => {
@@ -349,8 +435,8 @@ describe('SkilledOpenApiPlugin', () => {
       const fakeScope = { logger: fakeLogger, skills: { registerSkillContent: jest.fn() } };
       const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
       expect(sync).toBeInstanceOf(BundleSyncService);
-      // The "scope.tools is unavailable" warn must NOT fire when the option is off.
-      expect(fakeLogger.warn).not.toHaveBeenCalledWith(expect.stringMatching(/scope\.tools is unavailable/));
+      // No operation tool is registered, so nothing reaches for scope.tools.
+      expect(fakeLogger.warn).not.toHaveBeenCalledWith(expect.stringMatching(/scope\.tools/));
     });
 
     it('bundle-sync factory tolerates a malformed source config', async () => {

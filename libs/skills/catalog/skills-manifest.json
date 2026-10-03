@@ -2175,7 +2175,7 @@
                 "Secure defaults: external `$ref` resolution off, spec-URL redirects not followed, internal/private targets blocked (DNS-resolved) \u2014 on `mcp-from-openapi` >= 2.5.0",
                 "Opting back into external refs with `allowedProtocols`, and restricting the spec URL + `$ref`s with `allowedHosts`",
                 "Using `allowInternalIPs` for trusted internal/local targets (governs the spec URL and `$ref`s)",
-                "Filtering operations with `includeOperations`, `excludeOperations`, and `filterFn`",
+                "Filtering operations with `readOnlyOnly`, `includeTags`, `includePaths`, `excludeMethods`, `includeOperations`, `excludeOperations`, and `filterFn`",
                 "Combining security hardening with operation filtering for a production-ready setup"
               ]
             }

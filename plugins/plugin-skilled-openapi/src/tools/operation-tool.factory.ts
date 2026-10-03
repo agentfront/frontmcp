@@ -24,6 +24,7 @@ import {
   type ToolRegistry,
 } from '@frontmcp/sdk';
 
+import { callerTokenOf } from '../executor/caller-token';
 import { executeOperation, type OpenApiRuntimeDeps } from '../executor/openapi-runtime';
 import { getCompiledOpSchemas } from '../executor/schema-cache';
 import { type HiddenOpEntry } from '../registry/hidden-op.registry';
@@ -300,6 +301,8 @@ export class OperationToolFactory {
         entry,
         bundleId: entry.bundleId,
         input: inputParse.data as Record<string, unknown>,
+        // For a bearer binding with `passthroughCallerToken: true`.
+        callerToken: callerTokenOf(ctx.authInfo),
         deps,
       });
 

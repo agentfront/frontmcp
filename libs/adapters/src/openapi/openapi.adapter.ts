@@ -87,20 +87,17 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     const hasPerSchemeControl = inputSchemes !== 'all' && inputSchemes.size > 0;
     const includeSecurityInInput = inputSchemes === 'all' || hasPerSchemeControl;
 
-    // Generate tools from OpenAPI spec
+    // Generate tools from OpenAPI spec. Every generate option reaches the generator (the operation
+    // filters — includeTags, excludeMethods, includePaths, readOnlyOnly, … — are applied there);
+    // only the defaults below differ from mcp-from-openapi's, and the security-input choice is the
+    // adapter's own (the per-scheme list is applied by filterSecuritySchemes below).
+    const generateOptions = this.options.generateOptions;
     let openapiTools = await this.generator.generateTools({
-      includeOperations: this.options.generateOptions?.includeOperations,
-      excludeOperations: this.options.generateOptions?.excludeOperations,
-      filterFn: this.options.generateOptions?.filterFn,
-      namingStrategy: this.options.generateOptions?.namingStrategy,
-      preferredStatusCodes: this.options.generateOptions?.preferredStatusCodes ?? [200, 201, 202, 204],
-      includeDeprecated: this.options.generateOptions?.includeDeprecated ?? false,
-      includeAllResponses: this.options.generateOptions?.includeAllResponses ?? true,
-      includeSecurityInInput: includeSecurityInInput,
-      maxSchemaDepth: this.options.generateOptions?.maxSchemaDepth,
-      includeExamples: this.options.generateOptions?.includeExamples,
-      resolveFormats: this.options.generateOptions?.resolveFormats,
-      formatResolvers: this.options.generateOptions?.formatResolvers,
+      ...generateOptions,
+      preferredStatusCodes: generateOptions?.preferredStatusCodes ?? [200, 201, 202, 204],
+      includeDeprecated: generateOptions?.includeDeprecated ?? false,
+      includeAllResponses: generateOptions?.includeAllResponses ?? true,
+      includeSecurityInInput,
     });
 
     // If per-scheme control is enabled, filter security inputs
