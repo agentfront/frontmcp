@@ -7,16 +7,11 @@
 import { DynamicPlugin, isEntryGatedBy, Plugin, ScopeEntry, ToolHook, type FlowCtxOf } from '@frontmcp/sdk';
 
 import { ApprovalRequiredError } from '../approval';
-import { isApprovalExpired, isApprovalUsable, resolveApprovalRequirement } from '../approval/policy';
 import { resolveApprovalIdentity } from '../approval.identity';
 import { ApprovalStoreToken } from '../approval.symbols';
+import { isApprovalExpired, isApprovalUsable, resolveApprovalRequirement } from '../approval/policy';
 import type { ApprovalStore } from '../stores/approval-store.interface';
-import {
-  ApprovalState,
-  type ApprovalContext,
-  type ApprovalRecord,
-  type ToolApprovalRequirement,
-} from '../types';
+import { ApprovalState, type ApprovalContext, type ApprovalRecord, type ToolApprovalRequirement } from '../types';
 
 type CallToolState = FlowCtxOf<'tools:call-tool'>['state'];
 type GatedTool = NonNullable<CallToolState['tool']>;

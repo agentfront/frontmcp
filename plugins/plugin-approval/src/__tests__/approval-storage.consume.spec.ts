@@ -36,7 +36,10 @@ describe('ApprovalStorageStore.consumeApproval()', () => {
   it('gives one approval to only one of two calls', async () => {
     const record = await store.grantApproval({ toolId: TOOL_ID, scope: ApprovalScope.SESSION, sessionId: SESSION_ID });
 
-    const results = await Promise.all([store.consumeApproval(record, SESSION_ID), store.consumeApproval(record, SESSION_ID)]);
+    const results = await Promise.all([
+      store.consumeApproval(record, SESSION_ID),
+      store.consumeApproval(record, SESSION_ID),
+    ]);
 
     expect(results.sort()).toEqual([false, true]);
   });
