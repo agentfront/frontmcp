@@ -57,7 +57,7 @@ describe('ui-page generator', () => {
 
     const tsconfig = readJson(tree, 'tsconfig.base.json');
     expect(tsconfig.compilerOptions.paths['@frontmcp/ui-pages/AdminDashboard']).toEqual([
-      'ui/pages/src/AdminDashboard/index.ts',
+      './ui/pages/src/AdminDashboard/index.ts',
     ]);
   });
 

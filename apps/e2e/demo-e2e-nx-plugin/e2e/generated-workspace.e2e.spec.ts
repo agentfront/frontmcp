@@ -48,23 +48,18 @@ describe('generated workspace', () => {
     // Code that lives outside the app folder, reached through the tsconfig path alias.
     write(join(ws, 'libs/group/shared/src/shared.ts'), `export const SHARED_MARKER = 'shared-lib-marker-643';\n`);
     write(join(ws, 'libs/group/shared/src/index.ts'), `export { SHARED_MARKER } from './shared';\n`);
+    // The generated hello tool keeps its starter spec; the app module pulls the lib in instead.
     write(
-      join(ws, 'apps/demo/src/tools/hello.tool.ts'),
+      join(ws, 'apps/demo/src/demo.app.ts'),
       [
-        `import { Tool, ToolContext, z } from '@frontmcp/sdk';`,
+        `import { App } from '@frontmcp/sdk';`,
         `import { SHARED_MARKER } from '@frontmcp/shared';`,
+        `import HelloTool from './tools/hello.tool';`,
         ``,
-        `@Tool({`,
-        `  name: 'hello',`,
-        `  description: 'Say hello to someone',`,
-        `  inputSchema: { name: z.string().describe('Name to greet') },`,
-        `  outputSchema: { message: z.string() },`,
-        `})`,
-        `export default class HelloTool extends ToolContext {`,
-        `  async execute(input: { name: string }) {`,
-        `    return { message: \`Hello, \${input.name}! \${SHARED_MARKER}\` };`,
-        `  }`,
-        `}`,
+        `export const MARKER = SHARED_MARKER;`,
+        ``,
+        `@App({ id: 'demo', name: 'Demo', tools: [HelloTool] })`,
+        `export class DemoApp {}`,
         ``,
       ].join('\n'),
     );
@@ -97,7 +92,7 @@ describe('generated workspace', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('runs the test executor from the project folder with its jest config', async () => {
+  it('runs the test executor from the project folder with its jest config, starter spec included', async () => {
     const run = loadExecutor<Executor>('test');
     const result = await run({}, executorContext(ws, 'demo', 'apps/demo'));
     expect(result.success).toBe(true);

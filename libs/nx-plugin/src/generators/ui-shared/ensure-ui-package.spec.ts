@@ -1,7 +1,7 @@
 import { readJson, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
 
-import { getFrontmcpVersion } from '../../utils/versions';
+import { getEsbuildVersion, getFrontmcpVersion } from '../../utils/versions';
 import { uiComponentGenerator } from '../ui-component/ui-component';
 import { uiPageGenerator } from '../ui-page/ui-page';
 import { uiShellGenerator } from '../ui-shell/ui-shell';
@@ -34,6 +34,17 @@ describe('ensureUiPackage', () => {
       module: 'commonjs',
       moduleResolution: 'node10',
     });
+  });
+
+  it('resolves with bundler on TypeScript 6, which deprecates node10', () => {
+    tree.write('package.json', JSON.stringify({ devDependencies: { typescript: '~6.0.3' } }));
+    ensureUiPackage(tree, { packageRoot: 'ui/shells', projectName: 'ui-shells', kind: 'shell' });
+
+    expect(readJson(tree, 'ui/shells/tsconfig.json').compilerOptions).toMatchObject({
+      module: 'commonjs',
+      moduleResolution: 'bundler',
+    });
+    expect(readJson(tree, 'ui/shells/tsconfig.json').compilerOptions.ignoreDeprecations).toBeUndefined();
   });
 
   it('inherits module and moduleResolution when the base config sets customConditions (TS5098)', () => {
@@ -76,7 +87,50 @@ describe('ensureUiPackage', () => {
     const dev = readJson(tree, 'package.json').devDependencies;
     expect(dev['@testing-library/dom']).toBeDefined();
     expect(dev['@nx/esbuild']).toBeDefined();
-    expect(dev.esbuild).toBeDefined();
+    // @frontmcp/uipack peers on esbuild >=0.27; an older range made `npm install` fail with ERESOLVE.
+    expect(dev.esbuild).toBe(getEsbuildVersion());
+  });
+
+  describe('an esbuild range already in package.json', () => {
+    // Earlier versions of these generators wrote `^0.25.0`, below the `>=0.27` peer range of @frontmcp/uipack.
+    it.each([
+      ['devDependencies', '^0.25.0'],
+      ['dependencies', '~0.19.12'],
+    ])('is raised when it is older (%s: %s), in the section it is in', (section, existing) => {
+      tree.write('package.json', JSON.stringify({ [section]: { esbuild: existing } }));
+
+      ensureUiPackage(tree, { packageRoot: 'ui/shells', projectName: 'ui-shells', kind: 'shell' });
+
+      const pkg = readJson(tree, 'package.json');
+      expect(pkg[section].esbuild).toBe(getEsbuildVersion());
+      const other = section === 'dependencies' ? 'devDependencies' : 'dependencies';
+      expect(pkg[other]?.esbuild).toBeUndefined();
+    });
+
+    it('is kept when it is the same or newer', () => {
+      tree.write('package.json', JSON.stringify({ devDependencies: { esbuild: '^0.28.0' } }));
+
+      ensureUiPackage(tree, { packageRoot: 'ui/shells', projectName: 'ui-shells', kind: 'shell' });
+
+      expect(readJson(tree, 'package.json').devDependencies.esbuild).toBe('^0.28.0');
+    });
+
+    it('is raised for React packages too, without touching the other existing ranges', () => {
+      tree.write(
+        'package.json',
+        JSON.stringify({
+          dependencies: { react: '^18.3.0' },
+          devDependencies: { esbuild: '^0.25.0', '@nx/esbuild': '22.0.0' },
+        }),
+      );
+
+      ensureUiPackage(tree, { packageRoot: 'ui/components', projectName: 'ui-components', kind: 'react' });
+
+      const pkg = readJson(tree, 'package.json');
+      expect(pkg.devDependencies.esbuild).toBe(getEsbuildVersion());
+      expect(pkg.devDependencies['@nx/esbuild']).toBe('22.0.0');
+      expect(pkg.dependencies.react).toBe('^18.3.0');
+    });
   });
 
   it('leaves an existing package untouched', () => {
@@ -141,7 +195,7 @@ describe('UI generators install what the generated code imports', () => {
     expect(tree.exists('ui/components/project.json')).toBe(true);
     expect(tree.read('ui/components/src/index.ts', 'utf-8')).toContain("from './LoginForm'");
     expect(readJson(tree, 'tsconfig.base.json').compilerOptions.paths['@frontmcp/ui-components/LoginForm']).toEqual([
-      'ui/components/src/LoginForm/index.ts',
+      './ui/components/src/LoginForm/index.ts',
     ]);
   });
 });

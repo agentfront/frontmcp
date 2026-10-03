@@ -167,8 +167,11 @@ nx g @frontmcp/nx:lib shared-utils
 ## Build and Test Commands
 
 ```bash
-# Build a specific server
-nx build gateway
+# Build a specific server (server projects are named server-<name>)
+nx build server-gateway
+
+# Type-check a project
+nx typecheck billing
 
 # Test a specific app
 nx test billing
@@ -233,8 +236,8 @@ Use `nx graph` to visualize the dependency graph and ensure no circular imports 
 
 ### Build and Test
 
-- [ ] `nx build gateway` (or server name) succeeds without errors
-- [ ] `nx test billing` (or app name) passes all tests
+- [ ] `nx build server-gateway` (or `server-<name>`) succeeds without errors
+- [ ] `nx test billing` (or app name) passes all tests; new apps and libraries start with a spec
 - [ ] `nx run-many -t test` runs all tests across the workspace
 - [ ] `nx graph` shows no circular dependencies between apps
 

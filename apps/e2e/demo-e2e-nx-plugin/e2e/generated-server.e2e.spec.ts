@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 import {
@@ -70,5 +70,30 @@ describe.each(['node', 'vercel'] as const)('generated %s server', (deploymentTar
       .filter((f) => /\.(c|m)?js$/.test(f) && !f.includes('node_modules'))
       .some((f) => readFileSync(join(dist, f), 'utf8').includes('shared-lib-marker-643'));
     expect(bundled).toBe(true);
+  });
+
+  // Regression for #679: the Dockerfile ran dist/main.js and vercel.json routed to it, which no build writes.
+  it('generates deployment files that point at what the build wrote', () => {
+    const root = join(ws, 'servers', server);
+    if (deploymentTarget === 'node') {
+      const cmd = /CMD \["node", "([^"]+)"\]/.exec(readFileSync(join(root, 'Dockerfile'), 'utf8'));
+      expect(cmd?.[1]).toBe(`dist/node/server-${server}.bundle.js`);
+      expect(existsSync(join(root, cmd?.[1] ?? 'missing'))).toBe(true);
+    } else {
+      const vercel = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8')) as Record<string, unknown>;
+      expect(vercel['buildCommand']).toBe(`cd ../../ && npx nx build server-${server}`);
+      expect(vercel['builds']).toBeUndefined();
+      // The build ran with this vercel.json in place and left it alone, writing the Build Output API tree.
+      expect(existsSync(join(root, '.vercel', 'output', 'config.json'))).toBe(true);
+      expect(existsSync(join(root, '.vercel', 'output', 'functions', 'index.func', 'handler.cjs'))).toBe(true);
+    }
+  });
+
+  it('has a dev target next to build and typecheck', () => {
+    const project = JSON.parse(readFileSync(join(ws, 'servers', server, 'project.json'), 'utf8')) as {
+      targets: Record<string, { executor: string }>;
+    };
+    expect(project.targets['dev'].executor).toBe('@frontmcp/nx:dev');
+    expect(project.targets['typecheck'].executor).toBe('nx:run-commands');
   });
 });

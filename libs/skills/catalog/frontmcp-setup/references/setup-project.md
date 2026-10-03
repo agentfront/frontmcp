@@ -468,6 +468,8 @@ nx g @frontmcp/nx:app my-app --directory apps/my-app
 nx g @frontmcp/nx:server my-server --directory servers/my-server
 ```
 
+This works in `create-nx-workspace --preset=ts` workspaces too: the generated project `tsconfig.json` compiles CommonJS JavaScript whatever the TS-solution base inherits (`composite`, `emitDeclarationOnly`, `customConditions`), resolving with `node10` on TypeScript 5 and `bundler` on TypeScript 6+, and library path aliases are written as `./libs/<name>/src/index.ts`, which needs no `baseUrl`.
+
 ### 7c. Nx project.json example
 
 If manually configuring, add a `project.json`:

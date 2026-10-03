@@ -1,0 +1,7 @@
+import { <%= className %> } from './<%= fileName %>';
+
+describe('<%= className %>', () => {
+  it('greets by name', () => {
+    expect(new <%= className %>().greet('Ada')).toBe('Hello from <%= className %>, Ada!');
+  });
+});

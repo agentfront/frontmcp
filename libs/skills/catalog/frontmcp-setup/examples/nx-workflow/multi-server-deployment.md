@@ -36,9 +36,11 @@ nx g @frontmcp/nx:lib shared-db
 ```typescript
 // servers/public-gateway/src/main.ts
 import 'reflect-metadata';
-import { FrontMcp } from '@frontmcp/sdk';
+
 import { BillingApp } from '@my-workspace/billing';
 import { CrmApp } from '@my-workspace/crm';
+
+import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'public-gateway', version: '1.0.0' },
@@ -58,8 +60,10 @@ export default PublicGateway;
 ```typescript
 // servers/admin-portal/src/main.ts
 import 'reflect-metadata';
-import { FrontMcp } from '@frontmcp/sdk';
+
 import { AdminApp } from '@my-workspace/admin';
+
+import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'admin-portal', version: '1.0.0' },
@@ -73,9 +77,9 @@ export default AdminPortal;
 ```
 
 ```bash
-# Build each server independently
-nx build public-gateway
-nx build admin-portal
+# Build each server independently (server projects are named server-<name>)
+nx build server-public-gateway
+nx build server-admin-portal
 
 # Test all projects
 nx run-many -t test

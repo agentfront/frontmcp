@@ -1,13 +1,14 @@
 import { type Tree, names, joinPathFragments } from '@nx/devkit';
 import type { LibGeneratorSchema } from '../schema.js';
-import { getIgnoreDeprecations, resolveProjectPaths } from '../../../utils/project-paths.js';
+import { getProjectTsOptions, resolveProjectPaths, type ProjectModuleResolution } from '../../../utils/project-paths.js';
 
 export interface NormalizedLibOptions {
   name: string;
   projectName: string;
   projectRoot: string;
   offset: string;
-  ignoreDeprecations: string;
+  moduleResolution: ProjectModuleResolution;
+  resetCustomConditions: boolean;
   className: string;
   fileName: string;
   propertyName: string;
@@ -37,7 +38,7 @@ export function normalizeOptions(tree: Tree, schema: LibGeneratorSchema): Normal
     projectName: fileName,
     projectRoot,
     offset,
-    ignoreDeprecations: getIgnoreDeprecations(tree),
+    ...getProjectTsOptions(tree),
     className,
     fileName,
     propertyName,

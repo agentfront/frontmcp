@@ -47,7 +47,7 @@ nx g @frontmcp/nx:server gateway --apps=billing --deploymentTarget=node
 ```bash
 # Verify the generated structure
 nx test billing
-nx build gateway
+nx build server-gateway
 ```
 
 ## What This Demonstrates

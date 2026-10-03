@@ -54,7 +54,7 @@ describe('ui-shell generator', () => {
 
     const tsconfig = readJson(tree, 'tsconfig.base.json');
     expect(tsconfig.compilerOptions.paths['@frontmcp/ui-shells/admin-dashboard']).toEqual([
-      'ui/shells/src/admin-dashboard/index.ts',
+      './ui/shells/src/admin-dashboard/index.ts',
     ]);
   });
 

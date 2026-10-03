@@ -8,11 +8,25 @@
     "build": {
       "executor": "@frontmcp/nx:build",
       "cache": true,
-      "outputs": ["{projectRoot}/dist"],
+      "outputs": [<%- buildOutputs.map(o => `"${o}"`).join(', ') %>],
       "options": {
         "entry": "{projectRoot}/src/main.ts",
         "outputPath": "{projectRoot}/dist",
         "target": "<%= deploymentTarget %>"
+      }
+    },
+    "dev": {
+      "executor": "@frontmcp/nx:dev",
+      "options": {
+        "entry": "{projectRoot}/src/main.ts"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "tsc --noEmit -p tsconfig.lib.json",
+        "cwd": "{projectRoot}"
       }
     },
     "deploy": {

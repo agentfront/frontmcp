@@ -59,7 +59,7 @@ export type { LoginFormProps } from './LoginForm';
 The generator also updates three files in your workspace:
 
 1. **`ui/components/project.json`** — adds the entry to `additionalEntryPoints` in both `build-cjs` and `build-esm` targets
-2. **`tsconfig.base.json`** — adds a path alias `@frontmcp/ui-components/LoginForm`
+2. **`tsconfig.base.json`** — adds the path alias `@frontmcp/ui-components/LoginForm` → `./ui/components/src/LoginForm/index.ts` (relative, so it resolves with or without a `baseUrl`)
 3. **`ui/components/src/index.ts`** — appends `export * from './LoginForm'`
 
 ## Consuming

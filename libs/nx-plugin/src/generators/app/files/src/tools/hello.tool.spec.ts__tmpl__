@@ -1,0 +1,10 @@
+import HelloTool from './hello.tool';
+
+describe('HelloTool', () => {
+  it('greets the caller by name', async () => {
+    // execute() holds the tool's logic; build the tool without the request context the server injects.
+    const tool: HelloTool = Object.create(HelloTool.prototype);
+
+    await expect(tool.execute({ name: 'Ada' })).resolves.toEqual({ message: 'Hello, Ada!' });
+  });
+});
