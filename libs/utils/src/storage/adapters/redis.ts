@@ -9,6 +9,7 @@ import { StorageConfigError, StorageConnectionError } from '../errors';
 import { attachRedisErrorListener, type RedisErrorListenerOptions } from '../redis-error-listener';
 import type { MessageHandler, RedisAdapterOptions, SetOptions, Unsubscribe } from '../types';
 import { validateTTL } from '../utils';
+import { COMPARE_AND_DELETE_SCRIPT } from '../utils/compare-and-delete';
 import { BaseStorageAdapter } from './base';
 
 // Type imports for ioredis (dynamic import at runtime)
@@ -260,6 +261,16 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   async delete(key: string): Promise<boolean> {
     const result = await this.getConnectedClient().del(this.prefixKey(key));
     return result > 0;
+  }
+
+  override async deleteIfEquals(key: string, expectedValue: string): Promise<boolean> {
+    const deleted = await this.getConnectedClient().eval(
+      COMPARE_AND_DELETE_SCRIPT,
+      1,
+      this.prefixKey(key),
+      expectedValue,
+    );
+    return deleted === 1;
   }
 
   async exists(key: string): Promise<boolean> {

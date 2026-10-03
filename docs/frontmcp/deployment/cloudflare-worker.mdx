@@ -332,7 +332,7 @@ const storage = await createStorage({
 KV is eventually-consistent and is **not** Redis. The adapter is honest about what KV can't do — these throw `StorageNotSupportedError` pointing at the (forthcoming) Durable Object path:
 
 - **Atomic counters** (`incr`/`decr`/`incrBy`) — no atomic increment on KV.
-- **Conditional writes** (`ifNotExists`/`ifExists`) — no compare-and-set.
+- **Conditional writes** (`ifNotExists`/`ifExists`, `deleteIfEquals`) — no compare-and-set.
 - **TTL introspection** (`ttl`) — KV doesn't expose remaining TTL.
 
 `keys()` runs over the prefix-scoped, paginated `list()` API with client-side glob filtering, and the 60-second minimum `expirationTtl` is enforced. `delete()`'s "existed" flag and `expire()`'s re-put are best-effort under eventual consistency.

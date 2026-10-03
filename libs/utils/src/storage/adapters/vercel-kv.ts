@@ -5,10 +5,11 @@
  * NOTE: Vercel KV does NOT support pub/sub. Use Upstash adapter instead.
  */
 
-import { BaseStorageAdapter } from './base';
-import type { VercelKvAdapterOptions, SetOptions } from '../types';
-import { StorageConnectionError, StorageConfigError } from '../errors';
+import { StorageConfigError, StorageConnectionError } from '../errors';
+import type { SetOptions, VercelKvAdapterOptions } from '../types';
+import { COMPARE_AND_DELETE_SCRIPT } from '../utils/compare-and-delete';
 import { validateTTL } from '../utils/ttl';
+import { BaseStorageAdapter } from './base';
 
 // Type for @vercel/kv client
 type VercelKvClient = {
@@ -22,6 +23,7 @@ type VercelKvClient = {
   incr: (key: string) => Promise<number>;
   decr: (key: string) => Promise<number>;
   incrby: (key: string, increment: number) => Promise<number>;
+  eval: (script: string, keys: string[], args: string[]) => Promise<unknown>;
   scan: (cursor: number, options?: { match?: string; count?: number }) => Promise<[string, string[]]>;
   keys: (pattern: string) => Promise<string[]>;
 };
@@ -184,6 +186,15 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
   async delete(key: string): Promise<boolean> {
     const result = await this.getConnectedClient().del(this.prefixKey(key));
     return result > 0;
+  }
+
+  override async deleteIfEquals(key: string, expectedValue: string): Promise<boolean> {
+    const deleted = await this.getConnectedClient().eval(
+      COMPARE_AND_DELETE_SCRIPT,
+      [this.prefixKey(key)],
+      [expectedValue],
+    );
+    return deleted === 1;
   }
 
   async exists(key: string): Promise<boolean> {

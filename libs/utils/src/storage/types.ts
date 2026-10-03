@@ -261,6 +261,16 @@ export interface StorageAdapter {
    */
   incrBy(key: string, amount: number): Promise<number>;
 
+  /**
+   * Atomically delete a key only while it still holds `expectedValue` (compare-and-delete).
+   *
+   * @param key - Storage key
+   * @param expectedValue - The exact value the key must hold
+   * @returns true if this call deleted the key, false if it was missing or held another value
+   * @throws StorageNotSupportedError if the backend has no atomic compare-and-delete
+   */
+  deleteIfEquals?(key: string, expectedValue: string): Promise<boolean>;
+
   // ============================================
   // Pub/Sub (Optional)
   // ============================================
@@ -335,6 +345,9 @@ export interface NamespacedStorage extends StorageAdapter {
    * @returns A new NamespacedStorage with extended prefix
    */
   namespace(name: string, id?: string): NamespacedStorage;
+
+  /** {@link StorageAdapter.deleteIfEquals}; throws StorageNotSupportedError when the adapter has none. */
+  deleteIfEquals(key: string, expectedValue: string): Promise<boolean>;
 
   /**
    * Get the underlying root adapter (for advanced use).
