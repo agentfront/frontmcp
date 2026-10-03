@@ -59,6 +59,7 @@ describe('attemptSessionTakeover', () => {
     expect(updated.session.nodeId).toBe('my-pod');
     expect(updated.reassignedFrom).toBe('dead-pod');
     expect(updated.reassignedAt).toBeGreaterThan(0);
+    expect(result.reassignedAt).toBe(updated.reassignedAt);
   });
 
   it('should not claim a session already claimed by another pod', async () => {
@@ -74,6 +75,7 @@ describe('attemptSessionTakeover', () => {
 
     expect(result.claimed).toBe(false);
     expect(result.previousNodeId).toBeUndefined();
+    expect(result.reassignedAt).toBeUndefined();
 
     const unchangedRaw = redis.store.get('mcp:transport:sess1');
     if (!unchangedRaw) throw new Error('Expected session key "mcp:transport:sess1" to exist in store');
