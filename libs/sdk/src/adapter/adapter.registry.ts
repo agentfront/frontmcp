@@ -105,6 +105,14 @@ export default class AdapterRegistry
 
   /** Stop the adapters' polling and update subscriptions; the owning scope calls it when disposed. */
   dispose(): void {
-    for (const instance of this.instances.values()) instance.dispose();
+    for (const [token, instance] of this.instances) {
+      try {
+        instance.dispose();
+      } catch (error) {
+        const adapterName = instance.metadata?.name ?? tokenName(token);
+        const reason = error instanceof Error ? error.message : String(error);
+        this.logger?.warn(`AdapterRegistry: disposing adapter '${adapterName}' failed: ${reason}`);
+      }
+    }
   }
 }
