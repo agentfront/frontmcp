@@ -115,19 +115,71 @@ describe('app generator', () => {
       expect(compilerOptions.moduleResolution).toBe('node10');
       expect(compilerOptions.experimentalDecorators).toBe(true);
       expect(compilerOptions.emitDecoratorMetadata).toBe(true);
-      expect(compilerOptions.rootDir).toBeUndefined();
+      // Cross-project imports compile from the workspace root (TypeScript 6 requires it: TS5011).
+      expect(compilerOptions.rootDir).toBe('../../');
+      expect(compilerOptions.customConditions).toBeUndefined();
     });
 
-    it('acknowledges the node10 deprecation on TypeScript 6 workspaces only', async () => {
-      await appGenerator(tree, { name: 'ts5', skipFormat: true });
-      expect(readJson(tree, 'apps/ts5/tsconfig.json').compilerOptions.ignoreDeprecations).toBeUndefined();
-
+    it('resolves with bundler on TypeScript 6, which deprecates node10 (TS5107)', async () => {
       updateJson(tree, 'package.json', (json) => ({
         ...json,
         devDependencies: { ...json.devDependencies, typescript: '~6.0.3' },
       }));
       await appGenerator(tree, { name: 'ts6', skipFormat: true });
-      expect(readJson(tree, 'apps/ts6/tsconfig.json').compilerOptions.ignoreDeprecations).toBe('6.0');
+
+      const { compilerOptions } = readJson(tree, 'apps/ts6/tsconfig.json');
+      expect(compilerOptions.moduleResolution).toBe('bundler');
+      expect(compilerOptions.ignoreDeprecations).toBeUndefined();
+    });
+
+    it('builds JavaScript in an Nx TS-solution workspace (TS5098, declaration-only emit)', async () => {
+      tree.write(
+        'tsconfig.base.json',
+        JSON.stringify({
+          compilerOptions: {
+            composite: true,
+            declarationMap: true,
+            emitDeclarationOnly: true,
+            module: 'nodenext',
+            moduleResolution: 'nodenext',
+            customConditions: ['@org/source'],
+          },
+        }),
+      );
+      await appGenerator(tree, { name: 'demo', skipFormat: true });
+
+      const { compilerOptions } = readJson(tree, 'apps/demo/tsconfig.json');
+      expect(compilerOptions).toMatchObject({
+        module: 'commonjs',
+        moduleResolution: 'node10',
+        customConditions: null,
+        composite: false,
+        declarationMap: false,
+        emitDeclarationOnly: false,
+      });
+    });
+
+    it('type-checks with its own target instead of the inferred tsc --build one (TS5069)', async () => {
+      await appGenerator(tree, { name: 'demo', skipFormat: true });
+
+      expect(readJson(tree, 'apps/demo/tsconfig.json').nx).toEqual({ addTypecheckTarget: false });
+      const { typecheck } = readJson(tree, 'apps/demo/project.json').targets;
+      expect(typecheck).toMatchObject({
+        executor: 'nx:run-commands',
+        cache: true,
+        options: {
+          commands: ['tsc --noEmit -p tsconfig.lib.json', 'tsc --noEmit -p tsconfig.spec.json'],
+          cwd: '{projectRoot}',
+        },
+      });
+    });
+
+    it('starts with a spec, so `nx test` finds tests', async () => {
+      await appGenerator(tree, { name: 'demo', skipFormat: true });
+
+      const spec = tree.read('apps/demo/src/tools/hello.tool.spec.ts', 'utf-8') ?? '';
+      expect(spec).toContain("import HelloTool from './hello.tool'");
+      expect(spec).toContain("toEqual({ message: 'Hello, Ada!' })");
     });
 
     it('makes build and test cacheable', async () => {

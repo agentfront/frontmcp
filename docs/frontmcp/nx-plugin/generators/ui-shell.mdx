@@ -60,8 +60,12 @@ export type { AdminDashboardShellOptions } from './admin-dashboard.shell';
 The generator also updates three files in your workspace:
 
 1. **`ui/shells/project.json`** — adds the entry to `additionalEntryPoints` in both `build-cjs` and `build-esm` targets
-2. **`tsconfig.base.json`** — adds a path alias `@frontmcp/ui-shells/admin-dashboard`
+2. **`tsconfig.base.json`** — adds the path alias `@frontmcp/ui-shells/admin-dashboard` → `./ui/shells/src/admin-dashboard/index.ts` (relative, so it resolves with or without a `baseUrl`)
 3. **`ui/shells/src/index.ts`** — appends `export * from './admin-dashboard'`
+
+## Dependencies
+
+The first UI shell creates the `ui/shells` package and adds what it needs to the workspace `package.json`: `@frontmcp/uipack` (at the plugin's version) as a dependency, and `@nx/esbuild` plus `esbuild` (`^0.27.3`) for the package's build targets. The `esbuild` range satisfies the `esbuild >=0.27` peer range of `@frontmcp/uipack` and matches the one the `frontmcp` CLI uses, so the install resolves a single esbuild. Ranges already in your `package.json` are kept, except an `esbuild` range older than `^0.27.3` (such as the `^0.25.0` earlier versions of the UI generators wrote), which would fail the install with `ERESOLVE` and is raised to `^0.27.3` where it is declared.
 
 ## Consuming
 

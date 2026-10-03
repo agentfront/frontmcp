@@ -58,7 +58,7 @@ apps/billing/
 ```bash
 # Build and test the app
 nx test billing
-nx build gateway
+nx build server-gateway
 ```
 
 ## What This Demonstrates

@@ -61,7 +61,7 @@ export type { AdminDashboardProps } from './AdminDashboard';
 The generator also updates three files in your workspace:
 
 1. **`ui/pages/project.json`** — adds the entry to `additionalEntryPoints` in both `build-cjs` and `build-esm` targets
-2. **`tsconfig.base.json`** — adds a path alias `@frontmcp/ui-pages/AdminDashboard`
+2. **`tsconfig.base.json`** — adds the path alias `@frontmcp/ui-pages/AdminDashboard` → `./ui/pages/src/AdminDashboard/index.ts` (relative, so it resolves with or without a `baseUrl`)
 3. **`ui/pages/src/index.ts`** — appends `export * from './AdminDashboard'`
 
 ## Consuming

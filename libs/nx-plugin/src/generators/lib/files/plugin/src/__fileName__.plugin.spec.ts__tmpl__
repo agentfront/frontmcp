@@ -1,0 +1,11 @@
+import { <%= className %>Plugin } from './<%= fileName %>.plugin';
+
+describe('<%= className %>Plugin', () => {
+  it('keeps the options it is created with', () => {
+    expect(new <%= className %>Plugin({}).options).toEqual({});
+  });
+
+  it('contributes no providers yet', () => {
+    expect(<%= className %>Plugin.dynamicProviders({})).toEqual([]);
+  });
+});

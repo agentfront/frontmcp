@@ -241,6 +241,10 @@ Ensure your `tsconfig.base.json` includes decorator support:
 }
 ```
 
+<Note>
+  Workspaces created with `create-nx-workspace --preset=ts` work as they are. The `app`, `lib` and `server` generators write a project `tsconfig.json` that compiles CommonJS JavaScript whatever the base config inherits (`composite`, `emitDeclarationOnly`, `customConditions`), resolving with `node10` on TypeScript 5 and `bundler` on TypeScript 6+, and register library path aliases as `./libs/<name>/src/index.ts`, which needs no `baseUrl`.
+</Note>
+
 ---
 
 ## Verify installation

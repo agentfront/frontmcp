@@ -1,8 +1,8 @@
-import { offsetFromRoot, readJson, writeJson, type GeneratorCallback, type Tree } from '@nx/devkit';
+import { offsetFromRoot, readJson, runTasksInSerial, writeJson, type GeneratorCallback, type Tree } from '@nx/devkit';
 
 import { addFrontmcpDependencies } from '../../utils/add-dependencies.js';
-import { getIgnoreDeprecations } from '../../utils/project-paths.js';
-import { getFrontmcpVersion, getNxVersion } from '../../utils/versions.js';
+import { getModuleResolution } from '../../utils/project-paths.js';
+import { getFrontmcpVersion, getUiBuildDevDependencies } from '../../utils/versions.js';
 
 export interface EnsureUiPackageOptions {
   /** e.g. 'ui/components' */
@@ -75,7 +75,6 @@ export function ensureUiPackage(tree: Tree, options: EnsureUiPackageOptions): Ge
 
   if (!tree.exists(`${packageRoot}/project.json`)) {
     const offset = offsetFromRoot(packageRoot);
-    const ignoreDeprecations = getIgnoreDeprecations(tree);
     // `customConditions` (Nx solution workspaces set it) is only valid with a modern `moduleResolution`
     // (TS5098), so a package that inherits it must inherit the base's `module`/`moduleResolution` too.
     const inheritsModernResolution = Boolean(
@@ -94,8 +93,7 @@ export function ensureUiPackage(tree: Tree, options: EnsureUiPackageOptions): Ge
     writeJson(tree, `${packageRoot}/tsconfig.json`, {
       extends: `${offset}tsconfig.base.json`,
       compilerOptions: {
-        ...(!inheritsModernResolution && { module: 'commonjs', moduleResolution: 'node10' }),
-        ...(!inheritsModernResolution && ignoreDeprecations && { ignoreDeprecations }),
+        ...(!inheritsModernResolution && { module: 'commonjs', moduleResolution: getModuleResolution(tree) }),
         ...(kind === 'react' && { jsx: 'react-jsx' }),
         esModuleInterop: true,
         strict: true,
@@ -128,15 +126,21 @@ export function ensureUiPackage(tree: Tree, options: EnsureUiPackageOptions): Ge
   }
 
   const range = `~${getFrontmcpVersion()}`;
-  const buildDevDependencies = { '@nx/esbuild': getNxVersion(), esbuild: '^0.25.0' };
-  return kind === 'react'
-    ? addFrontmcpDependencies(
-        tree,
-        REACT_DEPENDENCIES,
-        { ...REACT_DEV_DEPENDENCIES, ...buildDevDependencies },
-        { keepExistingVersions: true },
-      )
-    : addFrontmcpDependencies(tree, { '@frontmcp/uipack': range }, buildDevDependencies, {
-        keepExistingVersions: true,
-      });
+  const { esbuild, ...buildDevDependencies } = getUiBuildDevDependencies();
+  const installUiDependencies =
+    kind === 'react'
+      ? addFrontmcpDependencies(
+          tree,
+          REACT_DEPENDENCIES,
+          { ...REACT_DEV_DEPENDENCIES, ...buildDevDependencies },
+          { keepExistingVersions: true },
+        )
+      : addFrontmcpDependencies(tree, { '@frontmcp/uipack': range }, buildDevDependencies, {
+          keepExistingVersions: true,
+        });
+  // An existing esbuild range is raised rather than kept when it is older than ours: the `^0.25.0` earlier
+  // versions of these generators wrote is below the `>=0.27` peer range of @frontmcp/uipack (npm ERESOLVE).
+  // A range at or above ours stays, in whichever section it is in.
+  const installEsbuild = addFrontmcpDependencies(tree, {}, { esbuild }, { keepExistingVersions: false });
+  return runTasksInSerial(installUiDependencies, installEsbuild);
 }

@@ -1,15 +1,6 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "builds": [
-    {
-      "src": "<%= projectRoot %>/dist/main.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "<%= projectRoot %>/dist/main.js"
-    }
-  ]
+  "installCommand": "cd <%= offset %> && <%= packageManager.install %>",
+  "buildCommand": "cd <%= offset %> && <%= packageManager.exec %> nx build <%= projectName %>"
 }

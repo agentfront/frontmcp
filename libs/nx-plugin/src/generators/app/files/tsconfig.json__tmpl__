@@ -2,13 +2,18 @@
   "extends": "<%= offset %>tsconfig.base.json",
   "compilerOptions": {
     "module": "commonjs",
-    "moduleResolution": "node10",<% if (ignoreDeprecations) { %>
-    "ignoreDeprecations": "<%= ignoreDeprecations %>",<% } %>
+    "moduleResolution": "<%= moduleResolution %>",<% if (resetCustomConditions) { %>
+    "customConditions": null,<% } %>
+    "rootDir": "<%= offset %>",
+    "composite": false,
+    "declarationMap": false,
+    "emitDeclarationOnly": false,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.spec.ts", "src/**/*.test.ts"]
+  "exclude": ["src/**/*.spec.ts", "src/**/*.test.ts"],
+  "nx": { "addTypecheckTarget": false }
 }

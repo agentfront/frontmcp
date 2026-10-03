@@ -1,6 +1,12 @@
 {
   "extends": "<%= offset %>tsconfig.base.json",
   "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "<%= moduleResolution %>",<% if (resetCustomConditions) { %>
+    "customConditions": null,<% } %>
+    "composite": false,
+    "declarationMap": false,
+    "emitDeclarationOnly": false,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "emitDecoratorMetadata": true,
@@ -11,5 +17,6 @@
   "references": [
     { "path": "./tsconfig.lib.json" },
     { "path": "./tsconfig.spec.json" }
-  ]
+  ],
+  "nx": { "addTypecheckTarget": false }
 }

@@ -1,0 +1,10 @@
+# Docker reads this file for the Dockerfile next to it: the build context is the workspace root.
+**/node_modules
+**/dist
+**/.vercel
+.nx
+tmp
+coverage
+.git
+**/.env
+**/.env.*

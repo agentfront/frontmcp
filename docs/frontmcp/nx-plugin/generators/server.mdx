@@ -34,9 +34,9 @@ nx g @frontmcp/nx:server production --apps crm,analytics
     servers/production/
     ├── src/main.ts              # Entry point composing apps
     ├── skills/                  # Skills bundle (unless --skills none)
-    ├── Dockerfile               # Multi-stage Docker build
+    ├── Dockerfile               # Multi-stage Docker build (context: workspace root)
+    ├── Dockerfile.dockerignore  # Ignore file Docker reads for this Dockerfile
     ├── docker-compose.yml       # Docker Compose (+ Redis if selected)
-    ├── .dockerignore
     ├── project.json
     ├── package.json             # Minimal manifest so `frontmcp build` runs in the project root
     ├── tsconfig.json
@@ -48,7 +48,7 @@ nx g @frontmcp/nx:server production --apps crm,analytics
     servers/production/
     ├── src/main.ts
     ├── skills/                  # Skills bundle (unless --skills none)
-    ├── vercel.json              # Vercel deployment config
+    ├── vercel.json              # Install and build commands (Build Output API)
     ├── project.json
     ├── package.json             # Minimal manifest so `frontmcp build` runs in the project root
     ├── tsconfig.json
@@ -60,7 +60,7 @@ nx g @frontmcp/nx:server production --apps crm,analytics
     servers/production/
     ├── src/main.ts
     ├── skills/                  # Skills bundle (unless --skills none)
-    ├── template.yaml            # AWS SAM template
+    ├── template.yaml            # AWS SAM template (handler: dist/lambda/handler.cjs)
     ├── project.json
     ├── package.json             # Minimal manifest so `frontmcp build` runs in the project root
     ├── tsconfig.json
@@ -83,13 +83,13 @@ nx g @frontmcp/nx:server production --apps crm,analytics
 
 ## Generated Code
 
-The entry point imports and composes all specified apps:
+The entry point imports and composes all specified apps from their project folders:
 
 ```ts src/main.ts
 import 'reflect-metadata';
 import { FrontMcp } from '@frontmcp/sdk';
-import { CrmApp } from '../../apps/crm/crm.app';
-import { AnalyticsApp } from '../../apps/analytics/analytics.app';
+import { CrmApp } from '../../../apps/crm/src/crm.app';
+import { AnalyticsApp } from '../../../apps/analytics/src/analytics.app';
 
 @FrontMcp({
   info: { name: 'Production Server', version: '0.1.0' },
@@ -100,10 +100,45 @@ export default class Server {}
 
 ## Nx Targets
 
-| Target   | Executor              | Description                     |
-| -------- | --------------------- | ------------------------------- |
-| `build`  | `@frontmcp/nx:build`  | Compile with deployment adapter |
-| `deploy` | `@frontmcp/nx:deploy` | Deploy to target platform       |
+The project is named `server-<name>`.
+
+| Target      | Executor              | Description                                             |
+| ----------- | --------------------- | ------------------------------------------------------- |
+| `build`     | `@frontmcp/nx:build`  | Compile with deployment adapter (`--target <platform>`) |
+| `dev`       | `@frontmcp/nx:dev`    | Run the composed apps with `frontmcp dev`               |
+| `typecheck` | `nx:run-commands`     | `tsc --noEmit -p tsconfig.lib.json`                     |
+| `deploy`    | `@frontmcp/nx:deploy` | Deploy to target platform                               |
+
+## Build Output
+
+`nx build server-<name>` runs `frontmcp build --target <platform>` with `--out-dir servers/<name>/dist`, and the generated deployment files point at what it writes:
+
+| Target       | Build writes                                                       | Referenced by                                                                       |
+| ------------ | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `node`       | `dist/node/server-<name>.bundle.js`                                | `Dockerfile`: `CMD ["node", "dist/node/server-<name>.bundle.js"]`                   |
+| `vercel`     | `dist/vercel/handler.cjs` and `.vercel/output/` (Build Output API) | `vercel.json`: `buildCommand` runs `nx build server-<name>` from the workspace root |
+| `lambda`     | `dist/lambda/handler.cjs`, exporting `handler`                     | `template.yaml`: `CodeUri: dist/lambda/`, `Handler: handler.handler`                |
+| `cloudflare` | `dist/cloudflare/index.js`                                         | `wrangler.toml`: `main = "dist/cloudflare/index.js"` (the build keeps it in sync)   |
+
+<AccordionGroup>
+  <Accordion title="Node.js (Docker)">
+    The Docker build context is the workspace root, so build the image from there; Docker reads the ignore rules from `Dockerfile.dockerignore` next to the Dockerfile. The image sets `FRONTMCP_BIND_ADDRESS=all`, because the server binds `127.0.0.1` by default and a published port could not reach it. It runs with `NODE_ENV=production`, so pass `MCP_SESSION_SECRET` when you start it.
+
+    ```bash
+    docker build -f servers/production/Dockerfile -t production .
+    docker run -p 3000:3000 -e MCP_SESSION_SECRET=$(openssl rand -hex 32) production
+    # or
+    docker compose -f servers/production/docker-compose.yml up --build
+    ```
+
+  </Accordion>
+  <Accordion title="Vercel">
+    Set the Vercel project's **Root Directory** to `servers/<name>`. `vercel.json` installs and builds from the workspace root with your package manager (`cd ../../ && npm install`, `cd ../../ && npx nx build server-<name>`), and the build writes `.vercel/output` into the server folder, where Vercel picks it up. The `build` target lists `.vercel/output` in its outputs, so an Nx cache hit restores it too.
+  </Accordion>
+  <Accordion title="AWS Lambda">
+    The generator adds `@codegenie/serverless-express` to the workspace: the generated handler wraps the server with it and `frontmcp build --target lambda` refuses to run without it. The bundle loads it at runtime without bundling it, so provide it to the function with a Lambda layer.
+  </Accordion>
+</AccordionGroup>
 
 ## Example
 
@@ -114,7 +149,8 @@ nx g @frontmcp/nx:server production --apps crm,analytics --deploymentTarget node
 # Vercel deployment
 nx g @frontmcp/nx:server edge --apps crm --deploymentTarget vercel
 
-# Build and deploy
-nx build production
-nx deploy production
+# Run, build and deploy
+nx dev server-production
+nx build server-production
+nx deploy server-production
 ```

@@ -1,0 +1,9 @@
+import { <%= className %>Adapter } from './<%= fileName %>.adapter';
+
+describe('<%= className %>Adapter', () => {
+  it('returns no tools, resources or prompts yet', async () => {
+    const adapter = new <%= className %>Adapter({ name: '<%= fileName %>' });
+
+    await expect(adapter.fetch()).resolves.toEqual({ tools: [], resources: [], prompts: [] });
+  });
+});

@@ -4,12 +4,28 @@
   "sourceRoot": "<%= projectRoot %>/src",
   "projectType": "library",
   "tags": [<%- parsedTags.map(t => `"${t}"`).join(', ') %>],
-  "targets": {
-    "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+  "targets": {<% if (publishable) { %>
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "outputs": ["{projectRoot}/dist"],
       "options": {
-        "jestConfig": "<%= projectRoot %>/jest.config.cjs"
+        "command": "tsc -p tsconfig.lib.json",
+        "cwd": "{projectRoot}"
+      }
+    },<% } %>
+    "test": {
+      "executor": "@frontmcp/nx:test",
+      "cache": true,
+      "options": {}
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "commands": ["tsc --noEmit -p tsconfig.lib.json", "tsc --noEmit -p tsconfig.spec.json"],
+        "parallel": false,
+        "cwd": "{projectRoot}"
       }
     }
   }

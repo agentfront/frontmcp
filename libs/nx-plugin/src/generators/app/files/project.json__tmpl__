@@ -31,6 +31,15 @@
       "cache": true,
       "options": {}
     },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "commands": ["tsc --noEmit -p tsconfig.lib.json", "tsc --noEmit -p tsconfig.spec.json"],
+        "parallel": false,
+        "cwd": "{projectRoot}"
+      }
+    },
     "inspector": {
       "executor": "@frontmcp/nx:inspector",
       "options": {}

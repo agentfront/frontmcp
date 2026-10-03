@@ -1,7 +1,7 @@
 services:
   app:
     build:
-      context: ../..
+      context: <%= offset %>
       dockerfile: <%= projectRoot %>/Dockerfile
     ports:
       - '${PORT:-3000}:3000'

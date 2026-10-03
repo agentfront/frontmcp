@@ -106,6 +106,21 @@ describe('workspace generator', () => {
     expect(namedInputs.production).toContain('!{projectRoot}/jest.config.cjs');
   });
 
+  it('does not register @nx/js/typescript, whose sync generator needs a solution-style root tsconfig.json', async () => {
+    await workspaceGenerator(tree, { name: 'my-project', skipInstall: true });
+
+    const { plugins } = readJson<{ plugins: Array<string | { plugin: string }> }>(tree, 'my-project/nx.json');
+    const names = plugins.map((entry) => (typeof entry === 'string' ? entry : entry.plugin));
+    expect(names).not.toContain('@nx/js/typescript');
+    expect(tree.exists('my-project/tsconfig.json')).toBe(false);
+  });
+
+  it('ignores the Vercel Build Output API tree', async () => {
+    await workspaceGenerator(tree, { name: 'my-project', skipInstall: true });
+
+    expect(tree.read('my-project/.gitignore', 'utf-8')).toContain('.vercel/');
+  });
+
   it('should return install task when skipInstall is false', async () => {
     const callback = await workspaceGenerator(tree, { name: 'my-project', skipInstall: false });
     expect(typeof callback).toBe('function');
