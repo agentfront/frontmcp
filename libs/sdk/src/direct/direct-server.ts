@@ -18,8 +18,8 @@ import {
 import { randomUUID, runRequestExclusive, sha256Hex } from '@frontmcp/utils';
 
 import { FlowControl } from '../common';
-import { listAllPages } from '../common/utils/list-all-pages.utils';
 import { type CallSurface } from '../common/availability';
+import { listAllPages } from '../common/utils/list-all-pages.utils';
 import { ErrorHandler, InternalMcpError, toMcpError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
 import { withMcpSurface } from '../transport/mcp-handlers/mcp-surface';

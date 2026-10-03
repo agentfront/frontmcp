@@ -48,6 +48,13 @@ export interface ExecutionResult {
   responseBytes: number;
 }
 
+/** The credentials for one request, and the caller's own token when they are that token. */
+interface ResolvedAuth {
+  context: SecurityContext;
+  /** The caller's token, when a `passthroughCallerToken` binding forwards it; it must cover the request URL. */
+  forwardedCallerToken?: string;
+}
+
 /**
  * Build a `SecurityContext` directly from our AuthBinding + a resolved
  * credential. This populates the same fields that `mcp-from-openapi`'s
@@ -62,41 +69,36 @@ async function buildSecurityContext(args: {
   /** The service the request goes to; a passed-through caller token must have been issued for it. */
   serviceBaseUrl: string;
   callerToken?: string;
-}): Promise<SecurityContext> {
+}): Promise<ResolvedAuth> {
   const { binding, bundleId, resolver, serviceBaseUrl, callerToken } = args;
-  const ctx: SecurityContext = {};
   switch (binding.kind) {
     case 'none':
-      return ctx;
+      return { context: {} };
     case 'bearer': {
-      let token: string | undefined;
       if (binding.passthroughCallerToken) {
         if (!callerToken) throw new Error('passthrough caller token requested but the caller presented none');
+        // Refused here when the token does not cover the service at all; `executeOperation` checks the
+        // URL the request is built for as well, which a path parameter can move.
         const refusal = callerTokenRefusal(callerToken, serviceBaseUrl);
         if (refusal) throw new Error(`passthrough caller token refused: ${refusal}`);
-        token = callerToken;
-      } else {
-        token = await resolver.resolve(binding.vaultRef, { bundleId });
-        if (!token) throw new Error(`bearer vaultRef "${binding.vaultRef}" did not resolve`);
+        return { context: { jwt: callerToken }, forwardedCallerToken: callerToken };
       }
-      ctx.jwt = token;
-      return ctx;
+      const token = await resolver.resolve(binding.vaultRef, { bundleId });
+      if (!token) throw new Error(`bearer vaultRef "${binding.vaultRef}" did not resolve`);
+      return { context: { jwt: token } };
     }
     case 'apiKey': {
       const value = await resolver.resolve(binding.vaultRef, { bundleId });
       if (!value) throw new Error(`apiKey vaultRef "${binding.vaultRef}" did not resolve`);
       // Use named apiKeys so the SecurityResolver routes it to the declared
       // header / query slot named in the bundle (the mapper carries the slot).
-      ctx.apiKeys = { [binding.name]: value };
       // Also set the legacy single-apiKey field for resolvers that look at it.
-      ctx.apiKey = value;
-      return ctx;
+      return { context: { apiKeys: { [binding.name]: value }, apiKey: value } };
     }
     case 'oauth2': {
       const token = await resolver.resolve(binding.vaultRef, { bundleId });
       if (!token) throw new Error(`oauth2 vaultRef "${binding.vaultRef}" did not resolve`);
-      ctx.oauth2Token = token;
-      return ctx;
+      return { context: { oauth2Token: token } };
     }
   }
 }
@@ -203,9 +205,9 @@ export async function executeOperation(args: {
     return failure(0, `tool projection failed: ${(e as Error).message}`);
   }
 
-  let securityContext: SecurityContext;
+  let auth: ResolvedAuth;
   try {
-    securityContext = await buildSecurityContext({
+    auth = await buildSecurityContext({
       binding: entry.authBinding,
       bundleId,
       resolver,
@@ -218,7 +220,7 @@ export async function executeOperation(args: {
 
   let security: AwaitedSecurity;
   try {
-    security = await resolveSecurity(mcpTool, securityContext);
+    security = await resolveSecurity(mcpTool, auth.context);
   } catch (e) {
     return failure(0, `security resolve failed: ${(e as Error).message}`);
   }
@@ -228,6 +230,14 @@ export async function executeOperation(args: {
     req = buildRequest(mcpTool, input, security, entry.service.baseUrl);
   } catch (e) {
     return failure(0, `request build failed: ${(e as Error).message}`);
+  }
+
+  // The caller's token was checked against the service's base URL; the request must stay inside the
+  // API it was issued for too. Path parameters are substituted into the URL, and URL parsing resolves
+  // the result (`/v1/{id}/me` with an `id` of `..` is `/me`), so check the URL fetch will request.
+  if (auth.forwardedCallerToken) {
+    const refusal = callerTokenRefusal(auth.forwardedCallerToken, req.url);
+    if (refusal) return failure(0, `auth resolution failed: passthrough caller token refused: ${refusal}`);
   }
 
   const ssrf = await checkOutboundUrl(req.url, allowedHosts, outbound);

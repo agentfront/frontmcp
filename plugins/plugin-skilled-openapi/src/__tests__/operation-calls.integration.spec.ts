@@ -56,7 +56,7 @@ const bundle = {
       name: 'Invoices',
       description: 'Create and look up invoices.',
       instructions: '# Invoices',
-      operationIds: ['createInvoice', 'getInvoice', 'getProfile'],
+      operationIds: ['createInvoice', 'getInvoice', 'getProfile', 'getAccountProfile'],
     },
   ],
   operations: {
@@ -95,6 +95,16 @@ const bundle = {
       inputSchema: { type: 'object' },
       outputSchema: { type: 'object' },
       mapper: [],
+      authBindingRef: 'caller',
+    },
+    getAccountProfile: {
+      operationId: 'getAccountProfile',
+      serviceId: 'billing',
+      httpMethod: 'GET',
+      pathTemplate: '/{accountId}/me',
+      inputSchema: { type: 'object', properties: { accountId: { type: 'string' } }, required: ['accountId'] },
+      outputSchema: { type: 'object' },
+      mapper: [{ inputKey: 'accountId', type: 'path', key: 'accountId', required: true }],
       authBindingRef: 'caller',
     },
   },
@@ -281,6 +291,29 @@ describe('passthroughCallerToken: true', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/passthrough caller token refused/);
+    expect(sent).toEqual([]);
+  });
+
+  it('forwards it to an operation path built from a path parameter', async () => {
+    const result = await runWorkflow('return await callTool("getAccountProfile", { accountId: "acct_1" })');
+
+    expect(result).toMatchObject({ success: true });
+    expect(sent).toEqual([
+      expect.objectContaining({ url: `${SERVICE_URL}/acct_1/me`, authorization: `Bearer ${CALLER_TOKEN}` }),
+    ]);
+  });
+
+  it.each([
+    ['resolves above the API', '..', /was not issued for https:\/\/203\.0\.113\.10\/me /],
+    ['hides a ".." segment behind an encoded slash', '../..', /has a "\.\." segment once percent-decoded/],
+  ])('sends nothing when a path parameter %s', async (_case, accountId, reason) => {
+    const result = await runWorkflow(
+      `return await callTool("getAccountProfile", { accountId: ${JSON.stringify(accountId)} })`,
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/passthrough caller token refused/);
+    expect(result.error).toMatch(reason);
     expect(sent).toEqual([]);
   });
 

@@ -29,16 +29,16 @@ export class DynamicRegistry {
    * suitable for useEffect cleanup.
    *
    * Multiple registrations of the same name are ref-counted:
-   * subsequent registrations update the definition but the tool
-   * is only removed when every registrant has unregistered.
+   * subsequent registrations replace the definition (and notify, so
+   * the server registration follows the new description, schema or
+   * availability) but the tool is only removed when every registrant
+   * has unregistered.
    */
   registerTool(def: DynamicToolDef): () => void {
     const existing = this.toolRefCounts.get(def.name) ?? 0;
     this.toolRefCounts.set(def.name, existing + 1);
     this.tools.set(def.name, def);
-    if (existing === 0) {
-      this.notify();
-    }
+    this.notify();
     let called = false;
     return () => {
       if (called) return;
