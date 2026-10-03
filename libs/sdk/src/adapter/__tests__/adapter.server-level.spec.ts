@@ -240,3 +240,51 @@ describe('server-level adapter lifecycle', () => {
     expect(shared.subscribers).toBe(0);
   });
 });
+
+describe('several adapters installed together', () => {
+  async function toolNamesOf(server: DirectMcpServer): Promise<string[]> {
+    const { tools } = await server.listTools();
+    return tools.map((tool) => tool.name).sort();
+  }
+
+  it('serves the tools of every adapter installed on the server', async () => {
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'two-server-adapters', version: '1.0.0' },
+      apps: [DeskApp],
+      adapters: [
+        StatusAdapter.init({ name: 'status-ap', region: 'ap' }),
+        StatusAdapter.init({ name: 'status-sa', region: 'sa' }),
+      ],
+      logging: { level: LogLevel.Off },
+    });
+
+    try {
+      expect(await toolNamesOf(server)).toEqual(['app_tool', 'status_ap', 'status_sa']);
+    } finally {
+      await server.dispose();
+    }
+  });
+
+  it('serves the tools of every adapter installed on one app', async () => {
+    @App({
+      id: 'regions',
+      name: 'Regions',
+      adapters: [
+        StatusAdapter.init({ name: 'status-af', region: 'af' }),
+        StatusAdapter.init({ name: 'status-oc', region: 'oc' }),
+      ],
+    })
+    class RegionsApp {}
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'two-app-adapters', version: '1.0.0' },
+      apps: [RegionsApp],
+      logging: { level: LogLevel.Off },
+    });
+
+    try {
+      expect(await toolNamesOf(server)).toEqual(['status_af', 'status_oc']);
+    } finally {
+      await server.dispose();
+    }
+  });
+});
