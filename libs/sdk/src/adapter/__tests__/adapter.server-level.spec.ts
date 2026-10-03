@@ -1,7 +1,9 @@
 /**
  * `@FrontMcp({ adapters })` registers what each adapter fetches on the server, for every app, as the
  * adapters docs show. The option was dropped by the config schema, so a server-level adapter was
- * never instantiated and its tools never listed (#678).
+ * never instantiated and its tools never listed (#678). Each server builds its own adapter from an
+ * `init()` record, and disposing the server stops the polling and update subscription of its
+ * adapters, server-level and app-level alike.
  */
 import 'reflect-metadata';
 
@@ -17,6 +19,7 @@ import {
   ResourceContext,
   Tool,
   ToolContext,
+  type AdapterType,
   type FrontMcpAdapterResponse,
 } from '../../common';
 import { type DirectMcpServer } from '../../direct/direct.types';
@@ -112,5 +115,128 @@ describe('server-level adapters', () => {
 
   it('fetches once for the server', () => {
     expect(fetches).toBe(1);
+  });
+});
+
+interface FeedOptions {
+  name: string;
+  feed: string;
+}
+
+const feedAdapters: FeedAdapter[] = [];
+
+@Adapter({ name: 'feed-api', description: 'A feed that polls for changes' })
+class FeedAdapter extends DynamicAdapter<FeedOptions> {
+  options: FeedOptions;
+  readonly events: string[] = [];
+  private readonly listeners = new Set<(response: FrontMcpAdapterResponse) => void>();
+
+  constructor(options: FeedOptions) {
+    super();
+    this.options = options;
+    feedAdapters.push(this);
+  }
+
+  async fetch(): Promise<FrontMcpAdapterResponse> {
+    this.events.push('fetch');
+    return {};
+  }
+
+  onUpdate(callback: (response: FrontMcpAdapterResponse) => void): () => void {
+    this.listeners.add(callback);
+    return () => this.listeners.delete(callback);
+  }
+
+  startPolling(): void {
+    this.events.push('start');
+  }
+
+  stopPolling(): void {
+    this.events.push('stop');
+  }
+
+  get subscribers(): number {
+    return this.listeners.size;
+  }
+}
+
+function serverWith(adapter: AdapterType): Promise<DirectMcpServer> {
+  return FrontMcpInstance.createDirect({
+    info: { name: 'feed-server', version: '1.0.0' },
+    apps: [DeskApp],
+    adapters: [adapter],
+    logging: { level: LogLevel.Off },
+  });
+}
+
+describe('server-level adapter lifecycle', () => {
+  it('stops polling and drops the update subscription when the server is disposed', async () => {
+    const record = FeedAdapter.init({ name: 'feed-dispose', feed: 'dispose' });
+    const adapter = feedAdapters[feedAdapters.length - 1];
+    const server = await serverWith(record);
+
+    expect(adapter.events).toEqual(['fetch', 'start']);
+    expect(adapter.subscribers).toBe(1);
+
+    await server.dispose();
+
+    expect(adapter.events).toEqual(['fetch', 'start', 'stop']);
+    expect(adapter.subscribers).toBe(0);
+  });
+
+  it("stops an app adapter's polling when the server is disposed", async () => {
+    @App({ id: 'feeds', name: 'Feeds', adapters: [FeedAdapter.init({ name: 'feed-app', feed: 'app' })] })
+    class FeedsApp {}
+    const adapter = feedAdapters[feedAdapters.length - 1];
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'feed-app-server', version: '1.0.0' },
+      apps: [FeedsApp],
+      logging: { level: LogLevel.Off },
+    });
+
+    expect(adapter.events).toEqual(['fetch', 'start']);
+
+    await server.dispose();
+
+    expect(adapter.events).toEqual(['fetch', 'start', 'stop']);
+    expect(adapter.subscribers).toBe(0);
+  });
+
+  it('builds an adapter of its own for each server that installs one init() record', async () => {
+    const record = FeedAdapter.init({ name: 'feed-per-server', feed: 'shared-options' });
+    const configured = feedAdapters[feedAdapters.length - 1];
+    const first = await serverWith(record);
+    const second = await serverWith(record);
+    const rebuilt = feedAdapters[feedAdapters.length - 1];
+
+    expect(rebuilt).not.toBe(configured);
+    expect(rebuilt.options).toEqual(configured.options);
+    expect(configured.events).toEqual(['fetch', 'start']);
+    expect(rebuilt.events).toEqual(['fetch', 'start']);
+
+    await first.dispose();
+    expect(configured.events).toEqual(['fetch', 'start', 'stop']);
+    expect(rebuilt.events).toEqual(['fetch', 'start']);
+
+    await second.dispose();
+    expect(rebuilt.events).toEqual(['fetch', 'start', 'stop']);
+  });
+
+  it('keeps a shared useValue adapter polling until the last server serving it is disposed', async () => {
+    const shared = new FeedAdapter({ name: 'feed-shared', feed: 'shared' });
+    const record = { provide: Symbol('feed-shared'), useValue: shared } as unknown as AdapterType;
+    const first = await serverWith(record);
+    const second = await serverWith(record);
+
+    expect(shared.events).toEqual(['fetch', 'start', 'fetch']);
+    expect(shared.subscribers).toBe(2);
+
+    await first.dispose();
+    expect(shared.events).toEqual(['fetch', 'start', 'fetch']);
+    expect(shared.subscribers).toBe(1);
+
+    await second.dispose();
+    expect(shared.events).toEqual(['fetch', 'start', 'fetch', 'stop']);
+    expect(shared.subscribers).toBe(0);
   });
 });
