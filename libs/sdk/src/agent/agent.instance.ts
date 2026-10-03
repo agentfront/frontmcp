@@ -46,6 +46,7 @@ import {
   InvalidHookFlowError,
   InvalidInputError,
 } from '../errors';
+import { describeUnreachableEntryClassHooks, unreachableHooksMessage } from '../hooks/entry-class-hooks';
 import type HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { normalizePrompt } from '../prompt/prompt.utils';
@@ -58,6 +59,7 @@ import { createAdapter, type ConfigResolver, type CreateAdapterOptions } from '.
 import { type ToolExecutor } from './agent-execution-loop';
 import { AgentScope } from './agent.scope';
 import { agentToolName, canAgentSeeSwarm, getVisibleAgentIds, isAgentVisibleToSwarm } from './agent.utils';
+import { agentClassHooksJoin } from './flows/call-agent.flow';
 
 // ============================================================================
 // Constants
@@ -480,6 +482,12 @@ export class AgentInstance<
         `Agent "${className}" has hooks for unsupported flows: ${invalidFlowNames}. ` +
           `Only agent flows (${VALID_AGENT_HOOK_FLOWS.join(', ')}) are supported on agent classes.`,
       );
+    }
+
+    // Fail fast on hooks that would never run on this class (#678)
+    const unreachable = describeUnreachableEntryClassHooks(validHooks, agentClassHooksJoin, ['agents:list-agents']);
+    if (unreachable.length > 0) {
+      throw new InvalidHookFlowError(unreachableHooksMessage('Agent', this.getClassName(), unreachable));
     }
 
     // Register valid hooks

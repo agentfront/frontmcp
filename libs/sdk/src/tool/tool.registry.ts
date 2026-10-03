@@ -153,6 +153,9 @@ export default class ToolRegistry extends RegistryAbstract<
 
     this.bump('reset');
 
+    // An entry whose hooks cannot run fails startup here, after the synchronous adoption that keeps siblings acyclic (#678).
+    await Promise.all([...this.instances.values()].map((ti) => ti.ready));
+
     await scope.registryFlows(ToolsListFlow, CallToolFlow);
   }
 

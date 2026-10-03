@@ -61,7 +61,7 @@ async onReply(reply: string, meta?: Record<string, string>): Promise<void>
 | `reply`   | `string`                 | The reply text from Claude                                    |
 | `meta`    | `Record<string, string>` | Metadata from the `channel-reply` tool call (e.g., `chat_id`) |
 
-Default implementation logs a warning. Override to forward replies to external systems.
+The default implementation throws (`onReply()` is not implemented). Override it to forward replies to external systems. When `onReply()` throws, the `channel-reply` tool answers with an error result carrying the message (up to 1.8.7 the error was logged and the tool reported success).
 
 ## Lifecycle Hooks (Service Connectors)
 
@@ -89,7 +89,7 @@ async onConnect(): Promise<void> {
 
 ### onDisconnect
 
-Tear down the persistent connection. Called during scope shutdown.
+Tear down the persistent connection. Called once during teardown: when the HTTP server shuts down, and when the server is disposed (`dispose()` on what `create()` returns, which up to 1.8.7 skipped it).
 
 ```typescript
 async onDisconnect(): Promise<void>

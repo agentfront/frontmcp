@@ -66,6 +66,8 @@ Everything else is optional with sensible defaults.
   serve?: true,                 // default true (auto-boot)
   splitByApp?: false,           // app composition mode
   providers?: [/* provider classes/factories/values */],
+  plugins?: [/* server-level plugins: every app */],
+  adapters?: [/* server-level adapters (e.g. OpenapiAdapter.init(...)): their tools, resources and prompts serve every app */],
 
   http?: {
     port?: 3000,                // default: process.env.PORT or 3000
@@ -78,7 +80,8 @@ Everything else is optional with sensible defaults.
   /** Transport & session lifecycle (NEW in v0.6) */
   transport?: {
     // Session lifecycle
-    // sessionMode has been removed in v1.0 — configure via transport.protocol presets
+    // sessionMode has no effect since v1.0: sessions follow transport.protocol ('stateless-api' serves
+    // without them). A value other than 'stateful' logs a startup warning.
     platformDetection?: {
       mappings?: { pattern: string | RegExp; platform: AIPlatformType }[],
       customOnly?: boolean,

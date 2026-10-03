@@ -28,6 +28,7 @@ import {
   ResourceReadError,
 } from '../../errors';
 import { ResolvedEntries } from '../../flows/resolved-entries';
+import { type EntryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { handleUIResourceRead, isUIResourceUri } from '../../tool/ui';
@@ -84,6 +85,9 @@ declare global {
 }
 
 const name = 'resources:read-resource' as const;
+
+/** Where the hooks a resource class declares join a run: they run on the instance 'createResourceContext' builds. */
+export const resourceClassHooksJoin: EntryClassHooksJoin = { flow: name, plan, contextStage: 'createResourceContext' };
 const { Stage } = FlowHooksOf<'resources:read-resource'>(name);
 
 /** Resources `resolveHookOwnerId` matched, reused by the same run's `findResource`. */
@@ -344,6 +348,8 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       const resourceViews = await resource.providers.buildViews(sessionKey, new Map(this.deps), this.scope.providers);
       const contextProviders = new FlowContextProviders(resource.providers, resourceViews.context);
       const context = resource.create(input.uri, params, { ...ctx, contextProviders });
+      // `authorities.pipes` may be async: run them before any hook or execute() reads `this.auth`.
+      await context.loadAuthContext();
       this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(resource.record.provide), context));
       context.mark('createResourceContext');
       this.state.set('resourceContext', context);

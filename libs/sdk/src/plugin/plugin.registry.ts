@@ -158,14 +158,14 @@ export default class PluginRegistry
 
       const providers = new ProviderRegistry(rec.metadata.providers ?? [], this.providers);
       await providers.ready;
-      // Collected before nested plugins copy their exports in, since those register their own hooks.
-      const providerHooks = normalizeHooksFromProviders(providers);
 
       // Registered before nested plugins so they can inject the providers this plugin derives from its options.
       const { pluginInstance, dynamicProviders, dynamicTools } = await this.instantiatePlugin(rec, deps);
       if (dynamicProviders) {
         await providers.addDynamicProviders(dynamicProviders);
       }
+      // Collected after the option-derived providers join and before nested plugins copy in their own hooked exports.
+      const providerHooks = normalizeHooksFromProviders(providers);
 
       // Create a plugin-specific owner (NOT the parent's owner)
       // This ensures plugin tools have kind='plugin' for proper filtering in adoption
@@ -185,6 +185,7 @@ export default class PluginRegistry
 
       const adapters = new AdapterRegistry(providers, rec.metadata.adapters ?? []);
       await adapters.ready;
+      if (adapters.getAdapters().length > 0) this.scope.onDispose(() => adapters.dispose());
 
       const tools = new ToolRegistry(providers, [...(rec.metadata.tools ?? []), ...dynamicTools], pluginOwner);
       const resources = new ResourceRegistry(providers, rec.metadata.resources ?? [], pluginOwner);
@@ -299,15 +300,15 @@ export default class PluginRegistry
 
         // Also merge to scope's registry (for flow buildViews to find them)
         // This enables CONTEXT-scoped providers from plugins to be built during flows.
-        // The scope.providers is a ProviderRegistryInterface but the actual implementation
-        // is ProviderRegistry which has mergeFromRegistry. We check at runtime to be safe.
+        // A plugin installed below the scope (on an app or agent) keeps the copy out of reach of
+        // the scope's other apps: only its own subtree resolves it (#678).
         const scopeProviders = this.scope.providers;
-        if (
-          scopeProviders !== this.providers &&
-          'mergeFromRegistry' in scopeProviders &&
-          typeof (scopeProviders as ProviderRegistry).mergeFromRegistry === 'function'
-        ) {
-          (scopeProviders as ProviderRegistry).mergeFromRegistry(providers, exported);
+        if (scopeProviders !== this.providers && scopeProviders instanceof ProviderRegistry) {
+          const installedOnScope = !this.owner || this.owner.kind === 'scope';
+          const visibleBelow = installedOnScope
+            ? undefined
+            : (this.providers.subtreeBelow(scopeProviders) ?? this.providers);
+          scopeProviders.mergeFromRegistry(providers, exported, visibleBelow);
         }
       }
       this.instances.set(token, pluginInstance);

@@ -29,6 +29,7 @@ import {
   InvalidOutputError,
   RateLimitError,
 } from '../../errors';
+import { type EntryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type SdkAuthInfo } from '../../server/server.types';
@@ -137,6 +138,9 @@ function invalidOutputFrom(outputError: unknown): InvalidOutputError {
 }
 
 const name = 'agents:call-agent' as const;
+
+/** Where the hooks an agent class declares join a run: they run on the instance 'createAgentContext' builds. */
+export const agentClassHooksJoin: EntryClassHooksJoin = { flow: name, plan, contextStage: 'createAgentContext' };
 const { Stage } = FlowHooksOf<'agents:call-agent'>(name);
 
 // ============================================================================
@@ -399,6 +403,8 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       const agentViews = await agent.providers.buildViews(sessionKey, new Map(this.deps), this.scope.providers);
       const contextProviders = new FlowContextProviders(agent.providers, agentViews.context);
       const context = agent.create(input.arguments, { ...ctx, progressToken, contextProviders });
+      // `authorities.pipes` may be async: run them before any hook or execute() reads `this.auth`.
+      await context.loadAuthContext();
       this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(agent.record.provide), context));
       context.mark('createAgentContext');
 

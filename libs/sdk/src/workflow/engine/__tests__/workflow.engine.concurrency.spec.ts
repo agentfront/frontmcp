@@ -31,6 +31,7 @@ describe('WorkflowEngine with native async context', () => {
           metadata: { name },
           parseInput: (input: unknown) => input,
           create: () => ({
+            loadAuthContext: async () => undefined,
             execute: async () => {
               inFlight++;
               maxInFlight = Math.max(maxInFlight, inFlight);

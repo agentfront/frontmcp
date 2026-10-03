@@ -179,6 +179,37 @@ authorities: {
 })
 ```
 
+### Custom Auth Context Fields (`pipes`)
+
+`pipes` add typed fields to `this.auth`. Each pipe receives the caller's claims and returns fields to merge into the
+auth context; pipes may be async (a database or Redis lookup). Declare the fields by augmenting
+`ExtendFrontMcpAuthContext`:
+
+```typescript
+declare global {
+  interface ExtendFrontMcpAuthContext {
+    team?: string;
+    plan?: string;
+  }
+}
+
+// In @FrontMcp({ authorities: { ... } })
+authorities: {
+  pipes: [
+    (claims) => ({ team: claims['team'] as string | undefined }),
+    async (claims) => ({ plan: await lookupPlan(String(claims['sub'])) }), // your own lookup
+  ],
+}
+
+// In a tool
+const team = this.auth.team;
+```
+
+Tools, resources, agents and jobs (including workflow steps) run the pipes when their context is built, before any hook
+or `execute()` reads `this.auth`. A pipe that throws is logged and its fields stay `undefined`. Pipes extend
+`this.auth` only; the authorities policies evaluate the claims (`claimsMapping` / `claimsResolver`). Up to 1.8.7,
+`pipes` were accepted but never ran, so their fields were always `undefined`.
+
 ## Authority Profiles
 
 Profiles are named, reusable authorization policies registered at the server or app level. They let you write `authorities: 'admin'` instead of repeating the full policy object on every entry.

@@ -41,6 +41,7 @@ function registryOf(probe: Probe, names: string[], ms: number): JobRegistryInter
         metadata: { name },
         parseInput: (input: unknown) => input,
         create: () => ({
+          loadAuthContext: async () => undefined,
           execute: async () => {
             probe.executions++;
             probe.inFlight++;

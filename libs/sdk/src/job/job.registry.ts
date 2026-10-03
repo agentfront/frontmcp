@@ -108,6 +108,8 @@ export default class JobRegistry
       const row = this.makeRow(token, ji, lineage);
       this.localRows.push(row);
     }
+    // An entry class that declares hooks it cannot run fails here, so startup fails with it (#678).
+    await Promise.all([...this.instances.values()].map((ji) => ji.ready));
 
     this.reindex();
     this.bump('reset');

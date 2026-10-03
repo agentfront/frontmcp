@@ -44,7 +44,6 @@ class DevtoolsApp {}
   info: { name: 'custom-protocol-server', version: '1.0.0' },
   apps: [DevtoolsApp],
   transport: {
-    sessionMode: 'stateful',
     protocol: {
       sse: true, // SSE endpoint enabled
       streamable: true, // Streamable HTTP POST enabled

@@ -64,6 +64,7 @@ import {
   ToolNotFoundError,
 } from '../../errors';
 import { ResolvedEntries } from '../../flows/resolved-entries';
+import { type EntryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type Scope } from '../../scope';
@@ -201,6 +202,9 @@ declare global {
 }
 
 const name = 'tools:call-tool' as const;
+
+/** Where the hooks a tool class declares join a run: they run on the instance 'createToolCallContext' builds. */
+export const toolClassHooksJoin: EntryClassHooksJoin = { flow: name, plan, contextStage: 'createToolCallContext' };
 const { Stage } = FlowHooksOf<'tools:call-tool'>(name);
 
 /** Tools `resolveHookOwnerId` found, reused by the same run's `findTool`. */
@@ -826,6 +830,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           signal: executionAbort.signal,
         }),
       );
+      // `authorities.pipes` may be async: run them before any hook or execute() reads `this.auth`.
+      await context.loadAuthContext();
       this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(tool.record.provide), context));
       context.mark('createToolCallContext');
 

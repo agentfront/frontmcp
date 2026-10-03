@@ -12,7 +12,6 @@
 import type { CallToolResult } from '@frontmcp/protocol';
 
 import { Tool, ToolContext } from '../../common';
-import type ChannelRegistry from '../channel.registry';
 import { channelReplyInputSchema, type ChannelReplyInput } from './reply.types';
 
 @Tool({
@@ -32,9 +31,7 @@ export class ChannelReplyTool extends ToolContext {
 
     this.logger.info('channel-reply: processing', { channel_name, textLength: text.length });
 
-    // Resolve the channel registry from scope (same casting pattern as job tools)
-    const scope = this.scope as unknown as { channels?: ChannelRegistry };
-    const channelRegistry = scope.channels;
+    const channelRegistry = this.scope.channels;
     if (!channelRegistry) {
       this.logger.error('channel-reply: channel registry not available');
       return {

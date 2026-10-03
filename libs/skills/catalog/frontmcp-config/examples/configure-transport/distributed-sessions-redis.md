@@ -44,7 +44,6 @@ class ReportsApp {}
   info: { name: 'distributed-server', version: '1.0.0' },
   apps: [ReportsApp],
   transport: {
-    sessionMode: 'stateful',
     protocol: 'modern',
     distributedMode: true,
     persistence: {

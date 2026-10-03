@@ -286,7 +286,9 @@ declare global {
 }
 ```
 
-Custom fields are populated by `AuthContextPipe` functions registered in your server config.
+Custom fields are populated by the `AuthContextPipe` functions registered in `@FrontMcp({ authorities: { pipes } })`.
+Tools, resources, agents and jobs run them before any hook or `execute()` reads `this.auth`; see
+[Custom Auth Context Fields](/frontmcp/authentication/authorities#custom-auth-context-fields-pipes).
 
 <Info>
   **FrontMcpAuthContext vs Authorization**: `FrontMcpAuthContext` is request-scoped and provides roles, permissions, and scopes from JWT claims. The `Authorization` interface is transport-scoped and tracks authorized tools, prompts, apps, and provider tokens. Use `FrontMcpAuthContext` for role/permission checks; use `Authorization` for tool/app access control.

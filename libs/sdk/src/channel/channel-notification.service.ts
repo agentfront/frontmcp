@@ -22,6 +22,15 @@ export interface ChannelNotificationMeta {
   [key: string]: string;
 }
 
+/** What the `channels:send-notification` flow takes. */
+export interface ChannelSendInput {
+  channelName: string;
+  content: string;
+  meta?: Record<string, string>;
+  /** Deliver to this session only. */
+  targetSessionId?: string;
+}
+
 /**
  * Service responsible for sending channel notifications to subscribed Claude Code sessions.
  *
@@ -34,15 +43,26 @@ export interface ChannelNotificationMeta {
  */
 export class ChannelNotificationService {
   private readonly logger: FrontMcpLogger;
-  private readonly defaultMeta: Record<string, string>;
+  private readonly serverMeta: Readonly<Record<string, string>>;
 
+  /**
+   * @param defaultMeta - The server's `channels.defaultMeta`, added under every notification's own meta.
+   * @param sendThroughFlow - Runs the `channels:send-notification` flow; the scope passes it so that
+   *   `send()` is hookable like every other channel notification.
+   */
   constructor(
     private readonly notificationService: NotificationService,
     logger: FrontMcpLogger,
     defaultMeta?: Record<string, string>,
+    private readonly sendThroughFlow?: (input: ChannelSendInput) => Promise<unknown>,
   ) {
     this.logger = logger.child('ChannelNotificationService');
-    this.defaultMeta = defaultMeta ?? {};
+    this.serverMeta = { ...(defaultMeta ?? {}) };
+  }
+
+  /** The server's `channels.defaultMeta`, added under every notification's own meta. */
+  get defaultMeta(): Readonly<Record<string, string>> {
+    return this.serverMeta;
   }
 
   /**
@@ -134,19 +154,26 @@ export class ChannelNotificationService {
   }
 
   /**
-   * Send a channel notification with the given channel name as source.
-   * Only sends to sessions subscribed to this specific channel.
+   * Send a channel notification with the given channel name as source, to the sessions subscribed to
+   * that channel. It runs the hookable `channels:send-notification` flow, which adds
+   * `channels.defaultMeta` and the channel's own `meta` and delivers it. A failure is logged, not thrown.
+   *
+   * `sendToSubscribedSessions()` and `sendToSession()` deliver directly, without the flow.
    *
    * @param channelName - The channel name (becomes the `source` attribute)
    * @param content - The notification content
    * @param additionalMeta - Additional metadata to include
    */
-  send(channelName: string, content: string, additionalMeta?: Record<string, string>): void {
-    const meta: ChannelNotificationMeta = {
-      ...this.defaultMeta,
-      ...(additionalMeta ?? {}),
-      source: channelName,
-    };
-    this.sendToSubscribedSessions(content, meta);
+  async send(channelName: string, content: string, additionalMeta?: Record<string, string>): Promise<void> {
+    if (!this.sendThroughFlow) {
+      // Not wired to a scope (constructed on its own): deliver right away.
+      this.sendToSubscribedSessions(content, { ...this.serverMeta, ...(additionalMeta ?? {}), source: channelName });
+      return;
+    }
+    try {
+      await this.sendThroughFlow({ channelName, content, meta: additionalMeta });
+    } catch (error) {
+      this.logger.error(`Channel "${channelName}" notification failed`, { error });
+    }
   }
 }

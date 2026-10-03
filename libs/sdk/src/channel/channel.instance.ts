@@ -168,7 +168,10 @@ export class ChannelInstance extends ChannelEntry {
   }
 
   /**
-   * Push a notification to subscribed Claude Code sessions.
+   * Push a notification to subscribed Claude Code sessions, through the hookable
+   * `channels:send-notification` flow. The flow adds the server's `channels.defaultMeta` and this
+   * channel's `meta` under the notification's own, buffers it for replay, and delivers it. A failure
+   * is logged, not thrown.
    *
    * **Session isolation:** If `targetSessionId` is provided, the notification is sent
    * ONLY to that specific session. This prevents session-scoped data (job results,
@@ -181,35 +184,30 @@ export class ChannelInstance extends ChannelEntry {
    * @param meta - Additional metadata
    * @param targetSessionId - If set, deliver ONLY to this session
    */
-  pushNotification(content: string, meta?: Record<string, string>, targetSessionId?: string): void {
-    // Merge static meta from channel metadata with per-notification meta.
-    // source is always authoritative (set last to prevent overrides).
-    const mergedMeta: ChannelNotificationMeta = {
-      ...(this.staticMeta ?? {}),
-      ...(meta ?? {}),
-      source: this.name,
-    };
-
-    const notification: ChannelNotification = { content, meta: mergedMeta };
-
-    // Buffer for replay if enabled (only for global events, not session-scoped)
-    if (this.replayEnabled && !targetSessionId) {
-      this._replayBuffer.push(notification);
-      while (this._replayBuffer.length > this._maxReplayEvents) {
-        this._replayBuffer.shift();
-      }
+  async pushNotification(content: string, meta?: Record<string, string>, targetSessionId?: string): Promise<void> {
+    try {
+      await this.scope.runFlow('channels:send-notification', {
+        channelName: this.name,
+        content,
+        meta,
+        ...(targetSessionId ? { targetSessionId } : {}),
+      });
+    } catch (err) {
+      this._providers.get(FrontMcpLogger).error(`Channel "${this.name}" failed to send a notification`, { error: err });
     }
+  }
 
-    if (!this._channelNotificationService) {
-      return;
-    }
-
-    if (targetSessionId) {
-      // Session-scoped delivery — only to the originating session
-      this._channelNotificationService.sendToSession(targetSessionId, content, mergedMeta);
-    } else {
-      // Global delivery — to all subscribed sessions
-      this._channelNotificationService.sendToSubscribedSessions(content, mergedMeta);
+  /**
+   * Keep a delivered global notification for sessions that connect later (when replay is enabled).
+   * Called by the `channels:send-notification` flow.
+   *
+   * @internal
+   */
+  recordForReplay(notification: ChannelNotification): void {
+    if (!this.replayEnabled) return;
+    this._replayBuffer.push(notification);
+    while (this._replayBuffer.length > this._maxReplayEvents) {
+      this._replayBuffer.shift();
     }
   }
 
@@ -263,7 +261,7 @@ export class ChannelInstance extends ChannelEntry {
       const ctx = this._serviceContext ?? this.create({});
       const notification = await ctx.onEvent(payload);
       if (notification) {
-        this.pushNotification(notification.content, notification.meta, targetSessionId);
+        await this.pushNotification(notification.content, notification.meta, targetSessionId);
       }
       return notification;
     } catch (err) {
@@ -275,6 +273,8 @@ export class ChannelInstance extends ChannelEntry {
 
   /**
    * Handle a reply from Claude Code (for two-way channels).
+   *
+   * @throws What `onReply()` throws, so the `channel-reply` tool reports the failure to the caller.
    */
   async handleReply(reply: string, meta?: Record<string, string>): Promise<void> {
     if (!this.twoWay) {
@@ -286,6 +286,7 @@ export class ChannelInstance extends ChannelEntry {
     } catch (err) {
       const logger = this._providers.get(FrontMcpLogger);
       logger.error(`Channel "${this.name}" failed to handle reply`, { error: err });
+      throw err;
     }
   }
 }

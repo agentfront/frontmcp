@@ -9,12 +9,19 @@ import {
   type EntryOwnerRef,
   type FrontMcpAdapterResponse,
 } from '../common';
+import { adapterInitOptionsOf } from '../common/dynamic/dynamic.adapter';
 import { isAdapterInstance } from '../common/dynamic/dynamic.utils';
 import { InvalidEntityError, InvalidRegistryKindError, RegistryNotInitializedError } from '../errors';
 import PromptRegistry from '../prompt/prompt.registry';
 import type ProviderRegistry from '../provider/provider.registry';
 import ResourceRegistry from '../resource/resource.registry';
 import ToolRegistry from '../tool/tool.registry';
+
+/** `useValue` adapters some registry has installed; a later registry builds its own from the `init()` options. */
+const installedAdapterValues = new WeakSet<object>();
+
+/** How many registries serve each adapter, so polling stops only when the last of them is disposed. */
+const adapterServings = new WeakMap<AdapterInterface, number>();
 
 export class AdapterInstance extends AdapterEntry {
   readonly deps: Set<Reference>;
@@ -25,6 +32,7 @@ export class AdapterInstance extends AdapterEntry {
   private adapterPrompts: PromptRegistry | null = null;
   private logger?: FrontMcpLogger;
   private unsubscribeUpdate?: () => void;
+  private servedAdapter?: AdapterInterface;
 
   constructor(record: AdapterRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
     super(record);
@@ -74,7 +82,7 @@ export class AdapterInstance extends AdapterEntry {
       for (const d of deps) args.push(await this.globalProviders.resolveBootstrapDep(d));
       adapter = await rec.useFactory(...args);
     } else if (rec.kind === AdapterKind.VALUE) {
-      adapter = rec.useValue;
+      adapter = adapterForThisRegistry(rec.useValue);
     } else {
       throw new InvalidRegistryKindError('adapter', (rec as { kind?: string }).kind);
     }
@@ -131,10 +139,40 @@ export class AdapterInstance extends AdapterEntry {
       });
     }
 
-    // Start polling if adapter supports it
-    if (typeof adapter.startPolling === 'function') {
+    const servings = (adapterServings.get(adapter) ?? 0) + 1;
+    adapterServings.set(adapter, servings);
+    this.servedAdapter = adapter;
+
+    if (servings === 1 && typeof adapter.startPolling === 'function') {
       adapter.startPolling();
       this.logger?.debug(`Adapter "${adapter.options.name}" polling started`);
+    }
+  }
+
+  /** Drop this registry's update subscription, and stop polling once no registry serves the adapter. */
+  dispose(): void {
+    const adapter = this.servedAdapter;
+    if (!adapter) return;
+    this.servedAdapter = undefined;
+    const unsubscribeUpdate = this.unsubscribeUpdate;
+    this.unsubscribeUpdate = undefined;
+    try {
+      unsubscribeUpdate?.();
+    } finally {
+      this.releaseServing(adapter);
+    }
+  }
+
+  private releaseServing(adapter: AdapterInterface): void {
+    const remaining = (adapterServings.get(adapter) ?? 1) - 1;
+    if (remaining > 0) {
+      adapterServings.set(adapter, remaining);
+      return;
+    }
+    adapterServings.delete(adapter);
+    if (typeof adapter.stopPolling === 'function') {
+      adapter.stopPolling();
+      this.logger?.debug(`Adapter "${adapter.options.name}" polling stopped`);
     }
   }
 
@@ -155,4 +193,14 @@ export class AdapterInstance extends AdapterEntry {
       this.adapterPrompts.replaceAll(response.prompts, owner);
     }
   }
+}
+
+/** The first registry keeps an `init()` adapter; each later one builds its own from the same options. */
+function adapterForThisRegistry(value: AdapterInterface): AdapterInterface {
+  if (!isAdapterInstance(value)) return value;
+  const initOptions = installedAdapterValues.has(value) ? adapterInitOptionsOf(value) : undefined;
+  installedAdapterValues.add(value);
+  if (!initOptions) return value;
+  const AdapterClass = value.constructor as new (options: object) => AdapterInterface;
+  return new AdapterClass(initOptions);
 }
