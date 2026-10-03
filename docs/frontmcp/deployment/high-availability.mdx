@@ -57,11 +57,11 @@ Other pods check for heartbeat presence before relaying to a pod or taking over 
 
 Each session's owner is recorded on the transport bus (`mcp:bus:session:{sessionId}`, a hash with the owning `nodeId`, its relay channel, and the session's transport type and token hash), and in the persisted session record (`transport.persistence`). A pod that receives a request for a session it does not hold:
 
-1. Looks up the owner — in the hookable `relayToSessionOwner` stage of the `http:request` flow, which runs right after the IP filter and **before** quota and authentication.
+1. Looks up the owner — in the hookable `relayToSessionOwner` stage of the `http:request` flow, which runs right after the IP filter and **before** quota and authentication. Only a session id this deployment minted (it decrypts under `MCP_SESSION_SECRET`) is looked up; any other id costs no Redis round trip and is answered by the receiving pod.
 2. If the owner is **another live pod**, publishes the request (method, URL, headers, parsed body, client address) to that pod's channel `mcp:ha:notify:{nodeId}`.
 3. The owner runs the request through its own `http:request` flow — IP filter, quota, session verification, routing, the MCP transport, audit and every hook run there, exactly as for a request it received itself — and publishes what it writes (status, headers, each body chunk, end) back to the relaying pod, which streams it to the client. SSE responses and the standalone `GET` notification stream are streamed chunk by chunk.
 
-If the client disconnects, the relaying pod tells the owner to abort the request. If the owner does not listen on its channel, does not acknowledge the request within 5 seconds, or its heartbeat expires while it serves, the client gets `503` with a `Retry-After` of the heartbeat TTL (see [Errors](#errors)) instead of a broken session: the stopped pod's heartbeat expires within that time, and the retry takes the session over. A relayed request is never relayed again.
+If the client disconnects, the relaying pod tells the owner to abort the request. If the owner does not listen on its channel, does not acknowledge the request within 5 seconds, its heartbeat expires while it serves, or nothing arrives from it for three heartbeat intervals (the owner sends a keepalive frame while a response, such as an SSE stream, is quiet), the client gets `503` with a `Retry-After` of the heartbeat TTL (see [Errors](#errors)) instead of a broken session — or, when part of the response already reached the client, the response is ended: the stopped pod's heartbeat expires within that time, and the retry takes the session over. A response frame the owner cannot publish (Redis error, or the relaying pod no longer listens) aborts the response on the owner and ends it on the relaying pod, so a response missing a chunk is never completed. A relayed request is never relayed again.
 
 <Note>
   The owner trusts what arrives on its relay channel like any other request: it re-authenticates it. Run Redis on a private network, as for the session store — anyone who can publish to Redis can inject requests, just as anyone who can write to it can rewrite sessions.
@@ -76,7 +76,9 @@ When a request arrives for a session owned by a dead pod, the receiving pod runs
 3. Atomically update `nodeId` to the new pod and set `reassignedAt` / `reassignedFrom`
 4. Return success or failure
 
-This CAS operation prevents two pods from claiming the same session simultaneously. The winner recreates the transport from the persisted session (client capabilities included), records itself as the owner on the transport bus, and serves the request. A pod that loses the race relays the request to the winner.
+This CAS operation prevents two pods from claiming the same session simultaneously. The winner recreates the transport from the persisted session (client capabilities included, `reassignedAt` / `reassignedFrom` kept), records itself as the owner on the transport bus, and serves the request. A pod that loses the race relays the request to the winner.
+
+A pod cut off from Redis for longer than the heartbeat TTL may lose its sessions this way while it still holds their transports. Once its heartbeat has lapsed, it re-reads a held session's persisted record before serving it again (once per lapse): if another pod owns the session now, it drops its own transport — leaving the record to the new owner — and relays the request there. While Redis stays unreachable it keeps serving the sessions it holds, since it can neither check nor relay; a client that still reaches it during the partition keeps the old copy until then.
 
 Only Streamable HTTP sessions can be taken over: the transport is recreated from `transport.persistence`, so takeover needs a persistence backend. Without one, a session whose pod stopped is unknown to the others and the client re-initializes.
 
