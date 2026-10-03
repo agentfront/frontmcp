@@ -151,8 +151,8 @@ function matchCustomMappings(clientName: string, mappings?: PlatformMappingEntry
         return mapping.platform;
       }
     } else {
-      // RegExp match
-      if (mapping.pattern.test(clientName)) {
+      // RegExp match: search() starts at 0 and leaves lastIndex alone, so a g or y pattern matches every time
+      if (clientName.search(mapping.pattern) !== -1) {
         return mapping.platform;
       }
     }

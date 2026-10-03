@@ -13,6 +13,7 @@ describe('validateCSPDomain', () => {
     'https://*.example.com',
     'wss://*.example.com',
     'https://*.api.example.co.uk',
+    'https://cdn.example.com/assets/',
     'http://localhost:3000',
     'ws://localhost:3000',
     'http://127.0.0.1:8080',
@@ -32,6 +33,9 @@ describe('validateCSPDomain', () => {
     'https://api.example.com/;script-src *',
     "https://api.example.com 'unsafe-eval'",
     'https://a.example.com,https://b.example.com',
+    'wss://api.example.com?token=x',
+    'https://api.example.com/v1?',
+    'https://api.example.com#section',
     '',
   ])('rejects %s', (domain) => {
     expect(validateCSPDomain(domain)).toBe(false);
