@@ -7,7 +7,7 @@
  * Options may be written inline: the tools are registered again only when the
  * `prefix`, the target server, or what an operation declares (its id, description,
  * method, path, input schema or parameters) changes. `baseUrl`, `headers`,
- * `client` and `fetch` are read when a tool runs.
+ * `client` and `fetch` are read when a tool runs, from the latest committed render.
  */
 
 import { useContext, useEffect, useRef } from 'react';
@@ -66,20 +66,22 @@ function registrationKey(operations: ApiOperation[]): string {
 }
 
 export function useApiClient(options: ApiClientOptions): void {
-  const { operations, prefix = 'api', client, fetch: customFetch } = options;
+  const { baseUrl, operations, headers, prefix = 'api', client, fetch: customFetch } = options;
   const { getDynamicRegistry } = useContext(FrontMcpContext);
   const dynamicRegistry = getDynamicRegistry(options.server);
 
-  const baseUrlRef = useRef(options.baseUrl);
-  baseUrlRef.current = options.baseUrl;
-  const headersRef = useRef(options.headers);
-  headersRef.current = options.headers;
+  const baseUrlRef = useRef(baseUrl);
+  const headersRef = useRef(headers);
   const operationsRef = useRef(operations);
-  operationsRef.current = operations;
-
-  // Keep the client ref fresh so token-refresh / header changes are captured
   const clientRef = useRef<HttpClient>(client ?? createFetchClient(customFetch));
-  clientRef.current = client ?? createFetchClient(customFetch);
+
+  // Set after commit, never during render: a render React discards must not reach a running tool
+  useEffect(() => {
+    baseUrlRef.current = baseUrl;
+    headersRef.current = headers;
+    operationsRef.current = operations;
+    clientRef.current = client ?? createFetchClient(customFetch);
+  }, [baseUrl, headers, operations, client, customFetch]);
 
   const key = registrationKey(operations);
 
