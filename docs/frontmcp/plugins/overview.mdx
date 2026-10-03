@@ -90,6 +90,21 @@ These plugins are maintained by the FrontMCP team and published as individual pa
     **Best for:** Large APIs (50+ ops) where flat exposure breaks the agent, CI-driven schema delivery, customer-facing MCP servers
 
   </Card>
+
+  <Card title="WebMCP Plugin" icon="globe" href="/frontmcp/plugins/webmcp-plugin">
+    Expose the tools of a FrontMCP server running in the page to in-browser agents through WebMCP
+    (`document.modelContext`), the browser API Gemini in Chrome and other browser agents use.
+
+    **Features:**
+    - Registers the server's tools with `document.modelContext` and keeps them in sync
+    - Every agent call runs the `tools:call-tool` flow: hooks, authorities, quota and `availableWhen` apply
+    - `'webmcp'` call surface to choose which tools agents see
+    - Picks up `server.registerTool()` and React `useDynamicTool` tools automatically
+    - Unregisters everything on `server.dispose()`
+
+    **Best for:** Websites that want agents in the browser to act through the site's own operations
+
+  </Card>
 </CardGroup>
 
 <Note>More official plugins are coming soon! Rate limiting, observability, and validation plugins are in development.</Note>

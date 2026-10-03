@@ -1,0 +1,62 @@
+{
+  "name": "@frontmcp/plugin-webmcp",
+  "version": "1.5.7",
+  "description": "WebMCP plugin for FrontMCP - expose an in-browser FrontMCP server's tools to browser agents through document.modelContext",
+  "author": "AgentFront <info@agentfront.dev>",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "webmcp",
+    "modelcontext",
+    "browser",
+    "agents",
+    "plugin",
+    "frontmcp",
+    "agentfront"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "plugins/plugin-webmcp"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "homepage": "https://github.com/agentfront/frontmcp/blob/main/plugins/plugin-webmcp/README.md",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    }
+  },
+  "dependencies": {
+    "@frontmcp/sdk": "1.5.7",
+    "@frontmcp/utils": "1.5.7"
+  },
+  "peerDependencies": {
+    "@frontmcp/lazy-zod": "1.5.7"
+  },
+  "devDependencies": {
+    "reflect-metadata": "^0.2.2"
+  }
+}

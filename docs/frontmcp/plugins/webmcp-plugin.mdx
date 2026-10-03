@@ -1,0 +1,189 @@
+---
+title: WebMCP Plugin
+description: Expose an in-browser FrontMCP server's tools to browser agents through WebMCP (document.modelContext).
+icon: globe
+keywords: ['frontmcp', 'mcp', 'model context protocol', 'plugin', 'plugins', 'webmcp', 'browser', 'chrome', 'modelContext', 'agents', 'typescript']
+---
+
+The WebMCP Plugin lets a website that runs FrontMCP **in the page** offer its tools to the agents in the user's browser. It registers the server's tools with [WebMCP](https://webmachinelearning.github.io/webmcp/) — the browser API (`document.modelContext`) that Gemini in Chrome, the Model Context Tool Inspector extension, DevTools' WebMCP pane and other in-browser agents use to discover and call a page's tools.
+
+## Why Use WebMCP?
+
+<CardGroup cols={2}>
+  <Card title="Agents Act Through Your Code" icon="hand-pointer">
+    Agents call the operations you define (search, add to cart, fill a form) instead of guessing clicks on the DOM
+  </Card>
+  <Card title="One Definition, Every Client" icon="clone">
+    The same tools serve MCP clients, React hooks, and in-browser agents
+  </Card>
+  <Card title="Hookable Like Any Call" icon="shield">
+    Every agent call runs the `tools:call-tool` flow: hooks, authorities, quota and `availableWhen` apply
+  </Card>
+  <Card title="Page-Aware Tools" icon="bolt">
+    Tools from `server.registerTool()` and React's `useDynamicTool` appear and disappear with the UI
+  </Card>
+</CardGroup>
+
+## Installation
+
+```bash
+npm install @frontmcp/plugin-webmcp
+```
+
+## Quick Start
+
+```typescript
+import { create } from '@frontmcp/sdk';
+import { WebMcpPlugin } from '@frontmcp/plugin-webmcp';
+
+const server = await create({
+  info: { name: 'shop', version: '1.0.0' },
+  tools: [SearchProducts, AddToCart],
+  plugins: [WebMcpPlugin.init({ prefix: 'shop.' })],
+});
+```
+
+Install the plugin with `WebMcpPlugin.init()`, with or without options.
+
+With React, pass the same server to the provider. Tools that components register with `useDynamicTool` are server tools, so the plugin exposes them too:
+
+```tsx
+const server = await create({
+  info: { name: 'shop', version: '1.0.0' },
+  tools: [SearchProducts],
+  plugins: [WebMcpPlugin.init()],
+});
+
+createRoot(root).render(
+  <FrontMcpProvider server={server}>
+    <App />
+  </FrontMcpProvider>,
+);
+```
+
+## How It Works
+
+<Steps>
+  <Step title="List">
+    Once the server is ready, the plugin lists its tools through the `tools:list-tools` flow on the `'webmcp'` surface — so `availableWhen`, authorities and list hooks decide what agents see.
+  </Step>
+  <Step title="Register">
+    Each listed tool is registered with `document.modelContext.registerTool()`, with an `AbortSignal` the plugin keeps.
+  </Step>
+  <Step title="Stay in Sync">
+    When the server's tools change (`server.registerTool()`, `useDynamicTool`, a remote app connecting), the plugin re-lists and registers, re-registers or unregisters only what changed. A burst of changes syncs once.
+  </Step>
+  <Step title="Call">
+    An agent's call runs the `tools:call-tool` flow on the `'webmcp'` surface, with the agent's cancellation signal linked to the tool's `this.signal`.
+  </Step>
+  <Step title="Clean Up">
+    `server.dispose()` unregisters every tool.
+  </Step>
+</Steps>
+
+## Choosing What Agents See
+
+The `'webmcp'` [call surface](/frontmcp/features/environment-awareness#surface-issue-417) decides per tool:
+
+```typescript
+// Only in-browser agents
+@Tool({ name: 'fill_checkout_form', availableWhen: { surface: ['webmcp'] } })
+
+// MCP clients only — never exposed through WebMCP
+@Tool({ name: 'admin_reset', availableWhen: { surface: ['mcp'] } })
+```
+
+A tool without `surface` is offered everywhere. For a decision the metadata can't express, use the `include` option:
+
+```typescript
+WebMcpPlugin.init({
+  include: (tool) => !tool.annotations?.destructiveHint,
+});
+```
+
+## Plugin Options
+
+| Option         | Type                                                      | Default                   | Description                                                                      |
+| -------------- | --------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------- |
+| `prefix`       | `string`                                                  | `''`                      | Prepended to every exposed name, e.g. `'shop.'`, to keep the page's tools apart. |
+| `include`      | `(tool) => boolean`                                       | all                       | Which listed tools to expose. Runs after `availableWhen` and authorities.        |
+| `exposedTo`    | `string[]`                                                | —                         | Other origins the tools are offered to (e.g. the parent of an iframe).           |
+| `authContext`  | `DirectAuthContext \| () => DirectAuthContext \| Promise` | anonymous `webmcp` caller | Who the server sees calling. A function is resolved on every list and call.      |
+| `modelContext` | `ModelContext`                                            | `document.modelContext`   | The context to register with: a polyfill or a test double.                       |
+
+### Calling as the Signed-In User
+
+By default the server sees an anonymous `webmcp` caller in one session. When the page knows its user, pass it:
+
+```typescript
+WebMcpPlugin.init({
+  authContext: () => ({ user: { sub: session.userId }, token: session.accessToken }),
+});
+```
+
+When what the user may see changes (they sign in or out), call `refresh()` on the bridge so the exposed tools follow:
+
+```typescript
+import { WebMcpBridge } from '@frontmcp/plugin-webmcp';
+
+// inside a tool, provider or hook with DI access
+this.get(WebMcpBridge).refresh();
+```
+
+## How Tools Are Translated
+
+| MCP                                 | WebMCP                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `name`                              | `prefix + name`, characters outside `[A-Za-z0-9_.-]` → `_` (`app:tool` → `app_tool`), max 128, deduped |
+| `description`                       | `description`, else `title`, else `name` (WebMCP requires one)                                         |
+| `title`, `inputSchema`              | passed through                                                                                         |
+| `readOnlyHint: true`                | `readOnlyHint: true`                                                                                   |
+| `destructiveHint: true`             | `consequentialHint: true`                                                                              |
+| `openWorldHint: true`               | `untrustedContentHint: true`                                                                           |
+| result                              | `{ content, structuredContent? }` (no `_meta`)                                                         |
+| `isError` result, or a server error | the call rejects with the error's text (or the error's public message)                                 |
+
+## Trying It in Chrome
+
+WebMCP is in origin trial in Chrome and Edge (Chrome 149–162). For local development:
+
+1. Open `chrome://flags/#enable-webmcp-testing`, enable it, and restart Chrome.
+2. Optionally enable `chrome://flags/#devtools-webmcp-support` for the DevTools pane.
+3. Open your page, then **DevTools → Application → WebMCP** to list the page's tools and run them, or use the **Model Context Tool Inspector** extension to have an agent call them.
+
+To serve the API to visitors without the flag, register for the [WebMCP origin trial](https://developer.chrome.com/blog/ai-webmcp-origin-trial) and add the token to your page.
+
+## Other Browsers
+
+Where `document.modelContext` is missing, the plugin does nothing and the server works as usual; `isWebMcpSupported()` tells you up front. To reach agents in other browsers, install a polyfill that provides `document.modelContext` before creating the server — for example [`@mcp-b/global`](https://github.com/WebMCP-org/npm-packages), which also bridges the page's tools to the MCP-B browser extension — or pass one as the `modelContext` option.
+
+```typescript
+import '@mcp-b/global';
+import { isWebMcpSupported } from '@frontmcp/plugin-webmcp';
+
+console.log(isWebMcpSupported()); // true once a native API or polyfill is present
+```
+
+## Security
+
+- **Secure context.** WebMCP exists only on HTTPS pages (and `localhost`).
+- **Permissions policy.** The `tools` feature defaults to `'self'`: top-level pages and same-origin iframes may register tools. A cross-origin iframe needs `<iframe allow="tools">`, and `Permissions-Policy: tools=()` turns WebMCP off.
+- **Cross-origin exposure is opt-in.** Tools are offered to other origins only through `exposedTo`, and the other origin must ask for them.
+- **Treat agent input as user input.** Agents call your tools with arguments a model chose. Validate them (zod `inputSchema`s do), keep consequential operations behind `destructiveHint: true` so agents can ask the user first, and keep anything an agent must never do off the `'webmcp'` surface.
+
+## Limitations
+
+- **Tools only.** WebMCP has no resources or prompts; they stay MCP-only.
+- **No elicitation or sampling.** WebMCP has no channel back to the agent (`requestUserInteraction` was removed from the draft), so a tool that elicits fails when an in-browser agent calls it.
+- **The declarative API is not covered.** HTML forms with `toolname` attributes are registered by the browser, not by FrontMCP.
+- **The API is still changing.** The plugin targets the WebMCP draft of 2026-09-30 (`registerTool` with an `AbortSignal`); earlier Chrome builds with `navigator.modelContext` are not supported.
+
+## API Reference
+
+| Export                                  | Description                                                                                           |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `WebMcpPlugin`                          | The plugin (default export too). Use `WebMcpPlugin.init(options)`.                                    |
+| `WebMcpBridge`                          | The bridge (also its DI token): `refresh()`, `whenIdle()`, `registeredToolNames`, `start()`, `stop()` |
+| `isWebMcpSupported()`                   | Whether `document.modelContext.registerTool` exists                                                   |
+| `toWebMcpToolName(name)`                | The WebMCP-valid form of a name                                                                       |
+| `ModelContext`, `ModelContextTool`, ... | The WebMCP types the plugin targets                                                                   |

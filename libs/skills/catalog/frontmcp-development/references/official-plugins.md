@@ -1,11 +1,11 @@
 ---
 name: official-plugins
-description: Guide to the 6 official plugins for discovery, memory, auth, caching, flags, and monitoring
+description: Guide to the 7 official plugins for discovery, memory, auth, caching, flags, monitoring, and WebMCP
 ---
 
 # Official FrontMCP Plugins
 
-FrontMCP ships 6 official plugins that extend server behavior with cross-cutting concerns: semantic tool discovery, session memory, authorization workflows, result caching, feature gating, and visual monitoring. Install individually or via `@frontmcp/plugins` (meta-package re-exporting cache, codecall, and remember).
+FrontMCP ships 7 official plugins that extend server behavior with cross-cutting concerns: semantic tool discovery, session memory, authorization workflows, result caching, feature gating, visual monitoring, and exposing in-browser tools to browser agents (WebMCP). Install individually or via `@frontmcp/plugins` (meta-package re-exporting cache, codecall, and remember).
 
 > **Note:** The Dashboard plugin (`@frontmcp/plugin-dashboard`) is currently in **beta** and may not work correctly in all environments. It is not recommended for production use at this time.
 
@@ -16,6 +16,7 @@ FrontMCP ships 6 official plugins that extend server behavior with cross-cutting
 - Installing and configuring any official FrontMCP plugin (CodeCall, Remember, Approval, Cache, Feature Flags)
 - Adding session memory, tool caching, or authorization workflows to an existing server
 - Integrating feature flag services (LaunchDarkly, Split.io, Unleash) to gate tools at runtime
+- Exposing the tools of a FrontMCP server running in the browser to in-browser agents through WebMCP (`document.modelContext`)
 
 ### Recommended
 
@@ -960,6 +961,51 @@ All official plugins use the static `init()` pattern inherited from `DynamicPlug
 class ProductionServer {}
 ```
 
+## 7. WebMCP Plugin (`@frontmcp/plugin-webmcp`)
+
+Exposes the tools of a FrontMCP server that runs **in the page** (`create()` from `@frontmcp/sdk` / `@frontmcp/react`) to in-browser agents through [WebMCP](https://webmachinelearning.github.io/webmcp/) — `document.modelContext`, which Gemini in Chrome, the Model Context Tool Inspector extension and DevTools' WebMCP pane use. WebMCP is in origin trial in Chrome/Edge (149–162); for local development enable `chrome://flags/#enable-webmcp-testing`.
+
+### Installation
+
+```typescript
+import { WebMcpPlugin } from '@frontmcp/plugin-webmcp';
+import { create } from '@frontmcp/sdk';
+
+const server = await create({
+  info: { name: 'shop', version: '1.0.0' },
+  tools: [SearchProducts, AddToCart],
+  plugins: [WebMcpPlugin.init({ prefix: 'shop.' })], // always .init(), with or without options
+});
+```
+
+The plugin is a transport adapter: it lists tools through the `tools:list-tools` flow and runs every agent call through `tools:call-tool`, both on the `'webmcp'` call surface — so hooks, authorities, quota and `availableWhen` apply. It keeps the registrations in sync with the tool registry (including `server.registerTool()` and React `useDynamicTool` tools) and unregisters everything on `server.dispose()`. Without `document.modelContext` (Node, unsupported browsers) it does nothing.
+
+### Options
+
+| Option         | Default                   | Description                                                                |
+| -------------- | ------------------------- | -------------------------------------------------------------------------- |
+| `prefix`       | `''`                      | Prepended to every exposed name                                            |
+| `include`      | all                       | `(tool) => boolean`, runs after `availableWhen` and authorities            |
+| `exposedTo`    | —                         | Other origins (e.g. an iframe's parent) the tools are offered to           |
+| `authContext`  | anonymous `webmcp` caller | `DirectAuthContext` or a function returning it, resolved per list and call |
+| `modelContext` | `document.modelContext`   | A polyfill or test double                                                  |
+
+### Choosing what agents see
+
+```typescript
+@Tool({ name: 'fill_checkout_form', availableWhen: { surface: ['webmcp'] } }) // browser agents only
+@Tool({ name: 'admin_reset', availableWhen: { surface: ['mcp'] } }) // never exposed through WebMCP
+```
+
+### Translation rules
+
+- Names: `prefix + name`, characters outside `[A-Za-z0-9_.-]` become `_` (`app:tool` → `app_tool`), max 128, collisions get `_2`, `_3`, …
+- Annotations: `readOnlyHint` → `readOnlyHint`; explicit `destructiveHint: true` → `consequentialHint`; explicit `openWorldHint: true` → `untrustedContentHint`.
+- Results: `{ content, structuredContent? }` without `_meta`; an `isError` result or server error rejects with its message.
+- Tools only — resources and prompts stay MCP-only; elicitation is unavailable to WebMCP callers.
+
+For other browsers, load a polyfill that installs `document.modelContext` (e.g. `@mcp-b/global`) before `create()`, or pass one as `modelContext`.
+
 ## Common Patterns
 
 | Pattern                  | Correct                                                            | Incorrect                                                                       | Why                                                                                                      |
@@ -994,13 +1040,14 @@ class ProductionServer {}
 
 ## Troubleshooting
 
-| Problem                           | Cause                                                                            | Solution                                                                             |
-| --------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `this.remember` is undefined      | RememberPlugin not registered or missing `.init()`                               | Add `RememberPlugin.init({ type: 'memory' })` to `plugins` array                     |
-| Cache not working for a tool      | Tool name does not match any `toolPatterns` glob and `cache` metadata is not set | Add `cache: true` to `@Tool` decorator or add matching pattern to `toolPatterns`     |
-| Feature flag always returns false | Using `'static'` adapter with flag not in the `flags` map                        | Add the flag key to `flags: { 'my-flag': true }` or check adapter connection         |
-| Dashboard returns 404             | Plugin is in beta and auto-disabled in production (`NODE_ENV=production`)        | Dashboard is unstable — avoid in production. For dev: set `enabled: true` explicitly |
-| Approval webhook times out        | Callback URL not reachable from the external approval service                    | Verify `callbackPath` is publicly accessible and matches the webhook configuration   |
+| Problem                           | Cause                                                                                                                     | Solution                                                                                                                       |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `this.remember` is undefined      | RememberPlugin not registered or missing `.init()`                                                                        | Add `RememberPlugin.init({ type: 'memory' })` to `plugins` array                                                               |
+| Cache not working for a tool      | Tool name does not match any `toolPatterns` glob and `cache` metadata is not set                                          | Add `cache: true` to `@Tool` decorator or add matching pattern to `toolPatterns`                                               |
+| Feature flag always returns false | Using `'static'` adapter with flag not in the `flags` map                                                                 | Add the flag key to `flags: { 'my-flag': true }` or check adapter connection                                                   |
+| Dashboard returns 404             | Plugin is in beta and auto-disabled in production (`NODE_ENV=production`)                                                 | Dashboard is unstable — avoid in production. For dev: set `enabled: true` explicitly                                           |
+| Approval webhook times out        | Callback URL not reachable from the external approval service                                                             | Verify `callbackPath` is publicly accessible and matches the webhook configuration                                             |
+| WebMCP tools never appear         | No `document.modelContext` (flag off, no origin-trial token, non-HTTPS, no polyfill), or `WebMcpPlugin` without `.init()` | Enable `chrome://flags/#enable-webmcp-testing` or load `@mcp-b/global`; check `isWebMcpSupported()`; use `WebMcpPlugin.init()` |
 
 ## Examples
 
