@@ -1052,6 +1052,7 @@ export class Scope extends ScopeEntry {
       this._channelTeardown = channelResult.teardown;
       // `dispose()` (what `create()` returns calls it) disconnects service channels, as `shutdown()` does.
       this.onDispose(() => this.teardownChannels());
+      await channelResult.connectServices();
     }
 
     // Initialize health service (after all registries and stores are ready)
