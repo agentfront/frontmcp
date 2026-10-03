@@ -147,7 +147,7 @@ const CODECALL_ONLY: CodeCallPluginOptionsInput = {
 };
 
 describe('CodeCall — direct tools/call of a tool it hides (#678)', () => {
-  describe("in codecall_only mode, with another app that has no CodeCall plugin", () => {
+  describe('in codecall_only mode, with another app that has no CodeCall plugin', () => {
     let server: Awaited<ReturnType<typeof connectTo>>;
 
     beforeAll(async () => {

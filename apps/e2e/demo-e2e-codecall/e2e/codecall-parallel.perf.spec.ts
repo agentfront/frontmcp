@@ -7,7 +7,7 @@
  * The CRM tools are hidden in codecall_only mode and a client cannot call them directly, so each
  * operation goes through `codecall:invoke` (no VM), which the app's `directCalls.allowedTools` permits.
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { expect, perfTest } from '@frontmcp/testing';
 
 perfTest.describe('CodeCall Parallel Stress Testing', () => {
   perfTest.use({
