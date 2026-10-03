@@ -211,6 +211,8 @@ export type CodeCallMode = 'codecall_only' | 'codecall_opt_in' | 'metadata_drive
 - Direct `tools/call` from a client:
   - Refused for a hidden tool, with the answer an unknown tool gets (in every mode: whatever CodeCall hides from
     `list_tools` is reached only through CodeCall). CodeCall's own calls and `this.callTool()` still reach it.
+  - An app-level plugin judges its app's tools and those of apps without a CodeCall plugin, in `list_tools` and on a
+    direct call alike; an app with its own plugin is judged by that plugin.
 
 - CodeCall index:
   - Include all tools by default.
