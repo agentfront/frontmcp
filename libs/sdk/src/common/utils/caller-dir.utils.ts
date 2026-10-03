@@ -100,7 +100,13 @@ export function parseCallerDir(stack: string | undefined, skipBasenames: readonl
     if (base === 'caller-dir.utils.ts' || base === 'caller-dir.utils.js') continue;
     if (skipBasenames.includes(base)) continue;
 
-    return dirname(file);
+    try {
+      return dirname(file);
+    } catch {
+      // A browser has no file system to anchor paths to: @frontmcp/utils' browser `dirname`
+      // throws, and `@FrontMcp` / `@App` must still evaluate in a page (#681)
+      return undefined;
+    }
   }
   return undefined;
 }

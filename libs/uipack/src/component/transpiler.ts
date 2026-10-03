@@ -156,8 +156,8 @@ if (__root) {
       configurable: true, enumerable: true
     });
   }
-  // 2. Try injected data globals
-  if (__hasData(window.__mcpToolOutput)) { __render(window.__mcpToolOutput); }
+  // 2. Try injected data globals (null: the page carries no call's data, e.g. compiled at startup)
+  if (__hasData(window.__mcpToolOutput) && window.__mcpToolOutput !== null) { __render(window.__mcpToolOutput); }
   // 3. Listen for bridge tool-result (ext-apps / MCP Inspector)
   var __bridge = window.FrontMcpBridge;
   if (__bridge && typeof __bridge.onToolResult === 'function') {

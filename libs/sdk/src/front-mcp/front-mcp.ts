@@ -1,4 +1,4 @@
-import { fileExists, isEdgeRuntime, randomUUID, unlink } from '@frontmcp/utils';
+import { fileExists, getEnv, isEdgeRuntime, randomUUID, unlink } from '@frontmcp/utils';
 
 import {
   FrontMcpLogger,
@@ -131,7 +131,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // JSON-RPC frames in stdio mode. #679 — the line carries the port and MCP
     // path this server actually listens on: `@FrontMcp({ http })` can
     // hard-code either, and the bridge must not guess.
-    if (process.env['FRONTMCP_DEV_BOOTSTRAP_SENTINEL'] === '1') {
+    if (getEnv('FRONTMCP_DEV_BOOTSTRAP_SENTINEL') === '1') {
       process.stderr.write(`__FRONTMCP_BOOTSTRAP_COMPLETE__ ${JSON.stringify(this.devListenerInfo(server))}\n`);
     }
   }

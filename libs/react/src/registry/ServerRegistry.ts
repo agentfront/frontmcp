@@ -14,6 +14,17 @@ import type { FrontMcpStatus, PromptInfo, ResourceInfo, ResourceTemplateInfo, To
 
 type Listener = () => void;
 
+/** Whether two tool / resource listings are the same, entry for entry. */
+export function sameListing(a: readonly unknown[], b: readonly unknown[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
 export interface ServerEntry {
   server: DirectMcpServer;
   client: DirectClient | null;
@@ -125,6 +136,8 @@ export class ServerRegistry {
         .then((tools) => {
           const entry = this.entries.get(name);
           if (listing !== latest || !entry || entry.client !== client) return;
+          // An announcement that left the listing as it was changes nothing for the readers
+          if (sameListing(entry.tools, tools as ToolInfo[])) return;
           this.update(name, { tools: tools as ToolInfo[] });
         })
         .catch(() => {

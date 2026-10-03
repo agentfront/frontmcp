@@ -364,6 +364,33 @@ describe('ToolForm', () => {
       );
       expect(seen['color']).toBe('red');
       expect(seen['size']).toBe('m');
+      expect(seen['note']).toBe('');
+    });
+
+    it('shows an optional enum without a default as unset, with an empty choice (#681)', () => {
+      const { container } = render(<ToolForm tool={enumTool} onSubmit={jest.fn()} />);
+      const note = container.querySelector('#field-note') as HTMLSelectElement;
+      const color = container.querySelector('#field-color') as HTMLSelectElement;
+
+      expect(note.value).toBe('');
+      expect([...note.options].map((o) => o.value)).toEqual(['', 'a', 'b']);
+      // A required enum has no empty choice
+      expect([...color.options].map((o) => o.value)).toEqual(['red', 'green']);
+    });
+
+    it('submits an optional enum once the user picks a value, and leaves it out again when cleared', () => {
+      const onSubmit = jest.fn();
+      const { container } = render(<ToolForm tool={enumTool} onSubmit={onSubmit} />);
+      const note = container.querySelector('#field-note') as HTMLSelectElement;
+      const form = container.querySelector('form') as HTMLFormElement;
+
+      fireEvent.change(note, { target: { value: 'b' } });
+      fireEvent.submit(form);
+      fireEvent.change(note, { target: { value: '' } });
+      fireEvent.submit(form);
+
+      expect(onSubmit).toHaveBeenNthCalledWith(1, { color: 'red', size: 'm', note: 'b' });
+      expect(onSubmit).toHaveBeenNthCalledWith(2, { color: 'red', size: 'm' });
     });
 
     it('still submits what the user picked', () => {

@@ -91,13 +91,56 @@
         }
       }
     },
+    "build-browser": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["build-cjs"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/sdk/dist/browser",
+        "main": "libs/sdk/src/index.ts",
+        "tsConfig": "libs/sdk/tsconfig.lib.json",
+        "format": ["esm", "cjs"],
+        "declaration": false,
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "skipTypeCheck": true,
+        "esbuildOptions": {
+          "outExtension": { ".js": ".mjs" },
+          "conditions": ["browser"],
+          "external": [
+            "@frontmcp/sdk",
+            "@frontmcp/utils",
+            "@frontmcp/di",
+            "@frontmcp/lazy-zod",
+            "@frontmcp/uipack",
+            "@frontmcp/uipack/*",
+            "@frontmcp/auth",
+            "@frontmcp/guard",
+            "@frontmcp/protocol",
+            "@frontmcp/observability",
+            "@opentelemetry/api",
+            "@opentelemetry/sdk-trace-base",
+            "ioredis",
+            "jose",
+            "reflect-metadata",
+            "zod",
+            "express",
+            "cors",
+            "raw-body",
+            "content-type",
+            "@vercel/kv"
+          ]
+        }
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-cjs", "build-esm"],
+      "dependsOn": ["build-cjs", "build-esm", "build-browser"],
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/sdk/dist/package.json",
-          "node scripts/inject-esm-require-banner.js libs/sdk/dist/esm"
+          "node scripts/inject-esm-require-banner.js libs/sdk/dist/esm libs/sdk/dist/browser"
         ],
         "parallel": false
       }

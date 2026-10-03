@@ -93,7 +93,11 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build-cjs", "build-esm"],
       "options": {
-        "command": "node scripts/strip-dist-from-pkg.js libs/uipack/dist/package.json"
+        "commands": [
+          "node scripts/strip-dist-from-pkg.js libs/uipack/dist/package.json",
+          "node scripts/inject-esm-require-banner.js libs/uipack/dist/esm"
+        ],
+        "parallel": false
       }
     },
     "publish": {

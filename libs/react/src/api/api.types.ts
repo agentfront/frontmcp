@@ -2,6 +2,33 @@
  * Types for API client integration.
  */
 
+/** Where an operation parameter goes in the request (the OpenAPI `in` field). */
+export type ApiParameterLocation = 'path' | 'query' | 'header' | 'cookie';
+
+/** How an array or object argument is written into the request (the OpenAPI `style` field). */
+export type ApiParameterStyle = 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject' | 'simple';
+
+/** An operation parameter: the argument `name`, where the request carries it, and how. */
+export interface ApiParameter {
+  /** Argument name, as it appears in `inputSchema.properties`. */
+  name: string;
+  /**
+   * `'query'` arguments are sent in the query string and `'header'` arguments as request headers.
+   * `'path'` arguments fill the `{name}` placeholders of `path` (as every placeholder is filled);
+   * `'cookie'` arguments are not sent.
+   */
+  in: ApiParameterLocation;
+  /**
+   * How an array or object value is serialized, as in OpenAPI. A query argument defaults to
+   * `'form'` (an array repeats the name, an object sends each property as its own parameter) and
+   * may be `'spaceDelimited'`, `'pipeDelimited'` or `'deepObject'` (`name[key]=value`). A header
+   * argument is always `'simple'`: its items joined with commas.
+   */
+  style?: ApiParameterStyle;
+  /** The OpenAPI `explode` flag: `true` by default for `'form'`, `false` for the other styles. */
+  explode?: boolean;
+}
+
 export interface ApiOperation {
   /** Unique operation identifier (becomes part of the tool name). */
   operationId: string;
@@ -13,6 +40,11 @@ export interface ApiOperation {
   path: string;
   /** JSON Schema for the operation's input. */
   inputSchema: Record<string, unknown>;
+  /**
+   * Where each argument goes. `parseOpenApiSpec` fills this from the spec's `parameters`. An
+   * argument without an entry here is sent only when it is a `{param}` of `path` or the `body`.
+   */
+  parameters?: ApiParameter[];
 }
 
 /** Configuration for a single HTTP request. */

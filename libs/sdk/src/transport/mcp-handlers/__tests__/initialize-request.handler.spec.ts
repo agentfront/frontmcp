@@ -20,11 +20,11 @@ jest.mock('../../../auth/session/utils/session-id.utils', () => ({
 
 const mockSupportsElicitation = jest.fn();
 const mockDetectPlatformFromCapabilities = jest.fn();
-const mockDetectAIPlatform = jest.fn();
+const mockResolvePlatformType = jest.fn();
 jest.mock('../../../notification', () => ({
   supportsElicitation: (...args: any[]) => mockSupportsElicitation(...args),
   detectPlatformFromCapabilities: (...args: any[]) => mockDetectPlatformFromCapabilities(...args),
-  detectAIPlatform: (...args: any[]) => mockDetectAIPlatform(...args),
+  resolvePlatformType: (...args: any[]) => mockResolvePlatformType(...args),
 }));
 
 describe('initializeRequestHandler', () => {
@@ -109,7 +109,7 @@ describe('initializeRequestHandler', () => {
     // Default mock implementations
     mockSupportsElicitation.mockReturnValue(false);
     mockDetectPlatformFromCapabilities.mockReturnValue(undefined);
-    mockDetectAIPlatform.mockReturnValue(undefined);
+    mockResolvePlatformType.mockReturnValue(undefined);
     mockUpdateSessionPayload.mockReturnValue(true);
   });
 
@@ -270,8 +270,8 @@ describe('initializeRequestHandler', () => {
   // ============================================
 
   describe('platformType detection', () => {
-    it('should set platformType from capability-based detection', async () => {
-      mockDetectPlatformFromCapabilities.mockReturnValue('ext-apps');
+    it('should set platformType to the resolved platform', async () => {
+      mockResolvePlatformType.mockReturnValue('ext-apps');
 
       const handler = initializeRequestHandler(handlerOptions);
       const request = createRequest({
@@ -286,38 +286,8 @@ describe('initializeRequestHandler', () => {
       expect(ctx.authInfo.sessionIdPayload.platformType).toBe('ext-apps');
     });
 
-    it('should set platformType from client info when capabilities detection returns undefined', async () => {
-      mockDetectPlatformFromCapabilities.mockReturnValue(undefined);
-      mockDetectAIPlatform.mockReturnValue('claude');
-
-      const handler = initializeRequestHandler(handlerOptions);
-      const request = createRequest({
-        clientInfo: { name: 'Claude Desktop', version: '1.0.0' },
-      });
-      const ctx = createContext();
-
-      await handler.handler(request, ctx as any);
-
-      expect(ctx.authInfo.sessionIdPayload.platformType).toBe('claude');
-    });
-
-    it('should prefer capability-based detection over client info detection', async () => {
-      mockDetectPlatformFromCapabilities.mockReturnValue('ext-apps');
-      mockDetectAIPlatform.mockReturnValue('claude');
-
-      const handler = initializeRequestHandler(handlerOptions);
-      const request = createRequest();
-      const ctx = createContext();
-
-      await handler.handler(request, ctx as any);
-
-      // Should use ext-apps from capability detection, not claude from client info
-      expect(ctx.authInfo.sessionIdPayload.platformType).toBe('ext-apps');
-    });
-
-    it('should not set platformType when both detections return undefined', async () => {
-      mockDetectPlatformFromCapabilities.mockReturnValue(undefined);
-      mockDetectAIPlatform.mockReturnValue(undefined);
+    it('should not set platformType when no platform is resolved', async () => {
+      mockResolvePlatformType.mockReturnValue(undefined);
 
       const handler = initializeRequestHandler(handlerOptions);
       const request = createRequest();
@@ -329,8 +299,8 @@ describe('initializeRequestHandler', () => {
       expect(ctx.authInfo.sessionIdPayload.platformType).toBeUndefined();
     });
 
-    it('should call detectAIPlatform with platformDetection config', async () => {
-      const platformConfig = { customPatterns: [] };
+    it('should resolve the platform from the client info, the declared capabilities and the platformDetection config', async () => {
+      const platformConfig = { mappings: [{ pattern: 'CustomClient', platform: 'gemini' }] };
       const scopeWithConfig = {
         ...mockScope,
         metadata: {
@@ -343,18 +313,37 @@ describe('initializeRequestHandler', () => {
         ...handlerOptions,
         scope: scopeWithConfig as any,
       });
+      const capabilities = { extensions: { 'io.modelcontextprotocol/ui': {} } };
       const request = createRequest({
         clientInfo: { name: 'CustomClient', version: '1.0.0' },
+        capabilities: capabilities as InitializeRequest['params']['capabilities'],
       });
       const ctx = createContext();
 
       await handler.handler(request, ctx as any);
 
-      expect(mockDetectAIPlatform).toHaveBeenCalledWith({ name: 'CustomClient', version: '1.0.0' }, platformConfig);
+      expect(mockResolvePlatformType).toHaveBeenCalledWith(
+        { name: 'CustomClient', version: '1.0.0' },
+        capabilities,
+        platformConfig,
+      );
+    });
+
+    it('should keep the SEP-2133 extensions among the stored client capabilities', async () => {
+      const handler = initializeRequestHandler(handlerOptions);
+      const extensions = { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } };
+      const request = createRequest({ capabilities: { extensions } as InitializeRequest['params']['capabilities'] });
+
+      await handler.handler(request, createContext() as any);
+
+      expect(mockNotifications.setClientCapabilities).toHaveBeenCalledWith(
+        'test-session-id-123',
+        expect.objectContaining({ extensions }),
+      );
     });
 
     it('should include platformType in updateSessionPayload when detected', async () => {
-      mockDetectAIPlatform.mockReturnValue('openai');
+      mockResolvePlatformType.mockReturnValue('openai');
 
       const handler = initializeRequestHandler(handlerOptions);
       const request = createRequest();

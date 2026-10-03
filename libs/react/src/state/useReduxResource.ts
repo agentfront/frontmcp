@@ -5,8 +5,9 @@
  */
 
 import { useMemo } from 'react';
-import { useStoreResource } from './useStoreResource';
+
 import type { ReduxResourceOptions } from './state.types';
+import { useStoreResource } from './useStoreResource';
 
 export function useReduxResource(options: ReduxResourceOptions): void {
   const { store, name = 'redux', selectors, actions, server } = options;
@@ -24,10 +25,14 @@ export function useReduxResource(options: ReduxResourceOptions): void {
     return wrapped;
   }, [actions, store]);
 
+  // Bound once per store: a new `subscribe` on every render would re-subscribe on every render
+  const getState = useMemo(() => store.getState.bind(store), [store]);
+  const subscribe = useMemo(() => store.subscribe.bind(store), [store]);
+
   useStoreResource({
     name,
-    getState: store.getState.bind(store),
-    subscribe: store.subscribe.bind(store),
+    getState,
+    subscribe,
     selectors,
     actions: wrappedActions,
     server,

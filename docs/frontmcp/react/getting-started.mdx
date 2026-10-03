@@ -20,6 +20,12 @@ yarn add @frontmcp/react react react-dom
 
 </CodeGroup>
 
+The packages bundle for the browser as they are — with Vite 7 and 8 (build and dev server), or any bundler that honors the `browser` export condition — with no Node polyfills and no aliases. A browser bundler resolves `@frontmcp/sdk` to its browser build (the `browser` export condition), which leaves the Node HTTP host (Express) and the stdio transports out of the bundle.
+
+<Note>
+With Vite 7 (Rollup), call `create()` from a function or a `.then()` rather than with a top-level `await` in your entry module: Rollup can place modules the SDK imports lazily in a chunk that imports the entry back, and a top-level `await` there waits on itself, so `create()` never settles.
+</Note>
+
 ## Wrap Your App
 
 Every `@frontmcp/react` app starts with a `FrontMcpProvider`. It takes a pre-created `DirectMcpServer` and manages the MCP client lifecycle.

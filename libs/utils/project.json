@@ -26,14 +26,26 @@
           "libs/utils/src/event-emitter/node-event-emitter.ts",
           "libs/utils/src/event-emitter/browser-event-emitter.ts",
           "libs/utils/src/env/node-env.ts",
-          "libs/utils/src/env/browser-env.ts"
+          "libs/utils/src/env/browser-env.ts",
+          "libs/utils/src/env/runtime-context.ts",
+          "libs/utils/src/env/browser-runtime-context.ts",
+          "libs/utils/src/path/node-path.ts",
+          "libs/utils/src/path/browser-path.ts"
         ],
         "assets": ["libs/utils/README.md", "libs/utils/CHANGELOG.md", "LICENSE", "libs/utils/package.json"],
         "esbuildOptions": {
           "outExtension": {
             ".js": ".js"
           },
-          "external": ["@frontmcp/lazy-zod", "#crypto-provider", "#async-context", "#event-emitter", "#env"]
+          "external": [
+            "@frontmcp/lazy-zod",
+            "#crypto-provider",
+            "#async-context",
+            "#event-emitter",
+            "#env",
+            "#runtime-context",
+            "#path"
+          ]
         }
       },
       "dependsOn": ["^build"]
@@ -59,13 +71,25 @@
           "libs/utils/src/event-emitter/node-event-emitter.ts",
           "libs/utils/src/event-emitter/browser-event-emitter.ts",
           "libs/utils/src/env/node-env.ts",
-          "libs/utils/src/env/browser-env.ts"
+          "libs/utils/src/env/browser-env.ts",
+          "libs/utils/src/env/runtime-context.ts",
+          "libs/utils/src/env/browser-runtime-context.ts",
+          "libs/utils/src/path/node-path.ts",
+          "libs/utils/src/path/browser-path.ts"
         ],
         "esbuildOptions": {
           "outExtension": {
             ".js": ".mjs"
           },
-          "external": ["@frontmcp/lazy-zod", "#crypto-provider", "#async-context", "#event-emitter", "#env"]
+          "external": [
+            "@frontmcp/lazy-zod",
+            "#crypto-provider",
+            "#async-context",
+            "#event-emitter",
+            "#env",
+            "#runtime-context",
+            "#path"
+          ]
         }
       }
     },
