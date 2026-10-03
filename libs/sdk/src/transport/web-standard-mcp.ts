@@ -20,6 +20,7 @@ import { type AuthInfo } from '@frontmcp/protocol';
 import { randomUUID } from '@frontmcp/utils';
 
 import { type Scope } from '../scope/scope.instance';
+import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { buildScopedServerOptions, type ScopedServerOptions } from './build-scoped-server-options';
 import { type PersistentSessionOwnerStore } from './persistent-session-owner';
 
@@ -59,7 +60,10 @@ async function wireServer(
   sessionIdGenerator: (() => string) | undefined,
   enableJsonResponse: boolean,
 ): Promise<WebStandardMcpPair> {
-  const { McpServer, WebStandardStreamableHTTPServerTransport } = await import('@frontmcp/protocol');
+  const { McpServer, WebStandardStreamableHTTPServerTransport } = await importWithRequireFallback(
+    () => import('@frontmcp/protocol'),
+    () => require('@frontmcp/protocol') as typeof import('@frontmcp/protocol'),
+  );
   const { createMcpHandlers } = await import('./mcp-handlers/index.js');
 
   const mcpServer = new McpServer(scope.metadata.info, serverOptions);

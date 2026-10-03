@@ -53,6 +53,14 @@ describe('generateCliEntry', () => {
     expect(source).toContain('"2.3.4"');
   });
 
+  it('records the cli build target, then the deployment env defaults, before anything else runs (#680)', () => {
+    const source = generateCliEntry(makeOptions({ env: { API_BASE: 'https://api.example.com' } }));
+    const head = source.split('\n').slice(0, 6).join('\n');
+    expect(head).toContain("globalThis.FRONTMCP_BUILD_TARGET = globalThis.FRONTMCP_BUILD_TARGET || 'cli';");
+    expect(head).toContain('if (process.env["API_BASE"] === undefined) process.env["API_BASE"] = "https://api.example.com";');
+    expect(source.indexOf('FRONTMCP_BUILD_TARGET')).toBeLessThan(source.indexOf("require('commander')"));
+  });
+
   it('should include global --output option', () => {
     const source = generateCliEntry(makeOptions());
     expect(source).toContain("'--output <mode>'");

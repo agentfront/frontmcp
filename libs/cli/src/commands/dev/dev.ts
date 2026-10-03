@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
 
 import { resolveConfig, type ResolvedFrontMcpConfig } from '../../config';
+import { serverRuntimeEnv } from '../../config/deployment-env';
 import { absolutizePathOptions, enterConfigRoot } from '../../config/project-root';
 import { pickServerDefaults, securityHeadersEnv } from '../../config/security-headers-env';
 import { type ParsedArgs } from '../../core/args';
@@ -205,7 +206,11 @@ export async function resolveDevLaunch(opts: ParsedArgs, options: ResolveDevLaun
     baseEnv: process.env,
     port,
     configHttpPath,
-    securityHeadersEnv: securityHeadersEnv(pickServerDefaults(cfg)),
+    // `server.csp` / `server.headers`, and `server.http.cors` (#680); dev picks its own port
+    securityHeadersEnv: {
+      ...securityHeadersEnv(pickServerDefaults(cfg)),
+      ...serverRuntimeEnv(pickServerDefaults(cfg), { listens: false }),
+    },
   });
 
   return {

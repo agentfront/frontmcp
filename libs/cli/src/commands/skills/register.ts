@@ -34,7 +34,10 @@ export function registerSkillsCommands(program: Command): void {
     .command('install')
     .description('Install skill(s) to a provider directory (.claude/skills or .codex/skills)')
     .argument('[name]', 'Skill name to install (optional with --all, --tag, or --category)')
-    .option('-p, --provider <provider>', 'Target provider: claude, codex (default: claude)', 'claude')
+    .option(
+      '-p, --provider <provider>',
+      'Target provider: claude, codex (default: skills.provider from frontmcp.config, else claude)',
+    )
     .option('-d, --dir <directory>', 'Custom install directory (overrides provider default)')
     .option(
       '-a, --all',
@@ -65,11 +68,17 @@ export function registerSkillsCommands(program: Command): void {
       ) => {
         const validProviders = ['claude', 'codex'] as const;
         type Provider = (typeof validProviders)[number];
-        const raw = options.provider;
+        // frontmcp.config `skills` supplies the defaults; explicit flags win (#680)
+        const { loadSkillsDefaults } = await import('./config-defaults.js');
+        const defaults = await loadSkillsDefaults((program.opts() as { config?: string }).config);
+        const raw = options.provider ?? defaults.provider;
         if (raw && !validProviders.includes(raw as Provider)) {
           console.error(`Invalid provider "${raw}". Valid providers: ${validProviders.join(', ')}`);
           process.exit(1);
         }
+        const noSelector =
+          !name && !options.all && !options.tag && !options.category && !options.fromEntry && !options.fromPackage;
+        const configured = noSelector && defaults.install && defaults.install.length > 0 ? defaults.install : undefined;
         const { installSkill } = await import('./install.js');
         await installSkill(name, {
           provider: raw as Provider | undefined,
@@ -79,6 +88,8 @@ export function registerSkillsCommands(program: Command): void {
           category: options.category,
           fromEntry: options.fromEntry,
           fromPackage: options.fromPackage,
+          names: configured,
+          bundle: noSelector && !configured ? defaults.bundle : undefined,
         });
       },
     );
@@ -86,14 +97,19 @@ export function registerSkillsCommands(program: Command): void {
   skills
     .command('export')
     .description('Convert a catalog skill into a Cursor / Windsurf / Copilot rule file in the current directory')
-    .option('-t, --target <target>', 'Target IDE: cursor | windsurf | copilot', 'cursor')
+    .option(
+      '-t, --target <target>',
+      'Target IDE: cursor | windsurf | copilot (default: skills.exportTarget from frontmcp.config, else cursor)',
+    )
     .option('-n, --name <name>', 'Skill name to export (required unless --all is set)')
     .option('-a, --all', 'Export every skill in the catalog')
     .option('-d, --out <directory>', 'Output directory (default: cwd)')
     .action(async (options: { target?: string; name?: string; all?: boolean; out?: string }) => {
       const validTargets = ['cursor', 'windsurf', 'copilot'] as const;
       type Target = (typeof validTargets)[number];
-      const t = (options.target ?? 'cursor') as Target;
+      const { loadSkillsDefaults } = await import('./config-defaults.js');
+      const defaults = await loadSkillsDefaults((program.opts() as { config?: string }).config);
+      const t = (options.target ?? defaults.exportTarget ?? 'cursor') as Target;
       if (!validTargets.includes(t)) {
         console.error(`Invalid target "${options.target}". Valid targets: ${validTargets.join(', ')}`);
         process.exit(1);

@@ -7,6 +7,7 @@ import { sha256Hex } from '@frontmcp/utils';
 import { type SkillContent } from '../../common/interfaces';
 import { type SkillMetadata, type SkillVisibility } from '../../common/metadata';
 import { importOptionalPeer } from '../../scope/optional-dependency.util';
+import { importWithRequireFallback } from '../../utils/dynamic-import.utils';
 import { type SkillIndexCache, type SkillIndexScoring } from '../skill-index-cache.interface';
 import {
   type MutableSkillStorageProvider,
@@ -178,8 +179,13 @@ function isSnapshotCapable(db: unknown): db is SnapshotCapableDb {
 export class MemorySkillProvider implements MutableSkillStorageProvider {
   readonly type: SkillStorageProviderType = 'memory';
 
+  /**
+   * The search index. `vectoriadb` is loaded the first time a search needs it,
+   * never at construction: a server whose skills are only listed or loaded
+   * (or that has none) must not pay for, or depend on, the optional peer.
+   */
   private vectorDB?: TFIDFVectoria<SkillDocumentMetadata>;
-  private readonly vectorDBReady: Promise<void>;
+  private vectorDBLoad?: Promise<TFIDFVectoria<SkillDocumentMetadata>>;
   private skills: Map<string, SkillContent> = new Map();
   private defaultTopK: number;
   private defaultMinScore: number;
@@ -193,12 +199,13 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   private indexCache?: SkillIndexCache;
 
   /**
-   * Whether the vector index reflects the current document set. Adds/removes
-   * mark it stale; the FIRST search after a mutation builds (or restores) it
-   * exactly once. This defers the expensive IDF/embedding pass off the
-   * registration hot-path — registering N skills no longer triggers N reindexes.
+   * The index is rebuilt from `skills` when it is stale: adds/removes bump
+   * `skillsVersion`, and the FIRST search after a mutation builds (or restores)
+   * the index exactly once. This keeps the expensive IDF/embedding pass — and
+   * the `vectoriadb` load itself — off the registration hot-path.
    */
-  private indexReady = false;
+  private skillsVersion = 0;
+  private indexedVersion = -1;
 
   constructor(options: MemorySkillProviderOptions = {}) {
     this.defaultTopK = options.defaultTopK ?? 10;
@@ -207,27 +214,27 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     this.scoring = options.scoring ?? 'cosine';
     this.indexCache = options.indexCache;
 
-    // `vectoriadb` is an OPTIONAL peer of the SDK: import it lazily so consumers
-    // that never touch skills don't need it installed, and a missing install
-    // surfaces as a clear on-use error instead of an ERR_MODULE_NOT_FOUND at
-    // module-evaluation time (which crashed every standalone consumer at boot).
-    this.vectorDBReady = this.initVectorDB();
-    // Mark handled so a missing optional peer can't become an unhandled
-    // rejection when the provider is constructed but never used; awaiters
-    // of `vectorDBReady` still observe the original rejection.
-    this.vectorDBReady.catch(() => undefined);
+    // `vectoriadb` is an OPTIONAL peer of the SDK and is loaded on first search
+    // (see `db()`), so consumers that never search skills don't need it
+    // installed and a missing install surfaces as a clear on-use error.
   }
 
-  private async initVectorDB(): Promise<void> {
+  private async loadVectorDB(): Promise<TFIDFVectoria<SkillDocumentMetadata>> {
     // Route the lazy load through importOptionalPeer so a missing install and an
     // install-but-failed-to-load are reported differently — never blindly
     // "reinstall it" when the package is present but threw (#453).
     const mod = await importOptionalPeer(
       'vectoriadb',
-      () => import('vectoriadb'),
+      // A dynamic import inside Jest's VM throws unless the run uses
+      // --experimental-vm-modules; `vectoriadb` ships CommonJS, so fall back to `require`.
+      () =>
+        importWithRequireFallback(
+          () => import('vectoriadb'),
+          () => require('vectoriadb') as typeof import('vectoriadb'),
+        ),
       // Read only when the import fails: an ESM browser bundle has no `require` at all
       (id) => require.resolve(id),
-      'skill storage',
+      'skill search',
     );
     // `scoring` is read by newer vectoriadb versions; older ones ignore the
     // extra field and use cosine. Built as a typed variable (not an object
@@ -238,7 +245,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
       defaultSimilarityThreshold: this.defaultMinScore,
     };
     if (this.scoring !== 'cosine') dbConfig.scoring = this.scoring;
-    this.vectorDB = new mod.TFIDFVectoria<SkillDocumentMetadata>(dbConfig);
+    return new mod.TFIDFVectoria<SkillDocumentMetadata>(dbConfig);
   }
 
   /**
@@ -248,7 +255,17 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
    */
   setIndexCache(cache: SkillIndexCache | undefined): void {
     this.indexCache = cache;
-    this.indexReady = false;
+    this.markStale();
+  }
+
+  /** Whether the index reflects the current skill set. */
+  private get indexReady(): boolean {
+    return this.indexedVersion === this.skillsVersion;
+  }
+
+  /** Record a change to the skill set; the next search rebuilds the index. */
+  private markStale(): void {
+    this.skillsVersion++;
   }
 
   /**
@@ -262,6 +279,8 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   private async ensureIndexed(): Promise<void> {
     if (this.indexReady) return;
     const db = await this.db();
+    // A mutation while this build awaits leaves the index stale for the next search.
+    const version = this.skillsVersion;
 
     if (this.indexCache && isSnapshotCapable(db)) {
       const key = await this.computeIndexKey();
@@ -273,14 +292,14 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
           // cast back to the DB's own snapshot parameter type. (vectoriadb's
           // `loadSnapshot` is strictly typed as of 2.3.x.)
           db.loadSnapshot(snapshot as Parameters<typeof db.loadSnapshot>[0]);
-          this.indexReady = true;
+          this.indexedVersion = version;
           return;
         }
       } catch {
         // Treat a cache failure as a miss and rebuild locally.
       }
-      this.reindexNow(db);
-      this.indexReady = true;
+      this.rebuildIndex(db);
+      this.indexedVersion = version;
       try {
         await this.indexCache.set(key, db.toSnapshot());
       } catch {
@@ -290,8 +309,8 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     }
 
     // No cache (or unsupported vectoriadb): just build locally.
-    this.reindexNow(db);
-    this.indexReady = true;
+    this.rebuildIndex(db);
+    this.indexedVersion = version;
   }
 
   /**
@@ -304,9 +323,19 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     await this.ensureIndexed();
   }
 
-  /** Force the vector DB to (re)compute its index now. */
-  private reindexNow(db: TFIDFVectoria<SkillDocumentMetadata>): void {
+  /** Load every current skill into the vector DB and (re)compute its index. */
+  private rebuildIndex(db: TFIDFVectoria<SkillDocumentMetadata>): void {
+    db.clear();
+    db.addDocuments(Array.from(this.skills.values(), (skill) => this.toDocument(skill)));
     (db as unknown as { reindex(): void }).reindex();
+  }
+
+  private toDocument(skill: SkillContent): { id: string; text: string; metadata: SkillDocumentMetadata } {
+    return {
+      id: skill.id,
+      text: this.buildSearchableText(skill),
+      metadata: { id: skill.id, skillId: skill.id, skill },
+    };
   }
 
   /**
@@ -322,12 +351,11 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     return sha256Hex(canonical);
   }
 
-  /** Await the lazy vectoriadb load (throws the clear install hint if absent). */
+  /** Load `vectoriadb` on first use (throws the clear install hint if absent). */
   private async db(): Promise<TFIDFVectoria<SkillDocumentMetadata>> {
-    await this.vectorDBReady;
-    if (!this.vectorDB) {
-      throw new Error('Vector DB not initialized; await this.vectorDBReady before use.');
-    }
+    if (this.vectorDB) return this.vectorDB;
+    this.vectorDBLoad ??= this.loadVectorDB();
+    this.vectorDB = await this.vectorDBLoad;
     return this.vectorDB;
   }
 
@@ -340,9 +368,10 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   }
 
   async initialize(): Promise<void> {
-    // Surface a missing `vectoriadb` here (first lifecycle call) rather than
-    // deep inside the first search.
-    await this.vectorDBReady;
+    // Deliberately does NOT load `vectoriadb`: every app builds a skill
+    // registry at boot, and loading the peer here made every server depend on
+    // it (and broke servers started inside Jest, whose VM rejects the dynamic
+    // import without --experimental-vm-modules). The first search loads it.
     this.initialized = true;
   }
 
@@ -555,45 +584,31 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
 
   async add(skill: SkillContent): Promise<void> {
     this.skills.set(skill.id, skill);
-    await this.indexSkill(skill);
+    this.markStale();
   }
 
   async update(skillId: string, skill: SkillContent): Promise<void> {
-    // Normalize: ensure skill.id matches skillId to prevent orphaned vector docs
+    // Normalize: ensure skill.id matches skillId so the index never holds an orphan
     const normalizedSkill = skill.id !== skillId ? { ...skill, id: skillId } : skill;
-
-    // Remove old entry by skillId
-    const db = await this.db();
-    if (db.hasDocument(skillId)) {
-      db.removeDocument(skillId);
-    }
-
-    // Add updated skill with normalized id
     this.skills.set(skillId, normalizedSkill);
-    await this.indexSkill(normalizedSkill);
+    this.markStale();
   }
 
   async remove(skillId: string): Promise<void> {
     this.skills.delete(skillId);
-    const db = await this.db();
-    if (db.hasDocument(skillId)) {
-      db.removeDocument(skillId);
-    }
-    this.indexReady = false;
+    this.markStale();
   }
 
   async clear(): Promise<void> {
     this.skills.clear();
-    // Resilient when the optional peer is absent: nothing was indexed anyway.
-    const db = await this.db().catch(() => undefined);
-    db?.clear();
-    this.indexReady = false;
+    this.vectorDB?.clear();
+    this.markStale();
   }
 
   async dispose(): Promise<void> {
     this.skills.clear();
-    const db = await this.db().catch(() => undefined);
-    db?.clear();
+    this.vectorDB?.clear();
+    this.markStale();
     this.initialized = false;
   }
 
@@ -601,45 +616,9 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
    * Bulk add skills (more efficient than adding one by one).
    */
   async addMany(skills: SkillContent[]): Promise<void> {
-    const documents = skills.map((skill) => {
-      this.skills.set(skill.id, skill);
-      return {
-        id: skill.id,
-        text: this.buildSearchableText(skill),
-        metadata: {
-          id: skill.id,
-          skillId: skill.id,
-          skill,
-        },
-      };
-    });
-
-    const db = await this.db();
-    db.addDocuments(documents);
-    // Defer the expensive IDF/embedding pass to the next search (built once),
-    // instead of reindexing per batch — see `ensureIndexed`.
-    this.indexReady = false;
-  }
-
-  /**
-   * Index a single skill in the vector database.
-   */
-  private async indexSkill(skill: SkillContent): Promise<void> {
-    const document = {
-      id: skill.id,
-      text: this.buildSearchableText(skill),
-      metadata: {
-        id: skill.id,
-        skillId: skill.id,
-        skill,
-      },
-    };
-
-    const db = await this.db();
-    db.addDocuments([document]);
-    // Mark stale; the next search reindexes once (avoids O(n^2) when many skills
-    // are registered one-by-one, e.g. a skilled-OpenAPI bundle).
-    this.indexReady = false;
+    for (const skill of skills) this.skills.set(skill.id, skill);
+    // Defer the expensive IDF/embedding pass to the next search (built once).
+    this.markStale();
   }
 
   /**

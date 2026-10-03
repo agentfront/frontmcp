@@ -30,6 +30,17 @@ import { resolveEmittedEntry } from '../../../shared/emitted-entry';
 import { runTsc } from '../../../shared/tsc';
 import { cleanIntermediateFiles } from './clean-intermediates';
 import { REQUIRED_DECORATOR_FIELDS } from '../../../core/tsconfig';
+import { serverBundleBanner } from '../../../config/deployment-env';
+import type { ServerDefaults } from '../../../config/frontmcp-config.types';
+
+/**
+ * Run two banners in order. Each sets a variable only when it is unset, so the first one wins:
+ * the deployment's `frontmcp.config` defaults go first (a deployment's `entryPath` wins over
+ * `transport.http.path`). Only the first keeps its `'use strict'` directive prologue.
+ */
+function joinBanners(first: string, ...rest: string[]): string {
+  return [first, ...rest.map((banner) => banner.replace(/^'use strict';\n/, ''))].join('\n');
+}
 
 export async function buildExec(
   opts: ParsedArgs & {
@@ -45,6 +56,10 @@ export async function buildExec(
       nodeVersion?: string;
       /** `transport.http.path` — the runner exports it as FRONTMCP_HTTP_ENTRY_PATH (#642). */
       httpEntryPath?: string;
+      /** The deployment's `server` block: run-time defaults the server bundle carries (#680). */
+      server?: ServerDefaults;
+      /** The deployment's `env` (`deployments[].env`): defaults the artifact carries (#680). */
+      env?: Record<string, string>;
     };
   },
 ): Promise<void> {
@@ -148,14 +163,18 @@ export async function buildExec(
   const { compiledEntry, emittedEntryDir } = resolveEmittedEntry(outDir, entry);
 
   // Always build non-self-contained first (schema extraction needs host SDK).
-  // A `--target node` bundle also runs on its own (`node <name>.bundle.js`, the
-  // generated Dockerfile's CMD), so it carries the runner's defaults (#680).
-  const bundleResult = await bundleWithEsbuild(
-    compiledEntry,
-    outDir,
-    config,
-    cliEnabled ? undefined : { banner: generateServerBundleBanner(config, { mainOnly: true }) },
-  );
+  // A `--target node` bundle also runs on its own (`node <name>.bundle.js`, the generated
+  // Dockerfile's CMD), so it carries the build target and the deployment's run-time defaults,
+  // then the runner's own defaults (#680). A `--target cli` bundle only records its target.
+  const buildTarget = cliEnabled ? 'cli' : 'node';
+  const configBanner = serverBundleBanner({
+    target: buildTarget,
+    server: opts.execOverrides?.server,
+    env: opts.execOverrides?.env,
+  });
+  const bundleResult = await bundleWithEsbuild(compiledEntry, outDir, config, {
+    banner: cliEnabled ? configBanner : joinBanners(configBanner, generateServerBundleBanner(config, { mainOnly: true })),
+  });
   console.log(
     `${c('green', '[build:exec]')} bundle created: ${path.relative(cwd, bundleResult.bundlePath)} (${formatSize(bundleResult.bundleSize)})`,
   );
@@ -305,6 +324,7 @@ export async function buildExec(
       schema,
       oauthConfig,
       selfContained: !!seaEnabled,
+      env: opts.execOverrides?.env,
     });
 
     const cliEntryPath = path.join(tempDir, 'cli-entry.js');
@@ -359,7 +379,15 @@ export async function buildExec(
       const seaBundle = await bundleWithEsbuild(compiledEntry, outDir, config, {
         selfContained: true,
         outputName: seaTempName,
-        banner: generateServerBundleBanner(config, { mainOnly: false }),
+        banner: joinBanners(
+          serverBundleBanner({
+            target: buildTarget,
+            server: opts.execOverrides?.server,
+            env: opts.execOverrides?.env,
+            singleExecutable: true,
+          }),
+          generateServerBundleBanner(config, { mainOnly: false }),
+        ),
       });
 
       console.log(`${c('cyan', '[build:sea]')} building server SEA binary...`);

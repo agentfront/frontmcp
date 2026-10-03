@@ -1,4 +1,6 @@
-import type { AdapterTemplate, AdapterName } from '../types';
+import { buildTargetStatement } from '../../../config/deployment-env';
+import { securityHeadersEnvSetupLines } from '../../../config/security-headers-env';
+import type { AdapterBuildContext, AdapterTemplate, AdapterName } from '../types';
 import { nodeAdapter } from './node';
 import { vercelAdapter } from './vercel';
 import { lambdaAdapter } from './lambda';
@@ -19,3 +21,19 @@ export const ADAPTERS: Record<AdapterName, AdapterTemplate> = {
 };
 
 export { nodeAdapter, vercelAdapter, lambdaAdapter, cloudflareAdapter, distributedAdapter };
+
+/**
+ * The setup module an adapter build emits (`serverless-setup.js`), or `undefined`
+ * for an adapter without one. The adapter's own template comes first; the
+ * deployment's run-time defaults (`context.runtimeEnv`) and the build target are
+ * appended — the setup module still finishes before the user's entry is evaluated (#680).
+ */
+export function composeAdapterSetup(adapter: AdapterName, context?: AdapterBuildContext): string | undefined {
+  const template = ADAPTERS[adapter];
+  if (!template.getSetupTemplate) return undefined;
+  return (
+    template.getSetupTemplate(context) +
+    securityHeadersEnvSetupLines(context?.runtimeEnv ?? {}) +
+    buildTargetStatement(adapter)
+  );
+}

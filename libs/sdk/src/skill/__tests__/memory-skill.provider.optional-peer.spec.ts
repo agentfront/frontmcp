@@ -1,3 +1,6 @@
+import { type SkillContent } from '../../common/interfaces';
+import { MemorySkillProvider } from '../providers/memory-skill.provider';
+
 /**
  * Regression guard: `vectoriadb` is an OPTIONAL peer of the SDK and MUST be
  * loaded lazily (issue 05 — "SDK eagerly imports its optional peer vectoriadb").
@@ -12,9 +15,12 @@
  *
  * The contract this file pins down:
  *   1. Loading the provider module never requires the peer (no boot crash).
- *   2. Constructing the provider never throws / never crashes synchronously.
- *   3. First *use* surfaces a clear, actionable install hint — not an opaque
- *      module-resolution error.
+ *   2. Constructing and initializing the provider, and registering, listing and
+ *      loading skills, never load the peer — only a search does (issue #680:
+ *      every app builds a skill registry at boot, so loading it there made
+ *      every server depend on it).
+ *   3. The first *search* surfaces a clear, actionable install hint — not an
+ *      opaque module-resolution error.
  *   4. Teardown (`clear`/`dispose`) stays resilient when the peer is absent.
  *
  * We simulate "peer not installed" by mocking `vectoriadb` to throw on load,
@@ -26,9 +32,6 @@
 jest.mock('vectoriadb', () => {
   throw new Error("Cannot find package 'vectoriadb' (ERR_MODULE_NOT_FOUND)");
 });
-
-import { MemorySkillProvider } from '../providers/memory-skill.provider';
-import { SkillContent } from '../../common/interfaces';
 
 const createTestSkill = (): SkillContent => ({
   id: 'guard-skill',
@@ -60,8 +63,6 @@ describe('MemorySkillProvider — optional peer `vectoriadb` (issue 05)', () => 
   });
 
   it('constructed-but-unused provider does not raise an unhandled rejection', async () => {
-    // The constructor kicks off the lazy load and pre-attaches a `.catch`, so a
-    // provider that is never awaited must not surface the rejection globally.
     const unhandled: unknown[] = [];
     const onUnhandled = (reason: unknown): void => {
       unhandled.push(reason);
@@ -69,7 +70,6 @@ describe('MemorySkillProvider — optional peer `vectoriadb` (issue 05)', () => 
     process.on('unhandledRejection', onUnhandled);
     try {
       new MemorySkillProvider();
-      // Flush microtasks so the lazy import() rejection would have surfaced.
       await new Promise((resolve) => setTimeout(resolve, 0));
     } finally {
       process.off('unhandledRejection', onUnhandled);
@@ -77,11 +77,18 @@ describe('MemorySkillProvider — optional peer `vectoriadb` (issue 05)', () => 
     expect(unhandled).toEqual([]);
   });
 
-  it('initialize() rejects with a clear, actionable install hint', async () => {
+  it('initialize() does not load the peer: a server whose skills are never searched boots without it', async () => {
     const provider = new MemorySkillProvider();
-    const error = await provider.initialize().catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toMatch(PEER_ERROR);
+    await expect(provider.initialize()).resolves.toBeUndefined();
+  });
+
+  it('add(), list(), load() and count() work without the peer', async () => {
+    const provider = new MemorySkillProvider();
+    await provider.initialize();
+    await provider.add(createTestSkill());
+    expect((await provider.list()).skills.map((s) => s.name)).toEqual(['Guard Skill']);
+    expect((await provider.load('guard-skill'))?.skill.name).toBe('Guard Skill');
+    expect(await provider.count()).toBe(1);
   });
 
   it('search() surfaces the same clear install hint on first use', async () => {
@@ -89,9 +96,10 @@ describe('MemorySkillProvider — optional peer `vectoriadb` (issue 05)', () => 
     await expect(provider.search('anything')).rejects.toThrow(PEER_ERROR);
   });
 
-  it('add() surfaces the same clear install hint on first use', async () => {
+  it('warm() surfaces the same clear install hint (it builds the search index)', async () => {
     const provider = new MemorySkillProvider();
-    await expect(provider.add(createTestSkill())).rejects.toThrow(PEER_ERROR);
+    await provider.add(createTestSkill());
+    await expect(provider.warm()).rejects.toThrow(PEER_ERROR);
   });
 
   it('clear() stays resilient (resolves) when the peer is absent', async () => {
