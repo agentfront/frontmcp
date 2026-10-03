@@ -462,6 +462,175 @@ describe('SessionRelay', () => {
     });
   });
 
+  describe('when response frames cannot be delivered', () => {
+    function streamingOwner() {
+      const closed = jest.fn();
+      const serve = jest.fn(
+        (_req: ServerRequest, res: ServerResponse) =>
+          new Promise<void>((resolve) => {
+            res.on('close', () => {
+              closed();
+              resolve();
+            });
+            res.writeHead(200, { 'content-type': 'text/event-stream' });
+            res.write('first');
+          }),
+      );
+      return { serve, closed };
+    }
+
+    function ownerPublishing(decide: (message: HaRelayMessage) => 'deliver' | 'reject' | 'nobody' | 'drop') {
+      const deliver = broker.publish('node-a');
+      return async (to: string, message: HaRelayMessage): Promise<number> => {
+        switch (decide(message)) {
+          case 'reject':
+            throw new Error('redis down');
+          case 'nobody':
+            return 0;
+          case 'drop':
+            return 1;
+          default:
+            return deliver(to, message);
+        }
+      };
+    }
+
+    const isFrame = (message: HaRelayMessage, event: string) =>
+      message.kind === 'relay-response' && message.event === event;
+
+    it('aborts the response on the owner and ends it on the relaying node when a frame fails to publish', async () => {
+      const owner = streamingOwner();
+      const relayingOwner = createRelay('node-a', {
+        serve: owner.serve,
+        publish: ownerPublishing((message) => (isFrame(message, 'data') ? 'reject' : 'deliver')),
+      });
+      const relaying = createRelay('node-b');
+      const target = createTarget();
+
+      let settled = false;
+      const outcome = relaying.forward('node-a', 'sess-1', request(), target).finally(() => {
+        settled = true;
+      });
+      for (let i = 0; i < 5; i++) await flush();
+
+      expect(settled).toBe(true);
+      await outcome;
+      expect(target.status).toBe(200);
+      expect(target.end).toHaveBeenCalledTimes(1);
+      expect(owner.closed).toHaveBeenCalledTimes(1);
+      expect(relaying.pendingCount).toBe(0);
+      expect(relayingOwner.servingCount).toBe(0);
+    });
+
+    it('aborts the response on the owner when the relaying node no longer listens', async () => {
+      const owner = streamingOwner();
+      const logger = { info: jest.fn(), warn: jest.fn() };
+      const relayingOwner = createRelay('node-a', {
+        serve: owner.serve,
+        publish: ownerPublishing((message) => (isFrame(message, 'data') ? 'nobody' : 'deliver')),
+        logger,
+      });
+      createRelay('node-b');
+      relayingOwner.handleMessage({
+        kind: 'relay-request',
+        requestId: 'r1',
+        sourceNodeId: 'node-b',
+        sessionId: 'sess-1',
+        request: request(),
+        timestamp: Date.now(),
+      });
+      for (let i = 0; i < 3; i++) await flush();
+
+      expect(owner.closed).toHaveBeenCalledTimes(1);
+      expect(relayingOwner.servingCount).toBe(0);
+      expect(logger.warn).toHaveBeenCalledWith('[HA] Failed to publish a relayed response frame', {
+        reason: 'the relaying node no longer listens',
+        targetNodeId: 'node-b',
+      });
+    });
+
+    it('ends a relayed response whose frames stop arriving, even though the owner is alive', async () => {
+      jest.useFakeTimers();
+      const owner = streamingOwner();
+      let lost = false;
+      createRelay('node-a', {
+        serve: owner.serve,
+        publish: ownerPublishing((message) => {
+          if (isFrame(message, 'data')) lost = true;
+          return lost && message.kind === 'relay-response' && message.event !== 'data' ? 'drop' : 'deliver';
+        }),
+      });
+      const relaying = createRelay('node-b', { ownerCheckIntervalMs: 500 });
+      const target = createTarget();
+
+      let settled = false;
+      const outcome = relaying.forward('node-a', 'sess-1', request(), target).finally(() => {
+        settled = true;
+      });
+      await jest.advanceTimersByTimeAsync(10);
+      expect(target.text()).toBe('first');
+
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(settled).toBe(false);
+      await jest.advanceTimersByTimeAsync(1000);
+
+      expect(settled).toBe(true);
+      await outcome;
+      expect(target.end).toHaveBeenCalledTimes(1);
+      expect(relaying.pendingCount).toBe(0);
+    });
+
+    it('keeps a quiet stream open while the owner sends keepalives', async () => {
+      jest.useFakeTimers();
+      const owner = streamingOwner();
+      const ownerRelay = createRelay('node-a', { serve: owner.serve });
+      const relaying = createRelay('node-b', { ownerCheckIntervalMs: 500 });
+      const target = createTarget();
+
+      let settled = false;
+      const outcome = relaying.forward('node-a', 'sess-1', request(), target).finally(() => {
+        settled = true;
+      });
+      await jest.advanceTimersByTimeAsync(5000);
+
+      expect(settled).toBe(false);
+      expect(broker.published.filter((p) => isFrame(p.message, 'keepalive')).length).toBeGreaterThanOrEqual(9);
+
+      target.close();
+      await outcome;
+      await jest.advanceTimersByTimeAsync(10);
+      expect(ownerRelay.servingCount).toBe(0);
+    });
+  });
+
+  it('drops a malformed relayed request', async () => {
+    const serve = jest.fn();
+    const publish = jest.fn(async () => 1);
+    const logger = { info: jest.fn(), warn: jest.fn() };
+    const owner = new SessionRelay({ nodeId: 'node-a', publish, isNodeAlive: async () => true, serve, logger });
+    const malformed = [
+      { sessionId: 42, request: request() },
+      { sessionId: 'sess-1', request: null },
+      { sessionId: 'sess-1', request: request(), requestId: 7 },
+    ];
+
+    for (const fields of malformed) {
+      owner.handleMessage({
+        kind: 'relay-request',
+        requestId: 'r1',
+        sourceNodeId: 'node-b',
+        timestamp: Date.now(),
+        ...fields,
+      } as unknown as HaRelayMessage);
+    }
+    await flush();
+
+    expect(serve).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledTimes(3);
+    expect(logger.warn).toHaveBeenCalledWith('[HA] Dropped a malformed relayed request');
+  });
+
   describe('close()', () => {
     it('fails requests in flight, aborts requests being served, and refuses new ones', async () => {
       let release: () => void = () => undefined;
