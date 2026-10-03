@@ -121,6 +121,7 @@ describe('server-level adapters', () => {
 interface FeedOptions {
   name: string;
   feed: string;
+  failOn?: 'unsubscribe' | 'stopPolling';
 }
 
 const feedAdapters: FeedAdapter[] = [];
@@ -144,7 +145,10 @@ class FeedAdapter extends DynamicAdapter<FeedOptions> {
 
   onUpdate(callback: (response: FrontMcpAdapterResponse) => void): () => void {
     this.listeners.add(callback);
-    return () => this.listeners.delete(callback);
+    return () => {
+      this.listeners.delete(callback);
+      this.failIf('unsubscribe');
+    };
   }
 
   startPolling(): void {
@@ -153,6 +157,11 @@ class FeedAdapter extends DynamicAdapter<FeedOptions> {
 
   stopPolling(): void {
     this.events.push('stop');
+    this.failIf('stopPolling');
+  }
+
+  private failIf(step: FeedOptions['failOn']): void {
+    if (this.options.failOn === step) throw new Error(`${this.options.name}: ${step} failed`);
   }
 
   get subscribers(): number {
@@ -160,13 +169,18 @@ class FeedAdapter extends DynamicAdapter<FeedOptions> {
   }
 }
 
-function serverWith(adapter: AdapterType): Promise<DirectMcpServer> {
+function serverWith(...adapters: AdapterType[]): Promise<DirectMcpServer> {
   return FrontMcpInstance.createDirect({
     info: { name: 'feed-server', version: '1.0.0' },
     apps: [DeskApp],
-    adapters: [adapter],
+    adapters,
     logging: { level: LogLevel.Off },
   });
+}
+
+function feedAdapter(options: FeedOptions): { record: AdapterType; adapter: FeedAdapter } {
+  const record = FeedAdapter.init(options);
+  return { record, adapter: feedAdapters[feedAdapters.length - 1] };
 }
 
 describe('server-level adapter lifecycle', () => {
@@ -238,6 +252,28 @@ describe('server-level adapter lifecycle', () => {
     await second.dispose();
     expect(shared.events).toEqual(['fetch', 'start', 'fetch', 'stop']);
     expect(shared.subscribers).toBe(0);
+  });
+
+  it('stops polling when the update unsubscribe throws', async () => {
+    const { record, adapter } = feedAdapter({ name: 'feed-bad-unsubscribe', feed: 'u', failOn: 'unsubscribe' });
+    const server = await serverWith(record);
+
+    await server.dispose();
+
+    expect(adapter.events).toEqual(['fetch', 'start', 'stop']);
+    expect(adapter.subscribers).toBe(0);
+  });
+
+  it('stops the other adapters when one fails to stop polling', async () => {
+    const failing = feedAdapter({ name: 'feed-bad-stop', feed: 's', failOn: 'stopPolling' });
+    const healthy = feedAdapter({ name: 'feed-after-bad-stop', feed: 'h' });
+    const server = await serverWith(failing.record, healthy.record);
+
+    await server.dispose();
+
+    expect(failing.adapter.events).toEqual(['fetch', 'start', 'stop']);
+    expect(healthy.adapter.events).toEqual(['fetch', 'start', 'stop']);
+    expect(healthy.adapter.subscribers).toBe(0);
   });
 });
 
