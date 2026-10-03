@@ -28,7 +28,7 @@ import {
   type AgentToolDefinition,
   type FlowCtxOf,
 } from '../../common';
-import { type DirectMcpServer } from '../../direct/direct.types';
+import { type DirectCallOptions, type DirectMcpServer } from '../../direct/direct.types';
 import { AgentCallDepthExceededError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 
@@ -237,8 +237,12 @@ describe('one agent calling another', () => {
     hops.length = 0;
   });
 
-  async function call(name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> {
-    return server.callTool(name, args);
+  async function call(
+    name: string,
+    args: Record<string, unknown> = {},
+    options?: DirectCallOptions,
+  ): Promise<CallToolResult> {
+    return server.callTool(name, args, options);
   }
 
   describe('nested agents (agents: [...])', () => {
@@ -338,6 +342,34 @@ describe('one agent calling another', () => {
 
       expect(result.structuredContent).toEqual({ error: 'Invalid tool input', code: 'INVALID_INPUT' });
       expect(runs).toEqual([]);
+    });
+  });
+
+  describe('under a consent selection', () => {
+    it('covers the nested agents the model calls, which the consent screen never offers', async () => {
+      const result = await call('invoke_harbor_master', {}, consentTo('invoke_harbor_master'));
+
+      expect(runs).toEqual(['tide_reader:dock 4']);
+      expect(JSON.stringify(result.structuredContent)).toContain('high at dock 4');
+    });
+
+    it('covers a nested agent called with this.invokeAgent()', async () => {
+      const result = await call(
+        'invoke_delegator',
+        { target: 'aide', args: { note: 'stow the lines' } },
+        consentTo('invoke_delegator'),
+      );
+
+      expect(result.structuredContent).toEqual({ result: { aide: 'STOW THE LINES' } });
+    });
+
+    it('still applies to a swarm agent, which the consent screen offers', async () => {
+      const refused = await call('invoke_coordinator', {}, consentTo('invoke_coordinator'));
+      const allowed = await call('invoke_coordinator', {}, consentTo('invoke_coordinator', 'invoke_researcher'));
+
+      expect(JSON.stringify(refused.structuredContent)).toContain('was not consented for this session');
+      expect(allowed.structuredContent).toEqual({ findings: 'notes on reefs' });
+      expect(runs).toEqual(['researcher:reefs']);
     });
   });
 
@@ -488,7 +520,32 @@ class RiggerAgent extends AgentContext {}
 })
 class BoatswainAgent extends AgentContext {}
 
-@App({ id: 'deck', name: 'Deck', agents: [BoatswainAgent] })
+@Agent({ name: 'spotter', inputSchema: {}, llm: { adapter: answering } })
+class SpotterAgent extends AgentContext {
+  override async execute(_input: Record<string, never>) {
+    runs.push('spotter');
+    return { spotted: true };
+  }
+}
+
+/** Sees its sibling `spotter` in the agent it is nested in, and its model calls it. */
+@Agent({
+  name: 'signaller',
+  inputSchema: {},
+  llm: { adapter: callingModel('signaller', 'invoke_spotter') },
+  swarm: { canSeeOtherAgents: true, visibleAgents: ['spotter'] },
+})
+class SignallerAgent extends AgentContext {}
+
+@Agent({
+  name: 'mate',
+  inputSchema: {},
+  llm: { adapter: callingModel('mate', 'invoke_signaller') },
+  agents: [SignallerAgent, SpotterAgent],
+})
+class MateAgent extends AgentContext {}
+
+@App({ id: 'deck', name: 'Deck', agents: [BoatswainAgent, MateAgent] })
 class DeckApp {}
 
 describe('the gates a nested agent declares', () => {
@@ -551,25 +608,52 @@ describe('the gates a nested agent declares', () => {
 });
 
 describe('calls an agent makes during its run', () => {
-  it("run inside the global concurrency slot of the agent's call", async () => {
-    const server = await FrontMcpInstance.createDirect({
+  let server: DirectMcpServer;
+
+  beforeAll(async () => {
+    server = await FrontMcpInstance.createDirect({
       info: { name: 'agent-global-slot', version: '1.0.0' },
       apps: [DeckApp],
       logging: { level: LogLevel.Off },
       throttle: { enabled: true, globalConcurrency: { maxConcurrent: 1, queueTimeoutMs: 0 } },
     });
-    try {
-      runs.length = 0;
-      const result = await server.callTool('invoke_boatswain', {});
+  });
 
-      // boatswain holds the only global slot while its nested agent and that agent's tool run
-      expect(result.structuredContent).toEqual({ hoisted: true });
-      expect(runs).toEqual(['hoist']);
-    } finally {
-      await server.dispose();
-    }
+  afterAll(async () => {
+    await server.dispose();
+  });
+
+  beforeEach(() => {
+    runs.length = 0;
+  });
+
+  it("run inside the global concurrency slot of the agent's call", async () => {
+    const result = await server.callTool('invoke_boatswain', {});
+
+    // boatswain holds the only global slot while its nested agent and that agent's tool run
+    expect(result.structuredContent).toEqual({ hoisted: true });
+    expect(runs).toEqual(['hoist']);
+  });
+
+  it('are covered by the consent given to the agent when they reach its nested agents and own tools', async () => {
+    const result = await server.callTool('invoke_boatswain', {}, consentTo('invoke_boatswain'));
+
+    expect(result.structuredContent).toEqual({ hoisted: true });
+    expect(runs).toEqual(['hoist']);
+  });
+
+  it('are covered by the consent given to the agent when a nested agent calls a sibling it sees', async () => {
+    const result = await server.callTool('invoke_mate', {}, consentTo('invoke_mate'));
+
+    expect(result.structuredContent).toEqual({ spotted: true });
+    expect(runs).toEqual(['spotter']);
   });
 });
+
+/** Call options for a caller whose token selected only `selectedTools` on the consent screen. */
+function consentTo(...selectedTools: string[]): DirectCallOptions {
+  return { authContext: { extra: { consent: { enabled: true, selectedTools } } } };
+}
 
 /** Resolves once `condition` holds, or after about a second; never rejects. */
 async function until(condition: () => boolean): Promise<boolean> {
