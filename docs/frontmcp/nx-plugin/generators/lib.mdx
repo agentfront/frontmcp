@@ -103,14 +103,14 @@ class MyApp {}
 
 Every library type gets the same project files:
 
-| File                          | Purpose                                                                                                                  |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `project.json`                | `test` runs the starter spec with [`@frontmcp/nx:test`](/frontmcp/nx-plugin/executors/test); `typecheck` runs `tsc --noEmit` on `tsconfig.lib.json` and `tsconfig.spec.json` |
-| `tsconfig.json`               | CommonJS with `moduleResolution` `node10` on TypeScript 5 and `bundler` on TypeScript 6+, decorators, and JavaScript output even when the base config is a TS-solution one (`composite`, `emitDeclarationOnly`) |
-| `tsconfig.lib.json` / `.spec.json` | Sources and specs                                                                                                   |
-| `jest.config.cjs`             | Maps the `tsconfig.base.json` path aliases so cross-project imports resolve in tests                                    |
+| File                               | Purpose                                                                                                                                                                                                         |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project.json`                     | `test` runs the starter spec with [`@frontmcp/nx:test`](/frontmcp/nx-plugin/executors/test); `typecheck` runs `tsc --noEmit` on `tsconfig.lib.json` and `tsconfig.spec.json`                                    |
+| `tsconfig.json`                    | CommonJS with `moduleResolution` `node10` on TypeScript 5 and `bundler` on TypeScript 6+, decorators, and JavaScript output even when the base config is a TS-solution one (`composite`, `emitDeclarationOnly`) |
+| `tsconfig.lib.json` / `.spec.json` | Sources and specs                                                                                                                                                                                               |
+| `jest.config.cjs`                  | Maps the `tsconfig.base.json` path aliases so cross-project imports resolve in tests                                                                                                                            |
 
-The generator registers the import path in `tsconfig.base.json` as a relative path, `"@frontmcp/my-lib": ["./libs/my-lib/src/index.ts"]`, which TypeScript accepts with or without a `baseUrl`. Apps import the library through that alias, and `nx build <app>` bundles it, so a library needs no build target of its own (a workspace that registers `@nx/js/typescript` still infers one from `tsconfig.lib.json`).
+The generator registers the import path in `tsconfig.base.json` as a relative path, `"@frontmcp/my-lib": ["./libs/my-lib/src/index.ts"]`, which TypeScript accepts with or without a `baseUrl`. Apps import the library through that alias, and `nx build <app>` bundles it, so a library needs no build target of its own (a workspace that registers `@nx/js/typescript` still infers one from `tsconfig.lib.json`). A [publishable library](#publishable-libraries) gets one, since it is built on its own.
 
 <Note>
   `tsconfig.json` sets `"nx": { "addTypecheckTarget": false }` so that, in a workspace that registers the `@nx/js/typescript` plugin, Nx uses the project's own `typecheck` target instead of inferring a `tsc --build` one.
@@ -122,4 +122,18 @@ Generate a library with a `package.json` for npm publishing:
 
 ```bash
 nx g @frontmcp/nx:lib my-plugin --libType plugin --publishable --importPath @my-org/plugin-cache
+```
+
+On top of the [project files](#project-setup) every library gets, a publishable library has:
+
+| File           | Purpose                                                                                                                                                                                                                                                                       |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project.json` | A cached `build` target that runs `tsc -p tsconfig.lib.json` in the library folder, writing JavaScript and declarations to `libs/my-plugin/dist`                                                                                                                              |
+| `package.json` | Named after `--importPath`, with `main` / `types` set to `./dist/index.js` / `./dist/index.d.ts` and `files: ["dist"]`. It depends on `tslib` and, for the `plugin`, `adapter` and `tool-register` types, on `@frontmcp/sdk`, at the ranges the workspace `package.json` uses |
+
+Build the library, then publish it from its folder:
+
+```bash
+nx build my-plugin
+npm publish libs/my-plugin --access public
 ```

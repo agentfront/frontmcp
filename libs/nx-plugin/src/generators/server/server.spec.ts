@@ -140,7 +140,12 @@ describe('server generator', () => {
     });
 
     it('adds no dependencies for the other targets', async () => {
-      const task = await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
+      const task = await serverGenerator(tree, {
+        name: 'prod',
+        apps: 'demo',
+        deploymentTarget: 'node',
+        skipFormat: true,
+      });
 
       expect(task).toBeUndefined();
       expect(readJson(tree, 'package.json').dependencies?.['@codegenie/serverless-express']).toBeUndefined();

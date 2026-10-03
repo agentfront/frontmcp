@@ -37,6 +37,11 @@ export interface FrontMcpProviderProps {
   components?: Record<string, ComponentType<Record<string, unknown>>>;
   /** Store adapters to register at the provider level (reduxStore, valtioStore, createStore). */
   stores?: StoreAdapter[];
+  /**
+   * Server app that dynamic tools join, by server name (the primary server goes by `name`). Needed
+   * only for a server with more than one local app; a tool's own `app` option takes precedence.
+   */
+  dynamicToolApps?: Record<string, string>;
   autoConnect?: boolean;
   children: React.ReactNode;
   onConnected?: (client: DirectClient) => void;
@@ -49,6 +54,7 @@ export function FrontMcpProvider({
   servers,
   components,
   stores,
+  dynamicToolApps,
   autoConnect = true,
   children,
   onConnected,
@@ -100,10 +106,18 @@ export function FrontMcpProvider({
     else console.warn(`[frontmcp] dynamic tool "${toolName}" was not registered: ${error.message}`);
   }, []);
 
+  // Keyed by content: an inline object is a new value on every render, which would re-bind every tool
+  const dynamicToolAppsKey = JSON.stringify(dynamicToolApps ?? {});
+  const toolApps = useMemo(
+    () => JSON.parse(dynamicToolAppsKey) as Record<string, string | undefined>,
+    [dynamicToolAppsKey],
+  );
+  const primaryToolApp = toolApps[resolvedName];
+
   // Mirror the primary server's dynamic tools into it as real tools
   useEffect(
-    () => bindDynamicTools(dynamicRegistry, server, { onError: reportToolError }),
-    [dynamicRegistry, server, reportToolError],
+    () => bindDynamicTools(dynamicRegistry, server, { onError: reportToolError, app: primaryToolApp }),
+    [dynamicRegistry, server, reportToolError, primaryToolApp],
   );
 
   // Register all servers into the shared ServerRegistry
@@ -115,7 +129,7 @@ export function FrontMcpProvider({
         const srvRegistry = getDynamicRegistry(sName);
         const wrappedSrv = createWrappedServer(srv, srvRegistry);
         serverRegistry.register(sName, wrappedSrv);
-        unbinds.push(bindDynamicTools(srvRegistry, srv, { onError: reportToolError }));
+        unbinds.push(bindDynamicTools(srvRegistry, srv, { onError: reportToolError, app: toolApps[sName] }));
       }
     }
 
@@ -135,7 +149,7 @@ export function FrontMcpProvider({
         }
       }
     };
-  }, [resolvedName, wrappedServer, servers, getDynamicRegistry, reportToolError]);
+  }, [resolvedName, wrappedServer, servers, getDynamicRegistry, reportToolError, toolApps]);
 
   // Refresh ServerRegistry entry when dynamic resources change. Dynamic tools reach the listing
   // through the server's `notifications/tools/list_changed` (see ServerRegistry.watchToolList).

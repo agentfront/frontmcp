@@ -3,6 +3,7 @@
 import 'reflect-metadata';
 
 import { ProviderScope, type Token, type Type } from '@frontmcp/di';
+import type { GuardManager } from '@frontmcp/guard';
 
 import AdapterRegistry from '../adapter/adapter.registry';
 import {
@@ -302,6 +303,16 @@ export class AgentScope {
     return this.parentScope.authoritiesScopeMapping;
   }
 
+  /**
+   * The server's guard manager: the agent's tools and its nested agents' `invoke_<agent>` tools take
+   * their `rateLimit` and `concurrency` from it in this scope's `tools:call-tool` flow, like every
+   * other tool. Read when a call runs: the server creates it after its agents when only they declare
+   * limits.
+   */
+  get rateLimitManager(): GuardManager | undefined {
+    return this.parentScope.rateLimitManager;
+  }
+
   // ============================================================================
   // Flow Execution
   // ============================================================================
@@ -403,8 +414,9 @@ class AgentScopeEntry {
     return undefined;
   }
 
-  get rateLimitManager(): undefined {
-    return undefined;
+  /** See {@link AgentScope.rateLimitManager}. */
+  get rateLimitManager(): GuardManager | undefined {
+    return this.agentScope.rateLimitManager;
   }
 
   get elicitationStore(): undefined {

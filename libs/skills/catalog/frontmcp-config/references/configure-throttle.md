@@ -45,7 +45,7 @@ Protect your FrontMCP server with rate limiting, concurrency control, execution 
       partitionBy: 'global', // shared across all clients
     },
 
-    // Global concurrency limit (a tool called with this.callTool() runs inside its caller's slot)
+    // Global concurrency limit (a tool called with this.callTool(), or by an agent during its run, runs inside its caller's slot)
     globalConcurrency: {
       maxConcurrent: 50,
       partitionBy: 'global',
@@ -111,6 +111,8 @@ class ExpensiveQueryTool extends ToolContext {
   }
 }
 ```
+
+A tool's own `rateLimit` and `concurrency` are enforced without a `throttle` option, as are those of an agent, of the tools declared inside an `@Agent` and of its nested agents. `throttle.enabled: false` turns every guard off, including these.
 
 ## `ipFilter` is enforced on every HTTP route
 

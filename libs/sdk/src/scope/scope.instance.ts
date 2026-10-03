@@ -1608,14 +1608,18 @@ export class Scope extends ScopeEntry {
 
   /**
    * Tools and agents that declare their own `rateLimit` or `concurrency` are guarded even
-   * without `throttle.enabled`, unless `throttle.enabled` is explicitly `false`.
+   * without `throttle.enabled`, unless `throttle.enabled` is explicitly `false`. That includes the
+   * tools declared inside an agent and its nested agents, at any depth.
    */
   private async initGuardForDeclaredLimits(): Promise<void> {
     const throttleConfig = this.metadata.throttle;
     if (this._rateLimitManager || this.cliMode || throttleConfig?.enabled === false) return;
 
     const guardedEntries = [...this.scopeTools.getTools(true), ...this.scopeAgents.getAgents(true)];
-    const declaresLimits = guardedEntries.some((entry) => entry.metadata.rateLimit || entry.metadata.concurrency);
+    const declaresLimits =
+      guardedEntries.some((entry) => entry.metadata.rateLimit || entry.metadata.concurrency) ||
+      // The tools and nested agents an agent runs in its private scope, which uses this manager too
+      this.scopeAgents.listAllInstances().some((agent) => agent.declaresScopedLimits());
     if (!declaresLimits) return;
 
     this._rateLimitManager = await createGuardManager({

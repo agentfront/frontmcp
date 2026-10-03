@@ -1,5 +1,6 @@
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
 import { type Tree, readJson } from '@nx/devkit';
+import { getFrontmcpVersion } from '../../utils/versions';
 import { adapterGenerator } from '../adapter/adapter';
 import { appGenerator } from '../app/app';
 import { pluginGenerator } from '../plugin/plugin';
@@ -189,6 +190,78 @@ describe('lib generator', () => {
 
       const projectJson = readJson(tree, 'libs/shared/project.json');
       expect(projectJson.tags).toContain('scope:publishable');
+    });
+
+    // The workspace no longer registers @nx/js/typescript, whose inferred `build` was the only one a library had.
+    it('builds with its own target, compiling tsconfig.lib.json into the package folder', async () => {
+      await libGenerator(tree, { name: 'shared', publishable: true, importPath: '@my-org/shared', skipFormat: true });
+
+      expect(readJson(tree, 'libs/shared/project.json').targets.build).toEqual({
+        executor: 'nx:run-commands',
+        cache: true,
+        outputs: ['{projectRoot}/dist'],
+        options: { command: 'tsc -p tsconfig.lib.json', cwd: '{projectRoot}' },
+      });
+      expect(readJson(tree, 'libs/shared/tsconfig.lib.json').compilerOptions).toMatchObject({
+        outDir: './dist',
+        rootDir: './src',
+        declaration: true,
+      });
+    });
+
+    it('writes a package.json that points at the build output', async () => {
+      await libGenerator(tree, { name: 'shared', publishable: true, importPath: '@my-org/shared', skipFormat: true });
+
+      expect(readJson(tree, 'libs/shared/package.json')).toEqual({
+        name: '@my-org/shared',
+        version: '0.0.1',
+        type: 'commonjs',
+        main: './dist/index.js',
+        types: './dist/index.d.ts',
+        files: ['dist'],
+        dependencies: { tslib: '^2.3.0' },
+      });
+    });
+
+    it.each(['plugin', 'adapter', 'tool-register'] as const)(
+      'makes a publishable %s library depend on the SDK it imports, at the workspace range',
+      async (libType) => {
+        tree.write(
+          'package.json',
+          JSON.stringify({ dependencies: { '@frontmcp/sdk': '~1.8.0' }, devDependencies: { tslib: '^2.6.0' } }),
+        );
+        await libGenerator(tree, { name: 'shared', libType, publishable: true, skipFormat: true });
+
+        expect(readJson(tree, 'libs/shared/package.json').dependencies).toEqual({
+          '@frontmcp/sdk': '~1.8.0',
+          tslib: '^2.6.0',
+        });
+      },
+    );
+
+    it('falls back to the plugin version of the SDK when the workspace does not list it', async () => {
+      await libGenerator(tree, { name: 'shared', libType: 'plugin', publishable: true, skipFormat: true });
+
+      expect(readJson(tree, 'libs/shared/package.json').dependencies['@frontmcp/sdk']).toBe(
+        `~${getFrontmcpVersion()}`,
+      );
+    });
+
+    it('uses the default ranges when the workspace has no package.json', async () => {
+      tree.delete('package.json');
+      await libGenerator(tree, { name: 'shared', libType: 'plugin', publishable: true, skipFormat: true });
+
+      expect(readJson(tree, 'libs/shared/package.json').dependencies).toEqual({
+        '@frontmcp/sdk': `~${getFrontmcpVersion()}`,
+        tslib: '^2.3.0',
+      });
+    });
+
+    it('gives a library that is not publishable neither a build target nor a package.json', async () => {
+      await libGenerator(tree, { name: 'shared', skipFormat: true });
+
+      expect(readJson(tree, 'libs/shared/project.json').targets.build).toBeUndefined();
+      expect(tree.exists('libs/shared/package.json')).toBe(false);
     });
   });
 

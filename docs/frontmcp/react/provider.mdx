@@ -28,16 +28,17 @@ import { FrontMcpProvider } from '@frontmcp/react';
 
 ### Props
 
-| Prop          | Type                              | Default     | Description                                              |
-| ------------- | --------------------------------- | ----------- | -------------------------------------------------------- |
-| `server`      | `DirectMcpServer`                 | —           | **Required.** Primary MCP server instance                |
-| `name`        | `string`                          | `'default'` | Logical name for the primary server in the registry      |
-| `servers`     | `Record<string, DirectMcpServer>` | —           | Additional named servers                                 |
-| `components`  | `Record<string, ComponentType>`   | —           | Components for `DynamicRenderer` and `ComponentRegistry` |
-| `autoConnect` | `boolean`                         | `true`      | Connect on mount                                         |
-| `children`    | `ReactNode`                       | —           | **Required.** Child elements                             |
-| `onConnected` | `(client: DirectClient) => void`  | —           | Called after successful connection                       |
-| `onError`     | `(error: Error) => void`          | —           | Called if connection fails                               |
+| Prop              | Type                              | Default     | Description                                                                                                                |
+| ----------------- | --------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `server`          | `DirectMcpServer`                 | —           | **Required.** Primary MCP server instance                                                                                  |
+| `name`            | `string`                          | `'default'` | Logical name for the primary server in the registry                                                                        |
+| `servers`         | `Record<string, DirectMcpServer>` | —           | Additional named servers                                                                                                   |
+| `components`      | `Record<string, ComponentType>`   | —           | Components for `DynamicRenderer` and `ComponentRegistry`                                                                   |
+| `dynamicToolApps` | `Record<string, string>`          | —           | App that [dynamic tools](/frontmcp/react/dynamic-tools#servers-with-several-apps) join, by server name (multi-app servers) |
+| `autoConnect`     | `boolean`                         | `true`      | Connect on mount                                                                                                           |
+| `children`        | `ReactNode`                       | —           | **Required.** Child elements                                                                                               |
+| `onConnected`     | `(client: DirectClient) => void`  | —           | Called after successful connection                                                                                         |
+| `onError`         | `(error: Error) => void`          | —           | Called if connection fails, or the server refuses a dynamic tool                                                           |
 
 ### Lifecycle
 
