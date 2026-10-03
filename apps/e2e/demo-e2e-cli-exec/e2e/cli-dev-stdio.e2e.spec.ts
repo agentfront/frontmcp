@@ -64,8 +64,7 @@ describe('frontmcp dev --stdio (#679)', () => {
   it(
     'keeps stdout JSON-RPC only when the project has a .env',
     async () => {
-      // `resolveDevLaunch` loads .env files and used to print
-      // "[dev] loaded N environment variables" on stdout, ahead of the frames.
+      // The .env notice used to land on stdout, ahead of the JSON-RPC frames.
       projectDir = await createScratchProject('dev-stdio-dotenv', {
         ...helloServerFiles(),
         '.env': 'DEV_STDIO_DOTENV=1\n',

@@ -176,9 +176,7 @@ describe('runDevBridge lifecycle (dev --stdio must not return while the child is
       upstreams.push(fakeUpstream(jest.fn()), failing);
       const { run, onReady } = await bootWithInitializedClient();
 
-      // The supervisor stops a child whose onReady rejects; the FSM stays in
-      // its reload path instead of draining buffered requests into a child
-      // that has no session for them.
+      // A rejected onReady makes the supervisor stop the child; nothing drains into it.
       await expect(onReady(child, {})).rejects.toThrow('replayed initialize failed: boom');
       expect(fsmOnChildReady).toHaveBeenCalledTimes(1);
       expect(failing.close).toHaveBeenCalled();

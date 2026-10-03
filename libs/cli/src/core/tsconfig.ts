@@ -180,9 +180,7 @@ export async function runInit(baseDir?: string): Promise<void> {
   const { result: withWidgetExcludes, added: addedExcludes } = ensureWidgetExcludes(merged);
   merged = withWidgetExcludes;
 
-  // Edit only the keys that change, so comments and formatting survive. A
-  // required option declared twice is refused: the edit would land on the
-  // occurrence TypeScript ignores.
+  // Edit only the keys that change, so comments and formatting survive.
   let updated: string;
   try {
     updated = updateJsoncText(current.text, existing, merged, path.basename(tsconfigPath));

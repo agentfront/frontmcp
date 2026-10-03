@@ -121,9 +121,7 @@ export function populateProcessEnv(env: Record<string, string>, override = false
  *
  * @param cwd - Current working directory.
  * @param label - Command name used in the log line (`dev`, `test`, …).
- * @param log - Where the "loaded N variables" notice goes. Defaults to stdout;
- *   `frontmcp dev --stdio` passes a stderr writer, its stdout carries JSON-RPC
- *   only.
+ * @param log - Where the notice goes (stdout by default; `dev --stdio` passes stderr).
  * @returns The variables read from the files, for callers that also need to
  *   forward them into a child process.
  */

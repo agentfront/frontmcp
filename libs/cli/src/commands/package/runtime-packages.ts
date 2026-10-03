@@ -48,11 +48,7 @@ const FALLBACK_RANGES: Record<string, string> = {
   tslib: '^2.3.0',
 };
 
-/**
- * Every range the project declares, by package name. When a name appears in
- * several sections the one npm installs wins: `optionalDependencies` overrides
- * `dependencies`, which overrides `devDependencies` / `peerDependencies`.
- */
+/** Declared ranges by name, with npm's precedence: optionalDependencies > dependencies > dev/peer. */
 function readDeclaredRanges(packageDir: string): Record<string, string> {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8')) as Record<

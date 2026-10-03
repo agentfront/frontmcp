@@ -7,9 +7,7 @@
  * `require()` against Node's built-ins only — while `frontmcp mcpb validate`
  * called the archive valid.
  *
- * Building an SEA binary needs a host platform MCPB ships binaries for and
- * `postject` (fetched by npx). Only when that toolchain is positively missing is
- * the suite skipped; with the toolchain present, a failed build fails it.
+ * Skipped only when the SEA toolchain is missing; otherwise a failed build fails it.
  */
 
 import { execFileSync, spawn } from 'child_process';
@@ -167,7 +165,6 @@ describeWithSeaToolchain('frontmcp build --target mcpb --sea (#679)', () => {
     }
     home = await mkdtemp(path.join(os.tmpdir(), 'mcpb-sea-home-'));
     archive = path.join(projectDir, 'dist', 'mcpb', `${APP}-1.0.0.mcpb`);
-    // The toolchain is here: a failed build is a regression, never a skip.
     try {
       execFileSync('node', [getFrontmcpBin(), 'build', '--target', 'mcpb', '--sea'], {
         cwd: projectDir,

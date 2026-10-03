@@ -128,10 +128,7 @@ export interface ResolveDevLaunchOptions {
    * busy-port check instead of refusing to start over a port nobody uses.
    */
   listens?: boolean;
-  /**
-   * Where notices (port, `.env`) go. `--stdio` passes a stderr writer: its
-   * stdout carries JSON-RPC frames only.
-   */
+  /** Where notices (port, `.env`) go; `--stdio` keeps stdout for JSON-RPC. */
   log?: (msg: string) => void;
 }
 

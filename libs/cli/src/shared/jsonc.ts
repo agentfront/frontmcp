@@ -35,17 +35,11 @@ export class JsoncParseError extends Error {
   }
 }
 
-/**
- * A key the CLI has to edit is declared more than once. The parser (like
- * TypeScript) keeps the last occurrence while `modify()` edits the first, so the
- * edit would not take effect; the text is rejected instead.
- */
+/** A key to edit is declared more than once: the parser keeps the last, `modify()` edits the first. */
 export class JsoncDuplicateKeyError extends Error {
   constructor(
     readonly file: string,
-    /** Dotted path of the duplicated key, e.g. `compilerOptions.target`. */
     readonly key: string,
-    /** 1-based lines of every occurrence. */
     readonly lines: number[],
   ) {
     super(`${file} declares "${key}" more than once (lines ${lines.join(', ')}) and only the last one takes effect`);
@@ -131,9 +125,7 @@ function duplicateKeyOn(root: Node | undefined, keyPath: JSONPath): { key: strin
  * Rewrite `text` so it holds `after`, touching only the keys whose values
  * differ from `before` (the parsed `text`). Keys `after` drops are left alone.
  * Comments, key order and formatting elsewhere are kept.
- *
- * Throws {@link JsoncDuplicateKeyError} when a key to edit is declared more
- * than once (`file` names the text in that error).
+ * Throws {@link JsoncDuplicateKeyError} when a key to edit is declared more than once.
  */
 export function updateJsoncText(
   text: string,

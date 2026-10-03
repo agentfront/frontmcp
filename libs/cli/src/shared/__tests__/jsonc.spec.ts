@@ -62,8 +62,7 @@ describe('updateJsoncText', () => {
     expect(parseJsoncObject(updated, 'x.json')).toEqual({ a: 1, b: 2 });
   });
 
-  // The parser keeps the last occurrence of a key, `modify()` edits the first:
-  // the edit would leave the effective value as it was.
+  // The parser keeps the last duplicate while modify() edits the first.
   it('refuses to edit a key declared more than once', () => {
     const text =
       '{\n  "compilerOptions": {\n    "emitDecoratorMetadata": true,\n    "emitDecoratorMetadata": false\n  }\n}\n';

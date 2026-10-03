@@ -208,11 +208,7 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
           for (const notification of listChangedNotifications(result)) await framer.write(notification);
         } catch (err) {
           log.error('client-handshake-replay-failed', { error: err instanceof Error ? err.message : String(err) });
-          // A child without the client's session cannot serve the buffered
-          // requests (HTTP answers 404 for the unknown session). Fail the
-          // launch instead: the supervisor stops this child and the FSM stays
-          // in its reload path — buffered requests wait for the next good
-          // child or get `dev_reload_deadline`.
+          // Without the client's session every drained request would fail: fail this launch.
           await next.close().catch(() => undefined);
           throw err;
         }

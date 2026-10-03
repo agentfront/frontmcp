@@ -145,7 +145,7 @@ function parseJsonRpc(line: string): JsonRpcMessage | undefined {
 export class StdioBridgeClient {
   readonly child: ChildProcess;
   readonly received: JsonRpcMessage[] = [];
-  /** stdout lines that are not JSON-RPC. stdout is the MCP channel: this must stay empty. */
+  /** stdout lines that are not JSON-RPC; must stay empty. */
   readonly stdoutNoise: string[] = [];
   stderr = '';
   private buffer = '';
