@@ -346,8 +346,11 @@ ApprovalPlugin.init({
 <ParamField path="approval.alwaysPrompt" type="boolean" default="false">
   Prompt every time, even if previously approved (for highly sensitive operations). Each approval lets exactly one call
   through and is used up by it, whatever its scope; the next call is refused with state `pending` until the caller
-  approves again. A custom `ApprovalStore` should implement `consumeApproval()` so that only one of two concurrent
-  calls gets an approval; without it the gate revokes the caller's approvals of the tool instead.
+  approves again. The built-in store uses up an approval with the storage's atomic compare-and-delete (memory, Redis,
+  Upstash, Vercel KV), so only one of two concurrent calls gets it, and a denial or new approval recorded in the
+  meantime is kept; on a backend without one (Cloudflare KV, the filesystem, SQLite) it deletes the approval directly.
+  A custom `ApprovalStore` should implement `consumeApproval()` the same way; without it the gate revokes the caller's
+  approvals of the tool instead.
 </ParamField>
 
 <ParamField path="approval.skipApproval" type="boolean" default="false">

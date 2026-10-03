@@ -462,9 +462,13 @@ authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectI
    call (only one of two concurrent calls gets it), so the next call needs a new one.
 5. Otherwise refused with state `pending` (or `expired`).
 
-Releases up to 1.8.7 refused every call of an `alwaysPrompt` tool, approved or not. A custom
-`ApprovalStore` should implement `consumeApproval()` (delete exactly that record, resolve `true` only
-for the call that deleted it); without it the gate revokes the caller's approvals of the tool instead.
+Releases up to 1.8.7 refused every call of an `alwaysPrompt` tool, approved or not. The built-in store
+uses up an approval with the storage's atomic `deleteIfEquals()` (memory, Redis, Upstash, Vercel KV), so
+a denial or new approval recorded in the meantime is kept; a backend without it (Cloudflare KV, the
+filesystem, SQLite) has the approval deleted directly. A custom `ApprovalStore` should implement
+`consumeApproval()` (delete exactly that record, and only while it is still stored, in one step; resolve
+`true` only for the call that deleted it); without it the gate revokes the caller's approvals of the tool
+instead.
 
 A refused call throws `ApprovalRequiredError`; the client receives an error result whose text is
 exactly the tool's `approvalMessage` (or the default `Tool "<full name>" requires approval to
