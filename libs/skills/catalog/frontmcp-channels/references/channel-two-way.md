@@ -13,7 +13,7 @@ Two-way channels let external users communicate with Claude Code through messagi
 2. **Transform**: `onEvent()` converts to `ChannelNotification`
 3. **Push**: Notification sent to Claude Code session
 4. **Reply**: Claude calls `channel-reply` tool with response text
-5. **Forward**: `onReply()` sends the reply back to the external platform
+5. **Forward**: `onReply()` sends the reply back to the external platform. If it throws, `channel-reply` answers an error result with the message, so Claude knows the reply did not go out (up to 1.8.7 the tool reported success)
 
 ## API Surface
 

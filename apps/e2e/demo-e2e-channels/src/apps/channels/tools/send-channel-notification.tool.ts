@@ -14,16 +14,13 @@ const inputSchema = {
 })
 export default class SendChannelNotificationTool extends ToolContext {
   async execute(input: { channelName: string; content: string; meta?: Record<string, string> }) {
-    const scope = this.scope as unknown as {
-      channelNotifications?: { send: (name: string, content: string, meta?: Record<string, string>) => void };
-    };
-    const channelNotifications = scope.channelNotifications;
+    const channelNotifications = this.scope.channelNotifications;
 
     if (!channelNotifications) {
       return { sent: false, reason: 'ChannelNotificationService not available' };
     }
 
-    channelNotifications.send(input.channelName, input.content, input.meta);
+    await channelNotifications.send(input.channelName, input.content, input.meta);
     return { sent: true, channelName: input.channelName };
   }
 }

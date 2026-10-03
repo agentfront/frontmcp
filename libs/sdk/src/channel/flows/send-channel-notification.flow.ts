@@ -4,12 +4,15 @@ import { z } from '@frontmcp/lazy-zod';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
 import { InvalidInputError } from '../../errors';
-import type { ChannelNotificationService } from '../channel-notification.service';
+import type { ChannelNotificationMeta } from '../channel-notification.service';
+import type { ChannelInstance } from '../channel.instance';
 
 const inputSchema = z.object({
   channelName: z.string().min(1),
   content: z.string().min(1),
   meta: z.record(z.string(), z.string()).optional(),
+  /** Deliver to this session only (session-scoped events such as agent and job completions). */
+  targetSessionId: z.string().min(1).optional(),
 });
 
 const outputSchema = z.object({
@@ -21,11 +24,12 @@ const stateSchema = z.object({
   channelName: z.string(),
   content: z.string(),
   meta: z.record(z.string(), z.string()).optional(),
+  targetSessionId: z.string().optional(),
   output: outputSchema.optional(),
 });
 
 const plan = {
-  pre: ['parseInput'],
+  pre: ['parseInput', 'resolveMeta'],
   execute: ['send'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
@@ -45,6 +49,11 @@ declare global {
 const name = 'channels:send-notification' as const;
 const { Stage } = FlowHooksOf<'channels:send-notification'>(name);
 
+/**
+ * Every channel notification runs this flow: the ones a channel pushes (`channel.pushNotification()`,
+ * which every source uses) and manual pushes through `scope.channelNotifications.send()`. Hooks see
+ * the final metadata from `Will('send')` on, and can stop a notification there.
+ */
 @Flow({
   name,
   plan,
@@ -70,26 +79,52 @@ export default class SendChannelNotificationFlow extends FlowBase<typeof name> {
       channelName: data.channelName,
       content: data.content,
       meta: data.meta,
+      targetSessionId: data.targetSessionId,
     });
     this.logger.verbose('parseInput:done');
+  }
+
+  /**
+   * The notification's metadata: the server's `channels.defaultMeta`, then the channel's own `meta`,
+   * then the notification's, with `source` always the channel name.
+   */
+  @Stage('resolveMeta')
+  async resolveMeta() {
+    const { channelName } = this.state.required;
+    const { meta } = this.state;
+    const channel = this.findChannel(channelName);
+    const resolved: ChannelNotificationMeta = {
+      ...(this.scope.channelNotifications?.defaultMeta ?? {}),
+      ...(channel?.staticMeta ?? {}),
+      ...(meta ?? {}),
+      source: channelName,
+    };
+    this.state.set('meta', resolved);
   }
 
   @Stage('send')
   async send() {
     this.logger.verbose('send:start');
 
-    const { channelName, content, meta } = this.state.required;
-    const scope = this.scope as unknown as { channelNotifications?: ChannelNotificationService };
-    const channelNotifications = scope.channelNotifications;
+    const { channelName, content } = this.state.required;
+    const { targetSessionId } = this.state;
+    const meta: ChannelNotificationMeta = { ...(this.state.meta ?? {}), source: channelName };
 
+    // Only global events are buffered: a session-scoped one belongs to its session alone.
+    const channel = this.findChannel(channelName);
+    if (channel && !targetSessionId) channel.recordForReplay({ content, meta });
+
+    const channelNotifications = this.scope.channelNotifications;
     if (!channelNotifications) {
       this.logger.warn('Channel notification service not available');
-      this.state.set({ ...this.state.required, output: { sent: false, channelName } });
+      this.state.set('output', { sent: false, channelName });
       return;
     }
 
-    channelNotifications.send(channelName, content, meta);
-    this.state.set({ ...this.state.required, output: { sent: true, channelName } });
+    const sent = targetSessionId
+      ? channelNotifications.sendToSession(targetSessionId, content, meta)
+      : (channelNotifications.sendToSubscribedSessions(content, meta), true);
+    this.state.set('output', { sent, channelName });
 
     this.logger.verbose('send:done');
   }
@@ -97,8 +132,12 @@ export default class SendChannelNotificationFlow extends FlowBase<typeof name> {
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
-    const output = this.state.required.output ?? { sent: false, channelName: this.state.required.channelName };
+    const output = this.state.output ?? { sent: false, channelName: this.state.required.channelName };
     this.respond(output);
     this.logger.verbose('finalize:done');
+  }
+
+  private findChannel(channelName: string): ChannelInstance | undefined {
+    return this.scope.channels?.findByName(channelName);
   }
 }

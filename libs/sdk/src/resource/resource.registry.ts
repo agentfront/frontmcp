@@ -157,6 +157,9 @@ export default class ResourceRegistry extends RegistryAbstract<
 
     this.bump('reset');
 
+    // An entry whose hooks cannot run fails startup here, after the synchronous adoption that keeps siblings acyclic (#678).
+    await Promise.all([...this.instances.values()].map((ri) => ri.ready));
+
     // Register resource flows with the scope (scope already declared above)
     await scope.registryFlows(
       ReadResourceFlow,

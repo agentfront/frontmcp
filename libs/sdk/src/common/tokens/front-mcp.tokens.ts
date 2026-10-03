@@ -28,6 +28,8 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   skills: tokenFactory.meta('skills'),
   // server-level plugins (instantiated per scope)
   plugins: tokenFactory.meta('plugins'),
+  // server-level adapters (instantiated per scope)
+  adapters: tokenFactory.meta('adapters'),
   // pagination configuration
   pagination: tokenFactory.meta('pagination'),
   // outbound this.fetch() configuration

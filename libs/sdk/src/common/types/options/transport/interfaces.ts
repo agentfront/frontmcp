@@ -342,15 +342,9 @@ export interface TransportOptionsInterface {
   // ============================================
 
   /**
-   * Defines how the session lifecycle and nested tokens are managed.
-   *
-   * Modes:
-   * - `'stateful'`: Session and nested tokens are stored server-side (e.g., Redis).
-   *   Results in smaller JWTs and supports token refresh.
-   * - `'stateless'`: All session data is embedded in the JWT.
-   *   Simpler but doesn't support token refresh.
-   *
-   * Can be a function for dynamic selection based on issuer.
+   * @deprecated Has no effect since v1.0: whether the server keeps sessions follows
+   * `transport.protocol` (`'stateless-api'` serves without sessions). A value other than
+   * `'stateful'` logs a startup warning. Remove it.
    *
    * @default 'stateful'
    */

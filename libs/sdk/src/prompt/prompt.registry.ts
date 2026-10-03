@@ -155,6 +155,9 @@ export default class PromptRegistry extends RegistryAbstract<
 
     this.bump('reset');
 
+    // An entry whose hooks cannot run fails startup here, after the synchronous adoption that keeps siblings acyclic (#678).
+    await Promise.all([...this.instances.values()].map((pi) => pi.ready));
+
     // Register prompt flows with the scope
     await scope.registryFlows(GetPromptFlow, PromptsListFlow);
   }

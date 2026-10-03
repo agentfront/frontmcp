@@ -3,7 +3,6 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
-import type ChannelRegistry from '../channel.registry';
 
 const inputSchema = z.object({}).optional();
 
@@ -58,8 +57,7 @@ export default class ListChannelsFlow extends FlowBase<typeof name> {
   async listChannels() {
     this.logger.verbose('listChannels:start');
 
-    const scope = this.scope as unknown as { channels?: ChannelRegistry };
-    const channelRegistry = scope.channels;
+    const channelRegistry = this.scope.channels;
     if (!channelRegistry) {
       this.state.set({ output: { channels: [], count: 0 } });
       return;

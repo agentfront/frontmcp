@@ -5,7 +5,7 @@ description: Overview of all official FrontMCP adapters that convert external de
 
 # Official Adapters
 
-Adapters convert external definitions (OpenAPI specs, Lambda functions, etc.) into MCP tools, resources, and prompts automatically. They are registered in the `adapters` array of `@App`.
+Adapters convert external definitions (OpenAPI specs, Lambda functions, etc.) into MCP tools, resources, and prompts automatically. They are registered in the `adapters` array of `@App` (that app's entries) or of `@FrontMcp` (entries every app serves).
 
 ## When to Use This Skill
 

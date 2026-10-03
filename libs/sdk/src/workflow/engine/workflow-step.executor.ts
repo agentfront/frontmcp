@@ -101,12 +101,21 @@ export class WorkflowStepExecutor {
     // Race a timer against the job promise. Note: this does NOT cancel the
     // underlying job execution — it only rejects the caller early on timeout.
     return new Promise<unknown>((resolve, reject) => {
+      let timedOut = false;
       const timer = setTimeout(() => {
+        timedOut = true;
         reject(new WorkflowJobTimeoutError(job.name, timeout));
       }, timeout);
 
-      // The step's job runs on the 'job' surface, which `getCallSurface()` reports and its tool calls carry.
-      runOnSurface('job', async () => ctx.execute(parsedInput))
+      // Async `authorities.pipes` load `this.auth` within the timed attempt, so a hung pipe times out like a hung job.
+      ctx
+        .loadAuthContext()
+        .then(() => {
+          // An attempt that timed out while its auth loaded is abandoned, so its job never starts.
+          if (timedOut) return undefined;
+          // The step's job runs on the 'job' surface, which `getCallSurface()` reports and its tool calls carry.
+          return runOnSurface('job', async () => ctx.execute(parsedInput));
+        })
         .then((result) => {
           clearTimeout(timer);
           resolve(result);

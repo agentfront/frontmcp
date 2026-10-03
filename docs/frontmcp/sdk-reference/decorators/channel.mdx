@@ -146,7 +146,7 @@ source: { type: 'file-watcher', paths: ['./logs/*.log'], events: ['change'] }
 source: { type: 'manual' }
 ```
 
-No automatic wiring. Push programmatically via `scope.channelNotifications.send()`.
+No automatic wiring. Push programmatically via `scope.channelNotifications.send()` or `channel.pushNotification()`; both run the hookable `channels:send-notification` flow.
 
 ## ChannelNotification Type
 
@@ -211,10 +211,10 @@ Enable channels at the server level:
 })
 ```
 
-| Option        | Type                     | Default | Description                                    |
-| ------------- | ------------------------ | ------- | ---------------------------------------------- |
-| `enabled`     | `boolean`                | `false` | Enable the channel system                      |
-| `defaultMeta` | `Record<string, string>` | —       | Metadata appended to all channel notifications |
+| Option        | Type                     | Default | Description                                                                                         |
+| ------------- | ------------------------ | ------- | --------------------------------------------------------------------------------------------------- |
+| `enabled`     | `boolean`                | `false` | Enable the channel system                                                                           |
+| `defaultMeta` | `Record<string, string>` | —       | Metadata added to every channel notification, under the channel's `meta` and the notification's own |
 
 ## Related
 

@@ -7,7 +7,7 @@ tags: [config, vercel, lambda, cloudflare, session, transport]
 features:
   - "The `'stateless-api'` preset disables SSE, streaming, and sessions entirely"
   - 'Each request is standalone with no server-side state'
-  - "Pair with `sessionMode: 'stateless'` for serverless execution"
+  - 'No `sessionMode` needed: sessions follow the protocol preset'
   - 'Required for Vercel, Lambda, Cloudflare Workers where persistent connections are not allowed'
 ---
 
@@ -46,7 +46,6 @@ class TranslateApp {}
   info: { name: 'serverless-translate', version: '1.0.0' },
   apps: [TranslateApp],
   transport: {
-    sessionMode: 'stateless',
     protocol: 'stateless-api',
   },
 })
@@ -59,7 +58,7 @@ class Server {}
 
 - The `'stateless-api'` preset disables SSE, streaming, and sessions entirely
 - Each request is standalone with no server-side state
-- Pair with `sessionMode: 'stateless'` for serverless execution
+- No `sessionMode` needed: sessions follow the protocol preset
 - Required for Vercel, Lambda, Cloudflare Workers where persistent connections are not allowed
 
 ## Related

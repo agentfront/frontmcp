@@ -154,7 +154,7 @@ scope.notifications.getChannelSubscriptions(sessionId: string): string[]
 Returns all channel names a session is subscribed to.
 
 <Info>
-**Auto-subscription:** When a session initializes with `experimental: { 'claude/channel': {} }` capability, it is automatically subscribed to all available channels. Channel subscriptions are cleaned up automatically when a session disconnects.
+**Auto-subscription:** When a session initializes with `experimental: { 'claude/channel': {} }` capability, it is automatically subscribed to the channels the `channels:list` flow returns (all of them unless a `ChannelListHook` filters the list). Channel subscriptions are cleaned up automatically when a session disconnects.
 </Info>
 
 ## Session-Targeted Delivery
@@ -162,8 +162,8 @@ Returns all channel names a session is subscribed to.
 Events from session-scoped sources (agent completion, job completion) carry the originating `sessionId` and are delivered ONLY to that session:
 
 ```typescript
-// ChannelInstance.pushNotification() with targetSessionId
-channel.pushNotification('Job completed', { job: 'daily-report' }, targetSessionId);
+// ChannelInstance.pushNotification() with targetSessionId (runs channels:send-notification)
+await channel.pushNotification('Job completed', { job: 'daily-report' }, targetSessionId);
 //                                                                  ^^^^^^^^^^^^^^^^
 //                                                            only this session receives it
 ```
@@ -197,15 +197,11 @@ Session-targeted events are NOT buffered (they're ephemeral to the session). Onl
 The companion service for sending notifications (session-scoped):
 
 ```typescript
-const scope = this.scope as unknown as {
-  channelNotifications?: ChannelNotificationService;
-};
+// Send to all sessions subscribed to 'status' channel, through the hookable channels:send-notification flow
+await this.scope.channelNotifications?.send('status', 'Deployment complete');
 
-// Send to all sessions subscribed to 'status' channel
-scope.channelNotifications?.send('status', 'Deployment complete');
-
-// Send to a specific session only
-scope.channelNotifications?.sendToSession(sessionId, 'Job result', { source: 'jobs' });
+// Deliver to a specific session directly (no flow, no defaultMeta)
+this.scope.channelNotifications?.sendToSession(sessionId, 'Job result', { source: 'jobs' });
 ```
 
 ## ChannelEventBus
@@ -213,10 +209,8 @@ scope.channelNotifications?.sendToSession(sessionId, 'Job result', { source: 'jo
 The in-process event bus for `app-event` sources:
 
 ```typescript
-const scope = this.scope as unknown as { channelEventBus?: ChannelEventBus };
-
 // Emit an event that channels with matching app-event source receive
-scope.channelEventBus?.emit('app:error', {
+this.scope.channelEventBus?.emit('app:error', {
   message: 'Connection refused',
   level: 'critical',
 });

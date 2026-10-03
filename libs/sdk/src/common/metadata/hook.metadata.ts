@@ -1,6 +1,7 @@
 import { type Token } from '@frontmcp/di';
 
 import { type EntryOwnerRef } from '../entries/base.entry';
+import { type ProviderRegistryInterface } from '../interfaces/internal';
 import { type FlowName } from './flow.metadata';
 
 export type HookStageType = 'stage' | 'will' | 'did' | 'around';
@@ -29,6 +30,16 @@ export interface TokenHookMetadata {
   hooks: HookMetadata[];
 }
 
+/** The flow run a hook declared on a CONTEXT-scoped provider is about to join. */
+export interface HookContextRun {
+  /** The session (or request) key the run builds CONTEXT-scoped providers for. */
+  sessionKey: string;
+  /** The CONTEXT-scoped instances the run already built (its flow dependencies). */
+  contextProviders: ReadonlyMap<Token, unknown>;
+  /** The provider registry that built `contextProviders` (the scope's). */
+  contextSource: ProviderRegistryInterface;
+}
+
 export interface HookMetadata<Name extends FlowName = FlowName, Stage = string, Ctx = any> extends HookOptions<Ctx> {
   type: HookStageType;
   flow: Name;
@@ -37,4 +48,11 @@ export interface HookMetadata<Name extends FlowName = FlowName, Stage = string, 
   method: string;
   static?: boolean;
   owner?: EntryOwnerRef;
+  /**
+   * Set by the SDK on a hook declared on a CONTEXT-scoped provider: builds (or reuses) the instance of
+   * that provider for the run, which the hook then runs on in place of `target`.
+   *
+   * @internal
+   */
+  contextTarget?: (run: HookContextRun) => Promise<object | undefined>;
 }

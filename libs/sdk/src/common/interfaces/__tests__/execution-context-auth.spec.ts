@@ -41,3 +41,52 @@ describe('ExecutionContextBase.auth', () => {
     expect(ctx.auth.user.sub).toBe('legacy-user');
   });
 });
+
+describe('ExecutionContextBase.loadAuthContext with authorities pipes (#678)', () => {
+  function contextWith(authorities: Record<string, unknown> | undefined, authInfo: Record<string, unknown>) {
+    const warn = jest.fn();
+    const providers = {
+      get: () => {
+        throw new Error('not found');
+      },
+      getScope: () => ({ metadata: { authorities } }),
+    };
+    const ctx = new TestContext({ providers: providers as never, logger: { warn } as never, authInfo });
+    return { ctx, warn };
+  }
+
+  it('applies sync and async pipes to this.auth', async () => {
+    const { ctx, warn } = contextWith(
+      {
+        pipes: [
+          () => ({ team: 'billing' }),
+          async (claims: Record<string, unknown>) => ({ tenant: `t-${String(claims['sub'])}` }),
+        ],
+      },
+      { user: { sub: 'alice' } },
+    );
+
+    await ctx.loadAuthContext();
+
+    const auth = ctx.auth as unknown as { team?: string; tenant?: string };
+    expect(auth.team).toBe('billing');
+    expect(auth.tenant).toBe('t-alice');
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does nothing without pipes', async () => {
+    const { ctx, warn } = contextWith(undefined, { user: { sub: 'alice' } });
+
+    await ctx.loadAuthContext();
+
+    expect(ctx.auth.user.sub).toBe('alice');
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('warns when this.auth is read before the pipes ran', () => {
+    const { ctx, warn } = contextWith({ pipes: [() => ({ team: 'billing' })] }, { user: { sub: 'alice' } });
+
+    expect((ctx.auth as unknown as { team?: string }).team).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('before the `authorities.pipes` ran'));
+  });
+});

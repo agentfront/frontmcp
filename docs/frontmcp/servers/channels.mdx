@@ -136,8 +136,8 @@ Your application emits events to the `ChannelEventBus`:
 })
 class ErrorChannel extends ChannelContext { /* ... */ }
 
-// Emit from anywhere with scope access
-scope.channelEventBus.emit('app:error', {
+// Emit from anywhere with scope access (in a tool: this.scope.channelEventBus)
+scope.channelEventBus?.emit('app:error', {
   message: 'Connection refused',
   level: 'critical',
 });
@@ -243,7 +243,9 @@ The conversation flow:
 6. Claude can continue the conversation by calling `send-whatsapp` again
 
 <Info>
-Service connector channels call `onConnect()` during scope initialization and `onDisconnect()` during teardown. The connection persists for the lifetime of the server.
+Service connector channels call `onConnect()` during scope initialization and `onDisconnect()` during teardown: when the
+HTTP server shuts down, and when the server is disposed (`dispose()` on what `create()` returns). The connection persists
+for the lifetime of the server. Up to 1.8.7, `dispose()` did not call `onDisconnect()`.
 </Info>
 
 ### File Watcher
@@ -288,8 +290,12 @@ class LogWatcher extends ChannelContext {
 Push notifications programmatically from any code with scope access:
 
 ```ts
-scope.channelNotifications.send('status', 'Server maintenance in 5 minutes');
+await scope.channelNotifications?.send('status', 'Server maintenance in 5 minutes');
 ```
+
+`send()` runs the `channels:send-notification` flow like every other channel notification (see
+[Hooking Channel Notifications](#hooking-channel-notifications)) and resolves once it is delivered; a failure is logged,
+not thrown. `sendToSubscribedSessions()` and `sendToSession()` deliver directly, without the flow.
 
 ---
 
@@ -367,6 +373,9 @@ And can reply using the auto-registered `channel-reply` tool:
 channel-reply({ channel_name: "whatsapp", text: "I'll review it now.", meta: { chat_id: "123" } })
 ```
 
+If `onReply()` throws, `channel-reply` answers with an error result carrying the message, so Claude knows the reply did
+not go out. Up to 1.8.7 the error was logged and the tool reported success.
+
 ---
 
 ## Registration
@@ -396,6 +405,45 @@ export default class Server {}
 <Warning>
 Channels must be explicitly enabled with `channels: { enabled: true }` in the `@FrontMcp` config. Without this, channel declarations are ignored.
 </Warning>
+
+`channels.defaultMeta` adds metadata to every channel notification. A channel's own `meta` overrides it, the
+notification's `meta` (what `onEvent()` returns, or what `send()` is given) overrides both, and `source` is always the
+channel name. Up to 1.8.7, `defaultMeta` reached only notifications sent with `scope.channelNotifications.send()`.
+
+---
+
+## Hooking Channel Notifications
+
+Every channel notification runs the `channels:send-notification` flow: the ones a channel's source pushes (webhook,
+app event, agent and job completion, service connector, file watcher, `channel.pushNotification()`) and manual
+`scope.channelNotifications.send()` calls. Its stages are `parseInput`, `resolveMeta` (applies the metadata layering
+above), `send` and `finalize`. A session that initializes with the `claude/channel` capability subscribes to the
+channels the `channels:list` flow returns. Hook them with `ChannelSendHook` and `ChannelListHook`:
+
+```ts
+import { ChannelListHook, ChannelSendHook, FlowCtxOf, Plugin } from '@frontmcp/sdk';
+
+@Plugin({ name: 'channel-policy' })
+class ChannelPolicyPlugin {
+  // Runs with the final metadata; `respond` stops the notification.
+  @ChannelSendHook.Will('send')
+  redact(ctx: FlowCtxOf<'channels:send-notification'>) {
+    const { channelName, content } = ctx.state.required;
+    if (content.includes('secret')) ctx.respond({ sent: false, channelName });
+  }
+
+  // Decides which channels a new session is subscribed to.
+  @ChannelListHook.Did('listChannels')
+  hideInternal(ctx: FlowCtxOf<'channels:list'>) {
+    const output = ctx.state.output;
+    if (!output) return;
+    const channels = output.channels.filter((channel) => !channel.tags.includes('internal'));
+    ctx.state.set({ output: { channels, count: channels.length } });
+  }
+}
+```
+
+Up to 1.8.7, neither flow ran: notifications were delivered directly and sessions were subscribed to every channel.
 
 ---
 
@@ -428,7 +476,7 @@ Channel notifications are **session-scoped** to prevent data leaking between con
 
 ### How It Works
 
-1. When a session initializes with `claude/channel` capability, it is auto-subscribed to all channels
+1. When a session initializes with `claude/channel` capability, it is auto-subscribed to the channels `channels:list` returns (all of them unless a hook filters the list)
 2. Notifications are only delivered to sessions subscribed to the specific channel
 3. **Session-targeted events** (job completions, agent results) go ONLY to the originating session
 4. **Global events** (webhooks, file changes) go to all subscribed sessions

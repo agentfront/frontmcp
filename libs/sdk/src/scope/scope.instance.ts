@@ -4,6 +4,7 @@ import { createGuardManager, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
 import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
 
+import AdapterRegistry from '../adapter/adapter.registry';
 import AgentRegistry from '../agent/agent.registry';
 import CallAgentFlow from '../agent/flows/call-agent.flow';
 import AppRegistry from '../app/app.registry';
@@ -49,7 +50,7 @@ import FlowRegistry from '../flows/flow.registry';
 import { HaManager } from '../ha';
 import { HealthService } from '../health';
 import HookRegistry from '../hooks/hook.registry';
-import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils';
 import { type JobExecutionManager } from '../job/execution/job-execution.manager';
 import { registerJobCapabilities, type JobsConfig } from '../job/job-scope.helper';
 import type JobRegistry from '../job/job.registry';
@@ -89,6 +90,7 @@ import { describeIgnoredUiOptions } from '../tool/ui/ui-option-warnings';
 import { RedisTransportBus } from '../transport/bus';
 import { createEventStore } from '../transport/event-stores';
 import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/request-state';
+import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import HttpIpFilterFlow from './flows/http.ip-filter.flow';
@@ -164,6 +166,9 @@ export class Scope extends ScopeEntry {
   private _authoritiesEngine?: import('@frontmcp/auth').AuthoritiesEngine;
   private _authoritiesContextBuilder?: import('@frontmcp/auth').AuthoritiesContextBuilder;
   private _authoritiesScopeMapping?: import('@frontmcp/auth').AuthoritiesScopeMapping;
+
+  /** Server-level adapters (`@FrontMcp({ adapters })`), optional */
+  private scopeAdapters?: AdapterRegistry;
 
   /** Channel system (optional) */
   private _scopeChannels?: ChannelRegistry;
@@ -283,6 +288,7 @@ export class Scope extends ScopeEntry {
     }
     this.transportService = new TransportService(this, effectivePersistence, transportBus);
     warnIfRequestStateKeyNotShared({ logger: this.logger, metadata: this.metadata });
+    warnIfSessionModeIgnored({ logger: this.logger, transport: transportConfig });
 
     // Orphan session scanner (distributed mode only — scans for dead-pod sessions)
     if (this.haManager && isDistributed && this.transportService.getBackendKind() === 'redis') {
@@ -523,6 +529,9 @@ export class Scope extends ScopeEntry {
     if (tasksPromise) batch1.push(tasksPromise);
     if (rateLimitPromise) batch1.push(rateLimitPromise);
     await Promise.all(batch1);
+    // Hooks declared on `@FrontMcp({ providers })` run for every app's entries, like an app's provider hooks do for its own.
+    const serverHooks = serverProviderHooks(this.scopeProviders, this.metadata.providers, scopeRef);
+    if (serverHooks.length > 0) await this.scopeHooks.registerHooks(false, ...serverHooks);
     this.logger.verbose('HookRegistry initialized');
     this.logger.verbose('FlowRegistry initialized');
     this.logger.verbose('TransportService initialized');
@@ -709,6 +718,15 @@ export class Scope extends ScopeEntry {
     // during adoption. Without this ordering, plugin tools are "orphaned".
     if (this.scopePlugins) {
       await this.scopePlugins.ready;
+    }
+
+    // `@FrontMcp({ adapters })`: the entries each adapter fetches register in this scope's providers,
+    // so the scope registries below adopt them and every app serves them (#678).
+    if (this.metadata.adapters?.length) {
+      const scopeAdapters = new AdapterRegistry(this.scopeProviders, this.metadata.adapters);
+      this.scopeAdapters = scopeAdapters;
+      await scopeAdapters.ready;
+      this.onDispose(() => scopeAdapters.dispose());
     }
 
     // Initialize authorities engine from metadata config (built-in, no plugin needed)
@@ -1034,6 +1052,9 @@ export class Scope extends ScopeEntry {
       this._channelNotificationService = channelResult.channelNotificationService;
       this._channelEventBus = channelResult.channelEventBus;
       this._channelTeardown = channelResult.teardown;
+      // `dispose()` (what `create()` returns calls it) disconnects service channels, as `shutdown()` does.
+      this.onDispose(() => this.teardownChannels());
+      await channelResult.connectServices();
     }
 
     // Initialize health service (after all registries and stores are ready)
@@ -1841,13 +1862,18 @@ export class Scope extends ScopeEntry {
       }
     }
     await this.closeHaRedisClient();
-    if (this._channelTeardown) {
-      try {
-        await this._channelTeardown();
-      } catch (err) {
-        this.logger.error('Channel teardown failed', { error: err });
-      }
-      this._channelTeardown = undefined;
+    await this.teardownChannels();
+  }
+
+  /** Disconnect service channels (`onDisconnect()`) and drop channel subscriptions, once. */
+  private async teardownChannels(): Promise<void> {
+    const teardown = this._channelTeardown;
+    if (!teardown) return;
+    this._channelTeardown = undefined;
+    try {
+      await teardown();
+    } catch (err) {
+      this.logger.error('Channel teardown failed', { error: err });
     }
   }
 

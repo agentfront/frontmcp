@@ -15,6 +15,12 @@ import { FlowControl } from './flow.interface';
 import { type ProviderRegistryInterface } from './internal';
 import { type FrontMcpLogger } from './logger.interface';
 
+/** `@frontmcp/auth`, loaded on first use. */
+function loadAuthModule(): typeof import('@frontmcp/auth') {
+  const rawAuth = require('@frontmcp/auth');
+  return (rawAuth.default ?? rawAuth) as typeof import('@frontmcp/auth');
+}
+
 /**
  * Base constructor arguments for all execution contexts.
  */
@@ -81,7 +87,8 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * and convenience methods like `hasRole()`, `hasPermission()`, `hasScope()`.
    *
    * Custom fields from `ExtendFrontMcpAuthContext` are available if pipes
-   * are configured in `@FrontMcp({ authorities: { pipes } })`.
+   * are configured in `@FrontMcp({ authorities: { pipes } })`: tools, resources,
+   * agents and jobs run them before any hook or `execute()` reads `this.auth`.
    *
    * @example
    * ```typescript
@@ -92,12 +99,37 @@ export abstract class ExecutionContextBase<Out = unknown> {
   get auth(): FrontMcpAuthContext {
     if (this._authContext) return this._authContext;
 
-    const rawAuth = require('@frontmcp/auth');
-    const auth = (rawAuth.default ?? rawAuth) as typeof import('@frontmcp/auth');
     // The request context is the source of truth (it is populated as the request is authenticated);
     // the constructor's copy only fills what the request context does not carry.
-    this._authContext = auth.buildAuthContext(this.resolveAuthSource(), this.scope.metadata.authorities?.claimsMapping);
+    this._authContext = loadAuthModule().buildAuthContext(
+      this.resolveAuthSource(),
+      this.scope.metadata.authorities?.claimsMapping,
+    );
+    if (this.scope.metadata.authorities?.pipes?.length) {
+      this.logger.warn(
+        '`this.auth` was read before the `authorities.pipes` ran for this context; the fields they add are undefined.',
+      );
+    }
     return this._authContext;
+  }
+
+  /**
+   * Build `this.auth` with the server's `authorities.pipes` applied. Pipes can be async, so whatever
+   * creates this context (the tool, resource and agent flows, the job runner) awaits this before
+   * any hook or `execute()` reads `this.auth`. Without pipes it does nothing: `this.auth` is built
+   * on first read.
+   *
+   * @internal
+   */
+  async loadAuthContext(): Promise<void> {
+    const authorities = this.scope.metadata.authorities;
+    const pipes = authorities?.pipes;
+    if (!pipes?.length) return;
+    this._authContext = await loadAuthModule().buildAuthContext(
+      this.resolveAuthSource(),
+      authorities?.claimsMapping,
+      pipes,
+    );
   }
 
   private resolveAuthSource(): Partial<AuthInfo> {
