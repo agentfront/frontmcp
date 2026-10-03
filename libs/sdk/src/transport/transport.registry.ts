@@ -3,6 +3,7 @@ import type { SessionStore, StoredSession } from '@frontmcp/auth';
 import { getMachineId, sha256Hex } from '@frontmcp/utils';
 
 import { createSessionStore, type SessionStoreFactoryOptions } from '../auth/session/session-store.factory';
+import { isDeploymentSessionId } from '../auth/session/utils/session-id.utils';
 import type { ServerRequest, ServerResponse, TransportPersistenceConfigInput } from '../common';
 import type { RedisOptions } from '../common/types/options/redis';
 import { sessionIdPresentedBy } from '../common/utils/auth-info.utils';
@@ -440,13 +441,14 @@ export class TransportService {
    * unknown, owned by this node, or owned by a node that stopped (this node takes it over).
    *
    * Runs before authentication — it only decides where the request is served; the owner
-   * authenticates it.
+   * authenticates it. Only session ids this deployment minted cost a Redis lookup.
    */
   async findRemoteSessionOwner(request: ServerRequest): Promise<RemoteLocation | undefined> {
     if (!this.distributed || !this.bus?.canRelay() || isRelayedRequest(request)) return undefined;
 
     const sessionId = sessionIdPresentedBy(request);
     if (!sessionId || sessionId.length > MAX_ROUTABLE_SESSION_ID_LENGTH) return undefined;
+    if (!isDeploymentSessionId(sessionId)) return undefined;
     if (this.localSessionIds.has(sessionId)) return undefined;
 
     try {

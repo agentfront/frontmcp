@@ -92,6 +92,14 @@ export function decryptPublicSession(sessionId: string, expectedAuthSig = 'publi
   return null;
 }
 
+/**
+ * Whether a session id was minted by this deployment: it decrypts (AES-256-GCM, so it cannot be
+ * forged without `MCP_SESSION_SECRET`) to a session payload. Says nothing about who may use it.
+ */
+export function isDeploymentSessionId(sessionId: string): boolean {
+  return cache.get(sessionId) !== undefined || hasValidSessionStructure(safeDecrypt(sessionId));
+}
+
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
 }
