@@ -353,7 +353,7 @@ async function runAdapterBuild(
     const { readEntryDecoratorStringLiteral } = await import('./decorator-source-scan.js');
     template.validate(entryInfo.decoratorConfig, {
       keysSeenInSource: entryInfo.keysSeenInSource,
-      redisProviderInSource: readEntryDecoratorStringLiteral(entry, ['redis', 'provider']),
+      redisProviderInSource: await readEntryDecoratorStringLiteral(entry, ['redis', 'provider']),
     });
   }
 
