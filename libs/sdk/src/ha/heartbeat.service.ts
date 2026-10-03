@@ -26,6 +26,8 @@ export class HeartbeatService {
   private readonly intervalMs: number;
   private readonly ttlMs: number;
   private sessionCount = 0;
+  private lastBeatAt: number;
+  private lapses = 0;
 
   constructor(
     private readonly redis: HeartbeatRedisClient,
@@ -33,6 +35,7 @@ export class HeartbeatService {
     config?: Partial<HaConfig>,
   ) {
     this.startedAt = Date.now();
+    this.lastBeatAt = this.startedAt;
     this.keyPrefix = config?.redisKeyPrefix ?? DEFAULT_HA_CONFIG.redisKeyPrefix;
     this.intervalMs = config?.heartbeatIntervalMs ?? DEFAULT_HA_CONFIG.heartbeatIntervalMs;
     this.ttlMs = config?.heartbeatTtlMs ?? DEFAULT_HA_CONFIG.heartbeatTtlMs;
@@ -82,6 +85,15 @@ export class HeartbeatService {
     }
   }
 
+  /**
+   * The span of uninterrupted liveness this node is in: it changes after every gap in which
+   * this node's heartbeat may have expired (another node could then take its sessions over),
+   * and is `undefined` while the heartbeat may be expired.
+   */
+  livenessGeneration(): number | undefined {
+    return Date.now() - this.lastBeatAt >= this.ttlMs ? undefined : this.lapses;
+  }
+
   /** Get all alive node IDs by scanning heartbeat keys. */
   async getAliveNodes(): Promise<string[]> {
     const keys = await this.redis.keys(`${this.keyPrefix}heartbeat:*`);
@@ -100,6 +112,14 @@ export class HeartbeatService {
       sessionCount: this.sessionCount,
     };
     // Fire-and-forget — if Redis is down, the key just expires
-    this.redis.set(this.heartbeatKey(), JSON.stringify(value), 'PX', this.ttlMs).catch(() => {});
+    this.redis.set(this.heartbeatKey(), JSON.stringify(value), 'PX', this.ttlMs).then(
+      () => this.recordBeat(value.lastBeat),
+      () => undefined,
+    );
+  }
+
+  private recordBeat(writtenAt: number): void {
+    if (Date.now() - this.lastBeatAt >= this.ttlMs) this.lapses++;
+    this.lastBeatAt = Math.max(this.lastBeatAt, writtenAt);
   }
 }
