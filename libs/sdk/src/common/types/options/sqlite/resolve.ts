@@ -18,7 +18,8 @@
  * resolved so this module stays unit-testable without a real disk.
  */
 
-import { homedir } from 'os';
+// Namespace import: a browser bundle stubs `os`, and a named import would read it as the module loads
+import * as os from 'os';
 import * as path from 'path';
 
 import { getRuntimeContext, readFileSync } from '@frontmcp/utils';
@@ -39,14 +40,14 @@ export function resolveDefaultSqlitePath(ctx: SqlitePathResolverContext): string
 
   // CLI mode OR production: home dir, per-app namespace
   if (ctx.cliMode || env === 'production') {
-    return path.join(homedir(), `.${namespace}`, 'sessions.sqlite');
+    return path.join(os.homedir(), `.${namespace}`, 'sessions.sqlite');
   }
 
   // Non-node runtimes can't load better-sqlite3 anyway; the resolver still
   // returns a sensible string so log messages aren't broken. The actual
   // error surfaces in the storage-sqlite require() at runtime.
   if (runtime !== 'node') {
-    return path.join(homedir(), `.${namespace}`, 'sessions.sqlite');
+    return path.join(os.homedir(), `.${namespace}`, 'sessions.sqlite');
   }
 
   // dev + node: project build folder

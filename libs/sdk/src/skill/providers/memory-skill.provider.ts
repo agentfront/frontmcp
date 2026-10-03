@@ -1,13 +1,13 @@
 // file: libs/sdk/src/skill/providers/memory-skill.provider.ts
 
-import type { TFIDFVectoria, DocumentMetadata } from 'vectoriadb';
+import type { DocumentMetadata, TFIDFVectoria } from 'vectoriadb';
 
 import { sha256Hex } from '@frontmcp/utils';
 
-import { importOptionalPeer } from '../../scope/optional-dependency.util';
-import { type SkillIndexCache, type SkillIndexScoring } from '../skill-index-cache.interface';
 import { type SkillContent } from '../../common/interfaces';
 import { type SkillMetadata, type SkillVisibility } from '../../common/metadata';
+import { importOptionalPeer } from '../../scope/optional-dependency.util';
+import { type SkillIndexCache, type SkillIndexScoring } from '../skill-index-cache.interface';
 import {
   type MutableSkillStorageProvider,
   type SkillListOptions,
@@ -225,7 +225,8 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     const mod = await importOptionalPeer(
       'vectoriadb',
       () => import('vectoriadb'),
-      require.resolve,
+      // Read only when the import fails: an ESM browser bundle has no `require` at all
+      (id) => require.resolve(id),
       'skill storage',
     );
     // `scoring` is read by newer vectoriadb versions; older ones ignore the
@@ -497,7 +498,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
 
     // Sort
     skills.sort((a, b) => {
-      let comparison = 0;
+      let comparison: number;
       switch (sortBy) {
         case 'name':
           comparison = a.name.localeCompare(b.name);
