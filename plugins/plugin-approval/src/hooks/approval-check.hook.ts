@@ -4,24 +4,29 @@
  * @module @frontmcp/plugin-approval
  */
 
-import { DynamicPlugin, Plugin, ToolHook, type FlowCtxOf } from '@frontmcp/sdk';
+import { DynamicPlugin, isEntryGatedBy, Plugin, ScopeEntry, ToolHook, type FlowCtxOf } from '@frontmcp/sdk';
 
 import { ApprovalRequiredError } from '../approval';
-import { isApprovalExpired, isApprovalUsable, resolveApprovalRequirement } from '../approval/policy';
 import { resolveApprovalIdentity } from '../approval.identity';
 import { ApprovalStoreToken } from '../approval.symbols';
+import { isApprovalExpired, isApprovalUsable, resolveApprovalRequirement } from '../approval/policy';
 import type { ApprovalStore } from '../stores/approval-store.interface';
-import {
-  ApprovalState,
-  type ApprovalContext,
-  type ApprovalRecord,
-  type ToolApprovalRequirement,
-} from '../types';
+import { ApprovalState, type ApprovalContext, type ApprovalRecord, type ToolApprovalRequirement } from '../types';
 
 type CallToolState = FlowCtxOf<'tools:call-tool'>['state'];
+type GatedTool = NonNullable<CallToolState['tool']>;
 
-/** The stores each call already passed, so a store is checked once even when this plugin is also listed explicitly. */
-const passedApprovalStores = new WeakMap<object, WeakSet<ApprovalStore>>();
+/**
+ * The calls already decided. Every approval gate that covers a tool reaches the same decision, over
+ * the same stores, so the first one to run decides the call and the others let it be.
+ */
+const decidedCalls = new WeakSet<object>();
+
+/** An approval or denial, with the store that holds it. */
+interface StoredApproval {
+  readonly store: ApprovalStore;
+  readonly record: ApprovalRecord;
+}
 
 /**
  * Hook plugin that checks tool approval before execution.
@@ -42,6 +47,11 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
    * Runs for the tools of the app the plugin is installed on and, `appliesTo: 'uncovered-apps'`,
    * for the tools of any app with no approval gate of its own, so an `approval` tool is never left
    * ungated because the plugin sits on a different app.
+   *
+   * A tool more than one gate covers (an `ApprovalPlugin` on the server and one on the tool's app)
+   * is decided once, over all their stores: an approval in any of them lets it run, a denial in any
+   * of them refuses it. It used to need an approval in each store (#678), so a grant through
+   * `this.approval`, which writes to one of them, never let it run.
    */
   @ToolHook.Will('execute', { priority: 100, appliesTo: 'uncovered-apps' })
   async checkApproval(flowCtx: FlowCtxOf<'tools:call-tool'>) {
@@ -62,25 +72,27 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
       return;
     }
 
-    const approvalStore = this.get(ApprovalStoreToken) as ApprovalStore;
-    const passedStores = passedApprovalStores.get(toolContext) ?? new WeakSet<ApprovalStore>();
-    if (passedStores.has(approvalStore)) return;
+    if (decidedCalls.has(toolContext)) return;
 
-    await this.enforceApproval(flowCtx, tool, toolContext, approvalConfig, approvalStore);
-    passedStores.add(approvalStore);
-    passedApprovalStores.set(toolContext, passedStores);
+    await this.enforceApproval(flowCtx, tool, toolContext, approvalConfig, this.coveringStores(tool));
+    decidedCalls.add(toolContext);
   }
 
   private async enforceApproval(
     flowCtx: FlowCtxOf<'tools:call-tool'>,
-    tool: NonNullable<CallToolState['tool']>,
+    tool: GatedTool,
     toolContext: NonNullable<CallToolState['toolContext']>,
     approvalConfig: ToolApprovalRequirement,
-    approvalStore: ApprovalStore,
+    stores: readonly ApprovalStore[],
   ): Promise<void> {
     const { sessionId, userId } = resolveApprovalIdentity(toolContext.tryGetContext?.());
     const currentContext = this.getCurrentContext(flowCtx);
-    const records = await this.readApprovals(approvalStore, tool.fullName, sessionId, userId, currentContext);
+    const stored: StoredApproval[] = [];
+    for (const store of stores) {
+      const records = await this.readApprovals(store, tool.fullName, sessionId, userId, currentContext);
+      stored.push(...records.map((record) => ({ store, record })));
+    }
+    const records = stored.map(({ record }) => record);
 
     // A recorded denial outranks every way of skipping the prompt, pre-approved contexts included.
     if (records.some((record) => record.state === ApprovalState.DENIED)) {
@@ -97,15 +109,18 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
 
     const approved = records.filter((record) => record.state === ApprovalState.APPROVED);
 
-    if (approvalConfig.alwaysPrompt) {
-      await this.handleApprovalRequired(flowCtx, approvalConfig, approved[0]);
-      return;
-    }
-
     // Only an approval the tool's policy accepts opens the gate: a scope in `allowedScopes`, and
     // not older than `maxTtlMs`, however it was recorded.
     const now = Date.now();
-    if (approved.some((record) => isApprovalUsable(record, approvalConfig, now))) {
+    const usable = stored.filter(({ record }) => isApprovalUsable(record, approvalConfig, now));
+
+    if (approvalConfig.alwaysPrompt) {
+      // Every call needs an approval of its own: one lets exactly this call through and is used up
+      // by it, so the next call prompts again. This refused every call, approved or not (#678).
+      for (const { store, record } of usable) {
+        if (await this.consumeApproval(store, record, sessionId, userId, currentContext)) return;
+      }
+    } else if (usable.length > 0) {
       return;
     }
 
@@ -114,6 +129,57 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
       approvalConfig,
       approved.find((record) => isApprovalExpired(record, approvalConfig, now)) ?? approved[0],
     );
+  }
+
+  /**
+   * The stores of every approval gate that runs for the tool: this plugin's, and that of each other
+   * `ApprovalCheckPlugin` whose hook the scope runs for it (an `ApprovalPlugin` on the server and
+   * one on the tool's app, say). One store shared by two gates counts once.
+   */
+  private coveringStores(tool: GatedTool): ApprovalStore[] {
+    const stores = new Set<ApprovalStore>([this.get(ApprovalStoreToken) as ApprovalStore]);
+
+    let scope: ScopeEntry | undefined;
+    try {
+      scope = this.get(ScopeEntry) as ScopeEntry | undefined;
+    } catch {
+      scope = undefined;
+    }
+    if (!scope?.hooks) return [...stores];
+
+    for (const hook of scope.hooks.getFlowHooks('tools:call-tool')) {
+      const gate = hook.metadata.target;
+      if (gate instanceof ApprovalCheckPlugin && isEntryGatedBy(scope, { tool }, gate)) {
+        stores.add(gate.get(ApprovalStoreToken) as ApprovalStore);
+      }
+    }
+    return [...stores];
+  }
+
+  /**
+   * Use up an approval of an `alwaysPrompt` tool, reporting whether this call got it.
+   *
+   * `consumeApproval()` deletes exactly that record, and only one of two calls racing for it wins.
+   * A store without it has the caller's approvals of the tool revoked instead, which leaves none
+   * standing but cannot tell two concurrent calls apart.
+   */
+  private async consumeApproval(
+    store: ApprovalStore,
+    record: ApprovalRecord,
+    sessionId: string,
+    userId: string | undefined,
+    context: ApprovalContext | undefined,
+  ): Promise<boolean> {
+    if (store.consumeApproval) {
+      return store.consumeApproval(record, sessionId, userId, context);
+    }
+    return store.revokeApproval({
+      toolId: record.toolId,
+      sessionId,
+      userId,
+      revokedBy: 'system',
+      reason: 'Used by a call of an alwaysPrompt tool',
+    });
   }
 
   /**

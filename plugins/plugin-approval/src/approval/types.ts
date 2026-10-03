@@ -319,7 +319,8 @@ export interface ToolApprovalRequirement {
 
   /**
    * Whether to prompt on each call even if approved.
-   * For highly sensitive operations.
+   * For highly sensitive operations: each approval lets exactly one call through and is used up by
+   * it, so the next call is refused with `pending` until the caller approves again.
    * @default false
    */
   alwaysPrompt?: boolean;

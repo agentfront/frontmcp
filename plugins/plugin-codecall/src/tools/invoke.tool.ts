@@ -3,7 +3,7 @@ import type { CallToolResult } from '@frontmcp/protocol';
 import { getCallSurface, Tool, ToolContext } from '@frontmcp/sdk';
 
 import CodeCallConfig from '../providers/code-call.config';
-import { checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
+import { asCodeCallDispatch, checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import {
   invokeToolDescription,
@@ -91,11 +91,12 @@ export default class InvokeTool extends ToolContext {
       },
     };
 
-    // The caller's surface goes along, so the flow judges the target for that caller as well.
-    const ctx = {
+    // The caller's surface goes along, so the flow judges the target for that caller as well. Marked as
+    // CodeCall's own call, which may reach a tool CodeCall hides from a client's direct tools/call.
+    const ctx = asCodeCallDispatch({
       authInfo: this.authInfo,
       surface,
-    };
+    });
 
     // runFlow returns CallToolResult directly - no transformation needed
     const result = await this.scope.runFlow('tools:call-tool', { request, ctx });

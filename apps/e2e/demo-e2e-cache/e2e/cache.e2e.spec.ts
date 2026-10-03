@@ -6,7 +6,7 @@
  * - Non-cached tool returns fresh result every time
  * - Execution counts verify actual vs cached executions
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Cache E2E', () => {
   test.use({
@@ -83,6 +83,68 @@ test.describe('Cache E2E', () => {
       expect(stats).toBeSuccessful();
       const statsContent = JSON.stringify(stats);
       expect(statsContent).toContain('"expensive-operation":2');
+    });
+  });
+
+  test.describe('Bypass Header', () => {
+    test('skips the cache for a request that sends the renamed bypass header', async ({ server }) => {
+      const client = await server
+        .createClientBuilder()
+        .withHeaders({ 'x-frontmcp-no-cache': '1' })
+        .withPublicMode()
+        .buildAndConnect();
+
+      try {
+        await client.tools.call('reset-stats', {});
+
+        await client.tools.call('expensive-operation', { operationId: 'bypass-test', complexity: 2 });
+        await client.tools.call('expensive-operation', { operationId: 'bypass-test', complexity: 2 });
+
+        const stats = await client.tools.call('get-cache-stats', {});
+        expect(JSON.stringify(stats)).toContain('"expensive-operation":2');
+      } finally {
+        await client.disconnect();
+      }
+    });
+
+    test('ignores the default header once the bypass header is renamed', async ({ server }) => {
+      const client = await server
+        .createClientBuilder()
+        .withHeaders({ 'x-frontmcp-disable-cache': '1' })
+        .withPublicMode()
+        .buildAndConnect();
+
+      try {
+        await client.tools.call('reset-stats', {});
+
+        await client.tools.call('expensive-operation', { operationId: 'default-header-test', complexity: 2 });
+        await client.tools.call('expensive-operation', { operationId: 'default-header-test', complexity: 2 });
+
+        const stats = await client.tools.call('get-cache-stats', {});
+        expect(JSON.stringify(stats)).toContain('"expensive-operation":1');
+      } finally {
+        await client.disconnect();
+      }
+    });
+  });
+
+  test.describe('Error Results', () => {
+    test('does not cache a result the tool returned with isError', async ({ mcp }) => {
+      await mcp.tools.call('reset-stats', {});
+
+      const failed = await mcp.tools.call('flaky-operation', { operationId: 'flaky-1' });
+      expect(failed).toBeError();
+
+      const retried = await mcp.tools.call('flaky-operation', { operationId: 'flaky-1' });
+      expect(retried).toBeSuccessful();
+      expect(retried).toHaveTextContent('execution 2');
+
+      // The successful result is cached as usual
+      const hit = await mcp.tools.call('flaky-operation', { operationId: 'flaky-1' });
+      expect(hit).toHaveTextContent('execution 2');
+
+      const stats = await mcp.tools.call('get-cache-stats', {});
+      expect(JSON.stringify(stats)).toContain('"flaky-operation":2');
     });
   });
 
@@ -195,6 +257,7 @@ test.describe('Cache E2E', () => {
 
       expect(tools).toContainTool('expensive-operation');
       expect(tools).toContainTool('non-cached');
+      expect(tools).toContainTool('flaky-operation');
       expect(tools).toContainTool('get-cache-stats');
       expect(tools).toContainTool('reset-stats');
     });

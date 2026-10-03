@@ -22,7 +22,8 @@ export class FeatureFlagAccessor {
   private readonly adapter: FeatureFlagAdapter;
   private readonly ctx: FrontMcpContext;
   private readonly config: FeatureFlagPluginOptions;
-  private readonly cache = new Map<string, { value: boolean; expiresAt: number }>();
+  /** The adapter's answers by flag key: `undefined` when it has none (an unknown flag). */
+  private readonly cache = new Map<string, { answer: boolean | undefined; expiresAt: number }>();
 
   constructor(adapter: FeatureFlagAdapter, ctx: FrontMcpContext, config: FeatureFlagPluginOptions) {
     this.adapter = adapter;
@@ -32,33 +33,46 @@ export class FeatureFlagAccessor {
 
   /**
    * Check if a feature flag is enabled.
+   *
+   * `defaultValue` (else the plugin's `defaultValue`, else `false`) is the answer when the adapter
+   * throws or has no answer for the flag: a key the static adapter was not given, or one a custom
+   * adapter's `evaluateFlags()` omits. A flag the adapter answers keeps its answer, `false` included.
+   * It used to apply only when the adapter threw, so `isEnabled('unknown', true)` was `false` (#678).
    */
   async isEnabled(flagKey: string, defaultValue?: boolean): Promise<boolean> {
+    const answer = await this.evaluate(flagKey);
+    return answer ?? defaultValue ?? this.config.defaultValue ?? false;
+  }
+
+  /**
+   * The adapter's answer for one flag, or `undefined` when it has none or throws. Asked through
+   * `evaluateFlags()`, as the execution gates ask, which is how an adapter says it does not know a
+   * flag; `isEnabled()` answers `false` for it. A successful answer is cached per `cacheStrategy`.
+   */
+  private async evaluate(flagKey: string): Promise<boolean | undefined> {
     const cacheStrategy = this.config.cacheStrategy ?? 'none';
     const cacheTtlMs = this.config.cacheTtlMs ?? 30_000;
 
-    // Check cache
     if (cacheStrategy !== 'none') {
       const cached = this.cache.get(flagKey);
       if (cached && Date.now() < cached.expiresAt) {
-        return cached.value;
+        return cached.answer;
       }
     }
 
-    const context = this.buildContext();
-    let result: boolean;
+    let answer: boolean | undefined;
     try {
-      result = await this.adapter.isEnabled(flagKey, context);
+      const results = await this.adapter.evaluateFlags([flagKey], this.buildContext());
+      answer = results.has(flagKey) ? results.get(flagKey) === true : undefined;
     } catch {
-      result = defaultValue ?? this.config.defaultValue ?? false;
+      // An adapter error is not an answer: the caller's default applies, and nothing is cached.
+      return undefined;
     }
 
-    // Store in cache
     if (cacheStrategy !== 'none') {
-      this.cache.set(flagKey, { value: result, expiresAt: Date.now() + cacheTtlMs });
+      this.cache.set(flagKey, { answer, expiresAt: Date.now() + cacheTtlMs });
     }
-
-    return result;
+    return answer;
   }
 
   /**

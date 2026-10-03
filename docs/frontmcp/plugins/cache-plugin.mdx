@@ -43,10 +43,14 @@ npm install @frontmcp/plugin-cache
     `content` and `structuredContent` as the call that filled the cache, and its own `_meta.cache` is `'hit'`
   </Step>
 
-  <Step title="Cache Miss">The tool executes normally, and the result is stored with the configured TTL</Step>
+  <Step title="Cache Miss">
+    The tool executes normally, and the result is stored with the configured TTL. A result the tool returns with
+    `isError: true` is not stored, so the next call runs the tool again
+  </Step>
 
   <Step title="Sliding Window (Optional)">
-    When enabled, each cache read refreshes the TTL to keep hot entries alive longer
+    With `slideWindow: true`, each cache read refreshes the TTL to keep hot entries alive longer. Without it (the
+    default, and what `cache: true` means) an entry expires its TTL after it was written, however often it is read
   </Step>
 </Steps>
 
@@ -257,6 +261,9 @@ toolPatterns: ['mintlify:*', 'local:ping', 'api:get-*']
 
 <ParamField path="bypassHeader" type="string" default="'x-frontmcp-disable-cache'">
   HTTP header name that clients can send to bypass cache for a specific request. When present with value `'true'` or `'1'`, cache read/write is skipped.
+  The name must start with `x-frontmcp-` (matched case-insensitively): the plugin reads it from the request context,
+  which keeps only a request's `x-frontmcp-*` headers. Any other name throws `CachePluginConfigurationError` when the
+  plugin is created; up to 1.8.7 it was accepted and silently ignored.
 </ParamField>
 
 ### Tool-Level Configuration
@@ -268,7 +275,7 @@ Configure caching behavior per tool in the `@Tool` or `tool()` metadata:
 ```ts Simple (use defaults)
 @Tool({
   name: 'get-report',
-  cache: true, // Uses plugin's defaultTTL
+  cache: true, // Uses plugin's defaultTTL, no sliding window
 })
 ```
 
@@ -296,7 +303,7 @@ Configure caching behavior per tool in the `@Tool` or `tool()` metadata:
 <ParamField path="cache" type="boolean | object">
   Enable caching for this tool
 
-- `true` - Use plugin defaults
+- `true` - Use plugin defaults: the plugin's `defaultTTL`, and no sliding window
 - `object` - Custom configuration
 
 </ParamField>
@@ -306,7 +313,9 @@ Configure caching behavior per tool in the `@Tool` or `tool()` metadata:
 </ParamField>
 
 <ParamField path="cache.slideWindow" type="boolean" default="false">
-  When `true`, reading from cache refreshes the TTL, keeping frequently accessed entries alive longer
+  When `true`, reading from cache refreshes the TTL (`cache.ttl`, or the plugin's `defaultTTL` when the tool sets
+  none), keeping frequently accessed entries alive longer. Up to 1.8.7, `cache: true` slid the TTL on every read, and
+  `slideWindow: true` without a `ttl` never did.
 </ParamField>
 
 ---
@@ -387,13 +396,18 @@ Clients can bypass caching for specific requests by sending a header:
 curl -H "x-frontmcp-disable-cache: true" http://localhost:3000/mcp
 ```
 
-Configure a custom header name:
+Configure a custom header name. It must start with `x-frontmcp-`, because the plugin only sees a request's
+`x-frontmcp-*` headers; any other name throws `CachePluginConfigurationError`:
 
 ```ts
 CachePlugin.init({
   type: 'memory',
-  bypassHeader: 'x-no-cache', // Custom header name
+  bypassHeader: 'x-frontmcp-no-cache', // Custom header name
 })
+```
+
+```bash
+curl -H "x-frontmcp-no-cache: 1" http://localhost:3000/mcp
 ```
 
 <Tip>
@@ -526,7 +540,8 @@ Use short TTLs for frequently changing data:
 | **Key Derivation** | Deterministic hash of tool name + validated input + caller identity, so one caller is never served another's entry. `keyByIdentity: false` drops the identity component -- use it only for tools whose output is the same for everybody |
 | **Cache Hits**     | Bypasses tool execution entirely, returns cached result instantly. `content` and `structuredContent` match the call that filled the cache; the result's `_meta.cache` is `'hit'` (never added to the data itself)                       |
 | **Default TTL**    | 86400 seconds (1 day) if not specified                                                                                                                                                                                                  |
-| **Sliding Window** | Extends TTL on reads when enabled                                                                                                                                                                                                       |
+| **Sliding Window** | Extends TTL on reads only with `slideWindow: true`; `cache: true` never slides                                                                                                                                                          |
+| **Error Results**  | A result the tool returns with `isError: true` is never cached; the next call runs the tool again                                                                                                                                       |
 | **Store Choice**   | Memory is per server (one store for each server, even in one process); Redis enables multi-instance sharing                                                                                                                             |
 | **Invalidation**   | Automatic after TTL expires, or manually by restarting (memory)                                                                                                                                                                         |
 

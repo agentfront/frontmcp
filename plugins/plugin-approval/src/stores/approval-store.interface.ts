@@ -166,6 +166,21 @@ export interface ApprovalStore {
   revokeApproval(options: RevokeApprovalOptions): Promise<boolean>;
 
   /**
+   * Use up one approval: delete the stored record `record` (one `getApprovals()` returned for this
+   * caller) and resolve `true` only for the call that deleted it, so two calls racing for one
+   * approval cannot both get it. A record written in its place since it was read (a denial, a new
+   * approval) must be kept, so the delete has to compare and delete in one step. The approval gate uses it for `alwaysPrompt` tools, where each
+   * approval admits a single call. Optional: for a store without it the gate revokes the caller's
+   * approvals of the tool instead.
+   */
+  consumeApproval?(
+    record: ApprovalRecord,
+    sessionId: string,
+    userId?: string,
+    context?: ApprovalContext,
+  ): Promise<boolean>;
+
+  /**
    * The caller's recent revocations of a tool: each is the approval that was revoked, with `revokedBy`,
    * `revokedAt` and `revocationReason`. Optional: a store that keeps no revocations leaves it out.
    */

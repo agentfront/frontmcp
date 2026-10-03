@@ -13,7 +13,9 @@ export interface CachePluginToolOptions {
   ttl?: number; // default 1 day
 
   /**
-   * If true, the cache value will be updated with the new value after the TTL.
+   * If true, every cache hit refreshes the entry's TTL (`ttl`, or the plugin's `defaultTTL`), so an
+   * entry that keeps being read stays cached. Without it an entry expires `ttl` seconds after it was
+   * written, however often it is read. `cache: true` does not slide.
    * Default is false.
    */
   slideWindow?: boolean;
@@ -41,8 +43,9 @@ export interface BaseCachePluginOptions {
    * HTTP header name that clients can send to bypass cache for a specific request.
    * When this header is present with a truthy value ('true' or '1'), cache read/write is skipped.
    *
-   * Note: Headers must use the `x-frontmcp-*` prefix to be captured by the context storage.
-   * Custom bypass headers should also follow this convention.
+   * Must start with `x-frontmcp-`: the plugin reads the header from the request context, which
+   * keeps only a request's `x-frontmcp-*` headers. Any other name throws
+   * `CachePluginConfigurationError` when the plugin is created.
    *
    * @default 'x-frontmcp-disable-cache'
    *

@@ -11,7 +11,7 @@
  *   - **Atomic counters** (`incr`/`decr`/`incrBy`): KV has no atomic increment;
  *     a get+put is racy under eventual consistency. Use a Durable Object for
  *     atomic state (the forthcoming `@frontmcp/adapters/cloudflare` DO host).
- *   - **Conditional writes** (`ifNotExists`/`ifExists`): KV has no compare-and-set.
+ *   - **Conditional writes** (`ifNotExists`/`ifExists`, `deleteIfEquals`): KV has no compare-and-set.
  *   - **TTL introspection** (`ttl`): KV does not expose a key's remaining TTL.
  *
  * Other KV-specific constraints are honored: the minimum `expirationTtl` is
@@ -48,7 +48,9 @@ export class CloudflareKvStorageAdapter extends BaseStorageAdapter {
   constructor(options: CloudflareKvAdapterOptions) {
     super();
     if (!options?.namespace) {
-      throw new Error('CloudflareKvStorageAdapter: a bound KV `namespace` is required (resolve it from the Worker `env`).');
+      throw new Error(
+        'CloudflareKvStorageAdapter: a bound KV `namespace` is required (resolve it from the Worker `env`).',
+      );
     }
     this.kv = options.namespace;
     this.keyPrefix = options.keyPrefix ?? '';
@@ -128,7 +130,7 @@ export class CloudflareKvStorageAdapter extends BaseStorageAdapter {
     throw new StorageNotSupportedError(
       'ttl',
       this.backendName,
-      'Cloudflare KV does not expose a key\'s remaining TTL. Track expiry alongside the value if you need it.',
+      "Cloudflare KV does not expose a key's remaining TTL. Track expiry alongside the value if you need it.",
     );
   }
 
@@ -165,6 +167,14 @@ export class CloudflareKvStorageAdapter extends BaseStorageAdapter {
       'incr/decr/incrBy',
       this.backendName,
       'Cloudflare KV has no atomic increment (a get+put is racy under eventual consistency). Use a Durable Object for atomic counters.',
+    );
+  }
+
+  override async deleteIfEquals(_key: string, _expectedValue: string): Promise<boolean> {
+    throw new StorageNotSupportedError(
+      'deleteIfEquals',
+      this.backendName,
+      'Cloudflare KV has no compare-and-set; use a Durable Object for an atomic compare-and-delete.',
     );
   }
 

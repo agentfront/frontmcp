@@ -99,7 +99,7 @@ class MyServer {}
 
 ### Modes
 
-- `codecall_only` -- Hides all tools from `list_tools` except CodeCall meta-tools. All other tools are discovered only via `codecall:search`. Best when the server has a large number of tools and you want the AI to search-then-execute. When `appIds` is set, only tools from those apps are hidden — tools from other apps remain visible.
+- `codecall_only` -- Hides all tools from `list_tools` except CodeCall meta-tools. All other tools are discovered only via `codecall:search` and reached only through CodeCall: a client's direct `tools/call` of a hidden tool is refused. Best when the server has a large number of tools and you want the AI to search-then-execute. When `appIds` is set, only tools from those apps are hidden — tools from other apps remain visible.
 - `codecall_opt_in` -- Shows all tools in `list_tools` normally. Tools opt-in to CodeCall execution via metadata. Useful when only some tools benefit from orchestrated execution.
 - `metadata_driven` -- Per-tool `metadata.codecall` controls visibility and CodeCall availability independently. Most granular control.
 
@@ -116,7 +116,19 @@ CodeCallPlugin.init({
 });
 ```
 
-Without `appIds`, `codecall_only` mode hides ALL tools in the server. With `appIds`, only tools from the specified apps are hidden — tools from other apps remain directly callable.
+Without `appIds`, `codecall_only` mode hides every tool the plugin judges: all tools of the server when it is installed on the server, or its own app's tools and those of apps without a CodeCall plugin of their own when it is installed on an app. With `appIds`, only tools from the specified apps are hidden — tools from other apps remain directly callable. An app with its own CodeCall plugin is judged by that plugin alone, in `list_tools` and on a direct `tools/call` alike; up to 1.8.7 another app's `codecall_only` plugin hid its tools from `list_tools` while its own plugin still let clients call them.
+
+### Hidden Tools Are Not Directly Callable
+
+A tool CodeCall hides from `list_tools` (in any mode: every non-meta tool in `codecall_only` unless it sets
+`visibleInListTools: true`, any tool with `visibleInListTools: false` otherwise) is reachable only through CodeCall. A
+client's direct `tools/call` of it -- MCP, an MCP Apps widget, an in-page WebMCP agent, `DirectMcpServer.callTool()` --
+is answered exactly like a call of an unknown tool (`Tool "<name>" not found`), before its input is validated. Still
+allowed: CodeCall's own calls (`codecall:execute`, `codecall:invoke`), server-side composition (`this.callTool()` from
+a tool, agent or job), and the server's own system tools (such as `sendElicitationResult`). Give a tool that clients
+or widgets call directly `codecall: { visibleInListTools: true }`. Up to 1.8.7 the tool was only missing from the
+listing, and a client that knew its name ran it directly, past `includeTools`, `enabledInCodeCall`, the blocked
+namespaces and `directCalls`.
 
 ### VM Presets
 
@@ -144,7 +156,7 @@ Control how individual tools interact with CodeCall:
 @Tool({
   name: 'my_tool',
   codecall: {
-    visibleInListTools: false, // Hide from list_tools (only discoverable via codecall:search)
+    visibleInListTools: false, // Hide from list_tools; reached only through CodeCall (direct tools/call refused)
     enabledInCodeCall: true, // Available for execution via codecall:execute
     tags: ['data', 'query'], // Extra indexing hints for semantic search
   },
@@ -175,7 +187,7 @@ CodeCallPlugin.init({
 - `tool.appId` names the owning app for the tools its adapters and plugins provide too, so `includeTools: (tool) => tool.appId !== 'admin'` withholds every tool of app `admin`.
 - `codecall:searchSkills` and `codecall:searchKnowledge` run the SDK's `skills:filter` flow, so a skill a plugin withholds there (a flag-disabled skill, for one) is absent from both.
 - `directCalls.allowedTools` and `directCalls.filter` only narrow the base policy; listing a withheld tool does not make it callable. Unlisted tools are refused.
-- Hiding a tool from search is not the control; the refusal at execution is. Do not rely on `visibleInListTools` or search ranking to protect a tool.
+- Hiding a tool from search is not the control; the refusal at execution is. Do not rely on search ranking to protect a tool. Hiding it from `list_tools` (`visibleInListTools: false`) does also refuse a client's direct `tools/call` of it, but CodeCall's own surfaces then apply this policy.
 - `includeTools` and `directCalls.filter` receive the same object, with the tool's `annotations` and declared `metadata` (`tool.metadata?.annotations` is the same object as `tool.annotations`). It is a deep read-only copy, so a filter cannot change what the next decision reads.
 - Namespace bindings (`mail.send({...})` for a tool named `mail.send`) are AgentScript wrappers over `callTool()` inside the sandbox: they count toward `vm.maxSteps` and pass the rate limit and suspicious-sequence checks exactly like `callTool('mail.send', {...})`. A binding with no argument sends `{}`.
 - `codecall:execute` results never include a `stack`, in any environment. In `runtime_error`, `syntax_error` and `tool_error` messages, stack frames are dropped and absolute paths (POSIX, Windows, UNC, `file:` URLs, quoted paths) become `[path]`; other URLs are kept.
@@ -278,10 +290,19 @@ class MyTool extends ToolContext {
     // List keys matching pattern
     const keys = await this.remember.list({ pattern: 'user:*' });
 
+    // Update a value, keeping its metadata (and its expiry, unless a new `ttl` is given)
+    await this.remember.update('theme', 'light');
+
     return { content: [{ type: 'text', text: `Theme: ${theme}` }] };
   }
 }
 ```
+
+`update(key, value, { ttl? })` returns `false` for a key that does not exist. Without a `ttl` the entry keeps its
+current expiry, and `knows()` and `list()` stop reporting it once that passes, the same as `get()`; up to 1.8.7 an
+entry updated without a `ttl` stayed in `knows()` and `list()` after it expired. `knows()` and `list()` read each entry
+and check its own expiry, so they report exactly the keys `get()` returns a value for, even while the store still holds
+an expired key for up to a second.
 
 ### Memory Scopes
 
@@ -436,12 +457,20 @@ authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectI
 2. A recorded **denial** for the caller (session, user, time-limited or context scope): refused
    with state `denied`. A denial outranks pre-approved contexts and any approval.
 3. The session context is one of `preApprovedContexts`: the tool runs.
-4. `alwaysPrompt: true`: refused with state `pending`.
-5. An approval for the caller that the tool's policy accepts: the tool runs. The caller's session,
+4. An approval for the caller that the tool's policy accepts: the tool runs. The caller's session,
    user, time-limited and context approvals all count (a context approval only when the session
    carries that context); its scope must be in `allowedScopes`, and it must be younger than
-   `maxTtlMs`, however it was stored.
-6. Otherwise refused with state `pending` (or `expired`).
+   `maxTtlMs`, however it was stored. With `alwaysPrompt: true` the approval is used up by this
+   call (only one of two concurrent calls gets it), so the next call needs a new one.
+5. Otherwise refused with state `pending` (or `expired`).
+
+Releases up to 1.8.7 refused every call of an `alwaysPrompt` tool, approved or not. The built-in store
+uses up an approval with the storage's atomic `deleteIfEquals()` (memory, Redis, Upstash, Vercel KV), so
+a denial or new approval recorded in the meantime is kept; a backend without it (Cloudflare KV, the
+filesystem, SQLite) has the approval deleted directly. A custom `ApprovalStore` should implement
+`consumeApproval()` (delete exactly that record, and only while it is still stored, in one step; resolve
+`true` only for the call that deleted it); without it the gate revokes the caller's approvals of the tool
+instead.
 
 A refused call throws `ApprovalRequiredError`; the client receives an error result whose text is
 exactly the tool's `approvalMessage` (or the default `Tool "<full name>" requires approval to
@@ -467,8 +496,10 @@ Installed on an app, `ApprovalPlugin` gates that app's tools (including those it
 plugins provide) against its own store, so two apps can each install it with separate stores. It
 also gates, against its store, the `approval` tools of apps with no approval plugin of their own,
 so such a tool never runs ungated because the plugin sits on another app (releases up to 1.8.2 ran
-them for anyone). Installed on the server, it gates every tool; a tool several plugins gate must
-pass each store's check, and a denial in any of them refuses the call.
+them for anyone). Installed on the server, it gates every tool. A tool several plugins gate (one on
+the server, one on its app) is decided once over all their stores: an approval in any of them lets
+it run -- one approval is enough, e.g. a grant through `this.approval` in the tool's app -- and a
+denial in any of them refuses the call. Releases up to 1.8.7 required an approval in each store.
 `this.approval` resolves the `ApprovalService` of the nearest `ApprovalPlugin` -- the one the
 tool's own app installed, otherwise the server's -- so with two apps each installing it, a grant
 or check in one app's tool uses that app's store. Releases up to 1.8.1 resolved the store of the
@@ -634,7 +665,7 @@ class GlobalCacheServer {}
 Enable caching on individual tools via the `cache` metadata field:
 
 ```typescript
-// Enable caching with default TTL
+// Enable caching with default TTL (no sliding window)
 @Tool({ name: 'get_weather', cache: true })
 class GetWeatherTool extends ToolContext {
   /* ... */
@@ -671,6 +702,13 @@ CachePlugin.init({
 
 A tool is cached if it matches any pattern OR has `cache: true` (or a cache object) in its metadata. `cache: { ttl: 0 }` (or a negative TTL) turns caching off for the tool, even when it matches a pattern; up to 1.8.5 it cached the first result with no expiry.
 
+Only `slideWindow: true` refreshes the TTL on a hit (`ttl`, or the plugin's `defaultTTL` when the tool sets none).
+`cache: true` means the plugin defaults and never slides: an entry expires its TTL after it was written, however often it
+is read. Up to 1.8.7, `cache: true` slid on every hit and `{ slideWindow: true }` without a `ttl` never slid.
+
+A result the tool returns with `isError: true` (a `CallToolResult` reporting a failure) is never cached, so the next
+call runs the tool again; up to 1.8.7 the failure was served from the cache until the TTL ran out.
+
 ### Cache Bypass
 
 Send the bypass header to skip caching for a specific request:
@@ -680,6 +718,13 @@ x-frontmcp-disable-cache: true
 ```
 
 The header name is configurable via `bypassHeader` in the plugin options. Default: `'x-frontmcp-disable-cache'`.
+It must start with `x-frontmcp-` (case-insensitive): the plugin reads it from the request context, which keeps only a
+request's `x-frontmcp-*` headers. Any other name (`'x-no-cache'`) throws `CachePluginConfigurationError` when the
+plugin is created; up to 1.8.7 it was accepted and silently ignored.
+
+```typescript
+CachePlugin.init({ type: 'memory', bypassHeader: 'x-frontmcp-no-cache' }); // client sends `x-frontmcp-no-cache: 1`
+```
 
 ### Cache Key
 
@@ -813,14 +858,23 @@ class BetaFeatureTool extends ToolContext {
       return { content: [{ type: 'text', text: 'Feature not available' }] };
     }
 
+    // Fail open: `true` when the adapter throws or has no answer for the flag
+    const engine = (await this.featureFlags.isEnabled('search-v2', true)) ? 'v2' : 'v1';
+
     // Get variant value (for multivariate flags)
     const variant = await this.featureFlags.getVariant('experiment-flag');
     // variant may be 'control', 'treatment-a', 'treatment-b', etc.
 
-    return { content: [{ type: 'text', text: `Running variant: ${variant}` }] };
+    return { content: [{ type: 'text', text: `Running variant: ${variant} on search ${engine}` }] };
   }
 }
 ```
+
+`isEnabled(key, defaultValue?)` answers `defaultValue` (else the plugin's `defaultValue`, else `false`) when the
+adapter throws or has no answer for the flag -- a key the `static` adapter was not given, or one a custom adapter's
+`evaluateFlags()` omits -- the same rule the gates apply to a ref's `defaultValue`. A flag the adapter answers keeps
+its answer, `false` included. Split.io, LaunchDarkly and Unleash answer every key with the service's own default. Up to
+1.8.7 the default applied only when the adapter threw, so `isEnabled('unknown-flag', true)` was `false`.
 
 ### Per-Tool Feature Flag Gating
 
@@ -833,7 +887,7 @@ class BetaTool extends ToolContext {
   /* ... */
 }
 
-// Object with default value -- if flag evaluation fails, use the default
+// Object with default value -- if flag evaluation fails or the flag is unknown, use the default
 @Tool({
   name: 'experimental_tool',
   featureFlag: { key: 'experimental-flag', defaultValue: false },

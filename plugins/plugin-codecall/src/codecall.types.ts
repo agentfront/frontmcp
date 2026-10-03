@@ -416,6 +416,9 @@ export interface CodeCallToolMetadata {
   /**
    * If true, this tool stays visible in `list_tools`
    * even when CodeCall is hiding most tools.
+   *
+   * A tool CodeCall hides is reachable only through CodeCall: a client's direct `tools/call` of
+   * it is refused as for an unknown tool. Set this on a tool a client or widget calls directly.
    */
   visibleInListTools?: boolean;
 
