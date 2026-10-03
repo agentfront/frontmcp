@@ -425,7 +425,7 @@ In-memory storage works for development but does not persist across restarts or 
   </Step>
 
   <Step title="Decide what happens when Redis is down">
-    Rate limits fail closed. If the throttle store is unreachable at startup, the server does not start: startup rejects with `GuardStorageUnavailableError` (`throttle.storage (redis) is unavailable: …`). That is the default in production, where `fallback` defaults to `'error'`. If Redis goes away while the server is running, a limited call is refused with the same `GuardStorageUnavailableError` (a readable 503), not an internal error.
+    Rate limits fail closed. If the throttle store is unreachable at startup, the server does not start: startup rejects with `GuardStorageUnavailableError` (`throttle.storage (redis) is unavailable: …`). That is the default in production, where `fallback` defaults to `'error'`. If Redis goes away while the server is running, a limited call is refused with the same `GuardStorageUnavailableError`, not an internal error: the `throttle.global` check answers HTTP 503 (`Retry-After: 1`, JSON-RPC `data.code: 'GUARD_STORAGE_UNAVAILABLE'`), and a per-tool limit inside `tools/call` answers an `isError` result with `_meta.code: 'GUARD_STORAGE_UNAVAILABLE'` (MCP carries tool-level failures in the result, over HTTP 200).
 
     To keep serving with per-instance counters instead, say so:
 

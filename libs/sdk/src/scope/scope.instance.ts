@@ -1,5 +1,16 @@
 import 'reflect-metadata';
 
+// A static import, not a lazy `require()`: a lazy require of this hard dependency becomes an
+// opaque `__require("@frontmcp/auth")` in the ESM build that a worker bundler cannot follow, so
+// the authorities engine failed to load on Cloudflare Workers (#680).
+import {
+  AuthoritiesContextBuilder,
+  AuthoritiesEngine,
+  AuthoritiesEvaluatorRegistry,
+  AuthoritiesProfileRegistry,
+  type AuthoritiesEvaluator,
+  type AuthoritiesPolicyMetadata,
+} from '@frontmcp/auth';
 import { createGuardManager, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
 import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
@@ -14,9 +25,6 @@ import { type ChannelNotificationService } from '../channel/channel-notification
 import { registerChannelCapabilities } from '../channel/channel-scope.helper';
 import type ChannelRegistry from '../channel/channel.registry';
 import { type ChannelEventBus } from '../channel/sources/app-event.source';
-// NOTE: @frontmcp/auth is imported via require() at runtime in initAuthoritiesFromConfig()
-// to avoid circular dependency issues with esbuild's __esm lazy initialization.
-// Type references use inline import('...') syntax to avoid creating bundler dependencies.
 import {
   FrontMcpLogger,
   FrontMcpServer,
@@ -1596,24 +1604,23 @@ export class Scope extends ScopeEntry {
     if (!config) return;
 
     try {
-      const {
-        AuthoritiesEngine,
-        AuthoritiesContextBuilder,
-        AuthoritiesProfileRegistry,
-        AuthoritiesEvaluatorRegistry,
-      } = require('@frontmcp/auth');
-
+      // The metadata schema validated these fields' shapes; this narrows them to the engine's types.
       const profileRegistry = new AuthoritiesProfileRegistry();
-      if (config['profiles']) profileRegistry.registerAll(config['profiles']);
+      if (config['profiles']) {
+        profileRegistry.registerAll(config['profiles'] as Record<string, AuthoritiesPolicyMetadata>);
+      }
 
       const evaluatorRegistry = new AuthoritiesEvaluatorRegistry();
-      if (config['evaluators']) evaluatorRegistry.registerAll(config['evaluators']);
+      if (config['evaluators']) {
+        evaluatorRegistry.registerAll(config['evaluators'] as Record<string, AuthoritiesEvaluator>);
+      }
 
+      type BuilderOptions = NonNullable<ConstructorParameters<typeof AuthoritiesContextBuilder>[0]>;
       this._authoritiesEngine = new AuthoritiesEngine(profileRegistry, evaluatorRegistry);
       this._authoritiesContextBuilder = new AuthoritiesContextBuilder({
-        claimsMapping: config['claimsMapping'],
-        claimsResolver: config['claimsResolver'],
-        relationshipResolver: config['relationshipResolver'],
+        claimsMapping: config['claimsMapping'] as BuilderOptions['claimsMapping'],
+        claimsResolver: config['claimsResolver'] as BuilderOptions['claimsResolver'],
+        relationshipResolver: config['relationshipResolver'] as BuilderOptions['relationshipResolver'],
       });
 
       this._authoritiesScopeMapping = config['scopeMapping'] as

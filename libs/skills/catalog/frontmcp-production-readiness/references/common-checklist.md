@@ -36,7 +36,8 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] `security.dnsRebindingProtection.allowedHosts` (or `FRONTMCP_ALLOWED_HOSTS`) names the public
       hostname(s) — on a routable bind the derived default is **not** enforced, and FrontMCP logs a
       warning saying so
-- [ ] Startup logs show no `DNS-rebinding protection is not enforcing a Host allow-list` warning
+- [ ] Startup logs show no `DNS-rebinding protection is not enforcing a Host allow-list` warning, and
+      the production audit reports `[Security] DNS_REBINDING_PROTECTED` (not `DNS_REBINDING_NOT_ENFORCED`)
 - [ ] Include the port when the public URL uses a non-default one (`api.example.com:8443`)
 - [ ] `allowedOrigins` is set when a browser client connects, so a foreign `Origin` is refused
 

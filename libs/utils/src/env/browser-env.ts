@@ -17,6 +17,10 @@ export function getCwd(): string {
   return '/';
 }
 
+export function getNodeEnv(): string | undefined {
+  return undefined;
+}
+
 export function isProduction(): boolean {
   return false;
 }

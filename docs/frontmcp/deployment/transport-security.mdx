@@ -198,6 +198,8 @@ To turn it off entirely:
 security: { dnsRebindingProtection: { enabled: false } }
 ```
 
+`enabled: false` wins over any `allowedHosts` / `allowedOrigins` (and `FRONTMCP_ALLOWED_HOSTS`): no header is checked while it is set, so remove it to turn protection back on.
+
 ### Semantics
 
 - **`allowedHosts`**: matched against `Host`, and against every hop of `X-Forwarded-Host` when present. A poisoned forwarded host is rejected even when `Host` itself is valid, because issuer and OAuth-discovery URLs can be derived from it.
@@ -276,6 +278,15 @@ In production (`NODE_ENV=production`) or distributed mode, FrontMCP logs securit
 ```
 
 A server on the defaults logs only info-level findings — `CORS_DISABLED` and `BIND_RESTRICTED` — because the defaults are already the safe choice. The audit reports; it never changes behaviour. Use it to check what your configuration actually exposes before going to production.
+
+The DNS-rebinding finding reports what the host adapter enforces, not just whether the option is on:
+
+| Code                           | When                                                                                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DNS_REBINDING_PROTECTED`      | `allowedHosts` / `allowedOrigins` (or `FRONTMCP_ALLOWED_HOSTS`) is set, or the server binds loopback and checks the derived loopback names |
+| `DNS_REBINDING_NOT_ENFORCED`   | The server binds a routable address (`0.0.0.0`, `::`, a NIC address) and no allowed hosts are configured, so no `Host` header is checked   |
+| `DNS_REBINDING_NOT_APPLICABLE` | The server listens on a Unix socket (no TCP `Host`)                                                                                        |
+| `DNS_REBINDING_UNPROTECTED`    | `dnsRebindingProtection.enabled: false` (warning)                                                                                          |
 
 ## Production Checklist
 

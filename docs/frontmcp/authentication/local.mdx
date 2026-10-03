@@ -819,6 +819,7 @@ auth: {
       encryption: { secret: process.env.AUTH_DB_SECRET! }, // optional at-rest encryption
       walMode: true,                 // default true
       ttlCleanupIntervalMs: 60000,   // default 60000
+      busyTimeoutMs: 5000,           // default 5000 — lock wait before SQLITE_BUSY
     },
   },
 }

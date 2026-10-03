@@ -138,6 +138,15 @@ redis: {
 },
 ```
 
+From a single connection URL (what managed Redis providers hand out). It is read into `host` / `port` / `password` / `db` at parse time; `rediss://` sets `tls: true`; the user part must be empty or `default`; percent-encode reserved password characters (`@` as `%40`, `%` as `%25`), since a malformed escape is a validation error:
+
+```typescript
+redis: {
+  url: process.env['REDIS_URL'], // redis://:password@host:6379/0 (or rediss:// for TLS)
+  keyPrefix: 'mcp:', // optional, as with the other forms
+},
+```
+
 ### For Vercel KV
 
 ```typescript
@@ -319,7 +328,7 @@ Every instance behind the load balancer needs the **same** values:
 ### What happens when Redis is down at startup
 
 - `redis` and `transport.persistence` fall back to in-memory storage and log the failure (`[TransportService] Failed to connect to redis - session persistence disabled`); the server starts.
-- `throttle.storage` fails closed: startup aborts with `GuardStorageUnavailableError` (`throttle.storage (redis) is unavailable: …`), the default in production. If Redis goes away while the server runs, a rate-limited call is refused with the same error, not `Internal FrontMCP error`. Opt in to per-instance counters explicitly (they also cover a mid-run outage):
+- `throttle.storage` fails closed: startup aborts with `GuardStorageUnavailableError` (`throttle.storage (redis) is unavailable: …`), the default in production. If Redis goes away while the server runs, a rate-limited call is refused with the same error, not `Internal FrontMCP error` (HTTP 503 from the `global` check; an `isError` result with `_meta.code: 'GUARD_STORAGE_UNAVAILABLE'` inside `tools/call`). Opt in to per-instance counters explicitly (they also cover a mid-run outage):
 
 ```typescript
 throttle: {
@@ -332,7 +341,7 @@ throttle: {
 },
 ```
 
-`throttle.storage` takes the `@frontmcp/utils` storage shape (`{ type: 'redis', redis: { config } }` or `{ type: 'redis', redis: { url } }`), not the top-level `redis` shape.
+`throttle.storage` takes the `@frontmcp/utils` storage shape (`{ type: 'redis', redis: { config } }` or `{ type: 'redis', redis: { url } }`), not the top-level `redis` shape (which takes `{ host, ... }` or `{ url }`).
 
 ## Common Patterns
 

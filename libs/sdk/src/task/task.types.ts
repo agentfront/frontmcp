@@ -246,6 +246,8 @@ export interface TasksConfig {
     walMode?: boolean;
     /** Periodic TTL cleanup interval in ms. Default: 60000. */
     ttlCleanupIntervalMs?: number;
+    /** Ms to wait for a lock held by another process before `SQLITE_BUSY`. Default: 5000. */
+    busyTimeoutMs?: number;
   };
 
   /**

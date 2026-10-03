@@ -17,7 +17,7 @@
 
 import { z } from '@frontmcp/lazy-zod';
 
-import { isEdgeRuntime, isServerless } from '#env';
+import { getNodeEnv, isEdgeRuntime, isServerless } from '#env';
 
 import { getBuildTarget } from './build-target';
 import { detectProvider } from './provider';
@@ -255,7 +255,7 @@ export function detectRuntimeContext(): RuntimeContext {
     deployment: detectDeployment(runtime),
     provider: detectProvider(),
     target: getBuildTarget(),
-    env: process.env['NODE_ENV'] || 'development',
+    env: getNodeEnv() || 'development',
   };
 }
 
@@ -271,13 +271,15 @@ let cached: RuntimeContext | undefined;
  * except `env`, which always reflects the live `NODE_ENV`. A Cloudflare Worker's
  * `[vars]` reach `process.env` on the first request, after module evaluation has
  * already read this context, so a frozen `env` would report `development` in a
- * production deployment.
+ * production deployment. It is read through `getNodeEnv()`, so a bundler's
+ * build-time `process.env.NODE_ENV` (`wrangler dev` inlines `development`) does
+ * not hide the value the deployment sets.
  */
 export function getRuntimeContext(): RuntimeContext {
   if (!cached) {
     const detected = detectRuntimeContext();
     Object.defineProperty(detected, 'env', {
-      get: () => process.env['NODE_ENV'] || 'development',
+      get: () => getNodeEnv() || 'development',
       enumerable: true,
       configurable: true,
     });

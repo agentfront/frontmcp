@@ -350,7 +350,11 @@ async function runAdapterBuild(
   const { loadEntryDecoratorInfo } = await import('./load-entry-config.js');
   const entryInfo = await loadEntryDecoratorInfo(entry);
   if (template.validate) {
-    template.validate(entryInfo.decoratorConfig, { keysSeenInSource: entryInfo.keysSeenInSource });
+    const { readEntryDecoratorStringLiteral } = await import('./decorator-source-scan.js');
+    template.validate(entryInfo.decoratorConfig, {
+      keysSeenInSource: entryInfo.keysSeenInSource,
+      redisProviderInSource: await readEntryDecoratorStringLiteral(entry, ['redis', 'provider']),
+    });
   }
 
   // #539 — `transport.http.path` drives the CLI, `@FrontMcp({ http: { entryPath } })`

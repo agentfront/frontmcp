@@ -347,6 +347,42 @@ describe('Build Adapters', () => {
       );
     });
 
+    it('accepts a literal vercel-kv redis in the source when the entry could not be evaluated (#680)', () => {
+      expect(() =>
+        cloudflareAdapter.validate?.(undefined, { keysSeenInSource: ['redis'], redisProviderInSource: 'vercel-kv' }),
+      ).not.toThrow();
+    });
+
+    it('does not suggest the config the user already wrote when the entry could not be evaluated (#680)', () => {
+      let message = '';
+      try {
+        cloudflareAdapter.validate?.(undefined, { keysSeenInSource: ['redis'] });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message).toContain('could not evaluate the entry');
+      expect(message).not.toContain('Use `redis:');
+    });
+
+    it('refuses a literal TCP provider read from the source with the ioredis message', () => {
+      expect(() =>
+        cloudflareAdapter.validate?.(undefined, { keysSeenInSource: ['redis'], redisProviderInSource: 'redis' }),
+      ).toThrow(/ioredis-style/);
+    });
+
+    it('trusts the evaluated config over the source literal', () => {
+      expect(() =>
+        cloudflareAdapter.validate?.(
+          { redis: { provider: 'redis', host: 'h' } },
+          { keysSeenInSource: ['redis'], redisProviderInSource: 'vercel-kv' },
+        ),
+      ).toThrow(/ioredis-style/);
+      // An evaluated config without `redis` (env-gated away) still ships the branch.
+      expect(() =>
+        cloudflareAdapter.validate?.({}, { keysSeenInSource: ['redis'], redisProviderInSource: 'vercel-kv' }),
+      ).toThrow(/ioredis-style/);
+    });
+
     it('points at the vercel-kv provider in the redis error (#642)', () => {
       expect(() => cloudflareAdapter.validate?.({ redis: { host: 'localhost' } })).toThrow(/provider: 'vercel-kv'/);
     });

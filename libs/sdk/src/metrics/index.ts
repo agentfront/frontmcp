@@ -7,5 +7,12 @@ export {
   type MetricsResponse,
   type MetricsServiceOptions,
 } from './metrics.service';
-export { registerMetricsRoutes, type MetricsRouteServer, type MetricsResponseLike } from './metrics.routes';
+export {
+  metricsPath,
+  registerMetricsRoutes,
+  renderMetricsScrape,
+  type MetricsHttpResult,
+  type MetricsRouteServer,
+  type MetricsResponseLike,
+} from './metrics.routes';
 export { MetricsPathConflictError, MetricsTokenNotConfiguredError } from './metrics.errors';

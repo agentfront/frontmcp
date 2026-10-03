@@ -546,6 +546,8 @@ export interface FrontMcpBaseMetadata {
       encryption?: { secret: string };
       walMode?: boolean;
       ttlCleanupIntervalMs?: number;
+      /** Ms to wait for a lock held by another process before `SQLITE_BUSY`. Default: 5000. */
+      busyTimeoutMs?: number;
     };
     /**
      * Command used by the CLI task runner to spawn detached worker processes.
@@ -651,6 +653,7 @@ export const frontMcpBaseSchema = z.object({
           encryption: z.object({ secret: z.string().min(1) }).optional(),
           walMode: z.boolean().optional(),
           ttlCleanupIntervalMs: z.number().int().positive().optional(),
+          busyTimeoutMs: z.number().int().nonnegative().optional(),
         })
         .optional(),
       cliRunnerCommand: z

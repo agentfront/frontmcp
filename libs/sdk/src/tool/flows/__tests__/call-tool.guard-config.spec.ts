@@ -22,6 +22,8 @@ interface GuardedServer {
   tracker: { running: number; maxRunning: number };
 }
 
+const RATE_LIMIT_WINDOW_MS = 60_000;
+
 let guardedServerCount = 0;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -81,9 +83,24 @@ async function callInParallel(server: GuardedServer, count: number): Promise<str
 }
 
 describe('call-tool guard configuration', () => {
+  beforeEach(() => {
+    const realNow = Date.now.bind(Date);
+    const startOfWindow = Math.floor(realNow() / RATE_LIMIT_WINDOW_MS) * RATE_LIMIT_WINDOW_MS;
+    const clockOffset = startOfWindow + RATE_LIMIT_WINDOW_MS / 2 - realNow();
+    // Rate-limit windows follow the wall clock; starting mid-window keeps a test from crossing into the next one.
+    jest.spyOn(Date, 'now').mockImplementation(() => realNow() + clockOffset);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   describe('settings', () => {
     it('enforces a per-tool rateLimit without a throttle option', async () => {
-      const server = await createGuardedServer({ rateLimit: { maxRequests: 2, windowMs: 60_000 } }, undefined);
+      const server = await createGuardedServer(
+        { rateLimit: { maxRequests: 2, windowMs: RATE_LIMIT_WINDOW_MS } },
+        undefined,
+      );
 
       const outcomes = await callSequentially(server, 4);
 
@@ -91,7 +108,10 @@ describe('call-tool guard configuration', () => {
     });
 
     it('leaves a per-tool rateLimit unenforced when throttle.enabled is explicitly false', async () => {
-      const server = await createGuardedServer({ rateLimit: { maxRequests: 1, windowMs: 60_000 } }, { enabled: false });
+      const server = await createGuardedServer(
+        { rateLimit: { maxRequests: 1, windowMs: RATE_LIMIT_WINDOW_MS } },
+        { enabled: false },
+      );
 
       const outcomes = await callSequentially(server, 3);
 
@@ -153,7 +173,10 @@ describe('call-tool guard configuration', () => {
     });
 
     it('counts each tools/call once against throttle.global', async () => {
-      const server = await createGuardedServer({}, { enabled: true, global: { maxRequests: 4, windowMs: 60_000 } });
+      const server = await createGuardedServer(
+        {},
+        { enabled: true, global: { maxRequests: 4, windowMs: RATE_LIMIT_WINDOW_MS } },
+      );
 
       const outcomes = await callSequentially(server, 5);
 
@@ -166,7 +189,7 @@ describe('call-tool guard configuration', () => {
     it('keys a session-partitioned throttle.global on a verified session, not the session header', async () => {
       const server = await createGuardedServer(
         {},
-        { enabled: true, global: { maxRequests: 2, windowMs: 60_000, partitionBy: 'session' } },
+        { enabled: true, global: { maxRequests: 2, windowMs: RATE_LIMIT_WINDOW_MS, partitionBy: 'session' } },
       );
 
       const outcomes: string[] = [];
