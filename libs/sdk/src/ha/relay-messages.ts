@@ -62,12 +62,16 @@ export interface RequestRelayMessage {
   sessionId: string;
   request: RelayedHttpRequest;
   timestamp: number;
+  /** How often the owner sends a `keepalive` frame while it serves the request (ms). */
+  keepaliveMs?: number;
 }
 
 /** One step of a relayed response, in the order the owner produced it. */
 export type RelayResponseEvent =
   /** The owner received the request and is serving it. */
   | { event: 'ack' }
+  /** The owner is still serving the request (sent while the response is quiet). */
+  | { event: 'keepalive' }
   /** Status line and headers. */
   | { event: 'head'; status: number; headers: Record<string, string | string[]> }
   /** A body chunk (`base64` for bytes, `utf8` for text). */
