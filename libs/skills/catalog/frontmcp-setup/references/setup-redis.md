@@ -138,7 +138,7 @@ redis: {
 },
 ```
 
-From a single connection URL (what managed Redis providers hand out). It is read into `host` / `port` / `password` / `db` at parse time; `rediss://` sets `tls: true`; the user part must be empty or `default`:
+From a single connection URL (what managed Redis providers hand out). It is read into `host` / `port` / `password` / `db` at parse time; `rediss://` sets `tls: true`; the user part must be empty or `default`; percent-encode reserved password characters (`@` as `%40`, `%` as `%25`), since a malformed escape is a validation error:
 
 ```typescript
 redis: {
