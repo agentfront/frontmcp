@@ -285,7 +285,11 @@ describe('toMcpError with an authorities refusal', () => {
     });
 
     it('answers a storage outage with a public 503 that keeps the store detail in the log (#680)', () => {
-      const outage = new GuardStorageUnavailableError('redis', new Error('connect ECONNREFUSED 10.0.0.3:6379'), 'runtime');
+      const outage = new GuardStorageUnavailableError(
+        'redis',
+        new Error('connect ECONNREFUSED 10.0.0.3:6379'),
+        'runtime',
+      );
       const mapped = toMcpError(outage) as GuardLimitMcpError;
 
       expect(mapped).toBeInstanceOf(GuardLimitMcpError);

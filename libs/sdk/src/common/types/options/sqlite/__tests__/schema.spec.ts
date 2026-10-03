@@ -22,7 +22,9 @@ describe('sqliteOptionsSchema', () => {
   });
 
   it('keeps busyTimeoutMs on transport.persistence.sqlite', () => {
-    const parsed = transportOptionsSchema.parse({ persistence: { sqlite: { path: '/tmp/s.sqlite', busyTimeoutMs: 75 } } });
+    const parsed = transportOptionsSchema.parse({
+      persistence: { sqlite: { path: '/tmp/s.sqlite', busyTimeoutMs: 75 } },
+    });
     const persistence = parsed.persistence as { sqlite?: { busyTimeoutMs?: number } };
     expect(persistence.sqlite?.busyTimeoutMs).toBe(75);
   });
