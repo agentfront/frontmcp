@@ -723,8 +723,10 @@ export class Scope extends ScopeEntry {
     // `@FrontMcp({ adapters })`: the entries each adapter fetches register in this scope's providers,
     // so the scope registries below adopt them and every app serves them (#678).
     if (this.metadata.adapters?.length) {
-      this.scopeAdapters = new AdapterRegistry(this.scopeProviders, this.metadata.adapters);
-      await this.scopeAdapters.ready;
+      const scopeAdapters = new AdapterRegistry(this.scopeProviders, this.metadata.adapters);
+      this.scopeAdapters = scopeAdapters;
+      await scopeAdapters.ready;
+      this.onDispose(() => scopeAdapters.dispose());
     }
 
     // Initialize authorities engine from metadata config (built-in, no plugin needed)
@@ -1052,6 +1054,7 @@ export class Scope extends ScopeEntry {
       this._channelTeardown = channelResult.teardown;
       // `dispose()` (what `create()` returns calls it) disconnects service channels, as `shutdown()` does.
       this.onDispose(() => this.teardownChannels());
+      await channelResult.connectServices();
     }
 
     // Initialize health service (after all registries and stores are ready)
@@ -1626,14 +1629,18 @@ export class Scope extends ScopeEntry {
 
   /**
    * Tools and agents that declare their own `rateLimit` or `concurrency` are guarded even
-   * without `throttle.enabled`, unless `throttle.enabled` is explicitly `false`.
+   * without `throttle.enabled`, unless `throttle.enabled` is explicitly `false`. That includes the
+   * tools declared inside an agent and its nested agents, at any depth.
    */
   private async initGuardForDeclaredLimits(): Promise<void> {
     const throttleConfig = this.metadata.throttle;
     if (this._rateLimitManager || this.cliMode || throttleConfig?.enabled === false) return;
 
     const guardedEntries = [...this.scopeTools.getTools(true), ...this.scopeAgents.getAgents(true)];
-    const declaresLimits = guardedEntries.some((entry) => entry.metadata.rateLimit || entry.metadata.concurrency);
+    const declaresLimits =
+      guardedEntries.some((entry) => entry.metadata.rateLimit || entry.metadata.concurrency) ||
+      // The tools and nested agents an agent runs in its private scope, which uses this manager too
+      this.scopeAgents.listAllInstances().some((agent) => agent.declaresScopedLimits());
     if (!declaresLimits) return;
 
     this._rateLimitManager = await createGuardManager({

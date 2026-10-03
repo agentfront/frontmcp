@@ -32,9 +32,12 @@ describe('frontmcp dev --stdio (#679)', () => {
   let client: StdioBridgeClient | undefined;
 
   afterEach(async () => {
+    const stdoutNoise = client?.stdoutNoise ?? [];
     await client?.close();
     client = undefined;
     if (projectDir) await rm(projectDir, { recursive: true, force: true });
+    // stdout is the MCP channel: anything but JSON-RPC there breaks the client.
+    expect(stdoutNoise).toEqual([]);
   });
 
   it(
@@ -54,6 +57,25 @@ describe('frontmcp dev --stdio (#679)', () => {
       const call = await client.request('tools/call', { name: 'hello', arguments: { name: 'stdio' } });
       expect(call.error).toBeUndefined();
       expect(toolText(call)).toContain('Hello, stdio!');
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'keeps stdout JSON-RPC only when the project has a .env',
+    async () => {
+      // The .env notice used to land on stdout, ahead of the JSON-RPC frames.
+      projectDir = await createScratchProject('dev-stdio-dotenv', {
+        ...helloServerFiles(),
+        '.env': 'DEV_STDIO_DOTENV=1\n',
+      });
+      client = new StdioBridgeClient(projectDir, []);
+
+      expect((await client.initialize()).error).toBeUndefined();
+      const call = await client.request('tools/call', { name: 'hello', arguments: { name: 'dotenv' } });
+      expect(toolText(call)).toContain('Hello, dotenv!');
+      expect(client.stdoutNoise).toEqual([]);
+      expect(client.stderr).toContain('loaded 1 environment variable');
     },
     TEST_TIMEOUT,
   );

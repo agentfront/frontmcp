@@ -97,6 +97,8 @@ This blocks the confused-deputy class of attack where a token issued for one cus
 
 For `passthrough caller token` outbound calls (an `AuthBinding` with `passthroughCallerToken: true`), the plugin forwards the caller's token only when it is a JWT issued for the customer REST API: its `resource` claim (RFC 8707) or `aud` claim (where RFC 8707 / RFC 9068 put the resource indicator) must name the service's base URL, or a URL above it on the same origin (`https://api.acme.com` covers `https://api.acme.com/v1`; `https://api.acme.com/v1/invoices` and `https://api.acme.com/v10` do not). Any other token — one issued for this MCP server, an opaque token, or none — fails the call before a request is sent (`auth resolution failed: passthrough caller token refused: …`).
 
+The same check runs again on the URL the request is built for, after path parameters are substituted and the URL is parsed the way `fetch` sends it. A path parameter cannot carry the token out of the API it was issued for: with a base URL of `https://api.acme.com/v1` and a path template of `/{id}/me`, an `id` of `..` builds `https://api.acme.com/me`, which a token issued for `https://api.acme.com/v1` does not cover, so nothing is sent. A request path that has a `..` segment once percent-decoded (`..%2F..`, `%252e%252e`, `..;`) is refused as well, since an upstream that decodes its path before resolving it would read it as a step out of the API.
+
 ## Input sanitization (CVE-2025-6514 lesson)
 
 Even after signature verification, every string in a bundle is treated as adversarial input. The Zod schema in `bundle.schema.ts` enforces:

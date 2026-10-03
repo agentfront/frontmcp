@@ -667,6 +667,46 @@ describe('useStoreResource (state module)', () => {
       expect(updateSpy).toHaveBeenCalledWith('state://inline/count', expect.any(Function));
     });
 
+    it('does not register again when the same names come in another order', () => {
+      const store = createMockStore({ count: 0 });
+      const { rerender } = renderInline(store, {
+        tag: 0,
+        selectorKeys: ['count', 'total'],
+        actionKeys: ['bump', 'reset'],
+      });
+      const version = dynamicRegistry.getVersion();
+      const registerResource = jest.spyOn(dynamicRegistry, 'registerResource');
+      const registerTool = jest.spyOn(dynamicRegistry, 'registerTool');
+
+      rerender({ tag: 1, selectorKeys: ['total', 'count'], actionKeys: ['reset', 'bump'] });
+
+      expect(registerResource).not.toHaveBeenCalled();
+      expect(registerTool).not.toHaveBeenCalled();
+      expect(dynamicRegistry.getVersion()).toBe(version);
+      expect(dynamicRegistry.hasResource('state://inline/count')).toBe(true);
+      expect(dynamicRegistry.hasResource('state://inline/total')).toBe(true);
+      expect(dynamicRegistry.hasTool('inline_bump')).toBe(true);
+      expect(dynamicRegistry.hasTool('inline_reset')).toBe(true);
+    });
+
+    it('registers an action whose name is empty or holds a line break', async () => {
+      const store = createMockStore({ count: 0 });
+      renderInline(store, { tag: 3, selectorKeys: [], actionKeys: ['', 'two\nlines'] });
+
+      const unnamed = dynamicRegistry.findTool('inline_');
+      const multiline = dynamicRegistry.findTool('inline_two\nlines');
+
+      expect(dynamicRegistry.hasTool('inline_two')).toBe(false);
+      expect(unnamed && JSON.parse((await unnamed.execute({})).content[0].text)).toEqual({
+        success: true,
+        result: ':3',
+      });
+      expect(multiline && JSON.parse((await multiline.execute({})).content[0].text)).toEqual({
+        success: true,
+        result: 'two\nlines:3',
+      });
+    });
+
     it('registers again when a selector or an action is added or removed', () => {
       const store = createMockStore({ count: 0 });
       const { rerender } = renderInline(store);

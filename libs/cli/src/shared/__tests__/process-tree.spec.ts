@@ -114,7 +114,9 @@ describe('stopProcessTree', () => {
       if (signal === 0 && !alive) throw esrch();
       if (signal === 'SIGTERM') alive = false;
     });
-    await expect(stopProcessTree(fakeChild(5), 'SIGTERM', 1000, { platform: 'linux', kill, sleep })).resolves.toBe(true);
+    await expect(stopProcessTree(fakeChild(5), 'SIGTERM', 1000, { platform: 'linux', kill, sleep })).resolves.toBe(
+      true,
+    );
     expect(kill).not.toHaveBeenCalledWith(-5, 'SIGKILL');
   });
 

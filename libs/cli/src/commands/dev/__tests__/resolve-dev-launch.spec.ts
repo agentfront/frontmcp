@@ -87,6 +87,22 @@ describe('resolveDevLaunch', () => {
     }
   });
 
+  it('sends the .env notice to the given logger, never to stdout (dev --stdio)', async () => {
+    await writeFile(path.join(root, '.env'), 'FROM_DOTENV_LAUNCH=yes\n');
+    const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const log = jest.fn();
+    try {
+      const launch = await resolveDevLaunch({ _: [], port: 4312 } as never, { log });
+
+      expect(launch.childEnv['FROM_DOTENV_LAUNCH']).toBe('yes');
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('loaded 1 environment variable'));
+      expect(consoleLog).not.toHaveBeenCalled();
+    } finally {
+      consoleLog.mockRestore();
+      delete process.env['FROM_DOTENV_LAUNCH'];
+    }
+  });
+
   it('with autoPortWhenUnset, picks a free port instead of failing on a busy default', async () => {
     const log = jest.fn();
     const launch = await resolveDevLaunch({ _: [] } as never, { autoPortWhenUnset: true, log });
