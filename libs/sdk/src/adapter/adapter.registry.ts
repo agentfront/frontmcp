@@ -72,21 +72,28 @@ export default class AdapterRegistry
   /** Instantiate adapters, run fetch/transform, and populate registries. */
   protected async initialize(): Promise<void> {
     const readyArr: Promise<void>[] = [];
-    for (const token of this.tokens) {
-      const rec = this.defs.get(token);
-      if (!rec) {
-        throw new RegistryDefinitionNotFoundError('AdapterRegistry', tokenName(token));
-      }
-      const deps = this.graph.get(token);
-      if (!deps) {
-        throw new RegistryGraphEntryNotFoundError('AdapterRegistry', tokenName(token));
-      }
+    try {
+      for (const token of this.tokens) {
+        const rec = this.defs.get(token);
+        if (!rec) {
+          throw new RegistryDefinitionNotFoundError('AdapterRegistry', tokenName(token));
+        }
+        const deps = this.graph.get(token);
+        if (!deps) {
+          throw new RegistryGraphEntryNotFoundError('AdapterRegistry', tokenName(token));
+        }
 
-      const instance = new AdapterInstance(rec, deps, this.providers);
+        const instance = new AdapterInstance(rec, deps, this.providers);
 
-      this.instances.set(token, instance);
-      readyArr.push(instance.ready);
-      this.logger?.verbose(`AdapterRegistry: initialized adapter '${rec.metadata.name}'`);
+        this.instances.set(token, instance);
+        readyArr.push(instance.ready);
+        this.logger?.verbose(`AdapterRegistry: initialized adapter '${rec.metadata?.name ?? tokenName(token)}'`);
+      }
+    } catch (err) {
+      // Adapters already started settle here, so a failure of theirs is not an unhandled rejection
+      // that ends the process; the start-up error is this one (#678).
+      await Promise.allSettled(readyArr);
+      throw err;
     }
     await Promise.all(readyArr);
     this.logger?.verbose(`AdapterRegistry: initialization complete (${this.instances.size} adapter(s))`);

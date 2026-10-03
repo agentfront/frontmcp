@@ -5,7 +5,7 @@
  *   500 (`Cannot resolve dependency ... from views`). It must fail at startup and name `adapter`.
  * - A flag refusal is an answer for the caller, so it is a public error with its own code.
  */
-import { PublicMcpError } from '@frontmcp/sdk';
+import { App, connect, LogLevel, PublicMcpError } from '@frontmcp/sdk';
 
 import { StaticFeatureFlagAdapter } from '../adapters/static.adapter';
 import { FeatureFlagConfigurationError, FeatureFlagDisabledError } from '../feature-flag.errors';
@@ -22,6 +22,53 @@ describe('FeatureFlagPlugin startup validation', () => {
     const options = { adapter: 'nope' } as unknown as Parameters<typeof FeatureFlagPlugin.init>[0];
 
     expect(() => FeatureFlagPlugin.init(options)).toThrow(/"nope".*static.*splitio.*launchdarkly.*unleash.*custom/s);
+  });
+
+  describe("adapter: 'custom' (#678)", () => {
+    const customOptions = (adapterInstance: unknown) =>
+      ({ adapter: 'custom', adapterInstance }) as unknown as Parameters<typeof FeatureFlagPlugin.init>[0];
+
+    it('rejects a missing adapterInstance at init and names it', () => {
+      const options = { adapter: 'custom' } as unknown as Parameters<typeof FeatureFlagPlugin.init>[0];
+
+      expect(() => FeatureFlagPlugin.init(options)).toThrow(FeatureFlagConfigurationError);
+      expect(() => FeatureFlagPlugin.init(options)).toThrow(/requires an `adapterInstance` option.*got undefined/s);
+    });
+
+    it('rejects an adapterInstance that is not a feature-flag adapter and names what it lacks', () => {
+      const partial = { evaluateFlags: async () => new Map<string, boolean>() };
+
+      expect(() => FeatureFlagPlugin.init(customOptions(partial))).toThrow(FeatureFlagConfigurationError);
+      expect(() => FeatureFlagPlugin.init(customOptions(partial))).toThrow(/missing isEnabled\(\), getVariant\(\)/);
+      expect(() => FeatureFlagPlugin.init(customOptions('static'))).toThrow(/got "static"/);
+    });
+
+    it('rejects a missing adapterInstance at startup when the options come from useFactory', async () => {
+      const plugin = FeatureFlagPlugin.init({
+        inject: () => [] as const,
+        useFactory: () => ({ adapter: 'custom' }) as unknown as Parameters<typeof FeatureFlagPlugin.init>[0],
+      } as unknown as Parameters<typeof FeatureFlagPlugin.init>[0]);
+
+      @App({ id: 'ff-custom-factory', name: 'Custom factory', plugins: [plugin] })
+      class CustomFactoryApp {}
+
+      await expect(
+        connect({
+          info: { name: 'ff-custom-factory', version: '1.0.0' },
+          apps: [CustomFactoryApp],
+          logging: { level: LogLevel.Off },
+        }),
+      ).rejects.toThrow(FeatureFlagConfigurationError);
+    });
+
+    it('builds with an adapterInstance that implements the adapter', () => {
+      const adapterInstance = new StaticFeatureFlagAdapter({ a: true });
+      const providers = FeatureFlagPlugin.dynamicProviders({ adapter: 'custom', adapterInstance });
+
+      expect(providers.find((p) => (p as { provide?: unknown }).provide === FeatureFlagAdapterToken)).toMatchObject({
+        useValue: adapterInstance,
+      });
+    });
   });
 
   it('still builds with a valid adapter', () => {

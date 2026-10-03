@@ -109,6 +109,17 @@ const result = await server.callTool('my_tool', { arg: 'value' });
 await server.dispose();
 ```
 
+The list methods (`listTools`, `listResources`, `listResourceTemplates`, `listPrompts`) of this server, and of the one `create()` returns, return the whole list: they read every page (a FrontMCP server pages `tools/list` 40 tools at a time by default), so the result carries no `nextCursor`, as with `DirectClient`. To page yourself, as an MCP client does, ask for one page with `paginate` and follow `nextCursor` with `cursor`:
+
+```typescript
+let page = await server.listTools({ paginate: true });
+while (page.nextCursor) {
+  page = await server.listTools({ cursor: page.nextCursor });
+}
+```
+
+Until 1.8.7 they returned the first page and a `nextCursor` that could not be passed back, so a server with more than 40 tools could not list them all.
+
 ### createForGraph(options)
 
 Create an instance for introspection without starting server.

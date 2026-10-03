@@ -1,4 +1,15 @@
-import { type ProviderType, type ToolType } from '../interfaces';
+import { type AdapterInterface, type ProviderType, type ToolType } from '../interfaces';
+
+/**
+ * Whether a value is an adapter the registry can start: an object with `options.name` and
+ * `fetch()`. Checked by shape rather than `instanceof`, so an adapter built from another copy of
+ * its class (a second bundle of the same package) is still recognised as one.
+ */
+export function isAdapterInstance(value: unknown): value is AdapterInterface {
+  if (!value || typeof value !== 'object') return false;
+  const { options, fetch } = value as Partial<AdapterInterface>;
+  return !!options && typeof options === 'object' && typeof options.name === 'string' && typeof fetch === 'function';
+}
 
 export function collectDynamicProviders<T>(klass: any, options: T): ProviderType[] {
   // walk the prototype chain so parent plugins can contribute
@@ -33,8 +44,21 @@ export function collectDynamicTools<T>(klass: any, options: T): ToolType[] {
   return out;
 }
 
-/** Metadata keys whose value is a list of entries; an option of the same name is not one of them. */
-const LIST_METADATA_KEYS = ['exports', 'plugins', 'adapters', 'tools', 'resources', 'prompts', 'skills'] as const;
+/**
+ * Metadata keys whose value is a list of entries; an option of the same name is not one of them.
+ * `providers` is not listed: `init` always sets it on the record to the providers it collects.
+ */
+const LIST_METADATA_KEYS = [
+  'exports',
+  'plugins',
+  'adapters',
+  'tools',
+  'resources',
+  'prompts',
+  'skills',
+  'contextExtensions',
+  'enforcesMetadata',
+] as const;
 
 /**
  * The part of a plugin's options that the registry reads as plugin metadata. A plugin option that

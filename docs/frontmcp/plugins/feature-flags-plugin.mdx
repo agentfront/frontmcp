@@ -339,7 +339,10 @@ When using the string shorthand (`featureFlag: 'key'`), `defaultValue` is `false
 </ParamField>
 
 <ParamField path="adapterInstance" type="FeatureFlagAdapter">
-  Custom adapter instance (only used with `adapter: 'custom'`)
+  Custom adapter instance (required with `adapter: 'custom'`, ignored otherwise). Without one, or with an object that
+  lacks `isEnabled()`, `getVariant()` or `evaluateFlags()`, `FeatureFlagPlugin.init({ adapter: 'custom' })` throws a
+  `FeatureFlagConfigurationError` that names `adapterInstance` and what is missing; with `init({ inject, useFactory })`
+  it is thrown at startup. It used to start and answer every request with a 500.
 </ParamField>
 
 <ParamField path="defaultValue" type="boolean" default="false">

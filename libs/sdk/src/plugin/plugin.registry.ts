@@ -16,9 +16,10 @@ import {
   type ProviderEntry,
   type ProviderType,
   type ScopeEntry,
+  type ToolType,
 } from '../common';
 import { initOptionsOf } from '../common/dynamic/dynamic.plugin';
-import { collectDynamicProviders, dedupePluginProviders } from '../common/dynamic/dynamic.utils';
+import { collectDynamicProviders, collectDynamicTools, dedupePluginProviders } from '../common/dynamic/dynamic.utils';
 import { installContextExtensions } from '../context/context-extension';
 import { InvalidPluginScopeError, InvalidRegistryKindError, RegistryDependencyNotRegisteredError } from '../errors';
 import { normalizeHooksFromCls, normalizeHooksFromProviders } from '../hooks/hooks.utils';
@@ -161,7 +162,7 @@ export default class PluginRegistry
       const providerHooks = normalizeHooksFromProviders(providers);
 
       // Registered before nested plugins so they can inject the providers this plugin derives from its options.
-      const { pluginInstance, dynamicProviders } = await this.instantiatePlugin(rec, deps);
+      const { pluginInstance, dynamicProviders, dynamicTools } = await this.instantiatePlugin(rec, deps);
       if (dynamicProviders) {
         await providers.addDynamicProviders(dynamicProviders);
       }
@@ -185,7 +186,7 @@ export default class PluginRegistry
       const adapters = new AdapterRegistry(providers, rec.metadata.adapters ?? []);
       await adapters.ready;
 
-      const tools = new ToolRegistry(providers, rec.metadata.tools ?? [], pluginOwner);
+      const tools = new ToolRegistry(providers, [...(rec.metadata.tools ?? []), ...dynamicTools], pluginOwner);
       const resources = new ResourceRegistry(providers, rec.metadata.resources ?? [], pluginOwner);
       const prompts = new PromptRegistry(providers, rec.metadata.prompts ?? [], pluginOwner);
       const skills = new SkillRegistry(providers, rec.metadata.skills ?? [], pluginOwner);
@@ -316,11 +317,19 @@ export default class PluginRegistry
     }
   }
 
-  /** Builds the plugin instance and the providers it contributes; a factory's options exist only once it has run. */
+  /**
+   * Builds the plugin instance and the providers it contributes; a factory's options exist only once
+   * it has run, so the providers and tools a plugin derives from them are collected here (#678).
+   * `init(options)` records already carry theirs (`dynamicTools` is then empty).
+   */
   private async instantiatePlugin(
     rec: PluginRecord,
     deps: Set<Token>,
-  ): Promise<{ pluginInstance: PluginEntry; dynamicProviders: ProviderType[] | undefined }> {
+  ): Promise<{
+    pluginInstance: PluginEntry;
+    dynamicProviders: ProviderType[] | undefined;
+    dynamicTools: readonly ToolType[];
+  }> {
     const depsInstances = await Promise.all([...deps].map((t) => this.providers.resolveBootstrapDep(t)));
 
     switch (rec.kind) {
@@ -328,11 +337,13 @@ export default class PluginRegistry
         return {
           pluginInstance: new (rec.useClass as Ctor<PluginEntry>)(...depsInstances),
           dynamicProviders: rec.providers,
+          dynamicTools: [],
         };
       case PluginKind.CLASS_TOKEN:
         return {
           pluginInstance: new (rec.provide as Ctor<PluginEntry>)(...depsInstances),
           dynamicProviders: rec.providers,
+          dynamicTools: [],
         };
       case PluginKind.VALUE: {
         // One `SomePlugin.init(options)` record can be installed by several registries (an app class
@@ -344,9 +355,13 @@ export default class PluginRegistry
         const init = installedPluginValues.has(value) ? initOptionsOf(value) : undefined;
         installedPluginValues.add(value);
         if (init && isDynamicPluginClass(rec.provide)) {
-          return { pluginInstance: new rec.provide(init.options) as PluginEntry, dynamicProviders: rec.providers };
+          return {
+            pluginInstance: new rec.provide(init.options) as PluginEntry,
+            dynamicProviders: rec.providers,
+            dynamicTools: [],
+          };
         }
-        return { pluginInstance: value, dynamicProviders: rec.providers };
+        return { pluginInstance: value, dynamicProviders: rec.providers, dynamicTools: [] };
       }
       case PluginKind.FACTORY: {
         const args: unknown[] = [];
@@ -361,9 +376,11 @@ export default class PluginRegistry
               optionDerived.length > 0
                 ? dedupePluginProviders([...optionDerived, ...(rec.providers ?? [])])
                 : rec.providers,
+            // `static dynamicTools` reads the options the factory returned, as `init(options)` reads its own.
+            dynamicTools: collectDynamicTools(rec.provide, produced),
           };
         }
-        return { pluginInstance: produced as PluginEntry, dynamicProviders: rec.providers };
+        return { pluginInstance: produced as PluginEntry, dynamicProviders: rec.providers, dynamicTools: [] };
       }
       default:
         throw new InvalidRegistryKindError('plugin', (rec as { kind?: string }).kind);

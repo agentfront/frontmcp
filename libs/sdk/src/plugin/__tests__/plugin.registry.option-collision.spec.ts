@@ -108,4 +108,121 @@ describe('PluginRegistry — options named like plugin metadata (#647)', () => {
 
     expect((record as { tools?: unknown }).tools).toBeUndefined();
   });
+
+  describe('tools contributed for the options a useFactory returns (#678)', () => {
+    it('registers them', async () => {
+      const registry = await install(
+        TogglePlugin.init({ inject: () => [] as const, useFactory: () => ({ tools: { enabled: true } }) }),
+      );
+
+      expect(toolNames(registry)).toEqual(['option_collision_tool']);
+    });
+
+    it('registers none when the options do not ask for them', async () => {
+      const registry = await install(
+        TogglePlugin.init({ inject: () => [] as const, useFactory: () => ({ tools: { enabled: false } }) }),
+      );
+
+      expect(toolNames(registry)).toEqual([]);
+    });
+  });
+
+  describe('an option named `providers` (#678)', () => {
+    const LABEL_TOKEN = Symbol('option-collision-label');
+
+    interface ProvidersOptions {
+      providers?: { a: number };
+      label?: string;
+    }
+
+    @FrontMcpPlugin({ name: 'option-collision-providers' })
+    class ProvidersOptionPlugin extends DynamicPlugin<ProvidersOptions> {
+      readonly options: ProvidersOptions;
+
+      constructor(options: ProvidersOptions = {}) {
+        super();
+        this.options = options;
+      }
+
+      static override dynamicProviders(options: ProvidersOptions) {
+        return [{ name: 'label', provide: LABEL_TOKEN, useValue: options.label ?? 'default' }];
+      }
+    }
+
+    it('builds the record when the option is an object', () => {
+      expect(() => ProvidersOptionPlugin.init({ providers: { a: 1 } })).not.toThrow();
+    });
+
+    it('gives the plugin instance the option and keeps the providers it derives from its options', () => {
+      const record = ProvidersOptionPlugin.init({ providers: { a: 1 }, label: 'configured' }) as {
+        useValue: ProvidersOptionPlugin;
+        providers?: { provide: unknown; useValue: unknown }[];
+      };
+
+      expect(record.useValue.options).toEqual({ providers: { a: 1 }, label: 'configured' });
+      expect(record.providers).toEqual([expect.objectContaining({ provide: LABEL_TOKEN, useValue: 'configured' })]);
+    });
+
+    it('starts and resolves the providers the plugin derives from its options', async () => {
+      const registry = await install(ProvidersOptionPlugin.init({ providers: { a: 1 }, label: 'started' }));
+      const [plugin] = registry.getPlugins();
+
+      expect(plugin.get(LABEL_TOKEN)).toBe('started');
+    });
+
+    it('starts when the plugin is built with useFactory and the factory returns the option', async () => {
+      const registry = await install(
+        ProvidersOptionPlugin.init({
+          inject: () => [] as const,
+          useFactory: () => ({ providers: { a: 2 }, label: 'from-factory' }),
+        }),
+      );
+      const [plugin] = registry.getPlugins();
+
+      expect((plugin as unknown as ProvidersOptionPlugin).options).toEqual({
+        providers: { a: 2 },
+        label: 'from-factory',
+      });
+      expect(plugin.get(LABEL_TOKEN)).toBe('from-factory');
+    });
+
+    it('types `providers` as the option when the plugin has one, and as extra providers otherwise', () => {
+      const PROVIDED = Symbol('option-collision-typed');
+      const extra = [{ name: 'typed', provide: PROVIDED, useValue: 1 }];
+
+      expect(() => {
+        ProvidersOptionPlugin.init({ providers: { a: 1 } });
+        // @ts-expect-error -- the plugin's own `providers` option is an object, not a provider list
+        ProvidersOptionPlugin.init({ providers: extra });
+        TogglePlugin.init({ providers: extra });
+        // @ts-expect-error -- without an option of that name, `providers` is a list of providers
+        TogglePlugin.init({ providers: { a: 1 } });
+      }).not.toThrow();
+    });
+
+    it('still adds a list of providers passed under `providers`', async () => {
+      const EXTRA_TOKEN = Symbol('option-collision-extra');
+      const record = DynamicPlugin.init.call(ProvidersOptionPlugin, {
+        providers: [{ name: 'extra', provide: EXTRA_TOKEN, useValue: 'extra' }],
+      } as never);
+
+      const registry = await install(record);
+      const [plugin] = registry.getPlugins();
+
+      expect(plugin.get(EXTRA_TOKEN)).toBe('extra');
+      expect(plugin.get(LABEL_TOKEN)).toBe('default');
+    });
+  });
+
+  it('keeps options named like the other list-valued metadata keys out of the record', async () => {
+    const record = DynamicPlugin.init.call(TogglePlugin, {
+      contextExtensions: { a: 1 },
+      enforcesMetadata: { b: 2 },
+    } as never) as unknown as Record<string, unknown> & { useValue: TogglePlugin };
+
+    expect(record['contextExtensions']).toBeUndefined();
+    expect(record['enforcesMetadata']).toBeUndefined();
+    expect(record.useValue.options).toEqual({ contextExtensions: { a: 1 }, enforcesMetadata: { b: 2 } });
+    expect((await install(record)).getPluginNames()).toEqual(['option-collision-toggle']);
+  });
 });

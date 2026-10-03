@@ -38,6 +38,17 @@ import { parseTraceContext } from './trace-context';
 const frontmcpContextStorage = new AsyncLocalStorage<FrontMcpContext>();
 
 /**
+ * The bindings object (a Cloudflare Worker's `env`) of a request: `context`'s, else that of the
+ * request the calling code runs in. `undefined` when the request carries none (Node, stdio, a
+ * direct server). Code built outside a flow's providers, such as a job run by `execute_job`, still
+ * runs inside the request that started it, so it reads that request's bindings (#678).
+ */
+export function workerEnvOf(context: FrontMcpContext | undefined): Readonly<Record<string, unknown>> | undefined {
+  const env = (context ?? frontmcpContextStorage.getStore())?.platformEnv;
+  return env !== null && typeof env === 'object' ? (env as Readonly<Record<string, unknown>>) : undefined;
+}
+
+/**
  * FrontMcpContextStorage provides unified context via AsyncLocalStorage.
  *
  * This is a GLOBAL-scoped provider because it manages the storage itself,

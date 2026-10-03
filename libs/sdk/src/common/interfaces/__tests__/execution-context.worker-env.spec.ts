@@ -55,4 +55,24 @@ describe('ExecutionContextBase.workerEnv (#646)', () => {
       expect(new TestContext(ctx).workerEnv?.['MY_KV']).toBe(kv);
     });
   });
+
+  it('reads the bindings of the request it runs in when its providers carry no context (#678)', () => {
+    const storage = new FrontMcpContextStorage();
+    const kv = { get: jest.fn() };
+    const request = { headers: {}, [ServerRequestTokens.webEnv]: { MY_KV: kv } };
+
+    storage.runForHttpRequest(request, 'scope', () => {
+      expect(new TestContext().workerEnv?.['MY_KV']).toBe(kv);
+    });
+  });
+
+  it("prefers its own context's (absent) bindings over the surrounding request's", () => {
+    const storage = new FrontMcpContextStorage();
+    const request = { headers: {}, [ServerRequestTokens.webEnv]: { MY_KV: {} } };
+    const own = new FrontMcpContext({ sessionId: 's1', scopeId: 'scope' });
+
+    storage.runForHttpRequest(request, 'scope', () => {
+      expect(new TestContext(own).workerEnv).toBeUndefined();
+    });
+  });
 });

@@ -157,4 +157,57 @@ describe('RememberPlugin LLM tools', () => {
       expect((result as { isError?: boolean }).isError).toBeFalsy();
     });
   });
+
+  describe('options from `init({ inject, useFactory })` (#678)', () => {
+    function factoryServerWith(options: RememberPluginOptionsInput) {
+      @App({
+        id: 'llm-memory-factory',
+        name: 'LLM memory (factory)',
+        plugins: [
+          RememberPlugin.init({
+            inject: () => [] as const,
+            useFactory: () => ({ type: 'memory', skipLegacyPurge: true, ...options }) as RememberPluginOptionsInput,
+          }),
+        ],
+      })
+      class MemoryFactoryApp {}
+
+      return {
+        info: { name: 'remember-llm-tools-factory', version: '1.0.0' },
+        apps: [MemoryFactoryApp],
+        logging: { level: LogLevel.Off },
+      };
+    }
+
+    it('exposes the four memory tools when the factory enables them', async () => {
+      client = await connect(factoryServerWith({ tools: { enabled: true } }));
+
+      expect(await toolNames(client)).toEqual(MEMORY_TOOLS);
+    });
+
+    it('names them with the prefix the factory returns', async () => {
+      client = await connect(factoryServerWith({ tools: { enabled: true, prefix: 'memory_' } }));
+
+      expect(await toolNames(client)).toEqual(MEMORY_TOOLS.map((n) => `memory_${n}`).sort());
+    });
+
+    it('works end to end and applies the allowed scopes the factory returns', async () => {
+      client = await connect(factoryServerWith({ tools: { enabled: true, allowedScopes: ['session'] } }));
+
+      await client.callTool('remember_this', { key: 'colour', value: 'blue' });
+
+      expect(structured(await client.callTool('recall', { key: 'colour' }))).toMatchObject({
+        found: true,
+        value: 'blue',
+      });
+      const refused = await client.callTool('remember_this', { key: 'k', value: 'v', scope: 'global' });
+      expect((refused as { isError?: boolean }).isError).toBe(true);
+    });
+
+    it('exposes no memory tools when the factory does not enable them', async () => {
+      client = await connect(factoryServerWith({}));
+
+      expect(await toolNames(client)).toEqual([]);
+    });
+  });
 });

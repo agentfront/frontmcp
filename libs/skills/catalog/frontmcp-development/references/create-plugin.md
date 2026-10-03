@@ -332,7 +332,9 @@ The reverse does not work: an option-derived provider cannot inject a provider t
 
 ### Options named like plugin metadata, and option-derived tools
 
-`init(options)` spreads the options into the plugin's metadata, so an option named like a list-valued metadata key (`tools`, `resources`, `prompts`, `skills`, `adapters`, `plugins`, `exports`) used to be read as that list: `RememberPlugin.init({ tools: { enabled: true } })` crashed at startup. A non-array value under one of those keys is now an option and stays out of the metadata; an array still contributes.
+`init(options)` spreads the options into the plugin's metadata, so an option named like a list-valued metadata key (`tools`, `resources`, `prompts`, `skills`, `adapters`, `plugins`, `exports`, `contextExtensions`, `enforcesMetadata`) used to be read as that list: `RememberPlugin.init({ tools: { enabled: true } })` crashed at startup. A non-array value under one of those keys is now an option and stays out of the metadata; an array still contributes.
+
+`providers` follows the same rule: an array adds providers to the plugin; any other value (`MyPlugin.init({ providers: { region: 'eu' } })`) is the plugin's own option and reaches the instance instead of throwing `(extraProviders ?? []) is not iterable` at module load. When the options type declares `providers`, `init()` types the key as that option.
 
 To register tools only when an option asks for it, declare `static dynamicTools(options)`, the counterpart of `dynamicProviders`. Its tools are added to those from `@Plugin({ tools })` and from an array `tools` option:
 
@@ -343,7 +345,7 @@ export default class MemoryPlugin extends DynamicPlugin<MemoryOptions, MemoryOpt
 }
 ```
 
-`dynamicTools` runs for `init(options)`; `init({ inject, useFactory })` takes its tools from the `@Plugin` metadata, since the options are unknown until the factory runs.
+`dynamicTools`, like `dynamicProviders`, runs on the options the plugin is built with: those given to `init(options)`, or the ones an `init({ inject, useFactory })` factory returns at startup. `RememberPlugin.init({ inject, useFactory: () => ({ type: 'memory', tools: { enabled: true } }) })` therefore registers the memory tools.
 
 ### Installing the same plugin in several apps
 

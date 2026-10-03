@@ -98,7 +98,8 @@ const server = await create({
 // Call tools directly
 const result = await server.callTool('calculate', { a: 2, b: 2, operation: 'add' });
 
-// List available tools
+// List available tools: every page is read, so this is the whole list (no `nextCursor`).
+// To page yourself: `listTools({ paginate: true })`, then `listTools({ cursor: page.nextCursor })`.
 const { tools } = await server.listTools();
 
 // Clean up
