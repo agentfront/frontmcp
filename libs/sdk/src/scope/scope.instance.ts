@@ -101,6 +101,7 @@ import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/reques
 import { wireSessionRelay, type SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import { TransportService } from '../transport/transport.registry';
+import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import HttpIpFilterFlow from './flows/http.ip-filter.flow';
 import HttpRequestFlow from './flows/http.request.flow';
@@ -1127,7 +1128,10 @@ export class Scope extends ScopeEntry {
     }
     try {
       const { dirname } = require('path') as typeof import('path');
-      const { mkdir } = await import('@frontmcp/utils');
+      const { mkdir } = await importWithRequireFallback(
+        () => import('@frontmcp/utils'),
+        () => require('@frontmcp/utils') as typeof import('@frontmcp/utils'),
+      );
       await mkdir(dirname(finalPath), { recursive: true });
     } catch (err) {
       this.logger.warn('[FrontMcp] Could not ensure sqlite parent directory exists', {

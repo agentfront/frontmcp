@@ -8,6 +8,7 @@
  */
 
 import type { CorsOptions } from '../../common';
+import { resolveHttpCors } from '../middleware/cors-env';
 import { allowedHostsFromEnv, isRoutableBind } from './resolve-allowed-hosts';
 
 /**
@@ -73,7 +74,8 @@ export function auditSecurityDefaults(config: SecurityAuditConfig, isProduction:
   // Omitting `cors` is the safe default now, not a permissive one, so it is not a warning. The
   // only permissive state left is an explicit `{ origin: true }`, and that stays a warning
   // whatever `strict` says: strict mode does not touch CORS, so it has nothing to suppress here.
-  const corsOrigin = config.cors === false ? undefined : config.cors?.origin;
+  const cors = resolveHttpCors(config.cors);
+  const corsOrigin = cors === false ? undefined : cors?.origin;
   if (corsOrigin === undefined || corsOrigin === false) {
     findings.push({
       level: 'info',

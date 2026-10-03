@@ -89,6 +89,10 @@ export interface InstallOptions {
    * Node's module resolution can locate it.
    */
   fromPackage?: string;
+  /** Install exactly these catalog skills (`skills.install` from frontmcp.config). */
+  names?: string[];
+  /** Install the catalog skills of this bundle (`skills.bundle` from frontmcp.config); `'none'` installs nothing. */
+  bundle?: 'recommended' | 'minimal' | 'full' | 'none';
 }
 
 /**
@@ -165,8 +169,16 @@ export async function installSkill(name: string | undefined, options: InstallOpt
   const manifest = loadCatalog();
   const catalogDir = getCatalogDir();
 
+  if (options.bundle === 'none') {
+    console.log(c('gray', "frontmcp.config sets skills.bundle to 'none': no skills to install."));
+    console.log(c('gray', 'Name a skill, or pass --all, --tag or --category.'));
+    return;
+  }
+
   // Validate that exactly one selector is supplied
-  const selectorCount = [options.all, options.tag, options.category, name].filter(Boolean).length;
+  const selectorCount = [options.all, options.tag, options.category, name, options.names, options.bundle].filter(
+    Boolean,
+  ).length;
   if (selectorCount > 1) {
     console.error(c('red', 'Options --all, --tag, --category, and <name> are mutually exclusive.'));
     console.log(c('gray', 'Provide exactly one selector to choose which skills to install.'));
@@ -178,6 +190,24 @@ export async function installSkill(name: string | undefined, options: InstallOpt
 
   if (options.all) {
     // Install all skills
+  } else if (options.names) {
+    // `skills.install` from frontmcp.config
+    const wanted = options.names;
+    const unknown = wanted.filter((n) => !skills.some((s) => s.name === n));
+    if (unknown.length > 0) {
+      console.error(c('red', `frontmcp.config skills.install names skills not in the catalog: ${unknown.join(', ')}`));
+      console.log(c('gray', "Use 'frontmcp skills list' to see available skills."));
+      process.exit(1);
+    }
+    skills = skills.filter((s) => wanted.includes(s.name));
+  } else if (options.bundle) {
+    // `skills.bundle` from frontmcp.config
+    const bundle = options.bundle;
+    skills = skills.filter((s) => s.bundle?.includes(bundle));
+    if (skills.length === 0) {
+      console.error(c('red', `No skills found in bundle "${bundle}".`));
+      process.exit(1);
+    }
   } else if (options.tag) {
     const tag = options.tag;
     skills = skills.filter((s) => s.tags.includes(tag));
@@ -203,7 +233,12 @@ export async function installSkill(name: string | undefined, options: InstallOpt
     }
     skills = [entry];
   } else {
-    console.error(c('red', 'Please specify a skill name, or use --all, --tag, or --category.'));
+    console.error(
+      c(
+        'red',
+        'Please specify a skill name, or use --all, --tag, or --category (or set skills.install / skills.bundle in frontmcp.config).',
+      ),
+    );
     process.exit(1);
   }
 

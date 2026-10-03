@@ -17,7 +17,7 @@
  * surrounding wrapper, both of which the user handles after pasting.
  */
 
-import type { FrontMcpConfigParsed, McpClientName } from '../../config';
+import { envOverlayFor, type FrontMcpConfigParsed, type McpClientName } from '../../config';
 
 interface ServerEntry {
   command?: string;
@@ -42,7 +42,9 @@ function buildServerEntry(client: McpClientName, config: FrontMcpConfigParsed): 
     const command = connection.command ?? 'npx';
     const args = connection.args ?? ['-y', config.name];
     const entry: ServerEntry = { command, args };
-    if (connection.env && Object.keys(connection.env).length > 0) entry.env = { ...connection.env };
+    // The client spawns the shipped server: `env.shared` ⊕ `env.ship`, then the client's own `env` (#680)
+    const env = { ...envOverlayFor(config, 'build:ship'), ...connection.env };
+    if (Object.keys(env).length > 0) entry.env = env;
     return entry;
   }
 

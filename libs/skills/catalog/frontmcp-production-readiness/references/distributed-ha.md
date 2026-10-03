@@ -148,7 +148,7 @@ Each pod subscribes to `mcp:ha:notify:{nodeId}` via Redis Pub/Sub. A notificatio
 
 FrontMCP sets:
 
-- **Cookie**: `__frontmcp_node` on Streamable HTTP initialize
+- **Cookie**: `__frontmcp_node` on Streamable HTTP initialize — name, `Domain` and `SameSite` come from the deployment's `server.cookies` (`affinity`, `domain`, `sameSite`) in `frontmcp.config`; keep the load balancer's cookie name in step
 - **Header**: `X-FrontMCP-Machine-Id` on every distributed response (initialize, message POSTs, DELETE, stateless and MCP 2026-07-28 requests, SSE, `/healthz`, `/readyz`, `/metrics` and 404s). The Express host and the web-fetch handler add it next to the security headers; the session flows also set it in the hookable `applyNodeHeaders` stage. Only distributed mode (`FRONTMCP_DEPLOYMENT_MODE=distributed`) sends it
 
 Affinity is an optimization: without it a request on the wrong pod is relayed to the owner (one Redis round trip each way). NGINX sticky session example:

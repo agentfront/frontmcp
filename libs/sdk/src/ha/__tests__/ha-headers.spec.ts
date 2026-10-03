@@ -1,4 +1,4 @@
-import { applyMachineIdHeader, applyNodeAffinity, machineIdHeader } from '../ha-headers';
+import { affinityCookieOptions, applyMachineIdHeader, applyNodeAffinity, machineIdHeader } from '../ha-headers';
 
 const mockRuntime = { deployment: 'distributed' };
 jest.mock('@frontmcp/utils', () => ({
@@ -49,5 +49,33 @@ describe('ha-headers', () => {
     const cookies = res.headers.get('Set-Cookie') as string[];
     expect(cookies[0]).toBe('a=b');
     expect(cookies.length).toBeGreaterThanOrEqual(1);
+  });
+
+  describe('server.cookies from frontmcp.config (FRONTMCP_AFFINITY_COOKIE*)', () => {
+    const keys = ['FRONTMCP_AFFINITY_COOKIE', 'FRONTMCP_AFFINITY_COOKIE_DOMAIN', 'FRONTMCP_AFFINITY_COOKIE_SAMESITE'];
+    afterEach(() => {
+      for (const key of keys) delete process.env[key];
+    });
+
+    it('defaults to __frontmcp_node with no domain or SameSite override', () => {
+      expect(affinityCookieOptions()).toEqual({ name: '__frontmcp_node' });
+    });
+
+    it('uses the configured name, domain and SameSite on the Set-Cookie', () => {
+      process.env['FRONTMCP_AFFINITY_COOKIE'] = 'pod';
+      process.env['FRONTMCP_AFFINITY_COOKIE_DOMAIN'] = 'example.com';
+      process.env['FRONTMCP_AFFINITY_COOKIE_SAMESITE'] = 'lax';
+      const res = makeResponse();
+      applyNodeAffinity(res, { headers: { host: 'api.example.com' }, url: '/mcp' } as never);
+      const [cookie] = res.headers.get('Set-Cookie') as string[];
+      expect(cookie).toMatch(/^pod=node-1;/);
+      expect(cookie).toContain('Domain=example.com');
+      expect(cookie).toContain('SameSite=Lax');
+    });
+
+    it('ignores an unknown SameSite value', () => {
+      process.env['FRONTMCP_AFFINITY_COOKIE_SAMESITE'] = 'sometimes';
+      expect(affinityCookieOptions()).toEqual({ name: '__frontmcp_node' });
+    });
   });
 });

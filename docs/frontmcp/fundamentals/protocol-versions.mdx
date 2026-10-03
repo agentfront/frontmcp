@@ -310,7 +310,9 @@ transportOptions: {
 ```
 
 `auto` probes `server/discover` and falls back to the session transports when
-the remote does not answer it.
+the remote does not answer it. `'2026-07-28'` skips the probe and always uses
+the stateless client; it requires a URL remote (`App.remote(url, …)`), and any
+other transport is refused at connect time rather than silently downgraded.
 
 ## Authorization changes
 

@@ -28,6 +28,7 @@ import { MetricsPathConflictError } from '../metrics/metrics.errors';
 import { metricsPath, renderMetricsScrape, type MetricsHttpResult } from '../metrics/metrics.routes';
 import { type MetricsService } from '../metrics/metrics.service';
 import { type Scope } from '../scope/scope.instance';
+import { resolveHttpCors } from '../server/middleware/cors-env';
 import { resolveSecurityHeaders } from '../server/middleware/csp.middleware';
 import { compileHostValidation, validateHostHeaders } from '../server/security/host-validation';
 import { flowErrorToHttpOutput } from './flow-error-output';
@@ -215,7 +216,7 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
   const rawEntry = options.entryPath ?? (normalizeEntryPrefix(resolveEntryPath(httpConfig?.entryPath)) || '/');
   const entryPaths = new Set((Array.isArray(rawEntry) ? rawEntry : [rawEntry]).map(normalizePath));
   // CORS: explicit option wins, else mirror the scope's `http.cors`.
-  const cors = options.cors ?? mapHttpCors(httpConfig?.cors, scope);
+  const cors = options.cors ?? mapHttpCors(resolveHttpCors(httpConfig?.cors), scope);
   const corsEnabled = cors?.origin !== undefined && cors.origin !== false;
 
   // Host / Origin validation (GHSA-mc9g-v2cp-vfff) — the same rules the Express

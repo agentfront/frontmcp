@@ -9,6 +9,7 @@ import { type AuthInfo, type Transport } from '@frontmcp/protocol';
 import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
 import { type Scope } from '../scope/scope.instance';
+import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { buildScopedServerOptions } from './build-scoped-server-options';
 
 /**
@@ -92,7 +93,10 @@ export async function createInMemoryServer(
   options?: CreateInMemoryServerOptions,
 ): Promise<InMemoryServerResult> {
   // Dynamically import to avoid bundling issues
-  const { InMemoryTransport, McpServer } = await import('@frontmcp/protocol');
+  const { InMemoryTransport, McpServer } = await importWithRequireFallback(
+    () => import('@frontmcp/protocol'),
+    () => require('@frontmcp/protocol') as typeof import('@frontmcp/protocol'),
+  );
   const { createMcpHandlers } = await import('./mcp-handlers/index.js');
 
   const sessionId = options?.sessionId ?? `in-memory:${randomUUID()}`;

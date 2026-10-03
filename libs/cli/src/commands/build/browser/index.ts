@@ -1,8 +1,9 @@
 import * as path from 'path';
-import { ParsedArgs } from '../../../core/args';
+import { type ParsedArgs } from '../../../core/args';
 import { c } from '../../../core/colors';
 import { ensureDir } from '@frontmcp/utils';
 import { resolveEntry } from '../../../shared/fs';
+import { buildTargetStatement } from '../../../config/deployment-env';
 
 /**
  * Build a browser-compatible ESM bundle.
@@ -37,6 +38,8 @@ export async function buildBrowser(opts: ParsedArgs): Promise<void> {
   console.log(c('cyan', '[build:browser] Bundling ESM for browser...'));
   await esbuild.build({
     entryPoints: [entry],
+    // `getBuildTarget()` reports 'browser' unless the host application set its own target first (#680)
+    banner: { js: buildTargetStatement('browser') },
     bundle: true,
     platform: 'browser',
     format: 'esm',

@@ -27,6 +27,7 @@ export type {
   ProjectCommandOption,
 } from './frontmcp-config.types';
 export {
+  envOverlayFor,
   resolveConfig,
   type ResolvedFrontMcpConfig,
   type ResolveConfigOptions,

@@ -23,6 +23,7 @@ import { REQUIRED_DECORATOR_FIELDS } from '../../../core/tsconfig';
 import { findDeployment, type FrontMcpConfigParsed } from '../../../config';
 import type { McpbDeployment } from '../../../config/frontmcp-config.types';
 import { loadExecConfig, normalizeConfig } from '../exec/config';
+import { serverBundleBanner } from '../../../config/deployment-env';
 import { bundleWithEsbuild, formatSize } from '../exec/esbuild-bundler';
 import { buildPlatformOverrides, mergeBinariesFrom, resolveHostPlatform, binaryFileName, type BinaryEntry } from './binary';
 import { generateMcpbManifest, loadPackageJsonMeta, resolveIconPath } from './manifest';
@@ -125,6 +126,8 @@ export async function buildMcpb(
   const shippedBundle = await bundleWithEsbuild(compiledEntry, outDir, execConfig, {
     selfContained: true,
     outputName: `${execConfig.name}.server`,
+    // The MCPB host runs this bundle as its program: record the build target (#680)
+    banner: serverBundleBanner({ target: 'mcpb', env: mcpbDeployment?.env }),
   });
   console.log(
     `${c('green', '[build:mcpb]')} server bundle (runtime inlined): ${formatSize(shippedBundle.bundleSize)}`,
@@ -147,6 +150,7 @@ export async function buildMcpb(
       const seaBundle = await bundleWithEsbuild(compiledEntry, outDir, execConfig, {
         selfContained: true,
         outputName: seaBundleName,
+        banner: serverBundleBanner({ target: 'mcpb', env: mcpbDeployment?.env, singleExecutable: true }),
       });
       const { buildSea } = await import('../exec/sea-builder.js');
       const seaResult = await buildSea(seaBundle.bundlePath, outDir, execConfig.name);

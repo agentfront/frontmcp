@@ -14,8 +14,12 @@
 // Server Defaults
 // ============================================
 
+/**
+ * Applied at run time as `FRONTMCP_CORS_*` defaults (the build writes them into the
+ * artifact; `frontmcp dev` exports them); an explicit `@FrontMcp({ http: { cors } })` wins.
+ */
 export interface CorsConfig {
-  /** Allowed origins. Empty array = permissive. */
+  /** Allowed origins (`['*']` = any origin). Omitted or empty = no CORS headers, the server default. */
   origins?: string[];
   /** Allow credentials (cookies, authorization headers). @default false */
   credentials?: boolean;
@@ -34,6 +38,10 @@ export interface CspConfig {
   reportOnly?: boolean;
 }
 
+/**
+ * The load-balancer affinity cookie a distributed deployment sets (other targets set none).
+ * Applied at run time as `FRONTMCP_AFFINITY_COOKIE*` defaults.
+ */
 export interface CookiesConfig {
   /** LB affinity cookie name. @default '__frontmcp_node' */
   affinity?: string;
@@ -63,11 +71,11 @@ export interface SecurityHeadersConfig {
  * - browser, sdk, cli: not available
  */
 export interface HttpConfig {
-  /** HTTP port. Only for node/distributed. @default 3000 */
+  /** HTTP port (`PORT` default). Only for node/distributed; `@FrontMcp({ http: { port } })` wins. @default 3000 */
   port?: number;
-  /** Unix socket path (alternative to port). Only for node/distributed. */
+  /** Unix socket path (alternative to port; `FRONTMCP_DAEMON_SOCKET` default). Only for node/distributed. */
   socketPath?: string;
-  /** MCP entry path ('' or '/mcp'). @default '' */
+  /** MCP entry path ('' or '/mcp'); wins over `transport.http.path` for this deployment. @default '' */
   entryPath?: string;
   /** CORS configuration. */
   cors?: CorsConfig;

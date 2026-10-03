@@ -6,14 +6,16 @@ import { fsp, resolveEntry } from '../../shared/fs';
 import { runTsc } from '../../shared/tsc';
 import { cleanOutDir } from '../../shared/clean-out-dir';
 import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
-import { ADAPTERS } from './adapters';
+import { ADAPTERS, composeAdapterSetup } from './adapters';
 import { haEnv } from '../../config/ha-env';
 import { securityHeadersEnv } from '../../config/security-headers-env';
+import { deploymentHttpPath, serverRuntimeEnv } from '../../config/deployment-env';
 import { type AdapterBuildContext, type AdapterName } from './types';
 import { bundleForServerless } from './bundler';
 import { resolveEmittedEntry } from '../../shared/emitted-entry';
 import { buildEmittedAliases, readTsPathAliases } from '../../shared/tsconfig-aliases';
 import { shipWidgetSources } from './copy-widgets';
+import type { ServerDefaults } from '../../config/frontmcp-config.types';
 import {
   type DeploymentTarget,
   findDeployment,
@@ -54,8 +56,8 @@ async function generateAdapterFiles(
 
   // Generate serverless setup file first (if adapter has one)
   // This file sets FRONTMCP_SERVERLESS=1 before any imports run
-  if (template.getSetupTemplate) {
-    const setupContent = template.getSetupTemplate(context);
+  const setupContent = composeAdapterSetup(adapter, context);
+  if (setupContent !== undefined) {
     const setupPath = path.join(outDir, 'serverless-setup.js');
     await fsp.writeFile(setupPath, setupContent, 'utf8');
     console.log(c('green', `  Generated serverless setup at ${path.relative(cwd, setupPath)}`));
@@ -259,6 +261,10 @@ async function buildSingleTarget(
     nodeVersion?: string;
     // #642 — `transport.http.path` reaches the exec/node runner as an env default.
     httpEntryPath?: string;
+    // #680 — the deployment's `server` block (http, cookies, csp, headers) for the bundle banner.
+    server?: ServerDefaults;
+    // #680 — `deployments[].env`, carried as defaults by the artifact.
+    env?: Record<string, string>;
   } = {
     storage: config?.build?.storage,
     cli: cliDeploymentConfig
@@ -271,7 +277,12 @@ async function buildSingleTarget(
         }
       : undefined,
     nodeVersion: config?.nodeVersion,
-    httpEntryPath: config?.transport?.http?.path,
+    httpEntryPath: deploymentHttpPath(
+      deployment && 'server' in deployment ? deployment.server : undefined,
+      config?.transport?.http?.path,
+    ),
+    server: deployment && 'server' in deployment ? deployment.server : undefined,
+    env: deployment?.env,
   };
 
   switch (target) {
@@ -362,16 +373,30 @@ async function runAdapterBuild(
   // drives the server. Hand the former to the adapter as the server's default so a
   // project that only set the documented option gets a worker on the path the rest
   // of the toolchain (and the generated client URL) already points at.
-  const transportHttpPath = config?.transport?.http?.path;
+  const server = deployment && 'server' in deployment ? deployment.server : undefined;
+  // A deployment's own `server.http.entryPath` wins over the project-wide `transport.http.path` (#680).
+  const transportHttpPath = deploymentHttpPath(server, config?.transport?.http?.path);
   const decoratorHttp = entryInfo.decoratorConfig?.['http'];
   const decoratorEntryPath =
     typeof decoratorHttp === 'object' && decoratorHttp !== null
       ? (decoratorHttp as Record<string, unknown>)['entryPath']
       : undefined;
+  // The platform picks the listener of a serverless deployment; only `distributed` runs its own.
+  const listens = adapter === 'distributed';
+  if (!listens && (server?.http?.port !== undefined || server?.http?.socketPath)) {
+    console.log(
+      c(
+        'yellow',
+        `[build] server.http.port / server.http.socketPath do not apply to the ${adapter} target ` +
+          `(the platform assigns the listener); they are ignored.`,
+      ),
+    );
+  }
   const context: AdapterBuildContext = {
     transportHttpPath,
-    securityHeadersEnv: securityHeadersEnv(deployment && 'server' in deployment ? deployment.server : undefined),
+    securityHeadersEnv: securityHeadersEnv(server),
     haEnv: haEnv(deployment && 'ha' in deployment ? deployment.ha : undefined),
+    runtimeEnv: { ...serverRuntimeEnv(server, { listens }), ...deployment?.env },
   };
 
   if (
