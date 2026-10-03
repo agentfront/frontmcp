@@ -10,6 +10,7 @@ import {
   type FrontMcpAdapterResponse,
 } from '../common';
 import { adapterInitOptionsOf } from '../common/dynamic/dynamic.adapter';
+import { isAdapterInstance } from '../common/dynamic/dynamic.utils';
 import { InvalidEntityError, InvalidRegistryKindError, RegistryNotInitializedError } from '../errors';
 import PromptRegistry from '../prompt/prompt.registry';
 import type ProviderRegistry from '../provider/provider.registry';
@@ -86,7 +87,7 @@ export class AdapterInstance extends AdapterEntry {
       throw new InvalidRegistryKindError('adapter', (rec as { kind?: string }).kind);
     }
 
-    if (!isAdapter(adapter)) {
+    if (!isAdapterInstance(adapter)) {
       // A factory that returns options instead of an adapter (a hand-written `{ provide, useFactory }`)
       // fails here, with an error that says so, instead of on the first property read (#678).
       throw new InvalidEntityError(
@@ -189,17 +190,10 @@ export class AdapterInstance extends AdapterEntry {
 
 /** The first registry keeps an `init()` adapter; each later one builds its own from the same options. */
 function adapterForThisRegistry(value: AdapterInterface): AdapterInterface {
-  if (!isAdapter(value)) return value;
+  if (!isAdapterInstance(value)) return value;
   const initOptions = installedAdapterValues.has(value) ? adapterInitOptionsOf(value) : undefined;
   installedAdapterValues.add(value);
   if (!initOptions) return value;
   const AdapterClass = value.constructor as new (options: object) => AdapterInterface;
   return new AdapterClass(initOptions);
-}
-
-/** Whether a constructed or produced value is an adapter the registry can start. */
-function isAdapter(value: unknown): value is AdapterInterface {
-  if (!value || typeof value !== 'object') return false;
-  const { options, fetch } = value as Partial<AdapterInterface>;
-  return !!options && typeof options === 'object' && typeof options.name === 'string' && typeof fetch === 'function';
 }

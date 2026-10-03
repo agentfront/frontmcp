@@ -21,9 +21,9 @@ import type { StoreResourceOptions } from './state.types';
 
 const VALID_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
-/** The names of a selector / action map, as one string that only changes when a name does. */
+/** The sorted, JSON-encoded names of a selector / action map: changes only when a name is added or removed. */
 function keysOf(map: Record<string, unknown> | undefined, kind: 'selector' | 'action'): string {
-  if (!map) return '';
+  if (!map) return '[]';
   const keys = Object.keys(map);
   if (kind === 'selector') {
     for (const key of keys) {
@@ -32,11 +32,11 @@ function keysOf(map: Record<string, unknown> | undefined, kind: 'selector' | 'ac
       }
     }
   }
-  return keys.join('\n');
+  return JSON.stringify(keys.sort());
 }
 
-function splitKeys(keys: string): string[] {
-  return keys === '' ? [] : keys.split('\n');
+function parseKeys(keys: string): string[] {
+  return JSON.parse(keys) as string[];
 }
 
 function jsonResource(uri: string, value: unknown): ReadResourceResult {
@@ -80,7 +80,7 @@ export function useStoreResource(options: StoreResourceOptions): void {
 
   // Selector sub-resources
   useEffect(() => {
-    const cleanups = splitKeys(selectorKeys).map((key) => {
+    const cleanups = parseKeys(selectorKeys).map((key) => {
       const uri = `${stateUri}/${key}`;
       return dynamicRegistry.registerResource({
         uri,
@@ -102,7 +102,7 @@ export function useStoreResource(options: StoreResourceOptions): void {
 
   // Store changes: tell readers of the state and selector resources to read again
   useEffect(() => {
-    const uris = [stateUri, ...splitKeys(selectorKeys).map((key) => `${stateUri}/${key}`)];
+    const uris = [stateUri, ...parseKeys(selectorKeys).map((key) => `${stateUri}/${key}`)];
     return subscribe(() => {
       for (const uri of uris) {
         const resource = dynamicRegistry.findResource(uri);
@@ -113,7 +113,7 @@ export function useStoreResource(options: StoreResourceOptions): void {
 
   // Action tools
   useEffect(() => {
-    const cleanups = splitKeys(actionKeys).map((key) => {
+    const cleanups = parseKeys(actionKeys).map((key) => {
       const execute = async (args: Record<string, unknown>): Promise<CallToolResult> => {
         const action = actionsRef.current?.[key];
         if (!action) {

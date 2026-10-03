@@ -60,3 +60,52 @@ describe('callerTokenRefusal', () => {
     expect(callerTokenRefusal(jwtWith({ resource: BASE_URL }), 'not a url')).toMatch(/was not issued for/);
   });
 });
+
+describe('callerTokenRefusal for the URL a request goes to', () => {
+  const token = jwtWith({ resource: BASE_URL });
+
+  it.each([
+    ['an operation path', 'https://api.acme.com/v1/invoices/42'],
+    ['an encoded slash inside a segment', 'https://api.acme.com/v1/files/a%2Fb'],
+    ['a "." segment', 'https://api.acme.com/v1/./me'],
+    ['dots inside a segment', 'https://api.acme.com/v1/inv...1/me'],
+    ['".." in the query only', 'https://api.acme.com/v1/search?path=../../admin'],
+  ])('allows %s under the resource', (_case, url) => {
+    expect(callerTokenRefusal(token, url)).toBeUndefined();
+  });
+
+  it.each([
+    ['a ".." segment', 'https://api.acme.com/v1/../admin'],
+    ['a "%2e%2e" segment', 'https://api.acme.com/v1/%2e%2e/admin'],
+    ['a ".%2E" segment', 'https://api.acme.com/v1/.%2E/admin'],
+    ['a backslash-separated ".." segment', 'https://api.acme.com/v1\\..\\admin'],
+  ])('refuses a URL whose %s resolves above the resource', (_case, url) => {
+    expect(callerTokenRefusal(token, url)).toMatch(/was not issued for https:\/\/api\.acme\.com\/admin /);
+  });
+
+  it.each([
+    ['an encoded slash', 'https://api.acme.com/v1/..%2F..%2Fadmin'],
+    ['an encoded backslash', 'https://api.acme.com/v1/..%5C..%5Cadmin'],
+    ['double encoding', 'https://api.acme.com/v1/%252e%252e/%252E%252E/admin'],
+    ['a path parameter', 'https://api.acme.com/v1/..;x/admin'],
+    ['an encoded path parameter', 'https://api.acme.com/v1/..%3B/admin'],
+  ])('refuses a ".." segment hidden by %s', (_case, url) => {
+    expect(callerTokenRefusal(token, url)).toMatch(/has a "\.\." segment once percent-decoded/);
+  });
+
+  it.each([
+    ['another host', 'https://evil.example.com/v1/me'],
+    ['a host that extends the API host', 'https://api.acme.com.evil.example/v1/me'],
+    ['another port', 'https://api.acme.com:8443/v1/me'],
+    ['another scheme', 'http://api.acme.com/v1/me'],
+    ['a sibling path', 'https://api.acme.com/v10/me'],
+  ])('refuses %s', (_case, url) => {
+    expect(callerTokenRefusal(token, url)).toMatch(/was not issued for/);
+  });
+
+  it('names the resolved URL, without its query, in the refusal', () => {
+    expect(callerTokenRefusal(token, 'https://api.acme.com/v1/../admin?key=secret')).toBe(
+      'the caller token was not issued for https://api.acme.com/admin (no resource or aud claim names it)',
+    );
+  });
+});

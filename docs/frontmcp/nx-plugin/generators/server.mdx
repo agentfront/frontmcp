@@ -102,23 +102,23 @@ export default class Server {}
 
 The project is named `server-<name>`.
 
-| Target      | Executor              | Description                                              |
-| ----------- | --------------------- | -------------------------------------------------------- |
-| `build`     | `@frontmcp/nx:build`  | Compile with deployment adapter (`--target <platform>`)  |
-| `dev`       | `@frontmcp/nx:dev`    | Run the composed apps with `frontmcp dev`                |
-| `typecheck` | `nx:run-commands`     | `tsc --noEmit -p tsconfig.lib.json`                      |
-| `deploy`    | `@frontmcp/nx:deploy` | Deploy to target platform                                |
+| Target      | Executor              | Description                                             |
+| ----------- | --------------------- | ------------------------------------------------------- |
+| `build`     | `@frontmcp/nx:build`  | Compile with deployment adapter (`--target <platform>`) |
+| `dev`       | `@frontmcp/nx:dev`    | Run the composed apps with `frontmcp dev`               |
+| `typecheck` | `nx:run-commands`     | `tsc --noEmit -p tsconfig.lib.json`                     |
+| `deploy`    | `@frontmcp/nx:deploy` | Deploy to target platform                               |
 
 ## Build Output
 
 `nx build server-<name>` runs `frontmcp build --target <platform>` with `--out-dir servers/<name>/dist`, and the generated deployment files point at what it writes:
 
-| Target       | Build writes                                                     | Referenced by                                                                                     |
-| ------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `node`       | `dist/node/server-<name>.bundle.js`                              | `Dockerfile`: `CMD ["node", "dist/node/server-<name>.bundle.js"]`                                 |
-| `vercel`     | `dist/vercel/handler.cjs` and `.vercel/output/` (Build Output API) | `vercel.json`: `buildCommand` runs `nx build server-<name>` from the workspace root                |
-| `lambda`     | `dist/lambda/handler.cjs`, exporting `handler`                   | `template.yaml`: `CodeUri: dist/lambda/`, `Handler: handler.handler`                              |
-| `cloudflare` | `dist/cloudflare/index.js`                                       | `wrangler.toml`: `main = "dist/cloudflare/index.js"` (the build keeps it in sync)                 |
+| Target       | Build writes                                                       | Referenced by                                                                       |
+| ------------ | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `node`       | `dist/node/server-<name>.bundle.js`                                | `Dockerfile`: `CMD ["node", "dist/node/server-<name>.bundle.js"]`                   |
+| `vercel`     | `dist/vercel/handler.cjs` and `.vercel/output/` (Build Output API) | `vercel.json`: `buildCommand` runs `nx build server-<name>` from the workspace root |
+| `lambda`     | `dist/lambda/handler.cjs`, exporting `handler`                     | `template.yaml`: `CodeUri: dist/lambda/`, `Handler: handler.handler`                |
+| `cloudflare` | `dist/cloudflare/index.js`                                         | `wrangler.toml`: `main = "dist/cloudflare/index.js"` (the build keeps it in sync)   |
 
 <AccordionGroup>
   <Accordion title="Node.js (Docker)">
@@ -130,6 +130,7 @@ The project is named `server-<name>`.
     # or
     docker compose -f servers/production/docker-compose.yml up --build
     ```
+
   </Accordion>
   <Accordion title="Vercel">
     Set the Vercel project's **Root Directory** to `servers/<name>`. `vercel.json` installs and builds from the workspace root with your package manager (`cd ../../ && npm install`, `cd ../../ && npx nx build server-<name>`), and the build writes `.vercel/output` into the server folder, where Vercel picks it up. The `build` target lists `.vercel/output` in its outputs, so an Nx cache hit restores it too.

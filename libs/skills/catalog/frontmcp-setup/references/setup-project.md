@@ -414,7 +414,8 @@ checker — and the command returns once the port is free.
 
 `frontmcp init` edits `tsconfig.json` in place, keeping comments and trailing
 commas; a file that is not valid JSON(C) is reported (line and column) and left
-untouched, never overwritten.
+untouched, never overwritten. So is one that declares an option `init` must set
+more than once — only the last occurrence takes effect, so remove the duplicate.
 
 Test with curl:
 

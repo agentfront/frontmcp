@@ -78,16 +78,17 @@ describe('DynamicRegistry', () => {
       expect(registry.getTools()).toHaveLength(1);
     });
 
-    it('only notifies on first registration of a name (ref counting)', () => {
+    it('notifies when a second registration of a name replaces its definition', () => {
       const listener = jest.fn();
       registry.subscribe(listener);
 
       registry.registerTool(createToolDef({ name: 'rc' }));
       expect(listener).toHaveBeenCalledTimes(1);
 
-      // Second registration of the same name should NOT notify
+      // The server registration mirrors the definition, so a replacement must be observable
       registry.registerTool(createToolDef({ name: 'rc', description: 'updated' }));
-      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledTimes(2);
+      expect(registry.findTool('rc')?.description).toBe('updated');
     });
 
     it('cleanup is idempotent — calling twice does not double-decrement ref count', () => {

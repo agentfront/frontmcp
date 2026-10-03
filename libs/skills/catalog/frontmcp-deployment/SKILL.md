@@ -91,7 +91,7 @@ Beyond `frontmcp build`, the CLI provides commands for the full deployment lifec
 | `frontmcp configure <name>`  | Re-run setup questionnaire for installed app                                                                                                                                                                                                                                                   |
 | `frontmcp doctor`            | Check Node.js/npm versions and tsconfig requirements                                                                                                                                                                                                                                           |
 | `frontmcp inspector`         | Launch MCP Inspector for debugging                                                                                                                                                                                                                                                             |
-| `frontmcp init`              | Create or fix tsconfig.json for FrontMCP (edits in place, keeps comments; never overwrites a file it cannot parse)                                                                                                                                                                             |
+| `frontmcp init`              | Create or fix tsconfig.json for FrontMCP (edits in place, keeps comments; never overwrites a file it cannot parse or that declares a required option twice)                                                                                                                                    |
 
 ## Target Comparison
 
