@@ -1,4 +1,5 @@
-import type { DirectMcpServer, DirectClient } from '@frontmcp/sdk';
+import type { DirectClient, DirectMcpServer } from '@frontmcp/sdk';
+
 import { ServerRegistry } from '../ServerRegistry';
 
 function createMockClient(): DirectClient {
@@ -422,6 +423,145 @@ describe('ServerRegistry', () => {
       await registry.connect('x');
       // at least 2 increments: connecting + connected
       expect(registry.getVersion()).toBeGreaterThanOrEqual(v0 + 2);
+    });
+  });
+
+  describe('watchToolList', () => {
+    type Notification = { method: string; params?: unknown };
+
+    /** A client whose notifications the spec sends, and whose listings the spec answers. */
+    function watchableClient() {
+      let handler: ((notification: Notification) => void) | undefined;
+      const stop = jest.fn();
+      const pending: Array<(tools: unknown) => void> = [];
+      const client = {
+        ...createMockClient(),
+        listTools: jest.fn(() => new Promise((resolve) => pending.push(resolve))),
+        onNotification: jest.fn((h: (notification: Notification) => void) => {
+          handler = h;
+          return stop;
+        }),
+      } as unknown as DirectClient;
+      return {
+        client,
+        stop,
+        notify: (method: string) => handler?.({ method }),
+        answer: (index: number, tools: unknown) => pending[index]?.(tools),
+        listings: () => pending.length,
+      };
+    }
+
+    async function flush() {
+      for (let i = 0; i < 3; i++) await Promise.resolve();
+    }
+
+    function connectedEntry(name: string, client: DirectClient) {
+      registry.register(name, createMockServer(client));
+      registry.update(name, { client, status: 'connected' });
+    }
+
+    it('lists once when the watch starts, and again on each tools/list_changed', async () => {
+      const watched = watchableClient();
+      connectedEntry('srv', watched.client);
+
+      registry.watchToolList('srv', watched.client);
+      watched.answer(0, [{ name: 'first' }]);
+      await flush();
+      watched.notify('notifications/tools/list_changed');
+      watched.answer(1, [{ name: 'first' }, { name: 'second' }]);
+      await flush();
+
+      expect(registry.get('srv')?.tools).toEqual([{ name: 'first' }, { name: 'second' }]);
+    });
+
+    it('ignores other notifications', () => {
+      const watched = watchableClient();
+      connectedEntry('srv', watched.client);
+      registry.watchToolList('srv', watched.client);
+
+      watched.notify('notifications/resources/list_changed');
+
+      expect(watched.listings()).toBe(1);
+    });
+
+    it('applies only the newest listing when answers arrive out of order', async () => {
+      const watched = watchableClient();
+      connectedEntry('srv', watched.client);
+      registry.watchToolList('srv', watched.client);
+      watched.notify('notifications/tools/list_changed');
+
+      watched.answer(1, [{ name: 'newest' }]);
+      await flush();
+      watched.answer(0, [{ name: 'stale' }]);
+      await flush();
+
+      expect(registry.get('srv')?.tools).toEqual([{ name: 'newest' }]);
+    });
+
+    it('ignores a listing once the entry has another client', async () => {
+      const watched = watchableClient();
+      connectedEntry('srv', watched.client);
+      registry.watchToolList('srv', watched.client);
+
+      registry.update('srv', { client: createMockClient() });
+      watched.answer(0, [{ name: 'from old client' }]);
+      await flush();
+
+      expect(registry.get('srv')?.tools).toEqual([]);
+    });
+
+    it('survives a failed listing', async () => {
+      const watched = watchableClient();
+      (watched.client.listTools as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+      connectedEntry('srv', watched.client);
+
+      registry.watchToolList('srv', watched.client);
+      await flush();
+
+      expect(registry.get('srv')?.tools).toEqual([]);
+    });
+
+    it('does nothing for a client without notifications', () => {
+      const client = createMockClient();
+      connectedEntry('srv', client);
+
+      registry.watchToolList('srv', client);
+
+      expect(client.listTools).not.toHaveBeenCalled();
+    });
+
+    it('stops watching on unregister, on re-register, on a new watch and on clear', () => {
+      const first = watchableClient();
+      registry.register('a', createMockServer());
+      registry.watchToolList('a', first.client);
+      registry.unregister('a');
+      expect(first.stop).toHaveBeenCalledTimes(1);
+
+      const second = watchableClient();
+      registry.register('b', createMockServer());
+      registry.watchToolList('b', second.client);
+      registry.register('b', createMockServer());
+      expect(second.stop).toHaveBeenCalledTimes(1);
+
+      const third = watchableClient();
+      const fourth = watchableClient();
+      registry.register('c', createMockServer());
+      registry.watchToolList('c', third.client);
+      registry.watchToolList('c', fourth.client);
+      expect(third.stop).toHaveBeenCalledTimes(1);
+
+      registry.clear();
+      expect(fourth.stop).toHaveBeenCalledTimes(1);
+    });
+
+    it('starts when connect() connects the server', async () => {
+      const watched = watchableClient();
+      (watched.client.listTools as jest.Mock).mockResolvedValue([{ name: 'listed' }]);
+      registry.register('srv', createMockServer(watched.client));
+
+      await registry.connect('srv');
+
+      expect(watched.client.onNotification).toHaveBeenCalledTimes(1);
     });
   });
 });

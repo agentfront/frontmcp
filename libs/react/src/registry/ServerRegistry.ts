@@ -28,9 +28,11 @@ export interface ServerEntry {
 export class ServerRegistry {
   private entries = new Map<string, ServerEntry>();
   private listeners = new Set<Listener>();
+  private toolListWatches = new Map<string, () => void>();
   private version = 0;
 
   register(name: string, server: DirectMcpServer): void {
+    this.stopToolListWatch(name);
     this.entries.set(name, {
       server,
       client: null,
@@ -45,6 +47,7 @@ export class ServerRegistry {
   }
 
   unregister(name: string): void {
+    this.stopToolListWatch(name);
     this.entries.delete(name);
     this.notify();
   }
@@ -91,6 +94,7 @@ export class ServerRegistry {
       };
       this.entries.set(name, connected);
       this.notify();
+      this.watchToolList(name, client);
       return client;
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -104,6 +108,36 @@ export class ServerRegistry {
     await Promise.all(this.list().map((name) => this.connect(name)));
   }
 
+  /**
+   * Keep `name`'s tool list current: re-list through `client` now, and whenever the server
+   * announces `notifications/tools/list_changed` (a dynamic tool registered or removed, say). The
+   * first listing catches a change made before the watch began. Only the newest listing is applied,
+   * and only while `client` is still the entry's client.
+   */
+  watchToolList(name: string, client: DirectClient): void {
+    this.stopToolListWatch(name);
+    if (typeof client.onNotification !== 'function') return;
+    let latest = 0;
+    const relist = () => {
+      const listing = ++latest;
+      client
+        .listTools()
+        .then((tools) => {
+          const entry = this.entries.get(name);
+          if (listing !== latest || !entry || entry.client !== client) return;
+          this.update(name, { tools: tools as ToolInfo[] });
+        })
+        .catch(() => {
+          // Non-critical — the next change re-lists
+        });
+    };
+    const stop = client.onNotification((notification) => {
+      if (notification.method === 'notifications/tools/list_changed') relist();
+    });
+    this.toolListWatches.set(name, stop);
+    relist();
+  }
+
   update(name: string, partial: Partial<ServerEntry>): void {
     const entry = this.entries.get(name);
     if (entry) {
@@ -113,6 +147,7 @@ export class ServerRegistry {
   }
 
   clear(): void {
+    for (const name of [...this.toolListWatches.keys()]) this.stopToolListWatch(name);
     this.entries.clear();
     this.notify();
   }
@@ -126,6 +161,13 @@ export class ServerRegistry {
 
   getVersion(): number {
     return this.version;
+  }
+
+  private stopToolListWatch(name: string): void {
+    const stop = this.toolListWatches.get(name);
+    if (!stop) return;
+    this.toolListWatches.delete(name);
+    stop();
   }
 
   private notify(): void {

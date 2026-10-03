@@ -3,7 +3,15 @@
  */
 
 import type React from 'react';
-import type { DirectMcpServer, DirectClient, CallToolResult, ReadResourceResult } from '@frontmcp/sdk';
+
+import type {
+  CallToolResult,
+  DirectClient,
+  DirectMcpServer,
+  ReadResourceResult,
+  RuntimeToolDefinition,
+} from '@frontmcp/sdk';
+
 import type { ComponentRegistry } from './components/ComponentRegistry';
 import type { DynamicRegistry } from './registry/DynamicRegistry';
 
@@ -64,6 +72,15 @@ export interface DynamicToolDef {
   description: string;
   inputSchema: Record<string, unknown>;
   execute: (args: Record<string, unknown>) => Promise<CallToolResult>;
+  /** MCP behavioral hints (`readOnlyHint`, `destructiveHint`, ...). */
+  annotations?: RuntimeToolDefinition['annotations'];
+  /** Where the tool is offered, e.g. `{ surface: ['webmcp'] }` for in-browser agents only. */
+  availableWhen?: RuntimeToolDefinition['availableWhen'];
+  /**
+   * Id of the server app the tool joins (its plugins' hooks apply to the tool). Needed only for a
+   * server with more than one local app; defaults to the provider's `dynamicToolApps` entry.
+   */
+  app?: RuntimeToolDefinition['app'];
 }
 
 export interface DynamicResourceDef {

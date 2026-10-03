@@ -213,7 +213,7 @@ This is the shared foundation for all other hooks. You typically don't need to u
 
 ## useDynamicTool
 
-Register an MCP tool on mount, unregister on unmount. See [Dynamic Tools](/frontmcp/react/dynamic-tools) for full details.
+Register an MCP tool on mount, unregister on unmount. The provider registers it with the server as a real tool, so it runs through the server's flows (plugin hooks, authorities, `availableWhen`) and every client — WebMCP included — sees it. See [Dynamic Tools](/frontmcp/react/dynamic-tools) for full details.
 
 Supports both **zod schemas** (recommended) and raw **JSON Schema** (backward compat).
 
@@ -257,15 +257,20 @@ useDynamicTool({
 
 ### Options
 
-| Option        | Type                                | Default | Description                                        |
-| ------------- | ----------------------------------- | ------- | -------------------------------------------------- |
-| `name`        | `string`                            | —       | **Required.** Tool name                            |
-| `description` | `string`                            | —       | **Required.** Description for agents               |
-| `schema`      | `z.ZodObject`                       | —       | Zod schema (mutually exclusive with `inputSchema`) |
-| `inputSchema` | `Record<string, unknown>`           | —       | JSON Schema (mutually exclusive with `schema`)     |
-| `execute`     | `(args) => Promise<CallToolResult>` | —       | **Required.** Handler                              |
-| `enabled`     | `boolean`                           | `true`  | Conditionally enable/disable                       |
-| `server`      | `string`                            | —       | Target a named server                              |
+| Option          | Type                                | Default | Description                                               |
+| --------------- | ----------------------------------- | ------- | --------------------------------------------------------- |
+| `name`          | `string`                            | —       | **Required.** Tool name                                   |
+| `description`   | `string`                            | —       | **Required.** Description for agents                      |
+| `schema`        | `z.ZodObject`                       | —       | Zod schema (mutually exclusive with `inputSchema`)        |
+| `inputSchema`   | `Record<string, unknown>`           | —       | JSON Schema (mutually exclusive with `schema`)            |
+| `execute`       | `(args) => Promise<CallToolResult>` | —       | **Required.** Handler                                     |
+| `enabled`       | `boolean`                           | `true`  | Conditionally enable/disable                              |
+| `server`        | `string`                            | —       | Target a named server                                     |
+| `annotations`   | `ToolAnnotations`                   | —       | MCP hints, e.g. `{ readOnlyHint: true }`                  |
+| `availableWhen` | `EntryAvailability`                 | —       | Where the tool is offered, e.g. `{ surface: ['webmcp'] }` |
+| `app`           | `string`                            | —       | Server app the tool joins (servers with several apps)     |
+
+A name a server tool already has is refused: the provider reports it through `onError` (or `console.warn`). On a server with several apps, name the app per tool with `app` or per server with the provider's `dynamicToolApps`.
 
 ---
 
