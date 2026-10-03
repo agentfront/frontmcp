@@ -5,10 +5,17 @@
  * and builds a JSON Schema for the input from parameters and requestBody.
  */
 
-import type { ApiOperation, ApiParameter, ApiParameterLocation } from './api.types';
+import type { ApiOperation, ApiParameter, ApiParameterLocation, ApiParameterStyle } from './api.types';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head'] as const;
 const PARAMETER_LOCATIONS: readonly string[] = ['path', 'query', 'header', 'cookie'] satisfies ApiParameterLocation[];
+const PARAMETER_STYLES: readonly unknown[] = [
+  'form',
+  'spaceDelimited',
+  'pipeDelimited',
+  'deepObject',
+  'simple',
+] satisfies ApiParameterStyle[];
 
 interface OpenApiParameter {
   name: string;
@@ -16,6 +23,16 @@ interface OpenApiParameter {
   required?: boolean;
   description?: string;
   schema?: Record<string, unknown>;
+  style?: unknown;
+  explode?: unknown;
+}
+
+/** Where the request carries a spec parameter, with the serialization `style` and `explode` it declares. */
+function toApiParameter(param: OpenApiParameter): ApiParameter {
+  const parameter: ApiParameter = { name: param.name, in: param.in as ApiParameterLocation };
+  if (PARAMETER_STYLES.includes(param.style)) parameter.style = param.style as ApiParameterStyle;
+  if (typeof param.explode === 'boolean') parameter.explode = param.explode;
+  return parameter;
 }
 
 export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] {
@@ -89,9 +106,7 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
           description: param.description,
         };
         if (param.required) required.push(param.name);
-        if (PARAMETER_LOCATIONS.includes(param.in)) {
-          parameters.push({ name: param.name, in: param.in as ApiParameterLocation });
-        }
+        if (PARAMETER_LOCATIONS.includes(param.in)) parameters.push(toApiParameter(param));
       }
 
       // Request body

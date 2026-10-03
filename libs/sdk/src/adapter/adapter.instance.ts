@@ -154,9 +154,16 @@ export class AdapterInstance extends AdapterEntry {
     const adapter = this.servedAdapter;
     if (!adapter) return;
     this.servedAdapter = undefined;
-    this.unsubscribeUpdate?.();
+    const unsubscribeUpdate = this.unsubscribeUpdate;
     this.unsubscribeUpdate = undefined;
+    try {
+      unsubscribeUpdate?.();
+    } finally {
+      this.releaseServing(adapter);
+    }
+  }
 
+  private releaseServing(adapter: AdapterInterface): void {
     const remaining = (adapterServings.get(adapter) ?? 1) - 1;
     if (remaining > 0) {
       adapterServings.set(adapter, remaining);

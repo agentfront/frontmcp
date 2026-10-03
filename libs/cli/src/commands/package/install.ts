@@ -116,7 +116,8 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
     }
 
     // 5. Install runtime packages (externalized from the bundle) and native addons
-    const packagesToInstall = [...resolveRuntimePackageSpecs(packageDir), ...manifestData.dependencies.nativeAddons];
+    const runtimePackages = resolveRuntimePackageSpecs(packageDir);
+    const packagesToInstall = [...runtimePackages.required, ...manifestData.dependencies.nativeAddons];
     console.log(`${c('cyan', '[install]')} installing runtime dependencies...`);
     if (!fs.existsSync(path.join(installDir, 'package.json'))) {
       await runCmd('npm', ['init', '-y', '--silent'], { cwd: installDir });
@@ -124,6 +125,7 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
     await runCmd('npm', ['install', ...packagesToInstall, '--save', '--silent'], {
       cwd: installDir,
     });
+    await installOptionalPackages(runtimePackages.optional, installDir);
 
     // 6. Set up SQLite data dir if needed
     if (manifestData.storage.type === 'sqlite') {
@@ -167,6 +169,18 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch {
       // ignore cleanup errors
+    }
+  }
+}
+
+/** Like npm's `optionalDependencies`: each is saved as optional, and one that fails to install is skipped. */
+async function installOptionalPackages(specs: string[], installDir: string): Promise<void> {
+  for (const spec of specs) {
+    try {
+      await runCmd('npm', ['install', spec, '--save-optional', '--silent'], { cwd: installDir });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn(`${c('yellow', '[install]')} skipped optional dependency ${spec}: ${reason}`);
     }
   }
 }

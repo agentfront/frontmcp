@@ -44,6 +44,8 @@ class LookupInvoiceTool extends ToolContext {
   name: 'billing_agent',
   description: 'Handles billing and payment inquiries',
   llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
+  // The arguments of its invoke_billing_agent tool: an agent without an inputSchema receives {}.
+  inputSchema: { request: z.string().describe('The billing request') },
   tools: [LookupInvoiceTool],
   // isVisible defaults to true; specialists do not need swarm config to be callable.
   swarm: { isVisible: true },
@@ -53,13 +55,14 @@ class BillingAgent extends AgentContext {}
 
 ```typescript
 // src/apps/support/agents/technical.agent.ts
-import { Agent, AgentContext } from '@frontmcp/sdk';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
 
 @Agent({
   id: 'technical_agent',
   name: 'technical_agent',
   description: 'Handles technical support issues',
   llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
+  inputSchema: { request: z.string().describe('The technical issue') },
   systemInstructions: 'You are a technical support specialist. Diagnose issues and provide solutions.',
   swarm: { isVisible: true },
 })
@@ -78,6 +81,9 @@ import { Agent, AgentContext, z } from '@frontmcp/sdk';
   llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
   inputSchema: { request: z.string() },
   outputSchema: { urgency: z.enum(['low', 'high']) },
+  // The model's reply is parsed as the output: ask for JSON that matches outputSchema.
+  systemInstructions:
+    'Rate how urgent the request is. Reply only with JSON: {"urgency": "low"} or {"urgency": "high"}.',
 })
 export class SentimentAgent extends AgentContext {}
 ```
