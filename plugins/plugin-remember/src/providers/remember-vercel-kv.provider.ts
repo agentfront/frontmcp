@@ -14,7 +14,7 @@ interface VercelKvClient {
   del(key: string): Promise<void>;
   exists(key: string): Promise<number>;
   keys(pattern: string): Promise<string[]>;
-  scan(cursor: number, options?: { match?: string; count?: number }): Promise<[number, string[]]>;
+  scan(cursor: string | number, options?: { match?: string; count?: number }): Promise<[string | number, string[]]>;
 }
 
 interface VercelKvModule {
@@ -164,7 +164,7 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
 
     try {
       // Try using scan if available (Upstash Redis API)
-      let cursor = 0;
+      let cursor: string | number = 0;
       do {
         const [nextCursor, keys] = await this.kv.scan(cursor, {
           match: searchPattern,
@@ -176,7 +176,7 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
         for (const key of keys) {
           result.push(key.slice(this.keyPrefix.length));
         }
-      } while (cursor !== 0);
+      } while (String(cursor) !== '0');
     } catch {
       // Fallback to keys command if scan not available
       try {

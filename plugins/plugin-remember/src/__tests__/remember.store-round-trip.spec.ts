@@ -36,8 +36,8 @@ class RawTextServer {
     return [...this.entries.keys()];
   }
 
-  async scan(): Promise<[number, string[]]> {
-    return [0, [...this.entries.keys()]];
+  async scan(): Promise<[string, string[]]> {
+    return ['0', [...this.entries.keys()]];
   }
 
   rewriteAsUnencodedText(): void {
@@ -152,6 +152,14 @@ describe('remember stores keep a stored value intact', () => {
       await store.setValue('json', jsonLookingText);
 
       expect(await store.getValue('json')).toBe(jsonLookingText);
+    });
+
+    it('lists keys once when the scan cursor comes back as the string "0", as Upstash returns it', async () => {
+      const store = new RememberVercelKvProvider({ url: 'https://kv.example.com', token: 'token' });
+      await store.setValue('first', 1);
+      await store.setValue('second', 2);
+
+      expect((await store.keys()).sort()).toEqual(['first', 'second']);
     });
 
     it.each([false, true])('lets remember read back what it wrote (encryption %p)', async (encrypted) => {
