@@ -367,7 +367,7 @@ export default class PluginRegistry
       case PluginKind.FACTORY: {
         const args: unknown[] = [];
         for (const d of rec.inject()) args.push(await this.providers.resolveBootstrapDep(d));
-        const produced: unknown = rec.useFactory(...args);
+        const produced: unknown = await rec.useFactory(...args);
         // DynamicPlugin.init({ useFactory }) factories return options; a hand-written factory may return the instance.
         if (isDynamicPluginClass(rec.provide) && !(produced instanceof rec.provide)) {
           const optionDerived = collectDynamicProviders(rec.provide, produced);
