@@ -13,11 +13,11 @@ import { BaseStorageAdapter } from './base';
 
 // Type for @vercel/kv client
 type VercelKvClient = {
-  get: <T = string>(key: string) => Promise<T | null>;
+  get: (key: string) => Promise<string | null>;
   set: (key: string, value: string, options?: { ex?: number; nx?: boolean; xx?: boolean }) => Promise<string | null>;
   del: (...keys: string[]) => Promise<number>;
   exists: (...keys: string[]) => Promise<number>;
-  mget: <T = string>(...keys: string[]) => Promise<(T | null)[]>;
+  mget: (...keys: string[]) => Promise<(string | null)[]>;
   expire: (key: string, seconds: number) => Promise<number>;
   ttl: (key: string) => Promise<number>;
   incr: (key: string) => Promise<number>;
@@ -30,7 +30,12 @@ type VercelKvClient = {
 
 /** The part of `@vercel/kv` the adapter uses. */
 interface VercelKvModule {
-  createClient: (config: { url: string; token: string; cache?: undefined }) => VercelKvClient;
+  createClient: (config: {
+    url: string;
+    token: string;
+    cache?: undefined;
+    automaticDeserialization: boolean;
+  }) => VercelKvClient;
 }
 
 /**
@@ -126,7 +131,8 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
       // mode unset instead — the value `@vercel/kv` itself calls equivalent.
       // The module's `kv` singleton cannot take this option, so even an
       // env-configured adapter builds its own client from the same URL and token.
-      this.client = createClient({ url, token, cache: undefined });
+      // Read values back exactly as stored; @upstash/redis would otherwise JSON-parse them.
+      this.client = createClient({ url, token, cache: undefined, automaticDeserialization: false });
 
       // Test connection with a simple operation
       await this.client.exists('__healthcheck__');
@@ -176,8 +182,7 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   async get(key: string): Promise<string | null> {
-    const result = await this.getConnectedClient().get<string>(this.prefixKey(key));
-    return result;
+    return this.getConnectedClient().get(this.prefixKey(key));
   }
 
   protected async doSet(key: string, value: string, options?: SetOptions): Promise<void> {
@@ -223,7 +228,7 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
   override async mget(keys: string[]): Promise<(string | null)[]> {
     if (keys.length === 0) return [];
     const prefixedKeys = keys.map((k) => this.prefixKey(k));
-    return this.getConnectedClient().mget<string>(...prefixedKeys);
+    return this.getConnectedClient().mget(...prefixedKeys);
   }
 
   override async mdelete(keys: string[]): Promise<number> {

@@ -13,11 +13,11 @@ import { BaseStorageAdapter } from './base';
 
 // Type for @upstash/redis client
 type UpstashRedis = {
-  get: <T = string>(key: string) => Promise<T | null>;
+  get: (key: string) => Promise<string | null>;
   set: (key: string, value: string, options?: { ex?: number; nx?: boolean; xx?: boolean }) => Promise<string | null>;
   del: (...keys: string[]) => Promise<number>;
   exists: (...keys: string[]) => Promise<number>;
-  mget: <T = string>(...keys: string[]) => Promise<(T | null)[]>;
+  mget: (...keys: string[]) => Promise<(string | null)[]>;
   expire: (key: string, seconds: number) => Promise<number>;
   ttl: (key: string) => Promise<number>;
   incr: (key: string) => Promise<number>;
@@ -34,7 +34,9 @@ type UpstashRedis = {
 /**
  * Lazy-load @upstash/redis to avoid bundling when not used.
  */
-function getUpstashRedis(): { Redis: new (config: { url: string; token: string }) => UpstashRedis } {
+function getUpstashRedis(): {
+  Redis: new (config: { url: string; token: string; automaticDeserialization: boolean }) => UpstashRedis;
+} {
   try {
     return require('@upstash/redis');
   } catch {
@@ -121,7 +123,8 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
       if (!url || !token) {
         throw new StorageConfigError('upstash', 'URL and token are required');
       }
-      this.client = new Redis({ url, token });
+      // Read values back exactly as stored; @upstash/redis would otherwise JSON-parse them.
+      this.client = new Redis({ url, token, automaticDeserialization: false });
 
       // Test connection
       await this.client.exists('__healthcheck__');
@@ -179,8 +182,7 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   async get(key: string): Promise<string | null> {
-    const result = await this.getConnectedClient().get<string>(this.prefixKey(key));
-    return result;
+    return this.getConnectedClient().get(this.prefixKey(key));
   }
 
   protected async doSet(key: string, value: string, options?: SetOptions): Promise<void> {
@@ -226,7 +228,7 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
   override async mget(keys: string[]): Promise<(string | null)[]> {
     if (keys.length === 0) return [];
     const prefixedKeys = keys.map((k) => this.prefixKey(k));
-    return this.getConnectedClient().mget<string>(...prefixedKeys);
+    return this.getConnectedClient().mget(...prefixedKeys);
   }
 
   override async mdelete(keys: string[]): Promise<number> {

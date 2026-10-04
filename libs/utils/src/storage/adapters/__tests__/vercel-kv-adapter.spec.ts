@@ -127,6 +127,14 @@ describe('VercelKvStorageAdapter', () => {
       expect(config['cache']).toBeUndefined();
     });
 
+    it('should create the client without automatic JSON deserialization (#716)', async () => {
+      const adapter = new VercelKvStorageAdapter({ url: 'https://example.vercel.storage', token: 'token123' });
+
+      await adapter.connect();
+
+      expect(mockCreateClient).toHaveBeenCalledWith(expect.objectContaining({ automaticDeserialization: false }));
+    });
+
     it('should connect using createClient when URL differs from env', async () => {
       process.env['KV_REST_API_URL'] = 'https://env.vercel.storage';
       process.env['KV_REST_API_TOKEN'] = 'env-token';
@@ -146,6 +154,7 @@ describe('VercelKvStorageAdapter', () => {
       expect(mockCreateClient).toHaveBeenCalledWith({
         url: 'https://custom.vercel.storage',
         token: 'custom-token',
+        automaticDeserialization: false,
       });
     });
 

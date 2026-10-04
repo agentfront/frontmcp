@@ -4,8 +4,8 @@
  * Comprehensive tests for UpstashStorageAdapter with mocked @upstash/redis.
  */
 
-import { UpstashStorageAdapter } from '../upstash';
 import { StorageConfigError, StorageConnectionError } from '../../errors';
+import { UpstashStorageAdapter } from '../upstash';
 
 // Mock Upstash Redis client
 const createMockUpstashClient = () => ({
@@ -141,6 +141,21 @@ describe('UpstashStorageAdapter', () => {
 
       expect(await adapter.ping()).toBe(true);
       expect(mockUpstashClient.exists).toHaveBeenCalledWith('__healthcheck__');
+    });
+
+    it('should create the client without automatic JSON deserialization (#716)', async () => {
+      const adapter = new UpstashStorageAdapter({
+        url: 'https://example.upstash.io',
+        token: 'token123',
+      });
+
+      await adapter.connect();
+
+      expect(MockUpstashRedis).toHaveBeenCalledWith({
+        url: 'https://example.upstash.io',
+        token: 'token123',
+        automaticDeserialization: false,
+      });
     });
 
     it('should not reconnect if already connected', async () => {
