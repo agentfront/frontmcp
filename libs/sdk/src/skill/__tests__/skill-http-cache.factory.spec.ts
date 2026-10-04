@@ -1,4 +1,6 @@
+import type { ScopeEntry } from '../../common';
 import { createSkillHttpCache } from '../cache/skill-http-cache.factory';
+import { disposeAllCaches, getSkillHttpCache } from '../cache/skill-http-cache.holder';
 
 const mockStoredValues = new Map<string, string>();
 
@@ -64,5 +66,24 @@ describe('createSkillHttpCache with the vercel-kv provider', () => {
 
     expect(type).toBe('memory');
     expect(mockCreateClient).not.toHaveBeenCalled();
+  });
+
+  it("warns through the scope's logger when a scope's configured cache falls back to memory", async () => {
+    delete process.env['KV_REST_API_URL'];
+    const warn = jest.fn();
+    const scope = {
+      metadata: {
+        id: 'kv-fallback-scope',
+        skillsConfig: { cache: { enabled: true, redis: { provider: 'vercel-kv' } } },
+      },
+      logger: { warn, verbose: jest.fn() },
+    } as unknown as ScopeEntry;
+
+    try {
+      await getSkillHttpCache(scope);
+      expect(warn).toHaveBeenCalledWith('Failed to create Redis cache, falling back to memory', expect.any(Object));
+    } finally {
+      await disposeAllCaches();
+    }
   });
 });
