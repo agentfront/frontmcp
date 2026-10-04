@@ -267,7 +267,7 @@ class GlobalStoreServer {}
 
 Every type takes `defaultTTL`, in seconds: an entry stored without its own `ttl` expires that long after it is written.
 Up to 1.9.0 the memory and Redis stores (`global-store` on Redis included) ignored it, so those entries never expired;
-entries written before the upgrade keep no expiry until they are written again.
+entries written before the upgrade keep no expiry until they are written again. It must be a whole number of seconds; `0` means no default expiry, and a negative or fractional value fails startup with `RememberConfigurationError`.
 
 ### Using `this.remember` in Tools
 

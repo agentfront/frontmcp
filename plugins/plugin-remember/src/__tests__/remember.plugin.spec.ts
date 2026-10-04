@@ -5,6 +5,7 @@ import 'reflect-metadata';
 import RememberMemoryProvider from '../providers/remember-memory.provider';
 import RememberRedisProvider from '../providers/remember-redis.provider';
 import RememberVercelKvProvider from '../providers/remember-vercel-kv.provider';
+import { RememberConfigurationError } from '../remember.errors';
 import RememberPlugin from '../remember.plugin';
 import { RememberAccessorToken, RememberConfigToken, RememberStoreToken } from '../remember.symbols';
 
@@ -83,6 +84,25 @@ describe('RememberPlugin', () => {
   });
 
   describe('dynamicProviders', () => {
+    it.each([-60, 1.5, Number.NaN])('refuses a defaultTTL of %p seconds at startup', (defaultTTL) => {
+      expect(() => RememberPlugin.dynamicProviders({ type: 'memory', defaultTTL })).toThrow(RememberConfigurationError);
+    });
+
+    it('accepts a whole number of seconds for defaultTTL', () => {
+      expect(() => RememberPlugin.dynamicProviders({ type: 'memory', defaultTTL: 3600 })).not.toThrow();
+    });
+
+    it('treats a defaultTTL of 0 as no default expiry', async () => {
+      const storeProvider = RememberPlugin.dynamicProviders({ type: 'memory', defaultTTL: 0 }).find(
+        (provider) => provider.name === 'remember:store:memory',
+      ) as { useFactory: () => RememberMemoryProvider };
+      const store = storeProvider.useFactory();
+
+      await expect(store.setValue('key', 'value')).resolves.toBeUndefined();
+      await expect(store.getValue('key')).resolves.toBe('value');
+      await store.close();
+    });
+
     describe('type: memory', () => {
       it('should create memory provider', () => {
         const providers = RememberPlugin.dynamicProviders({ type: 'memory' });
