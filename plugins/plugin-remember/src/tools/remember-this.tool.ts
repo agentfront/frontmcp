@@ -71,19 +71,17 @@ export default class RememberThisTool extends ToolContext {
       throw this.fail(new RememberScopeNotAllowedError(scope, allowedScopes));
     }
 
-    await remember.set(input.key, input.value, {
+    const entry = await remember.set(input.key, input.value, {
       scope,
       ttl: input.ttl,
       brand: input.brand,
     });
 
-    const expiresAt = input.ttl ? Date.now() + input.ttl * 1000 : undefined;
-
     return {
       success: true,
       key: input.key,
       scope,
-      expiresAt,
+      expiresAt: entry.expiresAt,
     };
   }
 }

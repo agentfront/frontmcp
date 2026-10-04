@@ -128,8 +128,9 @@ export class RememberAccessor {
    * @param key - The key to store under
    * @param value - The value to store (any JSON-serializable data)
    * @param options - Storage options (scope, ttl, brand, metadata)
+   * @returns The stored entry, with its `expiresAt` deadline
    */
-  async set<T>(key: string, value: T, options: RememberSetOptions = {}): Promise<void> {
+  async set<T>(key: string, value: T, options: RememberSetOptions = {}): Promise<RememberEntry<T>> {
     const scope = options.scope ?? 'session';
     const storageKey = this.buildStorageKey(key, scope);
     const now = Date.now();
@@ -149,6 +150,7 @@ export class RememberAccessor {
       : JSON.stringify(entry);
 
     await this.store.setValue(storageKey, serialized, ttlSeconds);
+    return entry;
   }
 
   /**

@@ -129,6 +129,13 @@ describe.each<[StoreKind, boolean]>([
     expect((await remember.getEntry('draft'))?.expiresAt).toBe(deadline);
   });
 
+  it('returns the entry it stored from set(), deadline included', async () => {
+    const stored = await remember.set('draft', 'v1', { brand: 'state' });
+
+    expect(stored).toEqual(await remember.getEntry('draft'));
+    expect(stored.expiresAt).toBe(start + DEFAULT_TTL_SECONDS * 1000);
+  });
+
   it('expires at its first deadline when updated without a ttl, not a full defaultTTL later', async () => {
     await remember.set('draft', 'v1');
     now += 59_000;
