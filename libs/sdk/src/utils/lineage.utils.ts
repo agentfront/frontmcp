@@ -7,9 +7,14 @@ import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 /** Owns `@FrontMcp({ tools, resources })` in every scope, so it never shares the id of the app a scope is named after. */
 export const serverEntryOwner: EntryOwnerRef = { kind: 'scope', id: 'server', ref: FrontMcpConfig };
 
-/** Whether an entry is one the server declares (`@FrontMcp({ tools, resources })`) rather than an app's. */
-export function isServerEntryOwner(owner: Pick<EntryOwnerRef, 'kind' | 'id'> | undefined): boolean {
-  return owner?.kind === serverEntryOwner.kind && owner.id === serverEntryOwner.id;
+/**
+ * Whether an entry is one the server declares (`@FrontMcp({ tools, resources })`) rather than an app's.
+ * The ref tells it apart from what a scope named `server` (a split app with that id) owns.
+ */
+export function isServerEntryOwner(owner: Pick<EntryOwnerRef, 'kind' | 'id' | 'ref'> | undefined): boolean {
+  return (
+    owner?.kind === serverEntryOwner.kind && owner.id === serverEntryOwner.id && owner.ref === serverEntryOwner.ref
+  );
 }
 
 /**

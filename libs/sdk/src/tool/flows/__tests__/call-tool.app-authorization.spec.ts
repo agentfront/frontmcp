@@ -128,6 +128,20 @@ describe('call-tool app-level authorization (progressive/incremental)', () => {
     await expect(flow.checkToolAuthorization()).rejects.toBeInstanceOf(AuthorizationRequiredError);
   });
 
+  it("still gates a tool owned by a split app's scope that is named like the server-level owner", async () => {
+    const flow = makeFlow({
+      tool: {
+        name: 'channel-reply',
+        fullName: 'channel-reply',
+        owner: { id: serverEntryOwner.id, kind: 'scope', ref: Symbol('split scope') },
+      },
+      apps: [...APPS, { id: serverEntryOwner.id, name: 'Server' }],
+      incrementalAuth: { enabled: true },
+      authInfo: { extra: { user: { sub: 'u1', authorized_apps: ['notes'] } } },
+    });
+    await expect(flow.checkToolAuthorization()).rejects.toBeInstanceOf(AuthorizationRequiredError);
+  });
+
   it('allows ALL tools when the token carries NO authorized_apps claim (default preserved)', async () => {
     const flow = makeFlow({
       tool: TASKS_TOOL,
