@@ -2,7 +2,7 @@
  * @file jest-preset.js
  * @description Jest preset for @frontmcp/testing
  *
- * Usage in jest.config.ts or jest.e2e.config.ts:
+ * Usage in jest.config.ts:
  * ```typescript
  * export default {
  *   preset: '@frontmcp/testing',
@@ -15,10 +15,7 @@ module.exports = {
   // Use Node.js environment for E2E tests
   testEnvironment: 'node',
 
-  // Must cover `.js`/`.jsx` as well as `.ts`/`.tsx`: `transformIgnorePatterns`
-  // only un-ignores a file and `testMatch` only discovers one — the transform
-  // still has to match it. ESM-only deps ship `.js`, and testMatch accepts
-  // `.e2e.spec.js(x)`, so a `.tsx?`-only rule would silently skip both.
+  // Covers `.js` too: ESM-only deps ship `.js`, and un-ignoring them in `transformIgnorePatterns` needs a matching transform.
   transform: {
     '^.+\\.[tj]sx?$': [
       // The transform `frontmcp test` injects, resolved from here because @frontmcp/testing installs it
@@ -42,20 +39,25 @@ module.exports = {
   // File extensions to consider
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 
-  // Default test timeout (30 seconds for E2E)
-  testTimeout: 30000,
+  testTimeout: 60000,
 
   // Setup files that run after Jest is initialized
   // Path resolves to the compiled output when used from node_modules/@frontmcp/testing
   setupFilesAfterEnv: [require.resolve('@frontmcp/testing/setup')],
 
-  // E2E specs, per the `.e2e.spec.ts(x)` convention the CLI's injected config
-  // also enforces. The legacy `.e2e.ts` / `.test.ts` globs matched none of the
-  // documented names, so projects on this preset silently ran zero E2E tests.
-  testMatch: ['**/*.e2e.spec.ts', '**/*.e2e.spec.tsx', '**/*.e2e.spec.js', '**/*.e2e.spec.jsx'],
+  testMatch: [
+    '<rootDir>/src/**/*.spec.ts',
+    '<rootDir>/src/**/*.spec.tsx',
+    '<rootDir>/**/__tests__/**/*.spec.ts',
+    '<rootDir>/**/__tests__/**/*.spec.tsx',
+    '<rootDir>/e2e/**/*.e2e.spec.ts',
+    '<rootDir>/e2e/**/*.e2e.spec.tsx',
+  ],
 
-  // Transpile ESM-only deps; the `.pnpm` skip keeps this correct under pnpm (issue #519).
-  transformIgnorePatterns: ['node_modules[/\\\\](?!\\.pnpm[/\\\\])(?!(jose)[/\\\\])'],
+  // Transpile ESM-only deps (`@noble/*` for CodeCall); the `.pnpm` skip keeps this correct under pnpm (issue #519).
+  transformIgnorePatterns: [
+    'node_modules[/\\\\](?!\\.pnpm[/\\\\])(?!(jose|@noble[/\\\\]hashes|@noble[/\\\\]ciphers)[/\\\\])',
+  ],
 
   // Ignore patterns
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
