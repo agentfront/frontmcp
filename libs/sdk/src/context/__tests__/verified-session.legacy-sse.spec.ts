@@ -12,6 +12,7 @@ import 'reflect-metadata';
 import * as http from 'node:http';
 import { type AddressInfo } from 'node:net';
 
+import { useMidRateLimitWindow } from '../../__test-utils__/helpers/rate-limit-window.helpers';
 import { App, LogLevel, Tool, ToolContext } from '../../common';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 
@@ -131,6 +132,8 @@ async function openSseSession(): Promise<SseSession> {
 }
 
 describe('a legacy SSE session', () => {
+  useMidRateLimitWindow(60_000);
+
   it('is the verified session of the requests posted to it', async () => {
     const session = await openSseSession();
 
