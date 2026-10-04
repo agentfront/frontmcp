@@ -1,16 +1,23 @@
-import * as os from 'os';
-import * as path from 'path';
-
 import { LogLevel, LogTransport, LogTransportInterface, type LogRecord } from '../../common';
 
-// `fs` is lazy-`require`d (not statically imported) so this module doesn't pull
-// `node:fs` into worker/browser bundles — workerd has no fs module and a static
+// `fs`, `os` and `path` are lazy-`require`d (not statically imported) so this module doesn't pull
+// Node built-ins into worker/browser bundles — workerd has no fs module and a static
 // import would fail the whole bundle at load. File logging is a Node-only
-// feature; on other runtimes `getFs()` throws and every call site below is
+// feature; on other runtimes these loaders throw and every call site below is
 // already wrapped in try/catch and degrades silently.
 let _fs: typeof import('fs') | undefined;
 function getFs(): typeof import('fs') {
   return (_fs ??= require('fs'));
+}
+
+let _os: typeof import('os') | undefined;
+function getOs(): typeof import('os') {
+  return (_os ??= require('os'));
+}
+
+let _path: typeof import('path') | undefined;
+function getPath(): typeof import('path') {
+  return (_path ??= require('path'));
 }
 
 const LOG_LEVEL_LABELS: Record<LogLevel, string> = {
@@ -69,7 +76,7 @@ export class FileLogTransportInstance extends LogTransportInterface {
     this.appName = sanitized.length > 0 ? sanitized : 'frontmcp';
     this.logDir =
       process.env['FRONTMCP_LOG_DIR'] ||
-      path.join(process.env['FRONTMCP_HOME'] || path.join(os.homedir(), '.frontmcp'), 'logs');
+      getPath().join(process.env['FRONTMCP_HOME'] || getPath().join(getOs().homedir(), '.frontmcp'), 'logs');
 
     const logsMax = parseInt(process.env['FRONTMCP_LOGS_MAX'] || '', 10);
     if (logsMax === 0) {
@@ -83,7 +90,7 @@ export class FileLogTransportInstance extends LogTransportInterface {
 
       // npm-style timestamped filename: appName-2026-04-06T12_34_56_789Z.log
       const ts = new Date().toISOString().replace(/:/g, '_');
-      const filePath = path.join(this.logDir, `${this.appName}-${ts}.log`);
+      const filePath = getPath().join(this.logDir, `${this.appName}-${ts}.log`);
       this.fd = getFs().openSync(filePath, 'a');
 
       // Rotate old log files
@@ -136,7 +143,7 @@ export class FileLogTransportInstance extends LogTransportInterface {
 
       for (let i = 0; i < excess; i++) {
         try {
-          getFs().unlinkSync(path.join(this.logDir, files[i]));
+          getFs().unlinkSync(getPath().join(this.logDir, files[i]));
         } catch {
           // Ignore individual file deletion failures
         }
