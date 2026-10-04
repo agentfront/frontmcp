@@ -2,6 +2,8 @@
  * @file jest-preset.js
  * @description Jest preset for @frontmcp/testing
  *
+ * Mirrors the config `frontmcp test` injects (libs/cli/src/commands/dev/test.ts); a CLI test fails when they differ.
+ *
  * Usage in jest.config.ts:
  * ```typescript
  * export default {

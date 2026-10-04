@@ -128,6 +128,8 @@ export function resolveSwcJestTransformer(
  *   - transforms `.tsx`/`.jsx` files with `tsx: true` and the automatic JSX
  *     runtime so React components are usable in tests,
  *   - exposes the helper for unit testing.
+ *
+ * `@frontmcp/testing`'s jest-preset.js mirrors this config; a test in `__tests__/test.spec.ts` fails when they differ.
  */
 export function generateJestConfig(
   cwd: string,
