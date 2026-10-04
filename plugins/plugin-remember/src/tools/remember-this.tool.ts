@@ -13,7 +13,7 @@ export const rememberThisInputSchema = {
   key: z.string().min(1).describe('What to call this memory (e.g., "user_preference", "last_action")'),
   value: z.unknown().describe('The value to remember (any JSON-serializable data)'),
   scope: z.enum(['session', 'user', 'tool', 'global']).optional().describe(REMEMBER_SCOPE_DESCRIPTION),
-  ttl: z.number().positive().optional().describe('Forget after this many seconds'),
+  ttl: z.number().int().positive().optional().describe('Forget after this many whole seconds'),
   brand: z
     .enum(['preference', 'cache', 'state', 'conversation', 'custom'])
     .optional()
