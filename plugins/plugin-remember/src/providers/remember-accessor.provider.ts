@@ -51,6 +51,11 @@ function remainingSeconds(expiresAt: number, now: number): number {
   return Math.max(1, Math.ceil((expiresAt - now) / 1000));
 }
 
+/** The deadline `ttlSeconds` from `now`, or undefined for no (or a zero) TTL. */
+function expiryAfter(ttlSeconds: number | undefined, now: number): number | undefined {
+  return ttlSeconds ? now + ttlSeconds * 1000 : undefined;
+}
+
 /**
  * Context-scoped accessor for remember storage.
  * Provides a human-friendly API for storing and retrieving values.
@@ -118,6 +123,8 @@ export class RememberAccessor {
   /**
    * Store a value in memory.
    *
+   * Without a `ttl`, the plugin's `defaultTTL` applies, and the entry records the deadline either one sets.
+   *
    * @param key - The key to store under
    * @param value - The value to store (any JSON-serializable data)
    * @param options - Storage options (scope, ttl, brand, metadata)
@@ -125,13 +132,15 @@ export class RememberAccessor {
   async set<T>(key: string, value: T, options: RememberSetOptions = {}): Promise<void> {
     const scope = options.scope ?? 'session';
     const storageKey = this.buildStorageKey(key, scope);
+    const now = Date.now();
+    const ttlSeconds = options.ttl ?? this.config.defaultTTL;
 
     const entry: RememberEntry<T> = {
       value,
       brand: options.brand,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      expiresAt: options.ttl ? Date.now() + options.ttl * 1000 : undefined,
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: expiryAfter(ttlSeconds, now),
       metadata: options.metadata,
     };
 
@@ -139,7 +148,7 @@ export class RememberAccessor {
       ? await encryptAndSerialize(entry, this.getKeySource(scope))
       : JSON.stringify(entry);
 
-    await this.store.setValue(storageKey, serialized, options.ttl);
+    await this.store.setValue(storageKey, serialized, ttlSeconds);
   }
 
   /**
@@ -213,6 +222,7 @@ export class RememberAccessor {
    *
    * With a `ttl` the entry expires that many seconds from now; without one it keeps its current
    * expiry, in the store as well, so the store does not keep it past that (rounded up to a second).
+   * An entry with no recorded expiry gets the plugin's `defaultTTL` from now, as the store would give it.
    *
    * @param key - The key to update
    * @param value - The new value
@@ -225,7 +235,7 @@ export class RememberAccessor {
     if (!existing) return false;
 
     const now = Date.now();
-    const expiresAt = options.ttl ? now + options.ttl * 1000 : existing.expiresAt;
+    const expiresAt = expiryAfter(options.ttl, now) ?? existing.expiresAt ?? expiryAfter(this.config.defaultTTL, now);
     const entry: RememberEntry<T> = {
       ...existing,
       value,
@@ -238,8 +248,7 @@ export class RememberAccessor {
       ? await encryptAndSerialize(entry, this.getKeySource(scope))
       : JSON.stringify(entry);
 
-    // Written back with no storage TTL, an entry updated without a `ttl` stayed in the store forever (#678).
-    const storageTtl = options.ttl ?? (expiresAt !== undefined ? remainingSeconds(expiresAt, now) : undefined);
+    const storageTtl = expiresAt !== undefined ? remainingSeconds(expiresAt, now) : undefined;
     await this.store.setValue(storageKey, serialized, storageTtl);
     return true;
   }
