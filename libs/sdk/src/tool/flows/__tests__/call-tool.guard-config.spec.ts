@@ -7,6 +7,7 @@ import {
   rpc20260728,
   type Rpc20260728Response,
 } from '../../../__test-utils__/helpers/mcp-20260728.helpers';
+import { useMidRateLimitWindow } from '../../../__test-utils__/helpers/rate-limit-window.helpers';
 import { App, Tool, ToolContext, type FrontMcpConfigInput } from '../../../common';
 import type { WebFetchHandler } from '../../../transport/web-fetch-handler';
 
@@ -83,17 +84,7 @@ async function callInParallel(server: GuardedServer, count: number): Promise<str
 }
 
 describe('call-tool guard configuration', () => {
-  beforeEach(() => {
-    const realNow = Date.now.bind(Date);
-    const startOfWindow = Math.floor(realNow() / RATE_LIMIT_WINDOW_MS) * RATE_LIMIT_WINDOW_MS;
-    const clockOffset = startOfWindow + RATE_LIMIT_WINDOW_MS / 2 - realNow();
-    // Rate-limit windows follow the wall clock; starting mid-window keeps a test from crossing into the next one.
-    jest.spyOn(Date, 'now').mockImplementation(() => realNow() + clockOffset);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
+  useMidRateLimitWindow(RATE_LIMIT_WINDOW_MS);
 
   describe('settings', () => {
     it('enforces a per-tool rateLimit without a throttle option', async () => {

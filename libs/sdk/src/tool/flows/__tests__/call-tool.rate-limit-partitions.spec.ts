@@ -8,6 +8,7 @@ import {
   rpc20260728,
   type Rpc20260728Response,
 } from '../../../__test-utils__/helpers/mcp-20260728.helpers';
+import { useMidRateLimitWindow } from '../../../__test-utils__/helpers/rate-limit-window.helpers';
 import { App, Tool, ToolContext, type FrontMcpConfigInput } from '../../../common';
 
 const LIMITED_AFTER_TWO = ['ok', 'ok', 'RATE_LIMIT_EXCEEDED', 'RATE_LIMIT_EXCEEDED', 'RATE_LIMIT_EXCEEDED'];
@@ -58,6 +59,8 @@ async function callFiveTimes(
 }
 
 describe('call-tool rate-limit partitions (2026-07-28, maxRequests 2, five calls from one client)', () => {
+  useMidRateLimitWindow(60_000);
+
   it('limits a global partition after two calls', async () => {
     expect(await callFiveTimes('global')).toEqual(LIMITED_AFTER_TWO);
   });

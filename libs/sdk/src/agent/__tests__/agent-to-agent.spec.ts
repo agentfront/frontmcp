@@ -15,6 +15,7 @@ import 'reflect-metadata';
 import { z } from '@frontmcp/lazy-zod';
 import type { CallToolResult } from '@frontmcp/protocol';
 
+import { useMidRateLimitWindow } from '../../__test-utils__/helpers/rate-limit-window.helpers';
 import {
   Agent,
   AgentContext,
@@ -549,6 +550,8 @@ class MateAgent extends AgentContext {}
 class DeckApp {}
 
 describe('the gates a nested agent declares', () => {
+  useMidRateLimitWindow(60_000);
+
   let server: DirectMcpServer;
 
   beforeAll(async () => {
