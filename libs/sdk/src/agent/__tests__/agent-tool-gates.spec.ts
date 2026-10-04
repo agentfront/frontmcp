@@ -5,6 +5,7 @@ import {
   rpc20260728,
   type TestFetchServer,
 } from '../../__test-utils__/helpers/mcp-20260728.helpers';
+import { useMidRateLimitWindow } from '../../__test-utils__/helpers/rate-limit-window.helpers';
 import {
   Agent,
   AgentContext,
@@ -153,6 +154,8 @@ interface ToolCallOutcome {
 }
 
 describe('gates an @Agent declares apply to its invoke_<agent> tool', () => {
+  useMidRateLimitWindow(60_000);
+
   let server: TestFetchServer;
 
   beforeAll(async () => {
