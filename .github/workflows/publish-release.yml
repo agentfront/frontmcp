@@ -657,7 +657,148 @@ jobs:
           echo "All packages published successfully!" >> "$GITHUB_STEP_SUMMARY"
 
   # =============================================================================
-  # JOB 4: DRY RUN SUMMARY
+  # JOB 4: SYNC VERSION TO MAIN
+  # - After a stable release that is the newest stable tag, open a PR that
+  #   brings the default branch's package versions to it
+  # =============================================================================
+  cherry-pick-version-to-main:
+    needs: [prepare, finalize]
+    if: >
+      inputs.dry_run != true && inputs.dry_run != 'true' &&
+      needs.prepare.outputs.is_prerelease != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      NX_DAEMON: "false"
+      VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_BRANCH: ${{ needs.prepare.outputs.branch }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check the release is the latest and not yet on the default branch
+        id: check
+        run: |
+          set -euo pipefail
+
+          git fetch --tags
+          git fetch origin "$RELEASE_BRANCH" "$DEFAULT_BRANCH"
+
+          LATEST=$(git tag --list 'v*' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -1 \
+            | sed 's/^v//')
+
+          echo "Released version: $VERSION"
+          echo "Latest stable tag: $LATEST"
+
+          if [ "$VERSION" != "$LATEST" ]; then
+            echo "Skipping: v$VERSION is not the latest stable release (v$LATEST is newer)"
+            echo "sync=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          VERSION_COMMIT=$(git log "origin/$RELEASE_BRANCH" \
+            --grep="^chore(release): bump version to ${VERSION}\$" \
+            --format="%H" -1)
+
+          if [ -n "$VERSION_COMMIT" ] && git merge-base --is-ancestor "$VERSION_COMMIT" "origin/$DEFAULT_BRANCH"; then
+            echo "Version bump $VERSION_COMMIT is already on $DEFAULT_BRANCH"
+            echo "sync=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "sync=true"
+            echo "version_commit=$VERSION_COMMIT"
+            echo "sync_branch=cherry-pick/v${VERSION}-version-to-${DEFAULT_BRANCH}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Switch to the default branch
+        if: steps.check.outputs.sync == 'true'
+        run: git checkout -B "${{ steps.check.outputs.sync_branch }}" "origin/$DEFAULT_BRANCH"
+
+      - name: Get Node version
+        if: steps.check.outputs.sync == 'true'
+        id: node-version
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node + Yarn
+        if: steps.check.outputs.sync == 'true'
+        uses: ./.github/actions/setup-node-yarn
+        with:
+          node-version: ${{ steps.node-version.outputs.version }}
+
+      - name: Configure git
+        if: steps.check.outputs.sync == 'true'
+        run: |
+          git config user.name "agentfront[bot]"
+          git config user.email "agentfront[bot]@users.noreply.github.com"
+
+      - name: Open a version sync PR to the default branch
+        if: steps.check.outputs.sync == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SYNC_BRANCH: ${{ steps.check.outputs.sync_branch }}
+          VERSION_COMMIT: ${{ steps.check.outputs.version_commit }}
+        run: |
+          set -euo pipefail
+
+          # Rebuild the bump with the steps the prepare job ran instead of
+          # cherry-picking its commit, which conflicts on package.json and
+          # yarn.lock whenever the default branch has diverged.
+          npx nx release version "$VERSION" --git-tag=false --git-commit=false
+          node scripts/normalize-internal-versions.mjs "$VERSION"
+          yarn install --mode=update-lockfile
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "$DEFAULT_BRANCH is already at v$VERSION"
+            exit 0
+          fi
+
+          COMMIT_BODY="Synced from $RELEASE_BRANCH (release v$VERSION)"
+          if [ -n "$VERSION_COMMIT" ]; then
+            COMMIT_BODY="$COMMIT_BODY, original commit $VERSION_COMMIT"
+          fi
+          git commit -m "chore: sync version to $VERSION" -m "$COMMIT_BODY"
+
+          git push --force origin "$SYNC_BRANCH"
+
+          EXISTING_PR=$(gh pr list --head "$SYNC_BRANCH" --base "$DEFAULT_BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Updated the existing version sync PR #$EXISTING_PR"
+            exit 0
+          fi
+
+          gh pr create \
+            --base "$DEFAULT_BRANCH" \
+            --head "$SYNC_BRANCH" \
+            --title "chore: sync version to v${VERSION}" \
+            --label "cherry-pick" \
+            --label "auto-cherry-pick" \
+            --body "$(cat <<EOF
+          ## Version sync to ${DEFAULT_BRANCH}
+
+          Sets the \`@frontmcp/*\` package versions on \`${DEFAULT_BRANCH}\` to \`${VERSION}\`, the latest stable release.
+
+          **Source:** \`${RELEASE_BRANCH}\` release v${VERSION}
+
+          ---
+          _Opened by the publish-release workflow._
+          EOF
+          )"
+
+  # =============================================================================
+  # JOB 5: DRY RUN SUMMARY
   # - Shows what would be published without actually publishing
   # =============================================================================
   dry-run-summary:
