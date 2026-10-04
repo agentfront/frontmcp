@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, render, renderHook } from '@testing-library/react';
 import React from 'react';
 
 import { ComponentRegistry } from '../../components/ComponentRegistry';
@@ -650,6 +650,46 @@ describe('useStoreResource (state module)', () => {
       expect(JSON.parse(state.contents[0].text)).toEqual({ count: 3, tag: 7 });
       expect(JSON.parse(selected.contents[0].text)).toEqual(['count', 7]);
       expect(JSON.parse(action.content[0].text)).toEqual({ success: true, result: 'bump:7' });
+    });
+
+    it('reads and runs the committed functions while a newer render is suspended', async () => {
+      const store = createMockStore({ count: 3 });
+      const neverSettles = new Promise<never>(() => undefined);
+      function InlineStore({ tag, suspend }: { tag: number; suspend: boolean }) {
+        useStoreResource({
+          name: 'inline',
+          getState: () => ({ ...store.getState(), tag }),
+          subscribe: store.subscribe,
+          selectors: { count: (state: unknown) => ['count', (state as { tag: number }).tag] },
+          actions: { bump: () => `bump:${tag}` },
+        });
+        if (suspend) throw neverSettles;
+        return null;
+      }
+      const Wrapper = createWrapper(dynamicRegistry);
+      const tree = (tag: number, suspend: boolean) => (
+        <Wrapper>
+          <React.Suspense fallback={null}>
+            <InlineStore tag={tag} suspend={suspend} />
+          </React.Suspense>
+        </Wrapper>
+      );
+      const { rerender } = render(tree(1, false));
+
+      await act(async () => {
+        React.startTransition(() => rerender(tree(2, true)));
+      });
+      const state = await dynamicRegistry.findResource('state://inline')?.read();
+      const selected = await dynamicRegistry.findResource('state://inline/count')?.read();
+      const action = await dynamicRegistry.findTool('inline_bump')?.execute({});
+
+      expect(state?.contents).toEqual([
+        { uri: 'state://inline', mimeType: 'application/json', text: JSON.stringify({ count: 3, tag: 1 }) },
+      ]);
+      expect(selected?.contents).toEqual([
+        { uri: 'state://inline/count', mimeType: 'application/json', text: JSON.stringify(['count', 1]) },
+      ]);
+      expect(action?.content).toEqual([{ type: 'text', text: JSON.stringify({ success: true, result: 'bump:1' }) }]);
     });
 
     it('still follows store changes after re-subscribing on a later render', () => {

@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react';
+import { act, render, renderHook } from '@testing-library/react';
 import React from 'react';
 
 import { z } from '@frontmcp/lazy-zod';
@@ -325,5 +325,59 @@ describe('useDynamicTool — Zod schema mode', () => {
     );
     rerender({ field: 'b' });
     expect(registerSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('runs the execute of the latest committed render without registering again', async () => {
+    const registerSpy = jest.spyOn(dynamicRegistry, 'registerTool');
+    const { rerender } = renderHook(
+      ({ label }: { label: string }) =>
+        useDynamicTool({
+          name: 'labelled',
+          description: 'labelled',
+          inputSchema: { type: 'object' },
+          execute: async () => okResult(label),
+        }),
+      { wrapper: createWrapper(dynamicRegistry), initialProps: { label: 'first' } },
+    );
+
+    rerender({ label: 'second' });
+    const result = await dynamicRegistry.findTool('labelled')?.execute({});
+
+    expect(result).toEqual(okResult('second'));
+    expect(registerSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the committed execute and schema while a newer render is suspended', async () => {
+    const committedExecute = jest.fn(async () => okResult('committed'));
+    const discardedExecute = jest.fn(async () => okResult('discarded'));
+    const neverSettles = new Promise<never>(() => undefined);
+    function SearchTool({ committed }: { committed: boolean }) {
+      useDynamicTool({
+        name: 'search',
+        description: 'Search',
+        schema: z.object({ query: committed ? z.string() : z.string().min(100) }),
+        execute: committed ? committedExecute : discardedExecute,
+      });
+      if (!committed) throw neverSettles;
+      return null;
+    }
+    const Wrapper = createWrapper(dynamicRegistry);
+    const tree = (committed: boolean) => (
+      <Wrapper>
+        <React.Suspense fallback={null}>
+          <SearchTool committed={committed} />
+        </React.Suspense>
+      </Wrapper>
+    );
+    const { rerender } = render(tree(true));
+
+    await act(async () => {
+      React.startTransition(() => rerender(tree(false)));
+    });
+    const result = await dynamicRegistry.findTool('search')?.execute({ query: 'mcp' });
+
+    expect(result).toEqual(okResult('committed'));
+    expect(committedExecute).toHaveBeenCalledWith({ query: 'mcp' });
+    expect(discardedExecute).not.toHaveBeenCalled();
   });
 });

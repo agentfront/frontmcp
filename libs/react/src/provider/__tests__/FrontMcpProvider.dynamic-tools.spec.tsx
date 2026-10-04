@@ -6,7 +6,9 @@ import type { CallToolResult, DirectClient, DirectMcpServer, RuntimeToolDefiniti
 
 import { useDynamicTool } from '../../hooks/useDynamicTool';
 import { useFrontMcp } from '../../hooks/useFrontMcp';
+import type { DynamicRegistry } from '../../registry/DynamicRegistry';
 import { serverRegistry } from '../../registry/ServerRegistry';
+import { FrontMcpContext } from '../FrontMcpContext';
 import { FrontMcpProvider } from '../FrontMcpProvider';
 
 /**
@@ -151,6 +153,48 @@ describe('FrontMcpProvider dynamic tools', () => {
     expect((onError.mock.calls[0][0] as Error).message).toBe(
       'Dynamic tool "static_tool" was not registered: A tool named "static_tool" is already registered',
     );
+    view.unmount();
+  });
+
+  it('reports through the committed onError while a newer render is suspended', async () => {
+    const { server } = serverDouble();
+    const committedOnError = jest.fn();
+    const discardedOnError = jest.fn();
+    const neverSettles = new Promise<never>(() => undefined);
+    let dynamicRegistry: DynamicRegistry | undefined;
+    function RegistryProbe() {
+      const context = React.useContext(FrontMcpContext);
+      React.useEffect(() => {
+        dynamicRegistry = context.dynamicRegistry;
+      }, [context.dynamicRegistry]);
+      return null;
+    }
+    function Suspender({ suspend }: { suspend: boolean }) {
+      if (suspend) throw neverSettles;
+      return null;
+    }
+    const tree = (onError: jest.Mock, suspend: boolean) => (
+      <FrontMcpProvider server={server} onError={onError} autoConnect={false}>
+        <RegistryProbe />
+        <React.Suspense fallback={null}>
+          <Suspender suspend={suspend} />
+        </React.Suspense>
+      </FrontMcpProvider>
+    );
+    const view = render(tree(committedOnError, false));
+
+    await act(async () => {
+      React.startTransition(() => view.rerender(tree(discardedOnError, true)));
+    });
+    dynamicRegistry?.registerTool({
+      name: 'static_tool',
+      description: 'Clashes with a server tool',
+      inputSchema: { type: 'object' },
+      execute: async () => ({ content: [] }),
+    });
+
+    await waitFor(() => expect(committedOnError).toHaveBeenCalledTimes(1));
+    expect(discardedOnError).not.toHaveBeenCalled();
     view.unmount();
   });
 
