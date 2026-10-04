@@ -1,4 +1,5 @@
 import { Provider, ProviderScope } from '@frontmcp/sdk';
+import { getEnv } from '@frontmcp/utils';
 
 import type { VercelKvRememberPluginOptions } from '../remember.types';
 import type { RememberStoreInterface } from './remember-store.interface';
@@ -9,11 +10,15 @@ import type { RememberStoreInterface } from './remember-store.interface';
 interface VercelKvClient {
   /** Resolves to `'OK'` on write, or `null` when `nx` was set and the key already existed. */
   set(key: string, value: string, options?: { ex?: number; nx?: boolean }): Promise<string | null>;
-  get(key: string): Promise<unknown>;
+  get(key: string): Promise<string | null>;
   del(key: string): Promise<void>;
   exists(key: string): Promise<number>;
   keys(pattern: string): Promise<string[]>;
-  scan(cursor: number, options?: { match?: string; count?: number }): Promise<[number, string[]]>;
+  scan(cursor: string | number, options?: { match?: string; count?: number }): Promise<[string | number, string[]]>;
+}
+
+interface VercelKvModule {
+  createClient(config: { url: string; token: string; automaticDeserialization: boolean }): VercelKvClient;
 }
 
 /**
@@ -40,13 +45,15 @@ export interface RememberVercelKvProviderOptions {
   scope: ProviderScope.GLOBAL,
 })
 export default class RememberVercelKvProvider implements RememberStoreInterface {
-  private kv: VercelKvClient;
+  private readonly createClient: VercelKvModule['createClient'];
+  private readonly connection: { url?: string; token?: string };
+  private client?: VercelKvClient;
   private readonly keyPrefix: string;
   private readonly defaultTTL?: number;
 
   constructor(options: RememberVercelKvProviderOptions = {}) {
     // Lazy import @vercel/kv to avoid bundling when not used
-    const vercelKv = require('@vercel/kv');
+    const vercelKv: VercelKvModule = require('@vercel/kv');
 
     // Validate partial configuration
     const hasUrl = options.url !== undefined;
@@ -58,19 +65,23 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
       );
     }
 
-    // Use custom config if url/token provided
-    if (options.url && options.token) {
-      this.kv = vercelKv.createClient({
-        url: options.url,
-        token: options.token,
-      });
-    } else {
-      // Use default kv instance (reads from env vars)
-      this.kv = vercelKv.kv;
-    }
-
+    this.createClient = vercelKv.createClient;
+    this.connection = { url: options.url, token: options.token };
     this.keyPrefix = options.keyPrefix ?? 'remember:';
     this.defaultTTL = options.defaultTTL;
+  }
+
+  /** Built on first use, like the module's `kv` singleton, which would JSON-parse what it reads. */
+  private get kv(): VercelKvClient {
+    if (!this.client) {
+      const url = this.connection.url ?? getEnv('KV_REST_API_URL');
+      const token = this.connection.token ?? getEnv('KV_REST_API_TOKEN');
+      if (!url || !token) {
+        throw new Error('RememberVercelKvProvider: pass url and token, or set KV_REST_API_URL and KV_REST_API_TOKEN.');
+      }
+      this.client = this.createClient({ url, token, automaticDeserialization: false });
+    }
+    return this.client;
   }
 
   private prefixKey(key: string): string {
@@ -82,7 +93,7 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
    */
   async setValue(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
     const fullKey = this.prefixKey(key);
-    const strValue = typeof value === 'string' ? value : JSON.stringify(value);
+    const strValue = JSON.stringify(value);
     const ttl = ttlSeconds ?? this.defaultTTL;
 
     if (ttl && ttl > 0) {
@@ -100,7 +111,7 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
    */
   async setIfAbsent(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
     const fullKey = this.prefixKey(key);
-    const strValue = typeof value === 'string' ? value : JSON.stringify(value);
+    const strValue = JSON.stringify(value);
     const ttl = ttlSeconds ?? this.defaultTTL;
 
     const result =
@@ -118,18 +129,13 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
     const fullKey = this.prefixKey(key);
     const raw = await this.kv.get(fullKey);
 
-    if (raw === null || raw === undefined) return defaultValue;
+    if (raw === null) return defaultValue;
 
-    // Vercel KV may auto-parse JSON
-    if (typeof raw === 'string') {
-      try {
-        return JSON.parse(raw) as T;
-      } catch {
-        return raw as unknown as T;
-      }
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return raw as unknown as T;
     }
-
-    return raw as T;
   }
 
   /**
@@ -158,7 +164,7 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
 
     try {
       // Try using scan if available (Upstash Redis API)
-      let cursor = 0;
+      let cursor: string | number = 0;
       do {
         const [nextCursor, keys] = await this.kv.scan(cursor, {
           match: searchPattern,
@@ -170,7 +176,7 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
         for (const key of keys) {
           result.push(key.slice(this.keyPrefix.length));
         }
-      } while (cursor !== 0);
+      } while (String(cursor) !== '0');
     } catch {
       // Fallback to keys command if scan not available
       try {

@@ -9,7 +9,7 @@
  * @module skill/cache/skill-http-cache.holder
  */
 
-import type { ScopeEntry } from '../../common/index.js';
+import type { FrontMcpLogger, ScopeEntry } from '../../common/index.js';
 import { createSkillHttpCache } from './skill-http-cache.factory.js';
 import { MemorySkillHttpCache, type SkillHttpCache } from './skill-http-cache.js';
 
@@ -54,7 +54,7 @@ export async function getSkillHttpCache(scope: ScopeEntry): Promise<SkillHttpCac
   }
 
   // Create cache
-  const creationPromise = createCacheForScope(scopeId, cacheConfig);
+  const creationPromise = createCacheForScope(scopeId, cacheConfig, scope.logger);
   pendingCreation.set(scopeId, creationPromise);
 
   try {
@@ -87,12 +87,17 @@ interface CacheConfig {
 /**
  * Create a cache instance for a scope.
  */
-async function createCacheForScope(scopeId: string, cacheConfig: CacheConfig): Promise<SkillHttpCache> {
+async function createCacheForScope(
+  scopeId: string,
+  cacheConfig: CacheConfig,
+  logger: FrontMcpLogger,
+): Promise<SkillHttpCache> {
   try {
     const { cache } = await createSkillHttpCache({
       redis: cacheConfig.redis,
       ttlMs: cacheConfig.ttlMs,
       keyPrefix: cacheConfig.keyPrefix ?? `frontmcp:skills:${scopeId}:cache:`,
+      logger,
     });
     return cache;
   } catch (error) {
