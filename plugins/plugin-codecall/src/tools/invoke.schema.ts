@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/tools/invoke.schema.ts
 import { z } from '@frontmcp/lazy-zod';
-import { CallToolResultSchema } from '@frontmcp/protocol';
+import type { CallToolResult } from '@frontmcp/protocol';
 
 export const invokeToolDescription = `Call ONE tool directly. Returns standard MCP CallToolResult.
 
@@ -28,7 +28,5 @@ export const invokeToolInputSchema = {
 
 export type InvokeToolInput = z.infer<z.ZodObject<typeof invokeToolInputSchema>>;
 
-// Use standard MCP CallToolResult schema - returns same format as direct tool call
-export const invokeToolOutputSchema = CallToolResultSchema;
-
-export type InvokeToolOutput = z.infer<typeof invokeToolOutputSchema>;
+// No output schema: the result is the invoked tool's own, so its structured content follows that tool's schema.
+export type InvokeToolOutput = CallToolResult;
