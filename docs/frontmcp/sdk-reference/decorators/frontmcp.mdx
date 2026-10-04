@@ -108,17 +108,18 @@ auto-starting entirely (use `FrontMcpInstance.bootstrap`/`runStdio` explicitly).
 
 ### Shared Components
 
-| Property     | Type             | Description                            |
-| ------------ | ---------------- | -------------------------------------- |
-| `providers`  | `ProviderType[]` | Gateway-level providers                |
-| `tools`      | `ToolType[]`     | Shared tools across all apps           |
-| `resources`  | `ResourceType[]` | Shared resources                       |
-| `skills`     | `SkillType[]`    | Shared skills                          |
-| `plugins`    | `PluginType[]`   | Server-level plugins                   |
-| `splitByApp` | `boolean`        | Run each app as an isolated sub-server |
+| Property     | Type             | Description                                                                                        |
+| ------------ | ---------------- | -------------------------------------------------------------------------------------------------- |
+| `providers`  | `ProviderType[]` | Gateway-level providers                                                                            |
+| `tools`      | `ToolType[]`     | Tools every app serves — see [Server-level tools and resources](#server-level-tools-and-resources) |
+| `resources`  | `ResourceType[]` | Resources and resource templates every app serves                                                  |
+| `skills`     | `SkillType[]`    | Shared skills                                                                                      |
+| `plugins`    | `PluginType[]`   | Server-level plugins                                                                               |
+| `adapters`   | `AdapterType[]`  | Server-level adapters: the tools, resources and prompts they fetch serve every app                 |
+| `splitByApp` | `boolean`        | Run each app as an isolated sub-server                                                             |
 
 <Note>
-Prompts, agents, jobs, workflows, channels, and adapters are declared at the `@App` level — not at the gateway level. See the [@App reference](/frontmcp/sdk-reference/decorators/app) for the full list.
+Prompts, agents, jobs, workflows, and channels are declared at the `@App` level — not at the gateway level. See the [@App reference](/frontmcp/sdk-reference/decorators/app) for the full list.
 </Note>
 
 ```typescript
@@ -130,6 +131,17 @@ Prompts, agents, jobs, workflows, channels, and adapters are declared at the `@A
   tools: [HealthCheckTool],
 })
 ```
+
+#### Server-level tools and resources
+
+Tools, resources and resource templates declared on `@FrontMcp` are listed, called and read next to every app's own, through the same flows: hooks of server-level plugins, hooks declared on the entry class, `authorities`, rate limits, `availableWhen`, and the startup checks apply to them as they do to app entries. They resolve the server-level `providers`, not an app's.
+
+- **Every scope serves them.** With `splitByApp: true`, and for a `standalone` app, each app's scope builds its own instance of every server-level tool and resource, as it does for server-level plugins and adapters.
+- **Name conflicts.** A server-level tool keeps its name unless an app in the same scope has a tool of that name. Then both are prefixed with their owner: `<app id>:<name>` for the app's tool and `server:<name>` for the server's. Call each by the name `tools/list` returns.
+- **Plugins.** An app's plugin hooks run for a server-level tool only when declared with `appliesTo: 'uncovered-apps'`; server-level plugin hooks always run.
+- **Progressive authorization.** A server-level tool belongs to no app, so `incrementalAuth` does not ask for an app grant before it runs.
+
+`@FrontMcp` does not accept `prompts`; declare them on an `@App`, or serve them from a server-level adapter or plugin.
 
 ### Feature Configuration
 

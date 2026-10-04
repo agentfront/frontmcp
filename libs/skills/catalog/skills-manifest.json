@@ -2914,10 +2914,10 @@
               "level": "basic",
               "tags": ["setup", "multi-app", "local", "multi", "app", "composition"],
               "features": [
-                "Multiple `@App` classes with unique `id` fields for tool namespacing (`billing:charge`, `inventory:check_stock`)",
-                "Server-level `tools` array for shared tools available to all apps without namespace prefix",
+                "Multiple `@App` classes with unique `id` fields, which prefix their tools when two tools share a name (`billing:charge`)",
+                "Server-level `tools` array for shared tools every app serves under their own name (`server:<name>` when an app tool has the same name)",
                 "Each app is self-contained with its own tools array",
-                "The `id` field on `@App` controls the namespace prefix for tool names"
+                "The `id` field on `@App` is the prefix of its tools when names collide"
               ]
             },
             {

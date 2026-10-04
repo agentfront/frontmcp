@@ -193,16 +193,16 @@ The type is: `standalone?: 'includeInParent' | boolean` (defaults to `false`).
 
 ## Tool Namespacing
 
-When multiple apps are composed, tools are automatically namespaced by app id to prevent naming collisions. The format is `appId:toolName`.
+A local app's tool keeps its own name while no other tool in the server shares it. When two tools share a name, each is listed with its owner's id as a prefix: `appId:toolName`.
 
 ```typescript
-@App({ id: 'billing', name: 'Billing', tools: [ChargeTool] })
+@App({ id: 'billing', name: 'Billing', tools: [SearchTool] })
 class BillingApp {}
-// Tool is exposed as: billing:charge_card
+// Listed as: billing:search (another app also has `search`)
 
-@App({ id: 'inventory', name: 'Inventory', tools: [CheckStockTool] })
+@App({ id: 'inventory', name: 'Inventory', tools: [SearchTool, CheckStockTool] })
 class InventoryApp {}
-// Tool is exposed as: inventory:check_stock
+// Listed as: inventory:search and check_stock
 ```
 
 For remote and ESM apps, the `namespace` option controls the prefix:
@@ -217,7 +217,7 @@ app.esm('@acme/tools@^1.0.0', { namespace: 'acme' });
 
 ## Shared Tools
 
-Tools declared directly on `@FrontMcp` (not inside an `@App`) are shared across all apps. They are merged additively with app-specific tools and are available without a namespace prefix.
+Tools declared directly on `@FrontMcp` (not inside an `@App`) are served next to every app's tools, through the same flows: server-level plugin hooks, hooks on the tool class, `authorities`, rate limits, `availableWhen` and the startup checks apply to them as to app tools. They resolve server-level `providers`, not an app's.
 
 ```typescript
 @FrontMcp({
@@ -228,7 +228,13 @@ Tools declared directly on `@FrontMcp` (not inside an `@App`) are shared across 
 export default class Server {}
 ```
 
-The same pattern works for shared resources and shared skills:
+- A shared tool keeps its own name. If an app in the same scope has a tool of that name, both are prefixed: `billing:health_check` for the app's and `server:health_check` for the shared one.
+- With `splitByApp: true`, and for a `standalone` app, each app's scope serves its own instance of every shared tool and resource.
+- An app's plugin hooks run for a shared tool only when declared with `appliesTo: 'uncovered-apps'`; server-level plugin hooks always run.
+- A shared tool belongs to no app, so `incrementalAuth` asks for no app grant before it runs.
+- `@FrontMcp` does not accept `prompts`; declare them on an `@App`.
+
+The same pattern works for shared resources (and resource templates) and shared skills:
 
 ```typescript
 @FrontMcp({
@@ -383,7 +389,7 @@ export default class Server {}
 ### Runtime
 
 - [ ] All app tools appear in `tools/list` with correct namespace prefixes
-- [ ] Shared tools appear without a namespace prefix
+- [ ] Shared tools appear under their own name, or as `server:<name>` when an app tool has the same name
 - [ ] `standalone: true` apps are isolated and do not appear in parent tool listing
 - [ ] `standalone: 'includeInParent'` apps have isolated scope but visible tools
 - [ ] Per-app auth modes are enforced independently per app
