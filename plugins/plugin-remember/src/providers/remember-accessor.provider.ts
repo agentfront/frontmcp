@@ -392,8 +392,10 @@ export class RememberAccessor {
 
   /** The entry stored under `storageKey`, if readable and unexpired; an expired one is deleted. */
   private async readEntry<T>(storageKey: string, scope: RememberScope): Promise<RememberEntry<T> | undefined> {
-    const raw = await this.store.getValue<string>(storageKey);
-    if (!raw) return undefined;
+    const stored = await this.store.getValue<unknown>(storageKey);
+    if (!stored) return undefined;
+    // Entries a Redis or Vercel KV store wrote before it JSON-encoded strings come back already parsed.
+    const raw = typeof stored === 'string' ? stored : JSON.stringify(stored);
 
     const entry = this.encryptionEnabled
       ? await deserializeAndDecrypt<RememberEntry<T>>(raw, this.getKeySource(scope))
