@@ -68,6 +68,8 @@ Everything else is optional with sensible defaults.
   providers?: [/* provider classes/factories/values */],
   plugins?: [/* server-level plugins: every app */],
   adapters?: [/* server-level adapters (e.g. OpenapiAdapter.init(...)): their tools, resources and prompts serve every app */],
+  tools?: [/* server-level tools: every app serves them under their own name, or as server:<name> when an app tool has the same name */],
+  resources?: [/* server-level resources and resource templates: every app serves them */],
 
   http?: {
     port?: 3000,                // default: process.env.PORT or 3000

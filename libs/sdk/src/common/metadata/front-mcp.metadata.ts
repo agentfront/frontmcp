@@ -118,13 +118,13 @@ export interface FrontMcpBaseMetadata {
   providers?: ProviderType[];
 
   /**
-   * Shared tools that are available to all apps.
-   * These are merged (additively) with app-specific tools.
+   * Shared tools that are available to all apps, in every scope (each `splitByApp` or standalone app's too).
+   * These are merged (additively) with app-specific tools; one named like an app's tool is listed as `server:<name>`.
    */
   tools?: ToolType[];
 
   /**
-   * Shared resources that are available to all apps.
+   * Shared resources and resource templates that are available to all apps, in every scope.
    * These are merged (additively) with app-specific resources.
    */
   resources?: ResourceType[];

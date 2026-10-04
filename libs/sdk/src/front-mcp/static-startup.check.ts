@@ -61,9 +61,10 @@ interface StaticEntry {
 
 /**
  * Whose plugins' hooks the flow that gates an entry runs: an agent's alone for its own tools, an
- * app's (and those that reach every app) for its entries, every plugin's for the rest.
+ * app's (and those that reach every app) for its entries, only those that reach every app for a
+ * tool no app owns, every plugin's for the rest.
  */
-type EntryReach = { agentKeys: ReadonlySet<string> } | { app: object } | 'every-plugin';
+type EntryReach = { agentKeys: ReadonlySet<string> } | { app: object } | 'every-app' | 'every-plugin';
 
 /** The entry lists of a server, an app or a plugin. */
 interface EntryLists {
@@ -164,9 +165,10 @@ function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType):
 
   const visitEntries = (owner: EntryLists, app: object | undefined): void => {
     const reach: EntryReach = app ? { app } : 'every-plugin';
+    const toolReach: EntryReach = app ? { app } : 'every-app';
     for (const item of owner.tools ?? []) {
       const record = tryNormalize(() => normalizeTool(item));
-      if (record) add(`Tool "${record.metadata.id || record.metadata.name}"`, record.metadata, reach);
+      if (record) add(`Tool "${record.metadata.id || record.metadata.name}"`, record.metadata, toolReach);
     }
     for (const item of owner.resources ?? []) {
       if (tryNormalize(() => isResourceTemplate(item))) {
@@ -204,10 +206,12 @@ function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType):
     visitPlugins(owner.plugins, app);
   };
 
-  // The server's own entries: its skills and its plugins' entries (its `tools` and `resources` lists
-  // are not registered by any scope, so the full checks never see them either).
+  // The server's own entries: its tools, resources and skills, and its plugins' entries.
   const server = config as EntryLists & { apps?: readonly unknown[] };
-  visitEntries({ skills: server.skills, plugins: server.plugins }, undefined);
+  visitEntries(
+    { tools: server.tools, resources: server.resources, skills: server.skills, plugins: server.plugins },
+    undefined,
+  );
   for (const app of server.apps ?? []) {
     const record = tryNormalize(() => normalizeApp(app as Parameters<typeof normalizeApp>[0]));
     if (record?.kind === AppKind.LOCAL_CLASS) visitEntries(record.metadata as EntryLists, record);
@@ -216,6 +220,7 @@ function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType):
   const everyPluginKeys = new Set([...everyAppKeys, ...[...ownAppKeys.values()].flatMap((keys) => [...keys])]);
   const keysReaching = (reach: EntryReach): ReadonlySet<string> => {
     if (reach === 'every-plugin') return everyPluginKeys;
+    if (reach === 'every-app') return everyAppKeys;
     if ('agentKeys' in reach) return reach.agentKeys;
     return new Set([...everyAppKeys, ...(ownAppKeys.get(reach.app) ?? [])]);
   };
