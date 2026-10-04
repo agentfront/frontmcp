@@ -5,7 +5,7 @@
  * Usage in jest.config.ts or jest.e2e.config.ts:
  * ```typescript
  * export default {
- *   preset: '@frontmcp/testing/jest-preset',
+ *   preset: '@frontmcp/testing',
  *   // Your additional config...
  * };
  * ```
@@ -21,16 +21,20 @@ module.exports = {
   // `.e2e.spec.js(x)`, so a `.tsx?`-only rule would silently skip both.
   transform: {
     '^.+\\.[tj]sx?$': [
-      'ts-jest',
+      // The transform `frontmcp test` injects, resolved from here because @frontmcp/testing installs it
+      require.resolve('@swc/jest'),
       {
-        useESM: false,
-        tsconfig: {
-          // Allow importing .js extensions for ESM compatibility
-          moduleResolution: 'node',
-          // Required to compile the `.js`/`.jsx` files the rule now matches.
-          allowJs: true,
-          jsx: 'react-jsx',
+        jsc: {
+          target: 'es2022',
+          parser: { syntax: 'typescript', tsx: true, decorators: true, dynamicImport: true },
+          transform: { decoratorMetadata: true, legacyDecorator: true, react: { runtime: 'automatic' } },
+          keepClassNames: true,
+          externalHelpers: false,
+          loose: true,
         },
+        module: { type: 'es6' },
+        sourceMaps: true,
+        swcrc: false,
       },
     ],
   },
@@ -49,14 +53,6 @@ module.exports = {
   // also enforces. The legacy `.e2e.ts` / `.test.ts` globs matched none of the
   // documented names, so projects on this preset silently ran zero E2E tests.
   testMatch: ['**/*.e2e.spec.ts', '**/*.e2e.spec.tsx', '**/*.e2e.spec.js', '**/*.e2e.spec.jsx'],
-
-  // Module name mapping for path aliases
-  // Note: These point to dist/ since the package exports declare dist/index.js
-  moduleNameMapper: {
-    // Map @frontmcp/testing to the installed package
-    '^@frontmcp/testing$': '<rootDir>/node_modules/@frontmcp/testing/dist/index.js',
-    '^@frontmcp/testing/(.*)$': '<rootDir>/node_modules/@frontmcp/testing/dist/$1',
-  },
 
   // Transpile ESM-only deps; the `.pnpm` skip keeps this correct under pnpm (issue #519).
   transformIgnorePatterns: ['node_modules[/\\\\](?!\\.pnpm[/\\\\])(?!(jose)[/\\\\])'],

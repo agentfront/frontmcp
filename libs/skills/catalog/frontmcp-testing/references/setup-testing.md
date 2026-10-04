@@ -544,6 +544,10 @@ export default defineConfig({
 });
 ```
 
+A project with its own `jest.config` can start from `preset: '@frontmcp/testing'`, which compiles with
+the same `@swc/jest` transform and needs no `ts-jest`. Name the package, not
+`'@frontmcp/testing/jest-preset'`: Jest looks for `jest-preset.js` at the root of the package it is given.
+
 ## Manual Testing with frontmcp dev
 
 For interactive development and manual testing, use the CLI:
