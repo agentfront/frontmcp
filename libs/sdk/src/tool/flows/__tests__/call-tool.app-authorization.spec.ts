@@ -16,13 +16,14 @@ import 'reflect-metadata';
 
 import { createMockScopeEntry } from '../../../__test-utils__';
 import { AuthorizationRequiredError } from '../../../errors';
+import { serverEntryOwner } from '../../../utils/lineage.utils';
 import CallToolFlow from '../call-tool.flow';
 
 const inputSchema = { parse: (v: unknown) => v } as any;
 const outputSchema = { parse: (v: unknown) => v } as any;
 
 function makeFlow(opts: {
-  tool: { name: string; fullName: string; owner?: { id: string } };
+  tool: { name: string; fullName: string; owner?: { id: string; kind?: string } };
   authInfo?: Record<string, unknown>;
   apps?: Array<{ id: string; name: string; auth?: { mode: string } }>;
   incrementalAuth?: { enabled?: boolean; skippedAppBehavior?: 'anonymous' | 'require-auth' };
@@ -46,6 +47,7 @@ function makeFlow(opts: {
 
 const NOTES_TOOL = { name: 'create-note', fullName: 'notes:create-note', owner: { id: 'notes' } };
 const TASKS_TOOL = { name: 'create-task', fullName: 'tasks:create-task', owner: { id: 'tasks' } };
+const SERVER_TOOL = { name: 'ping', fullName: 'server:ping', owner: serverEntryOwner };
 const APPS = [
   { id: 'notes', name: 'Notes' },
   { id: 'tasks', name: 'Tasks' },
@@ -104,6 +106,26 @@ describe('call-tool app-level authorization (progressive/incremental)', () => {
       authInfo: { extra: { user: { sub: 'u1', authorized_apps: ['notes', 'tasks'] } } },
     });
     await expect(flowA.checkToolAuthorization()).resolves.toBeUndefined();
+  });
+
+  it('allows a server-level tool, which belongs to no app, whatever apps the claim grants', async () => {
+    const flow = makeFlow({
+      tool: SERVER_TOOL,
+      apps: APPS,
+      incrementalAuth: { enabled: true },
+      authInfo: { extra: { user: { sub: 'u1', authorized_apps: ['notes'] } } },
+    });
+    await expect(flow.checkToolAuthorization()).resolves.toBeUndefined();
+  });
+
+  it('still gates an app whose id is the server-level owner id', async () => {
+    const flow = makeFlow({
+      tool: { name: 'ping', fullName: 'server:ping', owner: { id: serverEntryOwner.id, kind: 'app' } },
+      apps: [...APPS, { id: serverEntryOwner.id, name: 'Server' }],
+      incrementalAuth: { enabled: true },
+      authInfo: { extra: { user: { sub: 'u1', authorized_apps: ['notes'] } } },
+    });
+    await expect(flow.checkToolAuthorization()).rejects.toBeInstanceOf(AuthorizationRequiredError);
   });
 
   it('allows ALL tools when the token carries NO authorized_apps claim (default preserved)', async () => {

@@ -71,7 +71,7 @@ import { type Scope } from '../../scope';
 import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
-import { hookOwnerIdOf } from '../../utils/lineage.utils';
+import { hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
 import { hasUIConfig } from '../ui';
 import { evaluateToolCredentialGate } from './tool-credentials.gate';
 
@@ -617,11 +617,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // false and the request is denied with a progressive-auth challenge.
     }
 
-    // Get app ID from tool owner (uses existing lineage system)
-    const appId = tool?.owner?.id;
+    // A server-level tool (`@FrontMcp({ tools })`) belongs to no app to authorize
+    const appId = isServerEntryOwner(tool?.owner) ? undefined : tool?.owner?.id;
     if (!appId) {
-      // Tool has no owner = global tool, skip app-level authorization check
-      this.logger.verbose('checkToolAuthorization:skip (no owner)');
+      this.logger.verbose('checkToolAuthorization:skip (no app owner)');
       return;
     }
 

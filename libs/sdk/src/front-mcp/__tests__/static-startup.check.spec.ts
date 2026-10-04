@@ -146,8 +146,12 @@ const ACCEPTED: Array<[string, FrontMcpConfigInput]> = [
     server({ apps: [app('desk', { resources: [TicketTemplate] })], authorities: AUTHORITIES }),
   ],
   [
-    'an approval tool in the server-level tools list, which no scope registers',
-    server({ apps: [app('desk', {})], tools: [tool('shared_refund', APPROVAL)] }),
+    'a server-level approval tool a server-level plugin gates',
+    server({ apps: [app('desk', {})], tools: [tool('shared_refund', APPROVAL)], plugins: [OwnAppApprovalPlugin] }),
+  ],
+  [
+    'a server-level approval tool, and a gate for uncovered apps on an app',
+    server({ apps: [app('desk', { plugins: [AnyAppApprovalPlugin] })], tools: [tool('shared_refund', APPROVAL)] }),
   ],
   [
     'an approval tool on an app, and a gate for uncovered apps nested in a plugin value on another app',
@@ -191,6 +195,16 @@ const REFUSED: Array<[string, FrontMcpConfigInput, new (...args: never[]) => Err
     'a server-level skill has a feature flag',
     server({ apps: [app('desk', {})], skills: [BetaRunbookSkill] }),
     UnenforcedMetadataError,
+  ],
+  [
+    'a server-level tool asks for approval',
+    server({ apps: [app('desk', {})], tools: [tool('shared_refund', APPROVAL)] }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'a server-level resource template declares authorities',
+    server({ apps: [app('desk', {})], resources: [TicketTemplate] }),
+    AuthConfigurationError,
   ],
   [
     'an agent declares authorities',

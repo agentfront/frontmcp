@@ -204,10 +204,12 @@ function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType):
     visitPlugins(owner.plugins, app);
   };
 
-  // The server's own entries: its skills and its plugins' entries (its `tools` and `resources` lists
-  // are not registered by any scope, so the full checks never see them either).
+  // The server's own entries: its tools, resources and skills, and its plugins' entries.
   const server = config as EntryLists & { apps?: readonly unknown[] };
-  visitEntries({ skills: server.skills, plugins: server.plugins }, undefined);
+  visitEntries(
+    { tools: server.tools, resources: server.resources, skills: server.skills, plugins: server.plugins },
+    undefined,
+  );
   for (const app of server.apps ?? []) {
     const record = tryNormalize(() => normalizeApp(app as Parameters<typeof normalizeApp>[0]));
     if (record?.kind === AppKind.LOCAL_CLASS) visitEntries(record.metadata as EntryLists, record);

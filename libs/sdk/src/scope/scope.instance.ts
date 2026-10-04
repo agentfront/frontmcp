@@ -106,6 +106,7 @@ import type WorkflowRegistry from '../workflow/workflow.registry';
 import HttpIpFilterFlow from './flows/http.ip-filter.flow';
 import HttpRequestFlow from './flows/http.request.flow';
 import { probeOptionalDependency } from './optional-dependency.util';
+import { registerServerEntries } from './server-entries.helper';
 
 /**
  * Flows the web-fetch adapter must NOT auto-dispatch by HTTP match: `http:request`
@@ -752,6 +753,9 @@ export class Scope extends ScopeEntry {
       await scopeAdapters.ready;
       this.onDispose(() => scopeAdapters.dispose());
     }
+
+    // `@FrontMcp({ tools, resources })`: the scope registries below adopt them, so every app serves them (#703).
+    await registerServerEntries(this.scopeProviders, this.metadata);
 
     // Initialize authorities engine from metadata config (built-in, no plugin needed)
     this.initAuthoritiesFromConfig();
