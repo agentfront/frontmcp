@@ -1,4 +1,4 @@
-import Redis, { Redis as RedisClient } from 'ioredis';
+import Redis, { type Redis as RedisClient } from 'ioredis';
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
@@ -86,7 +86,7 @@ export default class RememberRedisProvider implements RememberStoreInterface {
     }
 
     const fullKey = this.keyPrefix + key;
-    const strValue = typeof value === 'string' ? value : JSON.stringify(value);
+    const strValue = JSON.stringify(value);
 
     if (ttlSeconds !== undefined && ttlSeconds > 0) {
       await this.client.set(fullKey, strValue, 'EX', ttlSeconds);
@@ -103,7 +103,7 @@ export default class RememberRedisProvider implements RememberStoreInterface {
    */
   async setIfAbsent(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
     const fullKey = this.keyPrefix + key;
-    const strValue = typeof value === 'string' ? value : JSON.stringify(value);
+    const strValue = JSON.stringify(value);
 
     const result =
       ttlSeconds !== undefined && ttlSeconds > 0

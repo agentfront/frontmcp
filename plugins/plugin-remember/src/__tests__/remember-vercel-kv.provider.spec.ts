@@ -22,25 +22,57 @@ jest.mock('@vercel/kv', () => ({
 }));
 
 describe('RememberVercelKvProvider', () => {
+  const previousEnvironment = { url: process.env['KV_REST_API_URL'], token: process.env['KV_REST_API_TOKEN'] };
+
+  beforeAll(() => {
+    process.env['KV_REST_API_URL'] = 'https://env.kv.vercel-storage.com';
+    process.env['KV_REST_API_TOKEN'] = 'env-token';
+  });
+
+  afterAll(() => {
+    restoreEnvironment('KV_REST_API_URL', previousEnvironment.url);
+    restoreEnvironment('KV_REST_API_TOKEN', previousEnvironment.token);
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   describe('constructor', () => {
-    it('should create provider with default kv instance', () => {
+    it('should build its client from KV_REST_API_URL and KV_REST_API_TOKEN on first use', async () => {
       const provider = new RememberVercelKvProvider();
-      expect(provider).toBeDefined();
+      expect(mockCreateClient).not.toHaveBeenCalled();
+
+      await provider.exists('key');
+      expect(mockCreateClient).toHaveBeenCalledWith({
+        url: 'https://env.kv.vercel-storage.com',
+        token: 'env-token',
+        automaticDeserialization: false,
+      });
     });
 
-    it('should create provider with custom url and token', () => {
+    it('should fail on first use when neither options nor the environment give a url and token', async () => {
+      const url = process.env['KV_REST_API_URL'];
+      delete process.env['KV_REST_API_URL'];
+      try {
+        const provider = new RememberVercelKvProvider();
+        await expect(provider.exists('key')).rejects.toThrow('KV_REST_API_URL and KV_REST_API_TOKEN');
+      } finally {
+        process.env['KV_REST_API_URL'] = url;
+      }
+    });
+
+    it('should create provider with custom url and token', async () => {
       const provider = new RememberVercelKvProvider({
         url: 'https://custom.kv.vercel-storage.com',
         token: 'custom-token',
       });
+      await provider.exists('key');
 
       expect(mockCreateClient).toHaveBeenCalledWith({
         url: 'https://custom.kv.vercel-storage.com',
         token: 'custom-token',
+        automaticDeserialization: false,
       });
     });
 
@@ -86,13 +118,13 @@ describe('RememberVercelKvProvider', () => {
     it('should set string value without TTL', async () => {
       await provider.setValue('key', 'value');
 
-      expect(mockKvClient.set).toHaveBeenCalledWith('remember:key', 'value');
+      expect(mockKvClient.set).toHaveBeenCalledWith('remember:key', JSON.stringify('value'));
     });
 
     it('should set string value with TTL', async () => {
       await provider.setValue('key', 'value', 3600);
 
-      expect(mockKvClient.set).toHaveBeenCalledWith('remember:key', 'value', { ex: 3600 });
+      expect(mockKvClient.set).toHaveBeenCalledWith('remember:key', JSON.stringify('value'), { ex: 3600 });
     });
 
     it('should serialize object values', async () => {
@@ -105,26 +137,26 @@ describe('RememberVercelKvProvider', () => {
       const providerWithTTL = new RememberVercelKvProvider({ defaultTTL: 1800 });
       await providerWithTTL.setValue('key', 'value');
 
-      expect(mockKvClient.set).toHaveBeenCalledWith('remember:key', 'value', { ex: 1800 });
+      expect(mockKvClient.set).toHaveBeenCalledWith('remember:key', JSON.stringify('value'), { ex: 1800 });
     });
 
     it('should use custom key prefix', async () => {
       const customProvider = new RememberVercelKvProvider({ keyPrefix: 'custom:' });
       await customProvider.setValue('key', 'value');
 
-      expect(mockKvClient.set).toHaveBeenCalledWith('custom:key', 'value');
+      expect(mockKvClient.set).toHaveBeenCalledWith('custom:key', JSON.stringify('value'));
     });
 
     it('should not use TTL if 0', async () => {
       await provider.setValue('key', 'value', 0);
 
-      expect(mockKvClient.set).toHaveBeenCalledWith('remember:key', 'value');
+      expect(mockKvClient.set).toHaveBeenCalledWith('remember:key', JSON.stringify('value'));
     });
 
     it('should not use TTL if negative', async () => {
       await provider.setValue('key', 'value', -1);
 
-      expect(mockKvClient.set).toHaveBeenCalledWith('remember:key', 'value');
+      expect(mockKvClient.set).toHaveBeenCalledWith('remember:key', JSON.stringify('value'));
     });
   });
 
@@ -174,15 +206,6 @@ describe('RememberVercelKvProvider', () => {
       const result = await provider.getValue('key');
 
       expect(result).toBe('plain-string');
-    });
-
-    it('should return auto-parsed value from Vercel KV', async () => {
-      // Vercel KV may auto-parse JSON, returning an object directly
-      mockKvClient.get.mockResolvedValue({ foo: 'bar' });
-
-      const result = await provider.getValue('key');
-
-      expect(result).toEqual({ foo: 'bar' });
     });
 
     it('should use custom key prefix', async () => {
@@ -340,7 +363,7 @@ describe('RememberVercelKvProvider', () => {
       const provider = new RememberVercelKvProvider();
 
       await expect(provider.setIfAbsent('marker', 'value')).resolves.toBe(true);
-      expect(mockKvClient.set).toHaveBeenCalledWith('remember:marker', 'value', { nx: true });
+      expect(mockKvClient.set).toHaveBeenCalledWith('remember:marker', JSON.stringify('value'), { nx: true });
     });
 
     it('passes the TTL alongside nx', async () => {
@@ -349,7 +372,7 @@ describe('RememberVercelKvProvider', () => {
 
       await provider.setIfAbsent('marker', 'value', 60);
 
-      expect(mockKvClient.set).toHaveBeenCalledWith('remember:marker', 'value', { nx: true, ex: 60 });
+      expect(mockKvClient.set).toHaveBeenCalledWith('remember:marker', JSON.stringify('value'), { nx: true, ex: 60 });
     });
 
     it('reports false when the key already existed', async () => {
@@ -360,3 +383,8 @@ describe('RememberVercelKvProvider', () => {
     });
   });
 });
+
+function restoreEnvironment(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}

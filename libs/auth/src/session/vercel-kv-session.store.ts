@@ -14,11 +14,17 @@
  */
 
 import { randomUUID, VercelKvStorageAdapter } from '@frontmcp/utils';
-import { SessionStore, StoredSession, storedSessionSchema, SessionSecurityConfig } from './transport-session.types';
+
 import type { AuthLogger } from '../common/auth-logger.interface';
+import { SessionIdEmptyError } from '../errors/auth-internal.errors';
 import { signSession, verifyOrParseSession } from './session-crypto';
 import { SessionRateLimiter } from './session-rate-limiter';
-import { SessionIdEmptyError } from '../errors/auth-internal.errors';
+import {
+  storedSessionSchema,
+  type SessionSecurityConfig,
+  type SessionStore,
+  type StoredSession,
+} from './transport-session.types';
 
 export interface VercelKvSessionConfig {
   /**
@@ -182,10 +188,9 @@ export class VercelKvSessionStore implements SessionStore {
       // If signing is enabled, verify and extract the session
       // Otherwise, just parse it (supports both signed and unsigned sessions)
       let parsed: StoredSession | null;
-      const rawStr = typeof raw === 'string' ? raw : JSON.stringify(raw);
 
       if (this.security.enableSigning) {
-        parsed = verifyOrParseSession(rawStr, { secret: this.security.signingSecret });
+        parsed = verifyOrParseSession(raw, { secret: this.security.signingSecret });
         if (!parsed) {
           this.logger?.warn('[VercelKvSessionStore] Session signature verification failed', {
             sessionId: sessionId.slice(0, 20),
@@ -194,7 +199,7 @@ export class VercelKvSessionStore implements SessionStore {
           return null;
         }
       } else {
-        parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        parsed = JSON.parse(raw);
       }
 
       const result = storedSessionSchema.safeParse(parsed);
