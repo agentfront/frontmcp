@@ -67,6 +67,20 @@ export class ToolNameConflictError extends InternalMcpError {
 }
 
 /**
+ * Thrown when an app's id is the owner id server-level entries (`@FrontMcp({ tools, resources })`) are
+ * listed under, which would make an app tool and a server tool of the same name indistinguishable.
+ */
+export class ReservedAppIdError extends InternalMcpError {
+  constructor(appId: string) {
+    super(
+      `App id "${appId}" is reserved while @FrontMcp declares tools or resources: a server-level entry ` +
+        `named like an app's is listed as "${appId}:<name>". Give the app another id.`,
+      'RESERVED_APP_ID',
+    );
+  }
+}
+
+/**
  * Thrown when a flow is not registered in the flow registry.
  */
 export class FlowNotRegisteredError extends InternalMcpError {

@@ -6,7 +6,7 @@
  * - Cross-app tool discovery
  * - Namespace handling
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Multi-App Server E2E', () => {
   test.use({
@@ -236,6 +236,31 @@ test.describe('Multi-App Server E2E', () => {
       expect(prompts).toContainPrompt('summarize-notes');
       expect(prompts).toContainPrompt('prioritize-tasks');
       expect(prompts).toContainPrompt('schedule-overview');
+    });
+  });
+
+  test.describe('Server-Level Tools and Resources', () => {
+    test('should list the server-level tool next to the app tools', async ({ mcp }) => {
+      const tools = await mcp.tools.list();
+
+      expect(tools).toContainTool('server-info');
+      expect(tools).toContainTool('create-note');
+    });
+
+    test('should call the server-level tool', async ({ mcp }) => {
+      const result = await mcp.tools.call('server-info', {});
+
+      expect(result).toBeSuccessful();
+      expect(result).toHaveTextContent('Demo E2E MultiApp');
+    });
+
+    test('should list and read the server-level resource', async ({ mcp }) => {
+      const resources = await mcp.resources.list();
+      expect(resources).toContainResource('server://status');
+
+      const content = await mcp.resources.read('server://status');
+      expect(content).toBeSuccessful();
+      expect(content).toHaveTextContent('"owner":"server"');
     });
   });
 

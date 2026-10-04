@@ -168,6 +168,7 @@ export {
   NameDisambiguationError,
   EntryValidationError,
   ToolNameConflictError,
+  ReservedAppIdError,
   FlowNotRegisteredError,
   UnsupportedHookOwnerKindError,
 } from './registry.errors';
