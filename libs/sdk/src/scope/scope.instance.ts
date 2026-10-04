@@ -755,7 +755,11 @@ export class Scope extends ScopeEntry {
     }
 
     // `@FrontMcp({ tools, resources })`: the scope registries below adopt them, so every app serves them (#703).
-    await registerServerEntries(this.scopeProviders, this.metadata);
+    await registerServerEntries(
+      this.scopeProviders,
+      this.metadata,
+      this.scopeApps.getApps().map((app) => app.id),
+    );
 
     // Initialize authorities engine from metadata config (built-in, no plugin needed)
     this.initAuthoritiesFromConfig();

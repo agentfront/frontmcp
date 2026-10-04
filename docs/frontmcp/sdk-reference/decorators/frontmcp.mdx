@@ -137,7 +137,7 @@ Prompts, agents, jobs, workflows, and channels are declared at the `@App` level 
 Tools, resources and resource templates declared on `@FrontMcp` are listed, called and read next to every app's own, through the same flows: hooks of server-level plugins, hooks declared on the entry class, `authorities`, rate limits, `availableWhen`, and the startup checks apply to them as they do to app entries. They resolve the server-level `providers`, not an app's.
 
 - **Every scope serves them.** With `splitByApp: true`, and for a `standalone` app, each app's scope builds its own instance of every server-level tool and resource, as it does for server-level plugins and adapters.
-- **Name conflicts.** A server-level tool keeps its name unless an app in the same scope has a tool of that name. Then both are prefixed with their owner: `<app id>:<name>` for the app's tool and `server:<name>` for the server's. Call each by the name `tools/list` returns.
+- **Name conflicts.** A server-level tool keeps its name unless an app in the same scope has a tool of that name. Then both are prefixed with their owner: `<app id>:<name>` for the app's tool and `server:<name>` for the server's. Call each by the name `tools/list` returns. For that reason no app may have the id `server` while `@FrontMcp` declares tools or resources; startup fails with `ReservedAppIdError`.
 - **Plugins.** An app's plugin hooks run for a server-level tool only when declared with `appliesTo: 'uncovered-apps'`; server-level plugin hooks always run.
 - **Progressive authorization.** A server-level tool belongs to no app, so `incrementalAuth` does not ask for an app grant before it runs.
 

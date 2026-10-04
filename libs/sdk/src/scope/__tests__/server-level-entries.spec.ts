@@ -5,6 +5,7 @@ import { type ReadResourceResult } from '@frontmcp/protocol';
 
 import { DirectMcpServerImpl } from '../../direct/direct-server';
 import { type DirectMcpServer } from '../../direct/direct.types';
+import { ReservedAppIdError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import {
   App,
@@ -211,6 +212,25 @@ describe('server-level tool named like an app tool', () => {
       expect(await toolNamesOf(server)).toEqual(['desk:ping', 'server:ping']);
       expect((await server.callTool('server:ping', {})).structuredContent).toEqual({ reply: 'pong', from: 'server' });
       expect((await server.callTool('desk:ping', {})).structuredContent).toEqual({ from: 'desk' });
+    } finally {
+      await server.dispose();
+    }
+  });
+});
+
+describe('an app whose id is the server-level owner id', () => {
+  it('fails startup while the server declares tools, since both would be listed as `server:<name>`', async () => {
+    await expect(
+      FrontMcpInstance.createDirect(serverConfig({ apps: [app('server', { tools: [appTool('ping', 'server')] })] })),
+    ).rejects.toBeInstanceOf(ReservedAppIdError);
+  });
+
+  it('starts when the server declares no tools or resources', async () => {
+    const server = await FrontMcpInstance.createDirect(
+      serverConfig({ apps: [app('server', { tools: [appTool('ping', 'server')] })], tools: [] }),
+    );
+    try {
+      expect(await toolNamesOf(server)).toEqual(['ping']);
     } finally {
       await server.dispose();
     }
