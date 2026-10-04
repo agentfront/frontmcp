@@ -26,11 +26,14 @@ export default class RememberRedisProvider implements RememberStoreInterface {
    * Include any separator (e.g., "myapp:" or "user:123:") as part of the prefix.
    */
   private readonly keyPrefix: string;
+  /** TTL in seconds for values stored without one. */
+  private readonly defaultTTL?: number;
   /** True if this provider created the client (and should close it), false if externally provided */
   private readonly ownsClient: boolean;
 
   constructor(options: RedisRememberOptions) {
     this.keyPrefix = options.keyPrefix ?? '';
+    this.defaultTTL = options.defaultTTL;
 
     if (options.type === 'redis-client') {
       this.client = options.client;
@@ -87,9 +90,10 @@ export default class RememberRedisProvider implements RememberStoreInterface {
 
     const fullKey = this.keyPrefix + key;
     const strValue = JSON.stringify(value);
+    const ttl = ttlSeconds ?? this.defaultTTL;
 
-    if (ttlSeconds !== undefined && ttlSeconds > 0) {
-      await this.client.set(fullKey, strValue, 'EX', ttlSeconds);
+    if (ttl !== undefined && ttl > 0) {
+      await this.client.set(fullKey, strValue, 'EX', ttl);
     } else {
       await this.client.set(fullKey, strValue);
     }
@@ -104,10 +108,11 @@ export default class RememberRedisProvider implements RememberStoreInterface {
   async setIfAbsent(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
     const fullKey = this.keyPrefix + key;
     const strValue = JSON.stringify(value);
+    const ttl = ttlSeconds ?? this.defaultTTL;
 
     const result =
-      ttlSeconds !== undefined && ttlSeconds > 0
-        ? await this.client.set(fullKey, strValue, 'EX', ttlSeconds, 'NX')
+      ttl !== undefined && ttl > 0
+        ? await this.client.set(fullKey, strValue, 'EX', ttl, 'NX')
         : await this.client.set(fullKey, strValue, 'NX');
 
     return result === 'OK';

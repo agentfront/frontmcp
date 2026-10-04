@@ -105,6 +105,19 @@ describe('RememberPlugin', () => {
         const storeProvider = providers.find((p) => p.name === 'remember:store:memory');
         expect(storeProvider).toBeDefined();
       });
+
+      it('should expire values stored without a ttl after defaultTTL (#717)', async () => {
+        const providers = RememberPlugin.dynamicProviders({ type: 'memory', defaultTTL: 60 });
+        const storeProvider = providers.find((p) => p.name === 'remember:store:memory') as FactoryProvider;
+        const store = storeProvider.useFactory() as RememberMemoryProvider;
+
+        await store.setValue('key', 'value');
+        jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000);
+
+        await expect(store.getValue('key')).resolves.toBeUndefined();
+        jest.restoreAllMocks();
+        await store.close();
+      });
     });
 
     describe('type: redis', () => {
@@ -231,6 +244,22 @@ describe('RememberPlugin', () => {
 
         const result = storeProvider.useFactory(mockConfig);
         expect(result).toBeInstanceOf(RememberRedisProvider);
+      });
+
+      it('should expire values stored without a ttl after defaultTTL on the Redis store (#717)', async () => {
+        const providers = RememberPlugin.dynamicProviders({ type: 'global-store', defaultTTL: 900 });
+        const storeProvider = providers.find((p) => p.name === 'remember:store:global') as FactoryProvider;
+        const store = storeProvider.useFactory({
+          redis: { provider: 'redis', host: 'redis.example.com', port: 6379 },
+        }) as RememberRedisProvider;
+        const redisConstructor = jest.requireMock<jest.Mock>('ioredis');
+        const redisClient = redisConstructor.mock.results[redisConstructor.mock.results.length - 1].value as {
+          set: jest.Mock;
+        };
+
+        await store.setValue('key', 'value');
+
+        expect(redisClient.set).toHaveBeenCalledWith('remember:key', JSON.stringify('value'), 'EX', 900);
       });
 
       it('should throw when redis config is missing', () => {

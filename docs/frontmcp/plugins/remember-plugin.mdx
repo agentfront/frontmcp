@@ -238,6 +238,10 @@ const prefKeys = await this.remember.list({
 
 ## Storage Options
 
+Every storage type takes `defaultTTL`, in seconds: an entry stored without its own `ttl` expires that long after it is
+written. Up to 1.9.0 the memory and Redis stores (`global-store` on Redis included) ignored it, so those entries never
+expired; entries written before the upgrade keep no expiry until they are written again.
+
 ### In-Memory (Default)
 
 Best for: Single-instance deployments, development, non-persistent data
@@ -371,7 +375,9 @@ makes the window mean something. A process-local timer restarts on every deploy 
 crash, so it never converges on "the fleet has been on `v2:` for a while", and an instance that
 booted early would fire on its own schedule no matter when the last old instance drained. The
 marker is written once and never overwritten, so a later instance cannot reset it, and whichever
-instance is alive when the window passes completes the sweep.
+instance is alive when the window passes completes the sweep. With `defaultTTL` set, the marker gets
+a TTL of its own -- twice the window, or `defaultTTL` if that is longer -- so the store cannot expire
+it before the sweep.
 
 The window has to outlast two things: the rollout, and the period in which a bad deploy gets
 rolled back. The second is the one that matters -- a rollback after the sweep makes the old

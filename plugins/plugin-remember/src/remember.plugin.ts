@@ -194,7 +194,7 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
           provide: RememberStoreToken,
           // Built per server: `init()` runs once, so a value here would be shared by every server using it.
           inject: () => [] as const,
-          useFactory: () => new RememberMemoryProvider(),
+          useFactory: () => new RememberMemoryProvider(undefined, config.defaultTTL),
         });
         break;
     }

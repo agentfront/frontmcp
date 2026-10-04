@@ -265,6 +265,10 @@ class GlobalStoreServer {}
 - `vercel-kv` -- Vercel KV (Redis-compatible). Uses `@vercel/kv` package.
 - `global-store` -- Reuses the Redis connection from `@FrontMcp({ redis: {...} })`.
 
+Every type takes `defaultTTL`, in seconds: an entry stored without its own `ttl` expires that long after it is written.
+Up to 1.9.0 the memory and Redis stores (`global-store` on Redis included) ignored it, so those entries never expired;
+entries written before the upgrade keep no expiry until they are written again.
+
 ### Using `this.remember` in Tools
 
 ```typescript
@@ -353,7 +357,8 @@ reads it and sweeps only once it is older than the window, re-arming for the rem
 then. The clock lives in the store because a process-local timer restarts on every deploy and
 crash, so it never converges on "the fleet has been on `v2:` for a while". The marker is written
 once and never overwritten, and if it cannot be read or parsed the purge stands down rather than
-deleting on an unknown clock.
+deleting on an unknown clock. With `defaultTTL` set, the marker gets a TTL of its own -- twice the
+window, or `defaultTTL` if that is longer -- so the store cannot expire it before the sweep.
 
 The window has to outlast the rollout _and_ the period in which a bad deploy is rolled back --
 a rollback after the sweep makes the old fleet permanent again with its memory gone. Tune it

@@ -29,7 +29,10 @@ export default class RememberMemoryProvider implements RememberStoreInterface {
   private readonly memory = new Map<string, Entry>();
   private sweeper?: NodeJS.Timeout;
 
-  constructor(sweepIntervalSeconds = 60) {
+  constructor(
+    sweepIntervalSeconds = 60,
+    private readonly defaultTTL?: number,
+  ) {
     this.sweeper = setInterval(() => this.sweep(), sweepIntervalSeconds * 1000);
     // Don't keep the process alive just for the sweeper
     (this.sweeper as { unref?: () => void }).unref?.();
@@ -49,9 +52,10 @@ export default class RememberMemoryProvider implements RememberStoreInterface {
     if (existing?.timeout) clearTimeout(existing.timeout);
 
     const entry: Entry = { value: strValue };
+    const ttl = ttlSeconds ?? this.defaultTTL;
 
-    if (ttlSeconds && ttlSeconds > 0) {
-      const ttlMs = ttlSeconds * 1000;
+    if (ttl && ttl > 0) {
+      const ttlMs = ttl * 1000;
       entry.expiresAt = Date.now() + ttlMs;
 
       // Only schedule a timer if within Node's setTimeout limit
