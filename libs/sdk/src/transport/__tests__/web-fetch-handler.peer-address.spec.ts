@@ -6,6 +6,7 @@ import {
   rpc20260728,
   type TestFetchServer,
 } from '../../__test-utils__/helpers/mcp-20260728.helpers';
+import { useMidRateLimitWindow } from '../../__test-utils__/helpers/rate-limit-window.helpers';
 import { App, Tool, ToolContext } from '../../common';
 import { type Scope } from '../../scope/scope.instance';
 import { runHttpRequestFlowWeb, type FetchHandlerCtx, type WebFetchHandler } from '../web-fetch-handler';
@@ -53,6 +54,8 @@ async function callLimited(handler: WebFetchHandler, headers: Record<string, str
 }
 
 describe('web-fetch peer address (GHSA-p3qf-fcwm-35x4)', () => {
+  useMidRateLimitWindow(60_000);
+
   let server: TestFetchServer;
 
   beforeEach(async () => {
