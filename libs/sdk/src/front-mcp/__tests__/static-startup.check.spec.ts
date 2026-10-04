@@ -202,6 +202,16 @@ const REFUSED: Array<[string, FrontMcpConfigInput, new (...args: never[]) => Err
     UnenforcedMetadataError,
   ],
   [
+    'a server-level approval tool, and an approval gate only on an unrelated app',
+    server({ apps: [app('desk', { plugins: [OwnAppApprovalPlugin] })], tools: [tool('shared_refund', APPROVAL)] }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'a server-level plugin contributes an approval tool, and an approval gate only on an unrelated app',
+    server({ apps: [app('desk', { plugins: [OwnAppApprovalPlugin] })], plugins: [QueueToolsPlugin] }),
+    UnenforcedMetadataError,
+  ],
+  [
     'a server-level resource template declares authorities',
     server({ apps: [app('desk', {})], resources: [TicketTemplate] }),
     AuthConfigurationError,
