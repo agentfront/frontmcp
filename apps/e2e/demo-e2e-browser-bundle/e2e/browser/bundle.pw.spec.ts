@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 test.describe('Browser bundle integration', () => {
   test('page loads without console errors', async ({ page }) => {
@@ -24,6 +24,17 @@ test.describe('Browser bundle integration', () => {
     for (const [name, result] of Object.entries(results as Record<string, { pass: boolean; value: string }>)) {
       expect(result.pass, `Check "${name}" failed: ${result.value}`).toBe(true);
     }
+  });
+
+  test('builds a fetch handler and a direct server, which never listen, in the browser', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('[data-testid="summary"]');
+    const results = (await page.evaluate(
+      () => (window as unknown as Record<string, unknown>).__BUNDLE_RESULTS__,
+    )) as Record<string, { pass: boolean; value: string }>;
+
+    expect(results['createFetchHandler']).toEqual({ pass: true, value: '200' });
+    expect(results['createDirect']).toEqual({ pass: true, value: 'ping' });
   });
 
   test('env utilities return browser defaults', async ({ page }) => {

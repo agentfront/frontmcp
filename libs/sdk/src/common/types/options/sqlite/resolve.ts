@@ -19,8 +19,6 @@
  */
 
 // Namespace import: a browser bundle stubs `os`, and a named import would read it as the module loads
-import * as os from 'os';
-import * as path from 'path';
 
 import { getRuntimeContext, readFileSync } from '@frontmcp/utils';
 
@@ -33,6 +31,16 @@ export interface SqlitePathResolverContext {
   cwd?: string;
 }
 
+/** Node's `os`, loaded on first use: the SQLite store is Node-only and a browser bundle must not import it. */
+function nodeOs(): typeof import('os') {
+  return require('os');
+}
+
+/** Node's `path`, loaded on first use for the same reason. */
+function nodePath(): typeof import('path') {
+  return require('path');
+}
+
 export function resolveDefaultSqlitePath(ctx: SqlitePathResolverContext): string {
   const cwd = ctx.cwd ?? process.cwd();
   const { env, runtime } = getRuntimeContext();
@@ -40,19 +48,19 @@ export function resolveDefaultSqlitePath(ctx: SqlitePathResolverContext): string
 
   // CLI mode OR production: home dir, per-app namespace
   if (ctx.cliMode || env === 'production') {
-    return path.join(os.homedir(), `.${namespace}`, 'sessions.sqlite');
+    return nodePath().join(nodeOs().homedir(), `.${namespace}`, 'sessions.sqlite');
   }
 
   // Non-node runtimes can't load better-sqlite3 anyway; the resolver still
   // returns a sensible string so log messages aren't broken. The actual
   // error surfaces in the storage-sqlite require() at runtime.
   if (runtime !== 'node') {
-    return path.join(os.homedir(), `.${namespace}`, 'sessions.sqlite');
+    return nodePath().join(nodeOs().homedir(), `.${namespace}`, 'sessions.sqlite');
   }
 
   // dev + node: project build folder
   const projectRoot = findProjectRoot(cwd) ?? cwd;
-  return path.join(projectRoot, 'dist', 'sessions.sqlite');
+  return nodePath().join(projectRoot, 'dist', 'sessions.sqlite');
 }
 
 function sanitizeForFs(name: string | undefined): string {
@@ -69,7 +77,7 @@ function findProjectRoot(start: string): string | undefined {
   // ENOENT, which we treat as "not here, keep walking".
   for (let i = 0; i < 32; i++) {
     try {
-      readFileSync(path.join(dir, 'package.json'));
+      readFileSync(nodePath().join(dir, 'package.json'));
       return dir;
     } catch (error: unknown) {
       // Only swallow the legitimate "not here" codes; rethrow anything
@@ -82,7 +90,7 @@ function findProjectRoot(start: string): string | undefined {
       }
       // package.json absent at this level — fall through to parent.
     }
-    const parent = path.dirname(dir);
+    const parent = nodePath().dirname(dir);
     if (parent === dir) return undefined;
     dir = parent;
   }
