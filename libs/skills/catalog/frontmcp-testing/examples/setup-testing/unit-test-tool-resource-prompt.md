@@ -5,7 +5,7 @@ level: intermediate
 description: 'Write unit tests for the three core MCP primitives, verifying that outputs match the expected MCP response shapes.'
 tags: [testing, jest, unit-test, setup, unit, tool]
 features:
-  - 'Testing tool `execute()` with a mock context object assigned via `Object.assign`'
+  - 'Testing tool `execute()` on an instance from `Object.create(MyTool.prototype)`, with mock context methods assigned via `Object.assign`'
   - 'Verifying resource `execute(uri, params)` output matches the MCP `ReadResourceResult` shape'
   - 'Verifying prompt `execute()` output matches the MCP `GetPromptResult` shape'
   - 'Using Jest matchers like `expect.stringContaining` and `expect.objectContaining` for flexible assertions'
@@ -25,15 +25,14 @@ describe('MyTool', () => {
   let tool: MyTool;
 
   beforeEach(() => {
-    tool = new MyTool();
+    // `new MyTool()` throws: the constructor needs the request context the server builds.
+    tool = Object.create(MyTool.prototype);
   });
 
   it('should return formatted result for valid input', async () => {
     const mockContext = {
-      scope: {
-        get: jest.fn(),
-        tryGet: jest.fn(),
-      },
+      get: jest.fn(),
+      tryGet: jest.fn(),
       fail: jest.fn(),
       mark: jest.fn(),
       fetch: jest.fn(),
@@ -49,7 +48,8 @@ describe('MyTool', () => {
 
   it('should throw for invalid input', async () => {
     const mockContext = {
-      scope: { get: jest.fn(), tryGet: jest.fn() },
+      get: jest.fn(),
+      tryGet: jest.fn(),
       fail: jest.fn(),
     };
     Object.assign(tool, mockContext);
@@ -65,7 +65,7 @@ import { MyResource } from '../my-resource';
 
 describe('MyResource', () => {
   it('should return resource contents matching ReadResourceResult', async () => {
-    const resource = new MyResource();
+    const resource: MyResource = Object.create(MyResource.prototype);
     const result = await resource.execute('resource://item/123', { id: '123' });
 
     expect(result).toEqual({
@@ -87,7 +87,7 @@ import { MyPrompt } from '../my-prompt';
 
 describe('MyPrompt', () => {
   it('should return a valid GetPromptResult', async () => {
-    const prompt = new MyPrompt();
+    const prompt: MyPrompt = Object.create(MyPrompt.prototype);
     const result = await prompt.execute({ topic: 'testing' });
 
     expect(result).toEqual({
@@ -104,7 +104,7 @@ describe('MyPrompt', () => {
 
 ## What This Demonstrates
 
-- Testing tool `execute()` with a mock context object assigned via `Object.assign`
+- Testing tool `execute()` on an instance from `Object.create(MyTool.prototype)`, with mock context methods assigned via `Object.assign`
 - Verifying resource `execute(uri, params)` output matches the MCP `ReadResourceResult` shape
 - Verifying prompt `execute()` output matches the MCP `GetPromptResult` shape
 - Using Jest matchers like `expect.stringContaining` and `expect.objectContaining` for flexible assertions

@@ -6,7 +6,7 @@ description: 'Shows how to write unit tests for tools by mocking context methods
 tags: [guides, e2e, unit-test, weather, api, unit]
 features:
   - 'Unit testing tools by mocking `this.fetch()`, `this.fail()`, and other context methods'
-  - 'Using `Object.assign(tool, ctx)` to inject mock context into the tool instance'
+  - 'Creating the tool with `Object.create(GetWeatherTool.prototype)` and injecting mock context methods with `Object.assign(tool, ctx)`'
   - 'E2E testing with `TestServer.start()` and `McpTestClient.create()`'
   - 'Asserting tool presence via `expect(tools.map((t) => t.name)).toContain(...)` and parsing resource JSON via `result.json<T>()`'
   - 'Proper cleanup with `client.disconnect()` and `server.stop()` in `afterAll`'
@@ -28,7 +28,8 @@ describe('GetWeatherTool', () => {
   let tool: GetWeatherTool;
 
   beforeEach(() => {
-    tool = new GetWeatherTool();
+    // `new GetWeatherTool()` throws: the constructor needs the request context the server builds.
+    tool = Object.create(GetWeatherTool.prototype);
   });
 
   it('should return weather data for a valid city', async () => {
@@ -133,7 +134,7 @@ describe('Weather Server E2E', () => {
 ## What This Demonstrates
 
 - Unit testing tools by mocking `this.fetch()`, `this.fail()`, and other context methods
-- Using `Object.assign(tool, ctx)` to inject mock context into the tool instance
+- Creating the tool with `Object.create(GetWeatherTool.prototype)` and injecting mock context methods with `Object.assign(tool, ctx)`
 - E2E testing with `TestServer.start()` and `McpTestClient.create()`
 - Asserting tool presence via `expect(tools.map((t) => t.name)).toContain(...)` and parsing resource JSON via `result.json<T>()`
 - Proper cleanup with `client.disconnect()` and `server.stop()` in `afterAll`

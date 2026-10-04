@@ -19,7 +19,7 @@ Validate that a tool's Zod input schema rejects invalid data before `execute()` 
 
 ```typescript
 // src/tools/__tests__/add.tool.schema.spec.ts
-import { ToolContext, z } from '@frontmcp/sdk';
+import { z } from '@frontmcp/sdk';
 
 import { AddTool } from '../add.tool';
 
@@ -50,21 +50,9 @@ describe('AddTool schema validation', () => {
   });
 
   it('should coerce valid input and produce correct output', async () => {
-    const tool = new AddTool();
-    // Mock the real ExecutionContextBase + ToolContext surface.
-    // Real API: libs/sdk/src/common/interfaces/execution-context.interface.ts
-    const ctx = {
-      get: jest.fn(),
-      tryGet: jest.fn(),
-      scope: { get: jest.fn(), tryGet: jest.fn() },
-      fail: jest.fn((err) => {
-        throw err;
-      }),
-      mark: jest.fn(),
-      fetch: jest.fn(),
-      notify: jest.fn(),
-    } as unknown as ToolContext;
-    Object.assign(tool, ctx);
+    // `new AddTool()` throws: the constructor needs the request context the server builds.
+    // AddTool calls no context method, so the instance needs no mocks.
+    const tool: AddTool = Object.create(AddTool.prototype);
 
     const parsed = schema.parse({ a: 7, b: 3 });
     const result = await tool.execute(parsed);

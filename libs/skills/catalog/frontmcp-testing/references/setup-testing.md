@@ -56,7 +56,7 @@ src/
 
 ### Testing a Tool
 
-Tools extend `ToolContext` and implement `execute()`. Test the execute method by providing mock inputs and verifying outputs match the MCP `CallToolResult` shape.
+Tools extend `ToolContext` and implement `execute()`. Test the execute method by providing mock inputs and verifying outputs match the MCP `CallToolResult` shape. Create the instance with `Object.create(MyTool.prototype)`: the constructor needs the request context the server builds for each call, so `new MyTool()` throws (see `test-tool-unit`).
 
 ```typescript
 // my-tool.spec.ts
@@ -66,22 +66,20 @@ describe('MyTool', () => {
   let tool: MyTool;
 
   beforeEach(() => {
-    tool = new MyTool();
+    // `new MyTool()` throws: the constructor needs the request context the server builds.
+    tool = Object.create(MyTool.prototype);
   });
 
   it('should return formatted result for valid input', async () => {
-    // Create a mock execution context
+    // Mock the context methods the tool calls (`scope` and `auth` are getters: use Object.defineProperty)
     const mockContext = {
-      scope: {
-        get: jest.fn(),
-        tryGet: jest.fn(),
-      },
+      get: jest.fn(),
+      tryGet: jest.fn(),
       fail: jest.fn(),
       mark: jest.fn(),
       fetch: jest.fn(),
     };
 
-    // Bind mock context
     Object.assign(tool, mockContext);
 
     const result = await tool.execute({ query: 'test input' });
@@ -93,7 +91,8 @@ describe('MyTool', () => {
 
   it('should handle missing optional parameters', async () => {
     const mockContext = {
-      scope: { get: jest.fn(), tryGet: jest.fn() },
+      get: jest.fn(),
+      tryGet: jest.fn(),
       fail: jest.fn(),
       mark: jest.fn(),
       fetch: jest.fn(),
@@ -108,7 +107,8 @@ describe('MyTool', () => {
 
   it('should throw for invalid input', async () => {
     const mockContext = {
-      scope: { get: jest.fn(), tryGet: jest.fn() },
+      get: jest.fn(),
+      tryGet: jest.fn(),
       fail: jest.fn(),
     };
     Object.assign(tool, mockContext);
@@ -120,7 +120,7 @@ describe('MyTool', () => {
 
 ### Testing a Resource
 
-Resources extend `ResourceContext` and implement `execute(uri, params)`. Verify the output matches the MCP `ReadResourceResult` shape.
+Resources extend `ResourceContext` and implement `execute(uri, params)`. Verify the output matches the MCP `ReadResourceResult` shape. Create the instance from its prototype, as for tools.
 
 ```typescript
 // my-resource.spec.ts
@@ -128,7 +128,7 @@ import { MyResource } from '../my-resource';
 
 describe('MyResource', () => {
   it('should return resource contents', async () => {
-    const resource = new MyResource();
+    const resource: MyResource = Object.create(MyResource.prototype);
     const result = await resource.execute('resource://item/123', { id: '123' });
 
     expect(result).toEqual({
@@ -146,7 +146,7 @@ describe('MyResource', () => {
 
 ### Testing a Prompt
 
-Prompts extend `PromptContext` and implement `execute()`. Verify the output matches the MCP `GetPromptResult` shape.
+Prompts extend `PromptContext` and implement `execute()`. Verify the output matches the MCP `GetPromptResult` shape. Create the instance from its prototype, as for tools.
 
 ```typescript
 // my-prompt.spec.ts
@@ -154,7 +154,7 @@ import { MyPrompt } from '../my-prompt';
 
 describe('MyPrompt', () => {
   it('should return a valid GetPromptResult', async () => {
-    const prompt = new MyPrompt();
+    const prompt: MyPrompt = Object.create(MyPrompt.prototype);
     const result = await prompt.execute({ topic: 'testing' });
 
     expect(result).toEqual({
