@@ -324,7 +324,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const build = async (deferred: boolean): Promise<WebFetchHandler> => {
       let frontMcp: FrontMcpInstance | undefined;
       try {
-        frontMcp = new FrontMcpInstance(frontMcpMetadataSchema.parse(options));
+        // A fetch handler never listens, so it gets no HTTP host (a browser or worker build has no Express)
+        frontMcp = new FrontMcpInstance(frontMcpMetadataSchema.parse({ ...options, serve: false }));
         await frontMcp.ready;
       } catch (err) {
         // A deferred build fails on a request, which may only be answered with a code and a remedy:
@@ -476,8 +477,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // Parse config through Zod to apply defaults, then disable HTTP server
     const parsedConfig = frontMcpMetadataSchema.parse({
       ...options,
-      // Disable HTTP server since we're using direct access
+      // Direct access never listens: no HTTP config and no HTTP host (a browser build has no Express)
       http: undefined,
+      serve: false,
     });
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
