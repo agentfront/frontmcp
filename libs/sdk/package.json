@@ -99,7 +99,7 @@
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": "^0.30.0 || ^0.78.0",
-    "@enclave-vm/core": "^2.15.3",
+    "@enclave-vm/core": "^2.16.0",
     "@frontmcp/observability": "1.9.0",
     "@frontmcp/storage-sqlite": "1.9.0",
     "@opentelemetry/api": "^1.9.0",
