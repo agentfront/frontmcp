@@ -66,7 +66,7 @@ describe('RememberRedisProvider', () => {
 
       await provider.setValue('key', 'value', 3600);
 
-      expect(mockRedis.set).toHaveBeenCalledWith('key', 'value', 'EX', 3600);
+      expect(mockRedis.set).toHaveBeenCalledWith('key', JSON.stringify('value'), 'EX', 3600);
     });
 
     it('should set value without TTL', async () => {
@@ -77,7 +77,7 @@ describe('RememberRedisProvider', () => {
 
       await provider.setValue('key', 'value');
 
-      expect(mockRedis.set).toHaveBeenCalledWith('key', 'value');
+      expect(mockRedis.set).toHaveBeenCalledWith('key', JSON.stringify('value'));
     });
 
     it('should serialize objects', async () => {
@@ -145,7 +145,7 @@ describe('RememberRedisProvider', () => {
 
       await provider.setValue('key', 'value');
 
-      expect(mockRedis.set).toHaveBeenCalledWith('prefix:key', 'value');
+      expect(mockRedis.set).toHaveBeenCalledWith('prefix:key', JSON.stringify('value'));
     });
   });
 
@@ -335,7 +335,7 @@ describe('RememberRedisProvider', () => {
       const provider = new RememberRedisProvider({ type: 'redis-client', client: mockRedis as any });
 
       await expect(provider.setIfAbsent('marker', 'value')).resolves.toBe(true);
-      expect(mockRedis.set).toHaveBeenCalledWith('marker', 'value', 'NX');
+      expect(mockRedis.set).toHaveBeenCalledWith('marker', JSON.stringify('value'), 'NX');
     });
 
     it('passes the TTL alongside NX', async () => {
@@ -344,7 +344,7 @@ describe('RememberRedisProvider', () => {
 
       await provider.setIfAbsent('marker', 'value', 60);
 
-      expect(mockRedis.set).toHaveBeenCalledWith('marker', 'value', 'EX', 60, 'NX');
+      expect(mockRedis.set).toHaveBeenCalledWith('marker', JSON.stringify('value'), 'EX', 60, 'NX');
     });
 
     it('reports false when the key already existed', async () => {
