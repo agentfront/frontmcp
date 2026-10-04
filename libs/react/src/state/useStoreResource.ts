@@ -17,6 +17,7 @@ import { useContext, useEffect, useRef } from 'react';
 import type { CallToolResult, ReadResourceResult } from '@frontmcp/sdk';
 
 import { FrontMcpContext } from '../provider/FrontMcpContext';
+import { useIsomorphicLayoutEffect } from '../utils/useIsomorphicLayoutEffect';
 import type { StoreResourceOptions } from './state.types';
 
 const VALID_NAME_RE = /^[a-zA-Z0-9_-]+$/;
@@ -59,8 +60,8 @@ export function useStoreResource(options: StoreResourceOptions): void {
   const selectorsRef = useRef(selectors);
   const actionsRef = useRef(actions);
 
-  // Set after commit, never during render: a render React discards must not reach a registered read or action
-  useEffect(() => {
+  // Set at commit, before passive effects and never during render: a render React discards must not reach a registered read or action
+  useIsomorphicLayoutEffect(() => {
     getStateRef.current = getState;
     selectorsRef.current = selectors;
     actionsRef.current = actions;

@@ -380,4 +380,35 @@ describe('useDynamicTool — Zod schema mode', () => {
     expect(committedExecute).toHaveBeenCalledWith({ query: 'mcp' });
     expect(discardedExecute).not.toHaveBeenCalled();
   });
+
+  it('runs the committed execute from a layout effect, before passive effects run', async () => {
+    const firstExecute = jest.fn(async () => okResult('first'));
+    const secondExecute = jest.fn(async () => okResult('second'));
+    const resultsSeenAfterCommit: Array<Promise<CallToolResult | undefined>> = [];
+    function SearchTool({ execute }: { execute: () => Promise<CallToolResult> }) {
+      useDynamicTool({ name: 'search', description: 'Search', schema: z.object({ query: z.string() }), execute });
+      return null;
+    }
+    function CallsToolOnCommit({ version }: { version: number }) {
+      React.useLayoutEffect(() => {
+        if (version > 1) resultsSeenAfterCommit.push(dynamicRegistry.findTool('search')?.execute({ query: 'mcp' }));
+      }, [version]);
+      return null;
+    }
+    const Wrapper = createWrapper(dynamicRegistry);
+    const tree = (version: number) => (
+      <Wrapper>
+        <SearchTool execute={version > 1 ? secondExecute : firstExecute} />
+        <CallsToolOnCommit version={version} />
+      </Wrapper>
+    );
+    const { rerender } = render(tree(1));
+
+    await act(async () => {
+      rerender(tree(2));
+    });
+
+    expect(await resultsSeenAfterCommit[0]).toEqual(okResult('second'));
+    expect(firstExecute).not.toHaveBeenCalled();
+  });
 });
