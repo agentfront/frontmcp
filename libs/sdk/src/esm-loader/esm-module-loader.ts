@@ -7,13 +7,11 @@
  * - **Browser**: fetch → in-memory cache → evaluate via Function constructor
  */
 
-import type { FrontMcpLogger } from '../common';
-import type { EsmRegistryAuth } from './esm-auth.types';
-import type { EsmCacheManager, EsmCacheEntry } from './esm-cache';
-import type { ParsedPackageSpecifier } from './package-specifier';
-import type { FrontMcpPackageManifest } from './esm-manifest';
-import { buildEsmShUrl } from './package-specifier';
-import { normalizeEsmExport } from './esm-manifest';
+import { type FrontMcpLogger } from '../common';
+import { type EsmRegistryAuth } from './esm-auth.types';
+import { type EsmCacheEntry, type EsmCacheManager } from './esm-cache';
+import { normalizeEsmExport, type FrontMcpPackageManifest } from './esm-manifest';
+import { buildEsmShUrl, type ParsedPackageSpecifier } from './package-specifier';
 import { VersionResolver } from './version-resolver';
 
 /**
@@ -195,10 +193,12 @@ export class EsmModuleLoader {
       if ((error as Error).name === 'AbortError') {
         throw new Error(
           `Timeout fetching ESM bundle for "${specifier.fullName}@${resolvedVersion}" after ${this.timeout}ms`,
+          { cause: error },
         );
       }
       throw new Error(
         `Failed to fetch ESM bundle for "${specifier.fullName}@${resolvedVersion}": ${(error as Error).message}`,
+        { cause: error },
       );
     } finally {
       clearTimeout(timeoutId);
@@ -239,7 +239,7 @@ export class EsmModuleLoader {
    * Uses dynamic import with file:// URL for cross-platform compatibility.
    */
   private async importFromPath(filePath: string): Promise<unknown> {
-    const { pathToFileURL } = await import('node:url');
+    const { pathToFileURL } = require('node:url') as typeof import('node:url');
     // NO cache-busting query. The disk cache path is keyed by package@version
     // (an immutable coordinate — see EsmCache.getEntryDir), so the same path
     // always holds the same content and reusing Node's ESM module cache is
@@ -303,9 +303,9 @@ export class EsmModuleLoader {
     // This branch is only the fallback for when the version-keyed disk cache
     // artifact is unavailable; the primary path imports that file directly.
     const { ensureDir, fileExists, sha256Hex, writeFile } = await import('@frontmcp/utils');
-    const nodePath = await import('node:path');
-    const nodeOs = await import('node:os');
-    const { pathToFileURL } = await import('node:url');
+    const nodePath = require('node:path') as typeof import('node:path');
+    const nodeOs = require('node:os') as typeof import('node:os');
+    const { pathToFileURL } = require('node:url') as typeof import('node:url');
 
     const dir = nodePath.join(nodeOs.tmpdir(), 'frontmcp-esm-modules');
     await ensureDir(dir);

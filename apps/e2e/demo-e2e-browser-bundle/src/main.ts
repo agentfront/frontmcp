@@ -20,7 +20,17 @@ import {
 } from '@frontmcp/adapters/skills';
 import { z } from '@frontmcp/lazy-zod';
 // ── @frontmcp/sdk imports (decorators, types, core) ──
-import { FrontMcp, Prompt, PromptContext, Resource, ResourceContext, Tool, ToolContext } from '@frontmcp/sdk';
+import {
+  App,
+  FrontMcp,
+  FrontMcpInstance,
+  Prompt,
+  PromptContext,
+  Resource,
+  ResourceContext,
+  Tool,
+  ToolContext,
+} from '@frontmcp/sdk';
 // ── @frontmcp/utils imports ──
 import {
   AsyncLocalStorage,
@@ -50,6 +60,21 @@ function check(name: string, fn: () => unknown) {
   } catch (e) {
     results[name] = { pass: false, value: String(e) };
   }
+}
+
+const pendingChecks: Promise<void>[] = [];
+
+function checkAsync(name: string, fn: () => Promise<unknown>) {
+  pendingChecks.push(
+    fn().then(
+      (value) => {
+        results[name] = { pass: true, value: String(value) };
+      },
+      (error: unknown) => {
+        results[name] = { pass: false, value: String(error) };
+      },
+    ),
+  );
 }
 
 // ── @frontmcp/utils checks ──
@@ -134,6 +159,36 @@ check('FrontMcp-decorator', () => {
   return typeof BrowserApp === 'function';
 });
 
+// ── @frontmcp/sdk entry points that never listen (#747) ──
+@Tool({ name: 'ping', inputSchema: {} })
+class BrowserPingTool extends ToolContext {
+  async execute() {
+    return { ok: true };
+  }
+}
+
+@App({ id: 'browser-entry', name: 'Browser entry', tools: [BrowserPingTool] })
+class BrowserEntryApp {}
+
+const browserEntryConfig = { info: { name: 'browser-entry', version: '0.0.1' }, apps: [BrowserEntryApp] };
+
+checkAsync('createFetchHandler', async () => {
+  const handler = await FrontMcpInstance.createFetchHandler(browserEntryConfig);
+  const response = await handler(new Request(`${location.origin}/healthz`));
+  if (response.status !== 200) throw new Error(`/healthz answered ${response.status}`);
+  return response.status;
+});
+
+checkAsync('createDirect', async () => {
+  const server = await FrontMcpInstance.createDirect(browserEntryConfig);
+  try {
+    const { tools } = await server.listTools();
+    return tools.map((tool) => tool.name).join(',');
+  } finally {
+    await server.dispose();
+  }
+});
+
 // ── @frontmcp/adapters/skills checks ──
 //
 // The harvester + classifier + registry are the load-bearing units that
@@ -204,8 +259,8 @@ check('parseOverlay-json', () => {
     bundleId: 'browser-demo',
     version: '0.0.1',
     generatedAt: new Date(0).toISOString(),
-    sourceDigest: '',
-    services: [],
+    sourceDigest: 'a'.repeat(64),
+    services: [{ id: 'demo', baseUrl: 'https://api.example.com' }],
     authBindings: {},
     skills: [],
     operations: {},
@@ -214,58 +269,62 @@ check('parseOverlay-json', () => {
   return parsed.bundleId === 'browser-demo';
 });
 
-// ── Render results to DOM ──
-const app = document.getElementById('app');
-if (!app) {
-  throw new Error('Required DOM element #app not found');
+// ── Render results to DOM once every check has settled ──
+function renderResults(): void {
+  const app = document.getElementById('app');
+  if (!app) {
+    throw new Error('Required DOM element #app not found');
+  }
+  const summary = Object.values(results);
+  const passed = summary.filter((r) => r.pass).length;
+  const failed = summary.filter((r) => !r.pass).length;
+
+  // Build DOM safely using textContent to avoid XSS from error strings containing HTML
+  const heading = document.createElement('h1');
+  heading.textContent = 'FrontMCP Browser Bundle E2E';
+  app.appendChild(heading);
+
+  const summaryP = document.createElement('p');
+  summaryP.dataset.testid = 'summary';
+  summaryP.textContent = `${passed} passed, ${failed} failed`;
+  app.appendChild(summaryP);
+
+  const table = document.createElement('table');
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  for (const h of ['Check', 'Status', 'Value']) {
+    const th = document.createElement('th');
+    th.textContent = h;
+    headerRow.appendChild(th);
+  }
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  for (const [name, r] of Object.entries(results)) {
+    const tr = document.createElement('tr');
+    tr.dataset.testid = `check-${name}`;
+    tr.dataset.status = r.pass ? 'pass' : 'fail';
+
+    const tdName = document.createElement('td');
+    tdName.textContent = name;
+    tr.appendChild(tdName);
+
+    const tdStatus = document.createElement('td');
+    tdStatus.textContent = r.pass ? '\u2705' : '\u274c';
+    tr.appendChild(tdStatus);
+
+    const tdValue = document.createElement('td');
+    tdValue.textContent = r.value;
+    tr.appendChild(tdValue);
+
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  app.appendChild(table);
+
+  // Expose for Playwright assertions
+  (window as unknown as Record<string, unknown>).__BUNDLE_RESULTS__ = results;
 }
-const summary = Object.values(results);
-const passed = summary.filter((r) => r.pass).length;
-const failed = summary.filter((r) => !r.pass).length;
 
-// Build DOM safely using textContent to avoid XSS from error strings containing HTML
-const heading = document.createElement('h1');
-heading.textContent = 'FrontMCP Browser Bundle E2E';
-app.appendChild(heading);
-
-const summaryP = document.createElement('p');
-summaryP.dataset.testid = 'summary';
-summaryP.textContent = `${passed} passed, ${failed} failed`;
-app.appendChild(summaryP);
-
-const table = document.createElement('table');
-const thead = document.createElement('thead');
-const headerRow = document.createElement('tr');
-for (const h of ['Check', 'Status', 'Value']) {
-  const th = document.createElement('th');
-  th.textContent = h;
-  headerRow.appendChild(th);
-}
-thead.appendChild(headerRow);
-table.appendChild(thead);
-
-const tbody = document.createElement('tbody');
-for (const [name, r] of Object.entries(results)) {
-  const tr = document.createElement('tr');
-  tr.dataset.testid = `check-${name}`;
-  tr.dataset.status = r.pass ? 'pass' : 'fail';
-
-  const tdName = document.createElement('td');
-  tdName.textContent = name;
-  tr.appendChild(tdName);
-
-  const tdStatus = document.createElement('td');
-  tdStatus.textContent = r.pass ? '\u2705' : '\u274c';
-  tr.appendChild(tdStatus);
-
-  const tdValue = document.createElement('td');
-  tdValue.textContent = r.value;
-  tr.appendChild(tdValue);
-
-  tbody.appendChild(tr);
-}
-table.appendChild(tbody);
-app.appendChild(table);
-
-// Expose for Playwright assertions
-(window as unknown as Record<string, unknown>).__BUNDLE_RESULTS__ = results;
+void Promise.all(pendingChecks).then(renderResults);
