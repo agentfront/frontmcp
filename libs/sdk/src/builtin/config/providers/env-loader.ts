@@ -1,5 +1,5 @@
 import { type z } from '@frontmcp/lazy-zod';
-import { fileExists, getCwd, getEnv, pathResolve, readFile, setEnv } from '@frontmcp/utils';
+import { fileExists, getCwd, getEnv, getRuntimeContext, pathResolve, readFile, setEnv } from '@frontmcp/utils';
 
 /**
  * Parse a .env file content into key-value pairs.
@@ -58,6 +58,23 @@ export function parseEnvContent(content: string): Record<string, string> {
   return result;
 }
 
+/** False in the browser build, which has no file system to read config files from. */
+export function canReadConfigFiles(): boolean {
+  return getRuntimeContext().runtime !== 'browser';
+}
+
+/**
+ * Environment variables of the running process; empty where there is no `process`, as in a browser.
+ */
+export function processEnvEntries(): Record<string, string> {
+  const env: Record<string, string> = {};
+  const processEnv = typeof process === 'undefined' ? undefined : process.env;
+  for (const [key, value] of Object.entries(processEnv ?? {})) {
+    if (value !== undefined) env[key] = value;
+  }
+  return env;
+}
+
 /**
  * Load environment variables from .env files.
  * Follows NestJS-style priority: .env.local overrides .env
@@ -65,7 +82,7 @@ export function parseEnvContent(content: string): Record<string, string> {
  * @param basePath - Base directory to resolve files from
  * @param envPath - Path to base .env file (relative to basePath)
  * @param localEnvPath - Path to local override file (relative to basePath)
- * @returns Record of merged environment variables
+ * @returns Record of merged environment variables, empty where config files cannot be read
  */
 export async function loadEnvFiles(
   basePath = getCwd(),
@@ -73,6 +90,7 @@ export async function loadEnvFiles(
   localEnvPath = '.env.local',
 ): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
+  if (!canReadConfigFiles()) return result;
 
   // Load base .env file
   const envFile = pathResolve(basePath, envPath);

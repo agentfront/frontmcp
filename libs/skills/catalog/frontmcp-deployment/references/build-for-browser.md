@@ -46,16 +46,17 @@ frontmcp build --target browser -e ./src/client.ts   # Custom entry file
 
 Not all FrontMCP features are available in browser environments:
 
-| Feature                     | Browser Support | Notes                                     |
-| --------------------------- | --------------- | ----------------------------------------- |
-| Tools (client-side)         | Yes             | Can define and run tools                  |
-| Resources                   | Yes             | Read-only access                          |
-| Prompts                     | Yes             | Full support                              |
-| Redis                       | No              | Use in-memory or connect to server        |
-| SQLite                      | No              | No filesystem access                      |
-| File system utilities       | No              | `@frontmcp/utils` fs ops throw in browser |
-| Crypto (`@frontmcp/utils`)  | Yes             | Uses WebCrypto API                        |
-| Direct client (`connect()`) | Yes             | In-memory connection                      |
+| Feature                     | Browser Support | Notes                                                                  |
+| --------------------------- | --------------- | ---------------------------------------------------------------------- |
+| Tools (client-side)         | Yes             | Can define and run tools                                               |
+| Resources                   | Yes             | Read-only access                                                       |
+| Prompts                     | Yes             | Full support                                                           |
+| Redis                       | No              | Use in-memory or connect to server                                     |
+| SQLite                      | No              | No filesystem access                                                   |
+| File system utilities       | No              | `@frontmcp/utils` fs ops throw in browser                              |
+| Crypto (`@frontmcp/utils`)  | Yes             | Uses WebCrypto API                                                     |
+| Direct client (`connect()`) | Yes             | In-memory connection                                                   |
+| `ConfigPlugin`              | Yes             | No `.env` / `config.yml` files: schema defaults and `process.env` only |
 
 ### Request context in the browser
 

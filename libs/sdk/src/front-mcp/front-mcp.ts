@@ -399,8 +399,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * const scopes = instance.getScopes();
    */
   public static async createForGraph(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
-    // Parse config through Zod to apply defaults (providers, tools, etc.)
-    const parsedConfig = frontMcpMetadataSchema.parse(options);
+    // Never listens, so no HTTP host: connect() builds on this, and a browser build has no Express
+    const parsedConfig = frontMcpMetadataSchema.parse({ ...options, serve: false });
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
     return frontMcp;
