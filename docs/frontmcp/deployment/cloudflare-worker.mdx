@@ -107,7 +107,9 @@ Cloudflare's flag only governs population at **module evaluation**, and the gene
 </Note>
 
 <Note>
-Only `main` is rewritten outright — it has to track the build output. `name` and `compatibility_date` are written only when the file does not already declare them, and `compatibility_flags` is merged rather than replaced, so a name you set by hand is never silently changed. If `wrangler.toml` and `frontmcp.config` disagree on the name, the build keeps the file's and warns.
+With `metrics: { enabled: true }` or `observability` in `@FrontMcp`, install `@frontmcp/observability`: the generated entry imports it and hands it to the SDK with `registerOptionalModule()`, since the Worker's `require()` cannot reach bundled modules (see [Metrics](/frontmcp/deployment/metrics)).
+
+Only `main` is rewritten outright — it has to track the build output, so `--out-dir build` (or `deployments[].outDir`) writes `main = "build/cloudflare/index.js"`. `name` and `compatibility_date` are written only when the file does not already declare them, and `compatibility_flags` is merged rather than replaced, so a name you set by hand is never silently changed. If `wrangler.toml` and `frontmcp.config` disagree on the name, the build keeps the file's and warns.
 </Note>
 </Step>
 

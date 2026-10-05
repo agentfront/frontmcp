@@ -105,7 +105,7 @@ import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import HttpIpFilterFlow from './flows/http.ip-filter.flow';
 import HttpRequestFlow from './flows/http.request.flow';
-import { probeOptionalDependency } from './optional-dependency.util';
+import { probeOptionalDependency, requireOptionalModule } from './optional-dependency.util';
 import { registerServerEntries } from './server-entries.helper';
 
 /**
@@ -594,7 +594,9 @@ export class Scope extends ScopeEntry {
     if (observabilityConfig) {
       let ObservabilityPluginModule: any;
       try {
-        ObservabilityPluginModule = require('@frontmcp/observability');
+        ObservabilityPluginModule = requireOptionalModule('@frontmcp/observability', () =>
+          require('@frontmcp/observability'),
+        );
       } catch (err) {
         // Don't blindly report "not installed" — `require()` also throws when the
         // package resolves but fails to load (export-condition / transpile / peer
@@ -628,7 +630,7 @@ export class Scope extends ScopeEntry {
           const loggingEnabled = pluginOptions.logging !== false;
           if (loggingEnabled) {
             try {
-              const { StructuredLogTransport, createSinks } = require('@frontmcp/observability');
+              const { StructuredLogTransport, createSinks } = ObservabilityPluginModule;
               const LoggerRegistryCls = require('../logger/logger.registry').default;
               let loggerRegistry: any;
               try {

@@ -264,6 +264,25 @@ describe('ProcessStatsCollector (issue #397)', () => {
     expect(histogram.reset).toHaveBeenCalledTimes(1);
   });
 
+  it('skips the probes a runtime does not implement instead of throwing (#768)', () => {
+    const notImplemented = (): never => {
+      throw new Error('[unenv] process.cpuUsage is not implemented yet!');
+    };
+    const collector = new ProcessStatsCollector({
+      cpuUsage: notImplemented,
+      memoryUsage: notImplemented,
+      uptime: () => 7,
+      monitorEventLoopDelay: () => ({ mean: 1, percentile: () => 1, reset: notImplemented }),
+      getActiveHandles: () => undefined,
+      getActiveRequests: () => undefined,
+      readFdCount: () => undefined,
+    });
+
+    expect(collector.collect()).toEqual([
+      { name: 'frontmcp_process_uptime_seconds', value: 7, help: 'Time since process start in seconds' },
+    ]);
+  });
+
   it('close() disables the event-loop lag histogram', () => {
     const histogram = makeHistogram({ mean: 0, p99: 0 });
     const collector = new ProcessStatsCollector({

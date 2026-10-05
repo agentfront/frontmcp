@@ -43,6 +43,8 @@ The Content-Type is the canonical Prometheus `text/plain; version=0.0.4; charset
 
 The Web-standard handler serves the same endpoint: `FrontMcpInstance.createFetchHandler(config)` (Bun, Deno, a Node `fetch` server) answers `GET /metrics` (or `metrics.path`) with the same body, auth and headers as the Express listener. Like the Express endpoint, it reads the counters through `@frontmcp/observability`, which must be installed.
 
+On Cloudflare Workers, `require()` cannot reach bundled modules, so `frontmcp build --target cloudflare` imports `@frontmcp/observability` in the generated worker entry and hands it to the SDK with `registerOptionalModule()` whenever the config enables `metrics` or `observability` (the build warns if the package is not installed). Process gauges the runtime does not implement (CPU, event-loop lag, handles) are left out of the scrape instead of failing it.
+
 ## What the endpoint exposes
 
 When enabled, every scrape returns:
