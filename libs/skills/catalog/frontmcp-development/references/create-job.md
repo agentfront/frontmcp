@@ -353,7 +353,7 @@ permissions: [
 
 ## Function Builder
 
-For simple jobs that do not need a class, use the `job()` function builder. The callback receives `(input, ctx)` where `ctx` is the run's `JobContext`: its public members (`get()`, `tryGet()`, `scope`, `respond()`) are available, while `log()` and `progress()` are protected, so a job that reports progress needs a `JobContext` class.
+For simple jobs that do not need a class, use the `job()` function builder. The callback receives `(input, ctx)` where `ctx` is the run's `JobContext`, the object a class job reaches as `this`: `ctx.log()`, `ctx.progress()`, `ctx.get()`, `ctx.tryGet()`, `ctx.attempt` and `ctx.respond()` behave as they do in a class. Up to 1.9.0 `log()` and `progress()` were protected, so only a `JobContext` class could call them.
 
 ```typescript
 import { job, z } from '@frontmcp/sdk';
@@ -369,12 +369,13 @@ const CleanupTempFiles = job({
     deleted: z.number().int(),
     freedBytes: z.number().int(),
   },
-})((input, ctx) => {
-  // log() and progress() are protected: use a JobContext class when you need them
-  ctx.scope.logger.info(`Cleaning ${input.directory}, max age: ${input.maxAgeDays} days`);
+})(async (input, ctx) => {
+  ctx.log(`Cleaning ${input.directory}, max age: ${input.maxAgeDays} days`);
+  await ctx.progress(0, 100, 'Scanning');
 
   // ... scan and delete logic ...
 
+  await ctx.progress(100, 100, 'Done');
   return { deleted: 42, freedBytes: 1024000 };
 });
 ```

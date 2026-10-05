@@ -63,14 +63,14 @@ export abstract class JobContext<
     return this._attempt;
   }
 
-  /** Log a message within the job execution. */
-  protected log(message: string): void {
+  /** Log a message within the job execution. A functional job calls it as `ctx.log()`. */
+  log(message: string): void {
     this._logs.push(`[${new Date().toISOString()}] ${message}`);
     this.logger.info(message);
   }
 
-  /** Report progress. Returns false if no session is available. */
-  protected async progress(pct: number, total?: number, msg?: string): Promise<boolean> {
+  /** Report progress. Returns false if no session is available. A functional job calls it as `ctx.progress()`. */
+  async progress(pct: number, total?: number, msg?: string): Promise<boolean> {
     const sessionId = this.authInfo.sessionId;
     if (!sessionId) {
       this.logger.debug('Cannot send progress: no session ID');

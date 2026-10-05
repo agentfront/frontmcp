@@ -1827,7 +1827,7 @@
               "features": [
                 "Declarative `permissions` as an array of `{ action, roles, scopes, custom }` rules",
                 "Using `tags` and `labels` for categorization and filtering",
-                "The `job()` function builder for simple jobs that need no class",
+                "The `job()` function builder for simple jobs that need no class, reporting through `ctx.log()` and `ctx.progress()`",
                 "Full server registration with `jobs.enabled: true` and a Redis store"
               ]
             },

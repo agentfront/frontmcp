@@ -175,11 +175,16 @@ const GreetJob = job({
   description: 'Generate a greeting',
   inputSchema: { name: z.string() },
   outputSchema: { message: z.string() },
-})((input, ctx) => {
-  ctx.scope.logger.info(`Greeting ${input.name}`); // log() and progress() are protected: use them in a JobContext class
+})(async (input, ctx) => {
+  ctx.log(`Greeting ${input.name}`);
+  await ctx.progress(1, 1, 'Greeting ready');
   return { message: `Hello, ${input.name}!` };
 });
 ```
+
+The handler's `ctx` is the run's `JobContext`, the object a class job reaches as `this`, so `ctx.log()`, `ctx.progress()`,
+`ctx.get()` and `ctx.attempt` behave as they do in a class. Up to 1.9.0 `log()` and `progress()` were protected, so only a
+`JobContext` class could call them.
 
 ## Context Methods
 
