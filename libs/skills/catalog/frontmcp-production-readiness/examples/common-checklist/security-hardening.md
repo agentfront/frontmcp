@@ -10,7 +10,7 @@ features:
   - 'Using Redis for session storage in multi-instance deployments'
   - 'Defining both `inputSchema` and `outputSchema` on tools to prevent data leaks'
   - 'Enabling the tamper-evident skill audit log with RS256 + a persistent store and a CI verifier'
-  - 'Wiring an OTel MeterProvider so framework counters (bundle pulls, signature failures, replay rejects) are exported'
+  - 'Wiring an OTel MeterProvider so framework counters (bundle pulls, signature failures, replay rejects, audit write failures and drops) are exported'
   - 'Keeping the auto-injected skill catalog summary inside the 16 KB initialize ceiling'
 ---
 
