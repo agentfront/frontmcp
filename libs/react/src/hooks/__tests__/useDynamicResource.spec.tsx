@@ -1,11 +1,13 @@
+import { act, render, renderHook } from '@testing-library/react';
 import React from 'react';
-import { renderHook } from '@testing-library/react';
-import { useDynamicResource } from '../useDynamicResource';
+
+import type { ReadResourceResult } from '@frontmcp/sdk';
+
+import { ComponentRegistry } from '../../components/ComponentRegistry';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
-import { ComponentRegistry } from '../../components/ComponentRegistry';
 import type { FrontMcpContextValue } from '../../types';
-import type { ReadResourceResult } from '@frontmcp/sdk';
+import { useDynamicResource } from '../useDynamicResource';
 
 function createWrapper(dynamicRegistry: DynamicRegistry) {
   const ctx: FrontMcpContextValue = {
@@ -133,5 +135,34 @@ describe('useDynamicResource', () => {
     const res = dynamicRegistry.findResource('app://counter')!;
     const result = await res.read();
     expect(result.contents[0].text).toBe('42');
+  });
+
+  it('reads through the committed read function while a newer render is suspended', async () => {
+    const textResult = (text: string): ReadResourceResult => ({ contents: [{ uri: 'app://doc', text }] });
+    const committedRead = jest.fn(async () => textResult('committed'));
+    const discardedRead = jest.fn(async () => textResult('discarded'));
+    const neverSettles = new Promise<never>(() => undefined);
+    function DocResource({ committed }: { committed: boolean }) {
+      useDynamicResource({ uri: 'app://doc', name: 'doc', read: committed ? committedRead : discardedRead });
+      if (!committed) throw neverSettles;
+      return null;
+    }
+    const Wrapper = createWrapper(dynamicRegistry);
+    const tree = (committed: boolean) => (
+      <Wrapper>
+        <React.Suspense fallback={null}>
+          <DocResource committed={committed} />
+        </React.Suspense>
+      </Wrapper>
+    );
+    const { rerender } = render(tree(true));
+
+    await act(async () => {
+      React.startTransition(() => rerender(tree(false)));
+    });
+    const result = await dynamicRegistry.findResource('app://doc')?.read();
+
+    expect(result).toEqual(textResult('committed'));
+    expect(discardedRead).not.toHaveBeenCalled();
   });
 });

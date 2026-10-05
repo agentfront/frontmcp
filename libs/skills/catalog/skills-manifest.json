@@ -2353,7 +2353,7 @@
                 "Using `TestTokenFactory` to create JWT tokens for authenticated E2E tests",
                 "Chaining `.withToken(token).buildAndConnect()` for authenticated clients",
                 "Unit testing tools by mocking `this.get(TaskStoreProvider)` and the `auth` getter",
-                "Mocking `this.auth = { user: { sub } }` (FrontMcpAuthContext) for auth-dependent tools",
+                "Stubbing the `auth` getter (FrontMcpAuthContext) with `Object.defineProperty(tool, 'auth', { value: { user: { sub } } })` for auth-dependent tools",
                 "Testing the unauthenticated error path (no `auth` / anonymous user)"
               ]
             },
@@ -2395,7 +2395,7 @@
               "tags": ["guides", "e2e", "unit-test", "weather", "api", "unit"],
               "features": [
                 "Unit testing tools by mocking `this.fetch()`, `this.fail()`, and other context methods",
-                "Using `Object.assign(tool, ctx)` to inject mock context into the tool instance",
+                "Creating the tool with `Object.create(GetWeatherTool.prototype)` and injecting mock context methods with `Object.assign(tool, ctx)`",
                 "E2E testing with `TestServer.start()` and `McpTestClient.create()`",
                 "Asserting tool presence via `expect(tools.map((t) => t.name)).toContain(...)` and parsing resource JSON via `result.json<T>()`",
                 "Proper cleanup with `client.disconnect()` and `server.stop()` in `afterAll`"
@@ -3276,7 +3276,7 @@
               "level": "intermediate",
               "tags": ["testing", "jest", "unit-test", "setup", "unit", "tool"],
               "features": [
-                "Testing tool `execute()` with a mock context object assigned via `Object.assign`",
+                "Testing tool `execute()` on an instance from `Object.create(MyTool.prototype)`, with mock context methods assigned via `Object.assign`",
                 "Verifying resource `execute(uri, params)` output matches the MCP `ReadResourceResult` shape",
                 "Verifying prompt `execute()` output matches the MCP `GetPromptResult` shape",
                 "Using Jest matchers like `expect.stringContaining` and `expect.objectContaining` for flexible assertions"
@@ -3472,8 +3472,8 @@
               "level": "basic",
               "tags": ["testing", "tool", "unit"],
               "features": [
-                "Mocking the real `ExecutionContextBase` API surface (`get`, `tryGet`, `scope`, `fail`, `mark`, `fetch`) plus `notify` from `ToolContext`",
-                "Assigning the mock context to the tool instance via `Object.assign`",
+                "Creating the tool with `Object.create(AddTool.prototype)`, since its constructor needs the request context the server builds",
+                "Assigning mocks of the context methods it calls (`get`, `tryGet`, `fail`, `mark`, `fetch`, `notify`) via `Object.assign`",
                 "Testing multiple input scenarios including edge cases (negatives, zero)"
               ]
             },

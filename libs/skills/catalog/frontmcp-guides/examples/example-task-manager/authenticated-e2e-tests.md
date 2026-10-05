@@ -8,7 +8,7 @@ features:
   - 'Using `TestTokenFactory` to create JWT tokens for authenticated E2E tests'
   - 'Chaining `.withToken(token).buildAndConnect()` for authenticated clients'
   - 'Unit testing tools by mocking `this.get(TaskStoreProvider)` and the `auth` getter'
-  - 'Mocking `this.auth = { user: { sub } }` (FrontMcpAuthContext) for auth-dependent tools'
+  - "Stubbing the `auth` getter (FrontMcpAuthContext) with `Object.defineProperty(tool, 'auth', { value: { user: { sub } } })` for auth-dependent tools"
   - 'Testing the unauthenticated error path (no `auth` / anonymous user)'
 ---
 
@@ -82,7 +82,8 @@ describe('CreateTaskTool', () => {
   let mockStore: jest.Mocked<TaskStoreProvider>;
 
   beforeEach(() => {
-    tool = new CreateTaskTool();
+    // `new CreateTaskTool()` throws: the constructor needs the request context the server builds.
+    tool = Object.create(CreateTaskTool.prototype);
     mockStore = {
       create: jest.fn(),
       list: jest.fn(),
@@ -104,10 +105,12 @@ describe('CreateTaskTool', () => {
       mark: jest.fn(),
       notify: jest.fn().mockResolvedValue(true),
       progress: jest.fn().mockResolvedValue(true),
-      // Stub the FrontMcpAuthContext exposed via the `auth` getter on the real SDK.
-      auth: userId ? { user: { sub: userId }, isAnonymous: false } : undefined,
     } as unknown as ToolContext;
     Object.assign(tool, ctx);
+    // `auth` is a getter with no setter, so stub the FrontMcpAuthContext with defineProperty.
+    Object.defineProperty(tool, 'auth', {
+      value: userId ? { user: { sub: userId }, isAnonymous: false } : undefined,
+    });
   }
 
   it('should create a task for an authenticated user', async () => {
@@ -142,7 +145,7 @@ describe('CreateTaskTool', () => {
 - Using `TestTokenFactory` to create JWT tokens for authenticated E2E tests
 - Chaining `.withToken(token).buildAndConnect()` for authenticated clients
 - Unit testing tools by mocking `this.get(TaskStoreProvider)` and the `auth` getter
-- Mocking `this.auth = { user: { sub } }` (FrontMcpAuthContext) for auth-dependent tools
+- Stubbing the `auth` getter (FrontMcpAuthContext) with `Object.defineProperty(tool, 'auth', { value: { user: { sub } } })` for auth-dependent tools
 - Testing the unauthenticated error path (no `auth` / anonymous user)
 
 ## Related

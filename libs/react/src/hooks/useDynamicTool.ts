@@ -76,7 +76,8 @@ function stableKey(value: unknown): string {
 }
 
 export function useDynamicTool<S extends z.ZodObject<z.ZodRawShape>>(options: UseDynamicToolOptions<S>): void {
-  const { name, description, app, enabled = true } = options;
+  const { name, description, app, execute, enabled = true } = options;
+  const schema = 'schema' in options && options.schema ? options.schema : null;
   const { getDynamicRegistry } = useContext(FrontMcpContext);
   const dynamicRegistry = getDynamicRegistry(options.server);
 
@@ -84,10 +85,9 @@ export function useDynamicTool<S extends z.ZodObject<z.ZodRawShape>>(options: Us
   // `z.object(...)` or object literal is a new value on every render, so the schema is
   // keyed by content: re-registering the tool on each render would notify the registry,
   // re-render the component and never settle.
-  const computedInputSchema =
-    'schema' in options && options.schema
-      ? zodToJsonSchema(options.schema)
-      : (options as UseDynamicToolJsonSchemaOptions).inputSchema;
+  const computedInputSchema = schema
+    ? zodToJsonSchema(schema)
+    : (options as UseDynamicToolJsonSchemaOptions).inputSchema;
   const inputSchemaKey = stableKey(computedInputSchema);
   // Memoized on the content key on purpose, see above
   const resolvedInputSchema = useMemo(() => computedInputSchema, [inputSchemaKey]);
@@ -97,13 +97,14 @@ export function useDynamicTool<S extends z.ZodObject<z.ZodRawShape>>(options: Us
   const availableWhenKey = stableKey(options.availableWhen ?? null);
   const availableWhen = useMemo(() => options.availableWhen, [availableWhenKey]);
 
-  // Keep the latest execute fn in a ref to avoid stale closures
-  const executeRef = useRef(options.execute);
-  executeRef.current = options.execute;
+  const executeRef = useRef(execute);
+  const schemaRef = useRef(schema);
 
-  // Keep schema ref for validation
-  const schemaRef = useRef('schema' in options && options.schema ? options.schema : null);
-  schemaRef.current = 'schema' in options && options.schema ? options.schema : null;
+  // Set after commit, never during render: a render React discards must not reach a running tool
+  useEffect(() => {
+    executeRef.current = execute;
+    schemaRef.current = schema;
+  }, [execute, schema]);
 
   useEffect(() => {
     if (!enabled) return;

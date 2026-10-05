@@ -15,6 +15,10 @@ module.exports = {
   },
   transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
   moduleFileExtensions: ['ts', 'js', 'html'],
+  moduleNameMapper: {
+    ...require('../../jest.imports-mapper'),
+    '^@frontmcp/testing/setup$': '<rootDir>/src/setup.ts',
+  },
   coverageDirectory: '../../coverage/unit/testing',
   coverageThreshold: {
     global: {

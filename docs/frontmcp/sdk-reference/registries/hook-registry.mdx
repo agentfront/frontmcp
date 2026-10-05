@@ -232,21 +232,33 @@ External hooks:
 
 ## Hook Context
 
-Hooks receive a context object with:
+A hook method receives the running flow as its first argument. Type it with `FlowCtxOf<'<flow-name>'>`. An `@Around` hook also receives `next`, which runs the wrapped stage. `this` is the plugin or provider instance the hook is declared on.
 
 ```typescript
-interface HookContext {
-  flow: string;
-  stage: string;
-  state: Map<string, unknown>;    // Shared state between hooks
-  input?: unknown;                 // Input data
-  output?: unknown;                // Output data (after execute)
-  error?: Error;                   // Error (in onError stage)
-  scope: Scope;                    // Access to registries
-  skip(): void;                    // Skip remaining hooks
-  abort(error: Error): void;       // Abort with error
+import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
+
+@Plugin({ name: 'audit' })
+class AuditPlugin {
+  @ToolHook.Did('execute')
+  logResult(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { tool, toolContext } = ctx.state.required;
+    ctx.logger.info(`Tool ${tool.name} returned ${JSON.stringify(toolContext.output)}`);
+  }
 }
 ```
+
+The flow exposes:
+
+| Member            | Description                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------------------- |
+| `state`           | The flow's state, typed per flow (see below)                                                        |
+| `rawInput`        | The input the flow was started with; for `tools:call-tool`, the MCP `request` and its `ctx`         |
+| `logger`          | The flow's logger (the tool, resource and prompt flows define one; every flow has `scopeLogger`)    |
+| `get(token)`      | Resolves a provider registered on the server, or a context-scoped provider of the current run       |
+| `respond(output)` | Ends the flow with this output; from `@Will('execute')` on `tools:call-tool`, the tool does not run |
+| `fail(error)`     | Ends the flow with this error                                                                       |
+
+Read a state key directly (`ctx.state.tool`, `undefined` until a stage sets it) or through `ctx.state.required` (throws when the key is unset), and write one with `ctx.state.set(key, value)`. For `tools:call-tool` the state holds `input` (the requested tool `name` and its `arguments`), `tool` (the tool entry) and `toolContext` (the tool instance, whose `output` is the tool's result once `execute` ran).
 
 ## Index Structure
 

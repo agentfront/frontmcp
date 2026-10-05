@@ -1,6 +1,7 @@
 import type { FrontMcpContext } from '@frontmcp/sdk';
 
 import { RememberAccessor } from '../providers/remember-accessor.provider';
+import RememberMemoryProvider from '../providers/remember-memory.provider';
 import type { RememberStoreInterface } from '../providers/remember-store.interface';
 import {
   purgeLegacyRememberEntries,
@@ -379,6 +380,19 @@ describe('legacy remember purge', () => {
       await jest.advanceTimersByTimeAsync(DEFAULT_DELAY_MS);
 
       expect(store.data.has('remember:session:session-abc:theme')).toBe(true);
+    });
+
+    it('purges on a store whose defaultTTL is no longer than the window (#717)', async () => {
+      const oneDaySeconds = DEFAULT_DELAY_MS / 1000;
+      const expiringStore = new RememberMemoryProvider(3600, oneDaySeconds);
+      const legacyKey = 'remember:session:session-abc:theme';
+      await expiringStore.setValue(legacyKey, 'legacy', 30 * oneDaySeconds);
+      new RememberAccessor(expiringStore, createContext(), { ...config, defaultTTL: oneDaySeconds });
+
+      await jest.advanceTimersByTimeAsync(DEFAULT_DELAY_MS);
+
+      await expect(expiringStore.exists(legacyKey)).resolves.toBe(false);
+      await expiringStore.close();
     });
 
     it('honours legacyPurgeDelayMs', async () => {

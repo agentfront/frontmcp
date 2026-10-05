@@ -41,7 +41,7 @@ This creates a full Nx workspace with `@frontmcp/nx` pre-installed, sample app, 
 
 ### Option B: Add FrontMCP to an existing Nx workspace
 
-Install the plugin with `nx add`. It runs the plugin's `init` generator, which adds `@frontmcp/sdk`, `frontmcp`, `@frontmcp/testing` and the Jest toolchain to `package.json` (existing versions are kept) and makes the `@frontmcp/nx:build`, `build-exec` and `test` executors cacheable in `nx.json` `targetDefaults`:
+Install the plugin with `nx add`. It runs the plugin's `init` generator, which adds `@frontmcp/sdk`, `frontmcp`, `@frontmcp/testing` and the Jest toolchain to `package.json` (existing versions are kept) and makes the `@frontmcp/nx:build`, `build-exec` and `test` executors cacheable in `nx.json` `targetDefaults` (the build executors on `production` inputs, the test executor on Nx's default inputs, so a changed spec file is not a cache hit):
 
 ```bash
 nx add @frontmcp/nx
@@ -451,6 +451,7 @@ Complete list of all `@frontmcp/nx` generators from `generators.json`:
 | `ERESOLVE` on `esbuild` after `nx g @frontmcp/nx:ui-shell`             | An `esbuild` range below the `>=0.27` peer of `@frontmcp/uipack`                       | Re-run the UI generator (it raises an older `esbuild` range to `^0.27.3`) or set `esbuild` to `^0.27.3`                                                        |
 | Build fails with circular dependency error                             | Library A imports from Library B and vice versa                                        | Use `nx graph` to visualize the cycle; extract shared code into a new library                                                                                  |
 | Cache not working (full rebuild every time)                            | Executor targets are not marked cacheable                                              | Run `nx g @frontmcp/nx:init`, or set `cache: true` on the target / in `targetDefaults`                                                                         |
+| `nx test` replays a cached pass after a spec file changed              | `nx add @frontmcp/nx` 1.8.7 / 1.9.0 gave `@frontmcp/nx:test` `production` inputs       | Delete that `inputs` line from `targetDefaults` in `nx.json` (`production` leaves out spec files); re-running `nx add` keeps existing values                   |
 | `Cannot find module '@scope/lib'` in Jest                              | Old `jest.config.ts` without the path-alias mapper                                     | Use the generated `jest.config.cjs` (maps `tsconfig.base.json` paths) or add a `moduleNameMapper`                                                              |
 
 ## Examples

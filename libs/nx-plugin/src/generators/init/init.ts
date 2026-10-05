@@ -4,7 +4,8 @@ import { addFrontmcpDependencies } from '../../utils/add-dependencies.js';
 import { getFrontmcpDependencies, getFrontmcpDevDependencies, getJestDevDependencies } from '../../utils/versions.js';
 import type { InitGeneratorSchema } from './schema.js';
 
-const CACHEABLE_EXECUTORS = ['@frontmcp/nx:build', '@frontmcp/nx:build-exec', '@frontmcp/nx:test'] as const;
+const BUILD_EXECUTORS = ['@frontmcp/nx:build', '@frontmcp/nx:build-exec'] as const;
+const TEST_EXECUTOR = '@frontmcp/nx:test';
 
 /**
  * Executors are only cached when the target (or a `targetDefaults` entry for
@@ -17,15 +18,16 @@ function makeExecutorsCacheable(tree: Tree): void {
   const targetDefaults = nxJson.targetDefaults ?? {};
   const inputs = nxJson.namedInputs?.['production'] ? ['production', '^production'] : undefined;
 
-  for (const executor of CACHEABLE_EXECUTORS) {
-    const existing = targetDefaults[executor];
+  for (const executor of BUILD_EXECUTORS) {
     targetDefaults[executor] = {
       cache: true,
-      ...(executor !== '@frontmcp/nx:test' && { dependsOn: ['^build'] }),
+      dependsOn: ['^build'],
       ...(inputs && { inputs }),
-      ...existing,
+      ...targetDefaults[executor],
     };
   }
+  // Default inputs, as in the workspace generator's nx.json: `production` leaves out the spec files
+  targetDefaults[TEST_EXECUTOR] = { cache: true, ...targetDefaults[TEST_EXECUTOR] };
 
   updateNxJson(tree, { ...nxJson, targetDefaults });
 }

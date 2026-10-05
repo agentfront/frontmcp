@@ -64,6 +64,21 @@ test.describe('CodeCall Plugin E2E', () => {
       expect(tools).toContainTool('codecall:execute');
     });
 
+    test('should advertise no output schema for codecall:invoke, which returns the invoked tool result', async ({
+      mcp,
+    }) => {
+      const tools = await mcp.tools.list();
+      const invokeTool = tools.find((tool) => tool.name === 'codecall:invoke');
+
+      expect(invokeTool).toBeDefined();
+      expect(invokeTool?.outputSchema).toBeUndefined();
+
+      const result = await mcp.tools.call('codecall:invoke', { tool: 'users-list', input: {} });
+
+      expect(result).toBeSuccessful();
+      expect(Array.isArray(result.json<{ users: unknown }>().users)).toBe(true);
+    });
+
     test('should have CRM tools available for CodeCall execution', async ({ mcp }) => {
       // In codecall_only mode, tools are searchable via CodeCall even if visible in list
       const result = await mcp.tools.call('codecall:search', {
