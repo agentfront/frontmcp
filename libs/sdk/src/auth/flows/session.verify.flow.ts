@@ -707,13 +707,10 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
         | string[]
         | undefined;
       if (requiredScopes && requiredScopes.length > 0) {
-        const scopeClaim = result.payload?.['scope'];
-        const tokenScopes =
-          typeof scopeClaim === 'string'
-            ? scopeClaim.split(/\s+/).filter(Boolean)
-            : Array.isArray(scopeClaim)
-              ? (scopeClaim as string[])
-              : [];
+        // `scope` (RFC 9068) or `scp` (Entra ID, Okta), as a space-separated string or an array
+        const tokenScopes = [result.payload?.['scope'], result.payload?.['scp']].flatMap((claim) =>
+          typeof claim === 'string' ? claim.split(/\s+/).filter(Boolean) : Array.isArray(claim) ? claim : [],
+        );
         const hasAll = requiredScopes.every((s: string) => tokenScopes.includes(s));
         if (!hasAll) {
           this.logger.warn('verifyIfJwt: insufficient scopes', {
