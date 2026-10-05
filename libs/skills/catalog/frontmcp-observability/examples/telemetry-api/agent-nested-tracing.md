@@ -19,14 +19,19 @@ Trace an agent's execution lifecycle including its nested tool calls. Every span
 
 ```typescript
 // src/apps/research/agents/research.agent.ts
-import { Agent, AgentContext } from '@frontmcp/sdk';
-import { WebSearchTool } from '../tools/web-search.tool';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
+
+import type {} from '@frontmcp/observability'; // declares this.telemetry
+
 import { SummarizerTool } from '../tools/summarizer.tool';
+import { WebSearchTool } from '../tools/web-search.tool';
 
 @Agent({
   name: 'research_agent',
   description: 'Research a topic using web search and summarization',
   systemInstructions: 'You are a research assistant. Search for information, then summarize.',
+  inputSchema: { query: z.string() },
+  llm: { provider: 'openai', model: 'gpt-4o', apiKey: { env: 'OPENAI_API_KEY' } },
   tools: [WebSearchTool, SummarizerTool],
 })
 export class ResearchAgent extends AgentContext {

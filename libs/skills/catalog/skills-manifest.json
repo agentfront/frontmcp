@@ -2707,6 +2707,7 @@
               "level": "basic",
               "tags": ["telemetry", "tool", "spans", "events", "attributes"],
               "features": [
+                "`import type {} from '@frontmcp/observability'` brings in the `this.telemetry` type (a module augmentation of `ExecutionContextBase`)",
                 "this.telemetry.withSpan() creates auto-managed child spans",
                 "this.telemetry.addEvent() adds events to the parent tool span",
                 "this.telemetry.setAttributes() adds metadata to the parent tool span",
