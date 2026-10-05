@@ -130,6 +130,43 @@ Lower numbers run first:
 | 900–1000 | Standard plugin behavior  |
 | 1000+    | Logging, metrics          |
 
+## Providers and Exports
+
+A plugin registers services in `providers` and makes them visible to the host app with `exports`:
+
+```typescript
+import { Plugin, type ProviderType, type Token } from '@frontmcp/sdk';
+
+export class AuditLogger {
+  async logToolCall(toolName: string, subject: string, input: unknown): Promise<void> {
+    console.log(`[AUDIT] ${subject} called ${toolName}`, input);
+  }
+}
+
+export const AuditLoggerToken: Token<AuditLogger> = Symbol('audit-log:logger');
+
+const auditLoggerProvider: ProviderType = {
+  name: 'audit-log:logger',
+  provide: AuditLoggerToken,
+  useFactory: () => new AuditLogger(),
+};
+
+@Plugin({
+  name: 'audit-log',
+  description: 'Logs tool executions for audit compliance',
+  providers: [auditLoggerProvider],
+  exports: [auditLoggerProvider],
+})
+export default class AuditLogPlugin {}
+```
+
+A tool in the host app then resolves `this.get(AuditLoggerToken)`, and the caller's identity is on `this.auth.user.sub`.
+
+- `providers` and `exports` accept a class decorated with `@Provider({ name })`, or a provider object with a `name`: `{ name, provide, useFactory, inject? }`, `{ name, provide, useClass }` or `{ name, provide, useValue }`. `inject` is only needed when the factory takes dependencies. A bare `@Provider()` throws: `name` is required.
+- `exports` lists provider definitions, never a bare token: `exports: [AuditLoggerToken]` throws when `@Plugin` runs.
+- Without `exports`, a provider from `@Plugin({ providers })` is visible only inside the plugin. Providers returned by `dynamicProviders()` reach the host app without it.
+- A plugin has no `this.scope`. A provider that needs the server's registries injects `ScopeEntry` (`inject: () => [ScopeEntry] as const`), and a hook reaches it with `flowCtx.get(ScopeEntry)`.
+
 ## Dynamic Providers
 
 For plugins that create providers based on configuration:
@@ -150,9 +187,10 @@ const CacheStoreToken = Symbol('CacheStore');
   description: 'Cache plugin for tool results',
   providers: [
     {
+      // A factory, so each server gets its own store; a value built here is shared by every server in the process
       name: 'cache:memory',
       provide: CacheStoreToken,
-      useValue: new MemoryCacheProvider(),
+      useFactory: () => new MemoryCacheProvider(),
     },
   ],
 })

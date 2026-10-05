@@ -197,11 +197,12 @@ import CacheMemoryProvider from './providers/cache-memory.provider';
   name: 'cache',
   description: 'Cache plugin for caching tool results',
   providers: [
-    // Default provider (overridden by dynamicProviders if configured)
+    // Default provider (overridden by dynamicProviders if configured). A factory, so each
+    // server gets its own store; a value built here is shared by every server in the process.
     {
       name: 'cache:memory',
       provide: CacheStoreToken,
-      useValue: new CacheMemoryProvider(60 * 60 * 24),
+      useFactory: () => new CacheMemoryProvider(60 * 60 * 24),
     },
   ],
 })
