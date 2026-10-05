@@ -4,7 +4,14 @@ import { type z } from '@frontmcp/lazy-zod';
 import { fileExists, getCwd, pathResolve, readFile } from '@frontmcp/utils';
 
 import { ConfigValidationError } from './config.service';
-import { extractSchemaPaths, loadEnvFiles, mapEnvToNestedConfig, populateProcessEnv } from './env-loader';
+import {
+  canReadConfigFiles,
+  extractSchemaPaths,
+  loadEnvFiles,
+  mapEnvToNestedConfig,
+  populateProcessEnv,
+  processEnvEntries,
+} from './env-loader';
 
 /**
  * Options for the config loader.
@@ -68,12 +75,7 @@ export async function loadConfig<T extends object>(
     }
 
     // Merge with process.env (process.env takes precedence)
-    const allEnv = { ...envFromFiles };
-    for (const [key, value] of Object.entries(process.env)) {
-      if (value !== undefined) {
-        allEnv[key] = value;
-      }
-    }
+    const allEnv = { ...envFromFiles, ...processEnvEntries() };
 
     // Map flat env vars to nested structure using schema paths
     const paths = extractSchemaPaths(schema);
@@ -94,6 +96,7 @@ export async function loadConfig<T extends object>(
  * Load and parse a YAML config file.
  */
 async function loadYamlConfig(basePath: string, configPath: string): Promise<Record<string, unknown>> {
+  if (!canReadConfigFiles()) return {};
   // Try multiple extensions
   const extensions = ['', '.yml', '.yaml'];
   const baseName = configPath.replace(/\.(ya?ml)$/, '');

@@ -1,13 +1,11 @@
 // file: libs/sdk/src/skill/providers/memory-skill.provider.ts
 
-import type { DocumentMetadata, TFIDFVectoria } from 'vectoriadb';
+import { TFIDFVectoria, type DocumentMetadata } from 'vectoriadb';
 
 import { sha256Hex } from '@frontmcp/utils';
 
 import { type SkillContent } from '../../common/interfaces';
 import { type SkillMetadata, type SkillVisibility } from '../../common/metadata';
-import { importOptionalPeer } from '../../scope/optional-dependency.util';
-import { importWithRequireFallback } from '../../utils/dynamic-import.utils';
 import { type SkillIndexCache, type SkillIndexScoring } from '../skill-index-cache.interface';
 import {
   type MutableSkillStorageProvider,
@@ -179,13 +177,8 @@ function isSnapshotCapable(db: unknown): db is SnapshotCapableDb {
 export class MemorySkillProvider implements MutableSkillStorageProvider {
   readonly type: SkillStorageProviderType = 'memory';
 
-  /**
-   * The search index. `vectoriadb` is loaded the first time a search needs it,
-   * never at construction: a server whose skills are only listed or loaded
-   * (or that has none) must not pay for, or depend on, the optional peer.
-   */
+  /** The search index, created the first time a search needs it. */
   private vectorDB?: TFIDFVectoria<SkillDocumentMetadata>;
-  private vectorDBLoad?: Promise<TFIDFVectoria<SkillDocumentMetadata>>;
   private skills: Map<string, SkillContent> = new Map();
   private defaultTopK: number;
   private defaultMinScore: number;
@@ -201,8 +194,8 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   /**
    * The index is rebuilt from `skills` when it is stale: adds/removes bump
    * `skillsVersion`, and the FIRST search after a mutation builds (or restores)
-   * the index exactly once. This keeps the expensive IDF/embedding pass — and
-   * the `vectoriadb` load itself — off the registration hot-path.
+   * the index exactly once. This keeps the expensive IDF/embedding pass off the
+   * registration hot-path.
    */
   private skillsVersion = 0;
   private indexedVersion = -1;
@@ -213,29 +206,9 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     this.toolValidator = options.toolValidator;
     this.scoring = options.scoring ?? 'cosine';
     this.indexCache = options.indexCache;
-
-    // `vectoriadb` is an OPTIONAL peer of the SDK and is loaded on first search
-    // (see `db()`), so consumers that never search skills don't need it
-    // installed and a missing install surfaces as a clear on-use error.
   }
 
-  private async loadVectorDB(): Promise<TFIDFVectoria<SkillDocumentMetadata>> {
-    // Route the lazy load through importOptionalPeer so a missing install and an
-    // install-but-failed-to-load are reported differently — never blindly
-    // "reinstall it" when the package is present but threw (#453).
-    const mod = await importOptionalPeer(
-      'vectoriadb',
-      // A dynamic import inside Jest's VM throws unless the run uses
-      // --experimental-vm-modules; `vectoriadb` ships CommonJS, so fall back to `require`.
-      () =>
-        importWithRequireFallback(
-          () => import('vectoriadb'),
-          () => require('vectoriadb') as typeof import('vectoriadb'),
-        ),
-      // Read only when the import fails: an ESM browser bundle has no `require` at all
-      (id) => require.resolve(id),
-      'skill search',
-    );
+  private createVectorDB(): TFIDFVectoria<SkillDocumentMetadata> {
     // `scoring` is read by newer vectoriadb versions; older ones ignore the
     // extra field and use cosine. Built as a typed variable (not an object
     // literal) so passing it to the older constructor type isn't an excess-
@@ -245,7 +218,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
       defaultSimilarityThreshold: this.defaultMinScore,
     };
     if (this.scoring !== 'cosine') dbConfig.scoring = this.scoring;
-    return new mod.TFIDFVectoria<SkillDocumentMetadata>(dbConfig);
+    return new TFIDFVectoria<SkillDocumentMetadata>(dbConfig);
   }
 
   /**
@@ -278,7 +251,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
    */
   private async ensureIndexed(): Promise<void> {
     if (this.indexReady) return;
-    const db = await this.db();
+    const db = this.db();
     // A mutation while this build awaits leaves the index stale for the next search.
     const version = this.skillsVersion;
 
@@ -351,11 +324,8 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     return sha256Hex(canonical);
   }
 
-  /** Load `vectoriadb` on first use (throws the clear install hint if absent). */
-  private async db(): Promise<TFIDFVectoria<SkillDocumentMetadata>> {
-    if (this.vectorDB) return this.vectorDB;
-    this.vectorDBLoad ??= this.loadVectorDB();
-    this.vectorDB = await this.vectorDBLoad;
+  private db(): TFIDFVectoria<SkillDocumentMetadata> {
+    this.vectorDB ??= this.createVectorDB();
     return this.vectorDB;
   }
 
@@ -368,10 +338,6 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   }
 
   async initialize(): Promise<void> {
-    // Deliberately does NOT load `vectoriadb`: every app builds a skill
-    // registry at boot, and loading the peer here made every server depend on
-    // it (and broke servers started inside Jest, whose VM rejects the dynamic
-    // import without --experimental-vm-modules). The first search loads it.
     this.initialized = true;
   }
 
@@ -427,7 +393,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
 
     // Search using TF-IDF. Ensure the index is built/restored exactly once for
     // the current document set (cold-start fast path via the snapshot cache).
-    const db = await this.db();
+    const db = this.db();
     await this.ensureIndexed();
     let results = await db.search(query, {
       topK,

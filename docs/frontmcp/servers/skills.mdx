@@ -701,10 +701,11 @@ Results are ranked by:
 2. Priority field (higher = earlier)
 3. Tool availability (complete skills rank higher)
 
-The index is built by the optional peer `vectoriadb`, which is loaded the first time a search runs —
-not when the server starts. Listing and loading skills (`skills/list`, `skills/load`, the `skill://`
-resources) never need it, so a server whose skills are never searched runs without it installed;
-the first search on such a server fails with an error that names the package to install.
+The index is built with `vectoriadb`, a dependency of `@frontmcp/sdk`. Under the `browser` and `worker`
+export conditions it resolves to its TF-IDF/BM25 entry, which has no Node built-ins, so skill search works
+the same in Node, on edge runtimes and in the browser build. The index is created the first time a search runs,
+not when the server starts. Up to 1.9.1-rc.2 `vectoriadb` was an optional peer that a browser bundle
+could not resolve unless it was installed.
 
 ---
 

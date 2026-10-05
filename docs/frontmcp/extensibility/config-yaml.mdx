@@ -111,6 +111,10 @@ console.log(config.database.url);
 
 When `false` (default), only environment variables and `.env` files are loaded. Set to `true` to also load YAML configuration.
 
+<Note>
+In the browser build there is no file system, so the YAML file and the `.env` files count as absent. The config comes from the schema defaults and from `process.env` where the page defines one.
+</Note>
+
 ### configPath
 
 | Property     | Type     | Default        | Description                                     |

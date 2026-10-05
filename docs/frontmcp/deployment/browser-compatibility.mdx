@@ -36,6 +36,12 @@ FrontMCP supports browser environments for client-side use cases like JWT verifi
 
 Use the packages from npm in a browser bundler that honors the `browser` export condition — Vite 7 and 8, build and dev server — without Node polyfills, `process` defines or an `express` alias. A bundler that resolves the `browser` condition gets `@frontmcp/sdk`'s browser build for an `import` and for a CommonJS `require()` alike (bundlers through the `module` condition; a CommonJS runtime with the `browser` condition, such as `jest-environment-jsdom`, gets a CommonJS copy of it), in which the Express host and the legacy SSE transport are stubs that throw if constructed, and the browser variants of `@frontmcp/protocol` (no stdio transports) and `@frontmcp/utils` (runtime context, paths, crypto, env). Node, and bundlers targeting Node, keep resolving the Node builds.
 
+## Entry Points and Config in the Browser
+
+- **Entry points that never listen:** `create()`, `FrontMcpInstance.createDirect()`, `FrontMcpInstance.createFetchHandler()` and `connect()` (with `connectOpenAI()` and `connectClaude()`) never build the Express host, so they work in the browser build. Up to 1.9.1-rc.2, `connect()` built it and threw `ExpressHostAdapter is not available in browser environments`.
+- **`ConfigPlugin` and `loadConfig()`:** there is no file system to read, so `.env`, `.env.local` and `config.yml` count as absent. The config comes from the schema defaults and from `process.env` where the page defines one. Up to 1.9.1-rc.2, startup threw `path.resolve() is not available in browser environments`.
+- **Runtime value:** the browser build reports the runtime context `{ runtime: 'browser', platform: 'browser', os: 'browser' }`. Entries with `availableWhen: { runtime: 'node' }` are therefore unavailable in a browser, even where a `process` polyfill makes the page look like Node.
+
 ## Request Context in the Browser
 
 Every request runs in its own `FrontMcpContext` (auth info, session, request-scoped providers), and tools see the tool they run as and the surface they were called on. On Node and Workers, `AsyncLocalStorage` keeps these apart for overlapping requests. A browser has no `AsyncLocalStorage`, so the browser build of `@frontmcp/utils` picks one of two modes (`getAsyncContextMode()`):
