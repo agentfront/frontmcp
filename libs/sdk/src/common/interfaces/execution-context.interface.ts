@@ -82,7 +82,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
    *
    * Custom fields from `ExtendFrontMcpAuthContext` are available if pipes
    * are configured in `@FrontMcp({ authorities: { pipes } })`: tools, resources,
-   * agents and jobs run them before any hook or `execute()` reads `this.auth`.
+   * prompts, agents and jobs run them before any hook or `execute()` reads `this.auth`.
    *
    * @example
    * ```typescript

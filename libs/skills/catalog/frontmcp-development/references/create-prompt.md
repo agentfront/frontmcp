@@ -128,7 +128,10 @@ The result is checked against this shape. A message with another `role`, such as
 
 - `this.metadata` -- prompt metadata from the decorator
 - `this.scope` -- the current scope instance
-- `this.context` -- the execution context
+- `this.context` -- the request context (request id, session, `flow`, `scope`)
+- `this.auth` -- the caller (`user.sub`, roles, scopes, claims), with `authorities.pipes` applied
+
+Up to 1.9.1 `PromptContext` did not extend `ExecutionContextBase`, so `this.auth`, `this.context` and `this.fetch()` were missing on prompts.
 
 ## Multi-Turn Conversations
 

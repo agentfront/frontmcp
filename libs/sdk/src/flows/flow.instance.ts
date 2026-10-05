@@ -21,7 +21,7 @@ import {
   type Token,
   type Type,
 } from '../common';
-import { FRONTMCP_CONTEXT, FrontMcpContextStorage } from '../context';
+import { FRONTMCP_CONTEXT, FrontMcpContextStorage, type FrontMcpContext } from '../context';
 import { InternalMcpError, PublicMcpError, RequestContextNotAvailableError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
 import type HookRegistry from '../hooks/hook.registry';
@@ -265,7 +265,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   async run(input: FlowInputOf<Name>, deps: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {
     this.logger.verbose(`run: starting flow '${this.name}'`);
     const scope = this.globalProviders.getActiveScope();
-    const { FlowClass, plan, name } = this;
 
     // Build provider views for scoped DI
     // This enables CONTEXT scoped providers to be resolved
@@ -274,7 +273,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // Get session ID from context - should always be available since runWithContext wraps the entire flow
     // If unavailable, it indicates a bug in context propagation (not a normal case)
     const sessionKey = currentContext?.sessionId;
-    if (!sessionKey) {
+    if (!currentContext || !sessionKey) {
       // This should never happen since runWithContext wraps the entire flow execution
       // If we reach here, there's a bug in context propagation
       throw new RequestContextNotAvailableError(
@@ -282,15 +281,34 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       );
     }
 
+    // `this.context.flow` and `this.context.scope` name the innermost flow running, until it returns
+    const outerFlow = currentContext.flow;
+    const outerScope = currentContext.scope;
+    currentContext.setFlow(this);
+    currentContext.setScope(scope);
+    try {
+      return await this.runStages(input, deps, scope, currentContext, sessionKey);
+    } finally {
+      currentContext.setFlow(outerFlow);
+      currentContext.setScope(outerScope);
+    }
+  }
+
+  private async runStages(
+    input: FlowInputOf<Name>,
+    deps: Map<Token, Type>,
+    scope: ScopeEntry,
+    currentContext: FrontMcpContext,
+    sessionKey: string,
+  ): Promise<FlowOutputOf<Name> | undefined> {
+    const { FlowClass, plan, name } = this;
+
     // Build views with current context if available
     // Include context tokens (e.g., ORCHESTRATED_AUTH_ACCESSOR) for DI resolution
-    let contextProviders: Map<Token, unknown> | undefined;
-    if (currentContext) {
-      contextProviders = new Map<Token, unknown>([[FRONTMCP_CONTEXT as Token, currentContext]]);
-      // Merge context tokens registered by auth flows (e.g., ORCHESTRATED_AUTH_ACCESSOR)
-      for (const [token, value] of currentContext.getContextTokens()) {
-        contextProviders.set(token as Token, value);
-      }
+    const contextProviders = new Map<Token, unknown>([[FRONTMCP_CONTEXT as Token, currentContext]]);
+    // Merge context tokens registered by auth flows (e.g., ORCHESTRATED_AUTH_ACCESSOR)
+    for (const [token, value] of currentContext.getContextTokens()) {
+      contextProviders.set(token as Token, value);
     }
     const views = await this.globalProviders.buildViews(sessionKey, contextProviders);
 

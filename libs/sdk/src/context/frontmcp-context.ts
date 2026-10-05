@@ -483,7 +483,7 @@ export class FrontMcpContext {
    * Set flow reference (internal use).
    * @internal
    */
-  setFlow(flow: FlowBaseRef): void {
+  setFlow(flow: FlowBaseRef | undefined): void {
     this._flow = flow;
   }
 
@@ -498,7 +498,7 @@ export class FrontMcpContext {
    * Set scope reference (internal use).
    * @internal
    */
-  setScope(scope: ScopeRef): void {
+  setScope(scope: ScopeRef | undefined): void {
     this._scope = scope;
   }
 
