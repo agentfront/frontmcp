@@ -92,7 +92,8 @@ export const annotatedFrontMcpProvidersSchema = z.custom<AnnotatedClass>(
           return true;
         }
       }
-      const definesProvider = 'useValue' in obj || obj['useClass'] || obj['useFactory'];
+      const definesProvider =
+        'useValue' in obj || typeof obj['useClass'] === 'function' || typeof obj['useFactory'] === 'function';
       if (definesProvider && frontMcpProviderMetadataSchema.passthrough().safeParse(v).success) {
         return true;
       }

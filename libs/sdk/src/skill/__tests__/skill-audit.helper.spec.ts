@@ -10,6 +10,7 @@
 
 import 'reflect-metadata';
 
+import { ScopeConfigurationError } from '../../errors';
 import {
   hasSkillAuditFactory,
   registerSkillAuditWriter,
@@ -138,6 +139,19 @@ describe('registerSkillAuditWriter', () => {
     });
 
     expect(FakeWriter.instances[0]?.metrics).toBe(metrics);
+  });
+
+  it('refuses a metrics sink without incrementWriteFailure()', () => {
+    setSkillAuditFactory(() => fakeModule);
+
+    expect(() =>
+      registerSkillAuditWriter({
+        providers: makeProviders() as never,
+        audit: { enabled: true, metrics: {} },
+        logger: makeLogger() as never,
+      }),
+    ).toThrow(ScopeConfigurationError);
+    expect(FakeWriter.instances).toHaveLength(0);
   });
 
   it('falls back to globalThis.__frontmcp_skill_audit_module__ when no factory is set', () => {

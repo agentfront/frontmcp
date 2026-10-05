@@ -107,4 +107,19 @@ describe('value and class providers in decorator metadata', () => {
       return UnnamedClassPlugin;
     }).toThrow(InvalidDecoratorMetadataError);
   });
+
+  it.each([
+    ['useClass', { name: 'greeter', provide: GREETER, useClass: 'Greeter' }],
+    ['useFactory', { name: 'greeter', provide: GREETER, useFactory: 'createGreeter' }],
+  ])('refuse a %s that is not a function', (_field, provider) => {
+    expect(() => {
+      @App({
+        name: 'malformed-provider',
+        // @ts-expect-error -- a provider whose useClass or useFactory is not a function is refused at runtime
+        providers: [provider],
+      })
+      class MalformedProviderApp {}
+      return MalformedProviderApp;
+    }).toThrow(InvalidDecoratorMetadataError);
+  });
 });

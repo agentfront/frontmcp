@@ -15,6 +15,7 @@ import { randomBytes } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../common';
 import type { SkillsConfigAuditOptions } from '../common/types/options/skills-http/interfaces';
+import { ScopeConfigurationError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 
 /**
@@ -171,6 +172,13 @@ export function registerSkillAuditWriter(options: {
     return;
   }
 
+  if (audit.metrics !== undefined && !isAuditMetricsSink(audit.metrics)) {
+    throw new ScopeConfigurationError(
+      '[skill-audit] skillsConfig.audit.metrics must have an incrementWriteFailure() method; ' +
+        'build it with createSkillAuditMetrics({ createCounter }) from @frontmcp/adapters/skills.',
+    );
+  }
+
   const signer = audit.signer ?? createDefaultSigner(mod, logger);
   const store = audit.store ?? createDefaultStore(mod, logger);
 
@@ -195,6 +203,14 @@ export function registerSkillAuditWriter(options: {
     },
   });
   logger.verbose('Registered SkillAuditWriter — skill action audit log enabled');
+}
+
+function isAuditMetricsSink(metrics: unknown): boolean {
+  return (
+    typeof metrics === 'object' &&
+    metrics !== null &&
+    typeof (metrics as { incrementWriteFailure?: unknown }).incrementWriteFailure === 'function'
+  );
 }
 
 function createDefaultSigner(mod: AuditModuleShape, logger: FrontMcpLogger): unknown {
