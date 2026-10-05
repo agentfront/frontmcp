@@ -7,7 +7,13 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import type { AuthOptions } from '../options/schema';
-import { isOrchestratedMode, isOrchestratedRemote, isPublicMode, isTransparentMode } from '../options/utils';
+import {
+  isOrchestratedMode,
+  isOrchestratedRemote,
+  isPublicMode,
+  isStaticMode,
+  isTransparentMode,
+} from '../options/utils';
 
 // ============================================
 // Schemas
@@ -154,10 +160,16 @@ export function detectAuthProviders(
     );
   }
 
-  if (uniqueProviderCount > 1 && parentAuth && isPublicMode(parentAuth)) {
-    warnings.push(
-      `Parent uses public mode but apps have auth providers configured. ` +
-        `App-level auth will be used, but consider using local or remote mode at parent for unified auth management.`,
+  const sharedEndpointUnenforced = !parentAuth || isPublicMode(parentAuth) || isStaticMode(parentAuth);
+  const unenforcedAppIds = apps
+    .filter((app) => app.auth && !isPublicMode(app.auth) && deriveProviderId(app.auth) !== parentProviderId)
+    .map((app) => app.id);
+  if (sharedEndpointUnenforced && unenforcedAppIds.length > 0) {
+    validationErrors.push(
+      `App-level auth is not enforced on the shared endpoint of a server in ${parentAuth?.mode ?? 'public'} mode, ` +
+        `so the tools of ${unenforcedAppIds.join(', ')} would be served without it. ` +
+        `Run the server in local or remote mode (it federates each app's provider and checks the app's grant on ` +
+        `every tool call), or serve the app on its own endpoint with standalone: true or splitByApp: true.`,
     );
   }
 
