@@ -81,7 +81,7 @@ Agents can use the default `execute()` from `AgentContext` (which runs the LLM a
 | `prompts`            | `PromptType[]`         | Agent-scoped prompts (not sent to the model; served to clients when exported)                                     |
 | `exports`            | `AgentExportsConfig`   | `{ resources?, prompts?, providers? }` shared with the scope the agent is registered in                           |
 | `swarm`              | `AgentSwarmConfig`     | `{ canSeeOtherAgents?, visibleAgents?, isVisible?, maxCallDepth? }`: which other agents it can call, and how deep |
-| `execution`          | `AgentExecutionConfig` | `{ maxIterations?, timeout?, inheritParentTools?, inheritPlugins?, useToolFlow?, enableAutoProgress?, ... }`      |
+| `execution`          | `AgentExecutionConfig` | `{ maxIterations?, timeout?, inheritParentTools?, inheritPlugins?, useToolFlow?, enableAutoProgress?, notificationInterval?, ... }` |
 | `systemInstructions` | `string`               | System prompt for the agent                                                                                       |
 | `id`                 | `string`               | Stable identifier                                                                                                 |
 | `tags`               | `string[]`             | Categorization tags                                                                                               |
@@ -351,7 +351,7 @@ class OrchestratorAgent extends AgentContext {
 }
 ```
 
-A call that would go deeper than `swarm.maxCallDepth` (default 3) fails with `AgentCallDepthExceededError`; see [Call Depth](/frontmcp/servers/agents#call-depth).
+A call that would go deeper than `swarm.maxCallDepth` (default 3) fails with `AgentCallDepthExceededError`. It counts agent-to-agent calls, not agents: with the default of 3, a chain of four agents runs. See [Call Depth](/frontmcp/servers/agents#call-depth).
 
 ## Full Example
 

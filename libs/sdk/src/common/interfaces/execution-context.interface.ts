@@ -241,7 +241,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
     args?: Record<string, unknown>,
     opts?: { progressToken?: string | number; signal?: AbortSignal },
   ): Promise<CallToolResult> {
-    const scope = this.scope as unknown as {
+    const scope = this.callToolScope(name) as unknown as {
       runFlow: (
         flowName: 'tools:call-tool',
         input: { request: unknown; ctx: unknown },
@@ -279,6 +279,14 @@ export abstract class ExecutionContextBase<Out = unknown> {
    */
   protected callToolSurface(): CallSurface | undefined {
     return undefined;
+  }
+
+  /**
+   * The scope whose `tools:call-tool` flow a {@link callTool} of `name` runs in: this context's scope,
+   * unless a context with tools of its own (an agent) holds that tool.
+   */
+  protected callToolScope(_name: string): Pick<ScopeEntry, 'runFlow'> {
+    return this.scope;
   }
 
   /**

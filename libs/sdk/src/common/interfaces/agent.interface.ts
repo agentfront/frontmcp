@@ -8,6 +8,7 @@ import { AgentMethodNotAvailableError } from '../../errors';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
 import { type CallSurface } from '../availability';
 import { type AgentInputOf, type AgentOutputOf } from '../decorators';
+import { type ScopeEntry } from '../entries';
 import type { AgentMetadata, AgentType, ToolInputType, ToolOutputType } from '../metadata';
 import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
 import { FlowControl } from './flow.interface';
@@ -58,9 +59,14 @@ export type AgentCtorArgs<In> = ExecutionContextBaseArgs & {
   toolExecutor?: ToolExecutor;
   /** Function to call another agent (`invokeAgent()`) - provided by AgentInstance */
   agentInvoker?: AgentInvoker;
+  /** The agent's private scope: `callTool()` reaches its own tools and nested agents there */
+  privateScope?: AgentPrivateScope;
   /** Progress token from the request's _meta, used for progress notifications */
   progressToken?: string | number;
 };
+
+/** The agent's private scope as `AgentContext.callTool()` uses it: its tools, and the flows that run them. */
+export type AgentPrivateScope = Pick<ScopeEntry, 'tools' | 'runFlow'>;
 
 // ============================================================================
 // Agent Context Base Class
@@ -129,6 +135,9 @@ export class AgentContext<
   /** Function to call another agent - provided by AgentInstance */
   private readonly agentInvoker?: AgentInvoker;
 
+  /** The agent's private scope, where `callTool()` finds its own tools and nested agents */
+  private readonly privateScope?: AgentPrivateScope;
+
   // ---- Internal fields for fallback elicitation support
   /** @internal Agent name for fallback elicitation - set by CallAgentFlow */
   _agentNameInternal?: string;
@@ -161,6 +170,7 @@ export class AgentContext<
       toolDefinitions,
       toolExecutor,
       agentInvoker,
+      privateScope,
       progressToken,
     } = args;
     super({
@@ -178,6 +188,7 @@ export class AgentContext<
     this.toolDefinitions = toolDefinitions ?? [];
     this.toolExecutor = toolExecutor;
     this.agentInvoker = agentInvoker;
+    this.privateScope = privateScope;
     this._progressToken = progressToken;
   }
 
@@ -226,25 +237,34 @@ export class AgentContext<
     const enableAutoProgress =
       this.metadata.execution?.enableAutoProgress === true && this.metadata.execution?.enableNotifications !== false;
     const maxIterations = this.metadata.execution?.maxIterations ?? 10;
+    const notificationInterval = this.metadata.execution?.notificationInterval ?? 1000;
 
     // Track progress state for monotonic updates
     let currentProgress = 0;
+    let lastAutoProgressAt: number | undefined;
+    const autoProgress = (progress: number, message: string, isFinal = false) => {
+      const now = Date.now();
+      if (!isFinal && lastAutoProgressAt !== undefined && now - lastAutoProgressAt < notificationInterval) return;
+      lastAutoProgressAt = now;
+      void this.progress(progress, 100, message);
+    };
 
-    // Create execution loop
+    // Create execution loop: every completion goes through completion(), so an override sees them all
     const loop = new AgentExecutionLoop({
-      adapter: this.llmAdapter,
+      adapter: { completion: (prompt, tools, options) => this.completion(prompt, tools, options) },
       systemInstructions: this.systemInstructions,
       tools: this.toolDefinitions,
       maxIterations,
       timeout: this.metadata.execution?.timeout ?? 120000,
       logger: this.logger,
+      completionOptions: this.completionOptions(),
 
       // Auto progress callbacks (only when enabled)
       onLlmStart: enableAutoProgress
         ? (iteration: number, maxIter: number) => {
             // Each iteration gets ~8% of progress (80% total for 10 iterations)
             currentProgress = Math.round(((iteration - 1) / maxIter) * 80);
-            this.progress(currentProgress, 100, `Starting LLM call (iteration ${iteration}/${maxIter})`);
+            autoProgress(currentProgress, `Starting LLM call (iteration ${iteration}/${maxIter})`);
           }
         : undefined,
 
@@ -252,7 +272,7 @@ export class AgentContext<
         ? (iteration: number, usage?: { promptTokens?: number; completionTokens?: number }) => {
             currentProgress = Math.round(((iteration - 0.5) / maxIterations) * 80);
             const usageStr = usage ? ` (${usage.promptTokens ?? 0}P + ${usage.completionTokens ?? 0}C tokens)` : '';
-            this.progress(currentProgress, 100, `LLM response received${usageStr}`);
+            autoProgress(currentProgress, `LLM response received${usageStr}`);
           }
         : undefined,
 
@@ -265,17 +285,13 @@ export class AgentContext<
       onToolStart: enableAutoProgress
         ? (toolCall: AgentToolCall, index: number, total: number) => {
             const toolProgress = currentProgress + Math.round(((index + 1) / total) * 10);
-            this.progress(toolProgress, 100, `Executing tool ${index + 1}/${total}: ${toolCall.name}`);
+            autoProgress(toolProgress, `Executing tool ${index + 1}/${total}: ${toolCall.name}`);
           }
         : undefined,
 
       onComplete: enableAutoProgress
         ? (content: string | null, error?: Error) => {
-            if (error) {
-              this.progress(100, 100, `Agent failed: ${error.message}`);
-            } else {
-              this.progress(100, 100, 'Agent completed');
-            }
+            autoProgress(100, error ? `Agent failed: ${error.message}` : 'Agent completed', true);
           }
         : undefined,
 
@@ -318,6 +334,18 @@ export class AgentContext<
 
     // Parse the LLM response as output
     return this.parseAgentResponse(result.content) as Out;
+  }
+
+  /**
+   * The options the loop passes to every completion: the generation settings of the agent's `llm`
+   * (`temperature`, `maxTokens`) when it sets them.
+   */
+  protected completionOptions(): AgentCompletionOptions {
+    const llm = this.metadata.llm as { temperature?: number; maxTokens?: number } | undefined;
+    return {
+      ...(llm?.temperature !== undefined && { temperature: llm.temperature }),
+      ...(llm?.maxTokens !== undefined && { maxTokens: llm.maxTokens }),
+    };
   }
 
   /**
@@ -482,6 +510,14 @@ export class AgentContext<
     return 'agent';
   }
 
+  /** The agent's own tools and its nested agents' `invoke_<agent>` tools run in its private scope. */
+  protected override callToolScope(name: string): Pick<ScopeEntry, 'runFlow'> {
+    const isPrivateTool = this.privateScope?.tools
+      .getTools(true)
+      .some((tool) => tool.name === name || tool.fullName === name);
+    return isPrivateTool && this.privateScope ? this.privateScope : super.callToolScope(name);
+  }
+
   // ============================================================================
   // Notification Methods
   // ============================================================================
@@ -517,13 +553,17 @@ export class AgentContext<
       this.logger.info(logMessage);
     }
 
-    // Send to client
+    const data = typeof message === 'string' ? { message } : message;
+
+    // Protocol 2026-07-28: log messages ride the request's own response stream, as a tool's do
+    const sink = this.requestNotificationSink();
+    if (sink) return sink.log(level, this.agentName, data);
+
     const sessionId = this.authInfo.sessionId;
     if (!sessionId) {
       return false;
     }
 
-    const data = typeof message === 'string' ? { message } : message;
     return this.scope.notifications.sendLogMessageToSession(sessionId, level, this.agentName, data);
   }
 
@@ -552,6 +592,10 @@ export class AgentContext<
    * ```
    */
   protected async progress(progress: number, total?: number, message?: string): Promise<boolean> {
+    // Protocol 2026-07-28: progress rides the request's own response stream, as a tool's does
+    const sink = this.requestNotificationSink();
+    if (sink) return sink.progress(progress, total, message);
+
     if (!this._progressToken) {
       this.logger.debug('Cannot send progress: no progressToken in request');
       return false;
@@ -622,6 +666,11 @@ export class AgentContext<
       requestedSchema,
       options,
     );
+  }
+
+  /** The stream a 2026-07-28 request's notifications ride, when the agent runs in one. */
+  private requestNotificationSink() {
+    return (this.tryGetContext() ?? this.runningRequestContext())?.getRequestNotificationSink?.();
   }
 
   /**

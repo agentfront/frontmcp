@@ -393,6 +393,10 @@ class IsolatedAgent extends AgentContext { ... }
 | `prompts`   | Nobody, unless exported, as for resources.                                                                                                                                                     |
 | `agents`    | The agent's model (see [Nested Agents](#nested-agents)).                                                                                                                                       |
 
+The agent's tools also see the providers of the agent's app and of the server, as the app's own tools do (for a nested agent, those of its parent agent too). Up to 1.9.1 an app provider failed in an agent's tool with `Provider "TicketStore" is not available`; only server-level providers reached it.
+
+From the agent's own code, `this.callTool(name, args)` reaches the agent's own tools and its nested agents' `invoke_<agent-id>` tools, which run in the agent's scope, and otherwise the tools of the server. Up to 1.9.1 it found only the server's tools, so a call to one of the agent's own tools or nested agents answered `Tool not found`.
+
 ### Exports
 
 `exports` shares some of the agent's own entries with the scope it is registered in (the server, or its parent agent for a nested agent):
@@ -417,7 +421,7 @@ Control agent visibility for multi-agent coordination:
     canSeeOtherAgents: true,              // Can this agent invoke others?
     visibleAgents: ['worker-a', 'worker-b'], // Which agents can it see?
     isVisible: true,                      // Can other agents see this one?
-    maxCallDepth: 3,                      // Max nested agent invocations
+    maxCallDepth: 3,                      // Max agent-to-agent calls in one chain
   },
   llm: { ... },
 })
@@ -439,7 +443,7 @@ Either way the call runs through the called agent's `invoke_<agent-id>` tool, so
 
 ### Call Depth
 
-`maxCallDepth` (1 to 10, default 3) limits how many agent-to-agent calls deep a chain may go: an agent called by a client that calls another makes call 1. It counts every way one agent reaches another: through its model, `this.invokeAgent()`, or `this.callTool('invoke_<agent-id>')`. When several agents are running in the chain, the smallest of their `maxCallDepth` applies, and agents without `swarm` count with the default of 3. A deeper call fails with `AgentCallDepthExceededError` (`AGENT_CALL_DEPTH_EXCEEDED`):
+`maxCallDepth` (1 to 10, default 3) limits how many agent-to-agent calls deep a chain may go: an agent called by a client that calls another makes call 1. It counts every way one agent reaches another: through its model, `this.invokeAgent()`, or `this.callTool('invoke_<agent-id>')`. When several agents are running in the chain, the smallest of their `maxCallDepth` applies, and agents without `swarm` count with the default of 3. It counts calls, not agents: with the default of 3, a chain of four agents runs (the agent the client called, and three agents each called by the one before), and the fifth is refused. A deeper call fails with `AgentCallDepthExceededError` (`AGENT_CALL_DEPTH_EXCEEDED`):
 
 ```text
 Agent "pong" can't be called from "ping" -> "pong" -> "ping": that would be agent call 3, deeper than maxCallDepth 2
@@ -487,6 +491,7 @@ Control agent execution behavior:
     inheritParentTools: false,  // Also offer the model the app's tools (default: false)
     inheritPlugins: false,      // Also run the app's and server's plugins for the agent's tools (default: false)
     useToolFlow: true,          // Execute tools through call-tool flow (default: true)
+    notificationInterval: 1000, // Least time between two automatic progress updates in ms (default: 1000)
   },
   llm: { ... },
 })
@@ -559,7 +564,15 @@ class CustomAgent extends AgentContext {
 }
 ```
 
-Up to 1.8.7 an `executeTool()` override never saw the model's tool calls: the loop called the tools without it.
+Every completion of the default loop goes through `completion()`, and every tool call of its model through `executeTool()`. The loop passes `completion()` the agent's completion options: `llm.temperature` and `llm.maxTokens` when the agent's `llm` sets them, else an empty object. Override `completionOptions()` to send others to every completion:
+
+```ts
+protected override completionOptions() {
+  return { temperature: 0.2, maxTokens: 800 };
+}
+```
+
+Up to 1.8.7 an `executeTool()` override never saw the model's tool calls, and up to 1.9.1 a `completion()` override never ran: the loop called the adapter directly, with `options` always `undefined`.
 
 ---
 
@@ -636,6 +649,10 @@ Auto progress requires both `enableAutoProgress: true` and `enableNotifications:
 Progress notifications are only sent if the client includes a `progressToken` in the request's `_meta` field.
 </Info>
 
+`execution.notificationInterval` (default 1000 ms) is the least time between two automatic progress updates: an update that comes sooner is skipped, except the last one (`Agent completed` or `Agent failed: ...`), which is always sent. It doesn't apply to your own `this.progress()` calls.
+
+`this.notify()` and `this.progress()` reach the client the way a tool's do: on a session (where `notifications/message` needs the client to have set a log level with `logging/setLevel`), and under MCP 2026-07-28 on the request's own response stream. Up to 1.9.1 an agent's own `notify()` and `progress()`, and its automatic progress, returned `false` and sent nothing under 2026-07-28, and `notificationInterval` was never read.
+
 ---
 
 ## Error Handling
@@ -660,6 +677,10 @@ class SafeAgent extends AgentContext {
   }
 }
 ```
+
+### A tool that fails
+
+When one of the agent's tools fails, the model gets the error as the tool's result, `{"error":"<message>"}`, and decides what to do next. A tool that calls `this.fail(new PublicMcpError('The ticket is locked'))` reaches the model as `{"error":"The ticket is locked"}`. Up to 1.9.1 the message was lost and the model read `{"error":""}`.
 
 ### Output that does not match `outputSchema`
 
