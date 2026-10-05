@@ -19,6 +19,7 @@ import {
   type SkillType,
 } from '../common';
 import { type SkillContent, type SkillExampleInfo, type SkillReferenceInfo } from '../common/interfaces';
+import { isExternalEntryRecord, unsupportedExternalEntry } from '../common/utils/external-entry.utils';
 import { InvalidInstructionSourceError, InvalidSkillError, SkillInstructionFetchError } from '../errors';
 import { stripFrontmatter } from './skill-md-parser';
 
@@ -49,11 +50,17 @@ export function collectSkillMetadata(cls: SkillType): SkillMetadata {
  * - SkillValueRecord (from skill() helper) → passthrough
  * - SkillFileRecord → passthrough
  *
+ * Refuses `Skill.esm()` / `Skill.remote()` records: per-entry loading covers tools, resources and prompts.
+ *
  * @param item - The skill input to normalize
  * @returns A normalized SkillRecord
  * @throws Error if the input is invalid
  */
 export function normalizeSkill(item: unknown): SkillRecord {
+  if (isExternalEntryRecord(item)) {
+    throw unsupportedExternalEntry('skill', item);
+  }
+
   // Check if it's already a SkillRecord (from skill() helper or file loader)
   if (isSkillRecord(item)) {
     return item;

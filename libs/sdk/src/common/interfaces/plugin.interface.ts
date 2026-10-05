@@ -4,7 +4,10 @@ import { type PluginMetadata } from '../metadata';
 
 export type PluginClassType<Provide> = ClassType<Provide> & PluginMetadata;
 export type PluginValueType<Provide> = ValueType<Provide> & PluginMetadata;
-export type PluginFactoryType<Provide, Tokens extends readonly Token[]> = FactoryType<Provide, Tokens> & PluginMetadata;
+/** A factory plugin; without `inject`, the factory receives no dependencies. */
+export type PluginFactoryType<Provide, Tokens extends readonly Token[]> = Omit<FactoryType<Provide, Tokens>, 'inject'> &
+  Partial<Pick<FactoryType<Provide, Tokens>, 'inject'>> &
+  PluginMetadata;
 
 export type PluginType<Provide = unknown> =
   | Type<Provide>

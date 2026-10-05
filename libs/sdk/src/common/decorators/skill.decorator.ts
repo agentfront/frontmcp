@@ -233,7 +233,9 @@ Object.assign(FrontMcpSkill, {
 
 type SkillDecorator = {
   (metadata: SkillMetadata): ClassDecorator;
+  /** Startup refuses it (`ExternalEntryNotSupportedError`); per-entry loading covers tools, resources, prompts. */
   esm: typeof skillEsm;
+  /** Startup refuses it (`ExternalEntryNotSupportedError`); per-entry loading covers tools, resources, prompts. */
   remote: typeof skillRemote;
 };
 

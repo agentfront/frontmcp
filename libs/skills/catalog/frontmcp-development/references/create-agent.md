@@ -466,25 +466,21 @@ Register it the same way as a class agent: `agents: [QuickTruncator]`.
 
 ## Remote and ESM Loading
 
-Load agents from external modules or remote URLs without importing them directly.
+`Agent.esm()` and `Agent.remote()` exist, but startup refuses them with `ExternalEntryNotSupportedError`: per-entry `.esm()` and `.remote()` loading covers tools, resources and prompts only. Do not put them in `agents`. Instead:
 
-**ESM loading** -- load an agent from an ES module:
-
-```typescript
-const ExternalAgent = Agent.esm('@my-org/agents@^1.0.0', 'ExternalAgent', {
-  description: 'An agent loaded from an ES module',
-});
-```
-
-**Remote loading** -- load an agent from a remote URL:
+- Declare the agent locally (`@Agent` class or `agent()`), and give it external tools with `Tool.esm()` / `Tool.remote()` in its `tools`:
 
 ```typescript
-const CloudAgent = Agent.remote('https://example.com/agents/cloud-agent', 'CloudAgent', {
-  description: 'An agent loaded from a remote server',
-});
+@Agent({
+  name: 'researcher',
+  description: 'Researches a topic',
+  llm: { provider: 'openai', model: 'gpt-4o', apiKey: { env: 'OPENAI_API_KEY' } },
+  tools: [Tool.esm('@my-org/tools@^1.0.0', 'web_search'), Tool.remote('https://example.com/mcp', 'fetch_page')],
+})
+class ResearcherAgent extends AgentContext {}
 ```
 
-Both return values that can be registered in `agents: [ExternalAgent, CloudAgent]`.
+- To call an agent another FrontMCP server hosts, proxy the `invoke_<agent>` tool that server exposes: `Tool.remote('https://example.com/mcp', 'invoke_writer')`.
 
 ## Registration
 

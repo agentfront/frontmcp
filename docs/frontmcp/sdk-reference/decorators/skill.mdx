@@ -281,6 +281,7 @@ Skills are validated on server startup. Validation strictness is configured **pe
 @Skill({
   name: 'review-pr',
   description: 'Review a pull request',
+  instructions: 'List the changed files, read each one, then comment on the PR.',
   tools: ['list_files', 'read_file', 'comment_on_pr'],
   toolValidation: 'strict', // 'strict' | 'warn' (default) | 'ignore'
 })
@@ -325,7 +326,7 @@ import { z } from '@frontmcp/sdk';
   inputSchema: { issueKey: z.string() },
 })
 class JiraGetIssueTool extends ToolContext {
-  async execute(input) {
+  async execute(input: { issueKey: string }) {
     return { key: input.issueKey, summary: 'Issue summary' };
   }
 }
@@ -335,7 +336,7 @@ class JiraGetIssueTool extends ToolContext {
   inputSchema: { issueKey: z.string(), status: z.string() },
 })
 class JiraUpdateStatusTool extends ToolContext {
-  async execute(input) {
+  async execute(input: { issueKey: string; status: string }) {
     return { success: true };
   }
 }
@@ -345,7 +346,7 @@ class JiraUpdateStatusTool extends ToolContext {
   inputSchema: { channel: z.string(), message: z.string() },
 })
 class SlackNotifyTool extends ToolContext {
-  async execute(input) {
+  async execute(input: { channel: string; message: string }) {
     return { sent: true };
   }
 }
@@ -466,14 +467,13 @@ allowed-tools: Read Edit Bash(git diff)
 ### Loading SKILL.md Files
 
 ```typescript
-import { loadSkillMdFile, parseSkillMdFrontmatter } from '@frontmcp/sdk';
+import { loadSkillDirectory } from '@frontmcp/sdk';
 
-// High-level: read + parse in one call
-const metadata = await loadSkillMdFile('./skills/review-pr/SKILL.md');
-
-// Low-level: parse content you already have
-const { frontmatter, body } = parseSkillMdFrontmatter(rawContent);
+// Reads SKILL.md (frontmatter and body) and detects scripts/, references/ and assets/
+const reviewPr = await loadSkillDirectory('./skills/review-pr');
 ```
+
+`loadSkillDirectory()` and `skillDir()` (below) are the public way to read a `SKILL.md`. The lower-level parser functions (`loadSkillMdFile`, `parseSkillMdFrontmatter`) are not exported from `@frontmcp/sdk`.
 
 ## Skill Directories
 

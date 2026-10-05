@@ -63,6 +63,8 @@ import MySimplePlugin from './plugins/my-simple.plugin';
 export default class MyApp {}
 ```
 
+In the factory form, `inject` is optional: without it, `useFactory` is called with no arguments.
+
 ## Dynamic Plugin with Options
 
 For plugins that need runtime configuration, extend `DynamicPlugin`:
@@ -429,14 +431,13 @@ declare global {
 }
 ```
 
-Tools can then use this metadata:
+Tools then set the field at the top level of their `@Tool` options:
 
 ```ts
 @Tool({
   name: 'my-tool',
-  metadata: {
-    cache: { ttl: 3600 },
-  },
+  inputSchema: { query: z.string() },
+  cache: { ttl: 3600 },
 })
 ```
 
@@ -484,6 +485,13 @@ export default class GlobalLoggerPlugin {
   Server-scoped plugins can only be used in non-standalone apps (`standalone: false`).
   Using `scope: 'server'` in a standalone app will throw an `InvalidPluginScopeError`.
 </Warning>
+
+Only the hooks reach every app, those declared on the plugin's providers included. The plugin's providers and context extensions (`this.remember`, `this.approval`) stay
+with the app that installed it, as described in [Installing a Plugin in Several Apps](#installing-a-plugin-in-several-apps).
+Its hooks see every app's tool inputs and outputs, resource reads and prompts, so give `scope: 'server'` only to a
+plugin trusted with every app's traffic. Install it on one app: each app that installs it adds its own copy of the
+hooks, and every copy runs for every app. Up to 1.9.0 the hooks of a server-scoped plugin installed on an app ran only
+for that app's tools, resources and prompts.
 
 ### When to Use Each Scope
 

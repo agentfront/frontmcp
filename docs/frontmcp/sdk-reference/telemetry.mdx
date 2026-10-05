@@ -12,6 +12,55 @@ The `this.telemetry` API is available on all execution contexts (`ToolContext`, 
 Requires `@frontmcp/observability` installed and `observability` config enabled. See the [Observability Guide](/frontmcp/guides/observability) for setup.
 </Info>
 
+## Typing `this.telemetry`
+
+The `observability` config installs `this.telemetry` at runtime on `ExecutionContextBase`, which tool, resource and agent contexts extend, and on `PromptContext`, which does not extend it. Its type is declared by `@frontmcp/observability`, as a module augmentation of the same two classes:
+
+```typescript
+// @frontmcp/observability: src/telemetry/telemetry.context-extension.ts
+import type { TelemetryAccessor } from './telemetry.accessor';
+
+declare module '@frontmcp/sdk' {
+  interface ExecutionContextBase {
+    readonly telemetry: TelemetryAccessor;
+  }
+
+  interface PromptContext {
+    readonly telemetry: TelemetryAccessor;
+  }
+}
+```
+
+TypeScript applies it only when the package is part of the compilation. Import it in the file that uses `this.telemetry`, or once in any file the project compiles, such as the server entry. A type-only import is enough and is erased at runtime:
+
+```typescript
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+import type {} from '@frontmcp/observability'; // declares this.telemetry
+
+@Tool({ name: 'lookup', inputSchema: { id: z.string() } })
+class LookupTool extends ToolContext {
+  async execute({ id }: { id: string }) {
+    this.telemetry.addEvent('lookup-started', { id });
+    return { id };
+  }
+}
+```
+
+The same import types `this.telemetry` in a prompt:
+
+```typescript
+import { Prompt, PromptContext } from '@frontmcp/sdk';
+import type {} from '@frontmcp/observability'; // declares this.telemetry
+
+@Prompt({ name: 'summarize', arguments: [{ name: 'topic', required: true }] })
+class SummarizePrompt extends PromptContext {
+  async execute({ topic }: Record<string, string>) {
+    this.telemetry.addEvent('prompt-built', { topic });
+    return `Summarize what we know about ${topic}.`;
+  }
+}
+```
+
 ---
 
 ## TelemetryAccessor
@@ -31,11 +80,11 @@ You **must** call `span.end()` or `span.endWithError()` when done.
 ```typescript
 const span = this.telemetry.startSpan('fetch-user', { 'user.id': userId });
 try {
-  const user = await this.fetch(`/api/users/${userId}`);
-  span.setAttribute('user.name', user.name);
+  const response = await this.fetch(`https://api.example.com/users/${userId}`);
+  span.setAttribute('http.status', response.status);
   span.end();
 } catch (err) {
-  span.endWithError(err);
+  span.endWithError(err instanceof Error ? err : String(err));
   throw err;
 }
 ```
@@ -113,7 +162,7 @@ get traceId(): string
 ```
 
 ```typescript
-const response = await this.fetch('/api/data', {
+const response = await this.fetch('https://api.example.com/data', {
   headers: { 'X-Trace-Id': this.telemetry.traceId },
 });
 ```
@@ -169,10 +218,11 @@ Counters are cumulative, monotonically-increasing metrics. Unlike spans (which d
 ### `createCounter(name, description?)`
 
 ```typescript
-createCounter(name: string, description?: string): Counter
+createCounter(name: string, description?: string): TelemetryCounter
 
-interface Counter {
-  inc(by?: number, attrs?: Record<string, string | number | boolean>): void;
+interface TelemetryCounter {
+  inc(by?: number, attributes?: Record<string, string>): void;
+  readonly name: string;
 }
 ```
 
@@ -185,14 +235,17 @@ counter.inc(1, { status: 'ok' });
 
 When `skillsConfig.enabled: true` is set on `@FrontMcp`, the framework emits the following counters automatically:
 
-| Counter                                         | Attributes                                                                                                                 | Description                                                |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `frontmcp_skills_bundle_pulls_total`            | `status: 'ok' \| 'error'`, `source: 'static' \| 'npm' \| 'saas-pull' \| 'filesystem' \| 'unknown'`, `reason` (errors only) | Skill bundle pulls / hot-swaps                             |
-| `frontmcp_skills_signature_verifications_total` | `status: 'ok' \| 'error'`                                                                                                  | Bundle signature verifications attempted                   |
-| `frontmcp_skills_signature_failures_total`      | `reason` (bounded vocabulary)                                                                                              | Signature failures, classified by reason                   |
-| `frontmcp_skills_replay_checks_total`           | `status: 'ok' \| 'error'`                                                                                                  | Replay-protection checks                                   |
-| `frontmcp_skills_replay_rejects_total`          | `reason` (bounded vocabulary)                                                                                              | Replay rejections, classified by reason                    |
-| `frontmcp_skills_audit_dropped_total`           | `reason`                                                                                                                   | Audit log records dropped (queue overflow / write failure) |
+| Counter                                         | Attributes                                                                                                                 | Description                                            |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `frontmcp_skills_bundle_pulls_total`            | `status: 'ok' \| 'error'`, `source: 'static' \| 'npm' \| 'saas-pull' \| 'filesystem' \| 'unknown'`, `reason` (errors only) | Skill bundle pulls / hot-swaps                         |
+| `frontmcp_skills_signature_verifications_total` | `status: 'ok' \| 'error'`                                                                                                  | Bundle signature verifications attempted               |
+| `frontmcp_skills_signature_failures_total`      | `reason` (bounded vocabulary)                                                                                              | Signature failures, classified by reason               |
+| `frontmcp_skills_replay_checks_total`           | `status: 'ok' \| 'error'`                                                                                                  | Replay-protection checks                               |
+| `frontmcp_skills_replay_rejects_total`          | `reason` (bounded vocabulary)                                                                                              | Replay rejections, classified by reason                |
+| `frontmcp_skills_audit_write_failures_total`    | `reason: 'sign' \| 'append' \| 'unexpected'`                                                                               | Audit records that failed to sign or append            |
+| `frontmcp_skills_audit_dropped_total`           | `reason: 'queue-overflow'`                                                                                                 | Audit records dropped because the write queue was full |
+
+The two audit counters are emitted only when `skillsConfig.audit.metrics` is set to `createSkillAuditMetrics({ createCounter })` from `@frontmcp/adapters/skills`.
 
 The framework also emits a `skill.bundle.swap` span (with `source`, `bundle_id`, `version`, `skill_count`, `from_version` attributes), and adds `skill_search.query`, `skill_search.results`, and `skill_action.phase` events to the active flow span when the skill HTTP catalog is exercised.
 
@@ -203,11 +256,11 @@ Counters become observable once you register a global OTel `MeterProvider`. With
 ```typescript
 import { metrics } from '@opentelemetry/api';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
-import { Resource } from '@opentelemetry/resources';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 
 const meterProvider = new MeterProvider({
-  resource: new Resource({ 'service.name': 'my-mcp-server' }),
+  resource: resourceFromAttributes({ 'service.name': 'my-mcp-server' }),
   readers: [
     new PeriodicExportingMetricReader({
       exporter: new OTLPMetricExporter({

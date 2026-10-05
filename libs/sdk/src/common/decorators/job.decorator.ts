@@ -226,7 +226,9 @@ interface JobDecorator {
       __MustReturn<C, ToolOutputOf<{ outputSchema: O }>>,
   ) => __Rewrap<C, ToolInputOf<{ inputSchema: I }>, ToolOutputOf<{ outputSchema: O }>>;
 
+  /** Startup refuses it (`ExternalEntryNotSupportedError`); per-entry loading covers tools, resources, prompts. */
   esm: typeof jobEsm;
+  /** Startup refuses it (`ExternalEntryNotSupportedError`); per-entry loading covers tools, resources, prompts. */
   remote: typeof jobRemote;
 }
 

@@ -245,6 +245,15 @@ export {
   EsmInvalidSpecifierError,
 } from './esm.errors';
 
+// Export .esm() / .remote() entry errors
+export {
+  ExternalEntryError,
+  ExternalEntryLoadError,
+  ExternalEntryNotFoundError,
+  ExternalEntryNotSupportedError,
+  type ExternalEntryKind,
+} from './external-entry.errors';
+
 // Export SDK errors
 export {
   FlowExitedWithoutOutputError,

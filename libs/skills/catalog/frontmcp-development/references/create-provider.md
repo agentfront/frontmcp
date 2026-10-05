@@ -130,6 +130,8 @@ class MyApp {}
 class Server {}
 ```
 
+Besides a `@Provider` class and a factory, `providers` takes a value or class binding, `{ name, provide, useValue }` or `{ name, provide, useClass }`. Every provider object needs a `name`. Up to 1.9.0, `@FrontMcp`, `@App`, `@Plugin` and `@Agent` refused `useClass` objects, and `useValue` objects unless the value was an instance of a `@Provider` class.
+
 ## Step 4: Use in Tools
 
 Access providers via `this.get(token)` in any context (ToolContext, ResourceContext, PromptContext, AgentContext):

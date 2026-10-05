@@ -104,6 +104,7 @@ export {
 // Audit log (tamper-evident, signed, hash-chained)
 export {
   canonicalizeRecordForSigning,
+  createSkillAuditMetrics,
   defaultAuditSignatureVerifier,
   Hs256AuditSigner,
   linkRecord,
@@ -137,6 +138,7 @@ export {
   type SkillAuditWriterOptions,
   type SkillAuditStore,
   type SkillAuditSuccessExtras,
+  type SkillAuditTelemetry,
   type SkillAuditWriteContext,
 } from './audit';
 

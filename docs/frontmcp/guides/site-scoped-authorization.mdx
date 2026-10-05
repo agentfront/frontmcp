@@ -461,7 +461,7 @@ test('should require admin for admin tools', async ({ mcp }) => {
 
     ```typescript
     if (allowedSites !== 'ALL' && !allowedSites.includes(siteId)) {
-      this.logger?.warn('Site access denied', { userId, siteId, allowedSites });
+      this.get(FrontMcpLogger).warn('Site access denied', { userId, siteId, allowedSites });
       throw new Error(`Not authorized for site ${siteId}`);
     }
     ```

@@ -2,7 +2,13 @@ import { type Type } from '@frontmcp/di';
 
 import { type ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
 import { type ToolContext } from '../interfaces';
-import { type EsmOptions, type RemoteAuthConfig, type RemoteTransportOptions, type ToolMetadata } from '../metadata';
+import {
+  type EsmOptions,
+  type RemoteAuthConfig,
+  type RemoteOptions,
+  type RemoteTransportOptions,
+  type ToolMetadata,
+} from '../metadata';
 
 export enum ToolKind {
   CLASS_TOKEN = 'CLASS_TOKEN',
@@ -39,7 +45,7 @@ export type ToolEsmTargetRecord = {
   specifier: ParsedPackageSpecifier;
   /** Which tool to load from the package */
   targetName: string;
-  options?: EsmOptions;
+  options?: EsmOptions<ToolMetadata>;
   metadata: ToolMetadata;
 };
 
@@ -53,8 +59,12 @@ export type ToolRemoteRecord = {
   targetName: string;
   transportOptions?: RemoteTransportOptions;
   remoteAuth?: RemoteAuthConfig;
+  options?: RemoteOptions<ToolMetadata>;
   metadata: ToolMetadata;
 };
+
+/** A record whose tools are loaded from a package or a remote server when its registry starts. */
+export type ToolExternalRecord = ToolEsmRecord | ToolEsmTargetRecord | ToolRemoteRecord;
 
 export type ToolRecord =
   | ToolClassTokenRecord

@@ -27,10 +27,10 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 
 ### Required Properties
 
-| Property | Type                | Description                                  |
-| -------- | ------------------- | -------------------------------------------- |
-| `info`   | `ServerInfoOptions` | Server metadata (name, version, description) |
-| `apps`   | `AppType[]`         | Array of app classes to register             |
+| Property | Type                | Description                                                                      |
+| -------- | ------------------- | -------------------------------------------------------------------------------- |
+| `info`   | `ServerInfoOptions` | Server metadata (`name`, `version`, and optional `title`, `websiteUrl`, `icons`) |
+| `apps`   | `AppType[]`         | Array of app classes to register                                                 |
 
 ### Server Metadata
 
@@ -62,10 +62,11 @@ auto-starting entirely (use `FrontMcpInstance.bootstrap`/`runStdio` explicitly).
   http: {
     port: 3000,
     cors: { origin: '*' },
-    hostFactory: (config) => new ExpressHostAdapter(config),
   },
 })
 ```
+
+`http.hostFactory` replaces the default Express host with a `FrontMcpServer` of your own, or a function that builds one from the HTTP options.
 
 ### Storage Configuration
 
@@ -99,9 +100,10 @@ auto-starting entirely (use `FrontMcpInstance.bootstrap`/`runStdio` explicitly).
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
   apps: [MyApp],
+  redis: { provider: 'redis', host: 'localhost', port: 6379 },
   transport: {
     distributedMode: true,
-    sessionTtl: 3600000, // 1 hour
+    persistence: { defaultTtlMs: 3600000 }, // keep session metadata for 1 hour
   },
 })
 ```
@@ -167,16 +169,17 @@ Tools, resources and resource templates declared on `@FrontMcp` are listed, call
 | `channels`      | `ChannelsConfigInput`                      | Channel notifications configuration                                                                                                                                                                                                                             |
 
 ```typescript
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
   apps: [MyApp],
   logging: {
-    level: 'info',
-    transports: [{ type: 'console' }],
+    level: LogLevel.Info,
+    enableConsole: true,
   },
   elicitation: {
-    enabled: true,
-    ttl: 300000, // 5 minutes
+    enabled: true, // each this.elicit() call sets its own ttl
   },
   skillsConfig: {
     enabled: true,
@@ -189,7 +192,7 @@ Tools, resources and resource templates declared on `@FrontMcp` are listed, call
 ## Full Example
 
 ```typescript
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
+import { FrontMcp, App, LogLevel, Tool, ToolContext } from '@frontmcp/sdk';
 import { RememberPlugin } from '@frontmcp/plugin-remember';
 import { z } from '@frontmcp/sdk';
 
@@ -213,13 +216,13 @@ class MainApp {}
   info: {
     name: 'Greeting Server',
     version: '1.0.0',
-    description: 'A simple greeting MCP server',
+    title: 'A simple greeting MCP server',
   },
   apps: [MainApp],
   serve: true,
   http: { port: 3000 },
   plugins: [RememberPlugin],
-  logging: { level: 'info' },
+  logging: { level: LogLevel.Info },
 })
 export default class GreetingServer {}
 ```
@@ -256,20 +259,31 @@ class Server {}
 
 `skillsConfig.audit` enables a tamper-evident, hash-chained audit log of skill action executions (authority pass / authority fail / HTTP success / HTTP failure phases). Records are signed and chained so that any later mutation breaks verification.
 
-| Field                  | Type                          | Default   | Description                                                                                               |
-| ---------------------- | ----------------------------- | --------- | --------------------------------------------------------------------------------------------------------- |
-| `enabled`              | `boolean`                     | `false`   | Turn the audit writer on                                                                                  |
-| `signer`               | `SkillAuditSigner`            | dev HS256 | Signs each record. Use `Rs256AuditSigner` in production (HS256 with a random key refuses to fire in prod) |
-| `store`                | `SkillAuditStore`             | memory    | Where records are persisted. Use `StorageAdapterAuditStore` for Redis/Vercel KV/SQLite-backed storage     |
-| `subjectMode`          | `'plain' \| 'hash' \| 'omit'` | `'hash'`  | Redaction policy for the principal embedded in each record                                                |
-| `headAnchorIntervalMs` | `number`                      | unset     | Periodically anchor the chain head out-of-band so tail truncation is detectable                           |
+| Field                  | Type                          | Default   | Description                                                                                                         |
+| ---------------------- | ----------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------- |
+| `enabled`              | `boolean`                     | `false`   | Turn the audit writer on                                                                                            |
+| `signer`               | `SkillAuditSigner`            | dev HS256 | Signs each record. Use `Rs256AuditSigner` in production; without a signer the server refuses to start in production |
+| `store`                | `SkillAuditStore`             | memory    | Where records are persisted. Use `StorageAdapterAuditStore` for Redis/Vercel KV/SQLite-backed storage               |
+| `metrics`              | `SkillAuditMetrics`           | unset     | Counts failed and dropped writes. Build it with `createSkillAuditMetrics({ createCounter })`                        |
+| `subjectMode`          | `'plain' \| 'hash' \| 'omit'` | `'hash'`  | Redaction policy for the principal embedded in each record                                                          |
+| `headAnchorIntervalMs` | `number`                      | unset     | Reserved for head anchoring. Validated, but not read yet                                                            |
 
-See the [skill audit log extensibility page](/frontmcp/extensibility/skill-audit-log) for the full architecture, threat model, and chain verification recipe.
+The audit module lives in `@frontmcp/adapters/skills`, which the SDK does not import: register it once at boot with `setSkillAuditFactory(() => auditModule)`. See the [skill audit log extensibility page](/frontmcp/extensibility/skill-audit-log) for the full architecture, threat model, and chain verification recipe.
 
 ```typescript
-import { Rs256AuditSigner, setSkillAuditFactory, SkillAuditWriter, StorageAdapterAuditStore } from '@frontmcp/adapters/skills';
+import * as auditModule from '@frontmcp/adapters/skills';
+import { createSkillAuditMetrics, Rs256AuditSigner, StorageAdapterAuditStore } from '@frontmcp/adapters/skills';
+import { createCounter } from '@frontmcp/observability';
+import { FrontMcp, setSkillAuditFactory } from '@frontmcp/sdk';
+import { createStorage } from '@frontmcp/utils';
 
-setSkillAuditFactory(({ signer, store, subjectMode }) => new SkillAuditWriter({ signer, store, subjectMode }));
+import { MainApp } from './main.app';
+
+setSkillAuditFactory(() => auditModule);
+
+const privateJwkJson = process.env.BUNDLE_SIGNING_PRIVATE_JWK;
+if (!privateJwkJson) throw new Error('BUNDLE_SIGNING_PRIVATE_JWK is not set');
+const storage = await createStorage({ type: 'redis', redis: { config: { host: 'localhost', port: 6379 } } });
 
 @FrontMcp({
   info: { name: 'prod-server', version: '1.0.0' },
@@ -278,8 +292,9 @@ setSkillAuditFactory(({ signer, store, subjectMode }) => new SkillAuditWriter({ 
     enabled: true,
     audit: {
       enabled: true,
-      signer: new Rs256AuditSigner({ keyId: 'bundle-2026-01', privateKeyPem: process.env.PRIVATE_KEY! }),
-      store: new StorageAdapterAuditStore(redisStorageAdapter),
+      signer: new Rs256AuditSigner(JSON.parse(privateJwkJson) as JsonWebKey, 'bundle-signing-2026-01'),
+      store: new StorageAdapterAuditStore(storage),
+      metrics: createSkillAuditMetrics({ createCounter }),
       subjectMode: 'hash',
     },
   },
@@ -288,7 +303,7 @@ class ProdServer {}
 ```
 
 <Note>
-v1.2.0 ships **single-writer** chain semantics. Multiple pods writing to the same store will produce loud warnings; CAS-based atomic chain head updates are queued for v1.3.0. Until then, route audit writes to a single elected leader pod or use per-pod chains and stitch offline.
+The writer is **single-writer only**: it serializes writes within one process, but two pods appending to the same store can link their records to the same tail, which `verifyChain` reports as a `prevHash` mismatch. Route audit writes to a single elected leader pod, or use per-pod chains and stitch them offline.
 </Note>
 
 ## Bootstrap Methods

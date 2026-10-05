@@ -8,6 +8,7 @@ import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../context';
 import { workerEnvOf } from '../../context/frontmcp-context-storage';
 import { type ScopeEntry } from '../entries';
 import { type PromptMetadata } from '../metadata';
+import { type PromptEsmTargetRecord, type PromptRemoteRecord } from '../records/prompt.record';
 import { FlowControl } from './flow.interface';
 import { type ProviderRegistryInterface } from './internal';
 import { type FrontMcpLogger } from './logger.interface';
@@ -32,7 +33,13 @@ export interface PromptInterface {
 
 export type FunctionalPromptType = (() => any) & { [key: symbol]: unknown };
 
-export type PromptType = Type<PromptInterface> | FuncType<PromptInterface> | FunctionalPromptType | string;
+export type PromptType =
+  | Type<PromptInterface>
+  | FuncType<PromptInterface>
+  | FunctionalPromptType
+  | string
+  | PromptEsmTargetRecord
+  | PromptRemoteRecord;
 
 type HistoryEntry<T> = {
   at: number;

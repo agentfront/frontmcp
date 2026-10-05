@@ -21,7 +21,7 @@ Read built-in skill counters from the in-memory snapshot for tests and wire an O
 // src/main.ts — wire a MeterProvider so framework counters export via OTLP
 import { metrics } from '@opentelemetry/api';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
-import { Resource } from '@opentelemetry/resources';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 
 // Now register the FrontMCP server. Built-in skill counters
@@ -32,7 +32,7 @@ import { FrontMcpInstance } from '@frontmcp/sdk';
 import config from './server';
 
 const meterProvider = new MeterProvider({
-  resource: new Resource({ 'service.name': 'my-mcp-server' }),
+  resource: resourceFromAttributes({ 'service.name': 'my-mcp-server' }),
   readers: [
     new PeriodicExportingMetricReader({
       exporter: new OTLPMetricExporter({
@@ -51,6 +51,8 @@ await FrontMcpInstance.bootstrap(config);
 ```typescript
 // src/tools/process-widget.tool.ts — custom counter inside a tool
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
+import type {} from '@frontmcp/observability'; // declares this.telemetry
 
 @Tool({
   name: 'process_widget',
@@ -82,8 +84,11 @@ import { getMetricSnapshot } from '@frontmcp/observability';
 
 it('records bundle pulls', async () => {
   // ... exercise the server so a bundle gets pulled
-  const snapshot = getMetricSnapshot();
-  expect(snapshot['frontmcp_skills_bundle_pulls_total']).toBeGreaterThan(0);
+  // One entry per counter name and attribute combination
+  const pulls = getMetricSnapshot()
+    .filter((entry) => entry.name === 'frontmcp_skills_bundle_pulls_total')
+    .reduce((total, entry) => total + entry.count, 0);
+  expect(pulls).toBeGreaterThan(0);
 });
 ```
 

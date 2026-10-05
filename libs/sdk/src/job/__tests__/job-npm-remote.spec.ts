@@ -1,7 +1,7 @@
 import { Job } from '../../common/decorators/job.decorator';
-import { JobKind } from '../../common/records/job.record';
-import type { JobEsmTargetRecord, JobRemoteRecord } from '../../common/records/job.record';
-import { normalizeJob, jobDiscoveryDeps } from '../job.utils';
+import { JobKind, type JobEsmTargetRecord, type JobRemoteRecord } from '../../common/records/job.record';
+import { ExternalEntryNotSupportedError } from '../../errors';
+import { jobDiscoveryDeps, normalizeJob } from '../job.utils';
 
 describe('Job.esm()', () => {
   it('creates JobEsmTargetRecord with kind ESM', () => {
@@ -117,18 +117,15 @@ describe('Job.remote()', () => {
 });
 
 describe('normalizeJob() with ESM/REMOTE records', () => {
-  it('passes through JobEsmTargetRecord unchanged', () => {
-    const record = Job.esm('@acme/jobs@^1.0.0', 'cleanup') as JobEsmTargetRecord;
-    const normalized = normalizeJob(record);
-    expect(normalized).toBe(record);
-    expect(normalized.kind).toBe(JobKind.ESM);
+  it('refuses a Job.esm() record, naming the job and the package', () => {
+    const record = Job.esm('@acme/jobs@^1.0.0', 'cleanup');
+    expect(() => normalizeJob(record)).toThrow(ExternalEntryNotSupportedError);
+    expect(() => normalizeJob(record)).toThrow('Job "cleanup" from @acme/jobs@^1.0.0 is not supported');
   });
 
-  it('passes through JobRemoteRecord unchanged', () => {
-    const record = Job.remote('https://api.example.com/mcp', 'sync') as JobRemoteRecord;
-    const normalized = normalizeJob(record);
-    expect(normalized).toBe(record);
-    expect(normalized.kind).toBe(JobKind.REMOTE);
+  it('refuses a Job.remote() record, naming the job and the server', () => {
+    const record = Job.remote('https://api.example.com/mcp', 'sync');
+    expect(() => normalizeJob(record)).toThrow('Job "sync" from https://api.example.com/mcp is not supported');
   });
 });
 

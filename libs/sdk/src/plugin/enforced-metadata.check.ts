@@ -57,7 +57,7 @@ function keysEnforcedByPlugins(plugins: readonly PluginType[] | undefined, into 
  * The metadata of the tools an agent can call: its private scope's tools (declared and contributed by
  * its plugins) once the agent is initialized, else the tools it declares.
  */
-function agentToolMetadata(agent: AgentEntry): ToolEntry['metadata'][] {
+export function agentToolMetadata(agent: AgentEntry): ToolEntry['metadata'][] {
   const tools = (agent as { getAgentTools?: () => readonly ToolEntry[] }).getAgentTools?.();
   if (tools && tools.length > 0) return tools.map((tool) => tool.metadata);
   return (agent.metadata.tools ?? []).map((toolType) => normalizeTool(toolType).metadata);

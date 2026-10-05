@@ -138,7 +138,7 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] `frontmcp_skills_bundle_pulls_total` is scraped
 - [ ] `frontmcp_skills_signature_failures_total` is alerted on
 - [ ] `frontmcp_skills_replay_rejects_total` is alerted on
-- [ ] `frontmcp_skills_audit_dropped_total` is alerted on (audit back-pressure)
+- [ ] `skillsConfig.audit.metrics` is set with `createSkillAuditMetrics({ createCounter })`, and `frontmcp_skills_audit_dropped_total` and `frontmcp_skills_audit_write_failures_total` are alerted on
 
 ## Jobs & Workflows (if enabled)
 
