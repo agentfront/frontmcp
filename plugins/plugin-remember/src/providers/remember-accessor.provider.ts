@@ -251,10 +251,8 @@ export class RememberAccessor {
       : JSON.stringify(entry);
 
     const writtenAt = Date.now();
-    if (expiresAt !== undefined && expiresAt <= writtenAt) {
-      await this.store.delete(storageKey);
-      return false;
-    }
+    // Deleting here could remove a concurrent set(); reads already treat the passed deadline as missing.
+    if (expiresAt !== undefined && expiresAt <= writtenAt) return false;
 
     const storageTtl = expiresAt !== undefined ? remainingSeconds(expiresAt, writtenAt) : undefined;
     await this.store.setValue(storageKey, serialized, storageTtl);
