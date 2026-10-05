@@ -1857,7 +1857,8 @@
               "features": [
                 "Using `ToolHook` pre-built export instead of calling `FlowHooksOf('tools:call-tool')` directly",
                 "Destructuring `Will` and `Did` decorators from the hook object",
-                "Setting `priority: 100` on `@Will` to ensure the logging hook runs early",
+                "Setting `priority: -100` on `@Will` so the logging hook runs before the stage's other `@Will` hooks (lower runs first)",
+                "Reading the tool name and arguments from `ctx.state.required.input` and logging with `ctx.logger`",
                 "Registering a plugin in the `plugins` array of `@App`"
               ]
             },
@@ -1868,21 +1869,22 @@
               "tags": ["development", "cache", "plugin-hooks", "plugin", "hooks", "caching"],
               "features": [
                 "Using `@Around` to wrap the `execute` stage with before-and-after logic",
-                "Calling `await next()` to invoke the original stage and capture its result",
+                "Calling `await next()` to run the original stage, then reading its result from `toolContext.output`",
                 "Short-circuiting execution by returning cached data without calling `next()`",
-                "Building a cache key from `ctx.toolName` and `ctx.input`"
+                "Building a cache key from the tool `name` and `arguments` in `ctx.state.required.input`"
               ]
             },
             {
-              "name": "tool-level-hooks-and-stage-replacement",
-              "description": "Demonstrates two advanced patterns: adding `@Will`/`@Did` hooks directly on a `@Tool` class (scoped to that tool only), and using `@Stage` in a plugin to replace a flow stage entirely with a filtered mock.",
+              "name": "tool-level-hooks-and-stage-short-circuit",
+              "description": "Demonstrates two advanced patterns: adding `@Will`/`@Did` hooks directly on a `@Tool` class (scoped to that tool only), and ending the flow from a plugin `@Stage` hook with `ctx.respond()` to mock one tool.",
               "level": "advanced",
               "tags": ["development", "plugin-hooks", "plugin", "hooks", "tool", "level"],
               "features": [
                 "Placing `@Will('execute')` and `@Did('execute')` directly on a `@Tool` class so hooks fire only for that tool",
                 "Using `this.fail()` in a `@Will` hook to abort execution when preconditions are not met",
                 "Using `this.mark()` to record lifecycle checkpoints during hook execution",
-                "Using `@Stage` with a `filter` predicate to replace the `execute` stage only for a specific tool name",
+                "A plugin `@Stage('execute')` runs alongside the tool's own `execute` step and its return value is ignored",
+                "Calling `ctx.respond()` from a `@Stage` hook with a `filter` predicate to end the flow for one tool name",
                 "The difference between tool-level hooks (scoped to one tool) and plugin-level hooks (fire for all tools)"
               ]
             }
