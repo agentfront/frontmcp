@@ -547,7 +547,7 @@ class ExpensiveAgent extends AgentContext {
 
 ## Agent with Providers and Plugins
 
-Agents can include their own providers and plugins for self-contained dependency management. The agent's tools can inject its providers without the app registering them too, and they also see the providers of the agent's app and the server. Its plugins' hooks run for its tools. Set `execution: { inheritPlugins: true }` to also run the plugins installed on the app and the server for the agent's tools (a plugin installed in both places runs once).
+Agents can include their own providers and plugins for self-contained dependency management. The agent's tools can inject its providers without the app registering them too, and they also see the providers of the agent's app and the server. Its plugins' hooks run for its tools. Set `execution: { inheritPlugins: true }` to also run the plugins installed on the app and the server for the agent's tools (a plugin installed in both places runs once); then an `ApprovalPlugin` or `FeatureFlagPlugin` on the app also satisfies the startup check for the `approval` or `featureFlag` of the agent's tools.
 
 ```typescript
 @Agent({

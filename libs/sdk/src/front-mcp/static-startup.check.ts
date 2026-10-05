@@ -64,7 +64,11 @@ interface StaticEntry {
  * app's (and those that reach every app) for its entries, only those that reach every app for a
  * tool no app owns, every plugin's for the rest.
  */
-type EntryReach = { agentKeys: ReadonlySet<string> } | { app: object } | 'every-app' | 'every-plugin';
+type EntryReach =
+  | { agentKeys: ReadonlySet<string>; inherits?: EntryReach }
+  | { app: object }
+  | 'every-app'
+  | 'every-plugin';
 
 /** The entry lists of a server, an app or a plugin. */
 interface EntryLists {
@@ -191,14 +195,17 @@ function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType):
       if (!record) continue;
       const agentName = record.metadata.id ?? record.metadata.name;
       if (!add(`Agent "${agentName}"`, record.metadata, reach)) continue;
-      // The agent's own tools run in its private scope, which holds only its plugins' hooks.
-      const agentKeys =
-        record.metadata.execution?.useToolFlow === false
-          ? new Set<string>()
-          : keysEnforcedByPlugins(record.metadata.plugins);
+      // The agent's own tools run in its private scope, which holds its plugins' hooks, and with
+      // `execution.inheritPlugins` those that reach the agent's app.
+      const usesToolFlow = record.metadata.execution?.useToolFlow !== false;
+      const agentKeys = usesToolFlow ? keysEnforcedByPlugins(record.metadata.plugins) : new Set<string>();
+      const toolReachInAgent: EntryReach =
+        usesToolFlow && record.metadata.execution?.inheritPlugins === true
+          ? { agentKeys, inherits: toolReach }
+          : { agentKeys };
       for (const toolItem of record.metadata.tools ?? []) {
         const toolRecord = tryNormalize(() => normalizeTool(toolItem));
-        if (toolRecord) add(`Tool "${agentName}:${toolRecord.metadata.name}"`, toolRecord.metadata, { agentKeys });
+        if (toolRecord) add(`Tool "${agentName}:${toolRecord.metadata.name}"`, toolRecord.metadata, toolReachInAgent);
       }
     }
     // `skills:filter` runs every hook for every skill.
@@ -224,7 +231,9 @@ function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType):
   const keysReaching = (reach: EntryReach): ReadonlySet<string> => {
     if (reach === 'every-plugin') return everyPluginKeys;
     if (reach === 'every-app') return everyAppKeys;
-    if ('agentKeys' in reach) return reach.agentKeys;
+    if ('agentKeys' in reach) {
+      return reach.inherits ? new Set([...reach.agentKeys, ...keysReaching(reach.inherits)]) : reach.agentKeys;
+    }
     return new Set([...everyAppKeys, ...(ownAppKeys.get(reach.app) ?? [])]);
   };
   return found.map(({ label, metadata, reach }) => ({ label, metadata, enforcedBy: keysReaching(reach) }));
