@@ -37,9 +37,11 @@ import { MyApp } from './my.app';
     keyPrefix: 'mcp:', // Namespace keys to avoid collisions
   },
 
-  // Session configuration
-  session: {
-    ttl: 3600_000, // 1 hour session TTL
+  // Session storage: persistence without its own `redis` block reuses the top-level redis
+  transport: {
+    persistence: {
+      defaultTtlMs: 3_600_000, // 1 hour session TTL
+    },
   },
 
   // Jobs use Redis store for multi-instance consistency
@@ -52,10 +54,7 @@ import { MyApp } from './my.app';
         port: Number(process.env.REDIS_PORT ?? 6379),
       },
     },
-    retry: {
-      maxAttempts: 3,
-      maxBackoffMs: 30_000,
-    },
+    // Retry policy is per job: @Job({ retry: { maxAttempts: 3, maxBackoffMs: 30_000 } })
   },
 })
 export default class ScalableServer {}
@@ -65,12 +64,11 @@ export default class ScalableServer {}
 // src/providers/env-validation.provider.ts
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export const ENV_VALIDATOR = Symbol('EnvValidator');
-
 // Validate env in the constructor rather than a lifecycle hook — first
 // instantiation throws synchronously on missing config and prevents the
 // server from starting (fail fast). Providers don't expose onInit/onDestroy.
-@Provider({ token: ENV_VALIDATOR, scope: ProviderScope.GLOBAL })
+// The class is its own DI token: list it in `providers` and resolve it with `this.get(EnvValidationProvider)`
+@Provider({ name: 'EnvValidationProvider', scope: ProviderScope.GLOBAL })
 export class EnvValidationProvider {
   constructor() {
     const required = ['REDIS_HOST', 'NODE_ENV'];
