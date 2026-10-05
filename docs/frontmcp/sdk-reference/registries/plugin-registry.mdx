@@ -115,22 +115,19 @@ Plugins can provide:
 
 ## Hook Registration
 
-Plugins can register hooks that run during tool/resource/prompt flows:
+Plugins register hooks by declaring them on their methods, and on the methods of their providers, with the flow's decorators. The registry reads them when it creates the plugin; `@Plugin` has no `hooks` option.
 
 ```typescript
-@Plugin({
-  name: 'audit-plugin',
-  hooks: [
-    {
-      flow: 'tools:call-tool',
-      stage: 'afterExecute',
-      handler: async (ctx) => {
-        await auditLog(ctx.toolName, ctx.result);
-      },
-    },
-  ],
-})
-class AuditPlugin { }
+import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
+
+@Plugin({ name: 'audit-plugin' })
+class AuditPlugin {
+  @ToolHook.Did('execute')
+  async audit(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { tool, toolContext } = ctx.state.required;
+    await auditLog(tool.name, toolContext.output);
+  }
+}
 ```
 
 Hooks are registered with scope-aware targeting:

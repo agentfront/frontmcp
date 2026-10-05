@@ -16,7 +16,7 @@ Hooks allow you to intercept and modify tool execution at specific lifecycle sta
   </Card>
 
   <Card title="Hook Types" icon="link">
-    **Will** (before), **Did** (after), **Around** (wrap), **Stage** (replace)
+    **Will** (before), **Did** (after), **Around** (wrap), **Stage** (one more step of the stage)
   </Card>
 
   <Card title="Priority" icon="arrow-up-1-9">
@@ -107,23 +107,22 @@ Hooks allow you to intercept and modify tool execution at specific lifecycle sta
 
   </Tab>
 
-  <Tab title="Stage (Replace)">
-    Replaces the default stage implementation entirely. Use for:
-    - Complete custom logic
-    - Alternative implementations
-    - Advanced control flow
+  <Tab title="Stage (Step)">
+    Runs as one more step of a stage the flow declares, next to the flow's own step: it does not replace it. At equal priority it runs before the flow's own step; the value it returns is ignored. Use for:
+    - Extra work that belongs to the stage
+    - Ending the flow early with `ctx.respond()`, which skips the flow's own step
 
     ```ts
-    @ToolHook.Stage('validate', { priority: 500 })
-    async customValidation(ctx: FlowCtxOf<'tools:call-tool'>) {
-      // Custom validation logic
-      const { tool, toolContext } = ctx.state;
-      if (!tool || !toolContext) return;
-
-      // Your custom validation
-      await this.validateSchema(toolContext.input, tool.inputSchema);
+    @ToolHook.Stage('execute', {
+      filter: (ctx) => ctx.state.required.input.name === 'fetch_weather',
+    })
+    async mockWeather(ctx: FlowCtxOf<'tools:call-tool'>) {
+      // Ends the flow with this result; the tool's execute() does not run
+      ctx.respond({ content: [{ type: 'text', text: '72F and sunny' }] });
     }
     ```
+
+    To skip a stage and let the flow go on, use an `Around` hook that does not call `next()`.
 
   </Tab>
 </Tabs>
