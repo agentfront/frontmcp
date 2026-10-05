@@ -292,6 +292,7 @@ export type {
   SkillValidationReport,
   SkillValidationResult,
   SyncResult,
+  SkillSessionManager,
 } from './skill';
 
 // Agent exports - only user-facing APIs

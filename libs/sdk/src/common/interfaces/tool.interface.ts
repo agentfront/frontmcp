@@ -171,7 +171,7 @@ export abstract class ToolContext<
    * }
    * ```
    */
-  protected async notify(message: string | Record<string, unknown>, level: McpLoggingLevel = 'info'): Promise<boolean> {
+  async notify(message: string | Record<string, unknown>, level: McpLoggingLevel = 'info'): Promise<boolean> {
     const data = typeof message === 'string' ? { message } : message;
 
     // Protocol 2026-07-28: log messages ride this request's own response
@@ -215,7 +215,7 @@ export abstract class ToolContext<
    * }
    * ```
    */
-  protected async progress(progress: number, total?: number, message?: string): Promise<boolean> {
+  async progress(progress: number, total?: number, message?: string): Promise<boolean> {
     // Protocol 2026-07-28: progress rides this request's own response stream.
     // The sink owns the progressToken check, so it is consulted before the
     // session-oriented path below.
@@ -254,7 +254,7 @@ export abstract class ToolContext<
    * }
    * ```
    */
-  protected notifyResourceUpdated(uri: string): void {
+  notifyResourceUpdated(uri: string): void {
     this.scope.notifications.notifyResourceUpdated(uri);
   }
 
@@ -264,7 +264,7 @@ export abstract class ToolContext<
    * Broadcasts `notifications/resources/list_changed` so clients re-run
    * `resources/list`. Call this when a tool adds or removes resources at runtime.
    */
-  protected notifyResourceListChanged(): void {
+  notifyResourceListChanged(): void {
     this.scope.notifications.broadcastNotification('notifications/resources/list_changed');
   }
 
