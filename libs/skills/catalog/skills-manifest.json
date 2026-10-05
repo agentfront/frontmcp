@@ -174,7 +174,7 @@
           "tags": ["di", "provider", "this.get", "error-handling"],
           "features": [
             "Defining a typed DI token with `Symbol('UserService')` and `Token<UserService>`",
-            "Implementing a `@Provider` and registering it in the same `@App` as the tool",
+            "Binding the token with a factory provider (`{ name, provide, inject, useFactory }`) and registering it in the same `@App` as the tool",
             "Resolving the service inside `execute()` via `this.get(USER_SERVICE)` (throws when missing)",
             "Translating \"not found\" into `ResourceNotFoundError` via `this.fail(...)` so the client gets a proper MCP error code (-32002)"
           ]

@@ -602,6 +602,21 @@ describe('skills catalog validation', () => {
       expect(violations).toEqual([]);
     });
 
+    it('should not pass DI binding keys to @Provider metadata', () => {
+      const violations: string[] = [];
+      for (const { skill, file, fullPath } of documentationFiles) {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        // The schema is strict: only id, name, description and scope are accepted
+        const bindingKeys = content.match(/@Provider\(\s*\{[^}]*\b(?:token|provide|useClass|useValue|useFactory)\s*:/g);
+        if (bindingKeys) {
+          violations.push(
+            `${skill}/${file}: found @Provider({ token/provide/use*: ... }) — use @Provider({ name, scope })`,
+          );
+        }
+      }
+      expect(violations).toEqual([]);
+    });
+
     it('should not use "session:" as a top-level @FrontMcp field', () => {
       const violations: string[] = [];
       for (const { skill, file, fullPath } of documentationFiles) {

@@ -384,7 +384,7 @@ Plugins are initialized in array order. Hook priority determines execution order
 
 Hooks declared on an app's providers, on its plugins (including plugins nested inside them), and on those plugins' providers run only for that app's tools, resources and prompts (`tools:call-tool`, `resources:read-resource`, `prompts:get-prompt`, `completion:complete`), including the ones its adapters and plugins provide, such as the tools an OpenAPI adapter generates. Plugins and providers registered on the server (`@FrontMcp({ plugins, providers })`) apply to every app. Resources and prompts the server serves outside every app, such as the SEP-2640 `skill://` resources, run every app's hooks.
 
-A hook declared on a `CONTEXT`-scoped provider (`@Provider({ scope: ProviderScope.CONTEXT })`, a class provider) runs on the instance built for the request or session -- the same instance the request's tools get from `this.get()`. Up to 1.8.7, hooks on server-level and `CONTEXT`-scoped providers were never registered.
+A hook declared on a `CONTEXT`-scoped provider (`@Provider({ name, scope: ProviderScope.CONTEXT })`, a class provider) runs on the instance built for the request or session -- the same instance the request's tools get from `this.get()`. Up to 1.8.7, hooks on server-level and `CONTEXT`-scoped providers were never registered.
 
 ## Using Hooks Inside a @Tool Class
 

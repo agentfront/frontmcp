@@ -5,7 +5,7 @@ description: 'Tool that resolves a DI-registered service via `this.get(TOKEN)` a
 tags: [di, provider, this.get, error-handling]
 features:
   - "Defining a typed DI token with `Symbol('UserService')` and `Token<UserService>`"
-  - 'Implementing a `@Provider` and registering it in the same `@App` as the tool'
+  - 'Binding the token with a factory provider (`{ name, provide, inject, useFactory }`) and registering it in the same `@App` as the tool'
   - 'Resolving the service inside `execute()` via `this.get(USER_SERVICE)` (throws when missing)'
   - 'Translating "not found" into `ResourceNotFoundError` via `this.fail(...)` so the client gets a proper MCP error code (-32002)'
 ---
@@ -14,7 +14,7 @@ features:
 
 Tool that resolves a DI-registered service via `this.get(TOKEN)` and uses it to power `execute()` — the standard pattern for tools that talk to a database or external API.
 
-The canonical pattern. A service lives behind a typed token, gets registered as a `@Provider` in the same `@App`, and the tool resolves it via `this.get(TOKEN)`.
+The canonical pattern. A service lives behind a typed token, a factory provider binds the token in the same `@App`, and the tool resolves it via `this.get(TOKEN)`. `@Provider` metadata has no `provide` or `token` field (a decorated class is registered under the class itself), and `@App({ providers })` accepts decorated classes and factory providers, not `{ provide, useClass }`.
 
 ## Code
 
@@ -30,11 +30,8 @@ export const USER_SERVICE: Token<UserService> = Symbol('UserService');
 
 ```typescript
 // src/apps/main/providers/user-service.provider.ts
-import { Provider } from '@frontmcp/sdk';
-
 import { USER_SERVICE, type UserService } from '../tokens';
 
-@Provider({ provide: USER_SERVICE })
 export class UserServiceProvider implements UserService {
   async findById(id: string) {
     // pretend this hits a database
@@ -42,6 +39,13 @@ export class UserServiceProvider implements UserService {
     return null;
   }
 }
+
+export const userServiceProvider = {
+  name: 'UserService',
+  provide: USER_SERVICE,
+  inject: () => [] as const,
+  useFactory: () => new UserServiceProvider(),
+};
 ```
 
 ```typescript
@@ -84,12 +88,12 @@ export class GetUserTool extends ToolContext {
 // src/apps/main/index.ts
 import { App } from '@frontmcp/sdk';
 
-import { UserServiceProvider } from './providers/user-service.provider';
+import { userServiceProvider } from './providers/user-service.provider';
 import { GetUserTool } from './tools/get-user.tool';
 
 @App({
   name: 'main',
-  providers: [UserServiceProvider],
+  providers: [userServiceProvider],
   tools: [GetUserTool],
 })
 export class MainApp {}
@@ -100,7 +104,7 @@ export class MainApp {}
 ## What This Demonstrates
 
 - Defining a typed DI token with `Symbol('UserService')` and `Token<UserService>`
-- Implementing a `@Provider` and registering it in the same `@App` as the tool
+- Binding the token with a factory provider (`{ name, provide, inject, useFactory }`) and registering it in the same `@App` as the tool
 - Resolving the service inside `execute()` via `this.get(USER_SERVICE)` (throws when missing)
 - Translating "not found" into `ResourceNotFoundError` via `this.fail(...)` so the client gets a proper MCP error code (-32002)
 
