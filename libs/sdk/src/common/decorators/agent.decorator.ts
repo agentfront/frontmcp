@@ -32,7 +32,7 @@ type AgentContextBase = { execute: (...args: any[]) => any };
  * @Agent({
  *   name: 'research-agent',
  *   description: 'Researches topics and compiles reports',
- *   llm: { adapter: 'openai', model: 'gpt-4-turbo', apiKey: { env: 'OPENAI_API_KEY' } },
+ *   llm: { provider: 'openai', model: 'gpt-4-turbo', apiKey: { env: 'OPENAI_API_KEY' } },
  *   tools: [WebSearchTool, SummarizeTool],
  * })
  * export default class ResearchAgent extends AgentContext { ... }
@@ -91,7 +91,7 @@ export type FrontMcpAgentFunction<
  * const researchAgent = agent({
  *   name: 'research-agent',
  *   inputSchema: { topic: z.string() },
- *   llm: { adapter: 'openai', model: 'gpt-4-turbo', apiKey: { env: 'OPENAI_API_KEY' } },
+ *   llm: { provider: 'openai', model: 'gpt-4-turbo', apiKey: { env: 'OPENAI_API_KEY' } },
  * })((input, ctx) => {
  *   // Agent implementation
  *   return { result: 'done' };

@@ -385,7 +385,7 @@ export interface AgentExportsConfig {
  *   description: 'Researches topics and compiles reports',
  *   systemInstructions: 'You are a research assistant...',
  *   llm: {
- *     adapter: 'openai',
+ *     provider: 'openai',
  *     model: 'gpt-4-turbo',
  *     apiKey: { env: 'OPENAI_API_KEY' },
  *   },

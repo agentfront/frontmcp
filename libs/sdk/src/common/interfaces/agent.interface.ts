@@ -84,7 +84,7 @@ export type AgentCtorArgs<In> = ExecutionContextBaseArgs & {
  *   name: 'research-agent',
  *   description: 'Researches topics',
  *   systemInstructions: 'You are a research assistant. Search and summarize topics.',
- *   llm: { adapter: 'openai', model: 'gpt-4-turbo', apiKey: { env: 'OPENAI_API_KEY' } },
+ *   llm: { provider: 'openai', model: 'gpt-4-turbo', apiKey: { env: 'OPENAI_API_KEY' } },
  *   tools: [WebSearchTool],
  * })
  * export default class ResearchAgent extends AgentContext {}
