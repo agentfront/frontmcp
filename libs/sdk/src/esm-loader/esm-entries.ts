@@ -1,3 +1,5 @@
+import { sha256Hex } from '@frontmcp/utils';
+
 import {
   isDecoratedPromptClass,
   isDecoratedResourceClass,
@@ -96,7 +98,7 @@ export function esmManifestRecords<R>(exported: unknown[] | undefined, recordOf:
 
 const packageLoadsByScope = new WeakMap<object, Map<string, Promise<EsmLoadResult>>>();
 
-/** Loads a package once per scope, however many `.esm()` entries name it. */
+/** Loads a package once per scope, however many `.esm()` entries name it with the same loader and cache TTL. */
 function loadPackageOnce(
   scope: ScopeEntry,
   specifier: ParsedPackageSpecifier,
@@ -107,11 +109,13 @@ function loadPackageOnce(
     loads = new Map();
     packageLoadsByScope.set(scope, loads);
   }
-  const key = `${specifier.fullName}@${specifier.range}`;
+  const packageLoader = options?.loader ?? scope.metadata.loader;
+  const loaderFingerprint = sha256Hex(JSON.stringify({ packageLoader, cacheTTL: options?.cacheTTL })).slice(0, 16);
+  const key = `${specifier.fullName}@${specifier.range}#${loaderFingerprint}`;
   let load = loads.get(key);
   if (!load) {
     const loader = createPackageModuleLoader({
-      loader: options?.loader ?? scope.metadata.loader,
+      loader: packageLoader,
       cacheTTL: options?.cacheTTL,
       logger: scope.logger,
     });

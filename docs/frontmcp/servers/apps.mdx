@@ -286,7 +286,7 @@ import { FrontMcp, App, Tool, Resource, Prompt } from '@frontmcp/sdk';
 class MyApp {}
 ```
 
-Unlike `App.esm()` and `App.remote()`, a per-primitive entry adds just the one entry, under its own name with no namespace prefix, and belongs to the app (or server) whose array lists it, so that owner's hooks, plugins and authorities apply. The server loads every entry at startup: each package once and each remote server over one connection, however many entries name it. `options.metadata` overrides the loaded metadata, and an entry the package or server does not have fails startup with a typed error that names it.
+Unlike `App.esm()` and `App.remote()`, a per-primitive entry adds just the one entry, under its own name with no namespace prefix, and belongs to the app (or server) whose array lists it, so that owner's hooks, plugins and authorities apply. The server loads every entry at startup: each package once and each remote server over one connection, however many entries name it with the same loader or connection options. `options.metadata` overrides the loaded metadata, and an entry the package or server does not have fails startup with a typed error that names it.
 
 <Warning>
 `Agent.esm()`, `Agent.remote()`, `Skill.esm()`, `Skill.remote()`, `Job.esm()` and `Job.remote()` are refused at startup with `ExternalEntryNotSupportedError`. Declare agents, skills and jobs locally; see [Agents](/frontmcp/servers/agents), [Skills](/frontmcp/servers/skills) and [Jobs](/frontmcp/servers/jobs) for the alternatives.

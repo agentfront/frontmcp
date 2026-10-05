@@ -164,7 +164,7 @@ class Gateway {}
 The server loads these entries when it starts, before it serves requests:
 
 - Each entry keeps the name it has in its package or on its server, with no namespace prefix; `metadata` overrides the loaded metadata (a new `name` renames it).
-- Entries that name the same package load it once; entries that name the same server URL share one connection.
+- Entries that name the same package with the same `loader` and `cacheTTL` load it once; entries that name the same server URL with the same `transportOptions` and `remoteAuth` share one connection. A `.remote()` entry is what the server listed at startup: unlike `App.remote()`, it is not re-discovered when the server's entries change.
 - The entry belongs to the app or server whose array lists it and runs through the regular flows, so that owner's hooks, plugins and authorities apply.
 - A package that does not load or a server that is unreachable fails startup with `ExternalEntryLoadError`; a name the package or server does not have fails it with `ExternalEntryNotFoundError`.
 

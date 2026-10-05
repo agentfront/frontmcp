@@ -7,6 +7,8 @@ import {
   Agent,
   AgentContext,
   App,
+  Channel,
+  ChannelContext,
   FlowHooksOf,
   LogLevel,
   Plugin,
@@ -14,6 +16,7 @@ import {
   Resource,
   Tool,
   ToolContext,
+  type ChannelNotification,
   type FlowCtxOf,
   type PromptType,
   type ResourceType,
@@ -154,6 +157,19 @@ describe('per-entry .esm() loading', () => {
     expect(load.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ fullName: '@acme/tools', range: '^1.0.0' }));
   });
 
+  it('loads the package again for an entry with another loader', async () => {
+    await start({
+      tools: [
+        Tool.esm(PACKAGE, 'echo'),
+        Tool.esm(PACKAGE, 'reverse', {
+          loader: { url: 'https://registry.internal.example', tokenEnvVar: 'INTERNAL_REGISTRY_TOKEN' },
+        }),
+      ],
+    });
+
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
   it('loads the package again for another server', async () => {
     await start({ tools: [Tool.esm(PACKAGE, 'echo')] });
     await server?.dispose();
@@ -212,6 +228,63 @@ describe('per-entry .esm() loading', () => {
     });
 
     expect(JSON.stringify(await server.callTool('invoke_flipper', {}))).toContain('cba');
+  });
+
+  it("fails startup when a loaded tool in an agent's tools declares authorities that nothing enforces", async () => {
+    @Tool({ name: 'purge', inputSchema: {}, authorities: { roles: { any: ['admin'] } } })
+    class PurgeTool extends ToolContext {
+      async execute() {
+        return 'purged';
+      }
+    }
+    load.mockResolvedValue({
+      manifest: { name: '@acme/admin', version: '1.0.0', tools: [PurgeTool] },
+      resolvedVersion: '1.0.0',
+      source: 'cache',
+      loadedAt: 0,
+      rawModule: {},
+    });
+    const idleAdapter = { completion: async () => ({ content: 'done', finishReason: 'stop' as const }) };
+    @Agent({
+      name: 'janitor',
+      inputSchema: {},
+      llm: { adapter: idleAdapter },
+      tools: [Tool.esm('@acme/admin@^1.0.0', 'purge')],
+    })
+    class JanitorAgent extends AgentContext {}
+    @App({ name: 'agents', agents: [JanitorAgent] })
+    class AgentsApp {}
+
+    const startup = FrontMcpInstance.createDirect({
+      info: { name: 'esm-entries', version: '1.0.0' },
+      apps: [AgentsApp],
+      logging: { level: LogLevel.Off },
+    });
+
+    await expect(startup).rejects.toThrow('Tool "janitor:purge" declare');
+  });
+
+  it("loads an entry in a channel's tools", async () => {
+    @Channel({
+      name: 'support',
+      source: { type: 'app-event', event: 'support' },
+      tools: [Tool.esm(PACKAGE, 'reverse')],
+    })
+    class SupportChannel extends ChannelContext {
+      async onEvent(payload: unknown): Promise<ChannelNotification> {
+        return { content: String(payload) };
+      }
+    }
+    @App({ name: 'support', channels: [SupportChannel] })
+    class SupportApp {}
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'esm-entries', version: '1.0.0' },
+      apps: [SupportApp],
+      channels: { enabled: true },
+      logging: { level: LogLevel.Off },
+    });
+
+    expect(textOf(await server.callTool('reverse', { text: 'ab' }))).toBe('ba');
   });
 
   it('loads server-level entries of @FrontMcp too', async () => {

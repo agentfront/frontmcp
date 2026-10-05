@@ -3,7 +3,6 @@ import { type ServerCapabilities } from '@frontmcp/protocol';
 import { ensureMaxLen, getRuntimeContext, isEntryAvailable, sepFor } from '@frontmcp/utils';
 
 import {
-  ToolKind,
   type AppEntry,
   type EntryLineage,
   type EntryOwnerRef,
@@ -23,14 +22,13 @@ import {
   RegistryDefinitionNotFoundError,
   RegistryGraphEntryNotFoundError,
 } from '../errors';
-import { loadEsmToolEntries } from '../esm-loader/esm-entries';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
-import { loadRemoteToolEntry } from '../remote-mcp/remote-entries';
 import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
 import CallToolFlow from './flows/call-tool.flow';
 import ToolsListFlow from './flows/tools-list.flow';
+import { loadExternalToolRecords } from './tool-external.loader';
 import { ToolEmitter, type ToolChangeEvent } from './tool.events';
 import { ToolInstance } from './tool.instance';
 import { DEFAULT_EXPORT_OPTS, type ExportNameOptions, type IndexedTool } from './tool.types';
@@ -184,9 +182,7 @@ export default class ToolRegistry extends RegistryAbstract<
   /** Load the tools `.esm()` / `.remote()` records and specifier strings name; register them like local ones. */
   async registerExternalTools(records: readonly ToolExternalRecord[]): Promise<void> {
     const scope = this.providers.getActiveScope();
-    const loads = records.map((record) =>
-      record.kind === ToolKind.ESM ? loadEsmToolEntries(scope, record) : loadRemoteToolEntry(scope, record),
-    );
+    const loads = records.map((record) => loadExternalToolRecords(scope, record));
     for (const record of (await Promise.all(loads)).flat()) {
       const instance = new ToolInstance(record, this.providers, this.owner);
       await instance.ready;

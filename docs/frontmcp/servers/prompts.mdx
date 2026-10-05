@@ -145,7 +145,7 @@ class MyApp {}
 
 - **Loading happens at startup.** The server does not serve requests until every entry is loaded.
 - **The prompt keeps its own name**, with no namespace prefix. `options.metadata` overrides the loaded metadata field by field; a new `name` renames the prompt.
-- **One load per package, one connection per URL**, shared by every entry that names it.
+- **One load per package, one connection per URL**, shared by every entry that names it with the same options (`loader` and `cacheTTL`, or `transportOptions` and `remoteAuth`). A `.remote()` entry is what the server listed at startup: unlike `App.remote()`, it is not re-discovered when the server's entries change.
 - **The prompt belongs to the app or server that lists it**, and runs through the regular `prompts:get-prompt` flow, so that owner's hooks and plugins apply.
 - **Options:** `.esm()` takes `loader` and `cacheTTL`; `.remote()` takes `transportOptions` and `remoteAuth`.
 

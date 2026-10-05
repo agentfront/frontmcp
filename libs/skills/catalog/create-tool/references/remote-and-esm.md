@@ -54,7 +54,7 @@ The server connects at startup, before it serves requests, and registers a proxy
 
 ## Loading rules (both)
 
-- **One load per package, one connection per URL.** Entries naming the same package (in any `tools`, `resources` or `prompts` array of the server) share one load; entries naming the same URL share one connection.
+- **One load per package, one connection per URL.** Entries naming the same package with the same `loader` and `cacheTTL` (in any `tools`, `resources` or `prompts` array of the server) share one load; entries naming the same URL with the same `transportOptions` and `remoteAuth` share one connection. A `.remote()` entry is what the server listed at startup: unlike `App.remote()`, it is not re-discovered when the server's entries change.
 - **Owner.** The tool belongs to the app (or server) whose `tools` lists it, so that owner's hooks, plugins, `authorities` and `availableWhen` apply.
 - **Startup errors, never skips.** `ExternalEntryLoadError` when the package does not load or the server is unreachable; `ExternalEntryNotFoundError` when it has no tool with that name (the message lists the tools it has).
 - **Same for resources and prompts.** `Resource.esm/remote` and `Prompt.esm/remote` follow these rules. `Agent`, `Skill` and `Job` `.esm()` / `.remote()` are refused at startup with `ExternalEntryNotSupportedError`; declare those locally.

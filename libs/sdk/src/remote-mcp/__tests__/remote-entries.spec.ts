@@ -82,21 +82,19 @@ describe('per-entry .remote() loading', () => {
     expect((await srv.getPrompt('greeting', {})).messages[0]?.content).toEqual({ type: 'text', text: 'Hi there' });
   });
 
-  it('connects once per URL, with options from the entry and an app id derived from the URL', async () => {
+  it('connects once per URL and connection options, with options from the entry', async () => {
+    const connection = {
+      transportOptions: { timeout: 5000, headers: { 'x-tenant': 'acme' } },
+      remoteAuth: { mode: 'static' as const, credentials: { type: 'bearer' as const, value: 'secret' } },
+    };
     await start({
-      tools: [
-        Tool.remote(URL, 'echo', {
-          transportOptions: { timeout: 5000, headers: { 'x-tenant': 'acme' } },
-          remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: 'secret' } },
-        }),
-        Tool.remote(URL, 'add'),
-      ],
-      resources: [Resource.remote(URL, 'status')],
-      prompts: [Prompt.remote(URL, 'greeting')],
+      tools: [Tool.remote(URL, 'echo', connection), Tool.remote(URL, 'add', connection)],
+      resources: [Resource.remote(URL, 'status', connection)],
+      prompts: [Prompt.remote(URL, 'greeting', connection)],
     });
     const firstAppId = connect.mock.calls[0]?.[0].appId;
     await server?.dispose();
-    await start({ tools: [Tool.remote(URL, 'echo')] });
+    await start({ tools: [Tool.remote(URL, 'echo', connection)] });
 
     expect(connect).toHaveBeenCalledTimes(2);
     const [request] = connect.mock.calls[0] ?? [];
@@ -109,6 +107,18 @@ describe('per-entry .remote() loading', () => {
       }),
     );
     expect(connect.mock.calls[1]?.[0].appId).toBe(firstAppId);
+  });
+
+  it('connects separately for entries of one URL with other credentials', async () => {
+    const tenantA = { mode: 'static' as const, credentials: { type: 'bearer' as const, value: 'tenant-a' } };
+    const tenantB = { mode: 'static' as const, credentials: { type: 'bearer' as const, value: 'tenant-b' } };
+    await start({
+      tools: [Tool.remote(URL, 'echo', { remoteAuth: tenantA }), Tool.remote(URL, 'add', { remoteAuth: tenantB })],
+    });
+
+    const requests = connect.mock.calls.map(([request]) => request);
+    expect(requests.map((request) => request.auth)).toEqual([tenantA, tenantB]);
+    expect(new Set(requests.map((request) => request.appId)).size).toBe(2);
   });
 
   it('applies options.metadata over the remote metadata and still calls the remote tool', async () => {

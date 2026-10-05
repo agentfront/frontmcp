@@ -293,7 +293,7 @@ const HealthResource = Resource.remote('https://example.com/mcp', 'health', {
 Register both like class resources: `resources: [StatusResource, HealthResource]`. The server loads them at startup, before it serves requests:
 
 - Each keeps its own name and URI (no namespace prefix); `metadata` overrides the loaded metadata.
-- Entries naming the same package load it once; entries naming the same URL share one connection.
+- Entries naming the same package with the same `loader` and `cacheTTL` load it once; entries naming the same URL with the same `transportOptions` and `remoteAuth` share one connection. A `.remote()` entry is what the server listed at startup: unlike `App.remote()`, it is not re-discovered when the server's entries change.
 - The resource belongs to the app or server that lists it, so that owner's hooks and plugins apply to reads.
 - A package that does not load or a server that is unreachable fails startup with `ExternalEntryLoadError`; a name it does not have fails it with `ExternalEntryNotFoundError`.
 

@@ -82,9 +82,18 @@ interface RemoteEntryServer {
 
 const remoteServersByScope = new WeakMap<object, Map<string, Promise<RemoteEntryServer>>>();
 
-async function connectRemoteEntryServer(scope: ScopeEntry, source: RemoteEntrySource): Promise<RemoteEntryServer> {
+/** One id per URL and connection options, so entries with different credentials or headers never share a connection. */
+function remoteEntryAppId(source: RemoteEntrySource): string {
+  const connection = { url: source.url, transportOptions: source.transportOptions, remoteAuth: source.remoteAuth };
+  return `remote-entry-${sha256Hex(JSON.stringify(connection)).slice(0, 16)}`;
+}
+
+async function connectRemoteEntryServer(
+  scope: ScopeEntry,
+  source: RemoteEntrySource,
+  appId: string,
+): Promise<RemoteEntryServer> {
   const client = mcpClientServiceOf(scope);
-  const appId = `remote-entry-${sha256Hex(source.url).slice(0, 16)}`;
   await client.connect(
     buildRemoteConnectRequest({
       appId,
@@ -98,17 +107,18 @@ async function connectRemoteEntryServer(scope: ScopeEntry, source: RemoteEntrySo
   return { client, appId, capabilities };
 }
 
-/** Connects to a server once per scope, however many `.remote()` entries name its URL. */
+/** Connects to a server once per scope, however many `.remote()` entries name its URL with the same options. */
 function connectOnce(scope: ScopeEntry, source: RemoteEntrySource): Promise<RemoteEntryServer> {
   let servers = remoteServersByScope.get(scope);
   if (!servers) {
     servers = new Map();
     remoteServersByScope.set(scope, servers);
   }
-  let server = servers.get(source.url);
+  const appId = remoteEntryAppId(source);
+  let server = servers.get(appId);
   if (!server) {
-    server = connectRemoteEntryServer(scope, source);
-    servers.set(source.url, server);
+    server = connectRemoteEntryServer(scope, source, appId);
+    servers.set(appId, server);
   }
   return server;
 }

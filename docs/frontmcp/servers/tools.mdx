@@ -121,7 +121,7 @@ class MyApp {}
 - **Loading happens at startup.** The server loads each package and connects to each remote server while it starts, and does not serve requests until every entry is loaded.
 - **The tool keeps its own name.** `Tool.esm('@acme/tools@^1.0.0', 'echo')` is listed and called as `echo`, with no namespace prefix.
 - **`options.metadata` overrides the loaded metadata.** Fields you set (`name`, `description`, `annotations`, ...) replace the package's or server's. A new `name` renames the tool; calls still run the original.
-- **One load per package, one connection per URL.** Entries that name the same package share a single load, and entries that name the same server share a single connection.
+- **One load per package, one connection per URL.** Entries that name the same package with the same `loader` and `cacheTTL` share a single load, and entries that name the same server with the same `transportOptions` and `remoteAuth` share a single connection. A `.remote()` entry is what the server listed at startup: unlike `App.remote()`, it is not re-discovered when the server's entries change.
 - **The tool belongs to the app or server that lists it.** Calls run through the regular `tools:call-tool` flow, so that owner's hooks, plugins, `authorities` and `availableWhen` apply as they do to a local tool.
 - **Options:** `.esm()` takes `loader` (registry and bundle CDN; defaults to the server's [`loader`](/frontmcp/servers/esm-packages#gateway-level-loader)) and `cacheTTL`; `.remote()` takes `transportOptions` and `remoteAuth`.
 
