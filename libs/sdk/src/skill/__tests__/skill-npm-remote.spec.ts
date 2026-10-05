@@ -1,7 +1,7 @@
 import { Skill } from '../../common/decorators/skill.decorator';
-import { SkillKind } from '../../common/records/skill.record';
-import type { SkillEsmTargetRecord, SkillRemoteRecord } from '../../common/records/skill.record';
-import { normalizeSkill, isSkillRecord, skillDiscoveryDeps } from '../skill.utils';
+import { SkillKind, type SkillEsmTargetRecord, type SkillRemoteRecord } from '../../common/records/skill.record';
+import { ExternalEntryNotSupportedError } from '../../errors';
+import { isSkillRecord, normalizeSkill, skillDiscoveryDeps } from '../skill.utils';
 
 describe('Skill.esm()', () => {
   it('creates SkillEsmTargetRecord with kind ESM', () => {
@@ -121,18 +121,15 @@ describe('isSkillRecord() with ESM/REMOTE records', () => {
 });
 
 describe('normalizeSkill() with ESM/REMOTE records', () => {
-  it('passes through SkillEsmTargetRecord unchanged', () => {
-    const record = Skill.esm('@acme/skills@^1.0.0', 'deploy') as SkillEsmTargetRecord;
-    const normalized = normalizeSkill(record);
-    expect(normalized).toBe(record);
-    expect(normalized.kind).toBe(SkillKind.ESM);
+  it('refuses a Skill.esm() record, naming the skill and the package', () => {
+    const record = Skill.esm('@acme/skills@^1.0.0', 'deploy');
+    expect(() => normalizeSkill(record)).toThrow(ExternalEntryNotSupportedError);
+    expect(() => normalizeSkill(record)).toThrow('Skill "deploy" from @acme/skills@^1.0.0 is not supported');
   });
 
-  it('passes through SkillRemoteRecord unchanged', () => {
-    const record = Skill.remote('https://api.example.com/mcp', 'audit') as SkillRemoteRecord;
-    const normalized = normalizeSkill(record);
-    expect(normalized).toBe(record);
-    expect(normalized.kind).toBe(SkillKind.REMOTE);
+  it('refuses a Skill.remote() record, naming the skill and the server', () => {
+    const record = Skill.remote('https://api.example.com/mcp', 'audit');
+    expect(() => normalizeSkill(record)).toThrow('Skill "audit" from https://api.example.com/mcp is not supported');
   });
 });
 

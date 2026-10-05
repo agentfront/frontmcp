@@ -85,7 +85,7 @@ interface GetPromptResult {
   description?: string;
   messages: Array<{
     role: 'user' | 'assistant';
-    content: TextContent | ImageContent | EmbeddedResource;
+    content: TextContent | ImageContent | AudioContent | ResourceLink | EmbeddedResource;
   }>;
 }
 ```
@@ -144,12 +144,12 @@ const researchPrompt = prompt({
   arguments: [
     { name: 'topic', required: true },
   ],
-})((args, ctx) => ({
-  description: `Research: ${args.topic}`,
+})((args) => ({
+  description: `Research: ${args?.topic}`,
   messages: [
     {
       role: 'user',
-      content: { type: 'text', text: `Research ${args.topic}` },
+      content: { type: 'text', text: `Research ${args?.topic}` },
     },
   ],
 }));

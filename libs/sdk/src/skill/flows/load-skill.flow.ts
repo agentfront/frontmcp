@@ -4,7 +4,6 @@ import { z } from '@frontmcp/lazy-zod';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
 import { InternalMcpError, InvalidInputError } from '../../errors';
-import type { SkillSessionManager } from '../session/skill-session.manager';
 import type { SkillActivationResult, SkillPolicyMode } from '../session/skill-session.types';
 import { assertSkillAuthorized } from '../skill-authorities.helper';
 import { createSkillEntryResolver } from '../skill-entry.resolver';
@@ -236,9 +235,7 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Try to get skill session manager from scope
-    const scope = this.scope as { skillSession?: SkillSessionManager };
-    const sessionManager = scope.skillSession;
+    const sessionManager = this.scope.skillSession;
 
     if (!sessionManager) {
       this.logger.verbose('activateSessions:skip (no session manager available)');

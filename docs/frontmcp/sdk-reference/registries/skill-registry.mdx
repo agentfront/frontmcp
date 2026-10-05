@@ -288,11 +288,33 @@ Skills can be synced to external storage for persistence:
 
 ### setExternalProvider()
 
-Configure an external storage provider. On the `SkillRegistry` class only. `@frontmcp/sdk` does not export `ExternalSkillProviderBase`.
+Configure an external storage provider. On the `SkillRegistry` class only. In `'read-only'` mode the registry searches, lists and loads skills through the provider; in `'persistent'` mode it keeps its own storage, and `syncToExternal()` writes the local skills to the provider.
 
 ```typescript
 setExternalProvider(provider: ExternalSkillProviderBase): void
 ```
+
+**Example:**
+
+```typescript
+import { ExternalSkillProviderBase, SkillRegistry, type SkillContent } from '@frontmcp/sdk';
+
+class RestSkillProvider extends ExternalSkillProviderBase {
+  protected async fetchSkill(skillId: string): Promise<SkillContent | null> {
+    const response = await fetch(`https://skills.example.com/skills/${skillId}`);
+    return response.ok ? response.json() : null;
+  }
+
+  // ...fetchSkills, searchExternal, upsertSkill, deleteSkill, countExternal and existsExternal
+}
+
+// Inside a tool, resource or prompt
+if (this.scope.skills instanceof SkillRegistry) {
+  this.scope.skills.setExternalProvider(new RestSkillProvider({ mode: 'read-only' }));
+}
+```
+
+`@frontmcp/sdk` exports `ExternalSkillProviderBase` together with the types its constructor and abstract methods take: `ExternalSkillMode`, `ExternalSkillProviderOptions`, `ExternalSkillSearchOptions`, `ExternalSkillListOptions` and, for `options.syncStateStore`, `SkillSyncStateStore`, `SkillSyncState`, `SkillSyncEntry` and `SkillSyncStatus`. Up to 1.9.0 it did not export them, so a provider could not be written outside the SDK.
 
 ### syncToExternal()
 

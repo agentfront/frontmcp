@@ -69,6 +69,15 @@ class OwnAppApprovalPlugin {
   }
 }
 
+/** Enforces `approval` on the tools of every app, from whichever app it is installed on. */
+@Plugin({ name: 'server-scoped-approval', scope: 'server', enforcesMetadata: ['approval'] })
+class ServerScopedApprovalPlugin {
+  @ToolHook.Will('execute')
+  gate() {
+    // enforcement itself is not under test here
+  }
+}
+
 /** Wraps an approval gate and is installed as a value, as `ApprovalPlugin.init()` installs its check plugin. */
 function wrappedGate(gate: new () => object) {
   @Plugin({ name: 'approval-suite', plugins: [gate] })
@@ -128,6 +137,15 @@ const ACCEPTED: Array<[string, FrontMcpConfigInput]> = [
       apps: [
         app('billing', { tools: [tool('refund_invoice', APPROVAL)] }),
         app('desk', { plugins: [AnyAppApprovalPlugin] }),
+      ],
+    }),
+  ],
+  [
+    "an approval tool on an app a scope: 'server' plugin on another app covers",
+    server({
+      apps: [
+        app('billing', { tools: [tool('refund_invoice', APPROVAL)] }),
+        app('desk', { plugins: [ServerScopedApprovalPlugin] }),
       ],
     }),
   ],

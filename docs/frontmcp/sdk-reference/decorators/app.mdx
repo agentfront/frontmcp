@@ -99,24 +99,32 @@ class CrmApp {}
 
 ### Configuration via Providers
 
-`@App` does not accept a free-form `config` field. Use a value provider to inject app configuration:
+`@App` does not accept a free-form `config` field. Bind the configuration to a token with a factory provider, and read it with `this.get(CRM_CONFIG)`:
 
 ```typescript
-import { App, Token } from '@frontmcp/sdk';
+import { App, type Token } from '@frontmcp/sdk';
 
-export const CRM_CONFIG = new Token<{ apiBaseUrl: string; maxRetries: number }>('CrmConfig');
+interface CrmConfig {
+  apiBaseUrl: string;
+  maxRetries: number;
+}
+
+export const CRM_CONFIG: Token<CrmConfig> = Symbol('CrmConfig');
 
 @App({
   name: 'crm',
   providers: [
     {
+      name: 'CrmConfig',
       provide: CRM_CONFIG,
-      useValue: { apiBaseUrl: 'https://api.salesforce.com', maxRetries: 3 },
+      useFactory: (): CrmConfig => ({ apiBaseUrl: 'https://api.salesforce.com', maxRetries: 3 }),
     },
   ],
 })
 class CrmApp {}
 ```
+
+`providers` accepts `@Provider` classes, factory providers (`{ name, provide, inject?, useFactory }`), and named `{ name, provide, useValue }` and `{ name, provide, useClass }` objects; see [@Provider](/frontmcp/sdk-reference/decorators/provider#factory-providers).
 
 ## Multi-App Architecture
 
@@ -161,7 +169,7 @@ export default class ECommercePlatform {}
 
 Each app maintains its own:
 
-- Tool namespace (tools are prefixed with app name on conflict)
+- Tool namespace (tools are prefixed with `<app id>:` on a name conflict)
 - Provider scope (providers are isolated per app)
 - Auth context (apps can have different auth providers)
 
@@ -169,13 +177,13 @@ Each app maintains its own:
 // Tools from different apps can have the same name
 @App({
   name: 'github',
-  tools: [SearchTool], // Exported as 'github_search' if conflict
+  tools: [SearchTool], // Listed as 'github:search' on a conflict
 })
 class GitHubApp {}
 
 @App({
   name: 'jira',
-  tools: [SearchTool], // Exported as 'jira_search' if conflict
+  tools: [SearchTool], // Listed as 'jira:search' on a conflict
 })
 class JiraApp {}
 ```
@@ -185,19 +193,6 @@ class JiraApp {}
 Apps can access providers from the parent server:
 
 ```typescript
-@FrontMcp({
-  info: { name: 'My Server', version: '1.0.0' },
-  apps: [MyApp],
-  providers: [ConfigService], // Available to all apps
-})
-class Server {}
-
-@App({
-  name: 'my-app',
-  providers: [MyAppService], // App-specific provider
-})
-class MyApp {}
-
 // In a tool
 @Tool({ name: 'my_tool', inputSchema: {} })
 class MyTool extends ToolContext {
@@ -206,9 +201,26 @@ class MyTool extends ToolContext {
     const config = this.get(ConfigService);
     // Access app-level provider
     const service = this.get(MyAppService);
+    return { ok: true };
   }
 }
+
+@App({
+  name: 'my-app',
+  providers: [MyAppService], // App-specific provider
+  tools: [MyTool],
+})
+class MyApp {}
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+  providers: [ConfigService], // Available to all apps
+})
+class Server {}
 ```
+
+Declare each class before a decorator lists it: decorator arguments are evaluated when the decorated class is defined, so `apps: [MyApp]` cannot refer to a `class MyApp` declared further down.
 
 ## Standalone vs Gateway Apps
 

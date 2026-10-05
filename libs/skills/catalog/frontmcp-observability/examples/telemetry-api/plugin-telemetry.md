@@ -21,6 +21,8 @@ Add telemetry events from a custom plugin's hooks. Events appear on the tool exe
 // src/plugins/audit.plugin.ts
 import { DynamicPlugin, FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
 
+import type {} from '@frontmcp/observability'; // declares toolContext.telemetry
+
 @Plugin({
   name: 'audit',
   description: 'Audit logging with telemetry integration',

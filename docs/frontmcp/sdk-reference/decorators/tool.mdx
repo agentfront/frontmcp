@@ -92,7 +92,7 @@ class BadTool extends ToolContext {
 | `authProviders`     | `ToolAuthProviderRef[]`                                     | Required auth providers for this tool (string name or `{ name, required?, scopes?, alias? }`)                                                                                                                                       |
 | `annotations`       | `ToolAnnotations`                                           | MCP hints (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)                                                                                                                                           |
 | `examples`          | `ToolExample[]`                                             | Usage examples (`description`, `input`, optional `output`)                                                                                                                                                                          |
-| `ui`                | `ToolUIConfig`                                              | UI widget configuration (`template`, `csp`, `servingMode`, `escapeStringResults`)                                                                                                                                                                   |
+| `ui`                | `ToolUIConfig`                                              | UI widget configuration (`template`, `csp`, `servingMode`, `escapeStringResults`)                                                                                                                                                   |
 | `output`            | `OutputPolicy`                                              | Output-validation + output-schema exposure policy (`allowNonFinite`, `schemaMode`, `schemaDescriptionFormat`). Resolved Tool > App > server > default. See [Output schema exposure](/frontmcp/servers/tools#output-schema-exposure) |
 | `hideFromDiscovery` | `boolean`                                                   | Deprecated alias for `visibility: 'hidden'`                                                                                                                                                                                         |
 
@@ -162,7 +162,7 @@ Without an `outputSchema`, a plain value (string, number, boolean or array) is s
   ],
 })
 class SensitiveTool extends ToolContext {
-  async execute(input) {
+  async execute(input: { data: string }) {
     // The credential gate runs before execute(): a required provider with no
     // connected credential aborts the call with a JSON-RPC -32001 error
     // (data: { tool, providers, authUrl }) — execute() never runs in that case.
@@ -216,6 +216,8 @@ unauthenticated / public requests.
 The `ui.template` field accepts a `FileSource` (recommended), a builder function, an HTML or Markdown string, or a React component. MDX is not compiled: a string containing `<` and `>` is used as HTML.
 
 ```typescript
+import { fileURLToPath } from 'node:url';
+
 @Tool({
   name: 'user_profile',
   inputSchema: { userId: z.string() },
@@ -249,12 +251,14 @@ const getWeather = tool({
   name: 'get_weather',
   description: 'Get current weather',
   inputSchema: { city: z.string() },
-})((input, ctx) => {
-  // ctx provides access to context methods
+})(async (input, ctx) => {
   const config = ctx.get(ConfigToken);
+  await ctx.progress(1, 1, `Fetched ${input.city}`);
   return { temperature: 72, city: input.city };
 });
 ```
+
+The handler's `ctx` is the call's `ToolContext`, the object a class tool reaches as `this`. Its public members work on it: `ctx.get()`, `ctx.notify()`, `ctx.progress()`, `ctx.notifyResourceUpdated()` and `ctx.notifyResourceListChanged()`. `fail()` and `elicit()` stay protected: throw a `PublicMcpError` to fail, and use a class tool to elicit.
 
 ## Context Methods
 
@@ -291,7 +295,7 @@ async execute(input) {
     { mode: 'form', ttl: 300000 }
   );
 
-  if (result.status === 'accept' && result.content.confirmed) {
+  if (result.status === 'accept' && result.content?.confirmed) {
     // Proceed with action
   }
 }
@@ -413,7 +417,7 @@ const outputSchema = z.object({
   ],
 })
 class CalculateTool extends ToolContext {
-  async execute(input) {
+  async execute(input: { operation: 'add' | 'subtract' | 'multiply' | 'divide'; a: number; b: number }) {
     await this.notify(`Calculating ${input.operation}(${input.a}, ${input.b})`, 'debug');
 
     let result: number;

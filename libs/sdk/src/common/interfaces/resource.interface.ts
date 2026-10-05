@@ -3,6 +3,7 @@
 import { type Type } from '@frontmcp/di';
 
 import { type ResourceMetadata, type ResourceTemplateMetadata } from '../metadata';
+import { type ResourceEsmTargetRecord, type ResourceRemoteRecord } from '../records/resource.record';
 import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
 import { FlowControl } from './flow.interface';
 
@@ -54,7 +55,9 @@ export type FunctionResourceType = (...args: any[]) => any;
 export type ResourceType<Params extends Record<string, string> = Record<string, string>, Out = unknown> =
   | Type<ResourceInterface<Params, Out>>
   | FunctionResourceType
-  | string;
+  | string
+  | ResourceEsmTargetRecord
+  | ResourceRemoteRecord;
 
 type HistoryEntry<T> = {
   at: number;

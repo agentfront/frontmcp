@@ -5,23 +5,28 @@ import { type ServerCapabilities } from '@frontmcp/protocol';
 import { ensureMaxLen, getRuntimeContext, isEntryAvailable, sepFor } from '@frontmcp/utils';
 
 import {
+  PromptKind,
   type AppEntry,
   type EntryLineage,
   type EntryOwnerRef,
   type PromptEntry,
+  type PromptExternalRecord,
   type PromptRecord,
   type PromptType,
   type ScopeEntry,
 } from '../common';
 import { logAvailabilityFiltering } from '../common/availability';
+import { externalEntryAfterStartup } from '../common/utils/external-entry.utils';
 import {
   EntryValidationError,
   NameDisambiguationError,
   RegistryDefinitionNotFoundError,
   RegistryGraphEntryNotFoundError,
 } from '../errors';
+import { loadEsmPromptEntries } from '../esm-loader/esm-entries';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { loadRemotePromptEntry } from '../remote-mcp/remote-entries';
 import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils';
 import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import GetPromptFlow from './flows/get-prompt.flow';
@@ -29,7 +34,7 @@ import PromptsListFlow from './flows/prompts-list.flow';
 import { PromptEmitter, type PromptChangeEvent } from './prompt.events';
 import { PromptInstance } from './prompt.instance';
 import { DEFAULT_PROMPT_EXPORT_OPTS, type IndexedPrompt, type PromptExportOptions } from './prompt.types';
-import { normalizePrompt, promptDiscoveryDeps } from './prompt.utils';
+import { isExternalPromptRecord, normalizePrompt, promptDiscoveryDeps } from './prompt.utils';
 
 /** Maximum attempts for name disambiguation to prevent infinite loops */
 const MAX_DISAMBIGUATE_ATTEMPTS = 10000;
@@ -127,6 +132,7 @@ export default class PromptRegistry extends RegistryAbstract<
     for (const token of this.tokens) {
       const rec = this.defs.get(token);
       if (!rec) throw new RegistryDefinitionNotFoundError('PromptRegistry', String(token));
+      if (isExternalPromptRecord(rec)) continue;
 
       // Single, authoritative instance per local prompt
       const pi = new PromptInstance(rec, this.providers, this.owner);
@@ -177,8 +183,23 @@ export default class PromptRegistry extends RegistryAbstract<
     // An entry whose hooks cannot run fails startup here, after the synchronous adoption that keeps siblings acyclic (#678).
     await Promise.all([...this.instances.values()].map((pi) => pi.ready));
 
+    await this.registerExternalPrompts([...this.defs.values()].filter(isExternalPromptRecord));
+
     // Register prompt flows with the scope
     await scope.registryFlows(GetPromptFlow, PromptsListFlow);
+  }
+
+  /** Load the prompts `.esm()` / `.remote()` records name and register them like local ones. */
+  private async registerExternalPrompts(records: readonly PromptExternalRecord[]): Promise<void> {
+    const scope = this.providers.getActiveScope();
+    const loads = records.map((record) =>
+      record.kind === PromptKind.ESM ? loadEsmPromptEntries(scope, record) : loadRemotePromptEntry(scope, record),
+    );
+    for (const record of (await Promise.all(loads)).flat()) {
+      const instance = new PromptInstance(record, this.providers, this.owner);
+      await instance.ready;
+      this.registerPromptInstance(instance);
+    }
   }
 
   /* -------------------- Adoption: reference child instances (no cloning) -------------------- */
@@ -548,6 +569,10 @@ export default class PromptRegistry extends RegistryAbstract<
    * Used by adapter polling to hot-swap prompts when specs change.
    */
   replaceAll(list: PromptType[], owner: EntryOwnerRef): void {
+    const { tokens, defs, graph } = this.buildMap(list);
+    const external = [...defs.values()].find(isExternalPromptRecord);
+    if (external) throw externalEntryAfterStartup('prompt', external);
+
     // Clear local rows and instances
     this.localRows = [];
     this.instances.clear();
@@ -558,7 +583,6 @@ export default class PromptRegistry extends RegistryAbstract<
     this.graph.clear();
 
     // Rebuild from new list
-    const { tokens, defs, graph } = this.buildMap(list);
     for (const [key, val] of defs) {
       this.defs.set(key, val);
       this.graph.set(key, graph.get(key) ?? new Set());

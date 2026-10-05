@@ -8,11 +8,13 @@ import {
   type EntryOwnerRef,
   type ScopeEntry,
   type ToolEntry,
+  type ToolExternalRecord,
   type ToolRecord,
   type ToolType,
 } from '../common';
 import { logAvailabilityFiltering } from '../common/availability';
 import { resolveToolVisibility } from '../common/metadata/tool.metadata';
+import { externalEntryAfterStartup } from '../common/utils/external-entry.utils';
 import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
 import {
   EntryValidationError,
@@ -26,10 +28,11 @@ import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage
 import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
 import CallToolFlow from './flows/call-tool.flow';
 import ToolsListFlow from './flows/tools-list.flow';
+import { loadExternalToolRecords } from './tool-external.loader';
 import { ToolEmitter, type ToolChangeEvent } from './tool.events';
 import { ToolInstance } from './tool.instance';
 import { DEFAULT_EXPORT_OPTS, type ExportNameOptions, type IndexedTool } from './tool.types';
-import { normalizeTool, toolDiscoveryDeps } from './tool.utils';
+import { isExternalToolRecord, normalizeTool, toolDiscoveryDeps } from './tool.utils';
 
 export default class ToolRegistry extends RegistryAbstract<
   ToolInstance, // IMPORTANT: instances map holds ToolInstance (not the interface)
@@ -121,6 +124,7 @@ export default class ToolRegistry extends RegistryAbstract<
     for (const token of this.tokens) {
       const rec = this.defs.get(token);
       if (!rec) throw new RegistryDefinitionNotFoundError('ToolRegistry', String(token));
+      if (isExternalToolRecord(rec)) continue;
 
       // Single, authoritative instance per local tool
       const ti = new ToolInstance(rec, this.providers, this.owner);
@@ -170,7 +174,20 @@ export default class ToolRegistry extends RegistryAbstract<
     // An entry whose hooks cannot run fails startup here, after the synchronous adoption that keeps siblings acyclic (#678).
     await Promise.all([...this.instances.values()].map((ti) => ti.ready));
 
+    await this.registerExternalTools([...this.defs.values()].filter(isExternalToolRecord));
+
     await scope.registryFlows(ToolsListFlow, CallToolFlow);
+  }
+
+  /** Load the tools `.esm()` / `.remote()` records and specifier strings name; register them like local ones. */
+  async registerExternalTools(records: readonly ToolExternalRecord[]): Promise<void> {
+    const scope = this.providers.getActiveScope();
+    const loads = records.map((record) => loadExternalToolRecords(scope, record));
+    for (const record of (await Promise.all(loads)).flat()) {
+      const instance = new ToolInstance(record, this.providers, this.owner);
+      await instance.ready;
+      this.registerToolInstance(instance);
+    }
   }
 
   /* -------------------- Adoption: reference child instances (no cloning) -------------------- */
@@ -583,6 +600,10 @@ export default class ToolRegistry extends RegistryAbstract<
    * Used by adapter polling to hot-swap tools when specs change.
    */
   replaceAll(list: ToolType[], owner: EntryOwnerRef): void {
+    const { tokens, defs, graph } = this.buildMap(list);
+    const external = [...defs.values()].find(isExternalToolRecord);
+    if (external) throw externalEntryAfterStartup('tool', external);
+
     // Clear local rows, instances, and remote app tool tracking
     this.localRows = [];
     this.instances.clear();
@@ -594,7 +615,6 @@ export default class ToolRegistry extends RegistryAbstract<
     this.graph.clear();
 
     // Rebuild from new list
-    const { tokens, defs, graph } = this.buildMap(list);
     for (const [key, val] of defs) {
       this.defs.set(key, val);
       this.graph.set(key, graph.get(key) ?? new Set());

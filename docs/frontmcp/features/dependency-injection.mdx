@@ -40,10 +40,14 @@ class EnvConfigService extends ConfigService {
 
 @App({
   name: 'app',
-  providers: [{ provide: ConfigService, useClass: EnvConfigService }],
+  providers: [{ name: 'config', provide: ConfigService, useClass: EnvConfigService }],
 })
 class MyApp {}
 ```
+
+A provider object (`useClass`, `useValue` or `useFactory`) needs a `name`. `@FrontMcp`, `@App`, `@Plugin` and `@Agent`
+take any of the three; up to 1.9.0 they refused `useClass` objects, and `useValue` objects unless the value was an
+instance of a `@Provider` class.
 
 ## Provider Scopes
 

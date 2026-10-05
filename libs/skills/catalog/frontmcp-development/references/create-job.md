@@ -353,7 +353,7 @@ permissions: [
 
 ## Function Builder
 
-For simple jobs that do not need a class, use the `job()` function builder. The callback receives `(input, ctx)` where `ctx` provides all `JobContext` methods.
+For simple jobs that do not need a class, use the `job()` function builder. The callback receives `(input, ctx)` where `ctx` is the run's `JobContext`, the object a class job reaches as `this`: `ctx.log()`, `ctx.progress()`, `ctx.get()`, `ctx.tryGet()`, `ctx.attempt` and `ctx.respond()` behave as they do in a class. Up to 1.9.0 `log()` and `progress()` were protected, so only a `JobContext` class could call them.
 
 ```typescript
 import { job, z } from '@frontmcp/sdk';
@@ -369,13 +369,13 @@ const CleanupTempFiles = job({
     deleted: z.number().int(),
     freedBytes: z.number().int(),
   },
-})((input, ctx) => {
+})(async (input, ctx) => {
   ctx.log(`Cleaning ${input.directory}, max age: ${input.maxAgeDays} days`);
-  ctx.progress(0, 100, 'Scanning directory');
+  await ctx.progress(0, 100, 'Scanning');
 
   // ... scan and delete logic ...
 
-  ctx.progress(100, 100, 'Cleanup complete');
+  await ctx.progress(100, 100, 'Done');
   return { deleted: 42, freedBytes: 1024000 };
 });
 ```
@@ -384,25 +384,7 @@ Register it the same way as a class job: `jobs: [CleanupTempFiles]`.
 
 ## Remote and ESM Loading
 
-Load jobs from external modules or remote URLs without importing them directly.
-
-**ESM loading** -- load a job from an ES module:
-
-```typescript
-const ExternalJob = Job.esm('@my-org/jobs@^1.0.0', 'ExternalJob', {
-  description: 'A job loaded from an ES module',
-});
-```
-
-**Remote loading** -- load a job from a remote URL:
-
-```typescript
-const CloudJob = Job.remote('https://example.com/jobs/cloud-job', 'CloudJob', {
-  description: 'A job loaded from a remote server',
-});
-```
-
-Both return values that can be registered in `jobs: [ExternalJob, CloudJob]`.
+`Job.esm()` and `Job.remote()` exist, but startup refuses them with `ExternalEntryNotSupportedError`: per-entry `.esm()` and `.remote()` loading covers tools, resources and prompts only. Do not put them in `jobs`; declare the job locally with `@Job` or `job()`. To run work that lives on another server, proxy the tool that server exposes for it with `Tool.remote(url, name)`.
 
 ## Registration and Configuration
 
@@ -631,7 +613,7 @@ class DataServer {}
 
 | Pattern           | Correct                                                                              | Incorrect                                                            | Why                                                                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Progress tracking | `this.progress(50, 100, 'Processing batch 5')`                                       | Not reporting progress                                               | Progress is persisted and queryable; essential for long-running visibility                                                             |
+| Progress tracking | `this.progress(50, 100, 'Processing batch 5')`                                       | Not reporting progress                                               | Sent to the caller's session as a progress notification; essential for long-running visibility                                         |
 | Retry config      | `retry: { maxAttempts: 3, backoffMs: 2000, backoffMultiplier: 2 }`                   | Implementing retry logic manually in `execute()`                     | Framework handles retry with exponential backoff and attempt tracking                                                                  |
 | Attempt awareness | Check `this.attempt` for retry-specific logic                                        | Ignoring attempt number                                              | `this.attempt` is 1-based; use it to log retry context or adjust behavior                                                              |
 | Job logging       | `this.log('message')` for persistent, queryable logs                                 | Using `console.log()`                                                | `this.log()` persists with job state; `console.log` is ephemeral                                                                       |

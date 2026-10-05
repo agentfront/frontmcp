@@ -133,14 +133,28 @@ import { App, Prompt } from '@frontmcp/sdk';
   prompts: [
     SummarizePrompt,                                                     // Local class
     Prompt.esm('@acme/tools@^1.0.0', 'greeting'),                       // Single prompt from npm
-    Prompt.remote('https://api.example.com/mcp', 'code-review-prompt'), // Single prompt from remote
+    Prompt.remote('https://api.example.com/mcp', 'code-review-prompt', { // Single prompt from remote
+      metadata: { name: 'code-review' },
+    }),
   ],
 })
 class MyApp {}
 ```
 
+`Prompt.esm(specifier, name, options?)` loads the prompt named `name` from an npm package and runs it in-process. `Prompt.remote(url, name, options?)` proxies the prompt named `name` on a remote MCP server.
+
+- **Loading happens at startup.** The server does not serve requests until every entry is loaded.
+- **The prompt keeps its own name**, with no namespace prefix. `options.metadata` overrides the loaded metadata field by field; a new `name` renames the prompt.
+- **One load per package, one connection per URL**, shared by every entry that names it with the same options (`loader` and `cacheTTL`, or `transportOptions` and `remoteAuth`). A `.remote()` entry is what the server listed at startup: unlike `App.remote()`, it is not re-discovered when the server's entries change.
+- **The prompt belongs to the app or server that lists it**, and runs through the regular `prompts:get-prompt` flow, so that owner's hooks and plugins apply.
+- **Options:** `.esm()` takes `loader` and `cacheTTL`; `.remote()` takes `transportOptions` and `remoteAuth`.
+
+<Warning>
+A missing prompt fails startup: `ExternalEntryLoadError` when the package does not load or the server is unreachable, `ExternalEntryNotFoundError` when it has no prompt with that name. Both name the prompt and its source.
+</Warning>
+
 <Info>
-`Prompt.esm()` and `Prompt.remote()` load individual prompts. For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
+For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
 </Info>
 
 ---

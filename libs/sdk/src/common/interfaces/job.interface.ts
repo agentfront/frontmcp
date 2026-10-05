@@ -4,10 +4,11 @@ import { type CallSurface } from '../availability';
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
 import { type ToolInputType, type ToolOutputType } from '../metadata';
 import { type JobMetadata } from '../metadata/job.metadata';
+import { type JobEsmTargetRecord, type JobRemoteRecord } from '../records/job.record';
 import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
 import { FlowControl } from './flow.interface';
 
-export type JobType<T = unknown> = Type<T> | FuncType<T> | string;
+export type JobType<T = unknown> = Type<T> | FuncType<T> | string | JobEsmTargetRecord | JobRemoteRecord;
 
 export type JobCtorArgs<In> = ExecutionContextBaseArgs & {
   metadata: JobMetadata;
@@ -63,14 +64,14 @@ export abstract class JobContext<
     return this._attempt;
   }
 
-  /** Log a message within the job execution. */
-  protected log(message: string): void {
+  /** Log a message within the job execution. A functional job calls it as `ctx.log()`. */
+  log(message: string): void {
     this._logs.push(`[${new Date().toISOString()}] ${message}`);
     this.logger.info(message);
   }
 
-  /** Report progress. Returns false if no session is available. */
-  protected async progress(pct: number, total?: number, msg?: string): Promise<boolean> {
+  /** Report progress. Returns false if no session is available. A functional job calls it as `ctx.progress()`. */
+  async progress(pct: number, total?: number, msg?: string): Promise<boolean> {
     const sessionId = this.authInfo.sessionId;
     if (!sessionId) {
       this.logger.debug('Cannot send progress: no session ID');

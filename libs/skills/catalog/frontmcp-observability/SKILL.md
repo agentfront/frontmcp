@@ -129,7 +129,7 @@ Follow the scenario routing table above to find the right reference for your use
 
 - [ ] Spans appear in trace backend when calling a tool
 - [ ] Log entries include `trace_id` and `span_id`
-- [ ] `this.telemetry` is available in tool execution contexts
+- [ ] `this.telemetry` is available in tool execution contexts, and `@frontmcp/observability` is imported so it type-checks
 - [ ] Session tracing ID is consistent across all spans in a request
 - [ ] Errors are recorded on spans with `ERROR` status
 
@@ -144,6 +144,7 @@ Follow the scenario routing table above to find the right reference for your use
 | Problem                                          | Cause                                                         | Solution                                                                                                                  |
 | ------------------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `this.telemetry` is undefined in a tool          | `observability` not enabled on the parent `@FrontMcp` config  | Set `observability: true` (or a config object) in the `@FrontMcp` decorator; see `tracing-setup`                          |
+| `Property 'telemetry' does not exist` (TS2339)   | `@frontmcp/observability` is not part of the compilation      | Add `import type {} from '@frontmcp/observability'` where you use it (or once in the server entry); see `telemetry-api`   |
 | Spans appear without `trace_id` in logs          | Logger not connected to `StructuredLogTransport`              | Use `this.logger`, not `console`; see `structured-logging`                                                                |
 | OTLP exporter silently drops spans               | Endpoint URL points at the UI, not the OTLP collector         | Use the OTLP HTTP/gRPC ingest endpoint exposed by your vendor (Datadog, Coralogix, Logz, etc.); see `vendor-integrations` |
 | Real session ID appears in span attributes       | A custom span attribute writes `session.id` directly          | Use the SDK-provided `mcp.session.id` (already hashed); never log the raw session token                                   |

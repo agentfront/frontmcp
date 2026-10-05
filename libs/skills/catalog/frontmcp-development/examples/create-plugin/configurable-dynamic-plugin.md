@@ -6,9 +6,10 @@ description: 'A plugin that accepts runtime configuration via `DynamicPlugin` an
 tags: [development, plugin, configurable, dynamic]
 features:
   - 'Extending `DynamicPlugin<TOptions, TInput>` for runtime-configurable plugins'
-  - 'Implementing `static dynamicProviders()` to create providers from the input options'
-  - 'Using `TInput` with optional fields and applying defaults in the constructor'
+  - 'Implementing `static dynamicProviders()` to return a named factory provider built from the input options'
+  - 'Using `TInput` with optional fields and resolving defaults in one helper shared by the constructor and `dynamicProviders()`'
   - 'Extending decorator metadata via `declare global { interface ExtendFrontMcpToolMetadata }`'
+  - 'Reading the custom metadata in a `@ToolHook.Did` hook that receives the flow context (`FlowCtxOf`)'
   - 'Augmenting both `ExecutionContextBase` and `PromptContext` for full context extension coverage'
   - 'Registering the plugin with `MyPlugin.init({ ... })` in the `plugins` array'
 ---
@@ -30,6 +31,10 @@ export type MyPluginOptionsInput = Omit<MyPluginOptions, 'refreshIntervalMs'> & 
   refreshIntervalMs?: number;
 };
 
+export function resolveMyPluginOptions(input: MyPluginOptionsInput): MyPluginOptions {
+  return { ...input, refreshIntervalMs: input.refreshIntervalMs ?? 30_000 };
+}
+
 // Extend the @Tool decorator metadata with a custom field
 declare global {
   interface ExtendFrontMcpToolMetadata {
@@ -47,32 +52,27 @@ import type { Token } from '@frontmcp/sdk';
 
 import type { MyService } from './providers/my-service.provider';
 
-export const MyServiceToken: Token<MyService> = Symbol('MyService');
+export const MyServiceToken: Token<MyService> = Symbol('my-plugin:service');
 ```
 
 ```typescript
 // src/plugins/my-plugin/providers/my-service.provider.ts
-import { Provider } from '@frontmcp/sdk';
-
 import type { MyPluginOptions } from '../my-plugin.types';
 
-@Provider()
 export class MyService {
-  private readonly endpoint: string;
-  private readonly refreshIntervalMs: number;
-
-  constructor(options: MyPluginOptions) {
-    this.endpoint = options.endpoint;
-    this.refreshIntervalMs = options.refreshIntervalMs;
-  }
+  constructor(private readonly options: MyPluginOptions) {}
 
   async query(params: Record<string, unknown>): Promise<unknown> {
-    const res = await globalThis.fetch(this.endpoint, {
+    const res = await globalThis.fetch(this.options.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     });
     return res.json();
+  }
+
+  async reportAuditedCall(toolName: string, level: 'info' | 'warn' | 'critical'): Promise<void> {
+    await this.query({ action: 'audit', toolName, level });
   }
 }
 ```
@@ -93,10 +93,10 @@ declare module '@frontmcp/sdk' {
 
 ```typescript
 // src/plugins/my-plugin/my-plugin.plugin.ts
-import { DynamicPlugin, Plugin, ProviderType } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, ToolHook, type FlowCtxOf, type ProviderType } from '@frontmcp/sdk';
 
 import { MyServiceToken } from './my-plugin.symbols';
-import type { MyPluginOptions, MyPluginOptionsInput } from './my-plugin.types';
+import { resolveMyPluginOptions, type MyPluginOptions, type MyPluginOptionsInput } from './my-plugin.types';
 import { MyService } from './providers/my-service.provider';
 
 import './my-plugin.context-extension';
@@ -113,44 +113,50 @@ import './my-plugin.context-extension';
   ],
 })
 export default class MyPlugin extends DynamicPlugin<MyPluginOptions, MyPluginOptionsInput> {
-  options: MyPluginOptions;
+  readonly options: MyPluginOptions;
 
-  constructor(options: MyPluginOptionsInput = { endpoint: '' }) {
+  constructor(options: MyPluginOptionsInput) {
     super();
-    this.options = { refreshIntervalMs: 30_000, ...options };
+    this.options = resolveMyPluginOptions(options);
   }
 
   static override dynamicProviders(options: MyPluginOptionsInput): ProviderType[] {
+    const resolved = resolveMyPluginOptions(options);
     return [
       {
-        name: 'my-service',
+        name: 'my-plugin:service',
         provide: MyServiceToken,
-        useFactory: () =>
-          new MyService({
-            refreshIntervalMs: 30_000,
-            ...options,
-          }),
+        useFactory: () => new MyService(resolved),
       },
     ];
+  }
+
+  @ToolHook.Did('execute')
+  async reportAuditedCall(flowCtx: FlowCtxOf<'tools:call-tool'>): Promise<void> {
+    const toolContext = flowCtx.state.toolContext;
+    const audit = toolContext?.metadata.audit;
+    if (!toolContext || !audit?.enabled) return;
+    await this.get(MyServiceToken).reportAuditedCall(toolContext.metadata.name, audit.level);
   }
 }
 ```
 
 ```typescript
 // src/server.ts
-import { App, FrontMcp, Tool, ToolContext } from '@frontmcp/sdk';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 import MyPlugin from './plugins/my-plugin/my-plugin.plugin';
 
 // Tool using the extended metadata field and context extension
 @Tool({
   name: 'delete_user',
+  inputSchema: { userId: z.string() },
   audit: { enabled: true, level: 'critical' }, // Custom metadata from ExtendFrontMcpToolMetadata
 })
 class DeleteUserTool extends ToolContext {
   async execute(input: { userId: string }) {
     const result = await this.myService.query({ action: 'delete', userId: input.userId });
-    return result;
+    return { result };
   }
 }
 
@@ -170,12 +176,15 @@ class MyApp {}
 class MyServer {}
 ```
 
+Providers that `dynamicProviders()` returns reach the apps the plugin is installed for without an `exports` entry, which is why `this.myService` resolves in `DeleteUserTool`. Each provider needs a `name`; `inject` is optional and only needed when the factory takes dependencies. Inside the plugin, `this.get(token)` resolves from the plugin's own providers.
+
 ## What This Demonstrates
 
 - Extending `DynamicPlugin<TOptions, TInput>` for runtime-configurable plugins
-- Implementing `static dynamicProviders()` to create providers from the input options
-- Using `TInput` with optional fields and applying defaults in the constructor
+- Implementing `static dynamicProviders()` to return a named factory provider built from the input options
+- Using `TInput` with optional fields and resolving defaults in one helper shared by the constructor and `dynamicProviders()`
 - Extending decorator metadata via `declare global { interface ExtendFrontMcpToolMetadata }`
+- Reading the custom metadata in a `@ToolHook.Did` hook that receives the flow context (`FlowCtxOf`)
 - Augmenting both `ExecutionContextBase` and `PromptContext` for full context extension coverage
 - Registering the plugin with `MyPlugin.init({ ... })` in the `plugins` array
 

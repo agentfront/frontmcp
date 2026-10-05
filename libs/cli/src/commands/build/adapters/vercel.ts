@@ -130,7 +130,7 @@ module.exports.default = module.exports;
     // We install them fresh to ensure correct platform binaries (linux-x64 for Vercel).
     //
     // #368 round-3 — `openai` and `@anthropic-ai/sdk` are peer deps consumed
-    // by `@Agent({ adapter: 'openai' | 'anthropic' })` via lazy
+    // by `@Agent({ llm: { provider: 'openai' | 'anthropic' } })` via lazy
     // `await import()` inside the SDK. They're externalized at bundle time
     // so rspack doesn't fail when they're not installed; only ship them on
     // Vercel when the user actually has them in their package.json (i.e.,

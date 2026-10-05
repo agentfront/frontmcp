@@ -10,6 +10,18 @@ import {
   frontMcpProviderMetadataSchema,
   frontMcpRemoteAppMetadataSchema,
 } from '../metadata';
+import type {
+  JobEsmTargetRecord,
+  JobRemoteRecord,
+  PromptEsmTargetRecord,
+  PromptRemoteRecord,
+  ResourceEsmTargetRecord,
+  ResourceRemoteRecord,
+  SkillEsmTargetRecord,
+  SkillRemoteRecord,
+  ToolEsmTargetRecord,
+  ToolRemoteRecord,
+} from '../records';
 import {
   FrontMcpAdapterTokens,
   FrontMcpAgentTokens,
@@ -27,6 +39,7 @@ import {
   FrontMcpToolTokens,
   FrontMcpWorkflowTokens,
 } from '../tokens';
+import { isExternalEntryRecord } from '../utils/external-entry.utils';
 
 /**
  * Check if an object has metadata for a given token, handling both Symbol() and Symbol.for()
@@ -79,13 +92,19 @@ export const annotatedFrontMcpProvidersSchema = z.custom<AnnotatedClass>(
           return true;
         }
       }
-      if (obj['useFactory'] && frontMcpProviderMetadataSchema.passthrough().safeParse(v).success) {
+      const definesProvider =
+        'useValue' in obj || typeof obj['useClass'] === 'function' || typeof obj['useFactory'] === 'function';
+      if (definesProvider && frontMcpProviderMetadataSchema.passthrough().safeParse(v).success) {
         return true;
       }
     }
     return false;
   },
-  { message: 'providers items must be annotated with @Provider() | @FrontMcpProvider().' },
+  {
+    message:
+      'providers items must be classes annotated with @Provider() | @FrontMcpProvider(), ' +
+      'or { provide, name, useValue | useClass | useFactory } objects.',
+  },
 );
 
 export const annotatedFrontMcpAuthProvidersSchema = z.custom<AnnotatedClass>(
@@ -161,22 +180,33 @@ export const annotatedFrontMcpAdaptersSchema = z.custom<AnnotatedClass>(
   { message: 'adapters items must be annotated with @Adapter() | @FrontMcpAdapter().' },
 );
 
-export const annotatedFrontMcpToolsSchema = z.custom<AnnotatedClass | string>(
-  (v): v is AnnotatedClass | string => {
+export const annotatedFrontMcpToolsSchema = z.custom<AnnotatedClass | string | ToolEsmTargetRecord | ToolRemoteRecord>(
+  (v): v is AnnotatedClass | string | ToolEsmTargetRecord | ToolRemoteRecord => {
     // ESM package specifier string (e.g., '@acme/tools@^1.0.0')
     if (typeof v === 'string') {
       return isPackageSpecifier(v);
+    }
+    if (isExternalEntryRecord(v)) {
+      return true;
     }
     return (
       typeof v === 'function' &&
       (hasMetadataCompat(FrontMcpToolTokens.type, v) || v[FrontMcpToolTokens.type] !== undefined)
     );
   },
-  { message: 'tools items must be annotated with @Tool() | @FrontMcpTool() or be a package specifier string.' },
+  {
+    message:
+      'tools items must be annotated with @Tool() | @FrontMcpTool(), be a package specifier string, or come from Tool.esm() | Tool.remote().',
+  },
 );
 
-export const annotatedFrontMcpResourcesSchema = z.custom<AnnotatedClass>(
-  (v): v is AnnotatedClass => {
+export const annotatedFrontMcpResourcesSchema = z.custom<
+  AnnotatedClass | ResourceEsmTargetRecord | ResourceRemoteRecord
+>(
+  (v): v is AnnotatedClass | ResourceEsmTargetRecord | ResourceRemoteRecord => {
+    if (isExternalEntryRecord(v)) {
+      return true;
+    }
     return (
       typeof v === 'function' &&
       // Class-based @Resource decorator
@@ -191,12 +221,15 @@ export const annotatedFrontMcpResourcesSchema = z.custom<AnnotatedClass>(
   },
   {
     message:
-      'resources items must be annotated with @Resource() | @ResourceTemplate() or use resource() | resourceTemplate() builders.',
+      'resources items must be annotated with @Resource() | @ResourceTemplate(), use resource() | resourceTemplate() builders, or come from Resource.esm() | Resource.remote().',
   },
 );
 
-export const annotatedFrontMcpPromptsSchema = z.custom<AnnotatedClass>(
-  (v): v is AnnotatedClass => {
+export const annotatedFrontMcpPromptsSchema = z.custom<AnnotatedClass | PromptEsmTargetRecord | PromptRemoteRecord>(
+  (v): v is AnnotatedClass | PromptEsmTargetRecord | PromptRemoteRecord => {
+    if (isExternalEntryRecord(v)) {
+      return true;
+    }
     return (
       typeof v === 'function' &&
       // Class-based @Prompt decorator
@@ -205,7 +238,10 @@ export const annotatedFrontMcpPromptsSchema = z.custom<AnnotatedClass>(
         v[FrontMcpPromptTokens.type] !== undefined)
     );
   },
-  { message: 'prompts items must be annotated with @Prompt() | @FrontMcpPrompt() or use prompt() builder.' },
+  {
+    message:
+      'prompts items must be annotated with @Prompt() | @FrontMcpPrompt(), use prompt() builder, or come from Prompt.esm() | Prompt.remote().',
+  },
 );
 
 export const annotatedFrontMcpLoggerSchema = z.custom<AnnotatedClass>(
@@ -231,6 +267,9 @@ export const annotatedFrontMcpAgentsSchema = z.custom<AgentType>(
       // For backwards compatibility, allow any function for now
       return true;
     }
+    if (isExternalEntryRecord(v)) {
+      return true;
+    }
     // Check for object-based configuration
     if (typeof v === 'object' && v !== null) {
       const obj = v as Record<string, unknown>;
@@ -247,12 +286,15 @@ export const annotatedFrontMcpAgentsSchema = z.custom<AgentType>(
   },
   {
     message:
-      'agents items must be annotated with @Agent() | @FrontMcpAgent(), use agent() builder, or be a package specifier string.',
+      'agents items must be annotated with @Agent() | @FrontMcpAgent(), use agent() builder, be a package specifier string, or come from Agent.esm() | Agent.remote().',
   },
 );
 
-export const annotatedFrontMcpJobsSchema = z.custom<AnnotatedClass>(
-  (v): v is AnnotatedClass => {
+export const annotatedFrontMcpJobsSchema = z.custom<AnnotatedClass | JobEsmTargetRecord | JobRemoteRecord>(
+  (v): v is AnnotatedClass | JobEsmTargetRecord | JobRemoteRecord => {
+    if (isExternalEntryRecord(v)) {
+      return true;
+    }
     if (typeof v === 'function') {
       if (hasMetadataCompat(FrontMcpJobTokens.type, v)) {
         return true;
@@ -264,7 +306,10 @@ export const annotatedFrontMcpJobsSchema = z.custom<AnnotatedClass>(
     }
     return false;
   },
-  { message: 'jobs items must be annotated with @Job() | @FrontMcpJob() or use job() builder.' },
+  {
+    message:
+      'jobs items must be annotated with @Job() | @FrontMcpJob(), use job() builder, or come from Job.esm() | Job.remote().',
+  },
 );
 
 export const annotatedFrontMcpWorkflowsSchema = z.custom<AnnotatedClass>(
@@ -283,8 +328,11 @@ export const annotatedFrontMcpWorkflowsSchema = z.custom<AnnotatedClass>(
   { message: 'workflows items must be annotated with @Workflow() | @FrontMcpWorkflow() or use workflow() builder.' },
 );
 
-export const annotatedFrontMcpSkillsSchema = z.custom<AnnotatedClass>(
-  (v): v is AnnotatedClass => {
+export const annotatedFrontMcpSkillsSchema = z.custom<AnnotatedClass | SkillEsmTargetRecord | SkillRemoteRecord>(
+  (v): v is AnnotatedClass | SkillEsmTargetRecord | SkillRemoteRecord => {
+    if (isExternalEntryRecord(v)) {
+      return true;
+    }
     // Check for class-based @Skill decorator
     if (typeof v === 'function') {
       if (hasMetadataCompat(FrontMcpSkillTokens.type, v)) {
@@ -311,7 +359,10 @@ export const annotatedFrontMcpSkillsSchema = z.custom<AnnotatedClass>(
     }
     return false;
   },
-  { message: 'skills items must be annotated with @Skill() | @FrontMcpSkill() or use skill() builder.' },
+  {
+    message:
+      'skills items must be annotated with @Skill() | @FrontMcpSkill(), use skill() builder, or come from Skill.esm() | Skill.remote().',
+  },
 );
 
 export const annotatedFrontMcpChannelsSchema = z.custom<AnnotatedClass>(

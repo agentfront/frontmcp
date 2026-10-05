@@ -29,7 +29,7 @@ export enum AgentKind {
  * ```typescript
  * @Agent({
  *   name: 'research-agent',
- *   llm: { adapter: 'openai', model: 'gpt-4-turbo', apiKey: { env: 'OPENAI_API_KEY' } },
+ *   llm: { provider: 'openai', model: 'gpt-4-turbo', apiKey: { env: 'OPENAI_API_KEY' } },
  * })
  * export default class ResearchAgent extends AgentContext { ... }
  * ```
@@ -49,7 +49,7 @@ export interface AgentClassTokenRecord {
  * const researchAgent = agent({
  *   name: 'research-agent',
  *   inputSchema: { topic: z.string() },
- *   llm: { adapter: 'openai', model: 'gpt-4-turbo', apiKey: { env: 'OPENAI_API_KEY' } },
+ *   llm: { provider: 'openai', model: 'gpt-4-turbo', apiKey: { env: 'OPENAI_API_KEY' } },
  * })((input, ctx) => {
  *   return { result: 'done' };
  * });

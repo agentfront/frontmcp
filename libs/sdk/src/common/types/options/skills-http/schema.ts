@@ -54,7 +54,7 @@ export const skillsConfigCacheOptionsSchema = z.object({
 });
 
 /**
- * Audit options schema. Signer/store are typed as `unknown` because their
+ * Audit options schema. Signer/store/metrics are typed as `unknown` because their
  * concrete types live in `@frontmcp/adapters/skills` — keeping the SDK free
  * of the upward dependency. Validation here just confirms shape; the helper
  * that consumes the config does the structural duck-type check.
@@ -66,6 +66,7 @@ export const skillsConfigAuditOptionsSchema = z.object({
   enabled: z.boolean().optional().default(false),
   signer: z.unknown().optional(),
   store: z.unknown().optional(),
+  metrics: z.unknown().optional(),
   subjectMode: z.enum(['plain', 'hash', 'omit']).optional(),
   headAnchorIntervalMs: z.number().int().positive().optional(),
 });

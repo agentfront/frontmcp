@@ -173,6 +173,7 @@ function resourceRemote(
     targetName,
     transportOptions: options?.transportOptions,
     remoteAuth: options?.remoteAuth,
+    options,
     metadata: {
       name: targetName,
       description: `Remote resource "${targetName}" from ${url}`,
