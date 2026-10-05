@@ -27,7 +27,7 @@ const tool = tools.getExported('my_tool');
 Get all tools (local + adopted).
 
 ```typescript
-getTools(includeHidden?: boolean): ReadonlyArray<ToolEntry>
+getTools(includeHidden?: boolean): ToolEntry[]
 ```
 
 | Parameter       | Type      | Default | Description                     |
@@ -49,7 +49,7 @@ const allTools = registry.getTools(true);
 Get tools appropriate for MCP listing with elicitation support filtering.
 
 ```typescript
-getToolsForListing(supportsElicitation?: boolean): ReadonlyArray<ToolEntry>
+getToolsForListing(supportsElicitation?: boolean): ToolEntry[]
 ```
 
 | Parameter             | Type      | Default | Description                         |
@@ -60,28 +60,28 @@ getToolsForListing(supportsElicitation?: boolean): ReadonlyArray<ToolEntry>
 
 ```typescript
 // For clients that support elicitation
-const tools = registry.getToolsForListing(true);
+const elicitingClientTools = registry.getToolsForListing(true);
 
 // For clients that don't support elicitation
-const tools = registry.getToolsForListing(false);
+const otherClientTools = registry.getToolsForListing(false);
 ```
 
 ### getExported()
 
-Lookup a tool by its exported (resolved) name.
+Lookup a tool by its exported (resolved) name: the name [`exportResolvedNames(opts)`](#exportresolvednames) gives it, compared exactly. Exported names are snake_case unless `opts.case` says otherwise.
 
 ```typescript
-getExported(name: string, opts?: { ignoreCase?: boolean }): ToolEntry | undefined
+getExported(name: string, opts?: ExportNameOptions): ToolEntry | undefined
 ```
 
 **Example:**
 
 ```typescript
-// Case-sensitive lookup
-const tool = registry.getExported('Search_Tool');
+// Exported names are snake_case by default
+const tool = registry.getExported('search_tool');
 
-// Case-insensitive lookup
-const tool = registry.getExported('search_tool', { ignoreCase: true });
+// Look up among the names exported in camelCase
+const camelCaseTool = registry.getExported('searchTool', { case: 'camel' });
 ```
 
 ### exportResolvedNames()
@@ -92,12 +92,14 @@ Produce unique, conflict-aware exported names for all tools.
 exportResolvedNames(opts?: ExportNameOptions): Array<{ name: string; instance: ToolEntry }>
 ```
 
+`ExportNameOptions` (not exported from `@frontmcp/sdk`) takes `case` (`'snake'`, the default, `'kebab'`, `'dot'` or `'camel'`), `maxLen` (default `64`), `prefixChildrenOnConflict` (default `true`) and `prefixSource` (`'provider'`, the default, or `'owner'`).
+
 **Example:**
 
 ```typescript
 const exportedNames = registry.exportResolvedNames();
 for (const { name, instance } of exportedNames) {
-  console.log(`${name} → ${instance.qualifiedId}`);
+  console.log(`${name} → ${instance.fullName}`);
 }
 // Output:
 // search → app1:search
@@ -109,7 +111,7 @@ for (const { name, instance } of exportedNames) {
 Get tools defined inline in this registry (local only, not adopted).
 
 ```typescript
-getInlineTools(): ReadonlyArray<ToolEntry>
+getInlineTools(): ToolEntry[]
 ```
 
 ### listAllInstances()
