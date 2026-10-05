@@ -238,8 +238,11 @@ export default class PluginRegistry
         // - scope='app' (default): register hooks to own scope (app-level)
         // - scope='server': register hooks to parent scope (gateway-level) if available
         let targetHookScope: ScopeEntry;
+        let hookOwner = this.owner;
         if (pluginScope === 'server' && this.scopeInfo?.parentScope) {
           targetHookScope = this.scopeInfo.parentScope;
+          // Owned by the plugin, not the app that installed it, so they run for every app's entries.
+          hookOwner = pluginOwner;
         } else {
           targetHookScope = this.scope;
           // Warn if server scope was requested but no parent scope is available
@@ -257,7 +260,7 @@ export default class PluginRegistry
           ...hook,
           metadata: {
             ...hook.metadata,
-            owner: this.owner,
+            owner: hookOwner,
           },
         }));
         // Register hooks to the determined target scope
