@@ -39,6 +39,7 @@ export {
 } from './audit-store';
 
 export {
+  createSkillAuditMetrics,
   SkillAuditWriter,
   SKILL_AUDIT_ERROR_MESSAGE_MAX,
   SKILL_AUDIT_QUEUE_MAX,
@@ -47,6 +48,7 @@ export {
   type SkillAuditLogger,
   type SkillAuditMetrics,
   type SkillAuditSuccessExtras,
+  type SkillAuditTelemetry,
   type SkillAuditWriteContext,
   type SkillAuditWriterOptions,
 } from './audit-writer';

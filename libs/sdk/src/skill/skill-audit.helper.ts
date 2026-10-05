@@ -10,7 +10,7 @@
 // once at boot. This pattern works in Edge runtimes (Cloudflare Workers,
 // Vercel Edge) because there is zero `eval`/`require` on the hot path.
 
-import { ProviderScope } from '@frontmcp/di';
+import { ProviderScope, type Token } from '@frontmcp/di';
 import { randomBytes } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../common';
@@ -37,18 +37,25 @@ export interface AuditWriterOptionsShape {
   maxQueueDepth?: number;
 }
 
+/**
+ * The writer's parameters are typed `never` so `@frontmcp/adapters/skills`,
+ * whose constructor takes its concrete store, signer and metrics types, is
+ * assignable as-is. The SDK forwards `skillsConfig.audit` values unchanged.
+ */
 export interface AuditModuleShape {
-  SkillAuditWriterToken: symbol;
-  SkillAuditWriter: new (
-    store: unknown,
-    signer: unknown,
-    logger: FrontMcpLogger,
-    metrics?: unknown,
-    options?: AuditWriterOptionsShape,
-  ) => unknown;
+  SkillAuditWriterToken: Token<unknown>;
+  SkillAuditWriter: new (store: never, signer: never, logger: never, metrics: never, options: never) => unknown;
   Hs256AuditSigner: new (secret: string | Uint8Array, keyId: string) => unknown;
   MemoryAuditStore: new () => unknown;
 }
+
+type AuditWriterConstructor = new (
+  store: unknown,
+  signer: unknown,
+  logger: FrontMcpLogger,
+  metrics: unknown,
+  options: AuditWriterOptionsShape | undefined,
+) => unknown;
 
 /**
  * Factory that returns the audit module. Set once at host bootstrap with
@@ -174,7 +181,8 @@ export function registerSkillAuditWriter(options: {
   const writerOptions: AuditWriterOptionsShape | undefined =
     audit.subjectMode !== undefined ? { subjectMode: audit.subjectMode } : undefined;
 
-  const writer = new mod.SkillAuditWriter(store, signer, logger, undefined, writerOptions);
+  const AuditWriter = mod.SkillAuditWriter as AuditWriterConstructor;
+  const writer = new AuditWriter(store, signer, logger, audit.metrics, writerOptions);
 
   providers.injectProvider({
     provide: mod.SkillAuditWriterToken,

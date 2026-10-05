@@ -60,6 +60,8 @@ class FakeWriter {
   constructor(
     public readonly store: unknown,
     public readonly signer: unknown,
+    public readonly logger: unknown,
+    public readonly metrics: unknown,
   ) {
     FakeWriter.instances.push(this);
   }
@@ -123,6 +125,19 @@ describe('registerSkillAuditWriter', () => {
     expect(providers.injectProvider).toHaveBeenCalledTimes(1);
     expect(providers.injected[0]!.provide).toBe(FAKE_TOKEN);
     expect(FakeWriter.instances.length).toBe(1);
+  });
+
+  it('hands the configured metrics sink to the writer', () => {
+    setSkillAuditFactory(() => fakeModule);
+    const metrics = { incrementWriteFailure: jest.fn() };
+
+    registerSkillAuditWriter({
+      providers: makeProviders() as never,
+      audit: { enabled: true, metrics },
+      logger: makeLogger() as never,
+    });
+
+    expect(FakeWriter.instances[0]?.metrics).toBe(metrics);
   });
 
   it('falls back to globalThis.__frontmcp_skill_audit_module__ when no factory is set', () => {
