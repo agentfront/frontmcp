@@ -79,13 +79,18 @@ export const annotatedFrontMcpProvidersSchema = z.custom<AnnotatedClass>(
           return true;
         }
       }
-      if (obj['useFactory'] && frontMcpProviderMetadataSchema.passthrough().safeParse(v).success) {
+      const definesProvider = 'useValue' in obj || obj['useClass'] || obj['useFactory'];
+      if (definesProvider && frontMcpProviderMetadataSchema.passthrough().safeParse(v).success) {
         return true;
       }
     }
     return false;
   },
-  { message: 'providers items must be annotated with @Provider() | @FrontMcpProvider().' },
+  {
+    message:
+      'providers items must be classes annotated with @Provider() | @FrontMcpProvider(), ' +
+      'or { provide, name, useValue | useClass | useFactory } objects.',
+  },
 );
 
 export const annotatedFrontMcpAuthProvidersSchema = z.custom<AnnotatedClass>(
