@@ -18,13 +18,14 @@ jobs:
     # Only run when:
     # - PR was merged (not just closed)
     # - PR is not from a fork (forked PRs have read-only GITHUB_TOKEN)
-    # - Target branch is a release branch (not main)
+    # - PR did not target main
+    # Whether the merge landed on a release branch is decided by the "Resolve target branches" step:
+    # a PR merged as part of a native stack keeps its stacked base (another PR's branch) in this event,
+    # although GitHub put its commit on the stack's base, so base.ref alone cannot tell.
     if: >
       github.event.pull_request.merged == true &&
       github.event.pull_request.head.repo.fork == false &&
-      github.event.pull_request.base.ref != github.event.repository.default_branch &&
-      (startsWith(github.event.pull_request.base.ref, 'release/') ||
-       startsWith(github.event.pull_request.base.ref, 'next/'))
+      github.event.pull_request.base.ref != github.event.repository.default_branch
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -38,12 +39,61 @@ jobs:
           git config user.name "agentfront[bot]"
           git config user.email "agentfront[bot]@users.noreply.github.com"
 
+      - name: Resolve target branches
+        id: target
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          case "$BASE_REF" in
+            release/*|next/*)
+              echo "release_branch=$BASE_REF" >> "$GITHUB_OUTPUT"
+              echo "cherry_base=$DEFAULT_BRANCH" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          # Stacked PR: find the release line from where its commit landed. A stacked PR merged
+          # into its parent's branch has not landed anywhere yet; the parent's own merge carries it.
+          git fetch --quiet origin '+refs/heads/release/*:refs/remotes/origin/release/*' '+refs/heads/next/*:refs/remotes/origin/next/*'
+          LANDED=$(git branch -r --contains "$MERGE_SHA" --format='%(refname:lstrip=3)' | grep -E '^(release|next)/' || true)
+          if [ "$(printf '%s' "$LANDED" | grep -c .)" -ne 1 ]; then
+            echo "Merge commit $MERGE_SHA is on ${LANDED:-no} release/next branch(es); nothing to cherry-pick."
+            exit 0
+          fi
+          echo "release_branch=$LANDED" >> "$GITHUB_OUTPUT"
+
+          # Build on the parent's cherry-pick while it is open, so the cherry-picks stack on main as
+          # the PRs did. The parent's job starts with this one when a stack merges, so wait for it.
+          PARENT_CHERRY=$(echo "${BASE_REF}-cherry-pick-main" | sed 's/[^a-zA-Z0-9._/-]/-/g' | head -c 100)
+          CHERRY_BASE="$DEFAULT_BRANCH"
+          for attempt in $(seq 1 45); do
+            PARENT_STATE=$(gh pr list --head "$PARENT_CHERRY" --state all --json state --jq '.[0].state // ""')
+            if [ "$PARENT_STATE" = "OPEN" ]; then
+              CHERRY_BASE="$PARENT_CHERRY"
+              break
+            fi
+            if [ -n "$PARENT_STATE" ]; then
+              break
+            fi
+            sleep 20
+          done
+          echo "Cherry-picking $MERGE_SHA from $LANDED onto $CHERRY_BASE"
+          echo "cherry_base=$CHERRY_BASE" >> "$GITHUB_OUTPUT"
+
       - name: Prepare cherry-pick branch
         id: prepare
+        if: steps.target.outputs.release_branch != ''
         shell: bash
         env:
           ORIGINAL_BRANCH: ${{ github.event.pull_request.head.ref }}
-          RELEASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          RELEASE_BRANCH: ${{ steps.target.outputs.release_branch }}
+          CHERRY_BASE: ${{ steps.target.outputs.cherry_base }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -64,13 +114,9 @@ jobs:
           echo "cherry_branch=$CHERRY_BRANCH" >> "$GITHUB_OUTPUT"
           echo "Cherry-pick branch: $CHERRY_BRANCH"
 
-          # Get default branch
-          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
-
-          # Checkout default branch (main)
-          git fetch origin "$DEFAULT_BRANCH"
-          git checkout "$DEFAULT_BRANCH"
-          git pull origin "$DEFAULT_BRANCH"
+          # Checkout the branch to cherry-pick onto: main, or the parent's open cherry-pick branch
+          git fetch origin "$CHERRY_BASE"
+          git checkout -B "$CHERRY_BASE" "origin/$CHERRY_BASE"
 
           # Create the cherry-pick branch (delete if already exists)
           if git show-ref --verify --quiet "refs/heads/$CHERRY_BRANCH"; then
@@ -164,7 +210,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHERRY_BRANCH: ${{ steps.prepare.outputs.cherry_branch }}
-          RELEASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          CHERRY_BASE: ${{ steps.target.outputs.cherry_base }}
+          RELEASE_BRANCH: ${{ steps.target.outputs.release_branch }}
           ORIGINAL_PR: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
@@ -175,9 +222,14 @@ jobs:
           # Push the cherry-pick branch
           git push origin "$CHERRY_BRANCH"
 
+          STACK_NOTE=""
+          if [ "$CHERRY_BASE" != "$DEFAULT_BRANCH" ]; then
+            STACK_NOTE="It is based on \`$CHERRY_BASE\`, the open cherry-pick of the PR #$ORIGINAL_PR was stacked on: merge that one first."
+          fi
+
           # Create the PR
           PR_URL=$(gh pr create \
-            --base "$DEFAULT_BRANCH" \
+            --base "$CHERRY_BASE" \
             --head "$CHERRY_BRANCH" \
             --title "Cherry-pick: $PR_TITLE" \
             --label "cherry-pick" \
@@ -195,6 +247,7 @@ jobs:
 
           ### Action Required
           Please review this cherry-pick to ensure it applies correctly to \`$DEFAULT_BRANCH\`.
+          $STACK_NOTE
 
           If the changes are NOT needed in \`$DEFAULT_BRANCH\`, close this PR.
 
@@ -230,7 +283,7 @@ jobs:
         if: steps.prepare.outputs.conflict == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          RELEASE_BRANCH: ${{ steps.target.outputs.release_branch }}
           ORIGINAL_PR: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
