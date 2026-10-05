@@ -49,6 +49,25 @@ export function pickExternalEntry<R extends { metadata: object }>(
   return Object.assign({}, picked, { metadata: { ...picked.metadata, ...overrides, ...renamed } });
 }
 
+const DECLARE_LOCALLY: Record<'agent' | 'skill' | 'job', string> = {
+  agent: 'declare the agent with @Agent() or agent()',
+  skill: 'declare the skill with @Skill() or skill()',
+  job: 'declare the job with @Job() or job()',
+};
+
+/** The startup error for `Agent.esm()`, `Skill.esm()`, `Job.esm()` and their `.remote()` siblings. */
+export function unsupportedExternalEntry(
+  entryKind: 'agent' | 'skill' | 'job',
+  record: ExternalEntryRecord,
+): ExternalEntryNotSupportedError {
+  return new ExternalEntryNotSupportedError(
+    entryKind,
+    record.targetName,
+    externalEntrySource(record),
+    `per-entry .esm() and .remote() loading is supported for tools, resources and prompts only; ${DECLARE_LOCALLY[entryKind]} instead`,
+  );
+}
+
 /** The error for a `.esm()` / `.remote()` entry added to a registry after it started, e.g. by `replaceAll()`. */
 export function externalEntryAfterStartup(
   entryKind: 'tool' | 'resource' | 'prompt',

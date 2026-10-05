@@ -10,6 +10,7 @@ import {
   type AgentRecord,
   type AgentType,
 } from '../common';
+import { isExternalEntryRecord, unsupportedExternalEntry } from '../common/utils/external-entry.utils';
 import { InvalidEntityError } from '../errors';
 import { AgentConfigurationError } from '../errors/agent.errors';
 
@@ -96,11 +97,12 @@ export function extractAgentFunctionMetadata(fn: AgentFunction): AgentMetadata {
  * - Class decorated with @Agent
  * - Function created with agent()
  * - Value/Factory objects
- * - ESM/REMOTE records from Agent.esm() / Agent.remote()
+ *
+ * Refuses `Agent.esm()` / `Agent.remote()` records: per-entry loading covers tools, resources and prompts.
  */
 export function normalizeAgent(agent: AgentType): AgentRecord {
-  if (typeof agent === 'object' && (agent.kind === AgentKind.ESM || agent.kind === AgentKind.REMOTE)) {
-    return agent;
+  if (isExternalEntryRecord(agent)) {
+    throw unsupportedExternalEntry('agent', agent);
   }
 
   // Class decorated with @Agent

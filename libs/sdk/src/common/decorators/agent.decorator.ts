@@ -383,7 +383,9 @@ type AgentDecorator = {
     cls: C & __MustExtendCtx<C> & __MustParam<C, AgentInputOf<{ inputSchema: I }>> & __MustReturn<C, AgentOutputOf<{}>>,
   ) => __Rewrap<C, AgentInputOf<{ inputSchema: I }>, AgentOutputOf<{}>>;
 
+  /** Startup refuses it (`ExternalEntryNotSupportedError`); per-entry loading covers tools, resources, prompts. */
   esm: typeof agentEsm;
+  /** Startup refuses it (`ExternalEntryNotSupportedError`); per-entry loading covers tools, resources, prompts. */
   remote: typeof agentRemote;
 };
 

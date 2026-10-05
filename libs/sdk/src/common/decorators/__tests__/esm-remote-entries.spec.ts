@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 
+import { ExternalEntryNotSupportedError } from '../../../errors';
 import { EsmModuleLoader } from '../../../esm-loader/esm-module-loader';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
 import { McpClientService } from '../../../remote-mcp/mcp-client.service';
@@ -139,7 +140,7 @@ describe('.esm() and .remote() entries at startup', () => {
   });
 
   it('load the tools, resources and prompts they name', async () => {
-    const server = await FrontMcpInstance.createDirect(directConfig);
+    const server = await FrontMcpInstance.createDirect({ ...directConfig, skills: [] });
 
     const tools = (await server.listTools()).tools.map((tool) => tool.name);
     const resources = (await server.listResources()).resources.map((resource) => resource.name);
@@ -149,5 +150,30 @@ describe('.esm() and .remote() entries at startup', () => {
     expect(tools).toEqual(expect.arrayContaining(['echo', 'search', 'lookup', 'translate']));
     expect(resources).toEqual(expect.arrayContaining(['status', 'system-health', 'quota', 'uptime']));
     expect(prompts).toEqual(expect.arrayContaining(['greeting', 'code-review']));
+  });
+
+  it('refuse server-level skills', async () => {
+    await expect(FrontMcpInstance.createDirect(directConfig)).rejects.toThrow(
+      'Skill "rollback" from @acme/skills@^1.0.0 is not supported: per-entry .esm() and .remote() loading is ' +
+        'supported for tools, resources and prompts only; declare the skill with @Skill() or skill() instead',
+    );
+  });
+
+  it.each([
+    ['agent', { agents: [remoteAgent] }, `Agent "assistant" from ${REMOTE_URL}`],
+    ['skill', { skills: [esmSkill] }, 'Skill "deploy" from @acme/skills@^1.0.0'],
+    ['job', { jobs: [esmJob] }, 'Job "cleanup" from @acme/jobs@^1.0.0'],
+  ])('refuse %s entries of an app', async (_kind, entries, entryLabel) => {
+    @App({ name: 'refused-entries', ...entries })
+    class RefusedEntriesApp {}
+
+    const startup = FrontMcpInstance.createDirect({
+      info: { name: 'refused-entries', version: '1.0.0' },
+      apps: [RefusedEntriesApp],
+      logging: { level: LogLevel.Off },
+    });
+
+    await expect(startup).rejects.toThrow(ExternalEntryNotSupportedError);
+    await expect(startup).rejects.toThrow(`${entryLabel} is not supported`);
   });
 });
