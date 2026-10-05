@@ -6,7 +6,7 @@ tags: [extensibility, audit, skills, tamper-evident, signature, chain]
 
 # Skill Audit Log
 
-The `@frontmcp/adapters/skills` module provides a tamper-evident, hash-chained audit log for skill action executions. Every authority pass / authority fail / HTTP success / HTTP failure phase emitted by the skill-action executor (`run_workflow`'s `callTool`, from `@frontmcp/plugin-skilled-openapi`) is captured, signed, and chained so any later mutation breaks signature verification.
+The `@frontmcp/adapters/skills` module provides a tamper-evident, hash-chained audit log for skill action executions. Each authority pass / authority fail / HTTP success / HTTP failure phase emitted by the skill-action executor (`run_workflow`'s `callTool`, from `@frontmcp/plugin-skilled-openapi`) is signed and chained so any later mutation breaks signature verification. Capture is best-effort: a record whose signing or append fails, or that is dropped because the write queue is full, is not in the log; those cases are logged as `[skill-audit]` warnings and counted when `skillsConfig.audit.metrics` is set.
 
 ## Architecture
 

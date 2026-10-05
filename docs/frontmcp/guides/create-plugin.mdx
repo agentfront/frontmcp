@@ -475,7 +475,7 @@ async myHook(flowCtx: FlowCtxOf<'tools:call-tool'>) {
 
 ## Error Handling in Hooks
 
-Hooks should handle errors gracefully, especially in non-critical paths:
+Hooks should handle errors gracefully, especially in non-critical paths. Add this hook to the `CachePlugin` above, and `FrontMcpLogger` to its `@frontmcp/sdk` import:
 
 ```ts
 @ToolHook.Will('execute', { priority: 1000 })

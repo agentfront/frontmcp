@@ -69,6 +69,7 @@ const auditSigner = new Rs256AuditSigner(JSON.parse(process.env.BUNDLE_SIGNING_P
       enabled: true,
       signer: auditSigner,
       store: new StorageAdapterAuditStore(auditStorage),
+      metrics: createSkillAuditMetrics({ createCounter }),
       subjectMode: 'hash',
     },
   },

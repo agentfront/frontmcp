@@ -11,6 +11,7 @@ import {
   FlowHooksOf,
   LogLevel,
   Plugin,
+  Provider,
   Resource,
   ResourceContext,
   Tool,
@@ -37,6 +38,17 @@ class ServerAuditPlugin {
     hookRuns.push(`server:${ctx.state.resource?.name}`);
   }
 }
+
+@Provider({ name: 'server-audit-provider' })
+class ServerAuditProvider {
+  @ToolHook.Will('execute')
+  auditTool(ctx: FlowCtxOf<'tools:call-tool'>) {
+    hookRuns.push(`server-provider:${ctx.state.tool?.name}`);
+  }
+}
+
+@Plugin({ name: 'server-provider-audit', scope: 'server', providers: [ServerAuditProvider] })
+class ServerProviderAuditPlugin {}
 
 @Plugin({ name: 'app-audit' })
 class AppAuditPlugin {
@@ -68,7 +80,7 @@ class BetaFeedResource extends ResourceContext {
   name: 'Alpha',
   standalone: false,
   tools: [toolNamed('alpha_tool')],
-  plugins: [ServerAuditPlugin, AppAuditPlugin],
+  plugins: [ServerAuditPlugin, ServerProviderAuditPlugin, AppAuditPlugin],
 })
 class AlphaApp {}
 
@@ -97,11 +109,18 @@ describe("plugin scope: 'server' on an app", () => {
   });
 
   it('runs its hooks for the tools of the app that installed it', async () => {
-    expect(await hooksDuring(() => server.callTool('alpha_tool', {}))).toEqual(['app:alpha_tool', 'server:alpha_tool']);
+    expect(await hooksDuring(() => server.callTool('alpha_tool', {}))).toEqual([
+      'app:alpha_tool',
+      'server-provider:alpha_tool',
+      'server:alpha_tool',
+    ]);
   });
 
   it("runs its hooks for another app's tools, unlike an app-scoped plugin", async () => {
-    expect(await hooksDuring(() => server.callTool('beta_tool', {}))).toEqual(['server:beta_tool']);
+    expect(await hooksDuring(() => server.callTool('beta_tool', {}))).toEqual([
+      'server-provider:beta_tool',
+      'server:beta_tool',
+    ]);
   });
 
   it("runs its hooks for another app's resource reads", async () => {

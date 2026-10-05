@@ -160,7 +160,7 @@ The official [RememberPlugin](/frontmcp/plugins/remember-plugin) already declare
 
 ### App Scope (Default)
 
-The plugin's hooks run only for the entries of the app that installs it:
+Installed on an `@App`, the plugin's hooks run only for the entries of that app. Installed on `@FrontMcp({ plugins })`, they run for every app's entries whatever its `scope`:
 
 ```typescript
 @Plugin({
