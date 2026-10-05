@@ -166,8 +166,8 @@ export default class GatewayServer {}
 ```ts
 transportOptions: {
   timeout: 60000,              // Request timeout in milliseconds
-  retryAttempts: 3,            // Number of retry attempts on failure
-  retryDelayMs: 1000,          // Delay between retries
+  retryAttempts: 2,            // Retries of a tool call that failed with a transient error (default 2, 0 = off)
+  retryDelayMs: 1000,          // Delay before the first retry; each later retry waits twice as long
   fallbackToSSE: true,         // Fall back to legacy SSE when Streamable HTTP fails
   headers: { 'x-team': 'a' },  // Sent with every request
   protocolVersion: 'auto',     // 'legacy' (default) | '2026-07-28' | 'auto'
@@ -187,6 +187,42 @@ See [Protocol versions](/frontmcp/fundamentals/protocol-versions#proxying-a-2026
 Each remote tool, resource, resource template and prompt is listed once. The gateway re-reads the
 remote's lists when `cacheTTL` expires (or the remote reports a change), and replaces what it proxied
 before: entries the remote dropped disappear, and nothing is listed twice.
+
+### Remote Auth
+
+`remoteAuth` sets the credentials the gateway sends to the remote:
+
+```ts
+// The same credentials on every request, discovery included
+remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: process.env['UPSTREAM_TOKEN']! } }
+// credentials.type: 'bearer' | 'basic' (Authorization header) | 'apiKey' (headerName, default 'X-API-Key')
+
+// The calling user's token, on that user's tool calls, resource reads and prompt requests
+remoteAuth: { mode: 'forward' }
+remoteAuth: { mode: 'forward', tokenClaim: 'upstream_token', headerName: 'X-Upstream-Auth' }
+
+// No gateway credentials: the remote runs its own OAuth
+remoteAuth: { mode: 'oauth' }
+```
+
+With `forward`, the gateway sends `Bearer <token>` in `headerName` (default `Authorization`); with
+`tokenClaim`, the token is the value of that claim of the caller's JWT instead of the whole token. A call
+with no caller token is sent without one. Discovery (`tools/list` and the other lists) runs at startup and
+on refresh, outside any user's request, so it carries only `transportOptions.headers`: a remote that
+requires auth to list its entries needs `static` credentials or a header in `transportOptions.headers`.
+
+### Filtering Remote Entries
+
+`filter` picks which of the remote's entries the gateway proxies, by their names on the remote (before
+the namespace prefix). Resource templates are matched under `resources`:
+
+```ts
+App.remote('https://api.example.com/mcp', {
+  namespace: 'api',
+  filter: { exclude: { tools: ['delete_*'] } },                 // everything except these
+  // filter: { default: 'exclude', include: { tools: ['search'] } }, // nothing except these
+})
+```
 
 ### Caching Remote Tools
 

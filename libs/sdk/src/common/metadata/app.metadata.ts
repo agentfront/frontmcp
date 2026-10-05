@@ -215,13 +215,14 @@ export interface RemoteTransportOptions {
   timeout?: number;
 
   /**
-   * Number of retry attempts for failed requests.
-   * @default 3
+   * How many times a tool call that failed with a transient error (a dropped
+   * connection, a 5xx) is retried. `0` turns retries off.
+   * @default 2
    */
   retryAttempts?: number;
 
   /**
-   * Delay between retries in milliseconds.
+   * Delay before the first retry in milliseconds; each later retry waits twice as long.
    * @default 1000
    */
   retryDelayMs?: number;

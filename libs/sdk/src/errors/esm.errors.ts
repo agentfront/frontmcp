@@ -3,7 +3,7 @@
  * @description Error classes for ESM package loading, version resolution, and caching.
  */
 
-import { PublicMcpError, InternalMcpError, MCP_ERROR_CODES } from './mcp.error';
+import { InternalMcpError, MCP_ERROR_CODES, PublicMcpError } from './mcp.error';
 
 // ═══════════════════════════════════════════════════════════════════
 // LOADING ERRORS
@@ -110,7 +110,7 @@ export class EsmRegistryAuthError extends PublicMcpError {
   readonly mcpErrorCode = MCP_ERROR_CODES.UNAUTHORIZED;
 
   constructor(registryUrl?: string, details?: string) {
-    super('Authentication failed for npm registry', 'ESM_REGISTRY_AUTH_ERROR', 401);
+    super(`Authentication failed for npm registry${details ? `: ${details}` : ''}`, 'ESM_REGISTRY_AUTH_ERROR', 401);
     this.registryUrl = registryUrl;
     this.details = details;
   }
@@ -128,7 +128,11 @@ export class EsmInvalidSpecifierError extends PublicMcpError {
   readonly mcpErrorCode = MCP_ERROR_CODES.INVALID_PARAMS;
 
   constructor(specifier: string) {
-    super(`Invalid ESM package specifier: "${specifier}"`, 'ESM_INVALID_SPECIFIER', 400);
+    super(
+      specifier.trim() ? `Invalid package specifier: "${specifier}"` : 'Package specifier cannot be empty',
+      'ESM_INVALID_SPECIFIER',
+      400,
+    );
     this.specifier = specifier;
   }
 }

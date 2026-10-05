@@ -7,11 +7,14 @@
  * - **Browser**: fetch → in-memory cache → evaluate via Function constructor
  */
 
+import { sha256Hex } from '@frontmcp/utils';
+
 import { type FrontMcpLogger } from '../common';
+import { EsmCacheError, EsmManifestInvalidError, EsmPackageLoadError } from '../errors/esm.errors';
 import { type EsmRegistryAuth } from './esm-auth.types';
 import { type EsmCacheEntry, type EsmCacheManager } from './esm-cache';
 import { normalizeEsmExport, type FrontMcpPackageManifest } from './esm-manifest';
-import { buildEsmShUrl, type ParsedPackageSpecifier } from './package-specifier';
+import { applyImportMap, buildEsmShUrl, importMapPackages, type ParsedPackageSpecifier } from './package-specifier';
 import { VersionResolver } from './version-resolver';
 
 /**
@@ -67,6 +70,8 @@ export interface EsmModuleLoaderOptions {
   logger?: FrontMcpLogger;
   /** Custom ESM CDN base URL */
   esmBaseUrl?: string;
+  /** Import map: the bundle's imports of these specifiers are rewritten to their targets */
+  importMap?: Record<string, string>;
 }
 
 /**
@@ -86,12 +91,14 @@ export class EsmModuleLoader {
   private readonly timeout: number;
   private readonly logger?: FrontMcpLogger;
   private readonly esmBaseUrl?: string;
+  private readonly importMap: Record<string, string>;
 
   constructor(options: EsmModuleLoaderOptions) {
     this.cache = options.cache;
     this.timeout = options.timeout ?? 30000;
     this.logger = options.logger;
     this.esmBaseUrl = options.esmBaseUrl;
+    this.importMap = options.importMap ?? {};
     this.versionResolver = new VersionResolver({
       registryAuth: options.registryAuth,
       timeout: options.timeout,
@@ -112,15 +119,33 @@ export class EsmModuleLoader {
     this.logger?.debug(`Resolved ${specifier.fullName}@${specifier.range} → ${resolvedVersion}`);
 
     // Step 2: Check cache
-    const cached = await this.cache.get(specifier.fullName, resolvedVersion);
+    const cacheVersion = this.cacheVersionOf(resolvedVersion);
+    const cached = await this.cache.get(specifier.fullName, cacheVersion);
     if (cached) {
       this.logger?.debug(`Cache hit for ${specifier.fullName}@${resolvedVersion}`);
-      return this.loadFromCache(cached);
+      return this.loadFromCache(cached, specifier, resolvedVersion);
     }
 
     // Step 3: Fetch from esm.sh
     this.logger?.debug(`Cache miss, fetching ${specifier.fullName}@${resolvedVersion} from esm.sh`);
-    return this.fetchAndCache(specifier, resolvedVersion);
+    return this.fetchAndCache(specifier, resolvedVersion, cacheVersion);
+  }
+
+  /** The version a bundle is cached under: a bundle rewritten by an import map is cached apart, per map. */
+  private cacheVersionOf(resolvedVersion: string): string {
+    const entries = Object.entries(this.importMap).sort(([a], [b]) => a.localeCompare(b));
+    return entries.length > 0
+      ? `${resolvedVersion}+import-map.${sha256Hex(JSON.stringify(entries)).slice(0, 12)}`
+      : resolvedVersion;
+  }
+
+  /** The manifest of `rawModule`, or an {@link EsmManifestInvalidError} naming the package. */
+  private manifestOf(rawModule: unknown, specifier: ParsedPackageSpecifier): FrontMcpPackageManifest {
+    try {
+      return normalizeEsmExport(rawModule);
+    } catch (error) {
+      throw new EsmManifestInvalidError(specifier.fullName, (error as Error).message);
+    }
   }
 
   /**
@@ -134,7 +159,11 @@ export class EsmModuleLoader {
   /**
    * Load a module from a cached bundle.
    */
-  private async loadFromCache(entry: EsmCacheEntry): Promise<EsmLoadResult> {
+  private async loadFromCache(
+    entry: EsmCacheEntry,
+    specifier: ParsedPackageSpecifier,
+    resolvedVersion: string,
+  ): Promise<EsmLoadResult> {
     let rawModule: unknown;
 
     if (entry.bundlePath) {
@@ -158,14 +187,14 @@ export class EsmModuleLoader {
       // Browser mode or in-memory-only fallback
       rawModule = await this.importBundle(entry.bundleContent);
     } else {
-      throw new Error(`Cached bundle for "${entry.packageName}@${entry.resolvedVersion}" has no importable content`);
+      throw new EsmCacheError('read', entry.packageName, new Error('the cached bundle has no importable content'));
     }
 
-    const manifest = normalizeEsmExport(rawModule);
+    const manifest = this.manifestOf(rawModule, specifier);
 
     return {
       manifest,
-      resolvedVersion: entry.resolvedVersion,
+      resolvedVersion,
       source: 'cache',
       loadedAt: Date.now(),
       rawModule,
@@ -175,10 +204,28 @@ export class EsmModuleLoader {
   /**
    * Fetch ESM bundle from esm.sh, cache it, and load it.
    */
-  private async fetchAndCache(specifier: ParsedPackageSpecifier, resolvedVersion: string): Promise<EsmLoadResult> {
+  private async fetchAndCache(
+    specifier: ParsedPackageSpecifier,
+    resolvedVersion: string,
+    cacheVersion: string,
+  ): Promise<EsmLoadResult> {
+    try {
+      return await this.fetchAndImport(specifier, resolvedVersion, cacheVersion);
+    } catch (error) {
+      if (error instanceof EsmManifestInvalidError || error instanceof EsmCacheError) throw error;
+      throw new EsmPackageLoadError(specifier.fullName, resolvedVersion, error as Error);
+    }
+  }
+
+  private async fetchAndImport(
+    specifier: ParsedPackageSpecifier,
+    resolvedVersion: string,
+    cacheVersion: string,
+  ): Promise<EsmLoadResult> {
     const url = buildEsmShUrl(specifier, resolvedVersion, {
       baseUrl: this.esmBaseUrl,
       bundle: true,
+      external: importMapPackages(this.importMap),
     });
 
     const controller = new AbortController();
@@ -210,18 +257,18 @@ export class EsmModuleLoader {
       );
     }
 
-    const bundleContent = await response.text();
+    const bundleContent = applyImportMap(await response.text(), this.importMap);
     const etag = response.headers.get('etag') ?? undefined;
 
     // Cache the bundle (disk + memory in Node.js, memory-only in browser)
-    const entry = await this.cache.put(specifier.fullName, resolvedVersion, bundleContent, url, etag);
+    const entry = await this.cache.put(specifier.fullName, cacheVersion, bundleContent, url, etag);
 
     // Import the bundle
     const rawModule = entry.bundlePath
       ? await this.importFromPath(entry.bundlePath)
       : await this.importBundle(bundleContent);
 
-    const manifest = normalizeEsmExport(rawModule);
+    const manifest = this.manifestOf(rawModule, specifier);
 
     this.logger?.info(`Loaded ${specifier.fullName}@${resolvedVersion} from esm.sh`);
 
