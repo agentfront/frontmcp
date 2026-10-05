@@ -312,6 +312,8 @@ export {
   normalizeTTL,
   attachRedisErrorListener,
   DEFAULT_REDIS_ERROR_LOG_INTERVAL_MS,
+  mergeRedisUrlFields,
+  describeRedisUrlConflicts,
 } from './storage';
 export type {
   StorageAdapter,
@@ -323,11 +325,15 @@ export type {
   Unsubscribe,
   MemoryAdapterOptions,
   RedisAdapterOptions,
+  RedisHostConnectionConfig,
+  RedisUrlConnectionConfig,
   VercelKvAdapterOptions,
   UpstashAdapterOptions,
   StorageType,
   StorageConfig,
   RedisErrorListenerOptions,
+  RedisUrlMerge,
+  RedisUrlSiblingFields,
   CreateRedisClientOptions,
   ErrorEmitterClient,
 } from './storage';

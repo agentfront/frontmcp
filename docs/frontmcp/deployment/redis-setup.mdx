@@ -155,6 +155,8 @@ A managed Redis usually hands you a single connection URL. Pass it as `url` inst
 
 The URL is read into `host`, `port`, `password` and `db` when the config is parsed; `rediss://` turns `tls` on, and `?db=2` works when the path carries no database. The user part may be empty or `default` (Redis ACL users other than `default` are refused with a validation error). Percent-encode reserved characters in the password (`@` as `%40`, `%` as `%25`); a malformed escape such as `%ZZ` is a validation error that does not echo the password. `keyPrefix` and `defaultTtlMs` go next to `url` as usual.
 
+The URL is the base. `host`, `port`, `password`, `db` and `tls` written beside it only fill in what the URL leaves out — `{ url: 'redis://cache:6379', password: process.env.REDIS_PASSWORD }` connects to `cache:6379` with that password, and `tls: true` turns TLS on for a `redis://` URL. A field that contradicts the URL (`{ url: 'redis://cache:6379', host: 'other' }`, a different port, password or database, or `tls: false` with `rediss://`) is a validation error naming the field, never silently dropped. The same rule applies to `pubsub` and to `throttle.storage`'s `redis` block.
+
 ### Running more than one instance
 
 Redis lets several instances share sessions, but each instance still signs and encrypts with its own secrets. Give every instance the **same** values:

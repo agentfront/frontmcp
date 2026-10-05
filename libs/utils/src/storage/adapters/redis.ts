@@ -7,6 +7,7 @@
 
 import { StorageConfigError, StorageConnectionError } from '../errors';
 import { attachRedisErrorListener, type RedisErrorListenerOptions } from '../redis-error-listener';
+import { describeRedisUrlConflicts, mergeRedisUrlFields, type RedisUrlMerge } from '../redis-url';
 import type { MessageHandler, RedisAdapterOptions, SetOptions, Unsubscribe } from '../types';
 import { validateTTL } from '../utils';
 import { COMPARE_AND_DELETE_SCRIPT } from '../utils/compare-and-delete';
@@ -73,6 +74,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   private connecting?: Promise<void>;
   private readonly keyPrefix: string;
   private readonly subscriptionHandlers = new Map<string, Set<MessageHandler>>();
+  private readonly connectionUrl?: string;
+  private readonly urlFillIns: RedisUrlMerge['fillIns'];
 
   constructor(options: RedisAdapterOptions = {}) {
     super();
@@ -101,6 +104,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
     this.options = options;
     this.ownsClient = !hasClient;
     this.keyPrefix = options.keyPrefix ?? '';
+    this.connectionUrl = options.url ?? (options.config && 'url' in options.config ? options.config.url : undefined);
+    this.urlFillIns = this.connectionUrl ? resolveUrlFillIns(this.connectionUrl, options) : {};
   }
 
   // ============================================
@@ -135,9 +140,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
       } else {
         // Create new client
         const RedisClass = getRedisClass();
-        if (this.options.url) {
-          // Pass URL directly to constructor
-          client = new RedisClass(this.options.url, this.buildRedisOptions());
+        if (this.connectionUrl) {
+          client = new RedisClass(this.connectionUrl, this.buildRedisOptions());
         } else {
           client = new RedisClass(this.buildRedisOptions());
         }
@@ -440,15 +444,21 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
    * Build Redis options from config.
    */
   private buildRedisOptions(): RedisOptions {
-    if (this.options.url) {
+    if (this.connectionUrl) {
+      const { port, password, db, tls } = this.urlFillIns;
+      // ioredis keeps what the URL states and takes only the missing fields from here.
       return {
+        ...(port !== undefined ? { port } : {}),
+        ...(password !== undefined ? { password } : {}),
+        ...(db !== undefined ? { db } : {}),
+        ...(tls ? { tls: {} } : {}),
         lazyConnect: false,
         maxRetriesPerRequest: 3,
       };
     }
 
     const config = this.options.config;
-    if (!config) {
+    if (!config || 'url' in config) {
       throw new StorageConfigError('redis', 'Redis config is required when URL is not provided');
     }
     return {
@@ -469,8 +479,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
     const RedisClass = getRedisClass();
     let subscriber: Redis;
 
-    if (this.options.url) {
-      subscriber = new RedisClass(this.options.url);
+    if (this.connectionUrl) {
+      subscriber = new RedisClass(this.connectionUrl, this.buildRedisOptions());
     } else if (this.options.config) {
       subscriber = new RedisClass(this.buildRedisOptions());
     } else if (this.options.client) {
@@ -523,6 +533,18 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   getClient(): Redis | undefined {
     return this.client;
   }
+}
+
+function resolveUrlFillIns(connectionUrl: string, options: RedisAdapterOptions): RedisUrlMerge['fillIns'] {
+  const { url: configUrl, ...siblingFields } = { url: undefined, ...options.config };
+  if (options.url && configUrl && configUrl !== options.url) {
+    throw new StorageConfigError('redis', 'redis.url and redis.config.url name different servers; set one of them.');
+  }
+  const merge = mergeRedisUrlFields(connectionUrl, siblingFields);
+  if (merge && merge.conflicts.length > 0) {
+    throw new StorageConfigError('redis', describeRedisUrlConflicts(merge.conflicts));
+  }
+  return merge?.fillIns ?? {};
 }
 
 export interface CreateRedisClientOptions {

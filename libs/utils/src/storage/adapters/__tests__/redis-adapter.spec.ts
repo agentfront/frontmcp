@@ -161,6 +161,35 @@ describe('RedisStorageAdapter', () => {
     });
   });
 
+  describe('url beside config fields (#768)', () => {
+    it('passes the fields the URL leaves out to ioredis', async () => {
+      const adapter = new RedisStorageAdapter({ url: 'redis://cache:6379', config: { host: 'cache', password: 'p' } });
+      await adapter.connect();
+      expect(MockRedisClass).toHaveBeenCalledWith(
+        'redis://cache:6379',
+        expect.objectContaining({ password: 'p', lazyConnect: false }),
+      );
+    });
+
+    it('accepts a url inside config, like the top-level redis option', async () => {
+      const adapter = new RedisStorageAdapter({ config: { url: 'rediss://cache', db: 3 } });
+      await adapter.connect();
+      expect(MockRedisClass).toHaveBeenCalledWith('rediss://cache', expect.objectContaining({ db: 3 }));
+    });
+
+    it('rejects a field that contradicts the URL', () => {
+      expect(() => new RedisStorageAdapter({ url: 'redis://cache:6379', config: { host: 'other' } })).toThrow(
+        'redis host contradicts redis.url',
+      );
+    });
+
+    it('rejects two different URLs', () => {
+      expect(() => new RedisStorageAdapter({ url: 'redis://a', config: { url: 'redis://b' } })).toThrow(
+        StorageConfigError,
+      );
+    });
+  });
+
   describe('Connection Lifecycle', () => {
     it('should connect with URL configuration', async () => {
       const adapter = new RedisStorageAdapter({ url: 'redis://localhost:6379' });

@@ -147,6 +147,8 @@ redis: {
 },
 ```
 
+The URL is the base: `host` / `port` / `password` / `db` / `tls` beside it only fill in what the URL leaves out (`{ url: 'redis://cache:6379', password }` adds the password; `tls: true` upgrades a `redis://` URL). A field that contradicts the URL — another host, port, password or db, or `tls: false` with `rediss://` — is a validation error naming the field, never silently dropped. `pubsub` and `throttle.storage.redis` follow the same rule.
+
 ### For Vercel KV
 
 ```typescript
@@ -341,7 +343,7 @@ throttle: {
 },
 ```
 
-`throttle.storage` takes the `@frontmcp/utils` storage shape (`{ type: 'redis', redis: { config } }` or `{ type: 'redis', redis: { url } }`), not the top-level `redis` shape (which takes `{ host, ... }` or `{ url }`).
+`throttle.storage` takes the `@frontmcp/utils` storage shape (`{ type: 'redis', redis: { config } }`, `{ type: 'redis', redis: { url } }` or `{ type: 'redis', redis: { config: { url } } }`), not the top-level `redis` shape (which takes `{ host, ... }` or `{ url }`).
 
 ## Common Patterns
 
