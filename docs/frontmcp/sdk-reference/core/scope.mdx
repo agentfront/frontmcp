@@ -220,7 +220,8 @@ Get the event store (if configured).
 get eventStore(): EventStore | undefined
 ```
 
-`eventStore` is declared on the concrete `Scope`, not on `ScopeEntry`.
+`eventStore` is declared on `ScopeEntry`, the type of `this.scope` and of `instance.getScopes()`, so it typechecks without a
+cast (up to 1.9.0 it needed one).
 
 This is the **scope-wide** store, shared by every session. Transports must not
 hand it to a session directly — wrap it with `createSessionScopedEventStore(store, sessionId)`
@@ -271,7 +272,9 @@ Get the skill session manager (if skills exist).
 get skillSession(): SkillSessionManager | undefined
 ```
 
-`skillSession` is declared on the concrete `Scope`, not on `ScopeEntry` (the type of `this.scope` and of `instance.getScopes()`).
+`skillSession` is declared on `ScopeEntry`, the type of `this.scope` and of `instance.getScopes()`, so it typechecks without a
+cast (up to 1.9.0 it needed one). It is `undefined` when the scope has no skills and no plugin registers them at runtime
+(`dynamicSkills`).
 
 ### toolUI
 
@@ -439,20 +442,10 @@ const unsubscribe = scope.tools.subscribe({}, (event) => {
 
 ### Skill Sessions
 
-`SkillSessionManager` runs inside an `AsyncLocalStorage` context — call `runWithSession(sessionId, fn)` first, then query session state from inside `fn`. `skillSession` is not declared on `ScopeEntry`, and `SkillSessionManager` is not exported from `@frontmcp/sdk`, so describe the part you use:
+`SkillSessionManager` runs inside an `AsyncLocalStorage` context — call `runWithSession(sessionId, fn)` first, then query session state from inside `fn`:
 
 ```typescript
-import type { ScopeEntry } from '@frontmcp/sdk';
-
-interface SkillSessions {
-  runWithSession<T>(sessionId: string, fn: () => Promise<T>): Promise<T>;
-  getToolAllowlist(): string[];
-  isToolAllowed(toolName: string): boolean;
-  getActiveSkillIds(): string[];
-}
-
-const scope = instance.getPrimaryScope() as (ScopeEntry & { skillSession?: SkillSessions }) | undefined;
-const skillSession = scope?.skillSession;
+const skillSession = instance.getPrimaryScope()?.skillSession;
 
 if (skillSession) {
   await skillSession.runWithSession(sessionId, async () => {

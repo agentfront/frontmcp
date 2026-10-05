@@ -44,8 +44,7 @@ class EmptyApp {}
 @Tool({ name: 'skill_session_wired', inputSchema: {} })
 class SkillSessionWiredTool extends ToolContext {
   async execute() {
-    const scope = this.get(ScopeEntry) as ScopeEntry & { skillSession?: unknown };
-    return { wired: scope.skillSession !== undefined };
+    return { wired: this.get(ScopeEntry).skillSession !== undefined };
   }
 }
 
