@@ -112,48 +112,54 @@ cross-cutting concern, it's wrong — rework it through a hookable flow.
 
 ## Server Lifecycle Hooks
 
-In addition to flow-based hooks, the framework exposes a single `scope.onServerStarted(callback)` API for post-startup work. Callbacks register against the active `ScopeEntry` and run after `server.start()` completes.
+Besides flow hooks, the scope (`ScopeEntry`) takes two lifecycle callbacks:
 
-### `onServerStarted()`
+- **`scope.onServerStarted(callback: () => void | Promise<void>): void`** runs `callback` after the HTTP server starts listening, in `FrontMcpInstance.start()`. Callbacks run in registration order, each awaited. It never fires in direct mode (`create()`, `createDirect()`, `connect()`), where no HTTP server starts.
+- **`scope.onDispose(callback: () => void | Promise<void>): () => void`** runs `callback` when the scope is disposed, in direct mode too. Callbacks run once, in reverse order of registration; the returned function removes the callback.
 
-Use for warming caches, starting background indexing, or logging readiness once the server is live.
-
-**Signature:** `scope.onServerStarted(callback: () => void | Promise<void>): void`
-
-- Callbacks are stored on the active scope and invoked when `emitServerStarted()` runs after startup.
-- Supports both sync and async callbacks; multiple callbacks execute in registration order with `await`.
-
-The cleanest place to call it from a plugin is a factory provider whose `useFactory` receives the active scope, or from a class provider's lifecycle. A common pattern is to register the callback from a hook method using the plugin's injected scope (the plugin instance has a `get(token)` accessor available after construction):
+Use them for warming caches, starting background indexing, or releasing timers and connections. A plugin reaches the scope from a factory provider: `ScopeEntry` is a DI token, so `inject: () => [ScopeEntry]` hands the factory the scope it is built in. The plugin's providers are built while the server starts up, before it listens, so the callback is registered in time.
 
 ```typescript
-import { Plugin, ToolHook } from '@frontmcp/sdk';
+import { Plugin, ScopeEntry } from '@frontmcp/sdk';
 
-const { Will } = ToolHook;
+export class ReportCache {
+  private readonly reports = new Map<string, string>();
+
+  async warm(): Promise<void> {
+    this.reports.set('daily', await loadDailyReport());
+  }
+
+  get(name: string): string | undefined {
+    return this.reports.get(name);
+  }
+
+  clear(): void {
+    this.reports.clear();
+  }
+}
+
+const reportCacheProvider = {
+  name: 'cache-warmer:report-cache',
+  provide: ReportCache,
+  inject: () => [ScopeEntry],
+  useFactory: (scope: ScopeEntry) => {
+    const cache = new ReportCache();
+    scope.onServerStarted(() => cache.warm());
+    scope.onDispose(() => cache.clear());
+    return cache;
+  },
+};
 
 @Plugin({
   name: 'cache-warmer',
-  description: 'Warms caches when the server starts',
-  providers: [CacheService],
+  description: 'Warms the report cache once the server is listening',
+  providers: [reportCacheProvider],
+  exports: [reportCacheProvider],
 })
-export class CacheWarmerPlugin {
-  private registered = false;
-
-  // Lazy-register the lifecycle callback the first time any tool is called.
-  // For pure post-startup work, prefer registering from a Provider with access
-  // to the active scope, or expose the callback registration via a custom Provider.
-  @Will('parseInput', { priority: 1000 })
-  registerOnce() {
-    if (this.registered) return;
-    this.registered = true;
-    const cache = this.get(CacheService);
-    // `this.get` is wired by the plugin registry post-construction; resolve scope similarly
-    // via a Provider that exposes onServerStarted, e.g. a `ScopeAccessor` wrapper.
-    cache.warmAllInBackground();
-  }
-}
+export class CacheWarmerPlugin {}
 ```
 
-> **Pattern note:** `ScopeEntry` is not directly DI-injectable into a plugin constructor (it is a scope-level entry, not a token-registered provider). For lifecycle work, prefer wiring `onServerStarted(...)` through a Provider that receives the scope via `providers.getActiveScope()`, or use Provider/Adapter `onInit` hooks where appropriate. See `apps/demo` for working patterns.
+Listing the provider in `exports` too lets the app's tools resolve the cache with `this.get(ReportCache)`; `exports` takes provider definitions, not bare tokens. Inside a tool, resource or prompt, the scope itself is `this.scope`. See [Scope lifecycle hooks](https://docs.agentfront.dev/frontmcp/sdk-reference/core/scope#lifecycle-hooks).
 
 ## Pre-Built Hook Type Exports
 
