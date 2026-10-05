@@ -146,6 +146,9 @@ const auth: AuthOptionsInput = {
 };
 ```
 
+A bare-token header has no HTTP auth scheme, so a request without the key gets a 401 with no `WWW-Authenticate`
+header (up to 1.9.1 the header was sent empty). With a scheme, the challenge names it and the `realm`.
+
 <Warning>
   A shared secret identifies a **caller**, not a user. There is no per-user identity, no revocation short of rotating the token and redeploying, and no progressive auth. Use `local` or `remote` when you need any of those. Rotate by deploying with both the old and new token in `tokens`, then removing the old one.
 </Warning>
@@ -200,8 +203,15 @@ sequenceDiagram
 | `providerConfig.additionalIssuers` | `string[]`           | -               | Extra `iss` values to trust beyond `provider` (e.g. a gateway that re-mints tokens). Trusted verbatim — set only to issuers you control |
 | `providerConfig.verifyIssuer`      | `boolean`            | `true`          | Validate the token `iss` claim. Setting `false` **disables issuer checking entirely** — see the security note below                     |
 | `expectedAudience`                 | `string \| string[]` | Resource URL    | Required audience claim value(s) — typically the protected resource URL. Defaults to the derived resource URL when omitted              |
-| `requiredScopes`                   | `string[]`           | `[]`            | Scopes that must be present                                                                                                             |
+| `requiredScopes`                   | `string[]`           | `[]`            | Scopes that must be present, read from the token's `scope` and `scp` claims (a space-separated string or an array); otherwise 403       |
 | `allowAnonymous`                   | `boolean`            | `false`         | Allow requests without tokens                                                                                                           |
+
+Without `providerConfig.jwks` or `jwksUri`, the keys are fetched from `<provider>/.well-known/jwks.json`, else from the
+`jwks_uri` of the provider's OAuth metadata or `/.well-known/openid-configuration`.
+
+A verified token's subject is its `sub`. A token without one (some IdPs issue client-credentials tokens that way)
+takes its subject from `client_id`, else `azp`, as RFC 9068 §2.2 names the client the subject of such a token; a token
+with none of the three has no subject and reads as anonymous (`this.auth.isAnonymous`).
 
 ### Claim validation
 
