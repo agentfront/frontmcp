@@ -32,6 +32,10 @@ module.exports = {
     ],
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
+  moduleNameMapper: {
+    ...require('../../jest.imports-mapper'),
+    '^@frontmcp/testing/setup$': '<rootDir>/../testing/src/setup.ts',
+  },
   coverageDirectory: '../../coverage/unit/cli',
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/index.ts', '!src/core/cli.ts'],
   coverageThreshold: {

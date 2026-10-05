@@ -95,12 +95,16 @@ with `SyntaxError: Unexpected token 'export'`.
 your project root, `frontmcp test` delegates to it instead of injecting the
 default config. You can also drop a `jest.config.ts` to customise transforms,
 projects, setup files, or coverage paths while still running via `frontmcp
-test`. Delegation is total, so remember to carry over `transformIgnorePatterns`
-for ESM-only dependencies — or start from `preset: '@frontmcp/testing'`, which
-already includes them and compiles with the same `@swc/jest` transform as the
-injected config, so the project needs no `ts-jest`. Name the package, not
-`'@frontmcp/testing/jest-preset'`: Jest looks for `jest-preset.js` at the root
-of the package it is given.
+test`. Delegation is total: `test.esmPackages`, `test.testMatch` and
+`test.timeoutMs` no longer apply. Start from `preset: '@frontmcp/testing'` to
+keep the injected defaults: the same `@swc/jest` transform (so the project needs
+no `ts-jest`), the same discovery (`src/**/*.spec.ts(x)`,
+`__tests__/**/*.spec.ts(x)`, `e2e/**/*.e2e.spec.ts(x)`), the same 60-second
+timeout, and the same `transformIgnorePatterns` for `jose`, `@noble/hashes` and
+`@noble/ciphers`. Setting `testMatch` or `transformIgnorePatterns` in your config
+replaces the preset's list rather than extending it, so copy its entries into
+yours. Name the package, not `'@frontmcp/testing/jest-preset'`: Jest looks for
+`jest-preset.js` at the root of the package it is given.
 </Info>
 
 ### 2. Write Your First Test

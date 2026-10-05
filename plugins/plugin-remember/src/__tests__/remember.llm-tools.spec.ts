@@ -81,6 +81,40 @@ describe('RememberPlugin LLM tools', () => {
     expect(structured(await client.callTool('recall', { key: 'colour' }))).toMatchObject({ found: false });
   });
 
+  describe('expiry (#717)', () => {
+    it('reports the defaultTTL deadline from remember_this, and recall reports the same one', async () => {
+      client = await connect(serverWith({ tools: { enabled: true }, defaultTTL: 60 }));
+      const before = Date.now();
+
+      const stored = structured(await client.callTool('remember_this', { key: 'colour', value: 'green' }));
+      const after = Date.now();
+
+      expect(stored['expiresAt']).toBeGreaterThanOrEqual(before + 60_000);
+      expect(stored['expiresAt']).toBeLessThanOrEqual(after + 60_000);
+      expect(structured(await client.callTool('recall', { key: 'colour' }))['expiresAt']).toBe(stored['expiresAt']);
+    });
+
+    it('reports the deadline of an explicit ttl, the same one recall reports', async () => {
+      client = await connect(serverWith({ tools: { enabled: true }, defaultTTL: 60 }));
+      const before = Date.now();
+
+      const stored = structured(await client.callTool('remember_this', { key: 'colour', value: 'green', ttl: 5 }));
+
+      expect(stored['expiresAt']).toBeGreaterThanOrEqual(before + 5_000);
+      expect(stored['expiresAt']).toBeLessThanOrEqual(Date.now() + 5_000);
+      expect(structured(await client.callTool('recall', { key: 'colour' }))['expiresAt']).toBe(stored['expiresAt']);
+    });
+
+    it('reports no expiry without defaultTTL or a ttl', async () => {
+      client = await connect(serverWith({ tools: { enabled: true } }));
+
+      const stored = structured(await client.callTool('remember_this', { key: 'colour', value: 'green' }));
+
+      expect(stored['expiresAt']).toBeUndefined();
+      expect(structured(await client.callTool('recall', { key: 'colour' }))['expiresAt']).toBeUndefined();
+    });
+  });
+
   describe('prefix', () => {
     it('names every tool with it', async () => {
       client = await connect(serverWith({ tools: { enabled: true, prefix: 'memory_' } }));

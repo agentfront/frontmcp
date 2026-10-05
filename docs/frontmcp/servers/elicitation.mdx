@@ -404,12 +404,12 @@ FrontMCP provides flow hooks to intercept elicitation requests and results. Hook
 
 ### Hook Types
 
-| Decorator          | Description                                       |
-| ------------------ | ------------------------------------------------- |
-| `.Will('stage')`   | Runs **before** the stage executes                |
-| `.Did('stage')`    | Runs **after** the stage completes                |
-| `.Stage('stage')`  | Runs **as** the stage (replaces default)          |
-| `.Around('stage')` | Wraps stage execution (call `next()` to continue) |
+| Decorator          | Description                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| `.Will('stage')`   | Runs **before** the stage executes                                                    |
+| `.Did('stage')`    | Runs **after** the stage completes                                                    |
+| `.Stage('stage')`  | Runs as one more step of the stage, next to the flow's own step (does not replace it) |
+| `.Around('stage')` | Wraps stage execution (call `next()` to continue)                                     |
 
 ### ElicitationRequestHook
 

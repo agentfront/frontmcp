@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useIsomorphicLayoutEffect } from '../utils/useIsomorphicLayoutEffect';
 import { useResolvedServer } from './useResolvedServer';
 
 interface StoreResourceState {
@@ -57,8 +58,8 @@ export function useStoreResource(uri: string, options?: StoreResourceOptions): U
 
   const fetchRef = useRef(fetchResource);
 
-  // Set after commit, never during render: a render React discards must not reach the update listener
-  useEffect(() => {
+  // Set at commit, before passive effects and never during render: a render React discards must not reach the update listener
+  useIsomorphicLayoutEffect(() => {
     uriRef.current = uri;
     fetchRef.current = fetchResource;
   }, [uri, fetchResource]);

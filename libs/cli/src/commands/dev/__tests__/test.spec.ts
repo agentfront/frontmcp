@@ -36,6 +36,7 @@ type JestConfig = {
   collectCoverage: boolean;
   collectCoverageFrom?: string[];
   transformIgnorePatterns: string[];
+  testPathIgnorePatterns: string[];
   verbose: boolean;
 };
 
@@ -154,6 +155,30 @@ describe('generateJestConfig (issue #402)', () => {
       const cfg = generateJestConfig('/proj', makeOpts()) as JestConfig;
       expect(cfg.testTimeout).toBe(60_000);
     });
+  });
+});
+
+describe('the @frontmcp/testing jest preset', () => {
+  const SHARED_KEYS = [
+    'testEnvironment',
+    'transform',
+    'moduleFileExtensions',
+    'testTimeout',
+    'testMatch',
+    'transformIgnorePatterns',
+    'testPathIgnorePatterns',
+    'collectCoverage',
+    'verbose',
+  ] as const;
+
+  const pickSharedKeys = (config: JestConfig) => Object.fromEntries(SHARED_KEYS.map((key) => [key, config[key]]));
+
+  it('carries the config frontmcp test injects, so a jest.config built on it runs the same', () => {
+    const preset = require('@frontmcp/testing/jest-preset') as JestConfig;
+    const [presetTransformer] = Object.values(preset.transform)[0];
+    const injected = generateJestConfig('/proj', makeOpts(), undefined, presetTransformer) as JestConfig;
+
+    expect(pickSharedKeys(preset)).toEqual(pickSharedKeys(injected));
   });
 });
 

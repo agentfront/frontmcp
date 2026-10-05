@@ -7,11 +7,11 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 
 ## Overview
 
-```typescript
-import { HookRegistry } from '@frontmcp/sdk';
+`HookRegistry` is not exported from `@frontmcp/sdk`: reach a scope's registry through `scope.hooks`. Inside a tool, resource or prompt, `this.scope` is the scope serving the call.
 
-// Access via scope
-const hooks = scope.hooks;
+```typescript
+// In a tool, resource or prompt
+const hooks = this.scope.hooks;
 
 // Get all hooks
 const allHooks = hooks.getHooks();
@@ -20,6 +20,8 @@ const allHooks = hooks.getHooks();
 const toolHooks = hooks.getFlowHooks('tools:call-tool');
 ```
 
+You do not register hooks through the registry. Declare them with the decorators of the flow (`ToolHook.Will('execute')`, `FlowHooksOf('<flow-name>')`) on a plugin, a provider or an entry class, and the SDK registers them. See [Flow Hooks](/frontmcp/sdk-reference/decorators/hooks).
+
 ## Methods
 
 ### getHooks()
@@ -27,7 +29,7 @@ const toolHooks = hooks.getFlowHooks('tools:call-tool');
 Get all hooks (instances, unordered).
 
 ```typescript
-getHooks(): ReadonlyArray<HookEntry>
+getHooks(): HookEntry[]
 ```
 
 **Example:**
@@ -35,16 +37,17 @@ getHooks(): ReadonlyArray<HookEntry>
 ```typescript
 const hooks = registry.getHooks();
 for (const hook of hooks) {
-  console.log(`Hook: ${hook.flow} @ ${hook.stage}`);
+  const { flow, type, stage, method } = hook.metadata;
+  console.log(`Hook: ${flow} ${type} ${stage} (${method})`);
 }
 ```
 
 ### getFlowHooks()
 
-Get hooks for a given flow, sorted by priority (descending).
+Get the plugin and provider hooks of a flow, sorted by priority (descending).
 
 ```typescript
-getFlowHooks(flow: string): ReadonlyArray<HookEntry>
+getFlowHooks(flow: FlowName): HookEntry[]
 ```
 
 **Example:**
@@ -56,40 +59,41 @@ const hooks = registry.getFlowHooks('tools:call-tool');
 
 ### getFlowStageHooks()
 
-Get hooks for a specific flow and stage.
+Get the plugin and provider hooks on one stage of a flow: its `Will`, `Did`, `Around` and `Stage` hooks alike. `metadata.type` tells them apart.
 
 ```typescript
-getFlowStageHooks(flow: string, stage: string): ReadonlyArray<HookEntry>
+getFlowStageHooks(flow: FlowName, stage: string): HookEntry[]
 ```
 
 **Example:**
 
 ```typescript
-const beforeHooks = registry.getFlowStageHooks('tools:call-tool', 'beforeExecute');
-const afterHooks = registry.getFlowStageHooks('tools:call-tool', 'afterExecute');
+const executeHooks = registry.getFlowStageHooks('tools:call-tool', 'execute');
+const beforeHooks = executeHooks.filter((hook) => hook.metadata.type === 'will');
+const afterHooks = executeHooks.filter((hook) => hook.metadata.type === 'did');
 ```
 
 ### getFlowHooksForOwner()
 
-Get flow hooks filtered by owner.
+Get the hooks a flow runs for an entry of the given owner (an app id): hooks with no owner or owned by the scope or a plugin, and the hooks owned by that app. A hook of another app declared with `appliesTo: 'uncovered-apps'` is included when no instance of the same hook applies to the owner. Without `ownerId`, returns every hook of the flow.
 
 ```typescript
-getFlowHooksForOwner(flow: string, ownerId?: string): ReadonlyArray<HookEntry>
+getFlowHooksForOwner(flow: FlowName, ownerId?: string): HookEntry[]
 ```
 
 **Example:**
 
 ```typescript
-// Get hooks only for 'my-app' owner
+// Get the hooks that run for the tools of the 'my-app' app
 const appHooks = registry.getFlowHooksForOwner('tools:call-tool', 'my-app');
 ```
 
 ### getClsHooks()
 
-Get hooks defined on a given class.
+Get the hooks declared on a given entry class (a `@Tool`, `@Resource`, `@Prompt` or `@Agent` class).
 
 ```typescript
-getClsHooks(token: Token): ReadonlyArray<HookEntry>
+getClsHooks(token: Token): HookEntry[]
 ```
 
 **Example:**
@@ -100,40 +104,33 @@ const classHooks = registry.getClsHooks(MyToolClass);
 
 ### registerHooks()
 
-Register hooks dynamically.
+Register hook records. The SDK calls it when it sets up plugins, providers and entry classes, with the records it reads from their decorated methods.
 
 ```typescript
-registerHooks(embedded: boolean, ...records: HookRecord[]): void
+registerHooks(embedded: boolean, ...records: HookRecord[]): Promise<void[]>
 ```
 
-| Parameter  | Type           | Description                      |
-| ---------- | -------------- | -------------------------------- |
-| `embedded` | `boolean`      | Whether hooks are class-embedded |
-| `records`  | `HookRecord[]` | Hook definitions to register     |
-
-**Example:**
-
-```typescript
-registry.registerHooks(false, {
-  flow: 'tools:call-tool',
-  stage: 'beforeExecute',
-  priority: 100,
-  handler: async (ctx) => {
-    console.log('Tool called:', ctx.toolName);
-  },
-});
-```
+| Parameter  | Type           | Description                                                                          |
+| ---------- | -------------- | ------------------------------------------------------------------------------------ |
+| `embedded` | `boolean`      | `true` for hooks declared on an entry class (indexed by class), `false` for the rest |
+| `records`  | `HookRecord[]` | `{ kind: HookKind.METHOD_TOKEN, provide, metadata }`, one per hook method            |
 
 ## Hook Structure
 
+A `HookEntry` carries the hook's `metadata`:
+
 ```typescript
-interface HookEntry {
-  flow: string;           // Flow name (e.g., 'tools:call-tool')
-  stage: string;          // Stage name (e.g., 'beforeExecute')
-  priority: number;       // Order within a stage (lower runs first)
-  handler: HookHandler;   // Handler function
-  ownerId?: string;       // Owner filter
-  embedded: boolean;      // Whether embedded in a class
+interface HookMetadata {
+  flow: FlowName;                         // Flow name (e.g., 'tools:call-tool')
+  stage: string;                          // Stage name (e.g., 'execute')
+  type: 'will' | 'did' | 'around' | 'stage';
+  method: string;                         // Name of the hook method
+  target: Token | null;                   // Instance (or class, for a static hook) the method runs on
+  static?: boolean;
+  priority?: number;                      // Order within a stage (lower runs first, default 0)
+  filter?: (ctx) => boolean | Promise<boolean>;
+  appliesTo?: 'own-app' | 'uncovered-apps';
+  owner?: EntryOwnerRef;                  // The app, agent, plugin or scope that registered the hook
 }
 ```
 
@@ -154,81 +151,87 @@ interface HookEntry {
   </Card>
 </CardGroup>
 
+See [Flow Hooks](/frontmcp/sdk-reference/decorators/hooks#available-flows) for every flow with ready-made hook decorators.
+
 ## Flow Stages
 
-Most flows have these stages:
+Each flow declares its own stages. A hook names one of them and runs relative to it by its type: `Will` before the stage, `Did` after it, `Around` wrapping it, and `Stage` as one more step of it, next to the flow's own step (it does not replace it). The stages of `tools:call-tool`, in order:
 
-| Stage              | Description                   |
-| ------------------ | ----------------------------- |
-| `beforeValidation` | Before input validation       |
-| `afterValidation`  | After input validation        |
-| `beforeExecute`    | Before execution              |
-| `afterExecute`     | After execution               |
-| `onError`          | On error (for error handling) |
-| `finally`          | Always runs (cleanup)         |
+```
+parseInput → ensureRemoteCapabilities → findTool → checkToolAuthorization → checkEntryAuthorities
+  → createTaskIfRequested → createToolCallContext → checkToolCredentials → acquireQuota → acquireSemaphore
+  → validateInput → execute → validateOutput → releaseSemaphore → releaseQuota → applyUI → finalize
+```
+
+There are no `beforeExecute`/`afterExecute` stages: hook `execute` with `Will` or `Did`. When a stage fails, the flow skips the stages after it and runs its cleanup stages (in `tools:call-tool`, `releaseSemaphore`, `releaseQuota`, `applyUI` and `finalize`).
 
 ## Priority
 
 The registry lists hooks by priority, highest first. When a flow runs a stage, its hooks run in ascending priority:
 
 ```typescript
-// Priority 50 runs before priority 100
-registry.registerHooks(false,
-  { flow: 'tools:call-tool', stage: 'beforeExecute', priority: 100, handler: firstHook },
-  { flow: 'tools:call-tool', stage: 'beforeExecute', priority: 50, handler: secondHook },
-);
+import { Plugin, ToolHook } from '@frontmcp/sdk';
+
+@Plugin({ name: 'ordering' })
+class OrderingPlugin {
+  @ToolHook.Will('execute', { priority: 100 })
+  runsSecond() {}
+
+  @ToolHook.Will('execute', { priority: 50 })
+  runsFirst() {}
+}
 ```
 
 ## Embedded vs External Hooks
 
 ### Embedded Hooks
 
-Defined on tool/resource/prompt classes using `@Hooks` decorator:
+Declared on a tool, resource, prompt or agent class with the flow's decorators:
 
 ```typescript
+import { Tool, ToolContext, ToolHook } from '@frontmcp/sdk';
+
 @Tool({ name: 'my_tool', inputSchema: {} })
-@Hooks([
-  {
-    stage: 'beforeExecute',
-    handler: (ctx) => console.log('Before execute'),
-  },
-])
 class MyTool extends ToolContext {
-  async execute() { }
+  @ToolHook.Will('execute')
+  beforeExecute() {
+    this.logger.info('Before execute');
+  }
+
+  async execute() {
+    return { ok: true };
+  }
 }
 ```
 
 Embedded hooks:
 
-- Are scoped to their class
+- Are scoped to their class, and run on the instance built for each call
 - Use `getClsHooks()` for lookup
-- Have `embedded: true`
+- Are registered with `registerHooks(true, ...)`
 
 ### External Hooks
 
-Registered via plugins or directly:
+Declared on a plugin or a provider:
 
 ```typescript
-@Plugin({
-  name: 'audit',
-  hooks: [
-    {
-      flow: 'tools:call-tool',
-      stage: 'afterExecute',
-      handler: async (ctx) => {
-        await auditLog(ctx.toolName, ctx.result);
-      },
-    },
-  ],
-})
-class AuditPlugin { }
+import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
+
+@Plugin({ name: 'audit' })
+class AuditPlugin {
+  @ToolHook.Did('execute')
+  async audit(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { tool, toolContext } = ctx.state.required;
+    await auditLog(tool.name, toolContext.output);
+  }
+}
 ```
 
 External hooks:
 
 - Can target any flow
-- Use `getFlowHooks()` for lookup
-- Have `embedded: false`
+- Use `getFlowHooks()` and `getFlowStageHooks()` for lookup
+- Are registered with `registerHooks(false, ...)`
 
 ## Hook Context
 
@@ -264,12 +267,12 @@ Read a state key directly (`ctx.state.tool`, `undefined` until a stage sets it) 
 
 Unlike other registries, HookRegistry uses specialized indexes:
 
-| Index              | Key          | Description                   |
-| ------------------ | ------------ | ----------------------------- |
-| `recordsByCls`     | `Token`      | Historical records by class   |
-| `entriesByCls`     | `Token`      | Hook instances by class       |
-| `hooksByFlow`      | `flow`       | Hooks indexed by flow         |
-| `hooksByFlowStage` | `flow:stage` | Hooks indexed by flow + stage |
+| Index              | Key                  | Description                   |
+| ------------------ | -------------------- | ----------------------------- |
+| `recordsByCls`     | `Token`              | Historical records by class   |
+| `entriesByCls`     | `Token`              | Hook instances by class       |
+| `hooksByFlow`      | `flow`               | Hooks indexed by flow         |
+| `hooksByFlowStage` | `flow`, then `stage` | Hooks indexed by flow + stage |
 
 ## Related
 

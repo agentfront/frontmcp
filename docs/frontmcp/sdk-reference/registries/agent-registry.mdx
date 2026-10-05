@@ -7,11 +7,15 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 
 ## Overview
 
+`AgentRegistry` is not exported from `@frontmcp/sdk`: reach it through `scope.agents`, and name its type as `ScopeEntry['agents']`. Inside a tool, resource or prompt, `this.scope` is the scope serving the call.
+
 ```typescript
-import { AgentRegistry } from '@frontmcp/sdk';
+import type { ScopeEntry } from '@frontmcp/sdk';
+
+type AgentRegistry = ScopeEntry['agents'];
 
 // Access via scope
-const agents = scope.agents;
+const agents: AgentRegistry = scope.agents;
 
 // List all agents
 const allAgents = agents.getAgents();

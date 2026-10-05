@@ -6,9 +6,9 @@ description: 'Demonstrates wrapping tool execution with an `@Around` hook to imp
 tags: [development, cache, plugin-hooks, plugin, hooks, caching]
 features:
   - 'Using `@Around` to wrap the `execute` stage with before-and-after logic'
-  - 'Calling `await next()` to invoke the original stage and capture its result'
+  - 'Calling `await next()` to run the original stage, then reading its result from `toolContext.output`'
   - 'Short-circuiting execution by returning cached data without calling `next()`'
-  - 'Building a cache key from `ctx.toolName` and `ctx.input`'
+  - 'Building a cache key from the tool `name` and `arguments` in `ctx.state.required.input`'
 ---
 
 # Caching Plugin with @Around Hook
@@ -19,8 +19,7 @@ Demonstrates wrapping tool execution with an `@Around` hook to implement result 
 
 ```typescript
 // src/plugins/cache.plugin.ts
-import { Plugin } from '@frontmcp/sdk';
-import { ToolHook } from '@frontmcp/sdk';
+import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
 
 const { Around } = ToolHook;
 
@@ -29,7 +28,7 @@ export class CachePlugin {
   private cache = new Map<string, { data: unknown; expiry: number }>();
 
   @Around('execute', { priority: 90 })
-  async cacheResults(ctx, next) {
+  async cacheResults(ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<void>) {
     const { name, arguments: toolArguments } = ctx.state.required.input;
     const key = `${name}:${JSON.stringify(toolArguments)}`;
     const toolContext = ctx.state.required.toolContext;
@@ -52,7 +51,8 @@ export class CachePlugin {
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
+
 import { CachePlugin } from './plugins/cache.plugin';
 
 @App({
@@ -71,9 +71,9 @@ class MyServer {}
 ## What This Demonstrates
 
 - Using `@Around` to wrap the `execute` stage with before-and-after logic
-- Calling `await next()` to invoke the original stage and capture its result
+- Calling `await next()` to run the original stage, then reading its result from `toolContext.output`
 - Short-circuiting execution by returning cached data without calling `next()`
-- Building a cache key from `ctx.toolName` and `ctx.input`
+- Building a cache key from the tool `name` and `arguments` in `ctx.state.required.input`
 
 ## Related
 

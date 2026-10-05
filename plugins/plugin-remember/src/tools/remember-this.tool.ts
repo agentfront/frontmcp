@@ -13,7 +13,7 @@ export const rememberThisInputSchema = {
   key: z.string().min(1).describe('What to call this memory (e.g., "user_preference", "last_action")'),
   value: z.unknown().describe('The value to remember (any JSON-serializable data)'),
   scope: z.enum(['session', 'user', 'tool', 'global']).optional().describe(REMEMBER_SCOPE_DESCRIPTION),
-  ttl: z.number().positive().optional().describe('Forget after this many seconds'),
+  ttl: z.number().int().positive().optional().describe('Forget after this many whole seconds'),
   brand: z
     .enum(['preference', 'cache', 'state', 'conversation', 'custom'])
     .optional()
@@ -71,19 +71,17 @@ export default class RememberThisTool extends ToolContext {
       throw this.fail(new RememberScopeNotAllowedError(scope, allowedScopes));
     }
 
-    await remember.set(input.key, input.value, {
+    const entry = await remember.set(input.key, input.value, {
       scope,
       ttl: input.ttl,
       brand: input.brand,
     });
 
-    const expiresAt = input.ttl ? Date.now() + input.ttl * 1000 : undefined;
-
     return {
       success: true,
       key: input.key,
       scope,
-      expiresAt,
+      expiresAt: entry.expiresAt,
     };
   }
 }

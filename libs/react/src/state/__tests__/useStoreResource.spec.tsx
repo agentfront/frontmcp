@@ -1,6 +1,8 @@
 import { act, render, renderHook } from '@testing-library/react';
 import React from 'react';
 
+import type { CallToolResult } from '@frontmcp/sdk';
+
 import { ComponentRegistry } from '../../components/ComponentRegistry';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
@@ -650,6 +652,42 @@ describe('useStoreResource (state module)', () => {
       expect(JSON.parse(state.contents[0].text)).toEqual({ count: 3, tag: 7 });
       expect(JSON.parse(selected.contents[0].text)).toEqual(['count', 7]);
       expect(JSON.parse(action.content[0].text)).toEqual({ success: true, result: 'bump:7' });
+    });
+
+    it('runs the committed action from a layout effect, before passive effects run', async () => {
+      const store = createMockStore({ count: 3 });
+      const actionsSeenAfterCommit: Array<Promise<CallToolResult | undefined>> = [];
+      function InlineStore({ tag }: { tag: number }) {
+        useStoreResource({
+          name: 'inline',
+          getState: () => ({ ...store.getState(), tag }),
+          subscribe: store.subscribe,
+          actions: { bump: () => `bump:${tag}` },
+        });
+        return null;
+      }
+      function RunsActionOnCommit({ tag }: { tag: number }) {
+        React.useLayoutEffect(() => {
+          if (tag > 1) actionsSeenAfterCommit.push(dynamicRegistry.findTool('inline_bump')?.execute({}));
+        }, [tag]);
+        return null;
+      }
+      const Wrapper = createWrapper(dynamicRegistry);
+      const tree = (tag: number) => (
+        <Wrapper>
+          <InlineStore tag={tag} />
+          <RunsActionOnCommit tag={tag} />
+        </Wrapper>
+      );
+      const { rerender } = render(tree(1));
+
+      await act(async () => {
+        rerender(tree(2));
+      });
+
+      expect((await actionsSeenAfterCommit[0])?.content).toEqual([
+        { type: 'text', text: JSON.stringify({ success: true, result: 'bump:2' }) },
+      ]);
     });
 
     it('reads and runs the committed functions while a newer render is suspended', async () => {
