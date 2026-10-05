@@ -184,29 +184,34 @@ if (result.ok) {
 
 ## DI Integration
 
-`SkillAuditWriterToken` is the DI token for the active writer. Plugins that need to emit additional audit records (e.g., a custom authority gate) can resolve it:
+`SkillAuditWriterToken` is the DI token for the active writer. Plugins that need to emit additional audit records (e.g., a custom authority gate) can resolve it. A hook receives the flow, whose `scope` is protected and whose `get()` throws for a token nothing registered, so resolve the writer through the tool's execution context: `tryGet()` returns `undefined` (and logs a warning) when `skillsConfig.audit` is not enabled.
 
 ```typescript
 import { SkillAuditWriterToken } from '@frontmcp/adapters/skills';
+import { Plugin, ToolHook, type FlowCtxOf } from '@frontmcp/sdk';
 
-class MyPlugin extends DynamicPlugin {
+@Plugin({ name: 'authority-audit' })
+export default class AuthorityAuditPlugin {
   @ToolHook.Will('execute')
-  willExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): void {
-    const writer = flowCtx.scope.tryGet(SkillAuditWriterToken);
+  recordAuthorityPass(flowCtx: FlowCtxOf<'tools:call-tool'>): void {
+    const toolContext = flowCtx.state.required.toolContext;
+    const writer = toolContext.tryGet(SkillAuditWriterToken);
     // Use the phase-specific method matching the event you're recording.
     // The writer assembles the canonical record (sequence, prevHash,
     // signature, signatureKeyId, signatureAlg) for you.
-    writer?.writeAuthorityPass({
+    void writer?.writeAuthorityPass({
       subject: 'user-id',
       skillId: 'my-skill',
       actionId: 'my-action',
       bundleId: 'bundle:id',
       bundleVersion: '1.0.0',
-      input: {},
+      input: toolContext.input,
     });
   }
 }
 ```
+
+The `write*` methods queue the record and never reject, so `void` keeps the tool call from waiting on the audit store.
 
 Plugins should always go through `SkillAuditWriterToken` rather than rolling their own audit log so the chain stays unified.
 
