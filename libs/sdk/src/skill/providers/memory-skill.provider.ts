@@ -1,6 +1,6 @@
 // file: libs/sdk/src/skill/providers/memory-skill.provider.ts
 
-import { TFIDFVectoria, type DocumentMetadata } from 'vectoriadb/worker';
+import { TFIDFVectoria, type DocumentMetadata } from 'vectoriadb';
 
 import { sha256Hex } from '@frontmcp/utils';
 

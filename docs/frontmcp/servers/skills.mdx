@@ -701,9 +701,9 @@ Results are ranked by:
 2. Priority field (higher = earlier)
 3. Tool availability (complete skills rank higher)
 
-The index is built with `vectoriadb`, a dependency of `@frontmcp/sdk`. The SDK uses its worker-safe
-TF-IDF/BM25 entry, which has no dependencies and no Node built-ins, so skill search works the same in
-Node, on edge runtimes and in the browser build. The index is created the first time a search runs,
+The index is built with `vectoriadb`, a dependency of `@frontmcp/sdk`. Under the `browser` and `worker`
+export conditions it resolves to its TF-IDF/BM25 entry, which has no Node built-ins, so skill search works
+the same in Node, on edge runtimes and in the browser build. The index is created the first time a search runs,
 not when the server starts. Up to 1.9.1-rc.2 `vectoriadb` was an optional peer that a browser bundle
 could not resolve unless it was installed.
 
