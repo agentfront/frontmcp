@@ -5,10 +5,10 @@ level: intermediate
 description: Verify a stored chain offline using verifyChain and the bundle-signing key registry.
 tags: [extensibility, audit, verification, chain, rs256]
 features:
-  - 'verifyChain returns { ok, breakAt?, reason? } and exits with the first detected break'
+  - 'verifyChain returns { ok: true, verified } or { ok: false, breakAt, reason } for the first detected break'
   - 'defaultAuditSignatureVerifier dispatches on record.signatureAlg (HS256 or RS256)'
-  - 'Trusted-keys registry maps signatureKeyId → public key PEM'
-  - 'iterate() reads the chain in order from any SkillAuditStore implementation'
+  - "Trusted keys are an AuditTrustedKey[] list; each record's signatureKeyId selects its key"
+  - 'read() returns the chain in sequence order from any SkillAuditStore implementation'
 ---
 
 # Verify Audit Chain
@@ -19,27 +19,38 @@ Verify a stored chain offline using verifyChain and the bundle-signing key regis
 
 ```typescript
 // scripts/verify-audit-chain.ts
-import { defaultAuditSignatureVerifier, StorageAdapterAuditStore, verifyChain } from '@frontmcp/adapters/skills';
+import {
+  defaultAuditSignatureVerifier,
+  StorageAdapterAuditStore,
+  verifyChain,
+  type AuditTrustedKey,
+} from '@frontmcp/adapters/skills';
 import { createStorage } from '@frontmcp/utils';
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is not set`);
+  return value;
+}
 
 async function main() {
   // createStorage() returns a RootStorage, which is a StorageAdapter.
   const storage = await createStorage({
     type: 'redis',
     redis: {
-      config: { host: process.env.REDIS_HOST!, port: 6379 },
+      config: { host: requireEnv('REDIS_HOST'), port: 6379 },
       keyPrefix: 'mcp:skill-audit:',
     },
   });
 
   const store = new StorageAdapterAuditStore(storage);
-  const records = await store.iterate();
+  const records = await store.read();
 
-  const trustedKeys: Record<string, string> = {
-    // Map every keyId you have ever rotated through, not just the current one.
-    'bundle-signing-2026-01': process.env.BUNDLE_SIGNING_PUBLIC_KEY_2026_01!,
-    'bundle-signing-2025-12': process.env.BUNDLE_SIGNING_PUBLIC_KEY_2025_12!,
-  };
+  // List every keyId you have ever rotated through, not just the current one.
+  const trustedKeys: AuditTrustedKey[] = [
+    { keyId: 'bundle-signing-2026-01', alg: 'RS256', publicKeyPem: requireEnv('BUNDLE_SIGNING_PUBLIC_KEY_2026_01') },
+    { keyId: 'bundle-signing-2025-12', alg: 'RS256', publicKeyPem: requireEnv('BUNDLE_SIGNING_PUBLIC_KEY_2025_12') },
+  ];
 
   const result = verifyChain(records, trustedKeys, defaultAuditSignatureVerifier);
 
@@ -48,7 +59,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`Verified ${records.length} records, chain intact.`);
+  console.log(`Verified ${result.verified} records, chain intact.`);
 }
 
 main().catch((err) => {
@@ -59,10 +70,10 @@ main().catch((err) => {
 
 ## What This Demonstrates
 
-- verifyChain returns { ok, breakAt?, reason? } and exits with the first detected break
+- verifyChain returns { ok: true, verified } or { ok: false, breakAt, reason } for the first detected break
 - defaultAuditSignatureVerifier dispatches on record.signatureAlg (HS256 or RS256)
-- Trusted-keys registry maps signatureKeyId → public key PEM
-- iterate() reads the chain in order from any SkillAuditStore implementation
+- Trusted keys are an AuditTrustedKey[] list; each record's signatureKeyId selects its key
+- read() returns the chain in sequence order from any SkillAuditStore implementation
 
 ## Related
 

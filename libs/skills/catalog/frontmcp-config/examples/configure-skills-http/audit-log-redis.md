@@ -23,30 +23,18 @@ Production-grade audit log with the Redis-backed StorageAdapterAuditStore and th
 // below is allowed. CommonJS consumers should wrap the bootstrap inside an
 // `async function init() { ... }` and await it before constructing the
 // FrontMcp class.
-import {
-  Hs256AuditSigner,
-  MemoryAuditStore,
-  Rs256AuditSigner,
-  setSkillAuditFactory,
-  SkillAuditWriter,
-  SkillAuditWriterToken,
-  StorageAdapterAuditStore,
-} from '@frontmcp/adapters/skills';
-import { FrontMcp } from '@frontmcp/sdk';
+import * as auditModule from '@frontmcp/adapters/skills';
+import { Rs256AuditSigner, StorageAdapterAuditStore } from '@frontmcp/adapters/skills';
+import { FrontMcp, setSkillAuditFactory, type AuditModuleShape } from '@frontmcp/sdk';
 import { createStorage } from '@frontmcp/utils';
 
 import { MainApp } from './main.app';
 
-// Register the audit module record with the SDK. The SDK constructs the
-// writer with the positional signature
-// `new SkillAuditWriter(store, signer, logger, metrics?, options?)` and
-// forwards `subjectMode` from `skillsConfig.audit` into the options bag.
-setSkillAuditFactory(() => ({
-  SkillAuditWriterToken,
-  SkillAuditWriter,
-  Hs256AuditSigner,
-  MemoryAuditStore,
-}));
+// Register the audit module with the SDK. The SDK constructs the writer as
+// `new SkillAuditWriter(store, signer, logger, undefined, { subjectMode })`,
+// with `subjectMode` taken from `skillsConfig.audit`. AuditModuleShape types
+// the token as `symbol` and the writer constructor loosely, hence the cast.
+setSkillAuditFactory(() => auditModule as unknown as AuditModuleShape);
 
 // createStorage() returns a RootStorage, which is a StorageAdapter. Note this
 // is the @frontmcp/utils storage-adapter config shape (`redis.config`), which
@@ -90,25 +78,34 @@ export default class ProductionServer {}
 
 ```typescript
 // scripts/verify-audit-chain.ts — run in CI
-import { defaultAuditSignatureVerifier, StorageAdapterAuditStore, verifyChain } from '@frontmcp/adapters/skills';
+import {
+  defaultAuditSignatureVerifier,
+  StorageAdapterAuditStore,
+  verifyChain,
+  type AuditTrustedKey,
+} from '@frontmcp/adapters/skills';
 import { createStorage } from '@frontmcp/utils';
 
 const storage = await createStorage({
   type: 'redis',
-  redis: { config: { host: process.env.REDIS_HOST!, port: 6379 } },
+  redis: {
+    config: { host: process.env.REDIS_HOST!, port: 6379 },
+    keyPrefix: 'mcp:skill-audit:',
+  },
 });
 const store = new StorageAdapterAuditStore(storage);
-const records = await store.iterate();
+const records = await store.read();
 
-const trustedKeys = {
-  'bundle-signing-2026-01': process.env.BUNDLE_SIGNING_PUBLIC_KEY!,
-};
+const trustedKeys: AuditTrustedKey[] = [
+  { keyId: 'bundle-signing-2026-01', alg: 'RS256', publicKeyPem: process.env.BUNDLE_SIGNING_PUBLIC_KEY! },
+];
 
 const result = verifyChain(records, trustedKeys, defaultAuditSignatureVerifier);
 if (!result.ok) {
   console.error('Audit chain broken at', result.breakAt, result.reason);
   process.exit(1);
 }
+console.log(`Audit chain intact: ${result.verified} record(s) verified`);
 ```
 
 ## What This Demonstrates

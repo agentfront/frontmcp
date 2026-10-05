@@ -96,29 +96,19 @@ import { metrics } from '@opentelemetry/api';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 
-import {
-  Hs256AuditSigner,
-  MemoryAuditStore,
-  Rs256AuditSigner,
-  setSkillAuditFactory,
-  SkillAuditWriter,
-  SkillAuditWriterToken,
-  StorageAdapterAuditStore,
-} from '@frontmcp/adapters/skills';
+import * as auditModule from '@frontmcp/adapters/skills';
+import { Rs256AuditSigner, StorageAdapterAuditStore } from '@frontmcp/adapters/skills';
+import { setSkillAuditFactory, type AuditModuleShape } from '@frontmcp/sdk';
 import { createStorage } from '@frontmcp/utils';
 
 // 1. Audit subsystem
 //
 // `setSkillAuditFactory` registers the audit module with the SDK; the SDK
-// itself constructs the writer using the positional signature
-// `new SkillAuditWriter(store, signer, logger, metrics?, options?)` and
-// forwards `subjectMode` from `skillsConfig.audit` into the options bag.
-setSkillAuditFactory(() => ({
-  SkillAuditWriterToken,
-  SkillAuditWriter,
-  Hs256AuditSigner,
-  MemoryAuditStore,
-}));
+// itself constructs the writer as
+// `new SkillAuditWriter(store, signer, logger, undefined, { subjectMode })`,
+// with `subjectMode` taken from `skillsConfig.audit`. AuditModuleShape types
+// the token as `symbol` and the writer constructor loosely, hence the cast.
+setSkillAuditFactory(() => auditModule as unknown as AuditModuleShape);
 
 export const auditSigner = new Rs256AuditSigner(
   // Private key as a JWK. Convert from a PEM if your secret store hands you

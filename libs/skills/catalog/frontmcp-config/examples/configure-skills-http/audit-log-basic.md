@@ -7,7 +7,7 @@ tags: [config, skills, audit, hs256, development]
 features:
   - 'Bootstraps the audit subsystem via setSkillAuditFactory(...) before FrontMcp registers'
   - 'MemoryAuditStore keeps records in-process — perfect for tests, lost on restart'
-  - 'Hs256AuditSigner refuses to start when NODE_ENV === production with a random key'
+  - 'A random-key Hs256AuditSigner cannot verify records after a restart: use Rs256AuditSigner in production'
   - "subjectMode: 'hash' redacts user identifiers while keeping them correlatable"
 ---
 
@@ -19,30 +19,20 @@ Enable the skill audit log with the in-memory store and HS256 signer for develop
 
 ```typescript
 // src/server.ts
-import {
-  Hs256AuditSigner,
-  MemoryAuditStore,
-  setSkillAuditFactory,
-  SkillAuditWriter,
-  SkillAuditWriterToken,
-} from '@frontmcp/adapters/skills';
-import { FrontMcp } from '@frontmcp/sdk';
+import * as auditModule from '@frontmcp/adapters/skills';
+import { Hs256AuditSigner, MemoryAuditStore } from '@frontmcp/adapters/skills';
+import { FrontMcp, setSkillAuditFactory, type AuditModuleShape } from '@frontmcp/sdk';
 import { randomBytes } from '@frontmcp/utils';
 
 import { MainApp } from './main.app';
 
-// Register the audit module record with the SDK at boot. The SDK constructs
-// the writer using the positional signature
-// `new SkillAuditWriter(store, signer, logger, metrics?, options?)` and
-// forwards `subjectMode` from `skillsConfig.audit`. The SDK does NOT
+// Register the audit module with the SDK at boot. The SDK constructs the
+// writer as `new SkillAuditWriter(store, signer, logger, undefined, { subjectMode })`,
+// with `subjectMode` taken from `skillsConfig.audit`. The SDK does NOT
 // statically depend on @frontmcp/adapters/skills — this keeps the static
-// dependency graph clean and works in Edge / CSP runtimes.
-setSkillAuditFactory(() => ({
-  SkillAuditWriterToken,
-  SkillAuditWriter,
-  Hs256AuditSigner,
-  MemoryAuditStore,
-}));
+// dependency graph clean and works in Edge / CSP runtimes. AuditModuleShape
+// types the token as `symbol` and the writer constructor loosely, hence the cast.
+setSkillAuditFactory(() => auditModule as unknown as AuditModuleShape);
 
 @FrontMcp({
   info: { name: 'dev-server', version: '1.0.0' },
@@ -51,8 +41,7 @@ setSkillAuditFactory(() => ({
     enabled: true,
     audit: {
       enabled: true,
-      // WARNING: Hs256AuditSigner with a randomBytes() key refuses to fire
-      // when NODE_ENV === 'production'. Use Rs256AuditSigner in prod.
+      // A random key cannot verify records after a restart. Use Rs256AuditSigner in production.
       // Constructor signature: new Hs256AuditSigner(secret, keyId)
       signer: new Hs256AuditSigner(randomBytes(32), 'dev'),
       store: new MemoryAuditStore(),
@@ -67,7 +56,7 @@ export default class DevServer {}
 
 - Bootstraps the audit subsystem via setSkillAuditFactory(...) before FrontMcp registers
 - MemoryAuditStore keeps records in-process — perfect for tests, lost on restart
-- Hs256AuditSigner refuses to start when NODE_ENV === production with a random key
+- A random-key Hs256AuditSigner cannot verify records after a restart: use Rs256AuditSigner in production
 - subjectMode: 'hash' redacts user identifiers while keeping them correlatable
 
 ## Related

@@ -1076,7 +1076,7 @@
               "features": [
                 "Bootstraps the audit subsystem via setSkillAuditFactory(...) before FrontMcp registers",
                 "MemoryAuditStore keeps records in-process — perfect for tests, lost on restart",
-                "Hs256AuditSigner refuses to start when NODE_ENV === production with a random key",
+                "A random-key Hs256AuditSigner cannot verify records after a restart: use Rs256AuditSigner in production",
                 "subjectMode: 'hash' redacts user identifiers while keeping them correlatable"
               ]
             },
@@ -2391,10 +2391,10 @@
               "level": "intermediate",
               "tags": ["extensibility", "audit", "verification", "chain", "rs256"],
               "features": [
-                "verifyChain returns { ok, breakAt?, reason? } and exits with the first detected break",
+                "verifyChain returns { ok: true, verified } or { ok: false, breakAt, reason } for the first detected break",
                 "defaultAuditSignatureVerifier dispatches on record.signatureAlg (HS256 or RS256)",
-                "Trusted-keys registry maps signatureKeyId → public key PEM",
-                "iterate() reads the chain in order from any SkillAuditStore implementation"
+                "Trusted keys are an AuditTrustedKey[] list; each record's signatureKeyId selects its key",
+                "read() returns the chain in sequence order from any SkillAuditStore implementation"
               ]
             }
           ]
