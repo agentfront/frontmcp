@@ -22,12 +22,16 @@ import { z } from '@frontmcp/lazy-zod';
 // ── @frontmcp/sdk imports (decorators, types, core) ──
 import {
   App,
+  ConfigPlugin,
+  ConfigService,
+  connect,
   FrontMcp,
   FrontMcpInstance,
   Prompt,
   PromptContext,
   Resource,
   ResourceContext,
+  skill,
   Tool,
   ToolContext,
 } from '@frontmcp/sdk';
@@ -186,6 +190,69 @@ checkAsync('createDirect', async () => {
     return tools.map((tool) => tool.name).join(',');
   } finally {
     await server.dispose();
+  }
+});
+
+// ── connect() and ConfigPlugin in the browser (#761) ──
+checkAsync('connect', async () => {
+  const client = await connect({ ...browserEntryConfig, info: { name: 'browser-connect', version: '0.0.1' } });
+  try {
+    const tools = (await client.listTools()) as Array<{ name: string }>;
+    return tools.map((tool) => tool.name).join(',');
+  } finally {
+    await client.close();
+  }
+});
+
+@Tool({ name: 'page_size', inputSchema: {} })
+class BrowserPageSizeTool extends ToolContext {
+  async execute() {
+    return { pageSize: this.get(ConfigService).getNumber('pageSize') };
+  }
+}
+
+@App({
+  id: 'browser-config',
+  name: 'Browser config',
+  tools: [BrowserPageSizeTool],
+  plugins: [ConfigPlugin.init({ schema: z.object({ pageSize: z.coerce.number().default(20) }) })],
+})
+class BrowserConfigApp {}
+
+checkAsync('ConfigPlugin', async () => {
+  const server = await FrontMcpInstance.createDirect({
+    info: { name: 'browser-config', version: '0.0.1' },
+    apps: [BrowserConfigApp],
+  });
+  try {
+    const result = await server.callTool('page_size', {});
+    return JSON.stringify(result.structuredContent);
+  } finally {
+    await server.dispose();
+  }
+});
+
+const deploySkill = skill({
+  name: 'deploy-app',
+  description: 'Deploy the app to cloudflare workers',
+  instructions: 'Run the deploy.',
+});
+const testSkill = skill({
+  name: 'write-tests',
+  description: 'Write unit tests with jest',
+  instructions: 'Write tests.',
+});
+
+@App({ id: 'browser-skills', name: 'Browser skills', skills: [deploySkill, testSkill] })
+class BrowserSkillsApp {}
+
+checkAsync('searchSkills', async () => {
+  const client = await connect({ info: { name: 'browser-skills', version: '0.0.1' }, apps: [BrowserSkillsApp] });
+  try {
+    const { skills } = await client.searchSkills('cloudflare deploy');
+    return skills.map((found) => found.id).join(',');
+  } finally {
+    await client.close();
   }
 });
 
