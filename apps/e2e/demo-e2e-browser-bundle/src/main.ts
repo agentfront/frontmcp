@@ -22,6 +22,9 @@ import { z } from '@frontmcp/lazy-zod';
 // ── @frontmcp/sdk imports (decorators, types, core) ──
 import {
   App,
+  ConfigPlugin,
+  ConfigService,
+  connect,
   FrontMcp,
   FrontMcpInstance,
   Prompt,
@@ -184,6 +187,45 @@ checkAsync('createDirect', async () => {
   try {
     const { tools } = await server.listTools();
     return tools.map((tool) => tool.name).join(',');
+  } finally {
+    await server.dispose();
+  }
+});
+
+// ── connect() and ConfigPlugin in the browser (#761) ──
+checkAsync('connect', async () => {
+  const client = await connect({ ...browserEntryConfig, info: { name: 'browser-connect', version: '0.0.1' } });
+  try {
+    const tools = (await client.listTools()) as Array<{ name: string }>;
+    return tools.map((tool) => tool.name).join(',');
+  } finally {
+    await client.close();
+  }
+});
+
+@Tool({ name: 'page_size', inputSchema: {} })
+class BrowserPageSizeTool extends ToolContext {
+  async execute() {
+    return { pageSize: this.get(ConfigService).getNumber('pageSize') };
+  }
+}
+
+@App({
+  id: 'browser-config',
+  name: 'Browser config',
+  tools: [BrowserPageSizeTool],
+  plugins: [ConfigPlugin.init({ schema: z.object({ pageSize: z.coerce.number().default(20) }) })],
+})
+class BrowserConfigApp {}
+
+checkAsync('ConfigPlugin', async () => {
+  const server = await FrontMcpInstance.createDirect({
+    info: { name: 'browser-config', version: '0.0.1' },
+    apps: [BrowserConfigApp],
+  });
+  try {
+    const result = await server.callTool('page_size', {});
+    return JSON.stringify(result.structuredContent);
   } finally {
     await server.dispose();
   }

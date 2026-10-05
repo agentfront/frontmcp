@@ -5,7 +5,7 @@ import { ConfigPluginConfigToken } from './config.symbols';
 import type { ConfigPluginOptions, ConfigPluginOptionsInput } from './config.types';
 import { loadConfig } from './providers/config-loader';
 import { ConfigService } from './providers/config.service';
-import { loadEnvFiles, populateProcessEnv } from './providers/env-loader';
+import { loadEnvFiles, populateProcessEnv, processEnvEntries } from './providers/env-loader';
 
 /**
  * ConfigPlugin - Environment variable management for FrontMCP.
@@ -146,15 +146,8 @@ export default class ConfigPlugin<TConfig extends object = Record<string, string
           env = await loadEnvFiles(basePath, pluginConfig.envPath, pluginConfig.localEnvPath);
         }
 
-        // Merge with existing process.env
-        const merged = { ...env };
-        if (typeof process !== 'undefined' && process.env) {
-          for (const [key, value] of Object.entries(process.env)) {
-            if (value !== undefined && merged[key] === undefined) {
-              merged[key] = value;
-            }
-          }
-        }
+        // Merge with existing process.env (the env files win here)
+        const merged = { ...processEnvEntries(), ...env };
 
         // Populate process.env if enabled
         if (pluginConfig.populateProcessEnv) {
