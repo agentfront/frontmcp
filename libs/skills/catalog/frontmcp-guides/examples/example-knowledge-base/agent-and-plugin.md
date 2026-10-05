@@ -13,8 +13,8 @@ tags:
 features:
   - Agent with `@Agent` decorator, LLM config, inner tools, and system instructions
   - 'Configuring the inner-loop limit via `@Agent({ execution: { maxIterations } })` (framework drives iteration; no `this.run(...)`)'
-  - 'Plugin built on real `ToolHook` decorators: `@ToolHook.Will/Did/Around("execute")`'
-  - Using `flowCtx.state.set/get()` for hook-local state
+  - 'Plugin built on a real `ToolHook` decorator: one `@ToolHook.Around("execute")` hook that sees the start, the end and any error'
+  - Keeping the start time in a local variable across `await next()` (the flow state accepts only its declared keys)
   - Using `flowCtx.state.required.toolContext` to read tool metadata and authInfo inside hooks
   - Non-blocking audit logging (`.catch()` prevents audit failures from breaking tools)
 ---
@@ -80,46 +80,55 @@ export interface AuditLogPluginOptions {
   endpoint?: string;
 }
 
+export interface AuditLogEntry {
+  timestamp: string;
+  tool: string;
+  userId: string | undefined;
+  duration: number;
+  success: boolean;
+}
+
 @Plugin({
   name: 'audit-log',
   description: 'Logs all tool invocations for audit compliance',
 })
 export default class AuditLogPlugin extends DynamicPlugin<AuditLogPluginOptions> {
-  private readonly logs: Array<{
-    timestamp: string;
-    tool: string;
-    userId: string | undefined;
-    duration: number;
-    success: boolean;
-  }> = [];
+  private readonly logs: AuditLogEntry[] = [];
 
   constructor(protected options: AuditLogPluginOptions = {}) {
     super();
   }
 
-  // Will('execute') runs immediately before the tool's execute() — record start time on the flow state.
-  @ToolHook.Will('execute', { priority: 100 })
-  async onWillExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): Promise<void> {
-    flowCtx.state.set('audit:startTime', Date.now());
+  // Around('execute') wraps the tool's execute(): the start time is a local variable, so each call keeps its own.
+  @ToolHook.Around('execute', { priority: 100 })
+  async aroundExecute(flowCtx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<void>): Promise<void> {
+    const startTime = Date.now();
+    let success = false;
+    try {
+      await next();
+      success = true;
+    } finally {
+      this.record(flowCtx, Date.now() - startTime, success);
+    }
   }
 
-  // Did('execute') runs after a successful execute() — compute duration and log success.
-  @ToolHook.Did('execute', { priority: 100 })
-  async onDidExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): Promise<void> {
-    const startTime = flowCtx.state.get('audit:startTime') as number | undefined;
-    const ctx = flowCtx.state.required.toolContext;
+  getLogs(): ReadonlyArray<AuditLogEntry> {
+    return [...this.logs];
+  }
 
-    const entry = {
+  private record(flowCtx: FlowCtxOf<'tools:call-tool'>, duration: number, success: boolean): void {
+    const ctx = flowCtx.state.required.toolContext;
+    const entry: AuditLogEntry = {
       timestamp: new Date().toISOString(),
       tool: ctx.metadata.name,
-      userId: (ctx.authInfo as any)?.user?.sub as string | undefined,
-      duration: startTime ? Date.now() - startTime : 0,
-      success: true,
+      userId: ctx.authInfo.user?.sub,
+      duration,
+      success,
     };
     this.logs.push(entry);
 
     if (this.options.endpoint) {
-      // Audit logging should never block tool execution — fire-and-forget.
+      // Audit logging should never block or fail the tool call — fire-and-forget.
       void ctx
         .fetch(this.options.endpoint, {
           method: 'POST',
@@ -129,29 +138,6 @@ export default class AuditLogPlugin extends DynamicPlugin<AuditLogPluginOptions>
         .catch(() => undefined);
     }
   }
-
-  // Around('execute') wraps the call so we can capture errors as well.
-  @ToolHook.Around('execute', { priority: 100 })
-  async aroundExecute(flowCtx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<unknown>): Promise<unknown> {
-    try {
-      return await next();
-    } catch (err) {
-      const startTime = flowCtx.state.get('audit:startTime') as number | undefined;
-      const ctx = flowCtx.state.required.toolContext;
-      this.logs.push({
-        timestamp: new Date().toISOString(),
-        tool: ctx.metadata.name,
-        userId: (ctx.authInfo as any)?.user?.sub as string | undefined,
-        duration: startTime ? Date.now() - startTime : 0,
-        success: false,
-      });
-      throw err;
-    }
-  }
-
-  getLogs(): ReadonlyArray<(typeof this.logs)[number]> {
-    return [...this.logs];
-  }
 }
 ```
 
@@ -159,8 +145,8 @@ export default class AuditLogPlugin extends DynamicPlugin<AuditLogPluginOptions>
 
 - Agent with `@Agent` decorator, LLM config, inner tools, and system instructions
 - Configuring the inner-loop limit via `@Agent({ execution: { maxIterations } })` (framework drives iteration; no `this.run(...)`)
-- Plugin built on real `ToolHook` decorators: `@ToolHook.Will/Did/Around("execute")`
-- Using `flowCtx.state.set/get()` for hook-local state
+- Plugin built on a real `ToolHook` decorator: one `@ToolHook.Around("execute")` hook that sees the start, the end and any error
+- Keeping the start time in a local variable across `await next()` (the flow state accepts only its declared keys)
 - Using `flowCtx.state.required.toolContext` to read tool metadata and authInfo inside hooks
 - Non-blocking audit logging (`.catch()` prevents audit failures from breaking tools)
 

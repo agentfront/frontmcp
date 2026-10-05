@@ -2469,8 +2469,8 @@
               "features": [
                 "Agent with `@Agent` decorator, LLM config, inner tools, and system instructions",
                 "Configuring the inner-loop limit via `@Agent({ execution: { maxIterations } })` (framework drives iteration; no `this.run(...)`)",
-                "Plugin built on real `ToolHook` decorators: `@ToolHook.Will/Did/Around(\"execute\")`",
-                "Using `flowCtx.state.set/get()` for hook-local state",
+                "Plugin built on a real `ToolHook` decorator: one `@ToolHook.Around(\"execute\")` hook that sees the start, the end and any error",
+                "Keeping the start time in a local variable across `await next()` (the flow state accepts only its declared keys)",
                 "Using `flowCtx.state.required.toolContext` to read tool metadata and authInfo inside hooks",
                 "Non-blocking audit logging (`.catch()` prevents audit failures from breaking tools)"
               ]
