@@ -4,10 +4,11 @@ import { type CallSurface } from '../availability';
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
 import { type ToolInputType, type ToolOutputType } from '../metadata';
 import { type JobMetadata } from '../metadata/job.metadata';
+import { type JobEsmTargetRecord, type JobRemoteRecord } from '../records/job.record';
 import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
 import { FlowControl } from './flow.interface';
 
-export type JobType<T = unknown> = Type<T> | FuncType<T> | string;
+export type JobType<T = unknown> = Type<T> | FuncType<T> | string | JobEsmTargetRecord | JobRemoteRecord;
 
 export type JobCtorArgs<In> = ExecutionContextBaseArgs & {
   metadata: JobMetadata;

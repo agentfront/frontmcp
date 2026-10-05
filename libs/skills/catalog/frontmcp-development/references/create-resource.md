@@ -278,15 +278,15 @@ Load resources from external modules or remote URLs.
 
 ```typescript
 const ExternalResource = Resource.esm('@my-org/resources@^1.0.0', 'ExternalResource', {
-  description: 'A resource loaded from an ES module',
+  metadata: { description: 'A resource loaded from an ES module' },
 });
 ```
 
 **Remote loading:**
 
 ```typescript
-const CloudResource = Resource.remote('https://example.com/resources/data', 'CloudResource', {
-  description: 'A resource loaded from a remote server',
+const CloudResource = Resource.remote('https://example.com/mcp', 'CloudResource', {
+  metadata: { description: 'A resource loaded from a remote MCP server' },
 });
 ```
 

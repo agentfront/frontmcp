@@ -390,15 +390,15 @@ Load jobs from external modules or remote URLs without importing them directly.
 
 ```typescript
 const ExternalJob = Job.esm('@my-org/jobs@^1.0.0', 'ExternalJob', {
-  description: 'A job loaded from an ES module',
+  metadata: { description: 'A job loaded from an ES module' },
 });
 ```
 
-**Remote loading** -- load a job from a remote URL:
+**Remote loading** -- load a job from a remote MCP server:
 
 ```typescript
-const CloudJob = Job.remote('https://example.com/jobs/cloud-job', 'CloudJob', {
-  description: 'A job loaded from a remote server',
+const CloudJob = Job.remote('https://example.com/mcp', 'CloudJob', {
+  metadata: { description: 'A job loaded from a remote MCP server' },
 });
 ```
 

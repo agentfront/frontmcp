@@ -135,30 +135,33 @@ const auth = this.context.authInfo;
 
 ## Importing from External Packages
 
-Decorators expose static `.esm()` and `.remote()` factories for declaring entries that come from outside the local source tree:
+`Tool`, `Resource`, `Prompt`, `Agent`, `Skill`, and `Job` expose static `.esm()` and `.remote()` factories for declaring a single entry that comes from outside the local source tree:
 
 ```typescript
-import { Tool, Resource, Prompt, Agent, Skill, Job, App } from '@frontmcp/sdk';
+import { Tool } from '@frontmcp/sdk';
 
-// Pull a named export from an installed npm package
-const OpenAI_GenImage = Tool.esm('@some-org/some-package', 'generate_image');
+// The tool named 'generate_image' in an npm package (optional semver range)
+const GenerateImage = Tool.esm('@some-org/some-package@^1.0.0', 'generate_image');
 
-// Pull from a remote MCP server
-const SearchAPI = Tool.remote('https://search.example.com/mcp', 'search');
+// The tool named 'search' on a remote MCP server
+const SearchApi = Tool.remote('https://search.example.com/mcp', 'search');
 ```
 
-Both factories are available on `Tool`, `Resource`, `Prompt`, `Agent`, `Skill`, `Job`, and `App`. Pass the resulting handle into your `@App` or `@FrontMcp` decorator just like a class-based entry:
+Each factory takes the package specifier or server URL, the entry's name, and optional overrides: `.esm()` accepts `{ loader, cacheTTL, metadata }` and `.remote()` accepts `{ transportOptions, remoteAuth, metadata }`. Put the result in the matching `@App` array (`tools`, `resources`, `prompts`, `agents`, `skills`, `jobs`) or in the server-level `tools`, `resources`, and `skills` of `@FrontMcp`, just like a class-based entry:
 
 ```typescript
 @FrontMcp({
   info: { name: 'gateway', version: '1.0.0' },
+  apps: [MainApp],
   tools: [
-    Tool.esm('@some-org/some-package', 'generate_image'),
+    Tool.esm('@some-org/some-package@^1.0.0', 'generate_image'),
     Tool.remote('https://search.example.com/mcp', 'search'),
   ],
 })
 class Gateway {}
 ```
+
+`App.esm(specifier, options?)` and `App.remote(url, options?)` take no entry name: they load a whole app, and go in `apps`.
 
 See the [ESM Dynamic Loading feature](/frontmcp/features/esm-dynamic-loading) for the full lifecycle, and [Remote MCP servers](/frontmcp/servers/discovery) for remote semantics.
 

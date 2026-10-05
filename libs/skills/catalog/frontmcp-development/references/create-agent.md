@@ -472,15 +472,15 @@ Load agents from external modules or remote URLs without importing them directly
 
 ```typescript
 const ExternalAgent = Agent.esm('@my-org/agents@^1.0.0', 'ExternalAgent', {
-  description: 'An agent loaded from an ES module',
+  metadata: { description: 'An agent loaded from an ES module' },
 });
 ```
 
-**Remote loading** -- load an agent from a remote URL:
+**Remote loading** -- load an agent from a remote MCP server:
 
 ```typescript
-const CloudAgent = Agent.remote('https://example.com/agents/cloud-agent', 'CloudAgent', {
-  description: 'An agent loaded from a remote server',
+const CloudAgent = Agent.remote('https://example.com/mcp', 'CloudAgent', {
+  metadata: { description: 'An agent loaded from a remote MCP server' },
 });
 ```
 

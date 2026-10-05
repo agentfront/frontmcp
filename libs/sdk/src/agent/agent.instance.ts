@@ -381,6 +381,11 @@ export class AgentInstance<
       return;
     }
 
+    // Agent.esm() / Agent.remote() records carry a placeholder llm, not a configuration
+    if (this.record.kind === AgentKind.ESM || this.record.kind === AgentKind.REMOTE) {
+      return;
+    }
+
     // Build adapter options with provider resolver
     const adapterOptions: CreateAdapterOptions = {
       providerResolver: {

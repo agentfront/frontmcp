@@ -15,10 +15,11 @@ import {
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
 import { type ToolInputType, type ToolMetadata, type ToolOutputType } from '../metadata';
+import { type ToolEsmTargetRecord, type ToolRemoteRecord } from '../records/tool.record';
 import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
 import { FlowControl } from './flow.interface';
 
-export type ToolType<T = unknown> = Type<T> | FuncType<T> | string;
+export type ToolType<T = unknown> = Type<T> | FuncType<T> | string | ToolEsmTargetRecord | ToolRemoteRecord;
 
 type HistoryEntry<T> = {
   at: number;

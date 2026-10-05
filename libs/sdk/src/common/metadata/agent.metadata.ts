@@ -16,6 +16,7 @@ import { type PromptType } from '../interfaces/prompt.interface';
 import { type ProviderType } from '../interfaces/provider.interface';
 import { type ResourceType } from '../interfaces/resource.interface';
 import { type ToolType } from '../interfaces/tool.interface';
+import { type AgentEsmTargetRecord, type AgentRemoteRecord } from '../records/agent.record';
 import {
   annotatedFrontMcpAdaptersSchema,
   annotatedFrontMcpAgentsSchema,
@@ -32,7 +33,7 @@ import { type ToolInputType, type ToolOutputType } from './tool.metadata';
  * Agent type definition (class or factory function).
  * Used in app/plugin metadata for defining agents.
  */
-export type AgentType<T = unknown> = Type<T> | FuncType<T> | string;
+export type AgentType<T = unknown> = Type<T> | FuncType<T> | string | AgentEsmTargetRecord | AgentRemoteRecord;
 
 declare global {
   /**

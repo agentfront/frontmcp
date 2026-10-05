@@ -1,6 +1,6 @@
 import { Agent } from '../../common/decorators/agent.decorator';
-import { AgentKind } from '../../common/records/agent.record';
-import type { AgentEsmTargetRecord, AgentRemoteRecord } from '../../common/records/agent.record';
+import { AgentKind, type AgentEsmTargetRecord, type AgentRemoteRecord } from '../../common/records/agent.record';
+import { normalizeAgent } from '../agent.utils';
 
 describe('Agent.esm()', () => {
   it('creates AgentEsmTargetRecord with kind ESM', () => {
@@ -108,5 +108,17 @@ describe('Agent.remote()', () => {
     expect(record.metadata.name).toBe('assistant');
     expect(record.metadata.description).toContain('assistant');
     expect(record.metadata.llm).toBeDefined();
+  });
+});
+
+describe('normalizeAgent() with ESM/REMOTE records', () => {
+  it('passes through AgentEsmTargetRecord unchanged', () => {
+    const record = Agent.esm('@acme/agents@^1.0.0', 'research');
+    expect(normalizeAgent(record)).toBe(record);
+  });
+
+  it('passes through AgentRemoteRecord unchanged', () => {
+    const record = Agent.remote('https://api.example.com/mcp', 'assistant');
+    expect(normalizeAgent(record)).toBe(record);
   });
 });

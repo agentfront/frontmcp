@@ -96,8 +96,13 @@ export function extractAgentFunctionMetadata(fn: AgentFunction): AgentMetadata {
  * - Class decorated with @Agent
  * - Function created with agent()
  * - Value/Factory objects
+ * - ESM/REMOTE records from Agent.esm() / Agent.remote()
  */
 export function normalizeAgent(agent: AgentType): AgentRecord {
+  if (typeof agent === 'object' && (agent.kind === AgentKind.ESM || agent.kind === AgentKind.REMOTE)) {
+    return agent;
+  }
+
   // Class decorated with @Agent
   if (isAgentClass(agent)) {
     const metadata = extractAgentClassMetadata(agent as Function);

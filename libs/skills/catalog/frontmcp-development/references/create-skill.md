@@ -499,15 +499,15 @@ Load skills from external modules or remote URLs without importing them directly
 
 ```typescript
 const ExternalGuide = Skill.esm('@my-org/skills@^1.0.0', 'ExternalGuide', {
-  description: 'A skill loaded from an ES module',
+  metadata: { description: 'A skill loaded from an ES module' },
 });
 ```
 
-**Remote loading** -- load a skill from a remote URL:
+**Remote loading** -- load a skill from a remote MCP server:
 
 ```typescript
-const CloudGuide = Skill.remote('https://example.com/skills/style-guide', 'CloudGuide', {
-  description: 'A skill loaded from a remote server',
+const CloudGuide = Skill.remote('https://example.com/mcp', 'CloudGuide', {
+  metadata: { description: 'A skill loaded from a remote MCP server' },
 });
 ```
 

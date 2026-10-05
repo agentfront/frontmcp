@@ -55,7 +55,7 @@ Follow these standards when writing code for this project...
 
 ```typescript
 // src/skills/load-skills.ts
-import { skillDir, skill } from '@frontmcp/sdk';
+import { skill, skillDir } from '@frontmcp/sdk';
 
 // Load a directory-based skill with bundled scripts, references, and assets
 const CodingStandards = await skillDir('./skills/coding-standards');
@@ -70,7 +70,7 @@ const DeployGuide = skill({
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App, Skill, SkillContext } from '@frontmcp/sdk';
+import { App, FrontMcp, Skill, SkillContext } from '@frontmcp/sdk';
 
 // URL-based instructions fetched at build time
 @Skill({
@@ -82,11 +82,11 @@ class ApiStandardsSkill extends SkillContext {}
 
 // ESM and remote loading
 const ExternalGuide = Skill.esm('@my-org/skills@^1.0.0', 'ExternalGuide', {
-  description: 'A skill loaded from an ES module',
+  metadata: { description: 'A skill loaded from an ES module' },
 });
 
-const CloudGuide = Skill.remote('https://example.com/skills/style-guide', 'CloudGuide', {
-  description: 'A skill loaded from a remote server',
+const CloudGuide = Skill.remote('https://example.com/mcp', 'CloudGuide', {
+  metadata: { description: 'A skill loaded from a remote MCP server' },
 });
 
 @App({
