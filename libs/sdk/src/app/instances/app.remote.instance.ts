@@ -21,6 +21,7 @@ import {
   type RemoteAppMetadata,
   type SkillEntry,
 } from '../../common';
+import { isPrimitiveIncluded } from '../../common/utils/primitive-filter';
 import { InternalMcpError } from '../../errors';
 import PromptRegistry from '../../prompt/prompt.registry';
 import type ProviderRegistry from '../../provider/provider.registry';
@@ -429,12 +430,16 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
       logger.debug(`Using cached capabilities for remote app ${this.id}`);
     }
 
+    const filter = this.metadata.filter;
+    const included = (kind: 'tools' | 'resources' | 'prompts') => (entry: { name: string }) =>
+      isPrimitiveIncluded(entry.name, kind, filter);
+
     // Build every proxy first, then swap them in synchronously: each discovery
     // creates fresh context classes (fresh registry tokens), so registering
     // without dropping the previous discovery's proxies listed every entry
     // once more each time the capability cache expired.
     const tools = await Promise.all(
-      capabilities.tools.map(async (remoteTool) => {
+      capabilities.tools.filter(included('tools')).map(async (remoteTool) => {
         const instance = createRemoteToolInstance(
           remoteTool,
           this.mcpClient,
@@ -449,33 +454,37 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     );
     const resources = await Promise.all(
       [
-        ...capabilities.resources.map((remoteResource) =>
-          createRemoteResourceInstance(
-            remoteResource,
-            this.mcpClient,
-            this.id,
-            this.scopeProviders,
-            this.appOwner,
-            namespace,
+        ...capabilities.resources
+          .filter(included('resources'))
+          .map((remoteResource) =>
+            createRemoteResourceInstance(
+              remoteResource,
+              this.mcpClient,
+              this.id,
+              this.scopeProviders,
+              this.appOwner,
+              namespace,
+            ),
           ),
-        ),
-        ...capabilities.resourceTemplates.map((remoteTemplate) =>
-          createRemoteResourceTemplateInstance(
-            remoteTemplate,
-            this.mcpClient,
-            this.id,
-            this.scopeProviders,
-            this.appOwner,
-            namespace,
+        ...capabilities.resourceTemplates
+          .filter(included('resources'))
+          .map((remoteTemplate) =>
+            createRemoteResourceTemplateInstance(
+              remoteTemplate,
+              this.mcpClient,
+              this.id,
+              this.scopeProviders,
+              this.appOwner,
+              namespace,
+            ),
           ),
-        ),
       ].map(async (instance) => {
         await instance.ready;
         return instance;
       }),
     );
     const prompts = await Promise.all(
-      capabilities.prompts.map(async (remotePrompt) => {
+      capabilities.prompts.filter(included('prompts')).map(async (remotePrompt) => {
         const instance = createRemotePromptInstance(
           remotePrompt,
           this.mcpClient,
@@ -505,8 +514,8 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     };
 
     logger.info(
-      `Remote app ${this.id} capabilities loaded: ${capabilities.tools.length} tools, ` +
-        `${capabilities.resources.length} resources, ${capabilities.prompts.length} prompts`,
+      `Remote app ${this.id} capabilities loaded: ${tools.length} tools, ` +
+        `${resources.length} resources, ${prompts.length} prompts`,
     );
   }
 }

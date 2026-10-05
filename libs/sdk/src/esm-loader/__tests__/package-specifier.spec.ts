@@ -1,4 +1,12 @@
-import { parsePackageSpecifier, buildEsmShUrl, isPackageSpecifier, ESM_SH_BASE_URL } from '../package-specifier';
+import { EsmInvalidSpecifierError } from '../../errors/esm.errors';
+import {
+  applyImportMap,
+  buildEsmShUrl,
+  ESM_SH_BASE_URL,
+  importMapPackages,
+  isPackageSpecifier,
+  parsePackageSpecifier,
+} from '../package-specifier';
 
 describe('parsePackageSpecifier', () => {
   it('should parse a scoped package with version range', () => {
@@ -72,6 +80,7 @@ describe('parsePackageSpecifier', () => {
 
   it('should throw for invalid specifiers', () => {
     expect(() => parsePackageSpecifier('INVALID/BAD NAME')).toThrow('Invalid package specifier');
+    expect(() => parsePackageSpecifier('INVALID/BAD NAME')).toThrow(EsmInvalidSpecifierError);
   });
 });
 
@@ -111,5 +120,44 @@ describe('buildEsmShUrl', () => {
     const spec = parsePackageSpecifier('pkg@1.0.0');
     const url = buildEsmShUrl(spec, '1.0.0', { bundle: false });
     expect(url).toBe(`${ESM_SH_BASE_URL}/pkg@1.0.0`);
+  });
+});
+
+describe('import maps (#766)', () => {
+  it('marks the remapped packages external in the esm.sh URL', () => {
+    const url = buildEsmShUrl(parsePackageSpecifier('@acme/tools@1.0.0'), '1.0.0', {
+      external: importMapPackages({ zod: 'https://cdn.example.com/zod.mjs', 'lodash/': 'file:///vendor/lodash/' }),
+    });
+
+    expect(url).toBe('https://esm.sh/@acme/tools@1.0.0?bundle&external=lodash,zod');
+  });
+
+  it('rewrites exact and prefix specifiers of static and dynamic imports', () => {
+    const bundle = [
+      'import{z}from"zod";',
+      "import chunk from 'lodash/chunk';",
+      'export*from"zod/v4";',
+      'const lazy=import("zod");',
+      'import"left-alone";',
+    ].join('\n');
+
+    const rewritten = applyImportMap(bundle, {
+      zod: 'https://cdn.example.com/zod.mjs',
+      'lodash/': 'file:///vendor/lodash/',
+    });
+
+    expect(rewritten).toBe(
+      [
+        'import{z}from"https://cdn.example.com/zod.mjs";',
+        "import chunk from 'file:///vendor/lodash/chunk';",
+        'export*from"zod/v4";',
+        'const lazy=import("https://cdn.example.com/zod.mjs");',
+        'import"left-alone";',
+      ].join('\n'),
+    );
+  });
+
+  it('leaves a bundle alone without an import map', () => {
+    expect(applyImportMap('import{z}from"zod";', {})).toBe('import{z}from"zod";');
   });
 });

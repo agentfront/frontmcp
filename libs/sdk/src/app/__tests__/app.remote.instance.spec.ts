@@ -89,6 +89,27 @@ describe('App.remote()', () => {
     });
   });
 
+  describe('filter (#766)', () => {
+    it('proxies only the entries the filter lets through, matched by their remote names', async () => {
+      const srv = await createGateway({
+        filter: { exclude: { tools: ['ech*'], prompts: ['greeting'], resources: ['item'] } },
+      });
+
+      expect((await srv.listTools()).tools).toEqual([]);
+      expect((await srv.listPrompts()).prompts).toEqual([]);
+      expect((await srv.listResourceTemplates()).resourceTemplates).toEqual([]);
+      expect((await srv.listResources()).resources.map((r) => r.uri)).toEqual(['test://status']);
+    });
+
+    it("with default: 'exclude', proxies only what include names", async () => {
+      const srv = await createGateway({ filter: { default: 'exclude', include: { tools: ['echo'] } } });
+
+      expect((await srv.listTools()).tools.map((t) => t.name)).toEqual(['up:echo']);
+      expect((await srv.listResources()).resources).toEqual([]);
+      expect((await srv.listPrompts()).prompts).toEqual([]);
+    });
+  });
+
   describe('listing', () => {
     it('lists each remote resource template once', async () => {
       const srv = await createGateway();

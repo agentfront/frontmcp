@@ -3,6 +3,8 @@
  * @description Parse npm package specifiers (e.g., '@scope/pkg@^1.0.0') and build esm.sh URLs.
  */
 
+import { EsmInvalidSpecifierError } from '../errors/esm.errors';
+
 /**
  * Parsed representation of an npm package specifier.
  */
@@ -30,7 +32,7 @@ const PACKAGE_SPECIFIER_RE = /^(?:(@[a-z0-9-~][a-z0-9-._~]*)\/)?([a-z0-9-~][a-z0
  *
  * @param spec - Package specifier string (e.g., '@acme/mcp-tools@^1.0.0')
  * @returns Parsed specifier with scope, name, range
- * @throws Error if the specifier is invalid
+ * @throws EsmInvalidSpecifierError if the specifier is empty or invalid
  *
  * @example
  * parsePackageSpecifier('@acme/mcp-tools@^1.0.0')
@@ -41,13 +43,9 @@ const PACKAGE_SPECIFIER_RE = /^(?:(@[a-z0-9-~][a-z0-9-._~]*)\/)?([a-z0-9-~][a-z0
  */
 export function parsePackageSpecifier(spec: string): ParsedPackageSpecifier {
   const trimmed = spec.trim();
-  if (!trimmed) {
-    throw new Error('Package specifier cannot be empty');
-  }
-
   const match = PACKAGE_SPECIFIER_RE.exec(trimmed);
   if (!match) {
-    throw new Error(`Invalid package specifier: "${trimmed}"`);
+    throw new EsmInvalidSpecifierError(trimmed);
   }
 
   const [, scope, name, range] = match;
@@ -90,15 +88,40 @@ export const ESM_SH_BASE_URL = 'https://esm.sh';
 export function buildEsmShUrl(
   spec: ParsedPackageSpecifier,
   resolvedVersion?: string,
-  options?: { baseUrl?: string; bundle?: boolean },
+  options?: { baseUrl?: string; bundle?: boolean; external?: string[] },
 ): string {
   const base = options?.baseUrl ?? ESM_SH_BASE_URL;
   const version = resolvedVersion ?? spec.range;
-  const bundle = options?.bundle !== false;
+  const query: string[] = [];
+  if (options?.bundle !== false) query.push('bundle');
+  if (options?.external?.length) query.push(`external=${[...options.external].sort().join(',')}`);
 
-  let url = `${base}/${spec.fullName}@${version}`;
-  if (bundle) {
-    url += '?bundle';
-  }
-  return url;
+  const url = `${base}/${spec.fullName}@${version}`;
+  return query.length > 0 ? `${url}?${query.join('&')}` : url;
+}
+
+/** The packages an import map remaps: esm.sh leaves their imports bare (`external`) so they can be rewritten. */
+export function importMapPackages(importMap: Record<string, string>): string[] {
+  return [...new Set(Object.keys(importMap).map((specifier) => specifier.replace(/\/$/, '')))];
+}
+
+const IMPORT_SPECIFIER_RE = /(\bfrom\s*|\bimport\s*\(?\s*)(["'])([^"'\n]+)\2/g;
+
+/**
+ * Rewrites the import specifiers of `bundle` that `importMap` names, with import-map semantics:
+ * a key matches its exact specifier, and a key ending in `/` also matches every specifier under it.
+ */
+export function applyImportMap(bundle: string, importMap: Record<string, string>): string {
+  const entries = Object.entries(importMap);
+  if (entries.length === 0) return bundle;
+  const remap = (specifier: string): string => {
+    const exact = importMap[specifier];
+    if (exact !== undefined) return exact;
+    const prefix = entries.find(([key]) => key.endsWith('/') && specifier.startsWith(key));
+    return prefix ? `${prefix[1]}${specifier.slice(prefix[0].length)}` : specifier;
+  };
+  return bundle.replace(
+    IMPORT_SPECIFIER_RE,
+    (_match, keyword: string, quote: string, specifier: string) => `${keyword}${quote}${remap(specifier)}${quote}`,
+  );
 }

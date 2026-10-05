@@ -3,6 +3,7 @@
  * @description Service for managing connections to remote MCP servers
  */
 
+import { decodeJwtPayloadSafe } from '@frontmcp/auth';
 import {
   Client,
   SSEClientTransport,
@@ -56,6 +57,7 @@ import type {
   McpUnsubscribeFn,
 } from './mcp-client.types';
 import { McpStatelessClientAdapter, negotiateRemoteProtocol } from './mcp-stateless-client.adapter';
+import { fetchWithRemoteRequestHeaders, withRemoteRequestHeaders } from './remote-request-headers';
 import {
   CircuitBreakerManager,
   CircuitOpenError,
@@ -194,11 +196,12 @@ export class McpClientService {
     this.updateConnectionStatus(appId, 'connecting');
 
     try {
+      const headers = await this.connectionHeaders(request);
       // Protocol 2026-07-28 remotes are stateless and have no `initialize`, so
       // the upstream SDK client cannot drive them. When selected (or discovered
       // via `auto`), swap in FrontMCP's own client behind an adapter that
       // presents the same surface to everything downstream.
-      const connection2026 = await this.tryConnect2026(request);
+      const connection2026 = await this.tryConnect2026(request, headers);
       if (connection2026) {
         this.connections.set(appId, connection2026);
         await this.discoverCapabilities(appId);
@@ -212,7 +215,7 @@ export class McpClientService {
       }
 
       // Create transport based on type
-      let transport = this.createTransport(request);
+      let transport = this.createTransport(request, headers);
 
       // Create MCP client with configurable name/version
       const client = new Client(
@@ -237,7 +240,7 @@ export class McpClientService {
             `Streamable HTTP connection failed for ${appId}: ${(connectError as Error).message}. ` +
               `Falling back to SSE transport.`,
           );
-          transport = this.createFallbackSSETransport(request);
+          transport = this.createFallbackSSETransport(request, headers);
           await client.connect(transport);
         } else {
           throw connectError;
@@ -502,13 +505,7 @@ export class McpClientService {
       }
     }
 
-    // Log if authContext is provided - headers are set at transport level during connect
-    if (authContext?.headers && Object.keys(authContext.headers).length > 0) {
-      this.logger.debug(
-        `authContext.headers provided for tool ${toolName} on ${appId}. ` +
-          `Note: Auth headers are configured at connection time via transportOptions.headers`,
-      );
-    }
+    const callerHeaders = await this.callerHeaders(appId, authContext);
 
     const operation = async (): Promise<CallToolResult> => {
       const connection = this.getConnection(appId);
@@ -527,9 +524,8 @@ export class McpClientService {
         }
 
         // Call the tool with timeout
-        const toolCallPromise = connection.client.callTool(
-          { name: toolName, arguments: args },
-          undefined, // resultSchema - let the server handle it
+        const toolCallPromise = withRemoteRequestHeaders(callerHeaders, () =>
+          connection.client.callTool({ name: toolName, arguments: args }),
         );
 
         const timeoutPromise = new Promise<never>((_, reject) => {
@@ -578,7 +574,7 @@ export class McpClientService {
     // Execute with retry if enabled
     if (this.options.enableRetry) {
       return withRetry(operation, {
-        ...this.options.retryOptions,
+        ...this.retryOptionsFor(appId),
         isRetryable: (error) => {
           // Don't retry non-transient errors
           if (error instanceof RemoteToolNotFoundError) return false;
@@ -605,7 +601,8 @@ export class McpClientService {
     const startTime = Date.now();
 
     try {
-      const result = await connection.client.readResource({ uri });
+      const callerHeaders = await this.callerHeaders(appId, authContext);
+      const result = await withRemoteRequestHeaders(callerHeaders, () => connection.client.readResource({ uri }));
 
       // Update heartbeat
       connection.lastHeartbeat = new Date();
@@ -646,7 +643,10 @@ export class McpClientService {
         throw new RemotePromptNotFoundError(appId, promptName);
       }
 
-      const result = await connection.client.getPrompt({ name: promptName, arguments: args });
+      const callerHeaders = await this.callerHeaders(appId, authContext);
+      const result = await withRemoteRequestHeaders(callerHeaders, () =>
+        connection.client.getPrompt({ name: promptName, arguments: args }),
+      );
 
       // Update heartbeat
       connection.lastHeartbeat = new Date();
@@ -708,12 +708,15 @@ export class McpClientService {
         return this.buildAuthHeaders(authConfig.credentials);
 
       case 'forward': {
-        if (!gatewayAuthInfo?.token) {
+        const token = authConfig.tokenClaim
+          ? decodeJwtPayloadSafe(gatewayAuthInfo?.token)?.[authConfig.tokenClaim]
+          : gatewayAuthInfo?.token;
+        if (typeof token !== 'string' || token.length === 0) {
           this.logger.warn(`No gateway auth token to forward for ${appId}`);
           return {};
         }
         const headerName = authConfig.headerName || 'Authorization';
-        return { [headerName]: `Bearer ${gatewayAuthInfo.token}` };
+        return { [headerName]: `Bearer ${token}` };
       }
 
       case 'mapped':
@@ -777,6 +780,35 @@ export class McpClientService {
   // PRIVATE HELPERS
   // ═══════════════════════════════════════════════════════════════════
 
+  /** The headers every request to the remote carries: `transportOptions.headers` and static `remoteAuth` credentials. */
+  private async connectionHeaders(request: McpConnectRequest): Promise<Record<string, string> | undefined> {
+    const configured = (request.transportOptions as McpHttpTransportOptions | undefined)?.headers;
+    const credentials =
+      request.auth?.mode === 'static' ? await this.resolveAuthHeaders(request.appId, request.auth) : {};
+    const headers = { ...configured, ...credentials };
+    return Object.keys(headers).length > 0 ? headers : undefined;
+  }
+
+  /** The headers one call adds for its caller: the ones it names, and a forwarded token or mapped credentials. */
+  private async callerHeaders(appId: string, authContext?: McpRemoteAuthContext): Promise<Record<string, string>> {
+    const auth = this.configs.get(appId)?.auth;
+    const fromCaller =
+      auth?.mode === 'forward' || auth?.mode === 'mapped'
+        ? await this.resolveAuthHeaders(appId, auth, authContext?.authInfo as AuthInfo | undefined)
+        : {};
+    return { ...authContext?.headers, ...fromCaller };
+  }
+
+  /** The retry policy for calls to `appId`: its `retryAttempts` and `retryDelayMs`, else the service's. */
+  private retryOptionsFor(appId: string): RetryOptions {
+    const transportOptions = this.configs.get(appId)?.transportOptions as McpHttpTransportOptions | undefined;
+    return {
+      ...this.options.retryOptions,
+      ...(transportOptions?.retryAttempts !== undefined && { maxAttempts: transportOptions.retryAttempts + 1 }),
+      ...(transportOptions?.retryDelayMs !== undefined && { initialDelayMs: transportOptions.retryDelayMs }),
+    };
+  }
+
   private getConnection(appId: string): McpClientConnection {
     const connection = this.connections.get(appId);
     if (!connection || connection.status !== 'connected') {
@@ -797,7 +829,10 @@ export class McpClientService {
    * Returns `undefined` for every other case so the legacy path below runs
    * completely untouched — the default for an unconfigured remote.
    */
-  private async tryConnect2026(request: McpConnectRequest): Promise<McpClientConnection | undefined> {
+  private async tryConnect2026(
+    request: McpConnectRequest,
+    headers: Record<string, string> | undefined,
+  ): Promise<McpClientConnection | undefined> {
     const httpOptions = request.transportOptions as McpHttpTransportOptions | undefined;
 
     if (request.transportType !== 'http') {
@@ -812,13 +847,14 @@ export class McpClientService {
       }
       return undefined;
     }
-    const negotiated = await negotiateRemoteProtocol(request.url, httpOptions?.protocolVersion, httpOptions?.headers);
+    const negotiated = await negotiateRemoteProtocol(request.url, httpOptions?.protocolVersion, headers);
     if (negotiated !== '2026-07-28') return undefined;
 
     const adapter = new McpStatelessClientAdapter({
       url: request.url,
       clientInfo: { name: this.options.clientName, version: this.options.clientVersion },
-      headers: httpOptions?.headers,
+      headers,
+      fetchImpl: fetchWithRemoteRequestHeaders,
     });
     await adapter.connect();
 
@@ -835,25 +871,17 @@ export class McpClientService {
     };
   }
 
-  private createTransport(request: McpConnectRequest): Transport {
-    const { transportType, url, transportOptions } = request;
-    const httpOptions = transportOptions as McpHttpTransportOptions | undefined;
+  private createTransport(request: McpConnectRequest, headers: Record<string, string> | undefined): Transport {
+    const { transportType, url } = request;
+    const options = { requestInit: headers ? { headers } : undefined, fetch: fetchWithRemoteRequestHeaders };
 
     switch (transportType) {
-      case 'http': {
+      case 'http':
         // Start with Streamable HTTP - fallback to SSE happens during connect() if needed
-        const headers = httpOptions?.headers;
-        return new StreamableHTTPClientTransport(new URL(url), {
-          requestInit: headers ? { headers } : undefined,
-        });
-      }
+        return new StreamableHTTPClientTransport(new URL(url), options);
 
-      case 'sse': {
-        const headers = httpOptions?.headers;
-        return new SSEClientTransport(new URL(url), {
-          requestInit: headers ? { headers } : undefined,
-        });
-      }
+      case 'sse':
+        return new SSEClientTransport(new URL(url), options);
 
       case 'worker':
       case 'npm':
@@ -869,11 +897,13 @@ export class McpClientService {
   /**
    * Create fallback SSE transport when Streamable HTTP fails
    */
-  private createFallbackSSETransport(request: McpConnectRequest): Transport {
-    const httpOptions = request.transportOptions as McpHttpTransportOptions | undefined;
-    const headers = httpOptions?.headers;
+  private createFallbackSSETransport(
+    request: McpConnectRequest,
+    headers: Record<string, string> | undefined,
+  ): Transport {
     return new SSEClientTransport(new URL(request.url), {
       requestInit: headers ? { headers } : undefined,
+      fetch: fetchWithRemoteRequestHeaders,
     });
   }
 
