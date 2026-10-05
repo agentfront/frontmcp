@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
 import { App, Tool, ToolContext } from '../../common';
+import { connect } from '../../direct';
 import { FrontMcpInstance } from '../front-mcp';
 
 // The browser and worker builds resolve `#express-host` to this stub, whose constructor throws (#747).
@@ -34,6 +35,16 @@ describe('entry points that never listen, with the browser build of the Express 
       expect(tools.map((tool) => tool.name)).toEqual(['ping']);
     } finally {
       await server.dispose();
+    }
+  });
+
+  it('connect returns a client that lists its tools', async () => {
+    const client = await connect({ ...config, info: { name: 'browser-host-connect', version: '1.0.0' } });
+    try {
+      const tools = (await client.listTools()) as Array<{ name: string }>;
+      expect(tools.map((tool) => tool.name)).toEqual(['ping']);
+    } finally {
+      await client.close();
     }
   });
 });
