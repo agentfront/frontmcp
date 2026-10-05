@@ -7,34 +7,37 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 
 ## Hook Types
 
-| Decorator | Timing                 | Use Case                   |
-| --------- | ---------------------- | -------------------------- |
-| `@Stage`  | Define execution stage | Custom flow steps          |
-| `@Will`   | Before stage executes  | Pre-processing, validation |
-| `@Did`    | After stage executes   | Post-processing, logging   |
-| `@Around` | Wraps stage execution  | Caching, error handling    |
+| Decorator | Timing                                    | Use Case                                 |
+| --------- | ----------------------------------------- | ---------------------------------------- |
+| `@Stage`  | One more step of a stage, next to its own | Extra work in the stage, ending the flow |
+| `@Will`   | Before stage executes                     | Pre-processing, validation               |
+| `@Did`    | After stage executes                      | Post-processing, logging                 |
+| `@Around` | Wraps stage execution                     | Caching, error handling                  |
 
 ## FlowHooksOf
 
 Create typed hook decorators for a specific flow:
 
 ```typescript
-import { FlowHooksOf } from '@frontmcp/sdk';
+import { FlowCtxOf, FlowHooksOf, Provider } from '@frontmcp/sdk';
 
 const { Stage, Will, Did, Around } = FlowHooksOf('tools:call-tool');
 
+@Provider({ name: 'my-hooks' })
 class MyHooks {
   @Will('execute')
-  async beforeExecute(ctx: ToolFlowContext) {
-    console.log('Before tool execution');
+  async beforeExecute(ctx: FlowCtxOf<'tools:call-tool'>) {
+    ctx.logger.info('Before tool execution');
   }
 
   @Did('execute')
-  async afterExecute(ctx: ToolFlowContext) {
-    console.log('After tool execution');
+  async afterExecute(ctx: FlowCtxOf<'tools:call-tool'>) {
+    ctx.logger.info('After tool execution');
   }
 }
 ```
+
+The stage names a decorator accepts are the stages of that flow (`execute`, `validateInput`, `finalize`, ... for `tools:call-tool`). A hook method receives the running flow, typed `FlowCtxOf<'<flow-name>'>`; see [Hook Context](#hook-context).
 
 ## Available Flows
 
@@ -66,21 +69,24 @@ Execute before a flow stage:
 ```typescript
 const { Will } = FlowHooksOf('tools:call-tool');
 
+@Provider({ name: 'validation-hooks' })
 class ValidationHooks {
   @Will('execute', { priority: 10 })
-  async validateInput(ctx: ToolFlowContext) {
-    const input = ctx.state.get('input');
-    if (!input) {
-      throw new Error('Input is required');
+  async requireArguments(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { arguments: toolArguments } = ctx.state.required.input;
+    if (!toolArguments || Object.keys(toolArguments).length === 0) {
+      throw new InvalidInputError('Arguments are required');
     }
   }
 
   @Will('execute', { priority: 20 })
-  async logStart(ctx: ToolFlowContext) {
-    console.log(`Starting tool: ${ctx.state.get('toolName')}`);
+  async logStart(ctx: FlowCtxOf<'tools:call-tool'>) {
+    ctx.logger.info(`Starting tool: ${ctx.state.required.input.name}`);
   }
 }
 ```
+
+The tool name is `ctx.state.required.input.name`: the flow state has no `toolName` key, and `ctx.state.get()` accepts only the keys the flow declares.
 
 ### Priority
 
@@ -97,29 +103,29 @@ Conditionally execute hooks:
 
 ```typescript
 @Will('execute', {
-  filter: (ctx) => ctx.state.get('toolName') === 'sensitive_tool'
+  filter: (ctx) => ctx.state.required.input.name === 'sensitive_tool'
 })
-async logSensitiveAccess(ctx) {
-  console.log('Accessing sensitive tool');
+async logSensitiveAccess(ctx: FlowCtxOf<'tools:call-tool'>) {
+  ctx.logger.warn('Accessing sensitive tool');
 }
 ```
 
 ## @Did (After Hook)
 
-Execute after a flow stage:
+Execute after a flow stage. A `Did` hook runs only when the stage succeeded; to see failures too, use an [`@Around`](#around-wrapper-hook) hook.
 
 ```typescript
 const { Did } = FlowHooksOf('tools:call-tool');
 
+@Provider({ name: 'audit-hooks' })
 class AuditHooks {
   @Did('execute')
-  async auditToolCall(ctx: ToolFlowContext) {
-    const toolName = ctx.state.get('toolName');
-    const output = ctx.state.get('output');
-    await this.auditService.log({
-      tool: toolName,
+  async auditToolCall(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { input, toolContext } = ctx.state.required;
+    await ctx.get(AuditService).log({
+      tool: input.name,
       timestamp: new Date(),
-      success: !ctx.state.get('error'),
+      output: toolContext.output,
     });
   }
 }
@@ -132,50 +138,52 @@ Wrap stage execution for full control. The stage's Will hooks run first, `next()
 ```typescript
 const { Around } = FlowHooksOf('tools:call-tool');
 
+@Provider({ name: 'caching-hooks' })
 class CachingHooks {
-  @Around('execute')
-  async cacheResults(ctx: ToolFlowContext, next: () => Promise<void>) {
-    const cacheKey = this.getCacheKey(ctx);
-    const cached = await this.cache.get(cacheKey);
+  private readonly cache = new Map<string, unknown>();
 
-    if (cached) {
+  @Around('execute')
+  async cacheResults(ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<void>) {
+    const { name, arguments: toolArguments } = ctx.state.required.input;
+    const cacheKey = `${name}:${JSON.stringify(toolArguments)}`;
+    const cached = this.cache.get(cacheKey);
+
+    if (cached !== undefined) {
       ctx.state.required.toolContext.output = cached;
       return; // Skip actual execution
     }
 
     await next(); // Execute the stage
 
-    await this.cache.set(cacheKey, ctx.state.required.toolContext.output);
+    this.cache.set(cacheKey, ctx.state.required.toolContext.output);
   }
 }
 ```
 
-## @Stage (Custom Stage)
+## @Stage (Stage Step)
 
-Define custom flow stages:
+Add a step to one of the flow's stages. The stage must be one the flow declares: a flow runs only the stages in its plan, so a `@Stage` hook cannot add a new stage.
+
+A `@Stage` hook does not replace the flow's own step: both run, in `priority` order (lower first). At equal priority a plugin's or provider's step runs before the flow's own, and a step declared on an entry class runs after it. The value the method returns is ignored. To keep the flow's own step from running, end the flow with `ctx.respond(result)` from the `@Stage` hook, or skip the stage with an [`@Around`](#around-wrapper-hook) hook that does not call `next()`.
 
 ```typescript
-const { Stage, Will, Did } = FlowHooksOf('tools:call-tool');
+const { Stage } = FlowHooksOf('tools:call-tool');
 
-class CustomFlow {
-  @Stage('preProcess')
-  async preProcess(ctx: ToolFlowContext) {
-    // Custom pre-processing stage
-    const input = ctx.state.get('input');
-    ctx.state.set('processedInput', transform(input));
-  }
-
-  @Will('preProcess')
-  async beforePreProcess(ctx) {
-    console.log('About to pre-process');
-  }
-
-  @Did('preProcess')
-  async afterPreProcess(ctx) {
-    console.log('Pre-processing complete');
+@Provider({ name: 'maintenance-hooks' })
+class MaintenanceHooks {
+  @Stage('execute', {
+    filter: (ctx) => ctx.state.required.input.name === 'export_report',
+  })
+  async answerDuringMaintenance(ctx: FlowCtxOf<'tools:call-tool'>) {
+    // Runs before the tool's own execute step, which ctx.respond() then skips
+    ctx.respond({ content: [{ type: 'text', text: 'Reports are paused for maintenance.' }] });
   }
 }
 ```
+
+`ctx.respond()` ends the flow with that output: the rest of the stage and the stages after it are skipped, while the stage's `Did` hooks and the flow's cleanup stages still run. In `tools:call-tool` the output is a complete `CallToolResult` and does not go through the tool's output schema.
+
+To share a value between the hooks of one call, key it on the flow in a `WeakMap`, or keep it in a local variable of an `@Around` hook: the flow state accepts only the keys the flow declares, so `ctx.state.set('processedInput', ...)` does not compile. The [Full Example](#full-example) times calls that way.
 
 ## Hook Options
 
@@ -234,7 +242,7 @@ A hook declared on a provider with `scope: ProviderScope.CONTEXT` runs on the in
 session), the same instance the request's tools resolve with `this.get()`:
 
 ```typescript
-@Provider({ scope: ProviderScope.CONTEXT })
+@Provider({ name: 'request-trace', scope: ProviderScope.CONTEXT })
 class RequestTrace {
   readonly steps: string[] = [];
 
@@ -331,26 +339,38 @@ async errorHandler(ctx, next) {
 ## Full Example
 
 ```typescript
-import { FlowHooksOf, Provider, Plugin, App, FrontMcp, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from '@frontmcp/sdk';
+import {
+  App,
+  FlowCtxOf,
+  FlowHooksOf,
+  FrontMcp,
+  Plugin,
+  Provider,
+  RateLimitError,
+  Tool,
+  ToolContext,
+  z,
+} from '@frontmcp/sdk';
 
 const { Will, Did, Around } = FlowHooksOf('tools:call-tool');
 
-// Audit hook provider
-@Provider()
+type ToolFlow = FlowCtxOf<'tools:call-tool'>;
+
+// Audit hook provider: the Will and Did hooks of one call share its start time through the flow instance
+@Provider({ name: 'audit-hooks' })
 class AuditHooks {
+  private readonly startTimes = new WeakMap<ToolFlow, number>();
   private auditLog: Array<{ tool: string; timestamp: Date; duration: number }> = [];
 
   @Will('execute', { priority: 0 })
-  async recordStart(ctx) {
-    ctx.state.set('_auditStartTime', Date.now());
+  async recordStart(ctx: ToolFlow) {
+    this.startTimes.set(ctx, Date.now());
   }
 
   @Did('execute', { priority: 1000 })
-  async recordEnd(ctx) {
-    const startTime = ctx.state.get('_auditStartTime');
-    const duration = Date.now() - startTime;
-    const toolName = ctx.state.get('toolName');
+  async recordEnd(ctx: ToolFlow) {
+    const duration = Date.now() - (this.startTimes.get(ctx) ?? Date.now());
+    const toolName = ctx.state.required.input.name;
 
     this.auditLog.push({
       tool: toolName,
@@ -367,14 +387,14 @@ class AuditHooks {
 }
 
 // Rate limiting hook
-@Provider()
+@Provider({ name: 'rate-limit-hooks' })
 class RateLimitHooks {
   private calls = new Map<string, number[]>();
   private maxCallsPerMinute = 60;
 
   @Will('execute', { priority: 5 })
-  async checkRateLimit(ctx) {
-    const toolName = ctx.state.get('toolName');
+  async checkRateLimit(ctx: ToolFlow) {
+    const toolName = ctx.state.required.input.name;
     const now = Date.now();
     const oneMinuteAgo = now - 60000;
 
@@ -391,7 +411,7 @@ class RateLimitHooks {
 }
 
 // Caching hook
-@Provider()
+@Provider({ name: 'cache-hooks' })
 class CacheHooks {
   private cache = new Map<string, { value: unknown; expires: number }>();
   private ttl = 60000; // 1 minute
@@ -399,7 +419,7 @@ class CacheHooks {
   @Around('execute', {
     filter: (ctx) => ctx.state.tool?.metadata.annotations?.idempotentHint === true
   })
-  async cacheIdempotent(ctx, next) {
+  async cacheIdempotent(ctx: ToolFlow, next: () => Promise<void>) {
     const { name: toolName, arguments: toolArguments } = ctx.state.required.input;
     const cacheKey = `${toolName}:${JSON.stringify(toolArguments)}`;
     const toolContext = ctx.state.required.toolContext;

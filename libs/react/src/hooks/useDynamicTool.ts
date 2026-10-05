@@ -17,6 +17,7 @@ import type { CallToolResult } from '@frontmcp/sdk';
 
 import { FrontMcpContext } from '../provider/FrontMcpContext';
 import type { DynamicToolDef } from '../types';
+import { useIsomorphicLayoutEffect } from '../utils/useIsomorphicLayoutEffect';
 import { zodToJsonSchema } from '../utils/zodToJsonSchema';
 
 /** Options every dynamic tool takes, whichever way its schema is given. */
@@ -100,8 +101,8 @@ export function useDynamicTool<S extends z.ZodObject<z.ZodRawShape>>(options: Us
   const executeRef = useRef(execute);
   const schemaRef = useRef(schema);
 
-  // Set after commit, never during render: a render React discards must not reach a running tool
-  useEffect(() => {
+  // Set at commit, before passive effects and never during render: a render React discards must not reach a running tool
+  useIsomorphicLayoutEffect(() => {
     executeRef.current = execute;
     schemaRef.current = schema;
   }, [execute, schema]);

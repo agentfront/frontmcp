@@ -7,7 +7,8 @@ tags: [development, plugin-hooks, plugin, hooks, logging]
 features:
   - "Using `ToolHook` pre-built export instead of calling `FlowHooksOf('tools:call-tool')` directly"
   - 'Destructuring `Will` and `Did` decorators from the hook object'
-  - 'Setting `priority: 100` on `@Will` to ensure the logging hook runs early'
+  - "Setting `priority: -100` on `@Will` so the logging hook runs before the stage's other `@Will` hooks (lower runs first)"
+  - 'Reading the tool name and arguments from `ctx.state.required.input` and logging with `ctx.logger`'
   - 'Registering a plugin in the `plugins` array of `@App`'
 ---
 
@@ -19,28 +20,29 @@ Demonstrates a plugin that logs tool execution using `@Will` and `@Did` hook dec
 
 ```typescript
 // src/plugins/logging.plugin.ts
-import { Plugin } from '@frontmcp/sdk';
-import { ToolHook } from '@frontmcp/sdk';
+import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
 
 const { Will, Did } = ToolHook;
 
 @Plugin({ name: 'logging-plugin' })
 export class LoggingPlugin {
-  @Will('execute', { priority: 100 })
-  logBefore(ctx) {
-    console.log(`[LOG] Tool "${ctx.toolName}" called with`, ctx.input);
+  @Will('execute', { priority: -100 })
+  logBefore(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { name, arguments: toolArguments } = ctx.state.required.input;
+    ctx.logger.info(`Tool "${name}" called`, toolArguments);
   }
 
   @Did('execute')
-  logAfter(ctx) {
-    console.log(`[LOG] Tool "${ctx.toolName}" completed in ${ctx.elapsed()}ms`);
+  logAfter(ctx: FlowCtxOf<'tools:call-tool'>) {
+    ctx.logger.info(`Tool "${ctx.state.required.input.name}" completed`);
   }
 }
 ```
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
+
 import { LoggingPlugin } from './plugins/logging.plugin';
 
 @App({
@@ -60,7 +62,8 @@ class MyServer {}
 
 - Using `ToolHook` pre-built export instead of calling `FlowHooksOf('tools:call-tool')` directly
 - Destructuring `Will` and `Did` decorators from the hook object
-- Setting `priority: 100` on `@Will` to ensure the logging hook runs early
+- Setting `priority: -100` on `@Will` so the logging hook runs before the stage's other `@Will` hooks (lower runs first)
+- Reading the tool name and arguments from `ctx.state.required.input` and logging with `ctx.logger`
 - Registering a plugin in the `plugins` array of `@App`
 
 ## Related

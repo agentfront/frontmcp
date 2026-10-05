@@ -15,6 +15,7 @@ import { useContext, useEffect, useRef } from 'react';
 import type { CallToolResult } from '@frontmcp/sdk';
 
 import { FrontMcpContext } from '../provider/FrontMcpContext';
+import { useIsomorphicLayoutEffect } from '../utils/useIsomorphicLayoutEffect';
 import type {
   ApiClientOptions,
   ApiOperation,
@@ -121,8 +122,8 @@ export function useApiClient(options: ApiClientOptions): void {
   const operationsRef = useRef(operations);
   const clientRef = useRef<HttpClient>(client ?? createFetchClient(customFetch));
 
-  // Set after commit, never during render: a render React discards must not reach a running tool
-  useEffect(() => {
+  // Set at commit, before passive effects and never during render: a render React discards must not reach a running tool
+  useIsomorphicLayoutEffect(() => {
     baseUrlRef.current = baseUrl;
     headersRef.current = headers;
     operationsRef.current = operations;

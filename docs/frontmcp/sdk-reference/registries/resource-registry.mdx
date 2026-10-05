@@ -7,11 +7,15 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 
 ## Overview
 
+`ResourceRegistry` is not exported from `@frontmcp/sdk`: reach it through `scope.resources`, and name its type as `ScopeEntry['resources']`. Inside a tool, resource or prompt, `this.scope` is the scope serving the call.
+
 ```typescript
-import { ResourceRegistry } from '@frontmcp/sdk';
+import type { ScopeEntry } from '@frontmcp/sdk';
+
+type ResourceRegistry = ScopeEntry['resources'];
 
 // Access via scope
-const resources = scope.resources;
+const resources: ResourceRegistry = scope.resources;
 
 // List all static resources
 const allResources = resources.getResources();

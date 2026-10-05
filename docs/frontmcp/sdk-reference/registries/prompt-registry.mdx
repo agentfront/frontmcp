@@ -7,11 +7,15 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 
 ## Overview
 
+`PromptRegistry` is not exported from `@frontmcp/sdk`: reach it through `scope.prompts`, and name its type as `ScopeEntry['prompts']`. Inside a tool, resource or prompt, `this.scope` is the scope serving the call.
+
 ```typescript
-import { PromptRegistry } from '@frontmcp/sdk';
+import type { ScopeEntry } from '@frontmcp/sdk';
+
+type PromptRegistry = ScopeEntry['prompts'];
 
 // Access via scope
-const prompts = scope.prompts;
+const prompts: PromptRegistry = scope.prompts;
 
 // List all prompts
 const allPrompts = prompts.getPrompts();

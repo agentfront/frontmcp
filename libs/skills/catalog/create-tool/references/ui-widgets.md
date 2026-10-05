@@ -1,6 +1,6 @@
 ---
 name: ui-widgets
-description: @Tool({ ui }) — template formats, trusted markup (html / escapeStringResults), servingMode, host-detect resourceMode, CSP, ignored options, MCP Apps spec.
+description: '@Tool({ ui }) — template formats, trusted markup (html / escapeStringResults), servingMode, host-detect resourceMode, CSP, ignored options, MCP Apps spec.'
 ---
 
 # Tool UI widgets

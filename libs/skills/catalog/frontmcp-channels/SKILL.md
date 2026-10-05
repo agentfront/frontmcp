@@ -7,7 +7,20 @@ when_to_use: |
   sources, app / agent / job event alerts, service connectors, file watchers,
   or a two-way chat bridge (WhatsApp, Telegram, Slack, Discord).
 paths: '**/*.channel.ts'
-tags: [channels, notifications, claude-code, webhooks, messaging, real-time, two-way]
+tags:
+  [
+    channels,
+    notifications,
+    claude-code,
+    webhooks,
+    messaging,
+    real-time,
+    two-way,
+    whatsapp,
+    telegram,
+    slack,
+    chat-bridge,
+  ]
 category: development
 targets: [all]
 bundle: [full]

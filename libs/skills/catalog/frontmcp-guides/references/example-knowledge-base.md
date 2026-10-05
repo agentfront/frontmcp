@@ -390,7 +390,9 @@ export class ResearcherAgent extends AgentContext {}
 
 ## Plugin: Audit Log
 
-Real plugins extend `DynamicPlugin<Options>` and attach to flows via the `FlowHooksOf` decorators (e.g. `@ToolHook.Will('execute')`, `@ToolHook.Did('execute')`). There is no `PluginHookContext`/`onToolExecute*` lifecycle.
+Real plugins attach to flows via the `FlowHooksOf` decorators (e.g. `@ToolHook.Around('execute')`); a plugin that takes options extends `DynamicPlugin<Options>`. There is no `PluginHookContext`/`onToolExecute*` lifecycle.
+
+A single `@Around('execute')` hook times the call: the start time is a local variable, so concurrent calls never share it. The flow state accepts only the keys the flow declares, so `flowCtx.state.set('audit:startTime', ...)` does not compile. To share a value between separate hooks of one call (a `@Will` and a `@Did`), key it on the flow in a `WeakMap` (see `create-plugin-hooks`).
 
 ```typescript
 // src/plugins/audit-log.plugin.ts
@@ -400,48 +402,56 @@ export interface AuditLogPluginOptions {
   endpoint?: string;
 }
 
+export interface AuditLogEntry {
+  timestamp: string;
+  tool: string;
+  userId: string | undefined;
+  duration: number;
+  success: boolean;
+}
+
 @Plugin({
   name: 'audit-log',
   description: 'Logs all tool invocations for audit compliance',
 })
 export class AuditLogPlugin extends DynamicPlugin<AuditLogPluginOptions> {
-  private readonly logs: Array<{
-    timestamp: string;
-    tool: string;
-    userId: string | undefined;
-    duration: number;
-    success: boolean;
-  }> = [];
+  private readonly logs: AuditLogEntry[] = [];
 
   constructor(protected options: AuditLogPluginOptions = {}) {
     super();
   }
 
-  // `Will('execute')` runs immediately before the tool's execute() — record start time on the flow state.
-  @ToolHook.Will('execute', { priority: 100 })
-  async onWillExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): Promise<void> {
-    flowCtx.state.set('audit:startTime', Date.now());
+  // `Around('execute')` wraps the tool's execute(), so one hook sees the start, the end and any error.
+  @ToolHook.Around('execute', { priority: 100 })
+  async aroundExecute(flowCtx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<void>): Promise<void> {
+    const startTime = Date.now();
+    let success = false;
+    try {
+      await next();
+      success = true;
+    } finally {
+      this.record(flowCtx, Date.now() - startTime, success);
+    }
   }
 
-  // `Did('execute')` runs after a successful execute() — compute duration and log success.
-  @ToolHook.Did('execute', { priority: 100 })
-  async onDidExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): Promise<void> {
-    const startTime = flowCtx.state.get('audit:startTime') as number | undefined;
-    const duration = startTime ? Date.now() - startTime : 0;
-    const ctx = flowCtx.state.required.toolContext;
+  getLogs(): ReadonlyArray<AuditLogEntry> {
+    return [...this.logs];
+  }
 
-    const entry = {
+  private record(flowCtx: FlowCtxOf<'tools:call-tool'>, duration: number, success: boolean): void {
+    const ctx = flowCtx.state.required.toolContext;
+    const entry: AuditLogEntry = {
       timestamp: new Date().toISOString(),
       tool: ctx.metadata.name,
-      userId: (ctx.authInfo as any)?.user?.sub as string | undefined,
+      userId: ctx.authInfo.user?.sub,
       duration,
-      success: true,
+      success,
     };
     this.logs.push(entry);
 
     if (this.options.endpoint) {
-      // Audit logging should never block tool execution.
-      await ctx
+      // Audit logging should never block or fail the tool call.
+      void ctx
         .fetch(this.options.endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -449,29 +459,6 @@ export class AuditLogPlugin extends DynamicPlugin<AuditLogPluginOptions> {
         })
         .catch(() => undefined);
     }
-  }
-
-  // `Around('execute')` wraps the call so we can capture errors as well.
-  @ToolHook.Around('execute', { priority: 100 })
-  async aroundExecute(flowCtx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<unknown>): Promise<unknown> {
-    try {
-      return await next();
-    } catch (err) {
-      const startTime = flowCtx.state.get('audit:startTime') as number | undefined;
-      const ctx = flowCtx.state.required.toolContext;
-      this.logs.push({
-        timestamp: new Date().toISOString(),
-        tool: ctx.metadata.name,
-        userId: (ctx.authInfo as any)?.user?.sub as string | undefined,
-        duration: startTime ? Date.now() - startTime : 0,
-        success: false,
-      });
-      throw err;
-    }
-  }
-
-  getLogs(): ReadonlyArray<(typeof this.logs)[number]> {
-    return [...this.logs];
   }
 }
 ```
@@ -512,7 +499,7 @@ describe('ResearcherAgent E2E', () => {
 
 ## Test: Audit Log Plugin
 
-Test the hook methods directly with a minimal `FlowCtx` shape. The `state` object is a `Map`-like store and `state.required.toolContext` is the live `ToolContext` exposed to hooks.
+Test the hook method directly with a minimal flow shape: `state.required.toolContext` is the live `ToolContext` exposed to hooks, and `next` stands in for the tool's `execute` stage.
 
 ```typescript
 // test/audit-log.plugin.spec.ts
@@ -523,29 +510,19 @@ import { AuditLogPlugin } from '../src/plugins/audit-log.plugin';
 type ToolFlowCtx = FlowCtxOf<'tools:call-tool'>;
 
 function makeFlowCtx(toolName: string, userSub: string | undefined): ToolFlowCtx {
-  const map = new Map<string, unknown>();
   const toolContext = {
     metadata: { name: toolName },
     authInfo: userSub ? { user: { sub: userSub } } : {},
     fetch: jest.fn().mockResolvedValue(new Response(null, { status: 204 })),
   };
-  return {
-    state: {
-      set: (k: string, v: unknown) => map.set(k, v),
-      get: (k: string) => map.get(k),
-      required: { toolContext },
-    },
-    rawInput: {},
-  } as unknown as ToolFlowCtx;
+  return { state: { required: { toolContext } } } as unknown as ToolFlowCtx;
 }
 
 describe('AuditLogPlugin', () => {
   it('records a successful tool execution', async () => {
     const plugin = new AuditLogPlugin();
-    const flowCtx = makeFlowCtx('search_docs', 'user-1');
 
-    await plugin.onWillExecute(flowCtx);
-    await plugin.onDidExecute(flowCtx);
+    await plugin.aroundExecute(makeFlowCtx('search_docs', 'user-1'), () => Promise.resolve());
 
     const logs = plugin.getLogs();
     expect(logs).toHaveLength(1);
@@ -555,14 +532,11 @@ describe('AuditLogPlugin', () => {
     expect(logs[0].duration).toBeGreaterThanOrEqual(0);
   });
 
-  it('records a failed tool execution via aroundExecute', async () => {
+  it('records a failed tool execution and rethrows the error', async () => {
     const plugin = new AuditLogPlugin();
-    const flowCtx = makeFlowCtx('ingest_document', undefined);
-
-    await plugin.onWillExecute(flowCtx);
     const failing = () => Promise.reject(new Error('boom'));
 
-    await expect(plugin.aroundExecute(flowCtx, failing)).rejects.toThrow('boom');
+    await expect(plugin.aroundExecute(makeFlowCtx('ingest_document', undefined), failing)).rejects.toThrow('boom');
 
     const logs = plugin.getLogs();
     expect(logs).toHaveLength(1);
