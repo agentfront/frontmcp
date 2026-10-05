@@ -5,6 +5,8 @@
  * Handles JWT shape differences across IdPs (Auth0, Keycloak, Okta, etc.).
  */
 
+import { getEnv } from '@frontmcp/utils';
+
 import type { AuthoritiesClaimsMapping } from './authorities.profiles';
 import type { AuthoritiesEvaluationContext, RelationshipResolver } from './authorities.types';
 
@@ -105,6 +107,12 @@ export function signedInSubject(rawSub: unknown, mappedSub?: unknown): string | 
   return [mappedSub, rawSub].find((candidate): candidate is string => !isAnonymousSubject(candidate));
 }
 
+/** The `env.*` of an evaluation context: the runtime's environment variables, read when a rule names one. */
+const runtimeEnv: Record<string, unknown> = new Proxy(
+  {},
+  { get: (_target, name) => (typeof name === 'string' ? getEnv(name) : undefined) },
+);
+
 /**
  * Options for building an evaluation context.
  */
@@ -134,7 +142,7 @@ export class AuthoritiesContextBuilder {
   build(
     authInfo: Partial<AuthInfoLike>,
     input: Record<string, unknown> = {},
-    env: Record<string, unknown> = {},
+    env: Record<string, unknown> = runtimeEnv,
   ): AuthoritiesEvaluationContext {
     // If a custom claimsResolver is provided, use it directly
     if (this.claimsResolver) {
