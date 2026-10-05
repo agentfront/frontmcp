@@ -768,8 +768,10 @@ export class Scope extends ScopeEntry {
     this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
     this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
     this.scopeAgents = new AgentRegistry(this.scopeProviders, [], scopeRef);
+    const skillsConfig = this.metadata.skillsConfig;
     this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef, {
-      ...(this.metadata.skillsConfig?.scoring ? { scoring: this.metadata.skillsConfig.scoring } : {}),
+      ...(skillsConfig?.scoring ? { scoring: skillsConfig.scoring } : {}),
+      ...(skillsConfig?.failOnInvalidSkills !== undefined && { failOnInvalidSkills: skillsConfig.failOnInvalidSkills }),
     });
 
     await Promise.all([

@@ -33,6 +33,7 @@ tags: [config, skills, skills-http, llm-txt, instructions, audit, injection]
       ttlMs: 60_000,
     },
     injectInstructions: 'append', // 'off' | 'append' | 'prepend' | 'replace'
+    failOnInvalidSkills: true, // false: a 'strict' skill with a missing tool is logged, not fatal
     audit: {
       enabled: true,
       signer: customSigner, // SkillAuditSigner — see audit section below
