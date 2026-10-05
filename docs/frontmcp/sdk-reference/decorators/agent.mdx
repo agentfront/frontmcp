@@ -68,23 +68,23 @@ Agents can use the default `execute()` from `AgentContext` (which runs the LLM a
 
 ### Optional Properties
 
-| Property             | Type                   | Description                                                                                                       |
-| -------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `description`        | `string`               | Agent description                                                                                                 |
-| `inputSchema`        | `ZodShape`             | Input validation schema                                                                                           |
-| `outputSchema`       | `ZodType`              | Output validation schema                                                                                          |
-| `tools`              | `ToolType[]`           | Tools offered to the agent's model                                                                                |
-| `agents`             | `AgentType[]`          | Nested agents, offered to the agent's model as `invoke_<agent>` tools and callable with `this.invokeAgent()`      |
-| `providers`          | `ProviderType[]`       | Providers for the agent's tools                                                                                   |
-| `plugins`            | `PluginType[]`         | Plugins whose hooks run for the agent's tools                                                                     |
-| `resources`          | `ResourceType[]`       | Agent-scoped resources (not sent to the model; served to clients when exported)                                   |
-| `prompts`            | `PromptType[]`         | Agent-scoped prompts (not sent to the model; served to clients when exported)                                     |
-| `exports`            | `AgentExportsConfig`   | `{ resources?, prompts?, providers? }` shared with the scope the agent is registered in                           |
-| `swarm`              | `AgentSwarmConfig`     | `{ canSeeOtherAgents?, visibleAgents?, isVisible?, maxCallDepth? }`: which other agents it can call, and how deep |
+| Property             | Type                   | Description                                                                                                                         |
+| -------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `description`        | `string`               | Agent description                                                                                                                   |
+| `inputSchema`        | `ZodShape`             | Input validation schema                                                                                                             |
+| `outputSchema`       | `ZodType`              | Output validation schema                                                                                                            |
+| `tools`              | `ToolType[]`           | Tools offered to the agent's model                                                                                                  |
+| `agents`             | `AgentType[]`          | Nested agents, offered to the agent's model as `invoke_<agent>` tools and callable with `this.invokeAgent()`                        |
+| `providers`          | `ProviderType[]`       | Providers for the agent's tools                                                                                                     |
+| `plugins`            | `PluginType[]`         | Plugins whose hooks run for the agent's tools                                                                                       |
+| `resources`          | `ResourceType[]`       | Agent-scoped resources (not sent to the model; served to clients when exported)                                                     |
+| `prompts`            | `PromptType[]`         | Agent-scoped prompts (not sent to the model; served to clients when exported)                                                       |
+| `exports`            | `AgentExportsConfig`   | `{ resources?, prompts?, providers? }` shared with the scope the agent is registered in                                             |
+| `swarm`              | `AgentSwarmConfig`     | `{ canSeeOtherAgents?, visibleAgents?, isVisible?, maxCallDepth? }`: which other agents it can call, and how deep                   |
 | `execution`          | `AgentExecutionConfig` | `{ maxIterations?, timeout?, inheritParentTools?, inheritPlugins?, useToolFlow?, enableAutoProgress?, notificationInterval?, ... }` |
-| `systemInstructions` | `string`               | System prompt for the agent                                                                                       |
-| `id`                 | `string`               | Stable identifier                                                                                                 |
-| `tags`               | `string[]`             | Categorization tags                                                                                               |
+| `systemInstructions` | `string`               | System prompt for the agent                                                                                                         |
+| `id`                 | `string`               | Stable identifier                                                                                                                   |
+| `tags`               | `string[]`             | Categorization tags                                                                                                                 |
 
 See [Agents](/frontmcp/servers/agents) for what each one does. `execution.enableStreaming` is not supported yet and is reported at startup when set.
 
