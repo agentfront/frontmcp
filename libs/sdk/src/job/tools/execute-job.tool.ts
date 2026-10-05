@@ -3,7 +3,6 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '../../common';
 import { JobNotAuthorizedError } from '../../errors';
 import type { JobExecutionManager } from '../execution/job-execution.manager';
-import type { JobRegistryInterface } from '../job.registry';
 
 @Tool({
   name: 'execute_job',
@@ -22,9 +21,9 @@ import type { JobRegistryInterface } from '../job.registry';
 })
 export default class ExecuteJobTool extends ToolContext {
   async execute(input: { name: string; input?: Record<string, unknown>; background: boolean }) {
-    const scope = this.scope as unknown as { jobs?: JobRegistryInterface; _jobExecutionManager?: JobExecutionManager };
+    const scope = this.scope as unknown as { _jobExecutionManager?: JobExecutionManager };
     const executionManager = scope._jobExecutionManager;
-    const jobRegistry = scope.jobs;
+    const jobRegistry = this.scope.jobs;
 
     if (!executionManager || !jobRegistry) {
       return this.fail(new Error('Jobs system is not enabled'));

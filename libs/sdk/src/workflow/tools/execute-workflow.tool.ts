@@ -3,8 +3,6 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '../../common';
 import { JobNotAuthorizedError } from '../../errors';
 import type { JobExecutionManager } from '../../job/execution/job-execution.manager';
-import type { JobRegistryInterface } from '../../job/job.registry';
-import type { WorkflowRegistryInterface } from '../workflow.registry';
 
 @Tool({
   name: 'execute_workflow',
@@ -22,14 +20,10 @@ import type { WorkflowRegistryInterface } from '../workflow.registry';
 })
 export default class ExecuteWorkflowTool extends ToolContext {
   async execute(input: { name: string; input?: Record<string, unknown>; background: boolean }) {
-    const scope = this.scope as unknown as {
-      jobs?: JobRegistryInterface;
-      workflows?: WorkflowRegistryInterface;
-      _jobExecutionManager?: JobExecutionManager;
-    };
+    const scope = this.scope as unknown as { _jobExecutionManager?: JobExecutionManager };
     const executionManager = scope._jobExecutionManager;
-    const workflowRegistry = scope.workflows;
-    const jobRegistry = scope.jobs;
+    const workflowRegistry = this.scope.workflows;
+    const jobRegistry = this.scope.jobs;
 
     if (!executionManager || !workflowRegistry || !jobRegistry) {
       return this.fail(new Error('Jobs/workflows system is not enabled'));
