@@ -16,9 +16,23 @@ import { createRememberAccessor } from './providers/remember-accessor.provider';
 import RememberMemoryProvider from './providers/remember-memory.provider';
 import RememberRedisProvider from './providers/remember-redis.provider';
 import RememberVercelKvProvider from './providers/remember-vercel-kv.provider';
+import { RememberConfigurationError } from './remember.errors';
 import { RememberAccessorToken, RememberConfigToken, RememberStoreToken } from './remember.symbols';
 import type { RememberPluginOptions, RememberPluginOptionsInput } from './remember.types';
 import { createRememberTools } from './tools/remember-tools.factory';
+
+/** The options with `defaultTTL` checked: a whole number of seconds, where 0 means no default expiry. */
+function withCheckedDefaultTTL(options: RememberPluginOptionsInput): RememberPluginOptionsInput {
+  const { defaultTTL } = options;
+  if (defaultTTL === undefined) return options;
+  if (defaultTTL === 0) return { ...options, defaultTTL: undefined };
+  if (!Number.isInteger(defaultTTL) || defaultTTL < 0) {
+    throw new RememberConfigurationError(
+      `RememberPlugin defaultTTL must be a whole number of seconds (0 for no default expiry), got ${defaultTTL}`,
+    );
+  }
+  return options;
+}
 
 /**
  * RememberPlugin - Stateful session memory for FrontMCP.
@@ -85,7 +99,7 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
     super();
     this.options = {
       ...RememberPlugin.defaultOptions,
-      ...options,
+      ...withCheckedDefaultTTL(options),
     } as RememberPluginOptions;
   }
 
@@ -103,7 +117,7 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
     const providers: ProviderType[] = [];
     const config: RememberPluginOptions = {
       ...RememberPlugin.defaultOptions,
-      ...options,
+      ...withCheckedDefaultTTL(options),
     } as RememberPluginOptions;
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -194,7 +208,7 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
           provide: RememberStoreToken,
           // Built per server: `init()` runs once, so a value here would be shared by every server using it.
           inject: () => [] as const,
-          useFactory: () => new RememberMemoryProvider(),
+          useFactory: () => new RememberMemoryProvider(undefined, config.defaultTTL),
         });
         break;
     }

@@ -2,6 +2,8 @@
 
 import 'reflect-metadata';
 
+import type { Redis } from 'ioredis';
+
 import RememberRedisProvider from '../providers/remember-redis.provider';
 
 // Mock ioredis
@@ -352,6 +354,36 @@ describe('RememberRedisProvider', () => {
       const provider = new RememberRedisProvider({ type: 'redis-client', client: mockRedis as any });
 
       await expect(provider.setIfAbsent('marker', 'value')).resolves.toBe(false);
+    });
+  });
+
+  describe('defaultTTL (#717)', () => {
+    function createProviderWithDefaultTtl(): RememberRedisProvider {
+      return new RememberRedisProvider({
+        type: 'redis-client',
+        client: mockRedis as unknown as Redis,
+        defaultTTL: 600,
+      });
+    }
+
+    it('expires a value stored without a ttl after defaultTTL', async () => {
+      await createProviderWithDefaultTtl().setValue('key', 'value');
+
+      expect(mockRedis.set).toHaveBeenCalledWith('key', JSON.stringify('value'), 'EX', 600);
+    });
+
+    it('lets an explicit ttl override defaultTTL', async () => {
+      await createProviderWithDefaultTtl().setValue('key', 'value', 60);
+
+      expect(mockRedis.set).toHaveBeenCalledWith('key', JSON.stringify('value'), 'EX', 60);
+    });
+
+    it('applies defaultTTL to a key setIfAbsent creates without a ttl', async () => {
+      mockRedis.set.mockResolvedValue('OK');
+
+      await createProviderWithDefaultTtl().setIfAbsent('marker', 'value');
+
+      expect(mockRedis.set).toHaveBeenCalledWith('marker', JSON.stringify('value'), 'EX', 600, 'NX');
     });
   });
 });

@@ -281,25 +281,29 @@ Hooks from an app's providers, and from the plugins (including plugins nested in
 
 ## Hook Context
 
-Hooks receive flow context with access to:
+A hook method receives the running flow, typed `FlowCtxOf<'<flow-name>'>`:
 
 ```typescript
-interface FlowContext {
-  state: FlowState;           // Flow state (input, output, metadata)
-  logger: FrontMcpLogger;     // Logger instance
-  providers: ProviderRegistry; // Dependency injection
+import { FlowCtxOf, ToolHook } from '@frontmcp/sdk';
+
+const { Will } = ToolHook;
+
+class InspectHooks {
+  @Will('execute')
+  async inspect(ctx: FlowCtxOf<'tools:call-tool'>) {
+    // Flow state, typed per flow
+    const { name, arguments: toolArguments } = ctx.state.required.input;
+
+    // The flow's logger
+    ctx.logger.info(`Calling ${name}`, toolArguments);
+
+    // A provider registered on the server
+    await ctx.get(AuditService).record(name);
+  }
 }
-
-// Access state
-const input = ctx.state.get('input');
-ctx.state.set('output', result);
-
-// Access providers
-const service = ctx.providers.get(ServiceToken);
-
-// Access logger
-ctx.logger.info('Processing');
 ```
+
+See [Hook Context](/frontmcp/sdk-reference/registries/hook-registry#hook-context) for every member of the flow.
 
 ## Error Handling
 

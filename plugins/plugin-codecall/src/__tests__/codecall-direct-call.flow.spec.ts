@@ -120,19 +120,7 @@ async function connectTo(apps: Parameters<typeof FrontMcpInstance.createForGraph
   return {
     call: async (name: string, args: Record<string, unknown> = {}) =>
       (await client.callTool({ name, arguments: args })) as CallToolResult,
-    // A client of its own: one that has listed the tools checks results against their output
-    // schemas, which `codecall:invoke`'s result (the invoked tool's own) does not match.
-    listed: async () => {
-      const lister = await createInMemoryServer(scope as Parameters<typeof createInMemoryServer>[0]);
-      const listingClient = new Client({ name: 'codecall-direct-call-lister', version: '1.0.0' });
-      await listingClient.connect(lister.clientTransport);
-      try {
-        return (await listingClient.listTools()).tools.map((tool) => tool.name).sort();
-      } finally {
-        await listingClient.close();
-        await lister.close();
-      }
-    },
+    listed: async () => (await client.listTools()).tools.map((tool) => tool.name).sort(),
     close: async () => {
       await client.close();
       await server.close();

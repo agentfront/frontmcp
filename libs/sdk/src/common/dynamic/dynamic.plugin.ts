@@ -23,7 +23,7 @@ type InitOptions<TInput> =
   | (TInput & { useFactory?: never; inject?: never } & ExtraProvidersOption<TInput>)
   | {
       inject: () => readonly Reference<any>[];
-      useFactory: (...args: any[]) => TInput;
+      useFactory: (...args: any[]) => TInput | Promise<TInput>;
       providers?: readonly ProviderType[];
     };
 
@@ -36,7 +36,11 @@ type PluginClassWithOptions<TInput, TOptions> = {
 };
 
 type ValueMcpPlugin<T> = { provide: any; useValue: T; providers?: ProviderType[] };
-type FactoryMcpPlugin<T> = { provide: any; inject: () => readonly Reference<any>[]; useFactory: (...args: any[]) => T };
+type FactoryMcpPlugin<T> = {
+  provide: any;
+  inject: () => readonly Reference<any>[];
+  useFactory: (...args: any[]) => T | Promise<T>;
+};
 
 type PluginReturn<T> = (ValueMcpPlugin<T> | FactoryMcpPlugin<T>) &
   PluginType & {

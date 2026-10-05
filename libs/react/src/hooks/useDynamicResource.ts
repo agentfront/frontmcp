@@ -6,7 +6,9 @@
  */
 
 import { useContext, useEffect, useRef } from 'react';
+
 import type { ReadResourceResult } from '@frontmcp/sdk';
+
 import { FrontMcpContext } from '../provider/FrontMcpContext';
 
 export interface UseDynamicResourceOptions {
@@ -26,9 +28,12 @@ export function useDynamicResource(options: UseDynamicResourceOptions): void {
   const { getDynamicRegistry } = useContext(FrontMcpContext);
   const dynamicRegistry = getDynamicRegistry(options.server);
 
-  // Keep the latest read fn in a ref to avoid stale closures
   const readRef = useRef(read);
-  readRef.current = read;
+
+  // Set after commit, never during render: a render React discards must not reach a registered read
+  useEffect(() => {
+    readRef.current = read;
+  }, [read]);
 
   useEffect(() => {
     if (!enabled) return;

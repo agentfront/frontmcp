@@ -197,3 +197,47 @@ describe('a hand-written factory whose provide is a DynamicPlugin class', () => 
     expect(produced.options).toEqual({ label: 'hand-written' });
   });
 });
+
+async function registeredPlugins(plugin: PluginType) {
+  const providers = await createProviderRegistryWithScope();
+  const scopeInfo: PluginScopeInfo = { ownScope: providers.get(Scope), isStandaloneApp: true };
+  const registry = new PluginRegistry(providers, [plugin], undefined, scopeInfo);
+  await registry.ready;
+  return registry.getPlugins();
+}
+
+describe('a plugin factory that returns a Promise (#708)', () => {
+  it('builds an init({ inject, useFactory }) plugin from the options the factory resolves to', async () => {
+    const [plugin] = await registeredPlugins(
+      FactoryDynamicPlugin.init({ inject: () => [], useFactory: async () => ({ label: 'from-async-factory' }) }),
+    );
+
+    expect(plugin).toBeInstanceOf(FactoryDynamicPlugin);
+    expect(plugin).toMatchObject({ options: { label: 'from-async-factory' } });
+    expect(plugin.get(LABEL_TOKEN)).toBe('from-async-factory');
+  });
+
+  it('uses the instance a hand-written async factory resolves to', async () => {
+    const produced = new FactoryDynamicPlugin({ label: 'hand-written-async' });
+    const [plugin] = await registeredPlugins({
+      provide: FactoryDynamicPlugin,
+      name: 'factory-dynamic',
+      inject: () => [],
+      useFactory: async () => produced,
+    });
+
+    expect(plugin).toBe(produced);
+  });
+
+  it('registers the value a hand-written async factory resolves to under its token', async () => {
+    const [plugin] = await registeredPlugins({
+      provide: Symbol('async-factory-plugin'),
+      name: 'async-factory-plugin',
+      inject: () => [],
+      useFactory: async () => ({ label: 'resolved-plugin' }),
+    });
+
+    expect(plugin).not.toBeInstanceOf(Promise);
+    expect((plugin as Partial<LabelOptions>).label).toBe('resolved-plugin');
+  });
+});

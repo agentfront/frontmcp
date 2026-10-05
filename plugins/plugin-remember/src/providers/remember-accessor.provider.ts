@@ -103,7 +103,11 @@ export class RememberAccessor {
     // providers are not eagerly instantiated. Scheduling only — the sweep itself runs later,
     // on a timer, so no request ever waits for it.
     if (!config.skipLegacyPurge) {
-      scheduleLegacyRememberPurge(store, this.keyPrefix, { delayMs: config.legacyPurgeDelayMs, logger });
+      scheduleLegacyRememberPurge(store, this.keyPrefix, {
+        delayMs: config.legacyPurgeDelayMs,
+        defaultTTL: config.defaultTTL,
+        logger,
+      });
     }
   }
 

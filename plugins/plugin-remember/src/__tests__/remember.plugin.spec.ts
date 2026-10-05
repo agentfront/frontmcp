@@ -5,6 +5,7 @@ import 'reflect-metadata';
 import RememberMemoryProvider from '../providers/remember-memory.provider';
 import RememberRedisProvider from '../providers/remember-redis.provider';
 import RememberVercelKvProvider from '../providers/remember-vercel-kv.provider';
+import { RememberConfigurationError } from '../remember.errors';
 import RememberPlugin from '../remember.plugin';
 import { RememberAccessorToken, RememberConfigToken, RememberStoreToken } from '../remember.symbols';
 
@@ -83,6 +84,25 @@ describe('RememberPlugin', () => {
   });
 
   describe('dynamicProviders', () => {
+    it.each([-60, 1.5, Number.NaN])('refuses a defaultTTL of %p seconds at startup', (defaultTTL) => {
+      expect(() => RememberPlugin.dynamicProviders({ type: 'memory', defaultTTL })).toThrow(RememberConfigurationError);
+    });
+
+    it('accepts a whole number of seconds for defaultTTL', () => {
+      expect(() => RememberPlugin.dynamicProviders({ type: 'memory', defaultTTL: 3600 })).not.toThrow();
+    });
+
+    it('treats a defaultTTL of 0 as no default expiry', async () => {
+      const storeProvider = RememberPlugin.dynamicProviders({ type: 'memory', defaultTTL: 0 }).find(
+        (provider) => provider.name === 'remember:store:memory',
+      ) as { useFactory: () => RememberMemoryProvider };
+      const store = storeProvider.useFactory();
+
+      await expect(store.setValue('key', 'value')).resolves.toBeUndefined();
+      await expect(store.getValue('key')).resolves.toBe('value');
+      await store.close();
+    });
+
     describe('type: memory', () => {
       it('should create memory provider', () => {
         const providers = RememberPlugin.dynamicProviders({ type: 'memory' });
@@ -104,6 +124,19 @@ describe('RememberPlugin', () => {
         const providers = RememberPlugin.dynamicProviders({});
         const storeProvider = providers.find((p) => p.name === 'remember:store:memory');
         expect(storeProvider).toBeDefined();
+      });
+
+      it('should expire values stored without a ttl after defaultTTL (#717)', async () => {
+        const providers = RememberPlugin.dynamicProviders({ type: 'memory', defaultTTL: 60 });
+        const storeProvider = providers.find((p) => p.name === 'remember:store:memory') as FactoryProvider;
+        const store = storeProvider.useFactory() as RememberMemoryProvider;
+
+        await store.setValue('key', 'value');
+        jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000);
+
+        await expect(store.getValue('key')).resolves.toBeUndefined();
+        jest.restoreAllMocks();
+        await store.close();
       });
     });
 
@@ -231,6 +264,22 @@ describe('RememberPlugin', () => {
 
         const result = storeProvider.useFactory(mockConfig);
         expect(result).toBeInstanceOf(RememberRedisProvider);
+      });
+
+      it('should expire values stored without a ttl after defaultTTL on the Redis store (#717)', async () => {
+        const providers = RememberPlugin.dynamicProviders({ type: 'global-store', defaultTTL: 900 });
+        const storeProvider = providers.find((p) => p.name === 'remember:store:global') as FactoryProvider;
+        const store = storeProvider.useFactory({
+          redis: { provider: 'redis', host: 'redis.example.com', port: 6379 },
+        }) as RememberRedisProvider;
+        const redisConstructor = jest.requireMock<jest.Mock>('ioredis');
+        const redisClient = redisConstructor.mock.results[redisConstructor.mock.results.length - 1].value as {
+          set: jest.Mock;
+        };
+
+        await store.setValue('key', 'value');
+
+        expect(redisClient.set).toHaveBeenCalledWith('remember:key', JSON.stringify('value'), 'EX', 900);
       });
 
       it('should throw when redis config is missing', () => {

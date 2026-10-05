@@ -7,7 +7,8 @@
  * Supports multi-server via `options.server`.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { useResolvedServer } from './useResolvedServer';
 
 interface StoreResourceState {
@@ -43,7 +44,6 @@ export function useStoreResource(uri: string, options?: StoreResourceOptions): U
 
   const [state, setState] = useState<StoreResourceState>({ data: null, loading: true, error: null });
   const uriRef = useRef(uri);
-  uriRef.current = uri;
 
   const fetchResource = useCallback(async () => {
     if (status !== 'connected' || !client) return;
@@ -56,7 +56,12 @@ export function useStoreResource(uri: string, options?: StoreResourceOptions): U
   }, [uri, client, status]);
 
   const fetchRef = useRef(fetchResource);
-  fetchRef.current = fetchResource;
+
+  // Set after commit, never during render: a render React discards must not reach the update listener
+  useEffect(() => {
+    uriRef.current = uri;
+    fetchRef.current = fetchResource;
+  }, [uri, fetchResource]);
 
   useEffect(() => {
     if (status !== 'connected' || !client) return;

@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, render, renderHook } from '@testing-library/react';
 import React from 'react';
 
 import type { DirectClient, DirectMcpServer } from '@frontmcp/sdk';
@@ -163,6 +163,45 @@ describe('useStoreResource', () => {
     });
 
     expect(mockClient.readResource).toHaveBeenCalledTimes(callCountAfterMount);
+  });
+
+  it('follows the committed URI while a render for another URI is suspended', async () => {
+    let updateCallback: ((uri: string) => void) | undefined;
+    mockClient.onResourceUpdated.mockImplementation((cb: (uri: string) => void) => {
+      updateCallback = cb;
+      return () => {};
+    });
+    mockClient.readResource.mockResolvedValue({ contents: [{ text: '{"v":1}' }] });
+    const neverSettles = new Promise<never>(() => undefined);
+    function StoreView({ uri, suspend }: { uri: string; suspend: boolean }) {
+      useStoreResource(uri);
+      if (suspend) throw neverSettles;
+      return null;
+    }
+    const Wrapper = createWrapper();
+    const tree = (uri: string, suspend: boolean) => (
+      <Wrapper>
+        <React.Suspense fallback={null}>
+          <StoreView uri={uri} suspend={suspend} />
+        </React.Suspense>
+      </Wrapper>
+    );
+    const { rerender } = render(tree('state://committed', false));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    await act(async () => {
+      React.startTransition(() => rerender(tree('state://discarded', true)));
+    });
+    mockClient.readResource.mockClear();
+    await act(async () => {
+      updateCallback?.('state://committed');
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(mockClient.readResource).toHaveBeenCalledTimes(1);
+    expect(mockClient.readResource).toHaveBeenCalledWith('state://committed');
   });
 
   it('handles errors during fetch', async () => {

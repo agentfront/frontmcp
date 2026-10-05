@@ -19,7 +19,7 @@ Test that a tool throws the correct MCP error classes with proper error codes an
 
 ```typescript
 // src/tools/__tests__/lookup.tool.spec.ts
-import { MCP_ERROR_CODES, ResourceNotFoundError, ToolContext } from '@frontmcp/sdk';
+import { MCP_ERROR_CODES, ResourceNotFoundError } from '@frontmcp/sdk';
 
 import { LookupTool } from '../lookup.tool';
 
@@ -27,23 +27,20 @@ describe('LookupTool error handling', () => {
   let tool: LookupTool;
 
   beforeEach(() => {
-    tool = new LookupTool();
+    // `new LookupTool()` throws: the constructor needs the request context the server builds.
+    tool = Object.create(LookupTool.prototype);
 
-    // Mock the real ExecutionContextBase + ToolContext surface.
-    // Real API: libs/sdk/src/common/interfaces/execution-context.interface.ts
-    const ctx = {
+    // `fail` rethrows the error it gets, so the tests see the MCP error class (the real one throws a flow-control signal).
+    Object.assign(tool, {
       get: jest.fn(),
       tryGet: jest.fn(),
-      scope: { get: jest.fn(), tryGet: jest.fn() },
-      fail: jest.fn((err) => {
-        throw err;
+      fail: jest.fn((error: Error) => {
+        throw error;
       }),
       mark: jest.fn(),
       fetch: jest.fn(),
       notify: jest.fn(),
-    } as unknown as ToolContext;
-
-    Object.assign(tool, ctx);
+    });
   });
 
   it('should throw ResourceNotFoundError for missing resource', async () => {
