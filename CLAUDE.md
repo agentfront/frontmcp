@@ -317,6 +317,12 @@ Three things worth knowing before they surprise you:
   `release/*` or `next/*` (never the default branch), and — the one that catches people —
   **not to come from a fork**, since a forked PR's `GITHUB_TOKEN` is read-only. Merge a fork PR
   into a release branch and no cherry-pick PR appears at all; back-port it to `main` by hand.
+- **Stacked PRs are cherry-picked from where their commit landed.** When GitHub merges a native
+  stack, each upper PR's `closed` event still names its stacked base (the parent PR's branch),
+  while its commit lands on the stack's base. The workflow finds the `release/*` or `next/*` branch
+  that contains the merge commit and cherry-picks from there. It builds on the parent's cherry-pick
+  branch while that PR is open, so the cherry-picks stack on `main` the way the PRs did. A stacked
+  PR merged only into its parent's branch has landed nowhere yet: the parent's merge carries it.
 - The cherry-pick PRs are authored by `github-actions[bot]`, and **CodeRabbit skips them**
   ("Bot user detected"). Review has to happen on the original PR against the release branch.
 - `publish-release.yml` only runs from a `release/X.Y.x` branch, so a fix that exists solely on
