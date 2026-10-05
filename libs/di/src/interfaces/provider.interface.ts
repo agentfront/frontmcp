@@ -3,7 +3,7 @@
  */
 
 import type { ProviderMetadata } from '../metadata/provider.metadata.js';
-import type { ClassToken, ClassType, FactoryType, Reference, Token, Type, ValueType } from './base.interface.js';
+import type { ClassToken, ClassType, FactoryType, Token, Type, ValueType } from './base.interface.js';
 
 /**
  * Base interface for all providers.
