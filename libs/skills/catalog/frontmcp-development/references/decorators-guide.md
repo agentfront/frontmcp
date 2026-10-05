@@ -464,14 +464,14 @@ class GitHubAdapter {
 
 **Key fields (strict schema — only these are accepted):**
 
-| Field          | Description                                                                         |
-| -------------- | ----------------------------------------------------------------------------------- |
-| `name`         | Provider name (required)                                                            |
-| `id?`          | Optional stable identifier                                                          |
-| `description?` | Human-readable description                                                          |
-| `scope?`       | `ProviderScope.GLOBAL` (default), `ProviderScope.SCOPE`, or `ProviderScope.REQUEST` |
+| Field          | Description                                                                                                               |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `name`         | Provider name (required)                                                                                                  |
+| `id?`          | Optional stable identifier                                                                                                |
+| `description?` | Human-readable description                                                                                                |
+| `scope?`       | `ProviderScope.GLOBAL` (default) or `ProviderScope.CONTEXT` (`SESSION` and `REQUEST` are deprecated aliases of `CONTEXT`) |
 
-> **Important:** The `@Provider` schema is strict and rejects `provide`, `useClass`, `useValue`, `useFactory`. There are two real ways to register a provider:
+> **Important:** The `@Provider` schema is strict and rejects `token`, `provide`, `useClass`, `useValue`, `useFactory`. There are two real ways to register a provider:
 >
 > 1. **Class-as-token (preferred for simple cases):** Decorate the class itself with `@Provider`. The class becomes its own DI token — inject it with `this.get(MyClass)`.
 > 2. **Factory binding (when you need a token + async construction):** Use the `AsyncProvider({ provide, name, scope, inject, useFactory })` helper instead of the `@Provider` decorator.

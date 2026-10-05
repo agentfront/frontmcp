@@ -44,6 +44,7 @@ declare global {
 ```typescript
 // src/plugins/my-plugin/my-plugin.symbols.ts
 import type { Token } from '@frontmcp/sdk';
+
 import type { MyService } from './providers/my-service.provider';
 
 export const MyServiceToken: Token<MyService> = Symbol('MyService');
@@ -52,6 +53,7 @@ export const MyServiceToken: Token<MyService> = Symbol('MyService');
 ```typescript
 // src/plugins/my-plugin/providers/my-service.provider.ts
 import { Provider } from '@frontmcp/sdk';
+
 import type { MyPluginOptions } from '../my-plugin.types';
 
 @Provider()
@@ -91,10 +93,12 @@ declare module '@frontmcp/sdk' {
 
 ```typescript
 // src/plugins/my-plugin/my-plugin.plugin.ts
-import { Plugin, DynamicPlugin, ProviderType } from '@frontmcp/sdk';
-import { MyService } from './providers/my-service.provider';
+import { DynamicPlugin, Plugin, ProviderType } from '@frontmcp/sdk';
+
 import { MyServiceToken } from './my-plugin.symbols';
 import type { MyPluginOptions, MyPluginOptionsInput } from './my-plugin.types';
+import { MyService } from './providers/my-service.provider';
+
 import './my-plugin.context-extension';
 
 @Plugin({
@@ -119,6 +123,7 @@ export default class MyPlugin extends DynamicPlugin<MyPluginOptions, MyPluginOpt
   static override dynamicProviders(options: MyPluginOptionsInput): ProviderType[] {
     return [
       {
+        name: 'my-service',
         provide: MyServiceToken,
         useFactory: () =>
           new MyService({
@@ -133,7 +138,8 @@ export default class MyPlugin extends DynamicPlugin<MyPluginOptions, MyPluginOpt
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
+import { App, FrontMcp, Tool, ToolContext } from '@frontmcp/sdk';
+
 import MyPlugin from './plugins/my-plugin/my-plugin.plugin';
 
 // Tool using the extended metadata field and context extension

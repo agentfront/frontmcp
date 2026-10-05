@@ -2,8 +2,8 @@
  * Provider-related interfaces for dependency injection.
  */
 
-import type { Type, Reference, Token, ClassType, ValueType, FactoryType, ClassToken } from './base.interface.js';
 import type { ProviderMetadata } from '../metadata/provider.metadata.js';
+import type { ClassToken, ClassType, FactoryType, Token, Type, ValueType } from './base.interface.js';
 
 /**
  * Base interface for all providers.
@@ -40,14 +40,15 @@ export type ProviderValueType<T = unknown> = ValueType<T> & {
 };
 
 /**
- * Provider using useFactory pattern.
+ * Provider using useFactory pattern. Without `inject`, the factory receives no dependencies.
  */
-export type ProviderFactoryType<
-  T = unknown,
-  Tokens extends readonly (ClassToken | Token)[] = readonly Token[],
-> = FactoryType<T, Tokens> & {
-  metadata?: ProviderMetadata;
-};
+export type ProviderFactoryType<T = unknown, Tokens extends readonly (ClassToken | Token)[] = readonly Token[]> = Omit<
+  FactoryType<T, Tokens>,
+  'inject'
+> &
+  Partial<Pick<FactoryType<T, Tokens>, 'inject'>> & {
+    metadata?: ProviderMetadata;
+  };
 
 /**
  * Union of all provider type definitions.

@@ -7,13 +7,11 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 
 ## Overview
 
-`JobRegistry` is exported from `@frontmcp/sdk`, but `ScopeEntry` does not declare the scope's `jobs`: the scope holds the registry at runtime, `undefined` unless jobs are enabled (`@FrontMcp({ jobs: { enabled: true } })`, or any job or workflow declared on an app). Reach it with a cast, as the SDK's own job tools do:
+`JobRegistry` is exported from `@frontmcp/sdk`. Reach the scope's registry through `scope.jobs`, which is `undefined` unless jobs are enabled (`@FrontMcp({ jobs: { enabled: true } })`, or any job or workflow declared on an app):
 
 ```typescript
-import type { JobRegistry } from '@frontmcp/sdk';
-
-// Access via scope (runtime only: ScopeEntry does not declare `jobs`)
-const jobs = (scope as unknown as { jobs?: JobRegistry }).jobs;
+// Access via scope
+const jobs = scope.jobs;
 if (!jobs) throw new Error('Jobs are not enabled');
 
 // List all jobs

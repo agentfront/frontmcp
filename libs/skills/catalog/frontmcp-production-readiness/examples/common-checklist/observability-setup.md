@@ -66,9 +66,8 @@ export class MonitoredOperationTool extends ToolContext {
 // src/providers/health-check.provider.ts
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export const HEALTH_CHECK = Symbol('HealthCheck');
-
-@Provider({ token: HEALTH_CHECK, scope: ProviderScope.GLOBAL })
+// The class is its own DI token: list it in `providers` and resolve it with `this.get(HealthCheckProvider)`
+@Provider({ name: 'HealthCheckProvider', scope: ProviderScope.GLOBAL })
 export class HealthCheckProvider {
   async checkRedis(): Promise<boolean> {
     // Verify downstream dependency is reachable

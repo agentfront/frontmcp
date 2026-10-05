@@ -90,10 +90,9 @@ Resources:
 // src/providers/secrets.provider.ts
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export const SECRETS = Symbol('Secrets');
-
 // Providers do NOT have onInit/onDestroy — load lazily on first read.
-@Provider({ token: SECRETS, scope: ProviderScope.GLOBAL })
+// The class is its own DI token: list it in `providers` and resolve it with `this.get(SecretsProvider)`
+@Provider({ name: 'SecretsProvider', scope: ProviderScope.GLOBAL })
 export class SecretsProvider {
   private cache: Map<string, string> | undefined;
 

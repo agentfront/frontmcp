@@ -17,11 +17,11 @@ import {
   type AdapterEntry,
   type FlowEntry,
   type LoggerEntry,
-  type PluginEntry,
   type ProviderEntry,
   type ScopeEntry,
 } from '../../entries';
 import { type FlowName } from '../../metadata';
+import { type PluginInstance } from '../plugin.interface';
 
 export interface ScopeRegistryInterface {
   getScopes(): ScopeEntry[];
@@ -53,7 +53,7 @@ export interface ProviderRegistryInterface {
 }
 
 export interface PluginRegistryInterface {
-  getPlugins(): PluginEntry[];
+  getPlugins(): PluginInstance[];
   getPluginNames(): string[];
 }
 

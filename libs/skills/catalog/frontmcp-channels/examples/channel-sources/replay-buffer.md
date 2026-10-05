@@ -43,14 +43,13 @@ class CIAlertChannel extends ChannelContext {
 }
 ```
 
-The SDK keeps a per-channel ring buffer of the last `maxEvents` notifications. Replay is delivered via `ChannelInstance.replayBufferedEvents(sessionId)` (defined in `libs/sdk/src/channel/channel.instance.ts:223`). That method lives on the **channel instance**, not on `ChannelContext`, so you cannot call `this.replayBufferedEvents(...)` from within `onEvent`/`onConnect`.
+The SDK keeps a per-channel ring buffer of the last `maxEvents` notifications. Replay is delivered via `ChannelInstance.replayBufferedEvents(sessionId)` (defined in `libs/sdk/src/channel/channel.instance.ts:221`). That method lives on the **channel instance**, not on `ChannelContext`, so you cannot call `this.replayBufferedEvents(...)` from within `onEvent`/`onConnect`.
 
 Replay is **not** triggered automatically when a new session subscribes — there is no caller of `replayBufferedEvents` inside the SDK today. To deliver buffered events, expose a tool that resolves the channel from the registry and triggers replay explicitly (Claude Code can call this on demand, or your application can call it from a custom hook):
 
 ```typescript
 // src/apps/alerts/tools/replay-ci-alerts.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
-import type ChannelRegistry from '@frontmcp/sdk/channel/channel.registry';
 
 @Tool({
   name: 'replay-ci-alerts',
@@ -60,10 +59,9 @@ import type ChannelRegistry from '@frontmcp/sdk/channel/channel.registry';
   },
 })
 export class ReplayCIAlertsTool extends ToolContext {
-  async execute(input) {
-    // Resolve the channel registry off scope (same cast pattern as ChannelReplyTool)
-    const scope = this.scope as unknown as { channels?: ChannelRegistry };
-    const registry = scope.channels;
+  async execute(input: { channel_name: string }) {
+    // Resolve the channel registry off the scope, as ChannelReplyTool does
+    const registry = this.scope.channels;
     if (!registry) {
       return { content: [{ type: 'text', text: 'Channels are not enabled on this server.' }], isError: true };
     }
