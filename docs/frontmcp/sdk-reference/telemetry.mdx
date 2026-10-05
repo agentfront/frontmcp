@@ -228,14 +228,17 @@ counter.inc(1, { status: 'ok' });
 
 When `skillsConfig.enabled: true` is set on `@FrontMcp`, the framework emits the following counters automatically:
 
-| Counter                                         | Attributes                                                                                                                 | Description                                                |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `frontmcp_skills_bundle_pulls_total`            | `status: 'ok' \| 'error'`, `source: 'static' \| 'npm' \| 'saas-pull' \| 'filesystem' \| 'unknown'`, `reason` (errors only) | Skill bundle pulls / hot-swaps                             |
-| `frontmcp_skills_signature_verifications_total` | `status: 'ok' \| 'error'`                                                                                                  | Bundle signature verifications attempted                   |
-| `frontmcp_skills_signature_failures_total`      | `reason` (bounded vocabulary)                                                                                              | Signature failures, classified by reason                   |
-| `frontmcp_skills_replay_checks_total`           | `status: 'ok' \| 'error'`                                                                                                  | Replay-protection checks                                   |
-| `frontmcp_skills_replay_rejects_total`          | `reason` (bounded vocabulary)                                                                                              | Replay rejections, classified by reason                    |
-| `frontmcp_skills_audit_dropped_total`           | `reason`                                                                                                                   | Audit log records dropped (queue overflow / write failure) |
+| Counter                                         | Attributes                                                                                                                 | Description                                            |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `frontmcp_skills_bundle_pulls_total`            | `status: 'ok' \| 'error'`, `source: 'static' \| 'npm' \| 'saas-pull' \| 'filesystem' \| 'unknown'`, `reason` (errors only) | Skill bundle pulls / hot-swaps                         |
+| `frontmcp_skills_signature_verifications_total` | `status: 'ok' \| 'error'`                                                                                                  | Bundle signature verifications attempted               |
+| `frontmcp_skills_signature_failures_total`      | `reason` (bounded vocabulary)                                                                                              | Signature failures, classified by reason               |
+| `frontmcp_skills_replay_checks_total`           | `status: 'ok' \| 'error'`                                                                                                  | Replay-protection checks                               |
+| `frontmcp_skills_replay_rejects_total`          | `reason` (bounded vocabulary)                                                                                              | Replay rejections, classified by reason                |
+| `frontmcp_skills_audit_write_failures_total`    | `reason: 'sign' \| 'append' \| 'unexpected'`                                                                               | Audit records that failed to sign or append            |
+| `frontmcp_skills_audit_dropped_total`           | `reason: 'queue-overflow'`                                                                                                 | Audit records dropped because the write queue was full |
+
+The two audit counters are emitted only when `skillsConfig.audit.metrics` is set to `createSkillAuditMetrics({ createCounter })` from `@frontmcp/adapters/skills`.
 
 The framework also emits a `skill.bundle.swap` span (with `source`, `bundle_id`, `version`, `skill_count`, `from_version` attributes), and adds `skill_search.query`, `skill_search.results`, and `skill_action.phase` events to the active flow span when the skill HTTP catalog is exercised.
 

@@ -37,6 +37,7 @@ tags: [config, skills, skills-http, llm-txt, instructions, audit, injection]
       enabled: true,
       signer: customSigner, // SkillAuditSigner — see audit section below
       store: customStore, // SkillAuditStore — see audit section below
+      metrics: createSkillAuditMetrics({ createCounter }), // counts failed and dropped writes
       subjectMode: 'hash', // 'plain' | 'hash' | 'omit'
       headAnchorIntervalMs: 300_000,
     },
@@ -137,10 +138,11 @@ Memory cache is the default; for multi-pod deployments use Redis or another supp
 | `enabled`              | `boolean`                     | `false`   | Turn the audit writer on                                                                                  |
 | `signer`               | `SkillAuditSigner`            | dev HS256 | The signer used to sign each record. **Use `Rs256AuditSigner` in production.**                            |
 | `store`                | `SkillAuditStore`             | memory    | Where records are persisted. Use `StorageAdapterAuditStore` for Redis/Vercel KV/SQLite-backed persistence |
+| `metrics`              | `SkillAuditMetrics`           | unset     | Counts failed and dropped writes. Build it with `createSkillAuditMetrics({ createCounter })`              |
 | `subjectMode`          | `'plain' \| 'hash' \| 'omit'` | `'hash'`  | Redaction policy for the subject (e.g., user ID) embedded in each record                                  |
 | `headAnchorIntervalMs` | `number`                      | unset     | Reserved for out-of-band head anchoring (tail-truncation detection); validated but not read yet           |
 
-The audit module lives in `@frontmcp/adapters/skills`, which the SDK does not import: register it once at boot with `setSkillAuditFactory(...)` (see `skill-audit-log`). With `audit.enabled` and no factory, the server runs without the audit log in development and refuses to start when `NODE_ENV` is `production`.
+The audit module lives in `@frontmcp/adapters/skills`, which the SDK does not import: register it once at boot with `setSkillAuditFactory(() => auditModule)` (see `skill-audit-log`). With `audit.enabled` and no factory, the server runs without the audit log in development and refuses to start when `NODE_ENV` is `production`.
 
 **Production constraint:** without a `signer`, the SDK falls back to an HS256 signer with a random, process-local secret, and refuses to start when `NODE_ENV === 'production'`. A random secret also makes records unverifiable after a restart. The recommended production pattern is `Rs256AuditSigner` reusing the bundle-signing keypair.
 

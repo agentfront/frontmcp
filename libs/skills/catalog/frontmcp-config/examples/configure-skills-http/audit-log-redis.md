@@ -24,17 +24,17 @@ Production-grade audit log with the Redis-backed StorageAdapterAuditStore and th
 // `async function init() { ... }` and await it before constructing the
 // FrontMcp class.
 import * as auditModule from '@frontmcp/adapters/skills';
-import { Rs256AuditSigner, StorageAdapterAuditStore } from '@frontmcp/adapters/skills';
-import { FrontMcp, setSkillAuditFactory, type AuditModuleShape } from '@frontmcp/sdk';
+import { createSkillAuditMetrics, Rs256AuditSigner, StorageAdapterAuditStore } from '@frontmcp/adapters/skills';
+import { createCounter } from '@frontmcp/observability';
+import { FrontMcp, setSkillAuditFactory } from '@frontmcp/sdk';
 import { createStorage } from '@frontmcp/utils';
 
 import { MainApp } from './main.app';
 
 // Register the audit module with the SDK. The SDK constructs the writer as
-// `new SkillAuditWriter(store, signer, logger, undefined, { subjectMode })`,
-// with `subjectMode` taken from `skillsConfig.audit`. AuditModuleShape types
-// the token as `symbol` and the writer constructor loosely, hence the cast.
-setSkillAuditFactory(() => auditModule as unknown as AuditModuleShape);
+// `new SkillAuditWriter(store, signer, logger, metrics, { subjectMode })`,
+// with `metrics` and `subjectMode` taken from `skillsConfig.audit`.
+setSkillAuditFactory(() => auditModule);
 
 // createStorage() returns a RootStorage, which is a StorageAdapter. Note this
 // is the @frontmcp/utils storage-adapter config shape (`redis.config`), which

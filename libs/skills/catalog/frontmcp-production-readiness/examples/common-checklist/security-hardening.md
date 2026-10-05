@@ -97,18 +97,18 @@ import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 
 import * as auditModule from '@frontmcp/adapters/skills';
-import { Rs256AuditSigner, StorageAdapterAuditStore } from '@frontmcp/adapters/skills';
-import { setSkillAuditFactory, type AuditModuleShape } from '@frontmcp/sdk';
+import { createSkillAuditMetrics, Rs256AuditSigner, StorageAdapterAuditStore } from '@frontmcp/adapters/skills';
+import { createCounter } from '@frontmcp/observability';
+import { setSkillAuditFactory } from '@frontmcp/sdk';
 import { createStorage } from '@frontmcp/utils';
 
 // 1. Audit subsystem
 //
 // `setSkillAuditFactory` registers the audit module with the SDK; the SDK
 // itself constructs the writer as
-// `new SkillAuditWriter(store, signer, logger, undefined, { subjectMode })`,
-// with `subjectMode` taken from `skillsConfig.audit`. AuditModuleShape types
-// the token as `symbol` and the writer constructor loosely, hence the cast.
-setSkillAuditFactory(() => auditModule as unknown as AuditModuleShape);
+// `new SkillAuditWriter(store, signer, logger, metrics, { subjectMode })`,
+// with `metrics` and `subjectMode` taken from `skillsConfig.audit`.
+setSkillAuditFactory(() => auditModule);
 
 export const auditSigner = new Rs256AuditSigner(
   // Private key as a JWK. Convert from a PEM if your secret store hands you
@@ -121,6 +121,9 @@ export const auditSigner = new Rs256AuditSigner(
 export const auditStore = new StorageAdapterAuditStore(
   await createStorage({ type: 'redis', redis: { config: { host: process.env.REDIS_HOST!, port: 6379 } } }),
 );
+
+// Counts failed and dropped audit writes as frontmcp_skills_audit_*_total.
+export const auditMetrics = createSkillAuditMetrics({ createCounter });
 
 // 2. Meter provider — exports framework counters (bundle pulls, signature failures, ...)
 metrics.setGlobalMeterProvider(
@@ -139,7 +142,7 @@ metrics.setGlobalMeterProvider(
 // src/main.ts — wire the audit + meter setup into the FrontMcp config
 import './audit-bootstrap';
 
-import { auditSigner, auditStore } from './audit-bootstrap';
+import { auditMetrics, auditSigner, auditStore } from './audit-bootstrap';
 
 @FrontMcp({
   // ... auth/cors/throttle/redis as above ...
@@ -157,6 +160,7 @@ import { auditSigner, auditStore } from './audit-bootstrap';
       enabled: true,
       signer: auditSigner,
       store: auditStore,
+      metrics: auditMetrics,
       subjectMode: 'hash',
     },
   },
@@ -171,7 +175,7 @@ export default class HardenedServer {}
 - Using Redis for session storage in multi-instance deployments
 - Defining both `inputSchema` and `outputSchema` on tools to prevent data leaks
 - Enabling the tamper-evident skill audit log with RS256 + a persistent store and a CI verifier
-- Wiring an OTel MeterProvider so framework counters (bundle pulls, signature failures, replay rejects) are exported
+- Wiring an OTel MeterProvider so framework counters (bundle pulls, signature failures, replay rejects, audit write failures and drops) are exported
 - Keeping the auto-injected skill catalog summary inside the 16 KB initialize ceiling
 
 ## Related

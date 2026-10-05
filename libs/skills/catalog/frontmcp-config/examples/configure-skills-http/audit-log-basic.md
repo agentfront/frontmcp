@@ -21,18 +21,17 @@ Enable the skill audit log with the in-memory store and HS256 signer for develop
 // src/server.ts
 import * as auditModule from '@frontmcp/adapters/skills';
 import { Hs256AuditSigner, MemoryAuditStore } from '@frontmcp/adapters/skills';
-import { FrontMcp, setSkillAuditFactory, type AuditModuleShape } from '@frontmcp/sdk';
+import { FrontMcp, setSkillAuditFactory } from '@frontmcp/sdk';
 import { randomBytes } from '@frontmcp/utils';
 
 import { MainApp } from './main.app';
 
 // Register the audit module with the SDK at boot. The SDK constructs the
-// writer as `new SkillAuditWriter(store, signer, logger, undefined, { subjectMode })`,
-// with `subjectMode` taken from `skillsConfig.audit`. The SDK does NOT
+// writer as `new SkillAuditWriter(store, signer, logger, metrics, { subjectMode })`,
+// with `metrics` and `subjectMode` taken from `skillsConfig.audit`. The SDK does NOT
 // statically depend on @frontmcp/adapters/skills — this keeps the static
-// dependency graph clean and works in Edge / CSP runtimes. AuditModuleShape
-// types the token as `symbol` and the writer constructor loosely, hence the cast.
-setSkillAuditFactory(() => auditModule as unknown as AuditModuleShape);
+// dependency graph clean and works in Edge / CSP runtimes.
+setSkillAuditFactory(() => auditModule);
 
 @FrontMcp({
   info: { name: 'dev-server', version: '1.0.0' },

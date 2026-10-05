@@ -136,14 +136,13 @@ import { S3Client } from '@aws-sdk/client-s3';
 
 import * as auditModule from '@frontmcp/adapters/skills';
 import { Rs256AuditSigner } from '@frontmcp/adapters/skills';
-import { FrontMcp, setSkillAuditFactory, type AuditModuleShape } from '@frontmcp/sdk';
+import { FrontMcp, setSkillAuditFactory } from '@frontmcp/sdk';
 
 import { S3AuditStore } from './audit/s3-audit.store';
 import { MainApp } from './main.app';
 
-// The SDK builds the writer from the module: new SkillAuditWriter(store, signer, logger, undefined, { subjectMode }).
-// AuditModuleShape types the token as `symbol` and the writer constructor loosely, so the module needs a cast.
-setSkillAuditFactory(() => auditModule as unknown as AuditModuleShape);
+// The SDK builds the writer from the module: new SkillAuditWriter(store, signer, logger, metrics, { subjectMode }).
+setSkillAuditFactory(() => auditModule);
 
 const s3Store = new S3AuditStore(new S3Client({ region: 'us-east-1' }), 'audit-prod', 'skill-audit/');
 

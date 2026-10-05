@@ -62,14 +62,14 @@ Wire the audit subsystem through `skillsConfig.audit` on `@FrontMcp`:
 
 ```typescript
 import * as auditModule from '@frontmcp/adapters/skills';
-import { Hs256AuditSigner, MemoryAuditStore } from '@frontmcp/adapters/skills';
-import { FrontMcp, setSkillAuditFactory, type AuditModuleShape } from '@frontmcp/sdk';
+import { createSkillAuditMetrics, Hs256AuditSigner, MemoryAuditStore } from '@frontmcp/adapters/skills';
+import { createCounter } from '@frontmcp/observability';
+import { FrontMcp, setSkillAuditFactory } from '@frontmcp/sdk';
 import { randomBytes } from '@frontmcp/utils';
 
 import { MainApp } from './main.app';
 
-// AuditModuleShape types the token as `symbol` and the writer constructor loosely, so the module needs a cast.
-setSkillAuditFactory(() => auditModule as unknown as AuditModuleShape);
+setSkillAuditFactory(() => auditModule);
 
 @FrontMcp({
   info: { name: 'svr', version: '1.0.0' },
@@ -80,6 +80,7 @@ setSkillAuditFactory(() => auditModule as unknown as AuditModuleShape);
       enabled: true,
       signer: new Hs256AuditSigner(randomBytes(32), 'dev'),
       store: new MemoryAuditStore(),
+      metrics: createSkillAuditMetrics({ createCounter }),
       subjectMode: 'hash', // 'plain' | 'hash' | 'omit'
     },
   },
@@ -87,7 +88,9 @@ setSkillAuditFactory(() => auditModule as unknown as AuditModuleShape);
 class Server {}
 ```
 
-`setSkillAuditFactory(factory)` takes a function with no arguments that returns the audit module. The SDK does **not** statically depend on `@frontmcp/adapters/skills` — this keeps the static dependency graph clean and works in Edge / CSP runtimes. From the module it reads `SkillAuditWriterToken`, `SkillAuditWriter`, `Hs256AuditSigner` and `MemoryAuditStore`, builds the writer itself as `new SkillAuditWriter(store, signer, logger, undefined, { subjectMode })`, and registers it under `SkillAuditWriterToken`. The writer gets no metrics sink, so dropped and failed writes surface only as `[skill-audit]` warnings in the server log.
+`setSkillAuditFactory(factory)` takes a function with no arguments that returns the audit module. The SDK does **not** statically depend on `@frontmcp/adapters/skills` — this keeps the static dependency graph clean and works in Edge / CSP runtimes. From the module it reads `SkillAuditWriterToken`, `SkillAuditWriter`, `Hs256AuditSigner` and `MemoryAuditStore`, builds the writer itself as `new SkillAuditWriter(store, signer, logger, metrics, { subjectMode })`, and registers it under `SkillAuditWriterToken`.
+
+`createSkillAuditMetrics({ createCounter })` turns any counter factory into the writer's metrics sink. With `createCounter` from `@frontmcp/observability`, a failed write increments `frontmcp_skills_audit_write_failures_total{reason}` (`sign`, `append`, `unexpected`) and a dropped record increments `frontmcp_skills_audit_dropped_total{reason}` (`queue-overflow`). Without `metrics`, failed and dropped writes surface only as `[skill-audit]` warnings in the server log.
 
 With `audit.enabled` and no factory registered, the server logs a warning and runs without the audit log in development, and refuses to start when `NODE_ENV` is `production`.
 
@@ -96,6 +99,7 @@ With `audit.enabled` and no factory registered, the server logs a warning and ru
 | `enabled`                  | `boolean`                     | `false`   |
 | `signer`                   | `SkillAuditSigner`            | dev HS256 |
 | `store`                    | `SkillAuditStore`             | memory    |
+| `metrics`                  | `SkillAuditMetrics`           | unset     |
 | `subjectMode`              | `'plain' \| 'hash' \| 'omit'` | `'hash'`  |
 | `headAnchorIntervalMs`     | `number \| undefined`         | unset     |
 
