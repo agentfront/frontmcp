@@ -48,8 +48,11 @@ export interface ProviderRegistryInterface {
 
   getRegistries<T extends RegistryKind>(type: T): RegistryType[T][];
 
-  // TODO: fix session type
-  buildViews(session: any): Promise<ProviderViews>;
+  buildViews(
+    sessionKey: string,
+    contextProviders?: Map<Token, unknown>,
+    contextSource?: ProviderRegistryInterface,
+  ): Promise<ProviderViews>;
 }
 
 export interface PluginRegistryInterface {
