@@ -85,6 +85,7 @@ export async function readLayoutFirstSeenAt(
   store: RememberStoreInterface,
   keyPrefix: string,
   logger?: Pick<FrontMcpLogger, 'warn' | 'debug'>,
+  markerTtlSeconds?: number,
 ): Promise<number | undefined> {
   const key = `${keyPrefix}${LAYOUT_MARKER_KEY}`;
   const standDown = (reason: string, extra: Record<string, unknown> = {}): undefined => {
@@ -102,11 +103,11 @@ export async function readLayoutFirstSeenAt(
     const serialized = JSON.stringify(marker);
 
     if (!store.setIfAbsent) {
-      await store.setValue(key, serialized);
+      await store.setValue(key, serialized, markerTtlSeconds);
       return marker.firstSeenAt;
     }
 
-    if (await store.setIfAbsent(key, serialized)) {
+    if (await store.setIfAbsent(key, serialized, markerTtlSeconds)) {
       return marker.firstSeenAt;
     }
 
@@ -184,12 +185,16 @@ export async function purgeLegacyRememberEntries(
 export function scheduleLegacyRememberPurge(
   store: RememberStoreInterface,
   keyPrefix: string,
-  options: { delayMs?: number; logger?: Pick<FrontMcpLogger, 'warn' | 'debug'> } = {},
+  options: { delayMs?: number; defaultTTL?: number; logger?: Pick<FrontMcpLogger, 'warn' | 'debug'> } = {},
 ): void {
   if (scheduled.has(store)) return;
   scheduled.add(store);
 
   const delayMs = options.delayMs ?? DEFAULT_LEGACY_PURGE_DELAY_MS;
+  // Under the store's defaultTTL the marker would expire before the window closes and restart the clock.
+  const markerTtlSeconds = options.defaultTTL
+    ? Math.max(options.defaultTTL, Math.ceil((2 * delayMs) / 1000))
+    : undefined;
 
   const arm = (waitMs: number): void => {
     // `setTimeout` silently fires immediately past the 32-bit limit, so a very long window is
@@ -208,7 +213,7 @@ export function scheduleLegacyRememberPurge(
   };
 
   const attempt = async (): Promise<void> => {
-    const firstSeenAt = await readLayoutFirstSeenAt(store, keyPrefix, options.logger);
+    const firstSeenAt = await readLayoutFirstSeenAt(store, keyPrefix, options.logger, markerTtlSeconds);
     if (firstSeenAt === undefined) return;
 
     const remainingMs = firstSeenAt + delayMs - Date.now();

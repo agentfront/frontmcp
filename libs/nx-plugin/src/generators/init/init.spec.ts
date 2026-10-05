@@ -62,6 +62,17 @@ describe('init generator', () => {
     expect(targetDefaults['@frontmcp/nx:serve']).toBeUndefined();
   });
 
+  it('leaves the test executor on default inputs, so a spec file change is not a cache hit', async () => {
+    writeJson(tree, 'nx.json', {
+      namedInputs: { production: ['default', '!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)'] },
+      targetDefaults: {},
+    });
+
+    await initGenerator(tree, { skipFormat: true });
+
+    expect(readJson(tree, 'nx.json').targetDefaults['@frontmcp/nx:test']).toEqual({ cache: true });
+  });
+
   it('does not reference a production input the workspace does not define', async () => {
     writeJson(tree, 'nx.json', { targetDefaults: {} });
 

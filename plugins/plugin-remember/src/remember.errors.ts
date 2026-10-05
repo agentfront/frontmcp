@@ -1,4 +1,4 @@
-import { PublicMcpError } from '@frontmcp/sdk';
+import { InternalMcpError, PublicMcpError } from '@frontmcp/sdk';
 
 /**
  * Raised when Remember has no per-client identity to namespace storage with
@@ -30,5 +30,14 @@ export class RememberScopeNotAllowedError extends PublicMcpError {
       'REMEMBER_SCOPE_NOT_ALLOWED',
       400,
     );
+  }
+}
+
+/** Raised at startup for a plugin option that cannot work, such as a fractional or negative `defaultTTL`. */
+export class RememberConfigurationError extends InternalMcpError {
+  override readonly name = 'RememberConfigurationError';
+
+  constructor(message: string) {
+    super(message, 'REMEMBER_CONFIGURATION');
   }
 }

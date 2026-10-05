@@ -8,7 +8,6 @@ import { AuditLoggerService } from '../services/audit-logger.service';
 import {
   invokeToolDescription,
   invokeToolInputSchema,
-  invokeToolOutputSchema,
   type InvokeToolInput,
   type InvokeToolOutput,
 } from './invoke.schema';
@@ -45,7 +44,6 @@ function buildErrorResult(message: string): CallToolResult {
   },
   description: invokeToolDescription,
   inputSchema: invokeToolInputSchema,
-  outputSchema: invokeToolOutputSchema,
 })
 export default class InvokeTool extends ToolContext {
   async execute(input: InvokeToolInput): Promise<InvokeToolOutput> {

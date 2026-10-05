@@ -165,7 +165,8 @@ describe('GetWeatherTool', () => {
   let tool: GetWeatherTool;
 
   beforeEach(() => {
-    tool = new GetWeatherTool();
+    // `new GetWeatherTool()` throws: the constructor needs the request context the server builds.
+    tool = Object.create(GetWeatherTool.prototype);
   });
 
   it('should return weather data for a valid city', async () => {

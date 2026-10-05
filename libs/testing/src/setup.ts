@@ -15,16 +15,16 @@
  * Or use the preset:
  * ```typescript
  * export default {
- *   preset: '@frontmcp/testing/jest-preset',
+ *   preset: '@frontmcp/testing',
  * };
  * ```
  */
 
 import { expect } from '@jest/globals';
+
 import { mcpMatchers } from './matchers/mcp-matchers';
+// Import type augmentation
+import './matchers/matcher-types';
 
 // Register custom matchers with Jest
 expect.extend(mcpMatchers);
-
-// Import type augmentation
-import './matchers/matcher-types';

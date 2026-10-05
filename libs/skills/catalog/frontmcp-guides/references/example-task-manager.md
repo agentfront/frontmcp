@@ -403,7 +403,8 @@ describe('CreateTaskTool', () => {
   let mockStore: jest.Mocked<TaskStoreProvider>;
 
   beforeEach(() => {
-    tool = new CreateTaskTool();
+    // `new CreateTaskTool()` throws: the constructor needs the request context the server builds.
+    tool = Object.create(CreateTaskTool.prototype);
     mockStore = {
       create: jest.fn(),
       list: jest.fn(),
@@ -425,10 +426,12 @@ describe('CreateTaskTool', () => {
       mark: jest.fn(),
       notify: jest.fn().mockResolvedValue(true),
       progress: jest.fn().mockResolvedValue(true),
-      // `auth` getter resolves to a FrontMcpAuthContext-like object on the real SDK; we stub it directly here.
-      auth: userId ? { user: { sub: userId }, isAnonymous: false } : undefined,
     } as unknown as ToolContext;
     Object.assign(tool, ctx);
+    // `auth` is a getter with no setter, so stub the FrontMcpAuthContext with defineProperty.
+    Object.defineProperty(tool, 'auth', {
+      value: userId ? { user: { sub: userId }, isAnonymous: false } : undefined,
+    });
   }
 
   it('should create a task for an authenticated user', async () => {

@@ -65,7 +65,11 @@ export function FrontMcpProvider({
   const mountedRef = useRef(true);
   const clientRef = useRef<DirectClient | null>(null);
   const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
+
+  // Set after commit, never during render: a render React discards must not receive tool errors
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   const registry = useMemo(() => {
     const reg = new ComponentRegistry();

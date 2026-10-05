@@ -44,7 +44,7 @@ function jsonResource(uri: string, value: unknown): ReadResourceResult {
 }
 
 export function useStoreResource(options: StoreResourceOptions): void {
-  const { name, subscribe } = options;
+  const { name, subscribe, getState, selectors, actions } = options;
   const { getDynamicRegistry } = useContext(FrontMcpContext);
   const dynamicRegistry = getDynamicRegistry(options.server);
 
@@ -52,16 +52,19 @@ export function useStoreResource(options: StoreResourceOptions): void {
     throw new Error(`useStoreResource: invalid store name "${name}". Names must match ${VALID_NAME_RE}.`);
   }
 
-  const selectorKeys = keysOf(options.selectors, 'selector');
-  const actionKeys = keysOf(options.actions, 'action');
+  const selectorKeys = keysOf(selectors, 'selector');
+  const actionKeys = keysOf(actions, 'action');
 
-  // The latest store accessors, read when a resource is read or an action runs
-  const getStateRef = useRef(options.getState);
-  getStateRef.current = options.getState;
-  const selectorsRef = useRef(options.selectors);
-  selectorsRef.current = options.selectors;
-  const actionsRef = useRef(options.actions);
-  actionsRef.current = options.actions;
+  const getStateRef = useRef(getState);
+  const selectorsRef = useRef(selectors);
+  const actionsRef = useRef(actions);
+
+  // Set after commit, never during render: a render React discards must not reach a registered read or action
+  useEffect(() => {
+    getStateRef.current = getState;
+    selectorsRef.current = selectors;
+    actionsRef.current = actions;
+  }, [getState, selectors, actions]);
 
   const stateUri = `state://${name}`;
 

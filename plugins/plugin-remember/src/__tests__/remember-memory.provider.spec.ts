@@ -369,3 +369,42 @@ describe('RememberMemoryProvider', () => {
     });
   });
 });
+
+describe('RememberMemoryProvider defaultTTL (#717)', () => {
+  const defaultTtlSeconds = 60;
+  let store: RememberMemoryProvider;
+
+  beforeEach(() => {
+    store = new RememberMemoryProvider(3600, defaultTtlSeconds);
+  });
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    await store.close();
+  });
+
+  function moveClockForwardBySeconds(seconds: number): void {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.now() + seconds * 1000);
+  }
+
+  it('expires a value stored without a ttl once defaultTTL passes', async () => {
+    await store.setValue('key', 'value');
+    moveClockForwardBySeconds(defaultTtlSeconds + 1);
+
+    await expect(store.getValue('key')).resolves.toBeUndefined();
+  });
+
+  it('lets an explicit ttl override defaultTTL', async () => {
+    await store.setValue('key', 'value', 3600);
+    moveClockForwardBySeconds(defaultTtlSeconds + 1);
+
+    await expect(store.getValue('key')).resolves.toBe('value');
+  });
+
+  it('applies defaultTTL to a key setIfAbsent creates without a ttl', async () => {
+    await expect(store.setIfAbsent('marker', 'value')).resolves.toBe(true);
+    moveClockForwardBySeconds(defaultTtlSeconds + 1);
+
+    await expect(store.getValue('marker')).resolves.toBeUndefined();
+  });
+});

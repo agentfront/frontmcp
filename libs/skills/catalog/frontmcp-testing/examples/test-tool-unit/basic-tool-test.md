@@ -5,8 +5,8 @@ level: basic
 description: "Test a simple tool's `execute()` method with mock context and verify the output."
 tags: [testing, tool, unit]
 features:
-  - 'Mocking the real `ExecutionContextBase` API surface (`get`, `tryGet`, `scope`, `fail`, `mark`, `fetch`) plus `notify` from `ToolContext`'
-  - 'Assigning the mock context to the tool instance via `Object.assign`'
+  - 'Creating the tool with `Object.create(AddTool.prototype)`, since its constructor needs the request context the server builds'
+  - 'Assigning mocks of the context methods it calls (`get`, `tryGet`, `fail`, `mark`, `fetch`, `notify`) via `Object.assign`'
   - 'Testing multiple input scenarios including edge cases (negatives, zero)'
 ---
 
@@ -19,31 +19,28 @@ Test a simple tool's `execute()` method with mock context and verify the output.
 ```typescript
 // src/tools/__tests__/add.tool.spec.ts
 // Real API: libs/sdk/src/common/interfaces/execution-context.interface.ts
-//   ExecutionContextBase exposes: get, tryGet, scope, fail, mark, fetch
-//   ToolContext additionally exposes: notify (use only when the tool calls this.notify(...))
-import { ToolContext } from '@frontmcp/sdk';
-
+//   ExecutionContextBase exposes: get, tryGet, fail, mark, fetch (and the getters scope, auth, context)
+//   ToolContext additionally exposes: notify, progress (mock them only when the tool calls them)
 import { AddTool } from '../add.tool';
 
 describe('AddTool', () => {
   let tool: AddTool;
 
   beforeEach(() => {
-    tool = new AddTool();
+    // `new AddTool()` throws: the constructor needs the request context the server builds.
+    tool = Object.create(AddTool.prototype);
 
-    const ctx = {
+    // Getters such as `scope` and `auth` have no setter; stub them with Object.defineProperty.
+    Object.assign(tool, {
       get: jest.fn(),
       tryGet: jest.fn(),
-      scope: { get: jest.fn(), tryGet: jest.fn() },
-      fail: jest.fn((err) => {
-        throw err;
+      fail: jest.fn((error: Error) => {
+        throw error;
       }),
       mark: jest.fn(),
       fetch: jest.fn(),
       notify: jest.fn(),
-    } as unknown as ToolContext;
-
-    Object.assign(tool, ctx);
+    });
   });
 
   it('should add two numbers', async () => {
@@ -65,8 +62,8 @@ describe('AddTool', () => {
 
 ## What This Demonstrates
 
-- Mocking the real `ExecutionContextBase` API surface (`get`, `tryGet`, `scope`, `fail`, `mark`, `fetch`) plus `notify` from `ToolContext`
-- Assigning the mock context to the tool instance via `Object.assign`
+- Creating the tool with `Object.create(AddTool.prototype)`, since its constructor needs the request context the server builds
+- Assigning mocks of the context methods it calls (`get`, `tryGet`, `fail`, `mark`, `fetch`, `notify`) via `Object.assign`
 - Testing multiple input scenarios including edge cases (negatives, zero)
 
 ## Related

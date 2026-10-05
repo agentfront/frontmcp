@@ -646,69 +646,85 @@ class DeployPipeline {}
 
 ---
 
-## 15. @Hook Decorators (@Will, @Did, @Stage, @Around)
+## 15. Hook Decorators (@Will, @Did, @Stage, @Around)
 
-**Purpose:** Attach lifecycle hooks to flows, allowing interception at different points.
+**Purpose:** Run logic before, after, around, or as part of a stage of a flow, such as a tool call or a resource read.
 
-**When to use:** When you need to run logic before, after, at a specific stage of, or wrapping around a flow execution.
+**When to use:** When you need cross-cutting logic (logging, timing, authorization, caching) around tool calls, resource reads, prompt gets and the other flows.
+
+`@frontmcp/sdk` does not export `Will`, `Did`, `Stage` or `Around` on their own. Take them from the export for the flow you hook (`ToolHook` for `tools:call-tool`, `ResourceHook` for `resources:read-resource`, `PromptHook` for `prompts:get-prompt`, ...) or from `FlowHooksOf('<flow-name>')`. The flow comes from where you take the decorator; the decorator itself takes a **stage** of that flow, such as `'execute'`.
 
 **Variants:**
 
-| Decorator | Timing   | Description                               |
-| --------- | -------- | ----------------------------------------- |
-| `@Will`   | Before   | Runs before the flow executes             |
-| `@Did`    | After    | Runs after the flow completes             |
-| `@Stage`  | During   | Runs at a specific stage in the flow plan |
-| `@Around` | Wrapping | Wraps the flow, controlling execution     |
+| Decorator | Timing   | Description                             |
+| --------- | -------- | --------------------------------------- |
+| `@Will`   | Before   | Runs before the stage                   |
+| `@Did`    | After    | Runs after the stage completes          |
+| `@Stage`  | During   | Runs as part of the stage itself        |
+| `@Around` | Wrapping | Wraps the stage; `await next()` runs it |
+
+Declare hooks on a `@Plugin` (or a provider) to run them for every tool, resource or prompt of the app it is registered on:
 
 ```typescript
-import { Around, Did, HookContext, Stage, Will } from '@frontmcp/sdk';
+import { FlowCtxOf, Plugin, ResourceHook, ToolHook } from '@frontmcp/sdk';
 
-class AuditHooks {
-  @Will('tools:call-tool')
-  async beforeToolCall(ctx: HookContext) {
-    ctx.state.set('startTime', Date.now());
+const { Will, Did } = ToolHook;
+const { Around } = ResourceHook;
+
+@Plugin({ name: 'audit', description: 'Logs tool calls and times resource reads' })
+export class AuditPlugin {
+  @Will('execute')
+  beforeToolCall(ctx: FlowCtxOf<'tools:call-tool'>) {
+    ctx.logger.info(`Calling tool ${ctx.state.required.tool.name}`);
   }
 
-  @Did('tools:call-tool')
-  async afterToolCall(ctx: HookContext) {
-    const duration = Date.now() - ctx.state.get('startTime');
-    await this.get(AuditService).log({ tool: ctx.toolName, duration });
+  @Did('execute')
+  afterToolCall(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { tool, toolContext } = ctx.state.required;
+    ctx.logger.info(`Tool ${tool.name} returned ${JSON.stringify(toolContext.output)}`);
   }
 
-  @Around('resources:read-resource')
-  async cacheResource(ctx: HookContext, next: () => Promise<void>) {
-    const cached = await this.get(CacheService).get(ctx.uri);
-    if (cached) {
-      ctx.respond(cached);
-      return;
-    }
+  @Around('execute')
+  async timeResourceRead(ctx: FlowCtxOf<'resources:read-resource'>, next: () => Promise<void>) {
+    const startedAt = Date.now();
     await next();
+    ctx.logger.info(`Read ${ctx.state.required.input.uri} in ${Date.now() - startedAt}ms`);
   }
 }
 ```
+
+Register the plugin in `@App({ plugins: [AuditPlugin] })`, or in `@FrontMcp({ plugins: [AuditPlugin] })` to run its hooks for every app.
+
+A hook method receives the running flow, typed `FlowCtxOf<'<flow-name>'>`:
+
+- `ctx.state` holds the flow's data (for `tools:call-tool`: `input`, `tool`, `toolContext`, ...); `ctx.state.required.<key>` throws when the key is unset.
+- `ctx.logger` logs, and `ctx.fail(error)` or `ctx.respond(output)` ends the flow.
+- An `@Around` hook also receives `next`, which runs the stage.
+- `this` is the plugin or provider instance.
+
+A hook declared on a `@Tool`, `@Resource` or `@Prompt` class runs only for that entry, on its context (`this.input`, `this.get()`). See `create-plugin-hooks` for the stages of each flow, `priority`, `filter` and entry-class hooks.
 
 ---
 
 ## Quick Reference Table
 
-| Decorator                   | Extends           | Registered In    | Purpose                  |
-| --------------------------- | ----------------- | ---------------- | ------------------------ |
-| `@FrontMcp`                 | -                 | Root             | Server configuration     |
-| `@App`                      | -                 | `@FrontMcp.apps` | Module grouping          |
-| `@Tool`                     | `ToolContext`     | `@App.tools`     | Executable action        |
-| `@Prompt`                   | `PromptContext`   | `@App.prompts`   | Prompt template          |
-| `@Resource`                 | `ResourceContext` | `@App.resources` | Static data              |
-| `@ResourceTemplate`         | `ResourceContext` | `@App.resources` | Parameterized data       |
-| `@Agent`                    | `AgentContext`    | `@App.agents`    | Autonomous AI agent      |
-| `@Skill`                    | -                 | `@App.skills`    | Knowledge package        |
-| `@Plugin`                   | -                 | `@App.plugins`   | Cross-cutting concern    |
-| `@Adapter`                  | -                 | `@App.adapters`  | External integration     |
-| `@Provider`                 | -                 | `@App.providers` | DI binding               |
-| `@Flow`                     | -                 | `@App`           | Custom flow              |
-| `@Job`                      | `JobContext`      | `@App.jobs`      | Background task          |
-| `@Workflow`                 | -                 | `@App.workflows` | Multi-step orchestration |
-| `@Will/@Did/@Stage/@Around` | -                 | Entry class      | Lifecycle hooks          |
+| Decorator                   | Extends           | Registered In                   | Purpose                  |
+| --------------------------- | ----------------- | ------------------------------- | ------------------------ |
+| `@FrontMcp`                 | -                 | Root                            | Server configuration     |
+| `@App`                      | -                 | `@FrontMcp.apps`                | Module grouping          |
+| `@Tool`                     | `ToolContext`     | `@App.tools`                    | Executable action        |
+| `@Prompt`                   | `PromptContext`   | `@App.prompts`                  | Prompt template          |
+| `@Resource`                 | `ResourceContext` | `@App.resources`                | Static data              |
+| `@ResourceTemplate`         | `ResourceContext` | `@App.resources`                | Parameterized data       |
+| `@Agent`                    | `AgentContext`    | `@App.agents`                   | Autonomous AI agent      |
+| `@Skill`                    | -                 | `@App.skills`                   | Knowledge package        |
+| `@Plugin`                   | -                 | `@App.plugins`                  | Cross-cutting concern    |
+| `@Adapter`                  | -                 | `@App.adapters`                 | External integration     |
+| `@Provider`                 | -                 | `@App.providers`                | DI binding               |
+| `@Flow`                     | -                 | `@App`                          | Custom flow              |
+| `@Job`                      | `JobContext`      | `@App.jobs`                     | Background task          |
+| `@Workflow`                 | -                 | `@App.workflows`                | Multi-step orchestration |
+| `@Will/@Did/@Stage/@Around` | -                 | Plugin, provider or entry class | Flow stage hooks         |
 
 ---
 
@@ -751,9 +767,11 @@ class AuditHooks {
 
 ### Hooks
 
-- [ ] Hook flow strings match valid flows (e.g., `tools:call-tool`, `resources:read-resource`)
+- [ ] Hook decorators come from the flow's export (`ToolHook`, `ResourceHook`, `PromptHook`, ...) or `FlowHooksOf('<flow-name>')`, not from a direct `Will`/`Did` import
+- [ ] Each hook decorator gets a stage of its flow (e.g., `'execute'`), not a flow name
+- [ ] Hooks are methods of a `@Plugin`, a provider or an entry class, and the plugin is registered in `plugins`
 - [ ] `@Around` hooks call `await next()` to continue the chain (unless intentionally short-circuiting)
-- [ ] Hooks do not mutate `rawInput` -- use `ctx.state.set()` for flow state
+- [ ] Hooks do not mutate `rawInput` -- use `ctx.state` for flow state
 
 ### DI and Plugins
 
@@ -770,7 +788,7 @@ class AuditHooks {
 | Tool does not appear in `tools/list` MCP response    | Tool class is not registered in any `@App({ tools: [...] })` or `@FrontMcp({ tools: [...] })`         | Add the tool class to the `tools` array of the appropriate `@App` or `@FrontMcp` decorator                                          |
 | `this.get(Token)` throws `ProviderNotAvailableError` | The provider for that token is not registered or is registered in a different app scope               | Add a `@Provider` for the token in the same `@App` or in `@FrontMcp({ providers: [...] })` for global access                        |
 | Resource returns 404 / `ResourceNotFoundError`       | The `uri` in `@Resource` does not match the requested URI, or `uriTemplate` parameters are misaligned | Verify the URI string exactly matches what the client requests; for templates, confirm `{param}` names match                        |
-| Hook never fires                                     | The `flow` string in `@Will`/`@Did`/`@Around`/`@Stage` does not match any registered flow             | Check the flow string against valid flows (e.g., `tools:call-tool`, `resources:read-resource`, `resources:list-resources`)          |
+| Hook never fires                                     | The plugin declaring it is not registered, or the decorator comes from another flow's export          | Register the plugin in `plugins`; take the decorators from the hooked flow's export (e.g., `ResourceHook` for resource reads)       |
 | Plugin context extension is `undefined` at runtime   | The plugin's `installContextExtension` function was not called, or module augmentation is missing     | Ensure the plugin is registered and its context extension function runs at startup; verify the `declare module` augmentation exists |
 | Agent `execute()` returns empty result               | LLM configuration is missing or invalid (wrong model name, missing API key)                           | Verify `llm.model` and `llm.provider` in `@Agent`, and ensure the provider API key is set in environment variables                  |
 
