@@ -1,11 +1,6 @@
 import { Provider, ProviderScope } from '@frontmcp/sdk';
-import {
-  createStorage,
-  createMemoryStorage,
-  type RootStorage,
-  type NamespacedStorage,
-  type StorageConfig,
-} from '@frontmcp/utils';
+import { createStorage, type NamespacedStorage, type RootStorage, type StorageConfig } from '@frontmcp/utils';
+
 import type { RememberStoreInterface } from './remember-store.interface';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -249,9 +244,8 @@ export class RememberStorageProvider implements RememberStoreInterface {
 export function createRememberMemoryProvider(
   options: Omit<RememberStorageProviderOptions, 'storage' | 'storageInstance'> = {},
 ): RememberStorageProvider {
-  const memoryStorage = createMemoryStorage();
   return new RememberStorageProvider({
     ...options,
-    storageInstance: memoryStorage,
+    storage: { type: 'memory' },
   });
 }

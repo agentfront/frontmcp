@@ -4,7 +4,7 @@
     {
       "name": "create-tool",
       "category": "development/create",
-      "description": "ALWAYS use this skill when the user asks to build, modify, or audit a FrontMCP tool. Covers @Tool({...}) end-to-end: class and function-style tools, Zod input/output schemas with derived execute() types, dependency injection, error handling, throttling (rate-limit / concurrency / timeout), auth providers, availability constraints, elicitation, interactive UI widgets (MCP Apps / SEP-1865 \u2014 including .tsx FileSource, CSP, window.FrontMcpBridge, host-detect resourceMode), annotations, examples metadata, registration in @App, and per-tool unit testing.",
+      "description": "ALWAYS use this skill when the user asks to build, modify, or audit a FrontMCP tool. Covers everything inside `@Tool({...})`: class and function-style tools, Zod input/output schemas with derived `execute()` types, dependency injection (`this.get` / `this.tryGet`), error handling (`this.fail`, MCP error classes), throttling (rate-limit / concurrency / timeout), auth providers (single / multi / vault), availability constraints (`availableWhen`), elicitation (`this.elicit`), interactive UI widgets via `@Tool({ ui })` (MCP Apps / SEP-1865 — including `.tsx` FileSource, CSP, `window.FrontMcpBridge`, host-detect `resourceMode`), annotations (`readOnlyHint` / `destructiveHint` / …), `examples` metadata, registration in `@App({ tools })`, and per-tool unit testing.",
       "path": "create-tool",
       "targets": ["all"],
       "hasResources": true,
@@ -29,36 +29,8 @@
       "priority": 10,
       "references": [
         {
-          "name": "quick-start",
-          "description": "60-second tour \u2014 minimal tool, schemas, registration, calling it."
-        },
-        {
-          "name": "decorator-options",
-          "description": "Every field on `@Tool({...})` \u2014 what it does, default, when to set it."
-        },
-        {
-          "name": "input-schema",
-          "description": "Define the tool's input contract \u2014 raw Zod shapes, refinements, defaults, optional fields."
-        },
-        {
-          "name": "output-schema",
-          "description": "Define the tool's output contract \u2014 Zod shape, primitives, media, multi-content arrays."
-        },
-        {
-          "name": "derived-types",
-          "description": "Derive execute() parameter and return types from the schemas via ToolInputOf / ToolOutputOf."
-        },
-        {
-          "name": "execution-context",
-          "description": "What ToolContext provides at runtime \u2014 this.get, this.fetch, this.notify, this.context."
-        },
-        {
-          "name": "error-handling",
-          "description": "this.fail, MCP error classes, error flow \u2014 when to throw vs fail."
-        },
-        {
-          "name": "throttling",
-          "description": "rateLimit, concurrency, timeout \u2014 semantics, interaction, defaults."
+          "name": "annotations",
+          "description": "readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title — behavioral hints for clients."
         },
         {
           "name": "auth-providers",
@@ -69,43 +41,62 @@
           "description": "availableWhen axes (os / runtime / deployment / provider / target / surface / env), missingAxes, isPlatform."
         },
         {
+          "name": "decorator-options",
+          "description": "Every field on @Tool({...}) — what it does, default, when to set it."
+        },
+        {
+          "name": "derived-types",
+          "description": "Derive execute() parameter and return types from the schemas via ToolInputOf / ToolOutputOf."
+        },
+        {
           "name": "elicitation",
-          "description": "this.elicit \u2014 request interactive input mid-execution. Server enable + accept/decline/cancel flow."
+          "description": "this.elicit — request interactive input mid-execution. Server enable + accept/decline/cancel flow."
         },
         {
-          "name": "ui-widgets",
-          "description": "@Tool({ ui }) \u2014 template formats, trusted markup (html / escapeStringResults), servingMode, host-detect resourceMode, CSP, ignored options, MCP Apps spec."
+          "name": "error-handling",
+          "description": "this.fail, MCP error classes, error flow — when to throw vs fail."
         },
         {
-          "name": "annotations",
-          "description": "readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title \u2014 behavioral hints for clients."
-        },
-        {
-          "name": "function-style-builder",
-          "description": "tool({...})(handler) \u2014 when to pick over a class, register, ctx parameter."
-        },
-        {
-          "name": "remote-and-esm",
-          "description": "Tool.esm / Tool.remote \u2014 load tools from ESM URLs or remote MCP servers."
-        },
-        {
-          "name": "registration",
-          "description": "@App({ tools }) vs @FrontMcp({ tools }), multi-app composition."
+          "name": "execution-context",
+          "description": "What ToolContext provides at runtime — this.get, this.fetch, this.notify, this.context."
         },
         {
           "name": "file-layout",
           "description": "Flat sibling vs folder-per-tool layouts. <name>.schema.ts / <name>.tool.ts / <name>.tool.spec.ts."
         },
         {
+          "name": "function-style-builder",
+          "description": "tool({...})(handler) — when to pick over a class, register, ctx parameter."
+        },
+        {
+          "name": "input-schema",
+          "description": "Define the tool's input contract — raw Zod shapes, refinements, defaults, optional fields."
+        },
+        {
+          "name": "output-schema",
+          "description": "Define the tool's output contract — Zod shape, primitives, media, multi-content arrays."
+        },
+        { "name": "quick-start", "description": "60-second tour — minimal tool, schemas, registration, calling it." },
+        { "name": "registration", "description": "@App({ tools }) vs @FrontMcp({ tools }), multi-app composition." },
+        {
+          "name": "remote-and-esm",
+          "description": "Tool.esm / Tool.remote — load tools from ESM URLs or remote MCP servers."
+        },
+        {
           "name": "testing",
-          "description": "Per-tool unit tests \u2014 @frontmcp/testing, mocking DI, asserting output validation."
+          "description": "Per-tool unit tests — pointer to the dedicated `testing` skill for the canonical patterns."
+        },
+        { "name": "throttling", "description": "rateLimit, concurrency, timeout — semantics, interaction, defaults." },
+        {
+          "name": "ui-widgets",
+          "description": "@Tool({ ui }) — template formats, trusted markup (html / escapeStringResults), servingMode, host-detect resourceMode, CSP, ignored options, MCP Apps spec."
         }
       ],
       "examples": [
         {
           "name": "01-basic-class-tool",
-          "level": "basic",
           "description": "Minimal class-based tool with Zod input/output schemas and types derived from the schemas. The foundation every other example builds on.",
+          "level": "basic",
           "tags": ["foundation", "class-tool", "output-schema", "derived-types"],
           "features": [
             "Extending `ToolContext` (no generics) and implementing `execute()`",
@@ -118,8 +109,8 @@
         },
         {
           "name": "02-basic-function-tool",
+          "description": "Function-style `tool({...})(handler)` for a tiny pure-input tool — pick this over a class only when the tool needs no DI / lifecycle / UI.",
           "level": "basic",
-          "description": "Function-style `tool({...})(handler)` for a tiny pure-input tool \u2014 pick this over a class only when the tool needs no DI / lifecycle / UI.",
           "tags": ["foundation", "function-tool", "tool-builder"],
           "features": [
             "Using the `tool({...})(handler)` builder for a one-liner",
@@ -130,11 +121,11 @@
         },
         {
           "name": "03-tool-with-zod-shape-output",
+          "description": "Tool returning structured JSON declared via a Zod raw shape outputSchema — the recommended pattern for any complex output.",
           "level": "basic",
-          "description": "Tool returning structured JSON declared via a Zod raw shape outputSchema \u2014 the recommended pattern for any complex output.",
           "tags": ["output-schema", "zod-shape", "structured-output"],
           "features": [
-            "Declaring `outputSchema` as a Zod raw shape `{ field: z.string(), \u2026 }`",
+            "Declaring `outputSchema` as a Zod raw shape `{ field: z.string(), … }`",
             "Constraining values with `.int().min(0)` so invalid output is rejected at the boundary",
             "Letting unrelated fields returned by the implementation (e.g. an upstream API's extras) be stripped silently",
             "Deriving `OrderSummaryOutput` once so the type and runtime contract can't drift"
@@ -142,8 +133,8 @@
         },
         {
           "name": "04-tool-with-zod-schema-output",
+          "description": "Tool returning a discriminated union via a full `z.discriminatedUnion(...)` outputSchema — for outputs that branch on a kind field.",
           "level": "advanced",
-          "description": "Tool returning a discriminated union via a full `z.discriminatedUnion(...)` outputSchema \u2014 for outputs that branch on a kind field.",
           "tags": ["output-schema", "zod-schema", "discriminated-union"],
           "features": [
             "Using a full Zod schema (`z.discriminatedUnion(...)`) as `outputSchema` instead of a raw shape",
@@ -154,8 +145,8 @@
         },
         {
           "name": "05-tool-with-primitive-output",
+          "description": "Tool returning a single primitive — `outputSchema: 'string' | 'number' | 'boolean' | 'date'` for single-value outputs.",
           "level": "basic",
-          "description": "Tool returning a single primitive \u2014 `outputSchema: 'string' | 'number' | 'boolean' | 'date'` for single-value outputs.",
           "tags": ["output-schema", "primitive-output"],
           "features": [
             "Using a primitive literal (`'string'`, `'number'`, `'boolean'`, `'date'`) for `outputSchema`",
@@ -166,20 +157,20 @@
         },
         {
           "name": "06-tool-with-media-output",
+          "description": "Tool returning binary content (image / audio) or a multi-content array of `[text, image]` — for outputs that aren't plain JSON.",
           "level": "intermediate",
-          "description": "Tool returning binary content (image / audio) or a multi-content array of `[text, image]` \u2014 for outputs that aren't plain JSON.",
           "tags": ["output-schema", "media-output", "image", "multi-content"],
           "features": [
             "Returning a base64-encoded image with `outputSchema: 'image'` and `{ type: 'image', data, mimeType }`",
             "Returning audio with `outputSchema: 'audio'` (same `{ type: 'audio', data, mimeType }` shape, audio MIME types)",
-            "Returning multi-content via `outputSchema: ['string', 'image']` \u2014 text summary + annotated image in one response",
+            "Returning multi-content via `outputSchema: ['string', 'image']` — text summary + annotated image in one response",
             "When to pick a media literal vs `'resource_link'` (host-fetched URI)"
           ]
         },
         {
           "name": "08-tool-with-provider-injection",
+          "description": "Tool that resolves a DI-registered service via `this.get(TOKEN)` and uses it to power `execute()` — the standard pattern for tools that talk to a database or external API.",
           "level": "intermediate",
-          "description": "Tool that resolves a DI-registered service via `this.get(TOKEN)` and uses it to power `execute()` \u2014 the standard pattern for tools that talk to a database or external API.",
           "tags": ["di", "provider", "this.get", "error-handling"],
           "features": [
             "Defining a typed DI token with `Symbol('UserService')` and `Token<UserService>`",
@@ -190,32 +181,32 @@
         },
         {
           "name": "09-tool-with-multiple-providers",
+          "description": "Tool composing three DI services — config (env-only), cache (optional, `tryGet`), and database (required) — the realistic shape for a production tool.",
           "level": "intermediate",
-          "description": "Tool composing three DI services \u2014 config (env-only), cache (optional, `tryGet`), and database (required) \u2014 the realistic shape for a production tool.",
           "tags": ["di", "multiple-providers", "cache-aside", "tryGet"],
           "features": [
             "Resolving multiple providers via `this.get(TOKEN)` and `this.tryGet(TOKEN)`",
-            "Cache-aside pattern \u2014 check `tryGet(CACHE)` first, fall back to the database",
+            "Cache-aside pattern — check `tryGet(CACHE)` first, fall back to the database",
             "Reading typed config from a `CONFIG` token vs `process.env` directly",
             "Letting the tool work in production (with cache) AND in test (without it)"
           ]
         },
         {
           "name": "11-tool-with-fetch",
+          "description": "Tool calling an external HTTP API with `this.fetch` — context propagation, status-code handling, and bounding the call with a tool `timeout`.",
           "level": "intermediate",
-          "description": "Tool calling an external HTTP API with `this.fetch` \u2014 context propagation, status-code handling, and bounding the call with a tool `timeout`.",
           "tags": ["fetch", "http", "external-api", "error-handling"],
           "features": [
             "Using `this.fetch(url, init?)` so trace context propagates to the upstream service",
             "Translating non-2xx HTTP responses into `PublicMcpError` so the MCP client gets a clean error",
-            "Bounding the call with a tool `timeout` (and `this.fetch`'s built-in per-request timeout) \u2014 without relying on a non-existent context abort signal",
+            "Bounding the call with a tool `timeout` (and `this.fetch`'s built-in per-request timeout) — without relying on a non-existent context abort signal",
             "Letting genuine network errors (DNS failure, ECONNREFUSED) propagate to the framework's error flow"
           ]
         },
         {
           "name": "12-tool-with-fetch-and-retries",
-          "level": "advanced",
           "description": "Tool calling a flaky external API with exponential backoff retries, an Idempotency-Key for safety, and respect for `Retry-After` on 429s.",
+          "level": "advanced",
           "tags": ["fetch", "retries", "exponential-backoff", "idempotency-key", "429-rate-limit"],
           "features": [
             "Retrying on transient errors (5xx + 429) with exponential backoff plus jitter",
@@ -226,57 +217,57 @@
         },
         {
           "name": "13-tool-with-single-auth-provider",
+          "description": "Tool requiring a single OAuth provider via the `authProviders: ['github']` string shorthand — credentials loaded before `execute()` runs.",
           "level": "intermediate",
-          "description": "Tool requiring a single OAuth provider via the `authProviders: ['github']` string shorthand \u2014 credentials loaded before `execute()` runs.",
           "tags": ["auth-providers", "oauth", "github", "this.authProviders"],
           "features": [
             "Declaring a single required OAuth provider with the `authProviders: ['github']` shorthand",
             "Reading pre-formatted credentials via `await this.authProviders.headers('github')`",
-            "Letting the framework reject calls whose required credential is missing **before** `execute()` runs \u2014 a JSON-RPC `-32001` (MCP `UNAUTHORIZED`) error whose `data` carries `{ tool, providers: ['github'], authUrl }` (no auth-check boilerplate)",
+            "Letting the framework reject calls whose required credential is missing **before** `execute()` runs — a JSON-RPC `-32001` (MCP `UNAUTHORIZED`) error whose `data` carries `{ tool, providers: ['github'], authUrl }` (no auth-check boilerplate)",
             "Trusting the framework to handle token refresh, expiration, and the connect/authorize URL"
           ]
         },
         {
           "name": "14-tool-with-multiple-auth-providers",
+          "description": "Tool with the full `authProviders` mapping form — one required provider with explicit scopes, one optional provider with an alias, and graceful degradation when the optional creds are missing.",
           "level": "advanced",
-          "description": "Tool with the full `authProviders` mapping form \u2014 one required provider with explicit scopes, one optional provider with an alias, and graceful degradation when the optional creds are missing.",
           "tags": ["auth-providers", "oauth", "scopes", "optional-auth", "this.authProviders.headers"],
           "features": [
             "Using the object form of `authProviders` to set `required`, `scopes`, and `alias`",
             "Declaring required OAuth scopes that the server advertises in its Protected Resource Metadata (`scopes_supported`) so clients request them",
             "Resolving an optional provider via `await this.authProviders.headers('cloud')` (returns an empty object `{}` when absent)",
-            "Branching the tool's behavior \u2014 full deploy when both providers are present; preview-only when the cloud provider is missing",
+            "Branching the tool's behavior — full deploy when both providers are present; preview-only when the cloud provider is missing",
             "The required `github` provider gating the call: when its credential is missing the framework aborts before `execute()` with `-32001` and `data: { tool, providers: ['github'], authUrl }`; the optional `aws`/`cloud` provider never gates"
           ]
         },
         {
           "name": "15-tool-with-credential-vault",
+          "description": "Tool that reads a user-supplied static credential (a Slack webhook URL) from the per-session encrypted credential vault — the pattern for credentials that aren't OAuth.",
           "level": "advanced",
-          "description": "Tool that reads a user-supplied static credential (a Slack webhook URL) from the per-session encrypted credential vault \u2014 the pattern for credentials that aren't OAuth.",
           "tags": ["auth-providers", "credential-vault", "slack-webhook", "encryption-at-rest"],
           "features": [
             "Declaring a vault-backed auth provider with `authProviders: ['slack-webhook']`",
-            "Reading the user's pasted-in credential via `await this.authProviders.headers('slack-webhook')` \u2014 same API as OAuth",
+            "Reading the user's pasted-in credential via `await this.authProviders.headers('slack-webhook')` — same API as OAuth",
             "Letting the framework handle per-session AES-256-GCM encryption at rest (Redis or memory store)",
             "Knowing when to pick the vault (static secrets the user knows) vs OAuth (delegated identity)"
           ]
         },
         {
           "name": "16-tool-with-rate-limit",
+          "description": "Tool with `rateLimit: { maxRequests, windowMs }` capping invocations per session per minute — the protection for expensive / external-API-billed operations.",
           "level": "intermediate",
-          "description": "Tool with `rateLimit: { maxRequests, windowMs }` capping invocations per session per minute \u2014 the protection for expensive / external-API-billed operations.",
           "tags": ["throttling", "rate-limit", "abuse-protection"],
           "features": [
             "Capping the tool to N invocations per windowMs, partitioned per session via `partitionBy: 'session'`",
             "Letting the framework reject over-limit calls with `RateLimitError` (code `'RATE_LIMIT_EXCEEDED'`, HTTP status 429) carrying a retry-after hint in its message that clients can back off against",
             "Combining `rateLimit` with `annotations.openWorldHint: true` so clients know the tool talks to billed external services",
-            "Sizing the limit against upstream quota / billing \u2014 not just \"what feels reasonable\""
+            "Sizing the limit against upstream quota / billing — not just \"what feels reasonable\""
           ]
         },
         {
           "name": "17-tool-with-concurrency-and-timeout",
+          "description": "Tool with `concurrency` + `timeout` for a real bottleneck (PDF rendering) — caps simultaneous in-flight work AND hard-caps per-call duration.",
           "level": "advanced",
-          "description": "Tool with `concurrency` + `timeout` for a real bottleneck (PDF rendering) \u2014 caps simultaneous in-flight work AND hard-caps per-call duration.",
           "tags": ["throttling", "concurrency", "timeout"],
           "features": [
             "Capping simultaneous in-flight executions with `concurrency: { maxConcurrent }` (server-wide by default)",
@@ -287,8 +278,8 @@
         },
         {
           "name": "18-tool-with-progress-and-notify",
+          "description": "Long-running tool emitting progress updates (`this.progress`), log notifications (`this.notify`), and stage markers (`this.mark`) — the standard pattern for jobs you don't want to feel hung.",
           "level": "intermediate",
-          "description": "Long-running tool emitting progress updates (`this.progress`), log notifications (`this.notify`), and stage markers (`this.mark`) \u2014 the standard pattern for jobs you don't want to feel hung.",
           "tags": ["progress", "notifications", "mark", "long-running"],
           "features": [
             "Emitting per-item progress with `await this.progress(current, total, message)`",
@@ -299,20 +290,20 @@
         },
         {
           "name": "19-tool-with-elicitation",
+          "description": "Tool that pauses mid-execution to ask the user for confirmation + extra input via `this.elicit(...)` — the safe pattern for destructive or expensive actions.",
           "level": "advanced",
-          "description": "Tool that pauses mid-execution to ask the user for confirmation + extra input via `this.elicit(...)` \u2014 the safe pattern for destructive or expensive actions.",
           "tags": ["elicitation", "this.elicit", "destructive-action", "confirmation"],
           "features": [
             "Calling `this.elicit(message, z.object({ ... }))` to request interactive input mid-`execute()`",
-            "Branching on `result.status` \u2014 `accept` / `decline` / `cancel` \u2014 and matching the early returns against `outputSchema`",
+            "Branching on `result.status` — `accept` / `decline` / `cancel` — and matching the early returns against `outputSchema`",
             "Pairing elicitation with `annotations.destructiveHint: true` so clients know to render the confirmation prominently",
-            "Requiring `elicitation: { enabled: true }` at the `@FrontMcp({...})` server level \u2014 and what fails when it isn't"
+            "Requiring `elicitation: { enabled: true }` at the `@FrontMcp({...})` server level — and what fails when it isn't"
           ]
         },
         {
           "name": "20-tool-with-annotations",
+          "description": "Four tools showing the standard annotation combinations — read-only query, destructive delete, send-email side-effecting, external-API search — and the client behavior each combination opts into.",
           "level": "basic",
-          "description": "Four tools showing the standard annotation combinations \u2014 read-only query, destructive delete, send-email side-effecting, external-API search \u2014 and the client behavior each combination opts into.",
           "tags": ["annotations", "readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"],
           "features": [
             "Setting `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` to opt into specific client behaviors (auto-retry, confirmation gating, parallelization)",
@@ -323,45 +314,45 @@
         },
         {
           "name": "21-tool-with-availability-constraints",
+          "description": "Three tools showing the `availableWhen` axes — macOS-only OS gate, production+Node runtime gate, and a `surface` gate that allows agent + job invocation but blocks direct MCP-client calls.",
           "level": "advanced",
-          "description": "Three tools showing the `availableWhen` axes \u2014 macOS-only OS gate, production+Node runtime gate, and a `surface` gate that allows agent + job invocation but blocks direct MCP-client calls.",
           "tags": ["availableWhen", "os", "runtime", "surface", "EntryUnavailableError"],
           "features": [
             "Restricting a tool to macOS with `availableWhen: { os: ['darwin'] }`",
-            "Composing constraints \u2014 `runtime: ['node']` AND `env: ['production']` \u2014 both must match for the tool to be available",
+            "Composing constraints — `runtime: ['node']` AND `env: ['production']` — both must match for the tool to be available",
             "Using the `surface` axis to expose an internal tool to agents and jobs while hiding it from direct user invocation",
-            "Knowing what happens on mismatch \u2014 `EntryUnavailableError` (`-32003` FORBIDDEN) with `data.missingAxes` so clients show the right \"not available here\" reason"
+            "Knowing what happens on mismatch — `EntryUnavailableError` (`-32003` FORBIDDEN) with `data.missingAxes` so clients show the right \"not available here\" reason"
           ]
         },
         {
           "name": "22-tool-with-ui-html-template",
+          "description": "Tool with an inline HTML function template — `ui: { template: (ctx) => '<div>…</div>' }` — for a quick widget that doesn't need a separate `.tsx` file.",
           "level": "intermediate",
-          "description": "Tool with an inline HTML function template \u2014 `ui: { template: (ctx) => '<div>\u2026</div>' }` \u2014 for a quick widget that doesn't need a separate `.tsx` file.",
           "tags": ["ui", "ui-widgets", "html-template", "html-tag", "escapeStringResults", "TemplateContext"],
           "features": [
             "Adding a `ui:` block with a function template that returns markup built with the `ctx.helpers.html` tagged template",
             "Annotating `ctx` explicitly to dodge the TS7006 inference gap on the union `ui.template` type",
             "Letting `ctx.helpers.html` escape every interpolated value so tool output can't inject markup into the widget",
-            "Opting in to `escapeStringResults: true` so a plain string result is escaped \u2014 the default from FrontMCP 1.9",
-            "Reading from `ctx.output` and `ctx.helpers` \u2014 the typed runtime context the template renderer hands you"
+            "Opting in to `escapeStringResults: true` so a plain string result is escaped — the default from FrontMCP 1.9",
+            "Reading from `ctx.output` and `ctx.helpers` — the typed runtime context the template renderer hands you"
           ]
         },
         {
           "name": "23-tool-with-ui-filesource-tsx",
+          "description": "Tool with a `.tsx` widget in a separate file via the `FileSource` form — the recommended pattern for any React widget. Path anchored with `import.meta.url` so it survives any cwd.",
           "level": "advanced",
-          "description": "Tool with a `.tsx` widget in a separate file via the `FileSource` form \u2014 the recommended pattern for any React widget. Path anchored with `import.meta.url` so it survives any cwd.",
           "tags": ["ui", "ui-widgets", "FileSource", "tsx", "import.meta.url", "host-detect"],
           "features": [
             "Pointing `template` at a sibling `.tsx` file via the `FileSource` form `{ file: ... }`",
             "Anchoring the path to the tool source with `fileURLToPath(new URL('./...widget.tsx', import.meta.url))` so `process.cwd()` doesn't matter",
-            "Leaving `resourceMode` unset \u2014 the framework host-detects (`'inline'` for Claude, `'cdn'` for others)",
+            "Leaving `resourceMode` unset — the framework host-detects (`'inline'` for Claude, `'cdn'` for others)",
             "Naming the widget `*.widget.tsx` so the scaffolded `tsconfig.json`'s `exclude` keeps it out of the server typecheck"
           ]
         },
         {
           "name": "24-tool-with-ui-csp-and-bridge",
+          "description": "Interactive tool widget that fetches from an allow-listed CSP origin and invokes another tool via `window.FrontMcpBridge.callTool` — the full pattern for live-data widgets that need cross-tool composition.",
           "level": "advanced",
-          "description": "Interactive tool widget that fetches from an allow-listed CSP origin and invokes another tool via `window.FrontMcpBridge.callTool` \u2014 the full pattern for live-data widgets that need cross-tool composition.",
           "tags": ["ui", "csp", "callTool", "FrontMcpBridge", "interactive-widget"],
           "features": [
             "Restricting the widget's outbound `fetch` via `ui.csp.connectDomains` (emitted on the resource per #455)",
@@ -372,8 +363,8 @@
         },
         {
           "name": "25-tool-handing-off-to-job",
+          "description": "Thin tool that validates input and enqueues a `@Job` to do the heavy lifting — the right pattern for any operation that takes more than a few seconds.",
           "level": "advanced",
-          "description": "Thin tool that validates input and enqueues a `@Job` to do the heavy lifting \u2014 the right pattern for any operation that takes more than a few seconds.",
           "tags": ["composition", "jobs", "job-handoff", "hideFromDiscovery"],
           "features": [
             "Splitting a long-running operation into a thin tool (validates, enqueues, returns a tracking handle) plus a `@Job` (does the work)",
@@ -384,11 +375,11 @@
         },
         {
           "name": "26-tool-with-resource-link-output",
+          "description": "Tool returning `outputSchema: 'resource_link'` — the URI is sent to the client; the client fetches the body via `resources/read`. The right pattern for large or cacheable payloads.",
           "level": "advanced",
-          "description": "Tool returning `outputSchema: 'resource_link'` \u2014 the URI is sent to the client; the client fetches the body via `resources/read`. The right pattern for large or cacheable payloads.",
           "tags": ["output-schema", "resource_link", "large-payload", "caching"],
           "features": [
-            "Returning `outputSchema: 'resource_link'` from a tool \u2014 `{ type: 'resource_link', uri }`, body fetched separately",
+            "Returning `outputSchema: 'resource_link'` from a tool — `{ type: 'resource_link', uri }`, body fetched separately",
             "Pairing the tool with a matching `@Resource({ uri: 'export://{exportId}.csv' })` URI template that resolves to the actual body",
             "When `'resource_link'` beats `'image'` / `'audio'` / a raw byte response (large payloads, cacheable URIs, deferred fetch)",
             "Cross-linking to the `create-resource` skill for the URI-template resource on the other end"
@@ -396,14 +387,14 @@
         },
         {
           "name": "27-tool-with-examples-metadata",
+          "description": "Tool with the `examples: [...]` field on `@Tool({...})` — concrete input (and optional expected output) examples consumed by the CodeCall `codecall:describe` tool to give agents accurate usage examples.",
           "level": "basic",
-          "description": "Tool with the `examples: [...]` field on `@Tool({...})` \u2014 concrete input (and optional expected output) examples consumed by the CodeCall `codecall:describe` tool to give agents accurate usage examples.",
           "tags": ["examples-metadata", "codecall", "describe"],
           "features": [
             "Adding `examples: [{ description, input, output? }]` to `@Tool({...})` so `codecall:describe` surfaces canned invocations",
             "Writing realistic example inputs so the generated describe output is concrete, not abstract",
             "Including `output?` for examples where showing the expected result helps an agent understand the tool",
-            "Why `examples` are advisory metadata \u2014 not emitted in `tools/list`, only consumed by `codecall:describe`"
+            "Why `examples` are advisory metadata — not emitted in `tools/list`, only consumed by `codecall:describe`"
           ]
         }
       ],
@@ -415,7 +406,7 @@
         },
         {
           "name": "derive-execute-types",
-          "constraint": "`execute()` parameter and return types come from `ToolInputOf<>` / `ToolOutputOf<>` \u2014 never duplicated inline.",
+          "constraint": "`execute()` parameter and return types come from `ToolInputOf<>` / `ToolOutputOf<>` — never duplicated inline.",
           "severity": "required"
         },
         {
@@ -425,7 +416,7 @@
         },
         {
           "name": "no-toolcontext-generics",
-          "constraint": "`class MyTool extends ToolContext` \u2014 never `extends ToolContext<typeof inputSchema>`.",
+          "constraint": "`class MyTool extends ToolContext` — never `extends ToolContext<typeof inputSchema>`.",
           "severity": "required"
         },
         {
@@ -445,7 +436,7 @@
         },
         {
           "name": "use-this-fail-for-business-errors",
-          "constraint": "`this.fail(new SomeMcpError(...))` for business-logic errors \u2014 never raw `throw new Error(...)`.",
+          "constraint": "`this.fail(new SomeMcpError(...))` for business-logic errors — never raw `throw new Error(...)`.",
           "severity": "required"
         },
         {
@@ -455,7 +446,7 @@
         },
         {
           "name": "widget-resource-mode-host-detect",
-          "constraint": "Leave `ui.resourceMode` unset \u2014 the framework host-detects (`inline` for Claude, `cdn` for others).",
+          "constraint": "Leave `ui.resourceMode` unset — the framework host-detects (`inline` for Claude, `cdn` for others).",
           "severity": "recommended"
         }
       ]
@@ -469,10 +460,11 @@
       "hasResources": true,
       "tags": ["auth", "auth-ui", "login", "consent", "custom-ui", "react", "oauth", "guide"],
       "bundle": ["full"],
+      "priority": 5,
       "references": [
         {
           "name": "custom-auth-ui",
-          "description": "Replace FrontMCP's built-in OAuth pages with custom React components using the auth.ui slot\u2192file map and auth.extras name\u2192handler map (no decorator, no class) plus the @frontmcp/ui/auth hooks.",
+          "description": "Replace FrontMCP's built-in OAuth pages with custom React components using the auth.ui slot→file map and auth.extras name→handler map (no decorator, no class) plus the @frontmcp/ui/auth hooks.",
           "examples": [
             {
               "name": "login-slot",
@@ -481,7 +473,7 @@
               "tags": ["auth", "auth-ui", "login", "custom-ui", "react", "client-rendered"],
               "features": [
                 "Mapping a slot to a `.tsx` file with `auth.ui: { login: './login.tsx' }` (the supported render path)",
-                "Using a RELATIVE path auto-anchored to the config file \u2014 no `fileURLToPath`, no decorator, no class",
+                "Using a RELATIVE path auto-anchored to the config file — no `fileURLToPath`, no decorator, no class",
                 "Reading the injected `AuthFlowState` via `useAuthFlow()` and submitting with `<form onSubmit={submitFinish}>`",
                 "Letting `<AuthPageWrapper>` render the enclosing finish `<form>` with the `pending_auth_id` + `csrf` hidden fields",
                 "The SDK transpiling the `.tsx` server-side and inlining it as an ES module (deps from esm.sh via an import-map) + appending the `mountAuthPage` call automatically"
@@ -489,7 +481,7 @@
             },
             {
               "name": "multi-step-auth-extra",
-              "description": "Add a server-validated multi-step field to a custom login page with auth.extras: { 'envs:add': fn }, useExtraField, and useAddedItems \u2014 accepted rows accumulate server-side and reflect back without a reload.",
+              "description": "Add a server-validated multi-step field to a custom login page with auth.extras: { 'envs:add': fn }, useExtraField, and useAddedItems — accepted rows accumulate server-side and reflect back without a reload.",
               "level": "advanced",
               "tags": ["auth", "auth-ui", "auth-extras", "useExtraField", "useAddedItems", "multi-step", "react"],
               "features": [
@@ -505,6 +497,179 @@
       ]
     },
     {
+      "name": "frontmcp-authorities",
+      "category": "development",
+      "description": "Use when implementing authorization and access control for FrontMCP tools, resources, prompts, or skills, deciding who may invoke what. Covers the RBAC, ABAC, and ReBAC models and when to choose each; JWT claims mapping per identity provider (Auth0, Keycloak, Okta, Cognito, Frontegg); reusable named authority profiles; and custom authority evaluators for domain-specific policy. This is about who-can-do-what (permissions, roles, scopes), distinct from configuring auth modes and login (see frontmcp-config) and custom login UI (see frontmcp-auth-ui). Triggers: authorization, access control, RBAC, ABAC, ReBAC, permissions, roles, scopes, policy enforcement, JWT claims, restrict who can call a tool.",
+      "path": "frontmcp-authorities",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": [
+        "authorization",
+        "rbac",
+        "abac",
+        "rebac",
+        "security",
+        "permissions",
+        "roles",
+        "access-control",
+        "authorities",
+        "jwt"
+      ],
+      "bundle": ["full"],
+      "priority": 9,
+      "references": [
+        {
+          "name": "authority-profiles",
+          "description": "Registering, composing, and using named authority profiles for reusable authorization policies",
+          "examples": []
+        },
+        {
+          "name": "claims-mapping",
+          "description": "JWT claims mapping configuration per identity provider (Auth0, Keycloak, Okta, Cognito, Frontegg) for the authorities system",
+          "examples": []
+        },
+        {
+          "name": "custom-evaluators",
+          "description": "Creating and registering custom authority evaluators for domain-specific authorization logic beyond RBAC, ABAC, and ReBAC",
+          "examples": []
+        },
+        {
+          "name": "rbac-abac-rebac",
+          "description": "Comparison of RBAC, ABAC, and ReBAC authorization models with when to use each, policy syntax, and examples",
+          "examples": []
+        }
+      ]
+    },
+    {
+      "name": "frontmcp-channels",
+      "category": "development",
+      "description": "Use when pushing real-time notifications or events into Claude Code (or another MCP client) sessions, or building two-way chat bridges. Covers channel source types: incoming webhooks (such as GitHub), app error events, agent-completion and job-completion alerts, service connectors, file watchers, and replay buffers; plus two-way conversational bridges connecting WhatsApp, Telegram, Slack, and Discord to a Claude Code session. Triggers: push notifications, real-time alerts, webhook channel, chat bridge, WhatsApp / Telegram / Slack / Discord, agent completion alert, job status notification, error forwarding, server-to-client messaging. The skill for CHANNELS and NOTIFICATIONS.",
+      "path": "frontmcp-channels",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": [
+        "channels",
+        "notifications",
+        "claude-code",
+        "webhooks",
+        "messaging",
+        "real-time",
+        "two-way",
+        "whatsapp",
+        "telegram",
+        "slack",
+        "chat-bridge"
+      ],
+      "bundle": ["full"],
+      "priority": 8,
+      "references": [
+        {
+          "name": "channel-sources",
+          "description": "Configure different channel source types - webhooks, app events, agent/job completion, service connectors, file watchers, and manual push",
+          "examples": [
+            {
+              "name": "agent-notify",
+              "description": "Notify Claude Code when AI agents complete their tasks",
+              "level": "intermediate",
+              "tags": ["agents", "completion", "notifications", "automation"],
+              "features": [
+                "Agent completion source with ID filtering",
+                "Duration and output reporting",
+                "Integration with agent registry emitter"
+              ]
+            },
+            {
+              "name": "app-errors",
+              "description": "Forward application errors to Claude Code via the in-process event bus",
+              "level": "basic",
+              "tags": ["errors", "app-event", "debugging", "monitoring"],
+              "features": [
+                "App event source with ChannelEventBus",
+                "Error severity classification",
+                "Stack trace forwarding"
+              ]
+            },
+            {
+              "name": "file-watcher",
+              "description": "Watch files for changes and notify Claude Code in real-time",
+              "level": "intermediate",
+              "tags": ["file-watcher", "filesystem", "logs", "monitoring", "real-time"],
+              "features": [
+                "File watcher source type with glob patterns",
+                "onConnect lifecycle for starting the watcher",
+                "pushIncoming for streaming file events",
+                "Log file monitoring example"
+              ]
+            },
+            {
+              "name": "job-completion",
+              "description": "Notify Claude Code when background jobs and workflows complete",
+              "level": "intermediate",
+              "tags": ["jobs", "workflows", "completion", "background", "notifications"],
+              "features": [
+                "Job completion source with name filtering",
+                "Status-aware notification formatting",
+                "Duration and output reporting"
+              ]
+            },
+            {
+              "name": "replay-buffer",
+              "description": "Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline.",
+              "level": "advanced",
+              "tags": ["replay", "buffer", "persistence", "offline", "reconnect"],
+              "features": [
+                "Replay configuration with `maxEvents` cap",
+                "In-memory ring buffer for event storage",
+                "Where `replayBufferedEvents` actually lives (on `ChannelInstance`, not on `ChannelContext`)",
+                "Persistent store pattern with `onConnect` and a user-defined Redis provider"
+              ]
+            },
+            {
+              "name": "service-connector",
+              "description": "Build a persistent service connector that lets Claude send and receive messages through WhatsApp, Telegram, or any messaging API",
+              "level": "advanced",
+              "tags": ["service", "connector", "whatsapp", "persistent-connection", "bidirectional"],
+              "features": [
+                "Service source type with onConnect/onDisconnect lifecycle",
+                "Channel-contributed tools for outbound messages",
+                "pushIncoming() for feeding service events into the notification pipeline",
+                "Bidirectional conversation flow"
+              ]
+            },
+            {
+              "name": "webhook-github",
+              "description": "Forward GitHub webhook events (PRs, pushes, CI) into Claude Code",
+              "level": "basic",
+              "tags": ["webhook", "github", "ci", "notifications"],
+              "features": [
+                "Webhook source with HTTP POST endpoint",
+                "GitHub event type routing",
+                "Static meta for team context"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "channel-two-way",
+          "description": "Build two-way chat bridges connecting WhatsApp, Telegram, Slack, and Discord to Claude Code",
+          "examples": [
+            {
+              "name": "whatsapp-bridge",
+              "description": "Full WhatsApp Business API bridge allowing users to chat with Claude Code via WhatsApp",
+              "level": "advanced",
+              "tags": ["whatsapp", "chat", "two-way", "messaging", "bridge"],
+              "features": [
+                "Two-way channel with reply support",
+                "WhatsApp Cloud API integration",
+                "Sender verification and allowlisting",
+                "Webhook signature validation"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "frontmcp-config",
       "category": "config",
       "description": "Use when configuring a FrontMCP server through frontmcp.config or the @FrontMcp options. Covers auth modes (public, transparent, local, remote), OAuth plus credential vault and secureStore, CORS, HTTP port / entry-path prefix / unix socket, security headers (CSP, HSTS, X-Frame-Options, X-Content-Type-Options), rate limiting / throttling / concurrency / timeout / IP filtering (GuardConfig), session storage (Redis, Vercel KV), client transport protocols (SSE, Streamable HTTP, stateless, protocol presets), elicitation, multi-target build config, and skillsConfig (HTTP catalog, caching, audit log, instruction injection). Triggers: configure auth, set up CORS, add rate limiting, throttle requests, manage sessions, choose transport, set HTTP options, configure JWT or OAuth. The skill for server CONFIGURATION.",
@@ -513,44 +678,21 @@
       "hasResources": true,
       "tags": ["router", "config", "transport", "http", "auth", "session", "redis", "sqlite", "throttle", "guide"],
       "bundle": ["recommended", "full"],
+      "priority": 10,
       "references": [
         {
           "name": "configure-auth-modes",
-          "description": "Detailed comparison of public, transparent, local, and remote auth modes",
+          "description": "Detailed comparison of public, static, transparent, local, and remote auth modes",
           "examples": [
             {
-              "name": "local-minimal",
-              "description": "Stand up the built-in local OAuth 2.1 server with the minimum configuration: HS256 signing via JWT_SECRET and in-memory token storage.",
-              "level": "basic",
-              "tags": ["config", "auth", "local", "hs256", "auth-modes", "modes"],
-              "features": [
-                "Using `mode: 'local'` with no other auth options to run the built-in OAuth 2.1 server",
-                "Relying on `JWT_SECRET` for HS256 token signing (symmetric secret, no key pair)",
-                "Accepting the default in-memory `tokenStorage` for local development (state is lost on restart)"
-              ]
-            },
-            {
-              "name": "local-self-signed-tokens",
-              "description": "Configure a local-mode server that signs its own HS256 JWTs and persists auth state across restarts with SQLite or Redis.",
+              "name": "local-behind-tunnel",
+              "description": "Expose a local-mode server through a tunnel or TLS proxy by aligning the token issuer with the public URL clients actually reach.",
               "level": "intermediate",
-              "tags": ["config", "auth", "local", "sqlite", "redis", "auth-modes", "modes"],
+              "tags": ["config", "auth", "local", "tunnel", "proxy", "issuer", "auth-modes"],
               "features": [
-                "Using `mode: 'local'` so the server signs its own HS256 JWTs (symmetric `JWT_SECRET`, no key pair)",
-                "Setting `local.issuer` and `expectedAudience` to control token claims",
-                "Persisting authorization codes and refresh tokens with `tokenStorage: { sqlite: { path } }` so they survive restart",
-                "Switching the same `tokenStorage` to `{ redis }` for multi-instance deployments",
-                "Enabling `consent` so login renders a tool-selection screen and the chosen tools are enforced at call time"
-              ]
-            },
-            {
-              "name": "local-single-operator",
-              "description": "Run local mode for a single operator (e.g. Claude Code) by skipping the email prompt and minting a stable anonymous subject.",
-              "level": "basic",
-              "tags": ["config", "auth", "local", "single-operator", "claude-code", "auth-modes"],
-              "features": [
-                "Setting `requireEmail: false` so the login callback mints a code without prompting for an email",
-                "Setting `anonymousSubject` so the single operator gets a stable `sub` across logins",
-                "Persisting tokens with SQLite so the operator stays logged in across restarts"
+                "Relying on request-host-derived OAuth discovery, which works behind a tunnel or under an http.entryPath without extra config",
+                "Setting `local.issuer` to a full public HTTPS URL so the token `iss` matches what clients reach through the proxy",
+                "Knowing the issuer order: `local.issuer`, then `FRONTMCP_PUBLIC_URL`, then `FRONTMCP_PUBLIC_HOST` (host only), then the request"
               ]
             },
             {
@@ -566,14 +708,26 @@
               ]
             },
             {
-              "name": "local-behind-tunnel",
-              "description": "Expose a local-mode server through a tunnel or TLS proxy by aligning the token issuer with the public URL clients actually reach.",
+              "name": "local-dcr-control",
+              "description": "Lock down the built-in Dynamic Client Registration endpoint with the auth.dcr control surface: disable open registration, allowlist redirect URIs and client ids, and seed a pre-registered trusted client.",
               "level": "intermediate",
-              "tags": ["config", "auth", "local", "tunnel", "proxy", "issuer", "auth-modes"],
+              "tags": ["config", "auth", "local", "dcr", "dynamic-client-registration", "security", "auth-modes"],
               "features": [
-                "Relying on request-host-derived OAuth discovery, which works behind a tunnel or under an http.entryPath without extra config",
-                "Setting `local.issuer` to a full public HTTPS URL so the token `iss` matches what clients reach through the proxy",
-                "Knowing the issuer order: `local.issuer`, then `FRONTMCP_PUBLIC_URL`, then `FRONTMCP_PUBLIC_HOST` (host only), then the request"
+                "Setting `dcr.enabled: false` so `POST /oauth/register` returns 404 and `registration_endpoint` is dropped from AS metadata",
+                "Constraining `dcr.allowedRedirectUris` (exact or `*` glob) so unlisted redirect URIs are rejected at both register and authorize",
+                "Constraining `dcr.allowedClientIds` so only known client ids may use `/oauth/authorize`",
+                "Seeding `dcr.clients` so a trusted client is accepted without any DCR round-trip"
+              ]
+            },
+            {
+              "name": "local-minimal",
+              "description": "Stand up the built-in local OAuth 2.1 server with the minimum configuration: HS256 signing via JWT_SECRET and in-memory token storage.",
+              "level": "basic",
+              "tags": ["config", "auth", "local", "hs256", "auth-modes", "modes"],
+              "features": [
+                "Using `mode: 'local'` with no other auth options to run the built-in OAuth 2.1 server",
+                "Relying on `JWT_SECRET` for HS256 token signing (symmetric secret, no key pair)",
+                "Accepting the default in-memory `tokenStorage` for local development (state is lost on restart)"
               ]
             },
             {
@@ -598,15 +752,27 @@
               ]
             },
             {
-              "name": "local-dcr-control",
-              "description": "Lock down the built-in Dynamic Client Registration endpoint with the auth.dcr control surface: disable open registration, allowlist redirect URIs and client ids, and seed a pre-registered trusted client.",
+              "name": "local-self-signed-tokens",
+              "description": "Configure a local-mode server that signs its own HS256 JWTs and persists auth state across restarts with SQLite or Redis.",
               "level": "intermediate",
-              "tags": ["config", "auth", "local", "dcr", "dynamic-client-registration", "security", "auth-modes"],
+              "tags": ["config", "auth", "local", "sqlite", "redis", "auth-modes", "modes"],
               "features": [
-                "Setting `dcr.enabled: false` so `POST /oauth/register` returns 404 and `registration_endpoint` is dropped from AS metadata",
-                "Constraining `dcr.allowedRedirectUris` (exact or `*` glob) so unlisted redirect URIs are rejected at both register and authorize",
-                "Constraining `dcr.allowedClientIds` so only known client ids may use `/oauth/authorize`",
-                "Seeding `dcr.clients` so a trusted client is accepted without any DCR round-trip"
+                "Using `mode: 'local'` so the server signs its own HS256 JWTs (symmetric `JWT_SECRET`, no key pair)",
+                "Setting `local.issuer` and `expectedAudience` to control token claims",
+                "Persisting authorization codes and refresh tokens with `tokenStorage: { sqlite: { path } }` so they survive restart",
+                "Switching the same `tokenStorage` to `{ redis }` for multi-instance deployments",
+                "Enabling `consent` so login renders a tool-selection screen and the chosen tools are enforced at call time"
+              ]
+            },
+            {
+              "name": "local-single-operator",
+              "description": "Run local mode for a single operator (e.g. Claude Code) by skipping the email prompt and minting a stable anonymous subject.",
+              "level": "basic",
+              "tags": ["config", "auth", "local", "single-operator", "claude-code", "auth-modes"],
+              "features": [
+                "Setting `requireEmail: false` so the login callback mints a code without prompting for an email",
+                "Setting `anonymousSubject` so the single operator gets a stable `sub` across logins",
+                "Persisting tokens with SQLite so the operator stays logged in across restarts"
               ]
             },
             {
@@ -642,6 +808,30 @@
           "description": "Set up authentication modes, credential vault, and OAuth flows for FrontMCP servers",
           "examples": [
             {
+              "name": "local-credential-vault",
+              "description": "Persist a per-session credential from a local authenticate() verifier into the built-in encrypted vault and read it from a tool via this.credentials.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "local", "vault", "credentials", "this-credentials"],
+              "features": [
+                "Returning `credentials: [{ key, secret, metadata? }]` from `authenticate()` so FrontMCP persists them encrypted, keyed by the minted `sub`",
+                "Reading a per-session credential from a tool via `this.credentials.get(key)` (no `this.authProviders` wiring needed)",
+                "Prompting the agent to connect a missing credential mid-session with `this.credentials.requireConnect({ key })` (framework-signed `/oauth/connect` URL)",
+                "Understanding per-session rotation: a reconnect yields an empty vault and old ciphertext is undecryptable"
+              ]
+            },
+            {
+              "name": "local-secure-store",
+              "description": "Configure the general session secure-secret store (this.secureStore) with a pluggable backing (memory / sqlite / redis / custom OS-keychain) and read/write user-typed secrets from a tool.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "local", "secure-store", "secrets", "this-secure-store", "keychain"],
+              "features": [
+                "Selecting the secure-store backing via `auth.secureStore` (memory / sqlite / redis / custom backend) plus a namespace `scope`",
+                "Reading/writing arbitrary user-typed secrets from a tool via `this.secureStore.set/get/list/delete` (JSON-serialized, scoped to the session/subject)",
+                "Backing the store with an OS keychain by supplying a `SecureStoreBackend` — no native dependency is bundled by the framework",
+                "Understanding scope: `user` (keyed by sub, default), `session` (keyed by sessionId), `global` (server-wide)"
+              ]
+            },
+            {
               "name": "multi-app-auth",
               "description": "Configure a single FrontMCP server with multiple apps, each using a different auth mode -- public for open endpoints and remote for admin endpoints.",
               "level": "advanced",
@@ -672,30 +862,6 @@
                 "Declaring an upstream provider in top-level `auth.providers` so FrontMCP orchestrates its OAuth flow",
                 "Loading `clientId`/`clientSecret` from environment variables instead of hardcoding",
                 "Reading the downstream provider token in a tool via `this.orchestration.getToken('github')`"
-              ]
-            },
-            {
-              "name": "local-credential-vault",
-              "description": "Persist a per-session credential from a local authenticate() verifier into the built-in encrypted vault and read it from a tool via this.credentials.",
-              "level": "intermediate",
-              "tags": ["config", "auth", "local", "vault", "credentials", "this-credentials"],
-              "features": [
-                "Returning `credentials: [{ key, secret, metadata? }]` from `authenticate()` so FrontMCP persists them encrypted, keyed by the minted `sub`",
-                "Reading a per-session credential from a tool via `this.credentials.get(key)` (no `this.authProviders` wiring needed)",
-                "Prompting the agent to connect a missing credential mid-session with `this.credentials.requireConnect({ key })` (framework-signed `/oauth/connect` URL)",
-                "Understanding per-session rotation: a reconnect yields an empty vault and old ciphertext is undecryptable"
-              ]
-            },
-            {
-              "name": "local-secure-store",
-              "description": "Configure the general session secure-secret store (this.secureStore) with a pluggable backing (memory / sqlite / redis / custom OS-keychain) and read/write user-typed secrets from a tool.",
-              "level": "intermediate",
-              "tags": ["config", "auth", "local", "secure-store", "secrets", "this-secure-store", "keychain"],
-              "features": [
-                "Selecting the secure-store backing via `auth.secureStore` (memory / sqlite / redis / custom backend) plus a namespace `scope`",
-                "Reading/writing arbitrary user-typed secrets from a tool via `this.secureStore.set/get/list/delete` (JSON-serialized, scoped to the session/subject)",
-                "Backing the store with an OS keychain by supplying a `SecureStoreBackend` \u2014 no native dependency is bundled by the framework",
-                "Understanding scope: `user` (keyed by sub, default), `session` (keyed by sessionId), `global` (server-wide)"
               ]
             }
           ]
@@ -794,7 +960,7 @@
               "level": "intermediate",
               "tags": ["config", "http", "routes", "custom", "webhook", "download", "auth"],
               "features": [
-                "Registering custom HTTP endpoints with `http.routes` \u2014 no tool/resource/prompt needed",
+                "Registering custom HTTP endpoints with `http.routes` — no tool/resource/prompt needed",
                 "A POST endpoint that validates a user-entered secret server-side (the `/connect-env` pattern)",
                 "Overriding the default `application/json` Content-Type for binary/HTML delivery",
                 "Gating a route behind the MCP `session:verify` flow with `auth: true`",
@@ -858,7 +1024,7 @@
         },
         {
           "name": "configure-session",
-          "description": "Set up session storage with Redis or Vercel KV for persistent user state across requests",
+          "description": "Set up session storage with Redis, Vercel KV, or SQLite for persistent user state across requests",
           "examples": [
             {
               "name": "multi-server-key-prefix",
@@ -894,6 +1060,49 @@
                 "Vercel automatically injects `KV_REST_API_URL` and `KV_REST_API_TOKEN` environment variables",
                 "Combining with `stateless-api` transport preset for serverless execution",
                 "No explicit host/port needed -- Vercel KV uses REST API under the hood"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "configure-skills-http",
+          "description": "Full reference for skillsConfig — HTTP catalog endpoints, auth, caching, instructions injection, and tamper-evident audit log.",
+          "examples": [
+            {
+              "name": "audit-log-basic",
+              "description": "Enable the skill audit log with the in-memory store and HS256 signer for development and tests.",
+              "level": "basic",
+              "tags": ["config", "skills", "audit", "hs256", "development"],
+              "features": [
+                "Bootstraps the audit subsystem via setSkillAuditFactory(...) before FrontMcp registers",
+                "MemoryAuditStore keeps records in-process — perfect for tests, lost on restart",
+                "Hs256AuditSigner refuses to start when NODE_ENV === production with a random key",
+                "subjectMode: 'hash' redacts user identifiers while keeping them correlatable"
+              ]
+            },
+            {
+              "name": "audit-log-redis",
+              "description": "Production-grade audit log with the Redis-backed StorageAdapterAuditStore and the RS256 bundle-signing key.",
+              "level": "advanced",
+              "tags": ["config", "skills", "audit", "rs256", "redis", "production"],
+              "features": [
+                "StorageAdapterAuditStore persists records to Redis via the standard storage adapter",
+                "Rs256AuditSigner reuses the bundle-signing keypair for forensic-friendly signatures",
+                "Single-writer constraint: only one pod should write the chain in v1.2.0",
+                "verifyChain(records, trustedKeys, defaultAuditSignatureVerifier) detects tampering"
+              ]
+            },
+            {
+              "name": "inject-instructions",
+              "description": "Set a server-level instructions string and append the skill catalog summary on every initialize response.",
+              "level": "basic",
+              "tags": ["config", "skills", "instructions", "injection", "initialize"],
+              "features": [
+                "Top-level `instructions` on `@FrontMcp` exposes a global system prompt to MCP clients",
+                "`skillsConfig.injectInstructions: 'append'` adds the skill catalog summary after the user prompt",
+                "Dynamic skills are picked up because the composer runs on every initialize request",
+                "The catalog only names skills the initializing caller may see (skill authorities and the `skills:filter` flow, e.g. feature flags)",
+                "Catalog summary is bounded at 16 KB with a truncation footer pointing at skill://index.json"
               ]
             }
           ]
@@ -1057,49 +1266,6 @@
           "name": "setup-sqlite",
           "description": "Cross-reference to the full SQLite configuration guide in frontmcp-setup",
           "examples": []
-        },
-        {
-          "name": "configure-skills-http",
-          "description": "Full reference for skillsConfig \u2014 HTTP catalog endpoints, auth, caching, instructions injection, and tamper-evident audit log.",
-          "examples": [
-            {
-              "name": "inject-instructions",
-              "description": "Set a server-level instructions string and append the skill catalog summary on every initialize response.",
-              "level": "basic",
-              "tags": ["config", "skills", "instructions", "injection", "initialize"],
-              "features": [
-                "Top-level `instructions` on `@FrontMcp` exposes a global system prompt to MCP clients",
-                "`skillsConfig.injectInstructions: 'append'` adds the skill catalog summary after the user prompt",
-                "Dynamic skills are picked up because the composer runs on every initialize request",
-                "The catalog only names skills the initializing caller may see (skill authorities and the `skills:filter` flow, e.g. feature flags)",
-                "Catalog summary is bounded at 16 KB with a truncation footer pointing at skill://index.json"
-              ]
-            },
-            {
-              "name": "audit-log-basic",
-              "description": "Enable the skill audit log with the in-memory store and HS256 signer for development and tests.",
-              "level": "basic",
-              "tags": ["config", "skills", "audit", "hs256", "development"],
-              "features": [
-                "Bootstraps the audit subsystem via setSkillAuditFactory(...) before FrontMcp registers",
-                "MemoryAuditStore keeps records in-process \u2014 perfect for tests, lost on restart",
-                "Hs256AuditSigner refuses to start when NODE_ENV === production with a random key",
-                "subjectMode: 'hash' redacts user identifiers while keeping them correlatable"
-              ]
-            },
-            {
-              "name": "audit-log-redis",
-              "description": "Production-grade audit log with the Redis-backed StorageAdapterAuditStore and the RS256 bundle-signing key.",
-              "level": "advanced",
-              "tags": ["config", "skills", "audit", "rs256", "redis", "production"],
-              "features": [
-                "StorageAdapterAuditStore persists records to Redis via the standard storage adapter",
-                "Rs256AuditSigner reuses the bundle-signing keypair for forensic-friendly signatures",
-                "Single-writer constraint: only one pod should write the chain in v1.2.0",
-                "verifyChain(records, trustedKeys, defaultAuditSignatureVerifier) detects tampering"
-              ]
-            }
-          ]
         }
       ]
     },
@@ -1125,6 +1291,7 @@
         "mcp-20260728"
       ],
       "bundle": ["recommended", "minimal", "full"],
+      "priority": 10,
       "references": [
         {
           "name": "build-for-browser",
@@ -1132,7 +1299,7 @@
           "examples": [
             {
               "name": "browser-build-with-custom-entry",
-              "description": "Build a browser bundle using a dedicated client entry file that avoids Node.js-only imports. Re-export the real `@frontmcp/react` symbols (`useListTools`, `useListResources`, `useCallTool`) \u2014 `useTools`/`useResources` do not exist.",
+              "description": "Build a browser bundle using a dedicated client entry file that avoids Node.js-only imports. Re-export the real `@frontmcp/react` symbols (`useListTools`, `useListResources`, `useCallTool`) — `useTools`/`useResources` do not exist.",
               "level": "intermediate",
               "tags": ["deployment", "browser", "custom", "entry"],
               "features": [
@@ -1154,7 +1321,7 @@
             },
             {
               "name": "react-provider-setup",
-              "description": "Connect a React application to a FrontMCP server using `@frontmcp/react`. `FrontMcpProvider` takes a `DirectMcpServer` instance via the `server` prop \u2014 there is no `serverUrl` option.",
+              "description": "Connect a React application to a FrontMCP server using `@frontmcp/react`. `FrontMcpProvider` takes a `DirectMcpServer` instance via the `server` prop — there is no `serverUrl` option.",
               "level": "basic",
               "tags": ["deployment", "react", "browser", "provider", "setup"],
               "features": [
@@ -1250,12 +1417,14 @@
           ]
         },
         {
-          "name": "deploy-to-cloudflare-skills-only",
-          "description": "Deploy a FrontMCP server to Cloudflare Workers using the v1.3 skills-only model \u2014 OpenAPI as capability inventory, AgentScript with namespaced bindings, four meta-tools, hot-reload via GitHub Action and a signed-bundle webhook."
+          "name": "deploy-manifest-yaml",
+          "description": "The frontmcp.deploy.yaml v1 schema — declarative manifest the GitHub Action consumes on every push to build, sign, and hot-reload the Cloudflare Worker",
+          "examples": []
         },
         {
-          "name": "deploy-manifest-yaml",
-          "description": "The frontmcp.deploy.yaml v1 schema \u2014 declarative manifest the GitHub Action consumes on every push to build, sign, and hot-reload the Cloudflare Worker."
+          "name": "deploy-to-cloudflare-skills-only",
+          "description": "Deploy an auto-updating FrontMCP server to Cloudflare Workers with @frontmcp/edge createEdgeMcp — managed skilled-OpenAPI bundle pulled from a SaaS endpoint, cached in KV, refreshed on a Cron Trigger",
+          "examples": []
         },
         {
           "name": "deploy-to-cloudflare",
@@ -1313,7 +1482,7 @@
             },
             {
               "name": "lambda-handler-with-cors",
-              "description": "CORS for a FrontMCP Lambda is configured at the API Gateway HTTP API level, not in the handler. `frontmcp build --target lambda` writes `dist/lambda/handler.cjs` \u2014 your `@FrontMcp` server is wrapped automatically with `@codegenie/serverless-express`, so CORS belongs on the gateway.",
+              "description": "CORS for a FrontMCP Lambda is configured at the API Gateway HTTP API level, not in the handler. `frontmcp build --target lambda` writes `dist/lambda/handler.cjs` — your `@FrontMcp` server is wrapped automatically with `@codegenie/serverless-express`, so CORS belongs on the gateway.",
               "level": "intermediate",
               "tags": ["deployment", "lambda", "handler", "cors"],
               "features": [
@@ -1412,7 +1581,7 @@
               "level": "basic",
               "tags": ["deployment", "vercel", "serverless", "config", "minimal"],
               "features": [
-                "The exact shape of the auto-generated `vercel.json` \u2014 three keys, nothing else",
+                "The exact shape of the auto-generated `vercel.json` — three keys, nothing else",
                 "That `buildCommand` builds the vercel target (`<exec> frontmcp build --target vercel`), not the `build` script",
                 "That routing and function configuration live in `.vercel/output/`, not `vercel.json`",
                 "That hand-authoring `api/frontmcp.ts` references in `vercel.json` is unnecessary and breaks deploys"
@@ -1420,7 +1589,7 @@
             },
             {
               "name": "vercel-config-with-security-headers",
-              "description": "The Vercel adapter emits a minimal `vercel.json` (version + buildCommand + installCommand). You can layer extra Vercel-supported keys on top after the build \u2014 but never add `functions: { 'api/frontmcp.ts': ... }` or `rewrites` to `/api/frontmcp` (the build does not produce an `api/` directory).",
+              "description": "The Vercel adapter emits a minimal `vercel.json` (version + buildCommand + installCommand). You can layer extra Vercel-supported keys on top after the build — but never add `functions: { 'api/frontmcp.ts': ... }` or `rewrites` to `/api/frontmcp` (the build does not produce an `api/` directory).",
               "level": "intermediate",
               "tags": ["deployment", "vercel", "security", "config", "headers"],
               "features": [
@@ -1437,18 +1606,18 @@
           "examples": [
             {
               "name": "vercel-mcp-endpoint-test",
-              "description": "Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation. The CLI emits the Build Output API v3 structure \u2014 there is no `api/frontmcp.ts` to test against; the function lives at `.vercel/output/functions/index.func/handler.cjs` and is routed via `.vercel/output/config.json`.",
+              "description": "Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation. The CLI emits the Build Output API v3 structure — there is no `api/frontmcp.ts` to test against; the function lives at `.vercel/output/functions/index.func/handler.cjs` and is routed via `.vercel/output/config.json`.",
               "level": "advanced",
               "tags": ["deployment", "json-rpc", "vercel", "mcp", "endpoint"],
               "features": [
                 "Testing the health endpoint (`/healthz`) and MCP JSON-RPC API of a deployed Vercel function",
                 "Using preview deployments to validate changes before promoting to production",
-                "Vercel plan limits for `maxDuration` (Hobby: 10s, Pro: 60s, Enterprise: 900s) \u2014 configure these in the Vercel dashboard, not via `functions: { 'api/frontmcp.ts': ... }`"
+                "Vercel plan limits for `maxDuration` (Hobby: 10s, Pro: 60s, Enterprise: 900s) — configure these in the Vercel dashboard, not via `functions: { 'api/frontmcp.ts': ... }`"
               ]
             },
             {
               "name": "vercel-with-kv",
-              "description": "Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence. The CLI emits the full Build Output API v3 structure for you \u2014 you do **not** author `api/frontmcp.ts` and you do **not** add a `rewrites` block.",
+              "description": "Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence. The CLI emits the full Build Output API v3 structure for you — you do **not** author `api/frontmcp.ts` and you do **not** add a `rewrites` block.",
               "level": "basic",
               "tags": ["deployment", "vercel-kv", "vercel", "session", "performance", "serverless"],
               "features": [
@@ -1459,7 +1628,7 @@
             },
             {
               "name": "vercel-with-skills-cache",
-              "description": "Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching. The CLI handles the Build Output API v3 emission for you \u2014 your job is to configure the server and provision Vercel KV.",
+              "description": "Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching. The CLI handles the Build Output API v3 emission for you — your job is to configure the server and provision Vercel KV.",
               "level": "intermediate",
               "tags": ["deployment", "vercel-kv", "vercel", "cache", "skills"],
               "features": [
@@ -1514,7 +1683,8 @@
         },
         {
           "name": "protocol-versions",
-          "description": "Serve MCP protocol revision 2026-07-28 alongside every earlier revision, and connect to a 2026 server as a client"
+          "description": "Serve MCP protocol revision 2026-07-28 alongside every earlier revision, and connect to a 2026 server as a client",
+          "examples": []
         }
       ]
     },
@@ -1527,6 +1697,7 @@
       "hasResources": true,
       "tags": ["router", "development", "tools", "resources", "prompts", "agents", "skills", "guide"],
       "bundle": ["recommended", "minimal", "full"],
+      "priority": 10,
       "references": [
         {
           "name": "create-adapter",
@@ -1686,7 +1857,8 @@
               "features": [
                 "Using `ToolHook` pre-built export instead of calling `FlowHooksOf('tools:call-tool')` directly",
                 "Destructuring `Will` and `Did` decorators from the hook object",
-                "Setting `priority: 100` on `@Will` to ensure the logging hook runs early",
+                "Setting `priority: -100` on `@Will` so the logging hook runs before the stage's other `@Will` hooks (lower runs first)",
+                "Reading the tool name and arguments from `ctx.state.required.input` and logging with `ctx.logger`",
                 "Registering a plugin in the `plugins` array of `@App`"
               ]
             },
@@ -1697,21 +1869,22 @@
               "tags": ["development", "cache", "plugin-hooks", "plugin", "hooks", "caching"],
               "features": [
                 "Using `@Around` to wrap the `execute` stage with before-and-after logic",
-                "Calling `await next()` to invoke the original stage and capture its result",
+                "Calling `await next()` to run the original stage, then reading its result from `toolContext.output`",
                 "Short-circuiting execution by returning cached data without calling `next()`",
-                "Building a cache key from `ctx.toolName` and `ctx.input`"
+                "Building a cache key from the tool `name` and `arguments` in `ctx.state.required.input`"
               ]
             },
             {
-              "name": "tool-level-hooks-and-stage-replacement",
-              "description": "Demonstrates two advanced patterns: adding `@Will`/`@Did` hooks directly on a `@Tool` class (scoped to that tool only), and using `@Stage` in a plugin to replace a flow stage entirely with a filtered mock.",
+              "name": "tool-level-hooks-and-stage-short-circuit",
+              "description": "Demonstrates two advanced patterns: adding `@Will`/`@Did` hooks directly on a `@Tool` class (scoped to that tool only), and ending the flow from a plugin `@Stage` hook with `ctx.respond()` to mock one tool.",
               "level": "advanced",
               "tags": ["development", "plugin-hooks", "plugin", "hooks", "tool", "level"],
               "features": [
                 "Placing `@Will('execute')` and `@Did('execute')` directly on a `@Tool` class so hooks fire only for that tool",
                 "Using `this.fail()` in a `@Will` hook to abort execution when preconditions are not met",
                 "Using `this.mark()` to record lifecycle checkpoints during hook execution",
-                "Using `@Stage` with a `filter` predicate to replace the `execute` stage only for a specific tool name",
+                "A plugin `@Stage('execute')` runs alongside the tool's own `execute` step and its return value is ignored",
+                "Calling `ctx.respond()` from a `@Stage` hook with a `filter` predicate to end the flow for one tool name",
                 "The difference between tool-level hooks (scoped to one tool) and plugin-level hooks (fire for all tools)"
               ]
             }
@@ -1826,7 +1999,7 @@
               "tags": ["development", "provider", "config", "api", "providers"],
               "features": [
                 "A configuration provider using `readonly` properties from environment variables (sync construction)",
-                "An API client provider that reads credentials in the constructor (no `onInit` \u2014 `@Provider` has no lifecycle hooks)",
+                "An API client provider that reads credentials in the constructor (no `onInit` — `@Provider` has no lifecycle hooks)",
                 "Folder-per-provider layout (`src/apps/main/providers/<slug>/`) with a barrel `index.ts` and a co-located `.provider.spec.ts`",
                 "Top-level `src/apps/main/providers/index.ts` barrel re-exporting each provider folder",
                 "Registering providers at `@FrontMcp` level for server-wide sharing across all apps",
@@ -2047,7 +2220,7 @@
               "tags": ["development", "database", "multi-app", "decorators", "multi", "app"],
               "features": [
                 "Organizing a server into multiple `@App` modules (`analytics` and `admin`)",
-                "Decorating a service class with `@Provider({ name, scope })` so it acts as its own DI token (the strict schema rejects `useFactory`/`useClass`/`provide` \u2014 use `AsyncProvider` for those)",
+                "Decorating a service class with `@Provider({ name, scope })` so it acts as its own DI token (the strict schema rejects `useFactory`/`useClass`/`provide` — use `AsyncProvider` for those)",
                 "Accessing injected dependencies via `this.get(DatabaseClient)` in tools and resources",
                 "Using `@ResourceTemplate` with URI parameters (`{dashboardId}`) for dynamic resources",
                 "Registering a `@Plugin` at the server level so it applies across all apps",
@@ -2172,7 +2345,7 @@
               "level": "intermediate",
               "tags": ["development", "openapi", "adapters", "security", "ssrf", "filtering"],
               "features": [
-                "Secure defaults: external `$ref` resolution off, spec-URL redirects not followed, internal/private targets blocked (DNS-resolved) \u2014 on `mcp-from-openapi` >= 2.5.0",
+                "Secure defaults: external `$ref` resolution off, spec-URL redirects not followed, internal/private targets blocked (DNS-resolved) — on `mcp-from-openapi` >= 2.5.0",
                 "Opting back into external refs with `allowedProtocols`, and restricting the spec URL + `$ref`s with `allowedHosts`",
                 "Using `allowInternalIPs` for trusted internal/local targets (governs the spec URL and `$ref`s)",
                 "Filtering operations with `readOnlyOnly`, `includeTags`, `includePaths`, `excludeMethods`, `includeOperations`, `excludeOperations`, and `filterFn`",
@@ -2192,7 +2365,38 @@
       "hasResources": true,
       "tags": ["extensibility", "vectoriadb", "search", "integration", "npm", "provider", "external-services"],
       "bundle": ["full"],
+      "priority": 10,
       "references": [
+        {
+          "name": "skill-audit-log",
+          "description": "Tamper-evident, hash-chained audit log for skill action executions — pluggable signer, pluggable store, offline verification.",
+          "examples": [
+            {
+              "name": "custom-store",
+              "description": "Implement a custom SkillAuditStore that streams records to S3 with one object per sequence.",
+              "level": "advanced",
+              "tags": ["extensibility", "audit", "custom", "s3", "store"],
+              "features": [
+                "Implements the SkillAuditStore interface (nextSequence, appendAtSequence, tail, read)",
+                "One S3 object per sequence keeps individual records immutable and verifiable",
+                "tail() returns the latest record so the writer can chain prevHash deterministically",
+                "read({ from, limit }) supports incremental verifyChain runs in CI"
+              ]
+            },
+            {
+              "name": "verify-chain",
+              "description": "Verify a stored chain offline using verifyChain and the bundle-signing key registry.",
+              "level": "intermediate",
+              "tags": ["extensibility", "audit", "verification", "chain", "rs256"],
+              "features": [
+                "verifyChain returns { ok, breakAt?, reason? } and exits with the first detected break",
+                "defaultAuditSignatureVerifier dispatches on record.signatureAlg (HS256 or RS256)",
+                "Trusted-keys registry maps signatureKeyId → public key PEM",
+                "iterate() reads the chain in order from any SkillAuditStore implementation"
+              ]
+            }
+          ]
+        },
         {
           "name": "vectoriadb",
           "description": "Use VectoriaDB for in-memory vector search with ML-based or TF-IDF engines in FrontMCP servers",
@@ -2239,36 +2443,6 @@
               ]
             }
           ]
-        },
-        {
-          "name": "skill-audit-log",
-          "description": "Tamper-evident, hash-chained audit log for skill action executions \u2014 pluggable signer, pluggable store, offline verification.",
-          "examples": [
-            {
-              "name": "verify-chain",
-              "description": "Verify a stored chain offline using verifyChain and the bundle-signing key registry.",
-              "level": "intermediate",
-              "tags": ["extensibility", "audit", "verification", "chain", "rs256"],
-              "features": [
-                "verifyChain returns { ok, breakAt?, reason? } and exits with the first detected break",
-                "defaultAuditSignatureVerifier dispatches on record.signatureAlg (HS256 or RS256)",
-                "Trusted-keys registry maps signatureKeyId \u2192 public key PEM",
-                "iterate() reads the chain in order from any SkillAuditStore implementation"
-              ]
-            },
-            {
-              "name": "custom-store",
-              "description": "Implement a custom SkillAuditStore that streams records to S3 with one object per sequence.",
-              "level": "advanced",
-              "tags": ["extensibility", "audit", "custom", "s3", "store"],
-              "features": [
-                "Implements the SkillAuditStore interface (nextSequence, appendAtSequence, tail, read)",
-                "One S3 object per sequence keeps individual records immutable and verifiable",
-                "tail() returns the latest record so the writer can chain prevHash deterministically",
-                "read({ from, limit }) supports incremental verifyChain runs in CI"
-              ]
-            }
-          ]
         }
       ]
     },
@@ -2281,6 +2455,7 @@
       "hasResources": true,
       "tags": ["guides", "examples", "best-practices", "architecture", "walkthrough", "end-to-end"],
       "bundle": ["recommended", "full"],
+      "priority": 10,
       "references": [
         {
           "name": "example-knowledge-base",
@@ -2294,8 +2469,8 @@
               "features": [
                 "Agent with `@Agent` decorator, LLM config, inner tools, and system instructions",
                 "Configuring the inner-loop limit via `@Agent({ execution: { maxIterations } })` (framework drives iteration; no `this.run(...)`)",
-                "Plugin built on real `ToolHook` decorators: `@ToolHook.Will/Did/Around(\"execute\")`",
-                "Using `flowCtx.state.set/get()` for hook-local state",
+                "Plugin built on a real `ToolHook` decorator: one `@ToolHook.Around(\"execute\")` hook that sees the start, the end and any error",
+                "Keeping the start time in a local variable across `await next()` (the flow state accepts only its declared keys)",
                 "Using `flowCtx.state.required.toolContext` to read tool metadata and authInfo inside hooks",
                 "Non-blocking audit logging (`.catch()` prevents audit failures from breaking tools)"
               ]
@@ -2365,7 +2540,7 @@
               "features": [
                 "Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`",
                 "Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup",
-                "Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) \u2014 `@Provider` has no `onDestroy` hook",
+                "Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) — `@Provider` has no `onDestroy` hook",
                 "Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`",
                 "Per-user data isolation using Redis hash keys (`tasks:${userId}`)"
               ]
@@ -2419,6 +2594,204 @@
       ]
     },
     {
+      "name": "frontmcp-observability",
+      "category": "observability",
+      "description": "Use when adding tracing, structured logging, metrics, or monitoring to a FrontMCP server. Covers zero-config OpenTelemetry distributed tracing across all flows; the this.telemetry API for custom spans, events, and attributes in tools, plugins, agents, and skills; structured JSON logging with trace correlation and configurable sinks (Winston, Pino, stdout); the off-by-default /metrics endpoint (process and framework metrics, Prometheus-compatible); vendor integrations (Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend); and testing spans, log correlation, and instrumentation. Triggers: observability, telemetry, tracing, logging, monitoring, OpenTelemetry, OTel, spans, metrics, Prometheus, Datadog, Coralogix, Logz.io, Grafana, Winston, Pino.",
+      "path": "frontmcp-observability",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": [
+        "router",
+        "observability",
+        "telemetry",
+        "tracing",
+        "logging",
+        "monitoring",
+        "opentelemetry",
+        "otel",
+        "spans"
+      ],
+      "bundle": ["recommended", "full"],
+      "priority": 10,
+      "references": [
+        {
+          "name": "metrics-endpoint",
+          "description": "Configure the off-by-default /metrics endpoint that exposes process metrics and framework counters in Prometheus text format",
+          "examples": [
+            {
+              "name": "enable-metrics-endpoint",
+              "description": "Turn on the /metrics endpoint with defaults and scrape it with curl.",
+              "level": "basic",
+              "tags": ["observability", "metrics", "prometheus"],
+              "features": [
+                "Setting `metrics: { enabled: true }` on `@FrontMcp` to register `GET /metrics`",
+                "Verifying the Prometheus text-exposition response with `curl`",
+                "Reading process metrics + framework counters from a single scrape"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "structured-logging",
+          "description": "Add structured JSON logging with trace correlation and configurable sinks (stdout, winston, pino, OTLP).",
+          "examples": [
+            {
+              "name": "stdout-logging",
+              "description": "Enable NDJSON structured logging to stdout with automatic trace correlation and field redaction.",
+              "level": "basic",
+              "tags": ["logging", "stdout", "ndjson", "redaction", "basic"],
+              "features": [
+                "NDJSON format for stdout (Docker/K8s log collection)",
+                "Automatic trace context enrichment (trace_id, span_id)",
+                "Sensitive field redaction (token → [REDACTED])"
+              ]
+            },
+            {
+              "name": "winston-integration",
+              "description": "Forward FrontMCP structured log entries to your existing winston logger. Each entry includes trace_id and span_id as metadata.",
+              "level": "intermediate",
+              "tags": ["logging", "winston", "integration", "intermediate"],
+              "features": [
+                "WinstonSink forwarding structured entries with trace metadata",
+                "Multiple sinks running simultaneously (stdout + winston)",
+                "Winston transports handle file logging, remote forwarding, etc."
+              ]
+            }
+          ]
+        },
+        {
+          "name": "telemetry-api",
+          "description": "Use this.telemetry in tools, plugins, and agents to create custom spans, events, and attributes.",
+          "examples": [
+            {
+              "name": "agent-nested-tracing",
+              "description": "Trace an agent's execution lifecycle including its nested tool calls. Every span shares the same trace ID.",
+              "level": "advanced",
+              "tags": ["telemetry", "agent", "nested", "tools", "trace-id"],
+              "features": [
+                "Agent span wraps the entire execution (including LLM loop)",
+                "Nested tool calls automatically get their own spans",
+                "All spans share the same trace ID for end-to-end visibility",
+                "this.telemetry works identically in agents and tools"
+              ]
+            },
+            {
+              "name": "plugin-telemetry",
+              "description": "Add telemetry events from a custom plugin's hooks. Events appear on the tool execution span, giving you visibility into plugin behavior within the trace.",
+              "level": "intermediate",
+              "tags": ["telemetry", "plugin", "hooks", "cache", "audit"],
+              "features": [
+                "Plugin hooks can access toolCtx.telemetry to add events to the active span",
+                "Events from plugins appear in the same trace as the tool execution",
+                "One `@ToolHook.Around('execute')` hook records success and failure: the flow state has no `error` key, and a `Did` hook runs only after a successful execute",
+                "Graceful degradation when observability is not enabled"
+              ]
+            },
+            {
+              "name": "skill-counters",
+              "description": "Read built-in skill counters from the in-memory snapshot for tests and wire an OTel MeterProvider so counters export to OTLP in production.",
+              "level": "intermediate",
+              "tags": ["telemetry", "counters", "metrics", "skills", "otel", "meter-provider"],
+              "features": [
+                "this.telemetry.createCounter(name, description) creates a custom counter",
+                "counter.inc(by, attrs) increments with bounded label cardinality",
+                "getMetricSnapshot() reads framework counters in tests without a MeterProvider",
+                "metrics.setGlobalMeterProvider() wires counters into OTLP for production"
+              ]
+            },
+            {
+              "name": "tool-custom-spans",
+              "description": "Create child spans, events, and attributes inside a tool's execute method using this.telemetry.",
+              "level": "basic",
+              "tags": ["telemetry", "tool", "spans", "events", "attributes"],
+              "features": [
+                "this.telemetry.withSpan() creates auto-managed child spans",
+                "this.telemetry.addEvent() adds events to the parent tool span",
+                "this.telemetry.setAttributes() adds metadata to the parent tool span",
+                "Child spans inherit the trace ID automatically"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "testing-observability",
+          "description": "Test that your spans, log entries, and telemetry instrumentation work correctly.",
+          "examples": [
+            {
+              "name": "test-custom-spans",
+              "description": "Verify that your tool creates the expected child spans with correct attributes.",
+              "level": "basic",
+              "tags": ["testing", "spans", "assertions", "jest", "basic"],
+              "features": [
+                "createTestTracer() provides isolated OTel setup (no global pollution)",
+                "assertSpanExists() throws helpful errors when spans are missing",
+                "assertSpanAttribute() verifies span attributes",
+                "findSpansByAttribute() queries spans by attribute value"
+              ]
+            },
+            {
+              "name": "test-log-correlation",
+              "description": "Verify that structured log entries include trace context fields for correlation with spans.",
+              "level": "intermediate",
+              "tags": ["testing", "logging", "correlation", "trace-id", "intermediate"],
+              "features": [
+                "CallbackSink captures log entries for test assertions",
+                "StructuredLogTransport with mock context accessor provides trace fields",
+                "Verifying trace_id, span_id, request_id are present",
+                "Testing field redaction behavior"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "tracing-setup",
+          "description": "Enable OpenTelemetry distributed tracing for all FrontMCP flows with zero configuration.",
+          "examples": [
+            {
+              "name": "basic-tracing",
+              "description": "Enable auto-tracing and see spans printed to your terminal.",
+              "level": "basic",
+              "tags": ["tracing", "setup", "console", "basic"],
+              "features": [
+                "Zero-config tracing via observability: true",
+                "Console exporter for local development",
+                "Single trace ID shared across all spans in a request"
+              ]
+            },
+            {
+              "name": "production-tracing",
+              "description": "Full production observability — traces to OTLP, structured logs to stdout, per-request log collection.",
+              "level": "intermediate",
+              "tags": ["tracing", "production", "otlp", "logging", "request-logs"],
+              "features": [
+                "OTLP exporter with env var configuration",
+                "Structured logging with sensitive field redaction",
+                "Request log collection with error alerting",
+                "Full tracing across all SDK flows"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "vendor-integrations",
+          "description": "Connect FrontMCP observability to Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend.",
+          "examples": [
+            {
+              "name": "coralogix-setup",
+              "description": "Send both traces and structured logs to Coralogix. Logs include trace_id so Coralogix links them to traces automatically.",
+              "level": "intermediate",
+              "tags": ["coralogix", "otlp", "vendor", "integration", "production"],
+              "features": [
+                "Traces and logs both sent to Coralogix via OTLP",
+                "Automatic trace_id correlation — click a trace, see its logs",
+                "Environment variable configuration for production"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "frontmcp-production-readiness",
       "category": "production",
       "description": "Pre-production audit, hardening, and go-live checklists for FrontMCP servers. Use before shipping to verify security hardening, performance, reliability, and observability, and for target-specific production checklists: Node server (Docker, graceful shutdown, Redis session scaling), Vercel and edge (cold-start, stateless design), AWS Lambda (cold start, scaling, monitoring), Cloudflare Workers (KV, Durable Objects, runtime limits), CLI binary and local daemon (stdio and socket transport), browser SDK bundle, and embedded npm SDK. Also configuring /healthz and /readyz health and readiness endpoints with custom probes, and distributed high-availability (multi-pod heartbeat, session takeover, notification relay). Triggers: production ready, security audit, hardening, performance check, production checklist, go live, pre-launch review.",
@@ -2427,6 +2800,7 @@
       "hasResources": true,
       "tags": ["production", "security", "performance", "reliability", "observability", "audit", "best-practices"],
       "bundle": ["recommended", "full"],
+      "priority": 10,
       "references": [
         {
           "name": "common-checklist",
@@ -2442,7 +2816,7 @@
                 "Setting per-tool TTL via `@Tool({ cache: { ttl } })` metadata in seconds",
                 "Using Redis-backed cache for multi-instance consistency",
                 "Configuring connection pool limits and timeouts to prevent resource exhaustion",
-                "Providers do not implement `onInit` / `onDestroy` \u2014 initialize in the constructor and let framework shutdown handle cleanup"
+                "Providers do not implement `onInit` / `onDestroy` — initialize in the constructor and let framework shutdown handle cleanup"
               ]
             },
             {
@@ -2621,12 +2995,12 @@
               "level": "intermediate",
               "tags": ["production", "unix-socket", "cli", "database", "daemon", "graceful"],
               "features": [
-                "The framework already wires SIGTERM/SIGINT \u2014 daemon cleanup attaches _additional_ listeners and does not call `process.exit()`",
+                "The framework already wires SIGTERM/SIGINT — daemon cleanup attaches _additional_ listeners and does not call `process.exit()`",
                 "Using `server.dispose()` (the only real method) instead of fictional `server.close()`",
                 "Removing the Unix socket file to prevent stale `.sock` files on restart",
                 "Cleaning up the PID file on shutdown",
                 "Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations",
-                "Providers initialize in the constructor \u2014 there is no `onInit` / `onDestroy`"
+                "Providers initialize in the constructor — there is no `onInit` / `onDestroy`"
               ]
             },
             {
@@ -2675,14 +3049,14 @@
             },
             {
               "name": "wrangler-config",
-              "description": "Checklist for verifying the `wrangler.toml` produced by `frontmcp build --target cloudflare` is production-ready. **Note:** configuration authoring lives in `frontmcp-deployment \u2192 references/deploy-to-cloudflare.md`; this file is checklist-only.",
+              "description": "Checklist for verifying the `wrangler.toml` produced by `frontmcp build --target cloudflare` is production-ready. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-cloudflare.md`; this file is checklist-only.",
               "level": "basic",
               "tags": ["production", "cloudflare", "cache", "session", "wrangler", "checklist"],
               "features": [
-                "Verify `main = \"dist/cloudflare/index.js\"` (the build adapter writes this \u2014 never override)",
+                "Verify `main = \"dist/cloudflare/index.js\"` (the build adapter writes this — never override)",
                 "Verify KV bindings for sessions and cache exist",
                 "Verify staging / production environment configs are separated",
-                "Verify secrets are NOT in `wrangler.toml` \u2014 use `wrangler secret put`"
+                "Verify secrets are NOT in `wrangler.toml` — use `wrangler secret put`"
               ]
             }
           ]
@@ -2699,13 +3073,13 @@
               "features": [
                 "Connection reuse pattern: caching the connection promise in module scope so it survives Lambda freeze/thaw",
                 "Lazy-loading heavy dependencies (`pg`) via dynamic `import()` on first use, not at module load",
-                "Not closing connections on shutdown for Lambda (they survive freeze/thaw \u2014 and providers have no `onDestroy` hook anyway)",
+                "Not closing connections on shutdown for Lambda (they survive freeze/thaw — and providers have no `onDestroy` hook anyway)",
                 "Keeping module scope lightweight with no heavy initialization"
               ]
             },
             {
               "name": "sam-template",
-              "description": "Checklist for verifying the SAM template pairs correctly with the bundle produced by `frontmcp build --target lambda`. **Note:** configuration authoring lives in `frontmcp-deployment \u2192 references/deploy-to-lambda.md`; this file is checklist-only.",
+              "description": "Checklist for verifying the SAM template pairs correctly with the bundle produced by `frontmcp build --target lambda`. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-lambda.md`; this file is checklist-only.",
               "level": "basic",
               "tags": ["production", "lambda", "session", "sam", "checklist"],
               "features": [
@@ -2749,7 +3123,7 @@
             },
             {
               "name": "multi-instance-cleanup",
-              "description": "Shows how multiple SDK instances can coexist without conflicts, and how to clean up timers and listeners \u2014 given that `@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. The pattern is: initialize in the constructor, expose an explicit `stop()` method, and have the host app call it before `server.dispose()`.",
+              "description": "Shows how multiple SDK instances can coexist without conflicts, and how to clean up timers and listeners — given that `@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. The pattern is: initialize in the constructor, expose an explicit `stop()` method, and have the host app call it before `server.dispose()`.",
               "level": "advanced",
               "tags": ["production", "sdk", "node", "multi", "instance", "cleanup"],
               "features": [
@@ -2797,7 +3171,7 @@
               "level": "intermediate",
               "tags": ["production", "redis", "database", "node", "graceful", "shutdown"],
               "features": [
-                "The framework already handles SIGTERM/SIGINT \u2014 never call `server.close()` (no such method) or `process.exit()` on top of it",
+                "The framework already handles SIGTERM/SIGINT — never call `server.close()` (no such method) or `process.exit()` on top of it",
                 "Use `server.dispose()` if you need explicit cleanup in non-server (SDK) contexts",
                 "Add a _drain probe_ on `/healthz` so load balancers stop sending traffic during the framework's drain window",
                 "Avoid handler conflicts: registering a second SIGTERM that calls `process.exit(0)` races the framework's own exit path"
@@ -2848,12 +3222,12 @@
             },
             {
               "name": "vercel-edge-config",
-              "description": "Checklist for verifying the Vercel Build Output API v3 artifact and edge config produced by `frontmcp build --target vercel`. **Note:** configuration authoring lives in `frontmcp-deployment \u2192 references/deploy-to-vercel.md`; this file is checklist-only.",
+              "description": "Checklist for verifying the Vercel Build Output API v3 artifact and edge config produced by `frontmcp build --target vercel`. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-vercel.md`; this file is checklist-only.",
               "level": "basic",
               "tags": ["production", "vercel-kv", "vercel", "session", "serverless", "checklist"],
               "features": [
                 "Verify `frontmcp build --target vercel` produced `.vercel/output/functions/index.func/handler.cjs`",
-                "No hand-written `vercel.json` `builds`/`routes` \u2014 the build adapter uses Build Output API v3",
+                "No hand-written `vercel.json` `builds`/`routes` — the build adapter uses Build Output API v3",
                 "Verify Vercel KV (`provider: 'vercel-kv'`) is configured for session/cache state",
                 "Verify CORS origins include `VERCEL_URL` and any custom production domain"
               ]
@@ -2871,6 +3245,7 @@
       "hasResources": true,
       "tags": ["router", "setup", "scaffold", "project", "nx", "redis", "sqlite", "structure", "guide"],
       "bundle": ["recommended", "minimal", "full"],
+      "priority": 10,
       "references": [
         {
           "name": "frontmcp-skills-usage",
@@ -3242,6 +3617,7 @@
       "hasResources": true,
       "tags": ["router", "testing", "jest", "e2e", "coverage", "quality", "guide"],
       "bundle": ["recommended", "full"],
+      "priority": 10,
       "references": [
         {
           "name": "setup-testing",
@@ -3502,376 +3878,6 @@
               ]
             }
           ]
-        }
-      ]
-    },
-    {
-      "name": "frontmcp-observability",
-      "category": "observability",
-      "description": "Use when adding tracing, structured logging, metrics, or monitoring to a FrontMCP server. Covers zero-config OpenTelemetry distributed tracing across all flows; the this.telemetry API for custom spans, events, and attributes in tools, plugins, agents, and skills; structured JSON logging with trace correlation and configurable sinks (Winston, Pino, stdout); the off-by-default /metrics endpoint (process and framework metrics, Prometheus-compatible); vendor integrations (Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend); and testing spans, log correlation, and instrumentation. Triggers: observability, telemetry, tracing, logging, monitoring, OpenTelemetry, OTel, spans, metrics, Prometheus, Datadog, Coralogix, Logz.io, Grafana, Winston, Pino.",
-      "path": "frontmcp-observability",
-      "targets": ["all"],
-      "hasResources": true,
-      "tags": [
-        "router",
-        "observability",
-        "telemetry",
-        "tracing",
-        "logging",
-        "monitoring",
-        "opentelemetry",
-        "otel",
-        "spans"
-      ],
-      "bundle": ["recommended", "full"],
-      "references": [
-        {
-          "name": "tracing-setup",
-          "description": "Enable OpenTelemetry distributed tracing for all FrontMCP flows with zero configuration.",
-          "examples": [
-            {
-              "name": "basic-tracing",
-              "description": "Enable auto-tracing and see spans printed to your terminal.",
-              "level": "basic",
-              "tags": ["tracing", "setup", "console", "basic"],
-              "features": [
-                "Zero-config tracing via observability: true",
-                "Console exporter for local development",
-                "Single trace ID shared across all spans in a request"
-              ]
-            },
-            {
-              "name": "production-tracing",
-              "description": "Full production observability \u2014 traces to OTLP, structured logs to stdout, per-request log collection.",
-              "level": "intermediate",
-              "tags": ["tracing", "production", "otlp", "logging", "request-logs"],
-              "features": [
-                "OTLP exporter with env var configuration",
-                "Structured logging with sensitive field redaction",
-                "Request log collection with error alerting",
-                "Full tracing across all SDK flows"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "structured-logging",
-          "description": "Add structured JSON logging with trace correlation and configurable sinks.",
-          "examples": [
-            {
-              "name": "stdout-logging",
-              "description": "Enable NDJSON structured logging to stdout with automatic trace correlation and field redaction.",
-              "level": "basic",
-              "tags": ["logging", "stdout", "ndjson", "redaction", "basic"],
-              "features": [
-                "NDJSON format for stdout (Docker/K8s log collection)",
-                "Automatic trace context enrichment (trace_id, span_id)",
-                "Sensitive field redaction (token \u2192 [REDACTED])"
-              ]
-            },
-            {
-              "name": "winston-integration",
-              "description": "Forward FrontMCP structured log entries to your existing winston logger. Each entry includes trace_id and span_id as metadata.",
-              "level": "intermediate",
-              "tags": ["logging", "winston", "integration", "intermediate"],
-              "features": [
-                "WinstonSink forwarding structured entries with trace metadata",
-                "Multiple sinks running simultaneously (stdout + winston)",
-                "Winston transports handle file logging, remote forwarding, etc."
-              ]
-            }
-          ]
-        },
-        {
-          "name": "telemetry-api",
-          "description": "Use this.telemetry in tools, plugins, and agents to create custom spans, events, and attributes.",
-          "examples": [
-            {
-              "name": "tool-custom-spans",
-              "description": "Create child spans, events, and attributes inside a tool's execute method using this.telemetry.",
-              "level": "basic",
-              "tags": ["telemetry", "tool", "spans", "events", "attributes"],
-              "features": [
-                "this.telemetry.withSpan() creates auto-managed child spans",
-                "this.telemetry.addEvent() adds events to the parent tool span",
-                "this.telemetry.setAttributes() adds metadata to the parent tool span",
-                "Child spans inherit the trace ID automatically"
-              ]
-            },
-            {
-              "name": "plugin-telemetry",
-              "description": "Add telemetry events from a custom plugin's hooks. Events appear on the tool execution span, giving you visibility into plugin behavior within the trace.",
-              "level": "intermediate",
-              "tags": ["telemetry", "plugin", "hooks", "cache", "audit"],
-              "features": [
-                "Plugin hooks can access toolCtx.telemetry to add events to the active span",
-                "Events from plugins appear in the same trace as the tool execution",
-                "Graceful degradation when observability is not enabled"
-              ]
-            },
-            {
-              "name": "agent-nested-tracing",
-              "description": "Trace an agent's execution lifecycle including its nested tool calls. Every span shares the same trace ID.",
-              "level": "advanced",
-              "tags": ["telemetry", "agent", "nested", "tools", "trace-id"],
-              "features": [
-                "Agent span wraps the entire execution (including LLM loop)",
-                "Nested tool calls automatically get their own spans",
-                "All spans share the same trace ID for end-to-end visibility",
-                "this.telemetry works identically in agents and tools"
-              ]
-            },
-            {
-              "name": "skill-counters",
-              "description": "Read built-in skill counters from the in-memory snapshot for tests and wire an OTel MeterProvider so counters export to OTLP in production.",
-              "level": "intermediate",
-              "tags": ["telemetry", "counters", "metrics", "skills", "otel", "meter-provider"],
-              "features": [
-                "this.telemetry.createCounter(name, description) creates a custom counter",
-                "counter.inc(by, attrs) increments with bounded label cardinality",
-                "getMetricSnapshot() reads framework counters in tests without a MeterProvider",
-                "metrics.setGlobalMeterProvider() wires counters into OTLP for production"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "metrics-endpoint",
-          "description": "Configure the off-by-default /metrics endpoint that exposes process metrics and framework counters in Prometheus text format",
-          "examples": [
-            {
-              "name": "enable-metrics-endpoint",
-              "description": "Turn on the /metrics endpoint with defaults and scrape it with curl.",
-              "level": "basic",
-              "tags": ["observability", "metrics", "prometheus"],
-              "features": [
-                "Setting `metrics: { enabled: true }` on `@FrontMcp` to register `GET /metrics`",
-                "Verifying the Prometheus text-exposition response with `curl`",
-                "Reading process metrics + framework counters from a single scrape"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "vendor-integrations",
-          "description": "Connect FrontMCP observability to Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend.",
-          "examples": [
-            {
-              "name": "coralogix-setup",
-              "description": "Send both traces and structured logs to Coralogix. Logs include trace_id so Coralogix links them to traces automatically.",
-              "level": "intermediate",
-              "tags": ["coralogix", "otlp", "vendor", "integration", "production"],
-              "features": [
-                "Traces and logs both sent to Coralogix via OTLP",
-                "Automatic trace_id correlation \u2014 click a trace, see its logs",
-                "Environment variable configuration for production"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "testing-observability",
-          "description": "Test that your spans, log entries, and telemetry instrumentation work correctly.",
-          "examples": [
-            {
-              "name": "test-custom-spans",
-              "description": "Verify that your tool creates the expected child spans with correct attributes.",
-              "level": "basic",
-              "tags": ["testing", "spans", "assertions", "jest", "basic"],
-              "features": [
-                "createTestTracer() provides isolated OTel setup (no global pollution)",
-                "assertSpanExists() throws helpful errors when spans are missing",
-                "assertSpanAttribute() verifies span attributes",
-                "findSpansByAttribute() queries spans by attribute value"
-              ]
-            },
-            {
-              "name": "test-log-correlation",
-              "description": "Verify that structured log entries include trace context fields for correlation with spans.",
-              "level": "intermediate",
-              "tags": ["testing", "logging", "correlation", "trace-id", "intermediate"],
-              "features": [
-                "CallbackSink captures log entries for test assertions",
-                "StructuredLogTransport with mock context accessor provides trace fields",
-                "Verifying trace_id, span_id, request_id are present",
-                "Testing field redaction behavior"
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "frontmcp-channels",
-      "category": "development",
-      "description": "Use when pushing real-time notifications or events into Claude Code (or another MCP client) sessions, or building two-way chat bridges. Covers channel source types: incoming webhooks (such as GitHub), app error events, agent-completion and job-completion alerts, service connectors, file watchers, and replay buffers; plus two-way conversational bridges connecting WhatsApp, Telegram, Slack, and Discord to a Claude Code session. Triggers: push notifications, real-time alerts, webhook channel, chat bridge, WhatsApp / Telegram / Slack / Discord, agent completion alert, job status notification, error forwarding, server-to-client messaging. The skill for CHANNELS and NOTIFICATIONS.",
-      "path": "frontmcp-channels",
-      "targets": ["all"],
-      "hasResources": true,
-      "tags": [
-        "channels",
-        "notifications",
-        "claude-code",
-        "webhooks",
-        "messaging",
-        "real-time",
-        "two-way",
-        "whatsapp",
-        "telegram",
-        "slack",
-        "chat-bridge"
-      ],
-      "bundle": ["full"],
-      "references": [
-        {
-          "name": "channel-sources",
-          "description": "Configure different channel source types - webhooks, app events, agent completion, job completion, and manual push",
-          "examples": [
-            {
-              "name": "webhook-github",
-              "description": "Forward GitHub webhook events (PRs, pushes, CI) into Claude Code",
-              "level": "basic",
-              "tags": ["webhook", "github", "ci", "notifications"],
-              "features": [
-                "Webhook source with HTTP POST endpoint",
-                "GitHub event type routing",
-                "Static meta for team context"
-              ]
-            },
-            {
-              "name": "app-errors",
-              "description": "Forward application errors to Claude Code via the in-process event bus",
-              "level": "basic",
-              "tags": ["errors", "app-event", "debugging", "monitoring"],
-              "features": [
-                "App event source with ChannelEventBus",
-                "Error severity classification",
-                "Stack trace forwarding"
-              ]
-            },
-            {
-              "name": "agent-notify",
-              "description": "Notify Claude Code when AI agents complete their tasks",
-              "level": "intermediate",
-              "tags": ["agents", "completion", "notifications", "automation"],
-              "features": [
-                "Agent completion source with ID filtering",
-                "Duration and output reporting",
-                "Integration with agent registry emitter"
-              ]
-            },
-            {
-              "name": "job-completion",
-              "description": "Notify Claude Code when background jobs and workflows complete",
-              "level": "intermediate",
-              "tags": ["jobs", "workflows", "completion", "background", "notifications"],
-              "features": [
-                "Job completion source with name filtering",
-                "Status-aware notification formatting",
-                "Duration and output reporting"
-              ]
-            },
-            {
-              "name": "service-connector",
-              "description": "Build a persistent service connector that lets Claude send and receive messages through WhatsApp, Telegram, or any messaging API",
-              "level": "advanced",
-              "tags": ["service", "connector", "whatsapp", "persistent-connection", "bidirectional"],
-              "features": [
-                "Service source type with onConnect/onDisconnect lifecycle",
-                "Channel-contributed tools for outbound messages",
-                "pushIncoming() for feeding service events into the notification pipeline",
-                "Bidirectional conversation flow"
-              ]
-            },
-            {
-              "name": "file-watcher",
-              "description": "Watch files for changes and notify Claude Code in real-time",
-              "level": "intermediate",
-              "tags": ["file-watcher", "filesystem", "logs", "monitoring", "real-time"],
-              "features": [
-                "File watcher source type with glob patterns",
-                "onConnect lifecycle for starting the watcher",
-                "pushIncoming for streaming file events",
-                "Log file monitoring example"
-              ]
-            },
-            {
-              "name": "replay-buffer",
-              "description": "Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline.",
-              "level": "advanced",
-              "tags": ["replay", "buffer", "persistence", "offline", "reconnect"],
-              "features": [
-                "Replay configuration with `maxEvents` cap",
-                "In-memory ring buffer for event storage",
-                "Where `replayBufferedEvents` actually lives (on `ChannelInstance`, not on `ChannelContext`)",
-                "Persistent store pattern with `onConnect` and a user-defined Redis provider"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "channel-two-way",
-          "description": "Build two-way chat bridges connecting WhatsApp, Telegram, Slack, and Discord to Claude Code",
-          "examples": [
-            {
-              "name": "whatsapp-bridge",
-              "description": "Full WhatsApp Business API bridge allowing users to chat with Claude Code via WhatsApp",
-              "level": "advanced",
-              "tags": ["whatsapp", "chat", "two-way", "messaging", "bridge"],
-              "features": [
-                "Two-way channel with reply support",
-                "WhatsApp Cloud API integration",
-                "Sender verification and allowlisting",
-                "Webhook signature validation"
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "frontmcp-authorities",
-      "category": "development",
-      "description": "Use when implementing authorization and access control for FrontMCP tools, resources, prompts, or skills, deciding who may invoke what. Covers the RBAC, ABAC, and ReBAC models and when to choose each; JWT claims mapping per identity provider (Auth0, Keycloak, Okta, Cognito, Frontegg); reusable named authority profiles; and custom authority evaluators for domain-specific policy. This is about who-can-do-what (permissions, roles, scopes), distinct from configuring auth modes and login (see frontmcp-config) and custom login UI (see frontmcp-auth-ui). Triggers: authorization, access control, RBAC, ABAC, ReBAC, permissions, roles, scopes, policy enforcement, JWT claims, restrict who can call a tool.",
-      "path": "frontmcp-authorities",
-      "targets": ["all"],
-      "hasResources": true,
-      "tags": [
-        "authorization",
-        "rbac",
-        "abac",
-        "rebac",
-        "security",
-        "permissions",
-        "roles",
-        "access-control",
-        "authorities",
-        "jwt"
-      ],
-      "bundle": ["full"],
-      "priority": 9,
-      "visibility": "both",
-      "license": "Apache-2.0",
-      "references": [
-        {
-          "name": "claims-mapping",
-          "description": "JWT claims mapping per identity provider (Auth0, Keycloak, Okta, Cognito, Frontegg)",
-          "examples": []
-        },
-        {
-          "name": "authority-profiles",
-          "description": "Registering and using named authority profiles for reusable access patterns",
-          "examples": []
-        },
-        {
-          "name": "rbac-abac-rebac",
-          "description": "Comparison of RBAC, ABAC, and ReBAC authorization models with usage guidance",
-          "examples": []
-        },
-        {
-          "name": "custom-evaluators",
-          "description": "Creating custom authority evaluators for domain-specific access control",
-          "examples": []
         }
       ]
     }

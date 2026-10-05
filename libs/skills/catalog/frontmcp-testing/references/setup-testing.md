@@ -544,9 +544,14 @@ export default defineConfig({
 });
 ```
 
-A project with its own `jest.config` can start from `preset: '@frontmcp/testing'`, which compiles with
-the same `@swc/jest` transform and needs no `ts-jest`. Name the package, not
-`'@frontmcp/testing/jest-preset'`: Jest looks for `jest-preset.js` at the root of the package it is given.
+A project with its own `jest.config` loses `test.esmPackages`, `test.testMatch` and `test.timeoutMs`, because
+`frontmcp test` then runs that config as is. Start it from `preset: '@frontmcp/testing'` to keep the injected
+defaults: the same `@swc/jest` transform (no `ts-jest` needed), the same discovery (`src/**/*.spec.ts(x)`,
+`__tests__/**/*.spec.ts(x)`, `e2e/**/*.e2e.spec.ts(x)`), the same 60-second timeout, and the same
+`transformIgnorePatterns` for `jose`, `@noble/hashes` and `@noble/ciphers`. Setting `testMatch` or
+`transformIgnorePatterns` replaces the preset's list rather than extending it, so copy its entries into yours.
+Name the package, not `'@frontmcp/testing/jest-preset'`: Jest looks for `jest-preset.js` at the root of the
+package it is given.
 
 ## Manual Testing with frontmcp dev
 

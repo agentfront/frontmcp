@@ -25,6 +25,7 @@ import { DynamicRegistry } from '../registry/DynamicRegistry';
 import { sameListing, serverRegistry } from '../registry/ServerRegistry';
 import { useStoreRegistration } from '../state/useStoreRegistration';
 import type { PromptInfo, ResourceInfo, ResourceTemplateInfo, StoreAdapter, ToolInfo } from '../types';
+import { useIsomorphicLayoutEffect } from '../utils/useIsomorphicLayoutEffect';
 import { FrontMcpContext } from './FrontMcpContext';
 
 export interface FrontMcpProviderProps {
@@ -66,8 +67,8 @@ export function FrontMcpProvider({
   const clientRef = useRef<DirectClient | null>(null);
   const onErrorRef = useRef(onError);
 
-  // Set after commit, never during render: a render React discards must not receive tool errors
-  useEffect(() => {
+  // Set at commit, before passive effects and never during render: a render React discards must not receive tool errors
+  useIsomorphicLayoutEffect(() => {
     onErrorRef.current = onError;
   }, [onError]);
 

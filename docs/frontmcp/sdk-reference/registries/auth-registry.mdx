@@ -7,11 +7,15 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 
 ## Overview
 
+`AuthRegistry` is not exported from `@frontmcp/sdk`: reach it through `scope.authProviders`, and name its type as `ScopeEntry['authProviders']`. Inside a tool, resource or prompt, `this.scope` is the scope serving the call.
+
 ```typescript
-import { AuthRegistry } from '@frontmcp/sdk';
+import type { ScopeEntry } from '@frontmcp/sdk';
+
+type AuthRegistry = ScopeEntry['authProviders'];
 
 // Access via scope
-const auth = scope.authProviders;
+const auth: AuthRegistry = scope.authProviders;
 
 // Get primary auth provider
 const primary = auth.getPrimary();

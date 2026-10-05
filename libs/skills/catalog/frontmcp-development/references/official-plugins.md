@@ -268,6 +268,10 @@ class GlobalStoreServer {}
 Every type takes `defaultTTL`, in seconds: an entry stored without its own `ttl` expires that long after it is written.
 Up to 1.9.0 the memory and Redis stores (`global-store` on Redis included) ignored it, so those entries never expired;
 entries written before the upgrade keep no expiry until they are written again. It must be a whole number of seconds; `0` means no default expiry, and a negative or fractional value fails startup with `RememberConfigurationError`.
+The entry records that deadline as `expiresAt`, which `set()`, `getEntry()`, `remember_this` and `recall` report, and
+`update()` without a `ttl` keeps it. Up to 1.9.0 it recorded none, so they reported no expiry, and on Vercel KV an
+`update()` without a `ttl` gave the entry a full `defaultTTL` again. An entry stored before the upgrade still reads
+normally; its next `update()` without a `ttl` gives it `defaultTTL` from then.
 
 ### Using `this.remember` in Tools
 
@@ -302,8 +306,9 @@ class MyTool extends ToolContext {
 }
 ```
 
-`update(key, value, { ttl? })` returns `false` for a key that does not exist. Without a `ttl` the entry keeps its
-current expiry, and `knows()` and `list()` stop reporting it once that passes, the same as `get()`; up to 1.8.7 an
+`update(key, value, { ttl? })` returns `false` for a key that does not exist or has expired. Without a `ttl` the entry
+keeps its current expiry (the one its `ttl` or `defaultTTL` set, with the store given the whole seconds left, rounded
+up), and `knows()` and `list()` stop reporting it once that passes, the same as `get()`; up to 1.8.7 an
 entry updated without a `ttl` stayed in `knows()` and `list()` after it expired. `knows()` and `list()` read each entry
 and check its own expiry, so they report exactly the keys `get()` returns a value for, even while the store still holds
 an expired key for up to a second.
@@ -383,7 +388,8 @@ across its requests; `user` is the signed-in caller across all of its sessions; 
 running the call, for the same caller as `session` -- each memory tool has its own, so `recall`
 does not see what `remember_this` stored in `tool` scope; `global` is shared by every caller. An
 anonymous caller cannot use `user`, nor `session` or `tool` without a session. No scope lasts
-"until disconnect" or "forever": entries last until forgotten or until their `ttl` runs out.
+"until disconnect" or "forever": entries last until forgotten or until their `ttl` (or `defaultTTL`) runs out, and
+`remember_this` and `recall` report when that is, as `expiresAt`.
 
 ---
 

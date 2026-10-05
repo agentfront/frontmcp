@@ -48,27 +48,21 @@ describe('LookupTool error handling', () => {
   });
 
   it('should produce correct MCP error code', async () => {
-    try {
-      await tool.execute({ id: 'nonexistent' });
-      fail('Expected an error to be thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(ResourceNotFoundError);
-      expect((err as ResourceNotFoundError).mcpErrorCode).toBe(MCP_ERROR_CODES.RESOURCE_NOT_FOUND);
-    }
+    await expect(tool.execute({ id: 'nonexistent' })).rejects.toMatchObject({
+      mcpErrorCode: MCP_ERROR_CODES.RESOURCE_NOT_FOUND,
+    });
   });
 
   it('should produce valid JSON-RPC error shape', async () => {
-    try {
-      await tool.execute({ id: 'nonexistent' });
-      fail('Expected an error to be thrown');
-    } catch (err) {
-      const rpc = (err as ResourceNotFoundError).toJsonRpcError();
-      expect(rpc).toEqual({
-        code: -32002,
-        message: expect.any(String),
-        data: expect.objectContaining({ uri: expect.any(String) }),
-      });
-    }
+    // `.catch` turns the rejection into a value; a call that resolves fails the instanceof check below.
+    const error = await tool.execute({ id: 'nonexistent' }).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(ResourceNotFoundError);
+    expect((error as ResourceNotFoundError).toJsonRpcError()).toEqual({
+      code: -32002,
+      message: expect.any(String),
+      data: expect.objectContaining({ uri: expect.any(String) }),
+    });
   });
 
   it('should succeed for valid resource id', async () => {

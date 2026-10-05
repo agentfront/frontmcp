@@ -5,7 +5,7 @@ description: Intercept and extend FrontMCP flows using before, after, around, an
 
 # Creating Plugins with Flow Lifecycle Hooks
 
-Plugins intercept and extend FrontMCP flows using lifecycle hook decorators. Every flow (tool calls, resource reads, prompt gets, etc.) is composed of **stages**, and hooks let you run logic before, after, around, or instead of any stage.
+Plugins intercept and extend FrontMCP flows using lifecycle hook decorators. Every flow (tool calls, resource reads, prompt gets, etc.) is composed of **stages**, and hooks let you run logic before, after, around, or as part of any stage.
 
 ## When to Use This Skill
 
@@ -17,7 +17,7 @@ Plugins intercept and extend FrontMCP flows using lifecycle hook decorators. Eve
 
 ### Recommended
 
-- Replacing a built-in stage entirely with custom logic using `@Stage`
+- Adding a step to a built-in stage, or ending the flow early from it, with `@Stage`
 - Adding hooks directly on a `@Tool` class for tool-specific pre/post processing
 - Filtering hook execution by tool name or context properties using `filter` predicates
 
@@ -33,12 +33,12 @@ Plugins intercept and extend FrontMCP flows using lifecycle hook decorators. Eve
 
 FrontMCP provides four hook decorators obtained via `FlowHooksOf(flowName)`:
 
-| Decorator | Timing                             | Use Case                                    |
-| --------- | ---------------------------------- | ------------------------------------------- |
-| `@Will`   | **Before** a stage runs            | Validate input, inject headers, check auth  |
-| `@Did`    | **After** a stage completes        | Log results, emit metrics, transform output |
-| `@Stage`  | **Replaces** a stage entirely      | Custom execution, mock responses            |
-| `@Around` | **Wraps** a stage (before + after) | Caching, timing, retry logic                |
+| Decorator | Timing                                           | Use Case                                       |
+| --------- | ------------------------------------------------ | ---------------------------------------------- |
+| `@Will`   | **Before** a stage runs                          | Validate input, inject headers, check auth     |
+| `@Did`    | **After** a stage completes                      | Log results, emit metrics, transform output    |
+| `@Stage`  | **Joins** a stage, alongside the flow's own step | Extra work in the stage, ending the flow early |
+| `@Around` | **Wraps** a stage (before + after)               | Caching, timing, retry, skipping the stage     |
 
 ### FlowHooksOf API
 
@@ -49,6 +49,15 @@ const { Stage, Will, Did, Around } = FlowHooksOf('tools:call-tool');
 ```
 
 `FlowHooksOf(flowName)` returns an object with all four decorator factories bound to the specified flow.
+
+### What `@Stage` Does
+
+A `@Stage('execute')` hook does not replace the flow's own `execute` step: it adds a step to that stage, and the flow's own step still runs. The steps of a stage run in `priority` order (lower first). At equal priority, a plugin's or provider's step runs before the flow's own step, and a step declared on a `@Tool` class runs after it. The value a `@Stage` method returns is ignored.
+
+To keep the flow's own step from running:
+
+- Call `ctx.respond(result)` from the `@Stage` (or a `@Will`) hook. The flow ends with that result: it skips the rest of the stage and the main stages after it, while the stage's `@Did` hooks and the cleanup stages (in `tools:call-tool`: `releaseSemaphore`, `releaseQuota`, `applyUI`, `finalize`) still run. In `tools:call-tool`, `result` is a complete MCP `CallToolResult`; it does not go through the tool's output schema.
+- Or use an `@Around` hook that does not call `next()`. The stage is skipped and the flow goes on; in `tools:call-tool`, set `ctx.state.required.toolContext.output`, and the result is validated and formatted like the tool's own.
 
 ## Available Flow Names
 
@@ -103,48 +112,54 @@ cross-cutting concern, it's wrong — rework it through a hookable flow.
 
 ## Server Lifecycle Hooks
 
-In addition to flow-based hooks, the framework exposes a single `scope.onServerStarted(callback)` API for post-startup work. Callbacks register against the active `ScopeEntry` and run after `server.start()` completes.
+Besides flow hooks, the scope (`ScopeEntry`) takes two lifecycle callbacks:
 
-### `onServerStarted()`
+- **`scope.onServerStarted(callback: () => void | Promise<void>): void`** runs `callback` after the HTTP server starts listening, in `FrontMcpInstance.start()`. Callbacks run in registration order, each awaited. It never fires in direct mode (`create()`, `createDirect()`, `connect()`), where no HTTP server starts.
+- **`scope.onDispose(callback: () => void | Promise<void>): () => void`** runs `callback` when the scope is disposed, in direct mode too. Callbacks run once, in reverse order of registration; the returned function removes the callback.
 
-Use for warming caches, starting background indexing, or logging readiness once the server is live.
-
-**Signature:** `scope.onServerStarted(callback: () => void | Promise<void>): void`
-
-- Callbacks are stored on the active scope and invoked when `emitServerStarted()` runs after startup.
-- Supports both sync and async callbacks; multiple callbacks execute in registration order with `await`.
-
-The cleanest place to call it from a plugin is a factory provider whose `useFactory` receives the active scope, or from a class provider's lifecycle. A common pattern is to register the callback from a hook method using the plugin's injected scope (the plugin instance has a `get(token)` accessor available after construction):
+Use them for warming caches, starting background indexing, or releasing timers and connections. A plugin reaches the scope from a factory provider: `ScopeEntry` is a DI token, so `inject: () => [ScopeEntry]` hands the factory the scope it is built in. The plugin's providers are built while the server starts up, before it listens, so the callback is registered in time.
 
 ```typescript
-import { Plugin, ToolHook } from '@frontmcp/sdk';
+import { Plugin, ScopeEntry } from '@frontmcp/sdk';
 
-const { Will } = ToolHook;
+export class ReportCache {
+  private readonly reports = new Map<string, string>();
+
+  async warm(): Promise<void> {
+    this.reports.set('daily', await loadDailyReport());
+  }
+
+  get(name: string): string | undefined {
+    return this.reports.get(name);
+  }
+
+  clear(): void {
+    this.reports.clear();
+  }
+}
+
+const reportCacheProvider = {
+  name: 'cache-warmer:report-cache',
+  provide: ReportCache,
+  inject: () => [ScopeEntry],
+  useFactory: (scope: ScopeEntry) => {
+    const cache = new ReportCache();
+    scope.onServerStarted(() => cache.warm());
+    scope.onDispose(() => cache.clear());
+    return cache;
+  },
+};
 
 @Plugin({
   name: 'cache-warmer',
-  description: 'Warms caches when the server starts',
-  providers: [CacheService],
+  description: 'Warms the report cache once the server is listening',
+  providers: [reportCacheProvider],
+  exports: [reportCacheProvider],
 })
-export class CacheWarmerPlugin {
-  private registered = false;
-
-  // Lazy-register the lifecycle callback the first time any tool is called.
-  // For pure post-startup work, prefer registering from a Provider with access
-  // to the active scope, or expose the callback registration via a custom Provider.
-  @Will('parseInput', { priority: 1000 })
-  registerOnce() {
-    if (this.registered) return;
-    this.registered = true;
-    const cache = this.get(CacheService);
-    // `this.get` is wired by the plugin registry post-construction; resolve scope similarly
-    // via a Provider that exposes onServerStarted, e.g. a `ScopeAccessor` wrapper.
-    cache.warmAllInBackground();
-  }
-}
+export class CacheWarmerPlugin {}
 ```
 
-> **Pattern note:** `ScopeEntry` is not directly DI-injectable into a plugin constructor (it is a scope-level entry, not a token-registered provider). For lifecycle work, prefer wiring `onServerStarted(...)` through a Provider that receives the scope via `providers.getActiveScope()`, or use Provider/Adapter `onInit` hooks where appropriate. See `apps/demo` for working patterns.
+Listing the provider in `exports` too lets the app's tools resolve the cache with `this.get(ReportCache)`; `exports` takes provider definitions, not bare tokens. Inside a tool, resource or prompt, the scope itself is `this.scope`. See [Scope lifecycle hooks](https://docs.agentfront.dev/frontmcp/sdk-reference/core/scope#lifecycle-hooks).
 
 ## Pre-Built Hook Type Exports
 
@@ -177,30 +192,76 @@ const { Will, Did, Around, Stage } = ToolHook;
 
 ## call-tool Flow Stages
 
-The `tools:call-tool` flow proceeds through these stages in order:
+The main stages of the `tools:call-tool` flow, in order (the full list is under [Available Stages for Tool Hooks](#available-stages-for-tool-hooks)):
 
-1. **parseInput** - Parse raw input from the MCP request
-2. **findTool** - Look up the tool in the registry
+1. **parseInput** - Parse the MCP request; sets `state.input` (the tool `name` and `arguments`) and `state.authInfo`
+2. **findTool** - Look up the tool in the registry; sets `state.tool`
 3. **checkToolAuthorization** - Verify the caller is authorized
-4. **createToolCallContext** - Build the ToolContext instance
+4. **createToolCallContext** - Build the ToolContext instance; sets `state.toolContext`
 5. **validateInput** - Validate input against the Zod schema
-6. **execute** - Run the tool's `execute()` method
-7. **validateOutput** - Validate output against the output schema
-8. **finalize** - Format and return the MCP response
+6. **execute** - Run the tool's `execute()` method; its result is `state.toolContext.output`
+7. **validateOutput** - Record the result as `state.rawOutput`
+8. **finalize** - Validate the result against the output schema and send the MCP response
+
+## What a Hook Receives
+
+A hook method on a plugin or provider receives the running flow as its first argument; type it `FlowCtxOf<'<flow-name>'>`. An `@Around` hook also receives `next`. `this` is the plugin or provider instance.
+
+| Member            | Description                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`           | The flow's state, typed per flow: read `ctx.state.tool` (or `ctx.state.required.tool`, which throws when unset), write with `ctx.state.set(key, value)` |
+| `rawInput`        | The input the flow was started with; for `tools:call-tool`, the MCP `request` and its `ctx`                                                             |
+| `logger`          | The flow's logger (the tool, resource and prompt flows define one; every flow has `scopeLogger`)                                                        |
+| `get(token)`      | Resolves a provider registered on the server, or a context-scoped provider of the current call                                                          |
+| `respond(output)` | Ends the flow with this output                                                                                                                          |
+| `fail(error)`     | Ends the flow with this error (an `Error`, such as an MCP error class)                                                                                  |
+
+The flow has no `toolName`, `elapsed` or `tryGet`, and its `input` is protected. In `tools:call-tool`, read the tool name and arguments from `ctx.state.required.input` (`name`, `arguments`), the tool entry from `ctx.state.tool`, and the tool instance from `ctx.state.toolContext` (set from `createToolCallContext` on). The state accepts only the keys the flow declares: `ctx.state.set('startedAt', Date.now())` does not compile.
+
+### Sharing Data Between Hooks
+
+A plugin is created once and serves every call, so a value kept on `this` is shared by concurrent calls. To carry a value through one call:
+
+- Within one stage, use an `@Around` hook: a local variable lives across `await next()`.
+- Across hooks, key the value on the flow in a `WeakMap`. Each call runs its own flow instance, every hook of the call receives that same instance, and the entry goes away with it.
+
+```typescript
+import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
+
+const { Will, Did } = ToolHook;
+
+@Plugin({ name: 'timing' })
+export class TimingPlugin {
+  private readonly startedAt = new WeakMap<FlowCtxOf<'tools:call-tool'>, number>();
+
+  @Will('validateInput')
+  start(ctx: FlowCtxOf<'tools:call-tool'>) {
+    this.startedAt.set(ctx, Date.now());
+  }
+
+  @Did('validateOutput')
+  stop(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const startedAt = this.startedAt.get(ctx);
+    if (startedAt !== undefined) {
+      ctx.logger.info(`Tool "${ctx.state.required.input.name}" took ${Date.now() - startedAt}ms`);
+    }
+  }
+}
+```
 
 ## HookOptions
 
-Both `@Will` and `@Did` (and `@Around`) accept an optional options object:
+All four decorators accept an optional options object:
 
 ```typescript
 @Will('execute', {
-  priority: 10,                          // Lower runs first (default: 0)
-  filter: (ctx) => ctx.toolName !== 'health_check',  // Predicate to skip
-  appliesTo: 'own-app',                  // Reach of an app plugin's hook (default: 'own-app')
+  priority: 10, // Lower runs first (default: 0)
+  filter: (ctx) => ctx.state.required.input.name !== 'health_check', // Predicate to skip
+  appliesTo: 'own-app', // Reach of an app plugin's hook (default: 'own-app')
 })
 ```
 
-- **priority** (`number`) - Execution order when multiple hooks target the same stage. Lower values run first, for `@Will`, `@Did` and `@Around` alike. Default: `0`.
+- **priority** (`number`) - Execution order when multiple hooks target the same stage. Lower values run first, for `@Will`, `@Did`, `@Around` and `@Stage` alike. Default: `0`.
 - **filter** (`(ctx) => boolean`) - A predicate that receives the flow context. Return `false` to skip this hook for the current invocation.
 - **appliesTo** (`'own-app' | 'uncovered-apps'`) - A hook of a plugin installed on an app runs, in `tools/call`, `resources/read`, `prompts/get` and `completion/complete`, only for that app's entries (`'own-app'`). With `'uncovered-apps'` it also runs for the entries of any app that has no instance of the same hook (same class and method) of its own or from a server-level plugin. Use it for gates an entry's metadata asks for (approval, feature flags), so the entry is not left ungated when the plugin sits on another app. Server-level plugins' hooks, and list-flow hooks, already run for every app.
 
@@ -209,20 +270,21 @@ Both `@Will` and `@Did` (and `@Around`) accept an optional options object:
 ### Logging Plugin
 
 ```typescript
-import { Plugin, ToolHook } from '@frontmcp/sdk';
+import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
 
 const { Will, Did } = ToolHook;
 
 @Plugin({ name: 'logging-plugin' })
 export class LoggingPlugin {
-  @Will('execute', { priority: 100 })
-  logBefore(ctx) {
-    console.log(`[LOG] Tool "${ctx.toolName}" called with`, ctx.input);
+  @Will('execute', { priority: -100 })
+  logBefore(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { name, arguments: toolArguments } = ctx.state.required.input;
+    ctx.logger.info(`Tool "${name}" called`, toolArguments);
   }
 
   @Did('execute')
-  logAfter(ctx) {
-    console.log(`[LOG] Tool "${ctx.toolName}" completed in ${ctx.elapsed}ms`);
+  logAfter(ctx: FlowCtxOf<'tools:call-tool'>) {
+    ctx.logger.info(`Tool "${ctx.state.required.input.name}" completed`);
   }
 }
 ```
@@ -230,17 +292,17 @@ export class LoggingPlugin {
 ### Authorization Check Plugin
 
 ```typescript
-import { Plugin, ToolHook } from '@frontmcp/sdk';
+import { FlowCtxOf, Plugin, ToolHook, UnauthorizedError } from '@frontmcp/sdk';
 
 const { Will } = ToolHook;
 
 @Plugin({ name: 'auth-check-plugin' })
 export class AuthCheckPlugin {
   @Will('checkToolAuthorization', { priority: 50 })
-  enforceRole(ctx) {
-    const user = ctx.tryGet(UserToken);
-    if (!user || !user.roles.includes('admin')) {
-      ctx.fail('Unauthorized: admin role required');
+  requireAdminScope(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const scopes = ctx.state.authInfo?.scopes ?? [];
+    if (!scopes.includes('admin')) {
+      ctx.fail(new UnauthorizedError('Unauthorized: admin scope required'));
     }
   }
 }
@@ -249,7 +311,7 @@ export class AuthCheckPlugin {
 ### Caching Plugin with @Around
 
 ```typescript
-import { Plugin, ToolHook } from '@frontmcp/sdk';
+import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
 
 const { Around } = ToolHook;
 
@@ -258,7 +320,7 @@ export class CachePlugin {
   private cache = new Map<string, { data: unknown; expiry: number }>();
 
   @Around('execute', { priority: 90 })
-  async cacheResults(ctx, next) {
+  async cacheResults(ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<void>) {
     const { name, arguments: toolArguments } = ctx.state.required.input;
     const key = `${name}:${JSON.stringify(toolArguments)}`;
     const toolContext = ctx.state.required.toolContext;
@@ -279,23 +341,27 @@ export class CachePlugin {
 }
 ```
 
-### Stage Replacement
+### Ending the Flow from a @Stage Hook
+
+The hook joins the `execute` stage and runs before the tool's own step. Its `ctx.respond()` ends the flow, so the tool's `execute()` does not run for `fetch_weather`; every other tool runs as usual. Returning a value instead would change nothing: the return value is ignored and the tool would still run.
 
 ```typescript
-import { Plugin, ToolHook } from '@frontmcp/sdk';
+import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
 
 const { Stage } = ToolHook;
 
 @Plugin({ name: 'mock-plugin' })
 export class MockPlugin {
   @Stage('execute', {
-    filter: (ctx) => ctx.toolName === 'fetch_weather',
+    filter: (ctx) => ctx.state.required.input.name === 'fetch_weather',
   })
-  mockWeather(ctx) {
-    return { content: [{ type: 'text', text: '72F and sunny' }] };
+  mockWeather(ctx: FlowCtxOf<'tools:call-tool'>) {
+    ctx.respond({ content: [{ type: 'text', text: '72F and sunny' }] });
   }
 }
 ```
+
+To give a mocked result that goes through the tool's output schema, use an `@Around('execute')` hook that sets `ctx.state.required.toolContext.output` and does not call `next()`, as the caching plugin above does on a hit.
 
 ## Registering Plugins
 
@@ -325,27 +391,33 @@ A hook declared on a `CONTEXT`-scoped provider (`@Provider({ scope: ProviderScop
 You can add hook methods directly on a `@Tool` class to intercept its own execution flow. The hooks apply only when **this tool** is called:
 
 ```typescript
-import { Tool, ToolContext, z } from '@frontmcp/sdk';
+import { Tool, ToolContext, ToolHook, ToolInputOf, z } from '@frontmcp/sdk';
 
 const { Will, Did } = ToolHook;
+
+const inputSchema = {
+  orderId: z.string(),
+  amount: z.number(),
+};
+
+type ProcessOrderInput = ToolInputOf<{ inputSchema: typeof inputSchema }>;
 
 @Tool({
   name: 'process_order',
   description: 'Process a customer order',
-  inputSchema: {
-    orderId: z.string(),
-    amount: z.number(),
-  },
+  inputSchema,
   outputSchema: { status: z.string(), receipt: z.string() },
 })
 class ProcessOrderTool extends ToolContext {
   // Runs BEFORE execute — validate, enrich input, check preconditions
   @Will('execute', { priority: 10 })
   async beforeExecute() {
+    // A hook has no `input` parameter: `this.input` is the validated input, typed through the schema
+    const { orderId } = this.input as ProcessOrderInput;
     const db = this.get(DB_TOKEN);
-    const order = await db.findOrder(this.input.orderId);
+    const order = await db.findOrder(orderId);
     if (!order) {
-      this.fail(new Error(`Order ${this.input.orderId} not found`));
+      this.fail(new Error(`Order ${orderId} not found`));
     }
     if (order.status === 'completed') {
       this.fail(new Error('Order already processed'));
@@ -354,7 +426,7 @@ class ProcessOrderTool extends ToolContext {
   }
 
   // Main execution
-  async execute(input: { orderId: string; amount: number }) {
+  async execute(input: ProcessOrderInput) {
     const payment = this.get(PAYMENT_TOKEN);
     const receipt = await payment.charge(input.orderId, input.amount);
     return { status: 'completed', receipt: receipt.id };
@@ -365,10 +437,8 @@ class ProcessOrderTool extends ToolContext {
   async afterExecute() {
     const analytics = this.tryGet(ANALYTICS_TOKEN);
     if (analytics) {
-      await analytics.track('order_processed', {
-        orderId: this.input.orderId,
-        amount: this.input.amount,
-      });
+      const { orderId, amount } = this.input as ProcessOrderInput;
+      await analytics.track('order_processed', { orderId, amount });
     }
   }
 }
@@ -416,27 +486,27 @@ A tool-class hook runs on the tool instance, which `createToolCallContext` build
 - [ ] `@Will` hook fires before the targeted stage
 - [ ] `@Did` hook fires after the targeted stage completes
 - [ ] `@Around` hook calls `next()` and the wrapped stage executes
-- [ ] `@Stage` replacement returns a valid response for the flow
+- [ ] A `@Stage` hook meant to stand in for the stage ends the flow with `ctx.respond()` and a valid result for the flow
 - [ ] Hook `filter` correctly skips invocations for excluded tools
 
 ## Troubleshooting
 
-| Problem                                       | Cause                                            | Solution                                                                          |
-| --------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------- |
-| Hook never fires                              | Plugin not registered in `plugins` array         | Add plugin class to `@App` or `@FrontMcp` `plugins` array                         |
-| `InvalidHookFlowError` at startup             | Entry-class hook that could never run            | Move early-stage, list-flow and `@Job` hooks to a plugin or a provider            |
-| Hook fires for wrong flow                     | Used wrong flow name in `FlowHooksOf`            | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)            |
-| `@Around` skips the stage entirely            | `next()` not called inside the around handler    | Always `await next()` to execute the wrapped stage                                |
-| Multiple hooks execute in wrong order         | Priorities not set or conflicting                | Set explicit `priority` values; lower numbers execute first                       |
-| `@Stage` replacement causes downstream errors | Return value shape does not match stage contract | Ensure the return matches what the next stage expects (e.g., MCP response format) |
+| Problem                                       | Cause                                               | Solution                                                                           |
+| --------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Hook never fires                              | Plugin not registered in `plugins` array            | Add plugin class to `@App` or `@FrontMcp` `plugins` array                          |
+| `InvalidHookFlowError` at startup             | Entry-class hook that could never run               | Move early-stage, list-flow and `@Job` hooks to a plugin or a provider             |
+| Hook fires for wrong flow                     | Used wrong flow name in `FlowHooksOf`               | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)             |
+| `@Around` skips the stage entirely            | `next()` not called inside the around handler       | Always `await next()` to execute the wrapped stage                                 |
+| Multiple hooks execute in wrong order         | Priorities not set or conflicting                   | Set explicit `priority` values; lower numbers execute first                        |
+| The tool still runs despite a plugin `@Stage` | `@Stage` adds a step; it does not replace the stage | End the flow with `ctx.respond(result)`, or use `@Around` without calling `next()` |
 
 ## Examples
 
-| Example                                                                                                               | Level        | Description                                                                                                                                                                                                   |
-| --------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`basic-logging-plugin`](../examples/create-plugin-hooks/basic-logging-plugin.md)                                     | Basic        | Demonstrates a plugin that logs tool execution using `@Will` and `@Did` hook decorators from the pre-built `ToolHook` export.                                                                                 |
-| [`caching-with-around`](../examples/create-plugin-hooks/caching-with-around.md)                                       | Intermediate | Demonstrates wrapping tool execution with an `@Around` hook to implement result caching with TTL-based expiry.                                                                                                |
-| [`tool-level-hooks-and-stage-replacement`](../examples/create-plugin-hooks/tool-level-hooks-and-stage-replacement.md) | Advanced     | Demonstrates two advanced patterns: adding `@Will`/`@Did` hooks directly on a `@Tool` class (scoped to that tool only), and using `@Stage` in a plugin to replace a flow stage entirely with a filtered mock. |
+| Example                                                                                                                   | Level        | Description                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-logging-plugin`](../examples/create-plugin-hooks/basic-logging-plugin.md)                                         | Basic        | Demonstrates a plugin that logs tool execution using `@Will` and `@Did` hook decorators from the pre-built `ToolHook` export.                                                                                  |
+| [`caching-with-around`](../examples/create-plugin-hooks/caching-with-around.md)                                           | Intermediate | Demonstrates wrapping tool execution with an `@Around` hook to implement result caching with TTL-based expiry.                                                                                                 |
+| [`tool-level-hooks-and-stage-short-circuit`](../examples/create-plugin-hooks/tool-level-hooks-and-stage-short-circuit.md) | Advanced     | Demonstrates two advanced patterns: adding `@Will`/`@Did` hooks directly on a `@Tool` class (scoped to that tool only), and ending the flow from a plugin `@Stage` hook with `ctx.respond()` to mock one tool. |
 
 > See all examples in [`examples/create-plugin-hooks/`](../examples/create-plugin-hooks/)
 

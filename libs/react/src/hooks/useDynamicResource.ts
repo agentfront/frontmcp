@@ -10,6 +10,7 @@ import { useContext, useEffect, useRef } from 'react';
 import type { ReadResourceResult } from '@frontmcp/sdk';
 
 import { FrontMcpContext } from '../provider/FrontMcpContext';
+import { useIsomorphicLayoutEffect } from '../utils/useIsomorphicLayoutEffect';
 
 export interface UseDynamicResourceOptions {
   uri: string;
@@ -30,8 +31,8 @@ export function useDynamicResource(options: UseDynamicResourceOptions): void {
 
   const readRef = useRef(read);
 
-  // Set after commit, never during render: a render React discards must not reach a registered read
-  useEffect(() => {
+  // Set at commit, before passive effects and never during render: a render React discards must not reach a registered read
+  useIsomorphicLayoutEffect(() => {
     readRef.current = read;
   }, [read]);
 
