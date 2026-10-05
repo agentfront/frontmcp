@@ -31,6 +31,7 @@ import {
   PromptContext,
   Resource,
   ResourceContext,
+  skill,
   Tool,
   ToolContext,
 } from '@frontmcp/sdk';
@@ -228,6 +229,30 @@ checkAsync('ConfigPlugin', async () => {
     return JSON.stringify(result.structuredContent);
   } finally {
     await server.dispose();
+  }
+});
+
+const deploySkill = skill({
+  name: 'deploy-app',
+  description: 'Deploy the app to cloudflare workers',
+  instructions: 'Run the deploy.',
+});
+const testSkill = skill({
+  name: 'write-tests',
+  description: 'Write unit tests with jest',
+  instructions: 'Write tests.',
+});
+
+@App({ id: 'browser-skills', name: 'Browser skills', skills: [deploySkill, testSkill] })
+class BrowserSkillsApp {}
+
+checkAsync('searchSkills', async () => {
+  const client = await connect({ info: { name: 'browser-skills', version: '0.0.1' }, apps: [BrowserSkillsApp] });
+  try {
+    const { skills } = await client.searchSkills('cloudflare deploy');
+    return skills.map((found) => found.id).join(',');
+  } finally {
+    await client.close();
   }
 });
 

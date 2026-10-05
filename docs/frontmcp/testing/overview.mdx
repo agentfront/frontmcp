@@ -69,8 +69,7 @@ pnpm, which installs into a symlinked store at
 
 A FrontMCP server started inside a spec — `FrontMcpInstance.createHandler()`, `createFetchHandler()`,
 `createDirect()`, `create()` / `connect()` — runs under this config as is, with no
-`--experimental-vm-modules`: the SDK falls back to `require` where Jest's VM refuses a dynamic import, and
-loads the skill search index (`vectoriadb`) only when a skill search runs.
+`--experimental-vm-modules`: the SDK falls back to `require` where Jest's VM refuses a dynamic import.
 
 If one of _your_ dependencies ships ESM-only, add it to `test.esmPackages` in
 `frontmcp.config.ts` rather than hand-writing a whole Jest config:

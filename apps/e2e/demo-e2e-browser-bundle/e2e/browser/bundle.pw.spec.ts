@@ -48,6 +48,16 @@ test.describe('Browser bundle integration', () => {
     expect(results['ConfigPlugin']).toEqual({ pass: true, value: '{"pageSize":20}' });
   });
 
+  test('searches skills in the browser', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('[data-testid="summary"]');
+    const results = (await page.evaluate(
+      () => (window as unknown as Record<string, unknown>).__BUNDLE_RESULTS__,
+    )) as Record<string, { pass: boolean; value: string }>;
+
+    expect(results['searchSkills']).toEqual({ pass: true, value: 'deploy-app' });
+  });
+
   test('env utilities return browser defaults', async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('[data-testid="summary"]');
