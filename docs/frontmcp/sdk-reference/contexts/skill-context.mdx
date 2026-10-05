@@ -22,17 +22,21 @@ export abstract class SkillContext extends ExecutionContextBase<SkillContent>
 ## Overridable Methods
 
 <Info>
-Both methods below have **default implementations** that throw
-`SkillContextNotImplementedError`. Under the normal `@Skill` pipeline the
-runtime drives loading via `SkillInstance` against the decorator metadata,
-so these methods are **never invoked on your class** — overriding them is
-optional. This is what makes `class MySkill extends SkillContext {}` (no
-body) compile under strict TypeScript.
+Overriding is optional: `class MySkill extends SkillContext {}` (no body) serves
+the content the decorator metadata describes. A `@Skill` class that overrides
+`loadInstructions()` or `build()` is instantiated once, the first time the skill
+is loaded (at server start, when the skill is indexed for search), and the skill
+serves what those methods return. The result is cached like any skill's content.
+There is no request then, so `this.context` and the caller's auth are not
+available.
 
-Override these methods only when you construct a `SkillContext` subclass
-manually outside the `@Skill` decorator pipeline and need bespoke
-loading/assembly logic. The detailed examples below show that advanced
-pattern.
+The defaults run the framework's own loading, so an override can start from
+`super.loadInstructions()` or `super.build()`. A `SkillContext` subclass you
+construct yourself, outside `@Skill`, has no defaults: its unoverridden methods
+throw `SkillContextNotImplementedError`.
+
+Up to 1.9.1 the runtime never instantiated a `@Skill` class, so these overrides
+never ran.
 
 </Info>
 
@@ -44,13 +48,20 @@ Load skill instructions from the configured source.
 loadInstructions(): Promise<string>
 ```
 
-Default behaviour: throws `SkillContextNotImplementedError`. The runtime
-calls `SkillInstance.loadInstructions()` (not this method) under the
-`@Skill` pipeline, resolving:
+Default behaviour: resolves the decorator's `instructions`:
 
 - Inline string
 - File reference (`{ file: './path.md' }`)
 - URL reference (`{ url: 'https://...' }`)
+
+```typescript
+@Skill({ name: 'release-notes', description: 'Write release notes', instructions: 'Steps.' })
+class ReleaseNotesSkill extends SkillContext {
+  async loadInstructions() {
+    return `${await super.loadInstructions()}\n\nRelease train: ${process.env['RELEASE_TRAIN']}`;
+  }
+}
+```
 
 ### build()
 
@@ -60,8 +71,17 @@ Build the complete skill content.
 build(): Promise<SkillContent>
 ```
 
-Default behaviour: throws `SkillContextNotImplementedError`. The runtime
-calls `SkillInstance.load()` (not this method) under the `@Skill` pipeline.
+Default behaviour: assembles the content from the decorator metadata, with the
+instructions `loadInstructions()` returns (your override included).
+
+```typescript
+class TriageSkill extends SkillContext {
+  async build() {
+    const content = await super.build();
+    return { ...content, instructions: `${content.instructions}\n\nEscalate P1s at once.` };
+  }
+}
+```
 
 ## Minimal Example
 
