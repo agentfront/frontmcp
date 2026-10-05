@@ -4,10 +4,12 @@ import { type ProviderMetadata } from '../metadata';
 
 export type ProviderClassType<Provide> = ClassType<Provide> & ProviderMetadata;
 export type ProviderValueType<Provide> = ValueType<Provide> & ProviderMetadata;
-export type ProviderFactoryType<Provide, Tokens extends readonly (ClassToken | Token)[]> = FactoryType<
-  Provide,
-  Tokens
+/** A factory provider; without `inject`, the factory receives no dependencies. */
+export type ProviderFactoryType<Provide, Tokens extends readonly (ClassToken | Token)[]> = Omit<
+  FactoryType<Provide, Tokens>,
+  'inject'
 > &
+  Partial<Pick<FactoryType<Provide, Tokens>, 'inject'>> &
   ProviderMetadata;
 
 export type ProviderType<
