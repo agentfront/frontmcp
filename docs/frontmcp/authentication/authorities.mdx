@@ -166,7 +166,7 @@ The `claimsMapping` supports dot-path traversal (e.g., `realm_access.roles`) and
 
 ### Custom Claims Resolver
 
-For more complex scenarios, provide a `claimsResolver` function instead of (or in addition to) `claimsMapping`. It takes precedence when both are configured.
+For more complex scenarios, provide a `claimsResolver` function instead of (or in addition to) `claimsMapping`. It takes precedence when both are configured, both for the authorities policies and for `this.auth`: `this.auth.roles`, `this.auth.permissions` and `this.auth.claims` (and `hasRole()` / `hasPermission()`) read what it returns. Up to 1.9.1, `this.auth` ignored it and read `claimsMapping`.
 
 ```typescript
 // In @FrontMcp({ authorities: { ... } })
@@ -349,12 +349,12 @@ When both `roles` and `permissions` are specified in the same policy, they are c
 
 Attribute-based access control evaluates conditions against a context envelope with four namespaces:
 
-| Prefix     | Source                                                         |
-| ---------- | -------------------------------------------------------------- |
-| `user.*`   | Resolved user object (`sub`, `roles`, `permissions`, `claims`) |
-| `claims.*` | Raw JWT claims                                                 |
-| `input.*`  | Tool/prompt input arguments                                    |
-| `env.*`    | Runtime environment variables                                  |
+| Prefix     | Source                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| `user.*`   | Resolved user object (`sub`, `roles`, `permissions`, `claims`)                              |
+| `claims.*` | Raw JWT claims                                                                              |
+| `input.*`  | Tool/prompt input arguments                                                                 |
+| `env.*`    | Runtime environment variables (`process.env`; empty in a browser); always empty up to 1.9.1 |
 
 ### Simple Match
 

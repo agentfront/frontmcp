@@ -6,7 +6,12 @@
  * authorities engine, and exposes convenience query methods.
  */
 
-import { resolveAuthUser, resolveDotPath, signedInSubject } from '../authorities/authorities.context';
+import {
+  resolveAuthUser,
+  resolveDotPath,
+  signedInSubject,
+  type ClaimsResolverFn,
+} from '../authorities/authorities.context';
 import type { AuthoritiesClaimsMapping } from '../authorities/authorities.profiles';
 import type { FrontMcpAuthContext, FrontMcpAuthUser } from './frontmcp-auth-context';
 
@@ -72,12 +77,17 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
   readonly roles: readonly string[];
   readonly permissions: readonly string[];
 
-  constructor(source: AuthContextSourceInfo, claimsMapping?: AuthoritiesClaimsMapping) {
+  constructor(
+    source: AuthContextSourceInfo,
+    claimsMapping?: AuthoritiesClaimsMapping,
+    claimsResolver?: ClaimsResolverFn,
+  ) {
     // -- User identity -------------------------------------------------
     const rawUser: NonNullable<AuthContextSourceInfo['user']> = resolveAuthUser(source);
-    const mappedSub = claimsMapping?.userId
-      ? resolveDotPath(this.buildRawClaims(source), claimsMapping.userId)
-      : undefined;
+    const mappedSub =
+      !claimsResolver && claimsMapping?.userId
+        ? resolveDotPath(this.buildRawClaims(source), claimsMapping.userId)
+        : undefined;
     const signedInSub = signedInSubject(rawUser.sub, mappedSub);
     const sub = signedInSub ?? (typeof rawUser.sub === 'string' ? rawUser.sub : '');
 
@@ -109,7 +119,15 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
       Array.isArray(source.scopes) ? source.scopes.filter((s): s is string => typeof s === 'string') : [],
     );
 
-    // -- Claims --------------------------------------------------------
+    // -- Claims, roles and permissions: a claimsResolver decides all three, as it does for the authorities
+    if (claimsResolver) {
+      const resolved = claimsResolver(source);
+      this.claims = Object.freeze({ ...resolved.claims });
+      this.roles = Object.freeze([...toStringArray(resolved.roles)]);
+      this.permissions = Object.freeze([...toStringArray(resolved.permissions)]);
+      return;
+    }
+
     const rawClaims = this.buildRawClaims(source);
     this.claims = Object.freeze({ ...rawClaims });
 
