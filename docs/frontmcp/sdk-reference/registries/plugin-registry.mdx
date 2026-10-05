@@ -7,33 +7,46 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 
 ## Overview
 
+The plugin registry is internal: `PluginRegistry` is not exported from `@frontmcp/sdk`, and `ScopeEntry` does not declare it. At runtime the scope holds the registry of its server-level plugins (`@FrontMcp({ plugins })`) under `plugins`, `undefined` when there are none; plugins installed on an app live in that app's registry, which the scope does not expose. The exported `PluginRegistryInterface` types the part this page describes:
+
 ```typescript
-import { PluginRegistry } from '@frontmcp/sdk';
+import type { PluginRegistryInterface } from '@frontmcp/sdk';
 
-// Access via scope
-const plugins = scope.plugins;
+// Access via scope (runtime only: ScopeEntry does not declare `plugins`)
+const plugins = (scope as unknown as { plugins?: PluginRegistryInterface }).plugins;
 
-// List all plugins
-const allPlugins = plugins.getPlugins();
+// List all server-level plugins
+const allPlugins = plugins?.getPlugins() ?? [];
 ```
 
 ## Methods
 
 ### getPlugins()
 
-Get all registered plugins.
+Get the registered plugin instances: the objects your plugin classes construct. They are typed `PluginEntry`, but a plugin class need not carry `metadata`, so read the names from `getPluginNames()`.
 
 ```typescript
-getPlugins(): ReadonlyArray<PluginEntry>
+getPlugins(): PluginEntry[]
 ```
 
 **Example:**
 
 ```typescript
-const plugins = registry.getPlugins();
-for (const plugin of plugins) {
-  console.log(`Plugin: ${plugin.name}`);
-}
+const cachePlugin = registry.getPlugins().find((plugin) => plugin instanceof CachePlugin);
+```
+
+### getPluginNames()
+
+Get the names of the registered plugins, from their `@Plugin` metadata.
+
+```typescript
+getPluginNames(): string[]
+```
+
+**Example:**
+
+```typescript
+console.log(`Plugins: ${registry.getPluginNames().join(', ')}`);
 ```
 
 ## Plugin Architecture
@@ -67,7 +80,8 @@ Plugins are registered via the `@FrontMcp` decorator:
 
 ```typescript
 @FrontMcp({
-  name: 'my-server',
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
   plugins: [
     RememberPlugin,
     CachePlugin,
@@ -170,21 +184,27 @@ class MyTool extends ToolContext {
 
 ## Provider Merging
 
-Plugin providers are merged into both:
+A plugin's `providers` stay in the plugin's own registry, where its hooks, tools and nested plugins resolve them. The ones it lists in `exports` are merged into the host registry, the app (or server) that installed it, so the host's tools can resolve them with `this.get()`. The providers derived from a dynamic plugin's options (`dynamicProviders(options)` and `init({ providers })`) are merged into the host registry and the scope registry.
 
-- App registry (for app-scoped access)
-- Scope registry (for server-wide access)
+A factory provider takes a `provide` token, a `name`, `inject` (the tokens of its dependencies) and a `useFactory`. `scope` is `ProviderScope.GLOBAL` (the default, one instance) or `ProviderScope.CONTEXT` (one per request context). `exports` takes provider definitions, so list the same definition in both arrays:
 
 ```typescript
+import { Plugin, ProviderScope } from '@frontmcp/sdk';
+
+export const CacheToken = Symbol('Cache');
+
+const cacheProvider = {
+  name: 'cache',
+  provide: CacheToken,
+  inject: () => [],
+  useFactory: () => new RedisCache(),
+  scope: ProviderScope.GLOBAL,
+};
+
 @Plugin({
   name: 'cache-plugin',
-  providers: [
-    {
-      token: CacheToken,
-      useFactory: () => new RedisCache(),
-      scope: ProviderScope.SINGLETON,
-    },
-  ],
+  providers: [cacheProvider],
+  exports: [cacheProvider],
 })
 class CachePlugin { }
 ```

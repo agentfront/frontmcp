@@ -142,22 +142,34 @@ class MyTool extends ToolContext {
 
 ### From Scope
 
-```typescript
-const scope = instance.getScopes()[0];
+`scope` is a `ScopeEntry`: `this.scope` in a tool, resource or prompt.
 
-// All registries available
-scope.tools;      // ToolRegistry
-scope.resources;  // ResourceRegistry
-scope.prompts;    // PromptRegistry
-scope.agents;     // AgentRegistry
-scope.skills;     // SkillRegistry
-scope.plugins;    // PluginRegistry
-scope.hooks;      // HookRegistry
-scope.providers;  // ProviderRegistry
-scope.auth;       // FrontMcpAuth (primary)
+```typescript
+// Registries the ScopeEntry type declares
+scope.tools;         // ToolRegistry
+scope.resources;     // ResourceRegistry
+scope.prompts;       // PromptRegistry
+scope.agents;        // AgentRegistry
+scope.skills;        // SkillRegistryInterface
+scope.hooks;         // HookRegistry
+scope.providers;     // ProviderRegistryInterface
+scope.auth;          // FrontMcpAuth (primary)
 scope.authProviders; // AuthRegistry
-scope.jobs;       // JobRegistry
-scope.workflows;  // WorkflowRegistry
+scope.channels;      // ChannelRegistry, undefined unless channels are enabled
+```
+
+`@frontmcp/sdk` exports `ToolRegistry`, `ProviderRegistry`, `SkillRegistry`, `JobRegistry`, `WorkflowRegistry` and `ChannelRegistry`. It does not export the resource, prompt, agent, hook, auth and plugin registries; name their types from the scope instead, for example `ScopeEntry['resources']`.
+
+The scope also holds its server-level plugins, jobs and workflows at runtime, but `ScopeEntry` does not declare them (each is `undefined` when not configured). Reach them through the exported types:
+
+```typescript
+import type { JobRegistry, PluginRegistryInterface, WorkflowRegistry } from '@frontmcp/sdk';
+
+const { plugins, jobs, workflows } = scope as unknown as {
+  plugins?: PluginRegistryInterface;
+  jobs?: JobRegistry;
+  workflows?: WorkflowRegistry;
+};
 ```
 
 ## Common Methods
