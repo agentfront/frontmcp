@@ -14,7 +14,7 @@ import {
   type AdapterRegistryInterface,
   type AppRecord,
   type EntryOwnerRef,
-  type PluginEntry,
+  type PluginInstance,
   type PluginRegistryInterface,
   type ProviderRegistryInterface,
   type RemoteAppMetadata,
@@ -52,7 +52,7 @@ import {
  * Empty plugin registry for ESM apps.
  */
 class EmptyPluginRegistry implements PluginRegistryInterface {
-  getPlugins(): PluginEntry[] {
+  getPlugins(): PluginInstance[] {
     return [];
   }
   getPluginNames(): string[] {

@@ -11,3 +11,8 @@ export type PluginType<Provide = unknown> =
   | PluginClassType<Provide>
   | PluginValueType<Provide>
   | PluginFactoryType<Provide, readonly any[]>;
+
+/** A registered plugin: the object its class, value or factory produced, bound to the plugin's providers. */
+export interface PluginInstance {
+  get<T>(token: Token<T>): T;
+}
