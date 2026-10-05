@@ -9,6 +9,7 @@ import type { RememberPluginOptions } from '../remember.types';
 const DEFAULT_TTL_SECONDS = 60;
 let now = 0;
 let advanceAfterNextEncryption = 0;
+let runDuringNextEncryption: (() => Promise<unknown>) | undefined;
 
 jest.mock('../remember.crypto', () => {
   const actual = jest.requireActual('../remember.crypto');
@@ -16,6 +17,9 @@ jest.mock('../remember.crypto', () => {
     ...actual,
     encryptAndSerialize: async (...args: Parameters<typeof actual.encryptAndSerialize>) => {
       const serialized = await actual.encryptAndSerialize(...args);
+      const concurrentWork = runDuringNextEncryption;
+      runDuringNextEncryption = undefined;
+      await concurrentWork?.();
       now += advanceAfterNextEncryption;
       advanceAfterNextEncryption = 0;
       return serialized;
@@ -49,11 +53,12 @@ describe('updating an encrypted entry whose deadline passes while it is encrypte
   });
 
   afterEach(async () => {
+    runDuringNextEncryption = undefined;
     await store.close();
     jest.restoreAllMocks();
   });
 
-  it('writes nothing, removes the entry and reports it was not updated', async () => {
+  it('writes nothing and reports it was not updated', async () => {
     await remember.set('draft', 'v1');
     now += 59_600;
     const setValue = jest.spyOn(store, 'setValue');
@@ -62,6 +67,17 @@ describe('updating an encrypted entry whose deadline passes while it is encrypte
     await expect(remember.update('draft', 'v2')).resolves.toBe(false);
 
     expect(setValue).not.toHaveBeenCalled();
-    await expect(store.keys('remember:*')).resolves.toEqual([]);
+    await expect(remember.get('draft')).resolves.toBeUndefined();
+  });
+
+  it('keeps a value set while the update was encrypting', async () => {
+    await remember.set('draft', 'v1');
+    now += 59_600;
+    advanceAfterNextEncryption = 700;
+    runDuringNextEncryption = () => remember.set('draft', 'v3');
+
+    await expect(remember.update('draft', 'v2')).resolves.toBe(false);
+
+    await expect(remember.get('draft')).resolves.toBe('v3');
   });
 });
