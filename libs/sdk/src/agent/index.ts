@@ -17,7 +17,7 @@
  *     topic: z.string().describe('Topic to research'),
  *   },
  *   llm: {
- *     adapter: 'openai',
+ *     provider: 'openai',
  *     model: 'gpt-4-turbo',
  *     apiKey: { env: 'OPENAI_API_KEY' },
  *   },

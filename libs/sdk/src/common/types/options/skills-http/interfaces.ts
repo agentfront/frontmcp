@@ -423,6 +423,14 @@ export interface SkillsConfigAuditOptions {
    */
   store?: unknown;
   /**
+   * Sink implementing the `SkillAuditMetrics` interface from
+   * `@frontmcp/adapters/skills`. Build one with `createSkillAuditMetrics`
+   * to count `frontmcp_skills_audit_write_failures_total` and
+   * `frontmcp_skills_audit_dropped_total`. When omitted, failed and dropped
+   * writes surface only as `[skill-audit]` warnings.
+   */
+  metrics?: unknown;
+  /**
    * How the `subject` field (typically JWT `sub`) is persisted in each
    * record. Forwarded to `SkillAuditWriter`. See `SkillAuditSubjectMode` in
    * `@frontmcp/adapters/skills`.

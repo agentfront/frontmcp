@@ -5,9 +5,8 @@ import {
   rpc20260728,
   type TestFetchServer,
 } from '../../__test-utils__/helpers/mcp-20260728.helpers';
-import { App, Skill, SkillContext, Tool, ToolContext } from '../../common';
-import { type Scope } from '../../scope';
-import { type SkillContent, type SkillLoadResult } from '../index';
+import { App, Skill, SkillContext, Tool, ToolContext, type SkillContent } from '../../common';
+import { type SkillLoadResult } from '../index';
 
 const executed: string[] = [];
 
@@ -56,7 +55,7 @@ describe('skill tool guard on tools/call', () => {
   });
 
   async function callInStrictTriageSession(toolName: string) {
-    const sessionManager = (server.instance.getScopes()[0] as Scope).skillSession;
+    const sessionManager = server.instance.getScopes()[0].skillSession;
     if (!sessionManager) {
       throw new Error('the scope has skills, so it must have a skill session manager');
     }

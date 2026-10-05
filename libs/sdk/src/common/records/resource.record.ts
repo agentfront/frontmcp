@@ -5,6 +5,7 @@ import { type ResourceEntry } from '../entries';
 import {
   type EsmOptions,
   type RemoteAuthConfig,
+  type RemoteOptions,
   type RemoteTransportOptions,
   type ResourceMetadata,
   type ResourceTemplateMetadata,
@@ -49,7 +50,7 @@ export type ResourceEsmTargetRecord = {
   specifier: ParsedPackageSpecifier;
   /** Which resource to load from the package */
   targetName: string;
-  options?: EsmOptions;
+  options?: EsmOptions<ResourceMetadata>;
   metadata: ResourceMetadata;
 };
 
@@ -63,8 +64,12 @@ export type ResourceRemoteRecord = {
   targetName: string;
   transportOptions?: RemoteTransportOptions;
   remoteAuth?: RemoteAuthConfig;
+  options?: RemoteOptions<ResourceMetadata>;
   metadata: ResourceMetadata;
 };
+
+/** A record whose resources are loaded from a package or a remote server when its registry starts. */
+export type ResourceExternalRecord = ResourceEsmRecord | ResourceEsmTargetRecord | ResourceRemoteRecord;
 
 export type ResourceRecord =
   | ResourceClassTokenRecord

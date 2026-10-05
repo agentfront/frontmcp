@@ -63,6 +63,27 @@ export interface SkillAuditMetrics {
   incrementDropped?(reason: 'queue-overflow' | 'background-failure'): void;
 }
 
+/** Counter factory, such as `createCounter` from `@frontmcp/observability`. */
+export interface SkillAuditTelemetry {
+  createCounter(name: string, description?: string): { inc(by?: number, attributes?: Record<string, string>): void };
+}
+
+/** Builds a {@link SkillAuditMetrics} sink that counts failed and dropped writes by reason. */
+export function createSkillAuditMetrics(telemetry: SkillAuditTelemetry): SkillAuditMetrics {
+  const writeFailures = telemetry.createCounter(
+    'frontmcp_skills_audit_write_failures_total',
+    'Skill audit records that failed to sign or append, partitioned by reason.',
+  );
+  const dropped = telemetry.createCounter(
+    'frontmcp_skills_audit_dropped_total',
+    'Skill audit records dropped before they were written, partitioned by reason.',
+  );
+  return {
+    incrementWriteFailure: (reason) => writeFailures.inc(1, { reason }),
+    incrementDropped: (reason) => dropped.inc(1, { reason }),
+  };
+}
+
 /**
  * Context the tool passes to each write call. Contains everything needed
  * to fully describe the invocation without leaking the raw input/output

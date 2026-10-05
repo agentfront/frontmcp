@@ -1,6 +1,7 @@
 import type { AuthoritiesContextBuilder, AuthoritiesEngine, AuthoritiesScopeMapping } from '@frontmcp/auth';
 import type { Token, Type } from '@frontmcp/di';
 import type { GuardManager } from '@frontmcp/guard';
+import type { EventStore } from '@frontmcp/protocol';
 
 import type AgentRegistry from '../../agent/agent.registry';
 import type AppRegistry from '../../app/app.registry';
@@ -16,6 +17,7 @@ import type JobRegistry from '../../job/job.registry';
 import type { NotificationService } from '../../notification';
 import type PromptRegistry from '../../prompt/prompt.registry';
 import type ResourceRegistry from '../../resource/resource.registry';
+import type { SkillSessionManager } from '../../skill/session/skill-session.manager';
 import type { SkillRegistryInterface } from '../../skill/skill.registry';
 import type { TaskStore } from '../../task/store/task.store';
 import type { TaskRegistry } from '../../task/task.registry';
@@ -67,6 +69,9 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
 
   abstract get skills(): SkillRegistryInterface;
 
+  /** Enforces the active skills' tool allowlists per session; `undefined` when the scope has no skills and no `dynamicSkills` plugin. */
+  abstract get skillSession(): SkillSessionManager | undefined;
+
   abstract get notifications(): NotificationService;
 
   abstract get agents(): AgentRegistry;
@@ -90,6 +95,9 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   abstract get authUi(): AuthUiRegistry | undefined;
 
   abstract get transportService(): TransportService | undefined;
+
+  /** The SSE resumability store every session shares; `undefined` unless `transport.eventStore` (or distributed Redis) enables it. */
+  abstract get eventStore(): EventStore | undefined;
 
   haManager?: HaManager;
 

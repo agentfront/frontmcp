@@ -151,7 +151,7 @@ get apps(): AppRegistry
 Get the hook registry.
 
 ```typescript
-get hooks(): HookRegistryInterface
+get hooks(): HookRegistry
 ```
 
 ### plugins
@@ -197,9 +197,11 @@ get notifications(): NotificationService
 ```
 
 ```typescript
-scope.notifications.on('tool-called', (event) => {
-  console.log('Tool called:', event.toolName);
-});
+// Tell every connected client that the resource list changed
+scope.notifications.broadcastNotification('notifications/resources/list_changed');
+
+// Send a log message to the sessions whose MCP log level lets it through
+scope.notifications.sendLogMessage('info', 'my-plugin', { event: 'cache-cleared' });
 ```
 
 ### elicitationStore
@@ -217,6 +219,9 @@ Get the event store (if configured).
 ```typescript
 get eventStore(): EventStore | undefined
 ```
+
+`eventStore` is declared on `ScopeEntry`, the type of `this.scope` and of `instance.getScopes()`, so it typechecks without a
+cast (up to 1.9.0 it needed one).
 
 This is the **scope-wide** store, shared by every session. Transports must not
 hand it to a session directly — wrap it with `createSessionScopedEventStore(store, sessionId)`
@@ -267,6 +272,10 @@ Get the skill session manager (if skills exist).
 get skillSession(): SkillSessionManager | undefined
 ```
 
+`skillSession` is declared on `ScopeEntry`, the type of `this.scope` and of `instance.getScopes()`, so it typechecks without a
+cast (up to 1.9.0 it needed one). It is `undefined` when the scope has no skills and no plugin registers them at runtime
+(`dynamicSkills`).
+
 ### toolUI
 
 Get the tool UI registry.
@@ -295,7 +304,7 @@ const result = await scope.runFlow('tools:call-tool', {
     method: 'tools/call',
     params: { name: 'my_tool', arguments: { input: 'test' } },
   },
-  ctx: { authInfo },
+  ctx: { authInfo }, // the caller's AuthInfo
 });
 ```
 
@@ -334,17 +343,22 @@ onDispose(callback: () => void | Promise<void>): () => void
 ```
 
 ```typescript
-{
+import { ScopeEntry } from '@frontmcp/sdk';
+
+const myBridgeProvider = {
+  name: 'MyBridge',
   provide: MyBridge,
-  inject: () => [ScopeEntry],
+  inject: () => [ScopeEntry] as const,
   useFactory: (scope: ScopeEntry) => {
     const bridge = new MyBridge(scope);
     void scope.ready.then(() => bridge.start());
     scope.onDispose(() => bridge.stop());
     return bridge;
   },
-}
+};
 ```
+
+Register `myBridgeProvider` in a plugin's, an app's or the server's `providers`.
 
 The returned function removes the callback.
 
@@ -399,8 +413,8 @@ const [scope] = instance.getScopes();
 // List all tools
 scope.tools.getTools().forEach(tool => {
   console.log(`Tool: ${tool.name}`);
-  console.log(`  Description: ${tool.description}`);
-  console.log(`  Input: ${JSON.stringify(tool.inputSchema)}`);
+  console.log(`  Description: ${tool.metadata.description}`);
+  console.log(`  Input: ${JSON.stringify(tool.getInputJsonSchema())}`);
 });
 
 // List all resources
@@ -411,7 +425,7 @@ scope.resources.getResources().forEach(resource => {
 // List all skills
 scope.skills.getSkills().forEach(skill => {
   console.log(`Skill: ${skill.name}`);
-  console.log(`  Tools: ${skill.tools.map(t => t.name).join(', ')}`);
+  console.log(`  Tools: ${skill.getToolNames().join(', ')}`);
 });
 ```
 
@@ -420,14 +434,9 @@ scope.skills.getSkills().forEach(skill => {
 ```typescript
 const scope = instance.getScopes()[0];
 
-// Subscribe to tool changes
-scope.tools.subscribe({}, (event) => {
-  console.log(`Tool ${event.kind}:`, event);
-});
-
-// Subscribe to notifications
-scope.notifications.on('progress', (event) => {
-  console.log(`Progress: ${event.progress}/${event.total}`);
+// Subscribe to tool changes; the returned function unsubscribes
+const unsubscribe = scope.tools.subscribe({}, (event) => {
+  console.log(`Tool ${event.kind}:`, event.snapshot.length);
 });
 ```
 
@@ -436,13 +445,14 @@ scope.notifications.on('progress', (event) => {
 `SkillSessionManager` runs inside an `AsyncLocalStorage` context — call `runWithSession(sessionId, fn)` first, then query session state from inside `fn`:
 
 ```typescript
-const scope = instance.getScopes()[0];
+const skillSession = instance.getPrimaryScope()?.skillSession;
 
-if (scope.skillSession) {
-  await scope.skillSession.runWithSession(sessionId, async () => {
-    const allowlist = scope.skillSession!.getToolAllowlist();
-    const canUse = scope.skillSession!.isToolAllowed('my_tool');
-    const activeIds = scope.skillSession!.getActiveSkillIds();
+if (skillSession) {
+  await skillSession.runWithSession(sessionId, async () => {
+    const allowlist = skillSession.getToolAllowlist();
+    const canUse = skillSession.isToolAllowed('my_tool');
+    const activeIds = skillSession.getActiveSkillIds();
+    console.log(allowlist, canUse, activeIds);
   });
 }
 ```

@@ -54,15 +54,15 @@ Patterns and examples for extending FrontMCP servers with external npm packages.
 
 ## Scenario Routing Table
 
-| Scenario                                      | Reference                                       | Description                                              |
-| --------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------- |
-| Add in-memory semantic search with VectoriaDB | `references/vectoriadb.md`                      | TF-IDF or ML semantic indexing, provider+tool pattern    |
-| Add tamper-evident skill audit logging        | `references/skill-audit-log.md`                 | Hash-chained, signed audit records for skill executions  |
-| Load an app from an npm package               | `multi-app-composition` (in frontmcp-setup)     | `App.esm('@scope/pkg@^1.0.0', 'AppName')` pattern        |
-| Connect to a remote MCP server                | `multi-app-composition` (in frontmcp-setup)     | `App.remote('https://...', 'ns')` pattern                |
-| Build a reusable plugin with hooks            | `create-plugin-hooks` (in frontmcp-development) | `DynamicPlugin`, context extensions, lifecycle hooks     |
-| Build a custom adapter for an external source | `create-adapter` (in frontmcp-development)      | `DynamicAdapter` for OpenAPI, GraphQL, or custom sources |
-| Auto-generate tools from an OpenAPI spec      | `official-adapters` (in frontmcp-development)   | `OpenapiAdapter` with filtering, auth, and transforms    |
+| Scenario                                      | Reference                                       | Description                                                  |
+| --------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------ |
+| Add in-memory semantic search with VectoriaDB | `references/vectoriadb.md`                      | TF-IDF or ML semantic indexing, provider+tool pattern        |
+| Add tamper-evident skill audit logging        | `references/skill-audit-log.md`                 | Hash-chained, signed audit records for skill executions      |
+| Load an app from an npm package               | `multi-app-composition` (in frontmcp-setup)     | `App.esm('@scope/pkg@^1.0.0', { namespace: 'pkg' })` pattern |
+| Connect to a remote MCP server                | `multi-app-composition` (in frontmcp-setup)     | `App.remote('https://...', { namespace: 'ns' })` pattern     |
+| Build a reusable plugin with hooks            | `create-plugin-hooks` (in frontmcp-development) | `DynamicPlugin`, context extensions, lifecycle hooks         |
+| Build a custom adapter for an external source | `create-adapter` (in frontmcp-development)      | `DynamicAdapter` for OpenAPI, GraphQL, or custom sources     |
+| Auto-generate tools from an OpenAPI spec      | `official-adapters` (in frontmcp-development)   | `OpenapiAdapter` with filtering, auth, and transforms        |
 
 ## Integration Pattern
 

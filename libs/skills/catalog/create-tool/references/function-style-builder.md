@@ -52,9 +52,23 @@ const GetCurrentUser = tool({
 });
 ```
 
-`ctx` provides (public): `get`, `tryGet`, `mark`, `fetch`, `respond`, `context`, `scope`, `input`, `metadata`, `isPlatform`, `isRuntime`, `isEnv`, `callTool`, `auth`, `config`, `clientInfo`, `platform`.
+`ctx` provides (public): `get`, `tryGet`, `mark`, `fetch`, `respond`, `notify`, `progress`, `notifyResourceUpdated`, `notifyResourceListChanged`, `context`, `scope`, `input`, `metadata`, `isPlatform`, `isRuntime`, `isEnv`, `callTool`, `auth`, `config`, `clientInfo`, `platform`.
 
-> `fail`, `notify`, `progress`, and `elicit` are **`protected`** on `ToolContext` — they're reachable only from inside a class tool's `execute()` (via `this.*`), **not** from an external function-builder handler (calling them on `ctx` is a compile error). To signal a failure from a function tool, `throw new PublicMcpError(...)`. If you need `notify` / `progress` / `elicit`, use a class tool.
+```typescript
+const ImportNotes = tool({
+  name: 'import_notes',
+  inputSchema: { ids: z.array(z.string()) },
+})(async (input, ctx) => {
+  for (const [index, id] of input.ids.entries()) {
+    await ctx.progress(index + 1, input.ids.length, `Imported ${id}`);
+  }
+  await ctx.notify(`Imported ${input.ids.length} notes`);
+  ctx.notifyResourceListChanged();
+  return { imported: input.ids.length };
+});
+```
+
+> `fail` and `elicit` are **`protected`** on `ToolContext` — they're reachable only from inside a class tool's `execute()` (via `this.*`), **not** from an external function-builder handler (calling them on `ctx` is a compile error). To signal a failure from a function tool, `throw new PublicMcpError(...)`. If you need `elicit`, use a class tool. Up to 1.9.0 `notify`, `progress`, `notifyResourceUpdated` and `notifyResourceListChanged` were protected too.
 
 ## When to pick which
 

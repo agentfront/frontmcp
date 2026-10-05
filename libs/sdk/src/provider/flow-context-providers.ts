@@ -48,7 +48,11 @@ export class FlowContextProviders implements ProviderRegistryInterface {
     return this.baseProviders.getRegistries(type);
   }
 
-  buildViews(session: any): Promise<ProviderViews> {
-    return this.baseProviders.buildViews(session);
+  buildViews(
+    sessionKey: string,
+    contextProviders?: Map<Token, unknown>,
+    contextSource?: ProviderRegistryInterface,
+  ): Promise<ProviderViews> {
+    return this.baseProviders.buildViews(sessionKey, contextProviders, contextSource);
   }
 }

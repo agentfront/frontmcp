@@ -602,6 +602,19 @@ describe('skills catalog validation', () => {
       expect(violations).toEqual([]);
     });
 
+    it('should not use bare @Provider() without metadata in code blocks', () => {
+      const violations: string[] = [];
+      for (const { skill, file, fullPath } of documentationFiles) {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        // Prose may quote the bare form (e.g. "a bare @Provider() throws"); only code is checked
+        const codeBlocks = content.match(/```[a-z]*\n[\s\S]*?```/g) ?? [];
+        if (codeBlocks.some((block) => /@Provider\(\s*\)/.test(block))) {
+          violations.push(`${skill}/${file}: found bare @Provider() — name is required: @Provider({ name: '...' })`);
+        }
+      }
+      expect(violations).toEqual([]);
+    });
+
     it('should not pass DI binding keys to @Provider metadata', () => {
       const violations: string[] = [];
       for (const { skill, file, fullPath } of documentationFiles) {

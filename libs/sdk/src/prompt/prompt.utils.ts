@@ -8,6 +8,7 @@ import {
   FrontMcpPromptTokens,
   PromptKind,
   type PromptEntry,
+  type PromptExternalRecord,
   type PromptMetadata,
   type PromptRecord,
   type PromptType,
@@ -68,6 +69,11 @@ export function normalizePrompt(item: any): PromptRecord {
 
   const name = (item as any)?.name ?? String(item);
   throw new InvalidEntityError('prompt', name, 'a class or a prompt function');
+}
+
+/** True for a record whose prompts are loaded from a package or a remote server when its registry starts. */
+export function isExternalPromptRecord(record: PromptRecord): record is PromptExternalRecord {
+  return record.kind === PromptKind.ESM || record.kind === PromptKind.REMOTE;
 }
 
 /**

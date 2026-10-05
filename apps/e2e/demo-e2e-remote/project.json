@@ -71,6 +71,7 @@
     },
     "test:e2e": {
       "executor": "@nx/jest:jest",
+      "dependsOn": ["^build"],
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-remote-e2e"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-remote/jest.e2e.config.ts",

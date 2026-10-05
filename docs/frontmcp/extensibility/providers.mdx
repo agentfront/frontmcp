@@ -67,8 +67,10 @@ export default class BillingApp {}
 ```
 
 <Tip>
-  You can register **class**, **value**, or **factory** providers. Factories are useful for async initialization or
-  composing other providers.
+  You can register **class** providers (`@Provider` classes), **factory** providers
+  (`{ name, provide, inject?, useFactory }`), and named **value** or **class** bindings (`{ name, provide, useValue }`,
+  `{ name, provide, useClass }`). Every provider object needs a `name`. Factories are useful for async initialization or
+  composing other providers. See [@Provider](/frontmcp/sdk-reference/decorators/provider#factory-providers).
 </Tip>
 
 ## File Layout (folder per provider)
@@ -122,10 +124,12 @@ FrontMCP resolves providers for your executors and hooks. Keep your tool logic p
 A tool, resource or prompt resolves each provider from the **nearest** definition in its own hierarchy: first the plugin that contributed the entry, then its app (including the providers the app's plugins contribute), then the server. The same rule applies to CONTEXT-scoped providers. If two apps on one server each install the same plugin with their own options, each app's entries get the provider built from that app's options. The definition the other app registered on the server never shadows it.
 
 ```ts
-@App({ id: 'billing', plugins: [ApprovalPlugin.init({ storageInstance: billingStorage })], tools: [RefundTool] })
+import { ApprovalPlugin } from '@frontmcp/plugin-approval';
+
+@App({ name: 'billing', plugins: [ApprovalPlugin.init({ storageInstance: billingStorage })], tools: [RefundTool] })
 class BillingApp {}
 
-@App({ id: 'ops', plugins: [ApprovalPlugin.init({ storageInstance: opsStorage })], tools: [DeployTool] })
+@App({ name: 'ops', plugins: [ApprovalPlugin.init({ storageInstance: opsStorage })], tools: [DeployTool] })
 class OpsApp {}
 
 // Inside RefundTool, `this.approval` writes to billingStorage; inside DeployTool, to opsStorage.
@@ -140,19 +144,19 @@ Every HTTP request creates a `FrontMcpContext` that flows through the entire exe
 ### In Tools/Resources/Prompts
 
 ```ts
-import { Tool, FRONTMCP_CONTEXT } from '@frontmcp/sdk';
+import { Tool, ToolContext, FRONTMCP_CONTEXT } from '@frontmcp/sdk';
 import { z } from '@frontmcp/sdk';
 
 @Tool({ name: 'my-tool', inputSchema: { query: z.string() } })
-class MyTool {
-  async execute({ query }) {
+class MyTool extends ToolContext {
+  async execute({ query }: { query: string }) {
     // Via getter (recommended)
     const ctx = this.context;
 
     // Via DI
     const ctx2 = this.get(FRONTMCP_CONTEXT);
 
-    console.log(ctx.requestId, ctx.traceContext.traceId);
+    console.log(ctx.requestId, ctx.traceContext.traceId, ctx2 === ctx);
     return `Processed: ${query}`;
   }
 }
@@ -163,18 +167,27 @@ class MyTool {
 CONTEXT-scoped providers can access the current context via factory injection:
 
 ```ts
-import { ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@frontmcp/sdk';
+import { ProviderScope, FRONTMCP_CONTEXT, type FrontMcpContext, type Token } from '@frontmcp/sdk';
 
-// Factory provider pattern
-const requestLoggerProvider = {
-  provide: 'RequestLogger',
+export interface RequestLogger {
+  log(msg: string): void;
+}
+
+export const REQUEST_LOGGER: Token<RequestLogger> = Symbol('RequestLogger');
+
+// Factory provider pattern: register it in an app's or the server's `providers`
+export const requestLoggerProvider = {
+  name: 'RequestLogger',
+  provide: REQUEST_LOGGER,
   scope: ProviderScope.CONTEXT,
-  useFactory: (ctx: FrontMcpContext) => ({
+  inject: () => [FRONTMCP_CONTEXT] as const,
+  useFactory: (ctx: FrontMcpContext): RequestLogger => ({
     log: (msg: string) => console.log(`[${ctx.requestId}] ${msg}`),
   }),
-  inject: [FRONTMCP_CONTEXT],
 };
 ```
+
+A tool then calls `this.get(REQUEST_LOGGER).log('...')`. A factory provider needs a `name`, and `inject` is a function that returns the tokens to resolve, in the order `useFactory` takes them.
 
 ### FrontMcpContext API
 
@@ -205,7 +218,8 @@ Use `ctx.fetch()` to automatically inject headers into outgoing requests:
 ```ts
 const ctx = this.context;
 
-// Auto-injects: Authorization, traceparent, x-request-id, custom headers
+// Injects traceparent and x-request-id; the caller's token and x-frontmcp-* headers
+// only reach the origins listed in @FrontMcp({ fetch })
 const response = await ctx.fetch('https://api.example.com/data');
 ```
 
@@ -217,8 +231,8 @@ Access the transport for interactive prompts:
 const ctx = this.context;
 
 if (ctx.transport?.supportsElicit) {
-  const result = await ctx.transport.elicit('Please confirm', schema);
-  console.log(result.action, result.content);
+  const result = await ctx.transport.elicit('Please confirm', z.object({ confirmed: z.boolean() }));
+  console.log(result.status, result.content); // status: 'accept' | 'decline' | 'cancel'
 }
 ```
 
@@ -234,52 +248,73 @@ CONTEXT-scoped providers are created fresh for each request. They're ideal for p
 
 ### Accessing Session ID
 
-The session ID is available directly from the context:
+The session the server verified is available directly from the context. Key per-session state on `ctx.verifiedSessionId`: it is `undefined` for a stateless request, whose `ctx.sessionId` can be an id shared by every stateless caller.
+
+The examples below use `RedisProvider`, a GLOBAL `@Provider` class of your own that wraps a Redis client and exposes `getValue(key)` and `setValue(key, value, ttl?)`.
 
 ```ts
-import { Provider, ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@frontmcp/sdk';
+import { ProviderScope, FRONTMCP_CONTEXT, type FrontMcpContext, type Token } from '@frontmcp/sdk';
+import { RedisProvider } from './redis.provider';
 
-// Factory provider that uses session ID
-const sessionCacheProvider = {
-  provide: 'SessionCache',
+export interface SessionCache {
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown): Promise<void>;
+}
+
+export const SESSION_CACHE: Token<SessionCache> = Symbol('SessionCache');
+
+// Factory provider that uses the verified session ID
+export const sessionCacheProvider = {
+  name: 'SessionCache',
+  provide: SESSION_CACHE,
   scope: ProviderScope.CONTEXT,
-  useFactory: (ctx: FrontMcpContext, redis: RedisProvider) => {
-    const cacheKey = `cache:${ctx.sessionId}`;
+  inject: () => [FRONTMCP_CONTEXT, RedisProvider] as const,
+  useFactory: (ctx: FrontMcpContext, redis: RedisProvider): SessionCache => {
+    // A request without a verified session gets a cache of its own
+    const cacheKey = `cache:${ctx.verifiedSessionId ?? `request:${ctx.requestId}`}`;
     return {
       async get(key: string) {
-        return redis.get(`${cacheKey}:${key}`);
+        return redis.getValue(`${cacheKey}:${key}`);
       },
       async set(key: string, value: unknown) {
-        return redis.set(`${cacheKey}:${key}`, value);
+        await redis.setValue(`${cacheKey}:${key}`, value);
       },
     };
   },
-  inject: [FRONTMCP_CONTEXT, RedisProvider],
 };
 ```
 
 ### Example: Context-Scoped Redis Provider
 
 ```ts
-import { Provider, ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@frontmcp/sdk';
+import { ProviderScope, FRONTMCP_CONTEXT, type FrontMcpContext, type Token } from '@frontmcp/sdk';
+import { RedisProvider } from './redis.provider';
 
-const sessionRedisProvider = {
-  provide: 'SessionRedis',
+export interface SessionRedis {
+  setValue<T>(key: string, value: T, ttl?: number): Promise<void>;
+  getValue<T>(key: string): Promise<T | undefined>;
+}
+
+export const SESSION_REDIS: Token<SessionRedis> = Symbol('SessionRedis');
+
+export const sessionRedisProvider = {
+  name: 'SessionRedis',
+  provide: SESSION_REDIS,
   scope: ProviderScope.CONTEXT,
-  useFactory: (ctx: FrontMcpContext, redis: RedisProvider) => {
-    const safeSid = ctx.sessionId.replace(/[:\s]/g, '_');
-    const prefix = `:session:${safeSid}:`;
+  inject: () => [FRONTMCP_CONTEXT, RedisProvider] as const,
+  useFactory: (ctx: FrontMcpContext, redis: RedisProvider): SessionRedis => {
+    const sessionKey = ctx.verifiedSessionId ?? `request:${ctx.requestId}`;
+    const prefix = `:session:${sessionKey.replace(/[:\s]/g, '_')}:`;
 
     return {
       async setValue<T>(key: string, value: T, ttl?: number) {
         await redis.setValue(`${prefix}${key}`, value, ttl);
       },
       async getValue<T>(key: string): Promise<T | undefined> {
-        return redis.getValue(`${prefix}${key}`);
+        return (await redis.getValue(`${prefix}${key}`)) as T | undefined;
       },
     };
   },
-  inject: [FRONTMCP_CONTEXT, RedisProvider],
 };
 ```
 
@@ -298,19 +333,30 @@ When running behind a load balancer:
 
 ```ts
 // Good: Use Redis for data that must persist across requests
-const crossRequestDataProvider = {
-  provide: 'CrossRequestData',
+export interface CrossRequestData {
+  setUserPreference(key: string, value: unknown): Promise<void>;
+  getUserPreference(key: string): Promise<unknown>;
+}
+
+export const CROSS_REQUEST_DATA: Token<CrossRequestData> = Symbol('CrossRequestData');
+
+export const crossRequestDataProvider = {
+  name: 'CrossRequestData',
+  provide: CROSS_REQUEST_DATA,
   scope: ProviderScope.CONTEXT,
-  useFactory: (ctx: FrontMcpContext, redis: RedisProvider) => ({
-    async setUserPreference(key: string, value: any) {
-      // Data is stored in Redis, accessible from any request/pod
-      await redis.setValue(`pref:${ctx.sessionId}:${key}`, value);
-    },
-    async getUserPreference(key: string) {
-      return redis.getValue(`pref:${ctx.sessionId}:${key}`);
-    },
-  }),
-  inject: [FRONTMCP_CONTEXT, RedisProvider],
+  inject: () => [FRONTMCP_CONTEXT, RedisProvider] as const,
+  useFactory: (ctx: FrontMcpContext, redis: RedisProvider): CrossRequestData => {
+    const sessionKey = ctx.verifiedSessionId ?? `request:${ctx.requestId}`;
+    return {
+      async setUserPreference(key: string, value: unknown) {
+        // Data is stored in Redis, accessible from any request/pod
+        await redis.setValue(`pref:${sessionKey}:${key}`, value);
+      },
+      async getUserPreference(key: string) {
+        return redis.getValue(`pref:${sessionKey}:${key}`);
+      },
+    };
+  },
 };
 ```
 
@@ -320,15 +366,15 @@ Access additional session metadata (protocol, platform type) via the context:
 
 ```ts
 @Tool({ name: 'session-info', inputSchema: {} })
-class SessionInfoTool {
+class SessionInfoTool extends ToolContext {
   async execute() {
     const ctx = this.context;
     const metadata = ctx.sessionMetadata;
 
     return {
       sessionId: ctx.sessionId,
-      protocol: metadata?.protocol,      // 'streamable-http', 'sse', etc.
-      platformType: metadata?.platform,  // 'openai', 'claude', etc.
+      protocol: metadata?.protocol,          // 'streamable-http', 'sse', etc.
+      platformType: metadata?.platformType,  // 'openai', 'claude', etc.
     };
   }
 }

@@ -40,6 +40,8 @@ function channel(opts: ChannelMetadata): (handler: ChannelMessageHandler) => () 
 ```
 
 ```typescript
+import { channel } from '@frontmcp/sdk';
+
 const ErrorChannel = channel({
   name: 'error-alerts',
   source: { type: 'app-event', event: 'app:error' },
@@ -170,6 +172,8 @@ Meta keys must be valid identifiers: letters, digits, and underscores only. Keys
 When `twoWay: true`, implement `onReply()` to handle responses from Claude:
 
 ```typescript
+import { Channel, ChannelContext, type ChannelNotification } from '@frontmcp/sdk';
+
 @Channel({
   name: 'chat-bridge',
   source: { type: 'webhook', path: '/hooks/chat' },
@@ -204,11 +208,14 @@ Enable channels at the server level:
 
 ```typescript
 @FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
   channels: {
     enabled: true,
     defaultMeta: { server: 'my-app' },  // Optional
   },
 })
+class Server {}
 ```
 
 | Option        | Type                     | Default | Description                                                                                         |
