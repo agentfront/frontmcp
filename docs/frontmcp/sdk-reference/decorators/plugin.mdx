@@ -8,11 +8,11 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 ## Basic Usage
 
 ```typescript
-import { Plugin, Provider, Token } from '@frontmcp/sdk';
+import { Plugin, Provider } from '@frontmcp/sdk';
 
 // Provider for the plugin
-@Provider()
-class CacheService {
+@Provider({ name: 'CacheService' })
+export class CacheService {
   private cache = new Map<string, string>();
 
   async get(key: string) {
@@ -24,18 +24,17 @@ class CacheService {
   }
 }
 
-export const CacheServiceToken = new Token<CacheService>('CacheService');
-
 // Plugin definition
 @Plugin({
   name: 'cache',
   description: 'In-memory caching for tools',
-  providers: [
-    { provide: CacheServiceToken, useClass: CacheService },
-  ],
+  providers: [CacheService],
+  exports: [CacheService],
 })
 export class CachePlugin {}
 ```
+
+A plugin's `providers` are private to the plugin: its own tools, hooks and nested plugins resolve them. List a provider in `exports` as well so the tools of the app that installs the plugin can call `this.get(CacheService)`. A decorated class is its own DI token.
 
 ## Signature
 
@@ -85,66 +84,83 @@ function Plugin(providedMetadata: PluginMetadata): ClassDecorator
 Extend all context classes with custom properties:
 
 ```typescript
-import { Plugin, Provider, Token, ExecutionContextBase } from '@frontmcp/sdk';
+import { Plugin, Provider, type Token } from '@frontmcp/sdk';
 
-// 1. Define token
-export const RememberAccessorToken = new Token<RememberAccessor>('RememberAccessor');
+// 1. Define the accessor
+@Provider({ name: 'MemoryAccessor' })
+export class MemoryAccessor {
+  private readonly values = new Map<string, string>();
 
-// 2. Define accessor
-@Provider()
-class RememberAccessor {
   async get(key: string): Promise<string | undefined> {
-    // Implementation
+    return this.values.get(key);
   }
 
   async set(key: string, value: string): Promise<void> {
-    // Implementation
+    this.values.set(key, value);
   }
 }
 
-// 3. Augment types (in .d.ts or separate file)
+// 2. Define a token for it: a Symbol typed with Token<T>
+export const MemoryAccessorToken: Token<MemoryAccessor> = Symbol('MemoryAccessor');
+
+const memoryAccessorProvider = {
+  name: 'MemoryAccessorToken',
+  provide: MemoryAccessorToken,
+  inject: () => [MemoryAccessor] as const,
+  useFactory: (accessor: MemoryAccessor) => accessor,
+};
+
+// 3. Augment the context types (here or in a separate file the project compiles)
 declare module '@frontmcp/sdk' {
   interface ExecutionContextBase {
-    readonly remember: RememberAccessor;
+    readonly memory: MemoryAccessor;
   }
 }
 
-// 4. Define plugin with context extension
+// 4. Define the plugin with the context extension
 @Plugin({
-  name: 'remember',
-  description: 'Session memory for tools',
-  providers: [
-    { provide: RememberAccessorToken, useClass: RememberAccessor },
-  ],
+  name: 'memory',
+  description: 'In-memory key-value store shared by tools',
+  providers: [MemoryAccessor, memoryAccessorProvider],
+  exports: [memoryAccessorProvider],
   contextExtensions: [
     {
-      property: 'remember',
-      token: RememberAccessorToken,
-      errorMessage: 'Remember plugin not installed',
+      property: 'memory',
+      token: MemoryAccessorToken,
+      errorMessage: 'Memory plugin not installed',
     },
   ],
 })
-export class RememberPlugin {}
+export class MemoryPlugin {}
 ```
+
+`this.memory` resolves `MemoryAccessorToken` from the calling tool's providers, so the plugin exports the provider that binds it. The token can also be the provider class itself (`token: MemoryAccessor`, with `exports: [MemoryAccessor]`).
 
 Now in tools:
 
 ```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 @Tool({ name: 'my_tool', inputSchema: {} })
 class MyTool extends ToolContext {
   async execute() {
     // Access extended property
-    await this.remember.set('lastRun', new Date().toISOString());
-    const lastRun = await this.remember.get('lastRun');
+    await this.memory.set('lastRun', new Date().toISOString());
+    const lastRun = await this.memory.get('lastRun');
+    return { lastRun };
   }
 }
 ```
+
+<Note>
+The official [RememberPlugin](/frontmcp/plugins/remember-plugin) already declares `this.remember`. A plugin of your own needs a property name no other installed plugin uses.
+</Note>
 
 ## Plugin Scopes
 
 ### App Scope (Default)
 
-Hooks register at app level:
+The plugin's hooks run only for the entries of the app that installs it:
 
 ```typescript
 @Plugin({
@@ -156,7 +172,7 @@ class AppPlugin {}
 
 ### Server Scope
 
-Hooks register at gateway/server level:
+The plugin's hooks register at the gateway/server level and run for every app's entries, even when the plugin is installed on one `@App`. Its providers and context extensions stay with the app that installs it:
 
 ```typescript
 @Plugin({
@@ -220,12 +236,15 @@ import { z } from '@frontmcp/sdk';
   description: 'Send user response to pending elicitation',
   inputSchema: {
     elicitId: z.string(),
-    response: z.any(),
+    response: z.record(z.string(), z.unknown()),
   },
 })
 class SendElicitationResultTool extends ToolContext {
-  async execute(input) {
+  async execute(input: { elicitId: string; response: Record<string, unknown> }) {
     // Plugin-provided tool implementation
+    const elicitation = this.get(ElicitationService);
+    await elicitation.resolve(input.elicitId, input.response);
+    return { delivered: true };
   }
 }
 
@@ -240,15 +259,11 @@ export class ElicitationPlugin {}
 ## Full Example
 
 ```typescript
-import { Plugin, Provider, Token, Tool, ToolContext, App, FrontMcp } from '@frontmcp/sdk';
+import { Plugin, Provider, Tool, ToolContext, App, FrontMcp } from '@frontmcp/sdk';
 import { z } from '@frontmcp/sdk';
 
-// Tokens
-export const ApprovalServiceToken = new Token<ApprovalService>('ApprovalService');
-export const ApprovalAccessorToken = new Token<ApprovalAccessor>('ApprovalAccessor');
-
 // Services
-@Provider()
+@Provider({ name: 'ApprovalService' })
 class ApprovalService {
   private approvals = new Map<string, boolean>();
 
@@ -265,7 +280,7 @@ class ApprovalService {
   }
 }
 
-@Provider()
+@Provider({ name: 'ApprovalAccessor' })
 class ApprovalAccessor {
   constructor(private service: ApprovalService) {}
 
@@ -281,7 +296,7 @@ class ApprovalAccessor {
 // Module augmentation
 declare module '@frontmcp/sdk' {
   interface ExecutionContextBase {
-    readonly approval: ApprovalAccessor;
+    readonly toolApproval: ApprovalAccessor;
   }
 }
 
@@ -293,7 +308,7 @@ declare module '@frontmcp/sdk' {
 })
 class ApproveToolTool extends ToolContext {
   async execute(input: { toolName: string }) {
-    const accessor = this.get(ApprovalAccessorToken);
+    const accessor = this.get(ApprovalAccessor);
     await accessor.approve(input.toolName);
     return { approved: input.toolName };
   }
@@ -301,22 +316,20 @@ class ApproveToolTool extends ToolContext {
 
 // Plugin definition
 @Plugin({
-  name: 'approval',
+  name: 'tool-approval',
   description: 'Tool approval system',
-  providers: [
-    { provide: ApprovalServiceToken, useClass: ApprovalService },
-    { provide: ApprovalAccessorToken, useClass: ApprovalAccessor },
-  ],
+  providers: [ApprovalService, ApprovalAccessor],
+  exports: [ApprovalAccessor],
   tools: [ApproveToolTool],
   contextExtensions: [
     {
-      property: 'approval',
-      token: ApprovalAccessorToken,
-      errorMessage: 'Approval plugin not installed',
+      property: 'toolApproval',
+      token: ApprovalAccessor,
+      errorMessage: 'ToolApprovalPlugin not installed',
     },
   ],
 })
-export class ApprovalPlugin {}
+export class ToolApprovalPlugin {}
 
 // Using the plugin
 @Tool({
@@ -326,7 +339,7 @@ export class ApprovalPlugin {}
 class DangerousOperationTool extends ToolContext {
   async execute(input: { data: string }) {
     // Check approval via context extension
-    const isApproved = await this.approval.isApproved('dangerous_operation');
+    const isApproved = await this.toolApproval.isApproved('dangerous_operation');
 
     if (!isApproved) {
       return { error: 'This tool requires approval. Please run approve_tool first.' };
@@ -339,7 +352,7 @@ class DangerousOperationTool extends ToolContext {
 
 @App({
   name: 'secure-app',
-  plugins: [ApprovalPlugin],
+  plugins: [ToolApprovalPlugin],
   tools: [DangerousOperationTool],
 })
 class SecureApp {}

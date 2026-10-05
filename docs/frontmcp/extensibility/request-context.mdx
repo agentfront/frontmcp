@@ -28,12 +28,12 @@ Every HTTP request to your FrontMCP server creates a `FrontMcpContext` that:
 Use the `context` getter for convenient access:
 
 ```ts
-import { Tool } from '@frontmcp/sdk';
+import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from '@frontmcp/sdk';
 
 @Tool({ name: 'my-tool', inputSchema: { query: z.string() } })
-class MyTool {
-  async execute({ query }) {
+class MyTool extends ToolContext {
+  async execute({ query }: { query: string }) {
     const ctx = this.context;
     // or: const ctx = this.get(FRONTMCP_CONTEXT);
 
@@ -61,17 +61,26 @@ if (ctx) {
 CONTEXT-scoped providers can receive FrontMcpContext via factory injection:
 
 ```ts
-import { ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@frontmcp/sdk';
+import { ProviderScope, FRONTMCP_CONTEXT, type FrontMcpContext, type Token } from '@frontmcp/sdk';
 
-const requestLoggerProvider = {
-  provide: 'RequestLogger',
+export interface RequestLogger {
+  log(msg: string): void;
+}
+
+export const REQUEST_LOGGER: Token<RequestLogger> = Symbol('RequestLogger');
+
+export const requestLoggerProvider = {
+  name: 'RequestLogger',
+  provide: REQUEST_LOGGER,
   scope: ProviderScope.CONTEXT,
-  useFactory: (ctx: FrontMcpContext) => ({
+  inject: () => [FRONTMCP_CONTEXT] as const,
+  useFactory: (ctx: FrontMcpContext): RequestLogger => ({
     log: (msg: string) => console.log(`[${ctx.requestId}] ${msg}`),
   }),
-  inject: [FRONTMCP_CONTEXT],
 };
 ```
+
+Register `requestLoggerProvider` in an app's or the server's `providers`, and resolve it in a tool with `this.get(REQUEST_LOGGER)`.
 
 ---
 
@@ -147,9 +156,9 @@ Access the transport for interactive prompts:
 const ctx = this.context;
 
 if (ctx.transport?.supportsElicit) {
-  const result = await ctx.transport.elicit('Please confirm your action', schema);
+  const result = await ctx.transport.elicit('Please confirm your action', z.object({ confirmed: z.boolean() }));
 
-  switch (result.action) {
+  switch (result.status) {
     case 'accept':
       console.log('User accepted:', result.content);
       break;
@@ -174,8 +183,9 @@ FrontMcpContext automatically parses [W3C Trace Context](https://www.w3.org/TR/t
 | Header                | Description                                              |
 | --------------------- | -------------------------------------------------------- |
 | `traceparent`         | W3C standard: `{version}-{trace-id}-{parent-id}-{flags}` |
-| `tracestate`          | Vendor-specific trace data                               |
 | `x-frontmcp-trace-id` | Fallback for non-W3C clients                             |
+
+A request with neither header gets a new trace ID.
 
 ### Using Trace Context
 
@@ -183,7 +193,7 @@ FrontMcpContext automatically parses [W3C Trace Context](https://www.w3.org/TR/t
 const ctx = this.context;
 
 // Access trace identifiers
-const { traceId, parentId, traceFlags, traceState } = ctx.traceContext;
+const { traceId, parentId, traceFlags } = ctx.traceContext;
 
 console.log(`Trace: ${traceId}, Parent: ${parentId}, Flags: ${traceFlags}`);
 
@@ -298,7 +308,7 @@ if (authInfo.token) {
 // User information
 if (authInfo.user) {
   console.log(`User: ${authInfo.user.email}`);
-  console.log(`Tenant: ${authInfo.user.tenantId}`);
+  console.log(`Tenant: ${authInfo.claims?.['tenantId']}`); // a verified token claim
 }
 
 // Session information
@@ -327,6 +337,7 @@ const logContext = ctx.toLogContext();
 // {
 //   requestId: 'abc12345-...',
 //   traceId: 'def67890...',
+//   parentId: '0123456789abcdef',
 //   sessionIdHash: 'a1b2c3d4e5f6', // Hashed for privacy
 //   scopeId: 'main',
 //   flowName: 'tools/call',
@@ -373,13 +384,12 @@ const logContext = ctx.toLogContext();
 
 ### TraceContext Interface
 
-| Property     | Type                  | Description                       |
-| ------------ | --------------------- | --------------------------------- |
-| `traceId`    | `string`              | 32-character hex trace identifier |
-| `parentId`   | `string \| undefined` | 16-character hex parent span ID   |
-| `traceFlags` | `number`              | Trace flags (e.g., 1 for sampled) |
-| `traceState` | `string \| undefined` | Vendor-specific trace state       |
-| `raw`        | `string`              | Raw traceparent header value      |
+| Property     | Type     | Description                       |
+| ------------ | -------- | --------------------------------- |
+| `traceId`    | `string` | 32-character hex trace identifier |
+| `parentId`   | `string` | 16-character hex parent span ID   |
+| `traceFlags` | `number` | Trace flags (e.g., 1 for sampled) |
+| `raw`        | `string` | Raw traceparent header value      |
 
 ### RequestMetadata Interface
 
@@ -393,10 +403,10 @@ const logContext = ctx.toLogContext();
 
 ### TransportAccessor Interface
 
-| Property/Method  | Type                                                     | Description                       |
-| ---------------- | -------------------------------------------------------- | --------------------------------- |
-| `supportsElicit` | `boolean`                                                | Whether transport supports elicit |
-| `elicit`         | `<T>(message: string, schema: T): Promise<ElicitResult>` | Send elicit request               |
+| Property/Method  | Type                                                                                                                   | Description                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `supportsElicit` | `boolean`                                                                                                              | Whether transport supports elicit                                                                                |
+| `elicit`         | `<S extends ZodType>(message: string, requestedSchema: S, options?: ElicitOptions): Promise<ElicitResult<z.infer<S>>>` | Send elicit request; the result has `status` (`'accept' \| 'decline' \| 'cancel'`) and, when accepted, `content` |
 
 ---
 
