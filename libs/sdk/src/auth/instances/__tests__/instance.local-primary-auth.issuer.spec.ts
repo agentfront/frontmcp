@@ -11,7 +11,7 @@ import 'reflect-metadata';
 import { ServerRequestTokens, type ServerRequest } from '../../../common';
 import { LocalPrimaryAuth } from '../instance.local-primary-auth';
 
-function createProviders() {
+function createProviders(metadata: Record<string, unknown> = { http: { port: 3001 } }) {
   const logger = {
     info: jest.fn(),
     warn: jest.fn(),
@@ -22,7 +22,7 @@ function createProviders() {
   };
   const activeScope = {
     logger,
-    metadata: { http: { port: 3001 } },
+    metadata,
     registryFlows: jest.fn().mockResolvedValue(undefined),
   };
   return {
@@ -34,8 +34,11 @@ function createProviders() {
 
 const scope = { fullPath: '/mcp', entryPath: '/mcp', routeBase: '' } as never;
 
-async function makeAuth(options: Record<string, unknown>): Promise<LocalPrimaryAuth> {
-  const auth = new LocalPrimaryAuth(scope, createProviders(), options as never);
+async function makeAuth(
+  options: Record<string, unknown>,
+  metadata?: Record<string, unknown>,
+): Promise<LocalPrimaryAuth> {
+  const auth = new LocalPrimaryAuth(scope, createProviders(metadata), options as never);
   await auth.ready;
   return auth;
 }
@@ -60,7 +63,7 @@ function nodeRequest(host: string): ServerRequest {
   return { method: 'POST', protocol: 'http', path: '/mcp', url: '/mcp', headers: { host }, query: {} } as never;
 }
 
-const ENV_KEYS = ['FRONTMCP_PUBLIC_URL', 'FRONTMCP_PUBLIC_HOST'];
+const ENV_KEYS = ['FRONTMCP_PUBLIC_URL', 'FRONTMCP_PUBLIC_HOST', 'PORT'];
 const savedEnv: Record<string, string | undefined> = {};
 
 beforeEach(() => {
@@ -82,6 +85,13 @@ describe('LocalPrimaryAuth.issuerFor', () => {
     const auth = await makeAuth({ mode: 'local' });
 
     expect(auth.issuerFor()).toBe('http://localhost:3001/mcp');
+  });
+
+  it('uses the port the server listens on when @FrontMcp has no http options (#766)', async () => {
+    expect((await makeAuth({ mode: 'local' }, {})).issuerFor()).toBe('http://localhost:3000/mcp');
+
+    process.env['PORT'] = '4123';
+    expect((await makeAuth({ mode: 'local' }, {})).issuerFor()).toBe('http://localhost:4123/mcp');
   });
 
   it("is a Web request's own origin plus the scope path", async () => {
