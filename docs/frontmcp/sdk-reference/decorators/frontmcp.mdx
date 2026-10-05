@@ -27,10 +27,10 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 
 ### Required Properties
 
-| Property | Type                | Description                                  |
-| -------- | ------------------- | -------------------------------------------- |
-| `info`   | `ServerInfoOptions` | Server metadata (name, version, description) |
-| `apps`   | `AppType[]`         | Array of app classes to register             |
+| Property | Type                | Description                                                                      |
+| -------- | ------------------- | -------------------------------------------------------------------------------- |
+| `info`   | `ServerInfoOptions` | Server metadata (`name`, `version`, and optional `title`, `websiteUrl`, `icons`) |
+| `apps`   | `AppType[]`         | Array of app classes to register                                                 |
 
 ### Server Metadata
 
@@ -62,10 +62,11 @@ auto-starting entirely (use `FrontMcpInstance.bootstrap`/`runStdio` explicitly).
   http: {
     port: 3000,
     cors: { origin: '*' },
-    hostFactory: (config) => new ExpressHostAdapter(config),
   },
 })
 ```
+
+`http.hostFactory` replaces the default Express host with a `FrontMcpServer` of your own, or a function that builds one from the HTTP options.
 
 ### Storage Configuration
 
@@ -99,9 +100,10 @@ auto-starting entirely (use `FrontMcpInstance.bootstrap`/`runStdio` explicitly).
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
   apps: [MyApp],
+  redis: { provider: 'redis', host: 'localhost', port: 6379 },
   transport: {
     distributedMode: true,
-    sessionTtl: 3600000, // 1 hour
+    persistence: { defaultTtlMs: 3600000 }, // keep session metadata for 1 hour
   },
 })
 ```
@@ -167,16 +169,17 @@ Tools, resources and resource templates declared on `@FrontMcp` are listed, call
 | `channels`      | `ChannelsConfigInput`                      | Channel notifications configuration                                                                                                                                                                                                                             |
 
 ```typescript
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
   apps: [MyApp],
   logging: {
-    level: 'info',
-    transports: [{ type: 'console' }],
+    level: LogLevel.Info,
+    enableConsole: true,
   },
   elicitation: {
-    enabled: true,
-    ttl: 300000, // 5 minutes
+    enabled: true, // each this.elicit() call sets its own ttl
   },
   skillsConfig: {
     enabled: true,
@@ -189,7 +192,7 @@ Tools, resources and resource templates declared on `@FrontMcp` are listed, call
 ## Full Example
 
 ```typescript
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
+import { FrontMcp, App, LogLevel, Tool, ToolContext } from '@frontmcp/sdk';
 import { RememberPlugin } from '@frontmcp/plugin-remember';
 import { z } from '@frontmcp/sdk';
 
@@ -213,13 +216,13 @@ class MainApp {}
   info: {
     name: 'Greeting Server',
     version: '1.0.0',
-    description: 'A simple greeting MCP server',
+    title: 'A simple greeting MCP server',
   },
   apps: [MainApp],
   serve: true,
   http: { port: 3000 },
   plugins: [RememberPlugin],
-  logging: { level: 'info' },
+  logging: { level: LogLevel.Info },
 })
 export default class GreetingServer {}
 ```

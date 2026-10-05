@@ -176,7 +176,7 @@ const GreetJob = job({
   inputSchema: { name: z.string() },
   outputSchema: { message: z.string() },
 })((input, ctx) => {
-  ctx.log(`Greeting ${input.name}`);
+  ctx.scope.logger.info(`Greeting ${input.name}`); // log() and progress() are protected: use them in a JobContext class
   return { message: `Hello, ${input.name}!` };
 });
 ```

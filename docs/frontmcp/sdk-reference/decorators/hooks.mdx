@@ -196,7 +196,8 @@ interface HookOptions<Ctx = unknown> {
 ```
 
 A hook of a plugin installed on an app runs, in `tools/call`, `resources/read`, `prompts/get` and
-`completion/complete`, only for that app's entries. With `appliesTo: 'uncovered-apps'` it also runs for the entries of
+`completion/complete`, only for that app's entries, unless the plugin has `scope: 'server'`: then its hooks run for
+every app's entries. With `appliesTo: 'uncovered-apps'` it also runs for the entries of
 any app that has no instance of the same hook (same class and method) of its own or from a server-level plugin. Use it
 for gates that an entry's metadata asks for, so the entry is not left ungated when the plugin sits on another app.
 
@@ -285,7 +286,7 @@ the same way. To act on job runs, hook `tools:call-tool` for the `execute_job` t
 
 Up to 1.8.7, all of these were accepted and silently never ran.
 
-Hooks from an app's providers, and from the plugins (including plugins nested inside them) and plugin providers it lists, run only for that app's tools, resources and prompts (`tools:call-tool`, `resources:read-resource`, `prompts:get-prompt`, `completion:complete`), including the ones its adapters and plugins provide, such as the tools an OpenAPI adapter generates. Plugins and providers registered on the server (`@FrontMcp({ plugins, providers })`) apply to every app. Resources and prompts the server serves outside every app, such as the SEP-2640 `skill://` resources, run every app's hooks.
+Hooks from an app's providers, and from the plugins (including plugins nested inside them) and plugin providers it lists, run only for that app's tools, resources and prompts (`tools:call-tool`, `resources:read-resource`, `prompts:get-prompt`, `completion:complete`), including the ones its adapters and plugins provide, such as the tools an OpenAPI adapter generates. The hooks of a plugin with `scope: 'server'` are the exception: they run for every app's entries, while the plugin's providers and context extensions stay with the app that installs it. Plugins and providers registered on the server (`@FrontMcp({ plugins, providers })`) apply to every app. Resources and prompts the server serves outside every app, such as the SEP-2640 `skill://` resources, run every app's hooks.
 
 ## Hook Context
 
@@ -319,13 +320,13 @@ A hook that throws stops the flow, and the error reaches the client like an erro
 
 ```typescript
 @Will('execute')
-async validateInput(ctx) {
+async validateInput(ctx: FlowCtxOf<'tools:call-tool'>) {
   // Throwing stops execution and reports error
   throw new InvalidInputError('Validation failed');
 }
 
 @Around('execute')
-async errorHandler(ctx, next) {
+async errorHandler(ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<void>) {
   try {
     await next();
   } catch (error) {

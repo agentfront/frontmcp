@@ -353,7 +353,7 @@ permissions: [
 
 ## Function Builder
 
-For simple jobs that do not need a class, use the `job()` function builder. The callback receives `(input, ctx)` where `ctx` provides all `JobContext` methods.
+For simple jobs that do not need a class, use the `job()` function builder. The callback receives `(input, ctx)` where `ctx` is the run's `JobContext`: its public members (`get()`, `tryGet()`, `scope`, `respond()`) are available, while `log()` and `progress()` are protected, so a job that reports progress needs a `JobContext` class.
 
 ```typescript
 import { job, z } from '@frontmcp/sdk';
@@ -370,12 +370,11 @@ const CleanupTempFiles = job({
     freedBytes: z.number().int(),
   },
 })((input, ctx) => {
-  ctx.log(`Cleaning ${input.directory}, max age: ${input.maxAgeDays} days`);
-  ctx.progress(0, 100, 'Scanning directory');
+  // log() and progress() are protected: use a JobContext class when you need them
+  ctx.scope.logger.info(`Cleaning ${input.directory}, max age: ${input.maxAgeDays} days`);
 
   // ... scan and delete logic ...
 
-  ctx.progress(100, 100, 'Cleanup complete');
   return { deleted: 42, freedBytes: 1024000 };
 });
 ```

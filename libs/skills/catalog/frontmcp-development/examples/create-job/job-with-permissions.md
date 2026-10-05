@@ -71,12 +71,11 @@ const CleanupTempFiles = job({
     freedBytes: z.number().int(),
   },
 })((input, ctx) => {
-  ctx.log(`Cleaning ${input.directory}, max age: ${input.maxAgeDays} days`);
-  ctx.progress(0, 100, 'Scanning directory');
+  // log() and progress() are protected: use a JobContext class when you need them
+  ctx.scope.logger.info(`Cleaning ${input.directory}, max age: ${input.maxAgeDays} days`);
 
   // ... scan and delete logic ...
 
-  ctx.progress(100, 100, 'Cleanup complete');
   return { deleted: 42, freedBytes: 1024000 };
 });
 ```
