@@ -39,7 +39,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379' # loopback only: a password-less Redis must not face the network
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
@@ -58,6 +58,8 @@ Start the container:
 ```bash
 docker compose up -d redis
 ```
+
+Projects from `frontmcp create --target node --redis docker` already have `ci/docker-compose.yml`: it publishes Redis on `127.0.0.1:6379` only, runs the app with `NODE_ENV=production` by default (set `MCP_SESSION_SECRET` in `ci/.env.docker`), and `ci/Dockerfile` runs as the `node` user with a `/healthz` `HEALTHCHECK`.
 
 Verify the connection:
 

@@ -38,6 +38,8 @@ When running inside Docker, use `redis` (the service name) as `REDIS_HOST`, not 
 Projects created with `frontmcp create` include a `ci/.env.docker` file with Docker-specific values.
 </Tip>
 
+The compose file publishes Redis on `127.0.0.1:6379` only, so a server running on the host can reach it while other machines cannot. The `app` service runs the production image with `NODE_ENV=production` by default, which requires `MCP_SESSION_SECRET` (set it in `ci/.env.docker` or your shell; `openssl rand -hex 32`). The generated `ci/Dockerfile` runs as the unprivileged `node` user and declares a `HEALTHCHECK` against `/healthz`.
+
 ### Option 2: Local Installation
 
 ```bash

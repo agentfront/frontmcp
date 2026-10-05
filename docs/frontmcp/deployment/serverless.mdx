@@ -181,6 +181,7 @@ Projects created with `frontmcp create --target lambda` include a SAM template a
 ```bash
 npm run deploy  # Runs: cd ci && sam build && sam deploy
 ```
+The template runs the function with `NODE_ENV=production` and takes `MCP_SESSION_SECRET` as the `NoEcho` parameter `McpSessionSecret` (`sam deploy --parameter-overrides McpSessionSecret=$(openssl rand -hex 32)`).
 </Tip>
 
 1. Build your project:
