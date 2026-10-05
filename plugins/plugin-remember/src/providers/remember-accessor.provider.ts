@@ -250,7 +250,13 @@ export class RememberAccessor {
       ? await encryptAndSerialize(entry, this.getKeySource(scope))
       : JSON.stringify(entry);
 
-    const storageTtl = expiresAt !== undefined ? remainingSeconds(expiresAt, now) : undefined;
+    const writtenAt = Date.now();
+    if (expiresAt !== undefined && expiresAt <= writtenAt) {
+      await this.store.delete(storageKey);
+      return false;
+    }
+
+    const storageTtl = expiresAt !== undefined ? remainingSeconds(expiresAt, writtenAt) : undefined;
     await this.store.setValue(storageKey, serialized, storageTtl);
     return true;
   }
