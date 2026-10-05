@@ -7,6 +7,7 @@ tags: [telemetry, plugin, hooks, cache, audit]
 features:
   - 'Plugin hooks can access toolCtx.telemetry to add events to the active span'
   - 'Events from plugins appear in the same trace as the tool execution'
+  - "One `@ToolHook.Around('execute')` hook records success and failure: the flow state has no `error` key, and a `Did` hook runs only after a successful execute"
   - 'Graceful degradation when observability is not enabled'
 ---
 
@@ -18,7 +19,7 @@ Add telemetry events from a custom plugin's hooks. Events appear on the tool exe
 
 ```typescript
 // src/plugins/audit.plugin.ts
-import { DynamicPlugin, Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+import { DynamicPlugin, FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
 
 @Plugin({
   name: 'audit',
@@ -26,33 +27,35 @@ import { DynamicPlugin, Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
   providers: [],
 })
 export default class AuditPlugin extends DynamicPlugin<{ enabled: boolean }> {
-  @ToolHook.Will('execute')
-  willExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): void {
-    const toolCtx = flowCtx.state.toolContext;
-    if (!toolCtx) return;
+  // One Around hook sees both outcomes: a Did hook runs only after a successful execute
+  @ToolHook.Around('execute')
+  async auditExecution(flowCtx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<void>): Promise<void> {
+    const toolCtx = flowCtx.state.required.toolContext;
 
     // Add audit event to the tool's execution span
+    this.addAuditEvent(flowCtx, 'audit.pre-execution', {
+      tool: flowCtx.state.required.input.name,
+      user: toolCtx.authInfo.clientId ?? 'anonymous',
+    });
+
     try {
-      toolCtx.telemetry?.addEvent('audit.pre-execution', {
-        tool: flowCtx.state.input?.name ?? 'unknown',
-        user: toolCtx.context?.authInfo?.clientId ?? 'anonymous',
-      });
-    } catch {
-      // telemetry may not be available if observability is disabled
+      await next();
+      this.addAuditEvent(flowCtx, 'audit.post-execution', { success: true });
+    } catch (error) {
+      this.addAuditEvent(flowCtx, 'audit.post-execution', { success: false });
+      throw error;
     }
   }
 
-  @ToolHook.Did('execute')
-  didExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): void {
-    const toolCtx = flowCtx.state.toolContext;
-    if (!toolCtx) return;
-
+  private addAuditEvent(
+    flowCtx: FlowCtxOf<'tools:call-tool'>,
+    name: string,
+    attributes: Record<string, string | boolean>,
+  ): void {
     try {
-      toolCtx.telemetry?.addEvent('audit.post-execution', {
-        success: !flowCtx.state.error,
-      });
+      flowCtx.state.required.toolContext.telemetry.addEvent(name, attributes);
     } catch {
-      // graceful degradation
+      // telemetry throws when observability is not installed or tracing is disabled
     }
   }
 }
@@ -61,9 +64,13 @@ export default class AuditPlugin extends DynamicPlugin<{ enabled: boolean }> {
 ```typescript
 // src/server.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
+import { MyApp } from './my.app';
 import AuditPlugin from './plugins/audit.plugin';
 
 @FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
   plugins: [AuditPlugin.init({ enabled: true })],
   observability: true,
 })
@@ -85,6 +92,7 @@ tool my_tool
 
 - Plugin hooks can access toolCtx.telemetry to add events to the active span
 - Events from plugins appear in the same trace as the tool execution
+- One `@ToolHook.Around('execute')` hook records success and failure: the flow state has no `error` key, and a `Did` hook runs only after a successful execute
 - Graceful degradation when observability is not enabled
 
 ## Related
