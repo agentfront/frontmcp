@@ -32,7 +32,7 @@ class Server {}
 To call `this.telemetry` from TypeScript, also import the package where you use it (or once in any compiled file). Its type is a `declare module '@frontmcp/sdk'` augmentation that TypeScript sees only when the package is part of the compilation:
 
 ```typescript
-import type {} from '@frontmcp/observability'; // declares this.telemetry on tool, resource and agent contexts
+import type {} from '@frontmcp/observability'; // declares this.telemetry on tool, resource, prompt and agent contexts
 ```
 
 When enabled:

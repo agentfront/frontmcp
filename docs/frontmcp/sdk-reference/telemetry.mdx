@@ -14,7 +14,7 @@ Requires `@frontmcp/observability` installed and `observability` config enabled.
 
 ## Typing `this.telemetry`
 
-The `observability` config installs `this.telemetry` at runtime. Its type is declared by `@frontmcp/observability`, as a module augmentation of `ExecutionContextBase`:
+The `observability` config installs `this.telemetry` at runtime on `ExecutionContextBase`, which tool, resource and agent contexts extend, and on `PromptContext`, which does not extend it. Its type is declared by `@frontmcp/observability`, as a module augmentation of the same two classes:
 
 ```typescript
 // @frontmcp/observability: src/telemetry/telemetry.context-extension.ts
@@ -22,6 +22,10 @@ import type { TelemetryAccessor } from './telemetry.accessor';
 
 declare module '@frontmcp/sdk' {
   interface ExecutionContextBase {
+    readonly telemetry: TelemetryAccessor;
+  }
+
+  interface PromptContext {
     readonly telemetry: TelemetryAccessor;
   }
 }
@@ -42,14 +46,17 @@ class LookupTool extends ToolContext {
 }
 ```
 
-`PromptContext` does not extend `ExecutionContextBase`, so the augmentation does not type `this.telemetry` in a prompt, although the property is installed there too. Declare it on `PromptContext` yourself:
+The same import types `this.telemetry` in a prompt:
 
 ```typescript
-import type { TelemetryAccessor } from '@frontmcp/observability';
+import { Prompt, PromptContext } from '@frontmcp/sdk';
+import type {} from '@frontmcp/observability'; // declares this.telemetry
 
-declare module '@frontmcp/sdk' {
-  interface PromptContext {
-    readonly telemetry: TelemetryAccessor;
+@Prompt({ name: 'summarize', arguments: [{ name: 'topic', required: true }] })
+class SummarizePrompt extends PromptContext {
+  async execute({ topic }: Record<string, string>) {
+    this.telemetry.addEvent('prompt-built', { topic });
+    return `Summarize what we know about ${topic}.`;
   }
 }
 ```

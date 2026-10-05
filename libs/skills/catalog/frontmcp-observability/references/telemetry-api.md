@@ -10,20 +10,24 @@ Every execution context (tools, resources, prompts, agents) gets a `this.telemet
 
 ## Typing `this.telemetry`
 
-`observability: true` installs `this.telemetry` at runtime, but its type comes from `@frontmcp/observability`: the package declares it on `ExecutionContextBase` with a `declare module '@frontmcp/sdk'` augmentation, which TypeScript applies only when the package is part of the compilation. Without it, `this.telemetry` fails with `Property 'telemetry' does not exist`. Import the package in the file that uses `this.telemetry`, or once in any file the project compiles (such as the server entry). A type-only import is enough and is erased at runtime:
+`observability: true` installs `this.telemetry` at runtime, but its type comes from `@frontmcp/observability`: the package declares it on `ExecutionContextBase` and on `PromptContext` (which does not extend `ExecutionContextBase`) with a `declare module '@frontmcp/sdk'` augmentation, which TypeScript applies only when the package is part of the compilation. Without it, `this.telemetry` fails with `Property 'telemetry' does not exist`. Import the package in the file that uses `this.telemetry`, or once in any file the project compiles (such as the server entry). A type-only import is enough and is erased at runtime:
 
 ```typescript
 import type {} from '@frontmcp/observability'; // declares this.telemetry
 ```
 
-`PromptContext` does not extend `ExecutionContextBase`, so a prompt needs its own declaration (the property is installed there at runtime too):
+The same import types `this.telemetry` in a prompt:
 
 ```typescript
-import type { TelemetryAccessor } from '@frontmcp/observability';
+import { Prompt, PromptContext } from '@frontmcp/sdk';
 
-declare module '@frontmcp/sdk' {
-  interface PromptContext {
-    readonly telemetry: TelemetryAccessor;
+import type {} from '@frontmcp/observability'; // declares this.telemetry
+
+@Prompt({ name: 'summarize', arguments: [{ name: 'topic', required: true }] })
+class SummarizePrompt extends PromptContext {
+  async execute({ topic }: Record<string, string>) {
+    this.telemetry.addEvent('prompt-built', { topic });
+    return `Summarize what we know about ${topic}.`;
   }
 }
 ```
@@ -190,6 +194,10 @@ interface TelemetryCounter {
 ```
 
 ```typescript
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
+import type {} from '@frontmcp/observability'; // declares this.telemetry
+
 @Tool({ name: 'process_widget', inputSchema: { id: z.string() } })
 class ProcessWidgetTool extends ToolContext {
   async execute({ id }: { id: string }) {
