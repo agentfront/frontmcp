@@ -1912,9 +1912,10 @@
               "tags": ["development", "plugin", "configurable", "dynamic"],
               "features": [
                 "Extending `DynamicPlugin<TOptions, TInput>` for runtime-configurable plugins",
-                "Implementing `static dynamicProviders()` to create providers from the input options",
-                "Using `TInput` with optional fields and applying defaults in the constructor",
+                "Implementing `static dynamicProviders()` to return a named factory provider built from the input options",
+                "Using `TInput` with optional fields and resolving defaults in one helper shared by the constructor and `dynamicProviders()`",
                 "Extending decorator metadata via `declare global { interface ExtendFrontMcpToolMetadata }`",
+                "Reading the custom metadata in a `@ToolHook.Did` hook that receives the flow context (`FlowCtxOf`)",
                 "Augmenting both `ExecutionContextBase` and `PromptContext` for full context extension coverage",
                 "Registering the plugin with `MyPlugin.init({ ... })` in the `plugins` array"
               ]
@@ -1926,10 +1927,11 @@
               "tags": ["development", "sdk", "plugin", "context", "extension"],
               "features": [
                 "Defining a typed DI token with `Token<T> = Symbol('...')` in a dedicated symbols file",
-                "Module augmentation via `declare module '@frontmcp/sdk'` to add `readonly auditLog` to `ExecutionContextBase`",
+                "Binding the token with a named factory provider and listing that same definition in `providers` and `exports`",
+                "Module augmentation via `declare module '@frontmcp/sdk'` to add `readonly auditLog` to `ExecutionContextBase` and `PromptContext`",
                 "Registering `contextExtensions` in `@Plugin` metadata with `property`, `token`, and `errorMessage`",
                 "Side-effect import of the context extension file in both the plugin and the barrel export",
-                "Accessing the extended property (`this.auditLog`) in tool execution contexts"
+                "Accessing the extended property (`this.auditLog`) in a tool, with the caller identity from `this.auth.user.sub`"
               ]
             }
           ]
