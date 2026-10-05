@@ -75,16 +75,19 @@ tool analyze_data
 
 ## Usage in Plugins
 
-External plugins use the same `this.telemetry` API. Events appear on the parent tool/resource span:
+External plugins use the same `telemetry` API through the tool's context. Events appear on the parent tool/resource span. The `telemetry` getter throws when `ObservabilityPlugin` is installed with tracing disabled, so a truthiness check such as `if (toolCtx?.telemetry)` does not guard it; wrap the call instead:
 
 ```typescript
-@Plugin({ name: 'my-audit-plugin', contextExtensions: [...] })
-class AuditPlugin extends DynamicPlugin<AuditOptions> {
+import { Plugin, ToolHook, type FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({ name: 'my-audit-plugin' })
+export default class AuditPlugin {
   @ToolHook.Will('execute')
   willExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): void {
-    const toolCtx = flowCtx.state.toolContext;
-    if (toolCtx?.telemetry) {
-      toolCtx.telemetry.addEvent('audit.pre-check', { policy: 'strict' });
+    try {
+      flowCtx.state.required.toolContext.telemetry.addEvent('audit.pre-check', { policy: 'strict' });
+    } catch {
+      // telemetry throws when observability is not installed or tracing is disabled
     }
   }
 }
