@@ -105,6 +105,7 @@ transport: {
 - `distributedMode: 'auto'` — auto-detect based on whether Redis is configured
 - `distributedMode: true` — force distributed mode (requires Redis)
 - `distributedMode: false` — single-instance mode (in-memory sessions)
+- `providerCaching` — keep `CONTEXT`-scoped provider instances for a verified session across its requests (default `true`, `false` in distributed mode); `false` builds them once per request. It applies to the providers of the server and of every app, plugin and agent
 
 ## Event Store (SSE Resumability)
 
