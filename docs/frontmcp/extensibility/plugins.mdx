@@ -431,14 +431,13 @@ declare global {
 }
 ```
 
-Tools can then use this metadata:
+Tools then set the field at the top level of their `@Tool` options:
 
 ```ts
 @Tool({
   name: 'my-tool',
-  metadata: {
-    cache: { ttl: 3600 },
-  },
+  inputSchema: { query: z.string() },
+  cache: { ttl: 3600 },
 })
 ```
 

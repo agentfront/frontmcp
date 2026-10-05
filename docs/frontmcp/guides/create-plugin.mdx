@@ -463,7 +463,7 @@ async myHook(flowCtx: FlowCtxOf<'tools:call-tool'>) {
   const { tool: requiredTool } = flowCtx.state.required;
 
   // Set state values
-  flowCtx.state.rawOutput = myValue;
+  flowCtx.state.set('rawOutput', myValue);
 
   // Add metadata to the result's own _meta (never to the tool's data)
   flowCtx.state.set('resultMeta', { ...flowCtx.state.resultMeta, traced: true });
@@ -483,17 +483,19 @@ async checkCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
   const { tool, toolContext } = flowCtx.state;
   if (!tool || !toolContext) return;
 
+  let cached: unknown;
   try {
-    const cacheStore = this.get(CacheStoreToken);
-    const cached = await cacheStore.getValue(key);
-    if (cached !== undefined) {
-      flowCtx.state.rawOutput = cached;
-      toolContext.respond(cached);
-    }
+    cached = await this.get(CacheStoreToken).getValue(`${tool.fullName}:${JSON.stringify(toolContext.input)}`);
   } catch (error) {
-    // Log but don't fail - cache miss is acceptable
-    this.logger?.warn('Cache read failed, continuing without cache', { error });
-    // Let execution continue normally
+    // Log but don't fail - a cache miss is acceptable, so the tool runs
+    this.get(FrontMcpLogger).warn('Cache read failed, continuing without cache', { error });
+    return;
+  }
+
+  if (cached !== undefined) {
+    flowCtx.state.set('rawOutput', cached);
+    // respond() ends the flow by throwing, so keep it outside the try block
+    toolContext.respond(cached);
   }
 }
 ```
