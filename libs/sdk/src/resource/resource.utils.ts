@@ -10,6 +10,7 @@ import {
   ResourceKind,
   ResourceTemplateKind,
   type ResourceEntry,
+  type ResourceExternalRecord,
   type ResourceMetadata,
   type ResourceRecord,
   type ResourceTemplateMetadata,
@@ -208,6 +209,13 @@ export function isResourceTemplate(item: any): boolean {
   }
 
   return false;
+}
+
+/** True for a record whose resources are loaded from a package or a remote server when its registry starts. */
+export function isExternalResourceRecord(
+  record: ResourceRecord | ResourceTemplateRecord,
+): record is ResourceExternalRecord {
+  return record.kind === ResourceKind.ESM || record.kind === ResourceKind.REMOTE;
 }
 
 /**

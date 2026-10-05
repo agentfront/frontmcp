@@ -39,6 +39,7 @@ import {
   FrontMcpToolTokens,
   FrontMcpWorkflowTokens,
 } from '../tokens';
+import { isExternalEntryRecord } from '../utils/external-entry.utils';
 
 /**
  * Check if an object has metadata for a given token, handling both Symbol() and Symbol.for()
@@ -56,13 +57,6 @@ function hasMetadataCompat(token: symbol, target: object): boolean {
 
 /** A class reference; declared in this package so published declarations name it from here, not from a monorepo path. */
 export interface AnnotatedClass extends Type {}
-
-/** True for the record a `.esm()` / `.remote()` factory returns, e.g. `Tool.esm('@acme/tools', 'echo')`. */
-function isEsmOrRemoteEntry(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null) return false;
-  const entry = value as Record<string, unknown>;
-  return (entry['kind'] === 'ESM' || entry['kind'] === 'REMOTE') && typeof entry['targetName'] === 'string';
-}
 
 export const annotatedFrontMcpAppSchema = z.custom<AnnotatedClass>(
   (v): v is AnnotatedClass => {
@@ -191,7 +185,7 @@ export const annotatedFrontMcpToolsSchema = z.custom<AnnotatedClass | string | T
     if (typeof v === 'string') {
       return isPackageSpecifier(v);
     }
-    if (isEsmOrRemoteEntry(v)) {
+    if (isExternalEntryRecord(v)) {
       return true;
     }
     return (
@@ -209,7 +203,7 @@ export const annotatedFrontMcpResourcesSchema = z.custom<
   AnnotatedClass | ResourceEsmTargetRecord | ResourceRemoteRecord
 >(
   (v): v is AnnotatedClass | ResourceEsmTargetRecord | ResourceRemoteRecord => {
-    if (isEsmOrRemoteEntry(v)) {
+    if (isExternalEntryRecord(v)) {
       return true;
     }
     return (
@@ -232,7 +226,7 @@ export const annotatedFrontMcpResourcesSchema = z.custom<
 
 export const annotatedFrontMcpPromptsSchema = z.custom<AnnotatedClass | PromptEsmTargetRecord | PromptRemoteRecord>(
   (v): v is AnnotatedClass | PromptEsmTargetRecord | PromptRemoteRecord => {
-    if (isEsmOrRemoteEntry(v)) {
+    if (isExternalEntryRecord(v)) {
       return true;
     }
     return (
@@ -272,7 +266,7 @@ export const annotatedFrontMcpAgentsSchema = z.custom<AgentType>(
       // For backwards compatibility, allow any function for now
       return true;
     }
-    if (isEsmOrRemoteEntry(v)) {
+    if (isExternalEntryRecord(v)) {
       return true;
     }
     // Check for object-based configuration
@@ -297,7 +291,7 @@ export const annotatedFrontMcpAgentsSchema = z.custom<AgentType>(
 
 export const annotatedFrontMcpJobsSchema = z.custom<AnnotatedClass | JobEsmTargetRecord | JobRemoteRecord>(
   (v): v is AnnotatedClass | JobEsmTargetRecord | JobRemoteRecord => {
-    if (isEsmOrRemoteEntry(v)) {
+    if (isExternalEntryRecord(v)) {
       return true;
     }
     if (typeof v === 'function') {
@@ -335,7 +329,7 @@ export const annotatedFrontMcpWorkflowsSchema = z.custom<AnnotatedClass>(
 
 export const annotatedFrontMcpSkillsSchema = z.custom<AnnotatedClass | SkillEsmTargetRecord | SkillRemoteRecord>(
   (v): v is AnnotatedClass | SkillEsmTargetRecord | SkillRemoteRecord => {
-    if (isEsmOrRemoteEntry(v)) {
+    if (isExternalEntryRecord(v)) {
       return true;
     }
     // Check for class-based @Skill decorator

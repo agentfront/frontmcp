@@ -89,6 +89,7 @@ function promptRemote(url: string, targetName: string, options?: RemoteOptions<P
     targetName,
     transportOptions: options?.transportOptions,
     remoteAuth: options?.remoteAuth,
+    options,
     metadata: {
       name: targetName,
       description: `Remote prompt "${targetName}" from ${url}`,

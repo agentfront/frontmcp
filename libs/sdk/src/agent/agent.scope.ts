@@ -28,7 +28,7 @@ import { Scope } from '../scope';
 import CallToolFlow from '../tool/flows/call-tool.flow';
 import { ToolInstance } from '../tool/tool.instance';
 import ToolRegistry from '../tool/tool.registry';
-import { normalizeTool } from '../tool/tool.utils';
+import { isExternalToolRecord, normalizeTool } from '../tool/tool.utils';
 import AgentRegistry from './agent.registry';
 import CallAgentFlow from './flows/call-agent.flow';
 
@@ -193,6 +193,10 @@ export class AgentScope {
     for (const toolType of toolTypes) {
       try {
         const record = normalizeTool(toolType);
+        if (isExternalToolRecord(record)) {
+          await this.agentTools.registerExternalTools([record]);
+          continue;
+        }
         const toolInstance = new ToolInstance(record, this.agentProviders, this.agentOwner);
         await toolInstance.ready;
         this.agentTools.registerToolInstance(toolInstance);

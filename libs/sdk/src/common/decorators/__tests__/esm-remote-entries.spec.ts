@@ -1,6 +1,9 @@
 import 'reflect-metadata';
 
+import { EsmModuleLoader } from '../../../esm-loader/esm-module-loader';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
+import { McpClientService } from '../../../remote-mcp/mcp-client.service';
+import type { McpClientConnection } from '../../../remote-mcp/mcp-client.types';
 import { type FrontMcpConfigInput } from '../../metadata';
 import { FrontMcpLocalAppTokens, FrontMcpTokens } from '../../tokens';
 import { LogLevel } from '../../types';
@@ -50,15 +53,26 @@ class ExternalEntriesApp {}
 })
 class ExternalEntriesServer {}
 
+@App({
+  name: 'loaded-entries',
+  tools: [esmTool, remoteTool],
+  resources: [esmResource, remoteResource],
+  prompts: [esmPrompt, remotePrompt],
+})
+class LoadedEntriesApp {}
+
 const directConfig: FrontMcpConfigInput = {
   info: { name: 'external-entries-direct', version: '1.0.0' },
-  apps: [ExternalEntriesApp],
-  tools: [Tool.esm('@acme/server-tools@^1.0.0', 'lookup'), Tool.remote(REMOTE_URL, 'translate')],
-  resources: [Resource.esm('@acme/server-tools@^1.0.0', 'quota'), Resource.remote(REMOTE_URL, 'uptime')],
+  apps: [LoadedEntriesApp],
+  tools: [Tool.esm(TOOLS_PACKAGE, 'lookup'), Tool.remote(REMOTE_URL, 'translate')],
+  resources: [Resource.esm(TOOLS_PACKAGE, 'quota'), Resource.remote(REMOTE_URL, 'uptime')],
   skills: [Skill.esm('@acme/skills@^1.0.0', 'rollback'), Skill.remote(REMOTE_URL, 'incident-review')],
   jobs: { enabled: true },
   logging: { level: LogLevel.Off },
 };
+
+const execute = async () => ({ content: [] });
+const read = async (uri: string) => ({ contents: [{ uri, text: 'ok' }] });
 
 describe('.esm() and .remote() entries in decorator arrays', () => {
   it('are kept by @App for every entry kind', () => {
@@ -79,10 +93,61 @@ describe('.esm() and .remote() entries in decorator arrays', () => {
     expect(serverEntries(FrontMcpTokens.resources)).toEqual([esmResource, remoteResource]);
     expect(serverEntries(FrontMcpTokens.skills)).toEqual([esmSkill, remoteSkill]);
   });
+});
 
-  it('are accepted by the registries when a server starts', async () => {
+describe('.esm() and .remote() entries at startup', () => {
+  beforeEach(() => {
+    jest.spyOn(EsmModuleLoader.prototype, 'load').mockResolvedValue({
+      manifest: {
+        name: '@acme/tools',
+        version: '1.0.0',
+        tools: [
+          { name: 'echo', execute },
+          { name: 'lookup', execute },
+        ],
+        resources: [
+          { name: 'status', uri: 'acme://status', read },
+          { name: 'quota', uri: 'acme://quota', read },
+        ],
+        prompts: [{ name: 'greeting', execute: async () => ({ messages: [] }) }],
+      },
+      resolvedVersion: '1.0.0',
+      source: 'cache',
+      loadedAt: 0,
+      rawModule: {},
+    });
+    jest
+      .spyOn(McpClientService.prototype, 'connect')
+      .mockImplementation(async () => ({ status: 'connected' }) as unknown as McpClientConnection);
+    jest.spyOn(McpClientService.prototype, 'discoverCapabilities').mockResolvedValue({
+      tools: [
+        { name: 'search', inputSchema: { type: 'object' } },
+        { name: 'translate', inputSchema: { type: 'object' } },
+      ],
+      resources: [
+        { name: 'system-health', uri: 'remote://health' },
+        { name: 'uptime', uri: 'remote://uptime' },
+      ],
+      resourceTemplates: [],
+      prompts: [{ name: 'code-review' }],
+      fetchedAt: new Date(),
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('load the tools, resources and prompts they name', async () => {
     const server = await FrontMcpInstance.createDirect(directConfig);
 
+    const tools = (await server.listTools()).tools.map((tool) => tool.name);
+    const resources = (await server.listResources()).resources.map((resource) => resource.name);
+    const prompts = (await server.listPrompts()).prompts.map((prompt) => prompt.name);
     await server.dispose();
+
+    expect(tools).toEqual(expect.arrayContaining(['echo', 'search', 'lookup', 'translate']));
+    expect(resources).toEqual(expect.arrayContaining(['status', 'system-health', 'quota', 'uptime']));
+    expect(prompts).toEqual(expect.arrayContaining(['greeting', 'code-review']));
   });
 });
