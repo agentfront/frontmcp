@@ -1,15 +1,15 @@
 /**
  * Auth Provider Detection Tests
  */
+import { assertDefined } from '../../__test-utils__/assertion.helpers';
 import type { AuthOptions } from '../../options/schema';
 import {
+  appRequiresOrchestration,
   deriveProviderId,
   detectAuthProviders,
-  appRequiresOrchestration,
-  getProviderScopes,
   getProviderApps,
+  getProviderScopes,
 } from '../auth-provider-detection';
-import { assertDefined } from '../../__test-utils__/assertion.helpers';
 
 // ============================================
 // Test Fixtures
@@ -227,13 +227,31 @@ describe('auth-provider-detection', () => {
       );
     });
 
-    it('should produce warning for public parent + app providers', () => {
+    it('refuses a protected app on the shared endpoint of a public server, which would not enforce it (#766)', () => {
       const parent = publicAuth();
       const apps = [{ id: 'app1', name: 'App1', auth: transparentAuth('https://auth.child.com') }];
       const result = detectAuthProviders(parent, apps);
-      expect(result.warnings.length).toBeGreaterThan(0);
-      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('public mode')]));
-      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('local or remote mode')]));
+      expect(result.validationErrors).toEqual([
+        expect.stringContaining('App-level auth is not enforced on the shared endpoint of a server in public mode'),
+      ]);
+      expect(result.validationErrors[0]).toContain('app1');
+      expect(result.validationErrors[0]).toContain('standalone: true');
+    });
+
+    it('refuses a protected app under a static server too, and when the server names no auth', () => {
+      const apps = [{ id: 'app1', name: 'App1', auth: transparentAuth('https://auth.child.com') }];
+      const staticParent = { mode: 'static', token: 'secret' } as unknown as AuthOptions;
+      expect(detectAuthProviders(staticParent, apps).validationErrors).toHaveLength(1);
+      expect(detectAuthProviders(undefined, apps).validationErrors).toHaveLength(1);
+    });
+
+    it('lets a public app sit under a public server, and a protected app under a local server', () => {
+      const publicApps = [{ id: 'app1', name: 'App1', auth: publicAuth() }];
+      expect(detectAuthProviders(publicAuth(), publicApps).validationErrors).toEqual([]);
+
+      const localParent = { mode: 'local' } as AuthOptions;
+      const protectedApps = [{ id: 'app1', name: 'App1', auth: transparentAuth('https://auth.child.com') }];
+      expect(detectAuthProviders(localParent, protectedApps).validationErrors).toEqual([]);
     });
 
     it('should not produce warning for single public provider', () => {

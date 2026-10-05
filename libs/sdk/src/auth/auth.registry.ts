@@ -4,6 +4,7 @@ import 'reflect-metadata';
 import { detectAuthProviders, type AppAuthInfo, type AuthProviderDetectionResult } from '@frontmcp/auth';
 import { tokenName, type Token } from '@frontmcp/di';
 
+import { collectAppMetadata } from '../app/app.utils';
 import {
   AuthProviderKind,
   FrontMcpAuth,
@@ -143,15 +144,11 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
       };
     }
 
-    // Class type: check for metadata decorator
+    // Class type: the @App decorator stores each field under its own metadata token
     if (typeof app === 'function') {
-      const metadata = Reflect.getMetadata('frontmcp:app', app);
-      if (metadata) {
-        return {
-          id: metadata.id,
-          name: metadata.name,
-          auth: metadata.auth,
-        };
+      const metadata = collectAppMetadata(app);
+      if (metadata.name) {
+        return { id: metadata.id, name: metadata.name, auth: metadata.auth as AuthOptions | undefined };
       }
     }
 
@@ -191,10 +188,11 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
       }
 
       // Throw with first error (most important)
+      const parentMode = isTransparentMode(this.parsedOptions) ? 'transparent' : this.parsedOptions.mode;
       throw new AuthConfigurationError(`Invalid auth configuration: ${validationErrors[0]}`, {
         errors: validationErrors,
         suggestion:
-          `1. Change your parent auth mode from 'transparent' to 'local' or 'remote'\n` +
+          `1. Change your parent auth mode from '${parentMode}' to 'local' or 'remote'\n` +
           `2. Example:\n` +
           `   auth: {\n` +
           `     mode: 'local', // or 'remote' with your provider config\n` +

@@ -129,7 +129,7 @@ class MyServer {}
 | `providers?`     | App-scoped DI providers                                                                                                            |
 | `authProviders?` | Named auth providers (e.g., GitHub, Google OAuth) separate from `auth`                                                             |
 | `adapters?`      | External source adapters (e.g., OpenAPI)                                                                                           |
-| `auth?`          | App-level auth config (overrides server default)                                                                                   |
+| `auth?`          | App-level auth; on the shared endpoint enforced only under a `local`/`remote` server (else use `standalone: true` or `splitByApp`) |
 | `standalone?`    | `boolean \| 'includeInParent'` — `true`: isolated scope, excluded. `'includeInParent'`: isolated scope but tools exposed in parent |
 | `jobs?`          | Background job definitions                                                                                                         |
 | `workflows?`     | Multi-step workflow definitions                                                                                                    |
