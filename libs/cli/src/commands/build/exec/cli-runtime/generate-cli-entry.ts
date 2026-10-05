@@ -1878,7 +1878,13 @@ ${selfContained ? `    // SEA mode: spawn the binary itself in daemon mode — a
     fs.closeSync(out);
     fs.closeSync(err);
 
-    var pidData = { pid: child.pid, startedAt: new Date().toISOString() };
+    var pidData = {
+      pid: child.pid,
+      name: ${JSON.stringify(appName)},
+      entry: ${selfContained ? 'process.execPath' : 'serverBundlePath'},
+      startedAt: new Date().toISOString(),
+      restartCount: 0
+    };
     if (usePort) {
       pidData.port = opts.port;
     } else {
