@@ -497,9 +497,11 @@ export default class GlobalLoggerPlugin {
 
 ### Accessing Other Apps (Server Scope)
 
-Server-scoped plugins can access other apps via `scope.apps`:
+Server-scoped plugins can access other apps through the scope's app registry. The flow a hook receives keeps its `scope` protected, so resolve `ScopeEntry` with `ctx.get()`, the flow's DI lookup:
 
 ```ts
+import { Plugin, ScopeEntry, ToolHook, type FlowCtxOf } from '@frontmcp/sdk';
+
 @Plugin({
   name: 'cross-app-plugin',
   scope: 'server',
@@ -508,7 +510,7 @@ export default class CrossAppPlugin {
   @ToolHook.Will('execute')
   async checkOtherApps(ctx: FlowCtxOf<'tools:call-tool'>) {
     // Access all registered apps
-    const apps = ctx.scope.apps.getApps();
+    const apps = ctx.get(ScopeEntry).apps.getApps();
 
     // Find a specific app by ID
     const otherApp = apps.find((a) => a.id === 'other-app-id');

@@ -16,7 +16,7 @@ import {
   type AppRecord,
   type EntryOwnerRef,
   type FrontMcpLogger,
-  type PluginEntry,
+  type PluginInstance,
   type PluginRegistryInterface,
   type ProviderRegistryInterface,
   type RemoteAppMetadata,
@@ -52,7 +52,7 @@ interface ScopeWithMcpClient {
  * Empty plugin registry for remote apps (remote apps don't have local plugins)
  */
 class EmptyPluginRegistry implements PluginRegistryInterface {
-  getPlugins(): PluginEntry[] {
+  getPlugins(): PluginInstance[] {
     return [];
   }
 

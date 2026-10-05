@@ -3,7 +3,6 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '../../common';
 import { JobNotAuthorizedError } from '../../errors';
 import { JobPermissionGuard } from '../job-permission.guard';
-import type { JobRegistryInterface } from '../job.registry';
 
 @Tool({
   name: 'remove_job',
@@ -19,8 +18,7 @@ import type { JobRegistryInterface } from '../job.registry';
 })
 export default class RemoveJobTool extends ToolContext {
   async execute(input: { name: string }) {
-    const scope = this.scope as unknown as { jobs?: JobRegistryInterface };
-    const jobRegistry = scope.jobs;
+    const jobRegistry = this.scope.jobs;
 
     if (!jobRegistry) {
       return this.fail(new Error('Jobs system is not enabled'));

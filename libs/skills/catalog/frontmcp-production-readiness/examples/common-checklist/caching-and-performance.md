@@ -82,9 +82,8 @@ export class GetWeatherTool extends ToolContext {
 // src/providers/db-connection.provider.ts
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export const DB_POOL = Symbol('DbPool');
-
-@Provider({ token: DB_POOL, scope: ProviderScope.GLOBAL })
+// The class is its own DI token: list it in `providers` and resolve it with `this.get(DbConnectionProvider)`
+@Provider({ name: 'DbConnectionProvider', scope: ProviderScope.GLOBAL })
 export class DbConnectionProvider {
   // Pool is created in the constructor — providers do not have onInit/onDestroy.
   private readonly pool: { query: Function; end: Function };

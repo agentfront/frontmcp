@@ -31,7 +31,7 @@ const prompt = prompts.findByName('code_review');
 Get all prompts (local + adopted).
 
 ```typescript
-getPrompts(includeHidden?: boolean): ReadonlyArray<PromptEntry>
+getPrompts(includeHidden?: boolean): PromptEntry[]
 ```
 
 | Parameter       | Type      | Default | Description            |
@@ -61,7 +61,7 @@ findByName(name: string): PromptEntry | undefined
 ```typescript
 const prompt = registry.findByName('code_review');
 if (prompt) {
-  console.log(`Found: ${prompt.description}`);
+  console.log(`Found: ${prompt.metadata.description}`);
 }
 ```
 
@@ -70,7 +70,7 @@ if (prompt) {
 Find all prompts matching a name (when multiple exist).
 
 ```typescript
-findAllByName(name: string): ReadonlyArray<PromptEntry>
+findAllByName(name: string): PromptEntry[]
 ```
 
 **Example:**
@@ -79,36 +79,22 @@ findAllByName(name: string): ReadonlyArray<PromptEntry>
 // When multiple apps define 'greeting' prompt
 const prompts = registry.findAllByName('greeting');
 for (const prompt of prompts) {
-  console.log(`${prompt.qualifiedId}: ${prompt.description}`);
+  console.log(`${prompt.fullName}: ${prompt.metadata.description}`);
 }
-```
-
-### findByQualifiedName()
-
-Find a prompt by its fully qualified name.
-
-```typescript
-findByQualifiedName(qualifiedName: string): PromptEntry | undefined
-```
-
-**Example:**
-
-```typescript
-const prompt = registry.findByQualifiedName('my-app:code_review');
 ```
 
 ### getExported()
 
-Lookup a prompt by its exported (resolved) name.
+Lookup a prompt by its exported (resolved) name: the name [`exportResolvedNames(opts)`](#exportresolvednames) gives it, compared exactly.
 
 ```typescript
-getExported(name: string, opts?: { ignoreCase?: boolean }): PromptEntry | undefined
+getExported(name: string, opts?: PromptExportOptions): PromptEntry | undefined
 ```
 
 **Example:**
 
 ```typescript
-const prompt = registry.getExported('Code_Review');
+const prompt = registry.getExported('code_review');
 ```
 
 ### exportResolvedNames()
@@ -116,8 +102,10 @@ const prompt = registry.getExported('Code_Review');
 Produce unique, conflict-aware exported names.
 
 ```typescript
-exportResolvedNames(opts?: ExportResolvedNamesOptions): Map<string, PromptEntry>
+exportResolvedNames(opts?: PromptExportOptions): Array<{ name: string; instance: PromptEntry }>
 ```
+
+`PromptExportOptions` (not exported from `@frontmcp/sdk`) takes the same fields as the tool registry's [`ExportNameOptions`](/frontmcp/sdk-reference/registries/tool-registry#exportresolvednames): `case` (default `'snake'`), `maxLen` (default `64`), `prefixChildrenOnConflict` (default `true`) and `prefixSource` (default `'provider'`).
 
 **Example:**
 
@@ -132,7 +120,7 @@ const exportedNames = registry.exportResolvedNames();
 Get prompts defined inline (local only).
 
 ```typescript
-getInlinePrompts(): ReadonlyArray<PromptEntry>
+getInlinePrompts(): PromptEntry[]
 ```
 
 ### listAllInstances()
@@ -159,10 +147,10 @@ const appPrompts = registry.listByOwner('my-app');
 
 ### registerPromptInstance()
 
-Register a pre-constructed PromptInstance directly.
+Register a pre-constructed prompt entry directly.
 
 ```typescript
-registerPromptInstance(prompt: PromptInstance): void
+registerPromptInstance(prompt: PromptEntry): void
 ```
 
 <Note>
@@ -175,7 +163,7 @@ Subscribe to prompt change events.
 
 ```typescript
 subscribe(
-  opts: SubscribeOptions,
+  opts: { immediate?: boolean; filter?: (i: PromptEntry) => boolean },
   cb: (event: PromptChangeEvent) => void
 ): () => void
 ```
@@ -198,14 +186,14 @@ unsubscribe();
 Get MCP capabilities for prompts.
 
 ```typescript
-getCapabilities(): { listChanged: boolean }
+getCapabilities(): Partial<ServerCapabilities>
 ```
 
 **Example:**
 
 ```typescript
 const caps = registry.getCapabilities();
-// { listChanged: true }
+// { prompts: { listChanged: true } }
 ```
 
 ### hasAny()
@@ -221,7 +209,7 @@ hasAny(): boolean
 Adopt prompts from a child registry.
 
 ```typescript
-adoptFromChild(child: PromptRegistry, childOwner: Owner): void
+adoptFromChild(child: PromptRegistry, _childOwner: EntryOwnerRef): void
 ```
 
 ## Change Events
@@ -266,7 +254,7 @@ Arguments are validated when the prompt is called:
 
 ```typescript
 const entry = registry.findByName('code_review');
-// entry.arguments contains the argument definitions
+// entry?.metadata.arguments contains the argument definitions
 ```
 
 ## Related

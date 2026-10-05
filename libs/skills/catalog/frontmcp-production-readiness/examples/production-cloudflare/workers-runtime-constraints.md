@@ -44,7 +44,7 @@ export class TransformDataTool extends ToolContext {
     // Cross-platform crypto (Web Crypto under the hood)
     const id = randomUUID();
     const hash = sha256Hex(input.payload);
-    const encoded = base64urlEncode(input.payload);
+    const encoded = base64urlEncode(new TextEncoder().encode(input.payload));
 
     // Use this.fetch() — standard Fetch API, not node http
     const response = await this.fetch('https://api.example.com/transform', {
@@ -71,10 +71,9 @@ export class TransformDataTool extends ToolContext {
 // src/providers/kv-store.provider.ts
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export const KV_STORE = Symbol('KvStore');
-
 // Workers KV — no filesystem, no eval, no dynamic Function()
-@Provider({ token: KV_STORE, scope: ProviderScope.GLOBAL })
+// The class is its own DI token: list it in `providers` and resolve it with `this.get(KvStoreProvider)`
+@Provider({ name: 'KvStoreProvider', scope: ProviderScope.GLOBAL })
 export class KvStoreProvider {
   // Workers KV is bound via wrangler.toml, accessed from env
   async get(key: string): Promise<string | null> {

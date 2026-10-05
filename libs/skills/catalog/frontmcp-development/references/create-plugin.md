@@ -105,7 +105,7 @@ import { GreeterService } from './providers/my-greeter.provider';
 @Plugin({ name: 'greeter', exports: [GreeterService] })
 export default class GreeterPlugin extends DynamicPlugin<{ prefix: string }> {
   static override dynamicProviders(opts: { prefix: string }): ProviderType[] {
-    return [{ provide: GreeterService, useFactory: () => new GreeterService() }];
+    return [{ name: 'greeter-service', provide: GreeterService, useFactory: () => new GreeterService() }];
   }
 }
 ```
@@ -281,6 +281,7 @@ export default class MyPlugin extends DynamicPlugin<MyPluginOptions, MyPluginOpt
   static override dynamicProviders(options: MyPluginOptionsInput): ProviderType[] {
     return [
       {
+        name: 'my-service',
         provide: MyServiceToken,
         useFactory: () =>
           new MyService({

@@ -7,6 +7,8 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 
 ## Overview
 
+`scope.skills` is typed `SkillRegistryInterface`. `getInlineSkills()`, `adoptFromChild()` and `setExternalProvider()` are on the exported `SkillRegistry` class only: narrow with `instanceof SkillRegistry` to call them.
+
 ```typescript
 import { SkillRegistry } from '@frontmcp/sdk';
 
@@ -30,13 +32,15 @@ const skill = await skills.loadSkill('data-pipeline');
 Get all skills with optional filtering.
 
 ```typescript
-getSkills(options?: GetSkillsOptions): ReadonlyArray<SkillEntry>
+getSkills(options?: boolean | GetSkillsOptions): SkillEntry[]
 ```
 
-| Option          | Type                        | Description           |
-| --------------- | --------------------------- | --------------------- |
-| `includeHidden` | `boolean`                   | Include hidden skills |
-| `visibility`    | `'mcp' \| 'http' \| 'both'` | Filter by visibility  |
+A boolean is `includeHidden`.
+
+| Option          | Type                       | Description                                                                                                |
+| --------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `includeHidden` | `boolean`                  | Include hidden skills                                                                                      |
+| `visibility`    | `'mcp' \| 'http' \| 'all'` | Filter by visibility: `'mcp'` or `'http'` keeps that one and `'both'`; `'all'` (default) keeps every skill |
 
 **Example:**
 
@@ -53,25 +57,30 @@ const httpSkills = registry.getSkills({ visibility: 'http' });
 Search skills using TF-IDF text matching.
 
 ```typescript
-search(query: string, options?: SearchOptions): Promise<SearchResult[]>
+search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]>
 ```
 
-| Option       | Type                        | Description               |
-| ------------ | --------------------------- | ------------------------- |
-| `limit`      | `number`                    | Maximum results to return |
-| `minScore`   | `number`                    | Minimum relevance score   |
-| `visibility` | `'mcp' \| 'http' \| 'both'` | Filter by visibility      |
+| Option            | Type       | Description                                          |
+| ----------------- | ---------- | ---------------------------------------------------- |
+| `topK`            | `number`   | Maximum results to return                            |
+| `minScore`        | `number`   | Minimum similarity score (0-1)                       |
+| `tags`            | `string[]` | Only skills with these tags                          |
+| `tools`           | `string[]` | Only skills that reference these tools               |
+| `requireAllTools` | `boolean`  | Only skills whose referenced tools are all available |
+| `excludeIds`      | `string[]` | Skill ids to leave out                               |
+
+Each `SkillSearchResult` has the skill's `metadata`, its `score`, its `availableTools` and `missingTools`, and its `source` (`'local'` or `'external'`).
 
 **Example:**
 
 ```typescript
 const results = await registry.search('data analysis', {
-  limit: 10,
+  topK: 10,
   minScore: 0.5,
 });
 
 for (const result of results) {
-  console.log(`${result.skill.name}: ${result.score}`);
+  console.log(`${result.metadata.name}: ${result.score}`);
 }
 ```
 
@@ -80,15 +89,20 @@ for (const result of results) {
 Load skill content by ID/name with tool validation.
 
 ```typescript
-loadSkill(skillId: string): Promise<LoadedSkill>
+loadSkill(skillId: string): Promise<SkillLoadResult | undefined>
 ```
+
+Resolves `undefined` when no skill has that id or name.
 
 **Example:**
 
 ```typescript
-const skill = await registry.loadSkill('data-pipeline');
-console.log(skill.content); // Full skill content
-console.log(skill.tools);   // Validated tool references
+const loaded = await registry.loadSkill('data-pipeline');
+if (loaded) {
+  console.log(loaded.skill.instructions); // Full skill content
+  console.log(loaded.availableTools);     // Referenced tools that are registered
+  console.log(loaded.missingTools);       // Referenced tools that are not
+}
 ```
 
 ### listSkills()
@@ -96,14 +110,19 @@ console.log(skill.tools);   // Validated tool references
 List skills with pagination support.
 
 ```typescript
-listSkills(options?: ListOptions): Promise<SkillListResult>
+listSkills(options?: SkillListOptions): Promise<SkillListResult>
 ```
 
-| Option       | Type                        | Description          |
-| ------------ | --------------------------- | -------------------- |
-| `offset`     | `number`                    | Starting index       |
-| `limit`      | `number`                    | Maximum results      |
-| `visibility` | `'mcp' \| 'http' \| 'both'` | Filter by visibility |
+| Option          | Type                                  | Description                 |
+| --------------- | ------------------------------------- | --------------------------- |
+| `offset`        | `number`                              | Starting index              |
+| `limit`         | `number`                              | Maximum results             |
+| `tags`          | `string[]`                            | Only skills with these tags |
+| `sortBy`        | `'name' \| 'priority' \| 'createdAt'` | Sort field                  |
+| `sortOrder`     | `'asc' \| 'desc'`                     | Sort direction              |
+| `includeHidden` | `boolean`                             | Include hidden skills       |
+
+`SkillListResult` has the page's `skills` (their metadata), the `total` count and `hasMore`.
 
 **Example:**
 
@@ -114,7 +133,7 @@ const page = await registry.listSkills({
 });
 
 console.log(`Total: ${page.total}`);
-console.log(`Skills: ${page.items.length}`);
+console.log(`Skills: ${page.skills.length}`);
 ```
 
 ### count()
@@ -122,7 +141,7 @@ console.log(`Skills: ${page.items.length}`);
 Get total skill count.
 
 ```typescript
-count(options?: CountOptions): Promise<number>
+count(options?: { tags?: string[]; includeHidden?: boolean }): Promise<number>
 ```
 
 ### findByName()
@@ -143,10 +162,10 @@ findByQualifiedName(qualifiedName: string): SkillEntry | undefined
 
 ### getInlineSkills()
 
-Get skills defined inline (local only).
+Get skills defined inline (local only). On the `SkillRegistry` class only.
 
 ```typescript
-getInlineSkills(): ReadonlyArray<SkillEntry>
+getInlineSkills(): SkillInstance[]
 ```
 
 ### validateAllTools()
@@ -154,16 +173,26 @@ getInlineSkills(): ReadonlyArray<SkillEntry>
 Validate all skills' tool references against the ToolRegistry.
 
 ```typescript
-validateAllTools(): ValidationResult
+validateAllTools(): Promise<SkillValidationReport>
 ```
 
 **Example:**
 
 ```typescript
-const result = registry.validateAllTools();
-if (!result.valid) {
-  for (const error of result.errors) {
-    console.error(`${error.skill}: Missing tool ${error.tool}`);
+import { SkillValidationError, type SkillValidationReport } from '@frontmcp/sdk';
+
+let report: SkillValidationReport;
+try {
+  report = await registry.validateAllTools();
+} catch (error) {
+  // A 'strict' skill that references a missing tool throws, unless failOnInvalidSkills is false
+  if (!(error instanceof SkillValidationError)) throw error;
+  report = error.report;
+}
+
+for (const result of report.results) {
+  if (result.status === 'failed') {
+    console.error(`${result.skillName}: missing tools ${result.missingTools.join(', ')}`);
   }
 }
 ```
@@ -174,7 +203,7 @@ Subscribe to skill change events.
 
 ```typescript
 subscribe(
-  opts: SubscribeOptions,
+  opts: { immediate?: boolean; filter?: (skill: SkillEntry) => boolean },
   cb: (event: SkillChangeEvent) => void
 ): () => void
 ```
@@ -183,10 +212,10 @@ subscribe(
 
 ### getCapabilities()
 
-Get MCP capabilities for skills.
+Get MCP capabilities for skills: the [SEP-2640](/frontmcp/servers/skills) extension (`io.modelcontextprotocol/skills`) under `experimental` and `extensions` when the registry serves skills, and `{}` otherwise.
 
 ```typescript
-getCapabilities(): { listChanged: boolean }
+getCapabilities(): Partial<ServerCapabilities>
 ```
 
 ### hasAny()
@@ -199,10 +228,10 @@ hasAny(): boolean
 
 ### adoptFromChild()
 
-Adopt skills from a child registry.
+Adopt skills from a child registry. On the `SkillRegistry` class only.
 
 ```typescript
-adoptFromChild(child: SkillRegistry, childOwner: Owner): void
+adoptFromChild(child: SkillRegistry, _childOwner: EntryOwnerRef): Promise<void>
 ```
 
 When a child's skill is removed, the adopting registry stops serving it at once, including from its storage provider.
@@ -259,7 +288,7 @@ Skills can be synced to external storage for persistence:
 
 ### setExternalProvider()
 
-Configure an external storage provider.
+Configure an external storage provider. On the `SkillRegistry` class only. `@frontmcp/sdk` does not export `ExternalSkillProviderBase`.
 
 ```typescript
 setExternalProvider(provider: ExternalSkillProviderBase): void
@@ -267,21 +296,20 @@ setExternalProvider(provider: ExternalSkillProviderBase): void
 
 ### syncToExternal()
 
-Sync local skills to external storage.
+Sync local skills to external storage. Resolves `null` when no external provider is configured.
 
 ```typescript
-syncToExternal(): Promise<SyncResult>
+syncToExternal(): Promise<SyncResult | null>
 ```
 
 **Example:**
 
 ```typescript
-// Configure Redis-based storage
-registry.setExternalProvider(new RedisSkillProvider(redisClient));
-
 // Sync skills
 const result = await registry.syncToExternal();
-console.log(`Synced ${result.count} skills`);
+if (result) {
+  console.log(`Added ${result.added.length}, updated ${result.updated.length}, removed ${result.removed.length}`);
+}
 ```
 
 ### hasExternalProvider()
@@ -304,12 +332,14 @@ getExternalProvider(): ExternalSkillProviderBase | undefined
 
 ```typescript
 interface SkillChangeEvent {
-  kind: 'added' | 'updated' | 'removed' | 'reset';
+  kind: 'added' | 'updated' | 'removed' | 'reset' | 'validated' | 'synced';
   changeScope: 'global' | 'session';
   version: number;
   snapshot: ReadonlyArray<SkillEntry>;
   sessionId?: string;
   relatedRequestId?: string;
+  validationReport?: SkillValidationReport;
+  syncResult?: SyncResult; // set on 'synced'
 }
 ```
 
@@ -353,12 +383,16 @@ Skills can have different visibility modes:
 ```typescript
 @Skill({
   name: 'internal-task',
+  description: 'Internal maintenance steps',
+  instructions: '# Internal task',
   visibility: 'mcp', // Only for MCP clients
 })
 class InternalTask extends SkillContext { }
 
 @Skill({
   name: 'public-api',
+  description: 'How to call the public API',
+  instructions: '# Public API',
   visibility: 'http', // Only for HTTP clients
 })
 class PublicAPI extends SkillContext { }
@@ -371,15 +405,18 @@ Skills can reference tools that must exist in the registry:
 ```typescript
 @Skill({
   name: 'data-pipeline',
+  description: 'Fetch, transform and save data',
+  instructions: '# Data pipeline',
   tools: ['fetch_data', 'transform', 'save_results'],
+  toolValidation: 'strict',
 })
 class DataPipeline extends SkillContext { }
 ```
 
-Validation modes:
+Validation modes (`toolValidation`):
 
-- **strict**: Fail if any tool is missing
-- **warn**: Log warning for missing tools
+- **strict**: The server refuses to start if a referenced tool is not registered (`validateAllTools()` throws `SkillValidationError`, unless the registry was created with `failOnInvalidSkills: false`)
+- **warn**: Log warning for missing tools (default)
 - **ignore**: Skip validation
 
 ## Related

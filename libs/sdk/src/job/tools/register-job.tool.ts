@@ -4,7 +4,6 @@ import { Tool, ToolContext } from '../../common';
 import type { ToolInputType, ToolOutputType } from '../../common/metadata/tool.metadata';
 import { JobKind } from '../../common/records/job.record';
 import { DynamicJobRegistrationDisabledError } from '../../errors';
-import type { JobRegistryInterface } from '../job.registry';
 
 @Tool({
   name: 'register_job',
@@ -32,8 +31,7 @@ export default class RegisterJobTool extends ToolContext {
     outputSchema?: Record<string, unknown>;
     tags?: string[];
   }) {
-    const scope = this.scope as unknown as { jobs?: JobRegistryInterface };
-    const jobRegistry = scope.jobs;
+    const jobRegistry = this.scope.jobs;
 
     if (!jobRegistry) {
       return this.fail(new Error('Jobs system is not enabled'));

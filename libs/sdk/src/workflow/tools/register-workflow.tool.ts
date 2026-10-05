@@ -3,7 +3,6 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '../../common';
 import { WorkflowKind } from '../../common/records/workflow.record';
 import { DynamicJobRegistrationDisabledError } from '../../errors';
-import type { WorkflowRegistryInterface } from '../workflow.registry';
 
 @Tool({
   name: 'register_workflow',
@@ -47,8 +46,7 @@ export default class RegisterWorkflowTool extends ToolContext {
     trigger?: 'manual' | 'webhook' | 'event';
     tags?: string[];
   }) {
-    const scope = this.scope as unknown as { workflows?: WorkflowRegistryInterface };
-    const workflowRegistry = scope.workflows;
+    const workflowRegistry = this.scope.workflows;
 
     if (!workflowRegistry) {
       return this.fail(new Error('Workflows system is not enabled'));

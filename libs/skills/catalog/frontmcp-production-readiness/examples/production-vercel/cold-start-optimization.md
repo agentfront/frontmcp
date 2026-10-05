@@ -29,32 +29,30 @@ Shows how to minimize cold start time by lazy-loading dependencies on first use,
 // src/providers/lazy-api-client.provider.ts
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export const API_CLIENT = Symbol('ApiClient');
-
 // Provider initializes lazily on first getClient() call — heavy SDK is
 // not imported at module scope, so cold starts stay fast.
-@Provider({ token: API_CLIENT, scope: ProviderScope.GLOBAL })
+// The class is its own DI token: list it in `providers` and resolve it with `this.get(LazyApiClientProvider)`
+@Provider({ name: 'LazyApiClientProvider', scope: ProviderScope.GLOBAL })
 export class LazyApiClientProvider {
   private clientPromise: Promise<unknown> | undefined;
 
   async getClient(): Promise<unknown> {
     if (!this.clientPromise) {
-      // Reset the cache from inside the async initializer so a transient
-      // import/init failure doesn't permanently poison `clientPromise` for
-      // every warm invocation that follows. The initializer itself owns the
-      // try/catch + rethrow, so callers see the original error.
-      const promise = (async () => {
-        try {
-          const { HeavySDK } = await import('heavy-third-party-sdk');
-          return new HeavySDK({ apiKey: process.env.API_KEY });
-        } catch (err) {
-          if (this.clientPromise === promise) this.clientPromise = undefined;
-          throw err;
-        }
-      })();
+      const promise = this.loadClient();
+      // Reset on failure so a transient import/init failure doesn't permanently
+      // poison `clientPromise` for every warm invocation that follows. Callers
+      // still see the original error through the returned promise.
+      promise.catch(() => {
+        if (this.clientPromise === promise) this.clientPromise = undefined;
+      });
       this.clientPromise = promise;
     }
     return this.clientPromise;
+  }
+
+  private async loadClient(): Promise<unknown> {
+    const { HeavySDK } = await import('heavy-third-party-sdk');
+    return new HeavySDK({ apiKey: process.env.API_KEY });
   }
 }
 ```

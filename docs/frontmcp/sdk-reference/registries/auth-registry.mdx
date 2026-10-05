@@ -55,7 +55,7 @@ const res = await auth.fetch('https://api.example.com/me');
 Get all auth provider entries.
 
 ```typescript
-getAuthProviders(): ReadonlyArray<AuthProviderEntry>
+getAuthProviders(): AuthProviderEntry[]
 ```
 
 **Example:**
@@ -63,7 +63,7 @@ getAuthProviders(): ReadonlyArray<AuthProviderEntry>
 ```typescript
 const providers = registry.getAuthProviders();
 for (const provider of providers) {
-  console.log(`Provider: ${provider.name} (${provider.mode})`);
+  console.log(`Provider: ${provider.metadata.name}`);
 }
 ```
 
@@ -162,15 +162,14 @@ class ProtectedTool extends ToolContext {
 
 ## Configuration Validation
 
-The registry validates auth configuration:
+The registry validates the auth configuration it detects across the scope's apps, and throws `AuthConfigurationError` on the first error in `detection.validationErrors`. A server in `transparent` mode passes tokens through unchanged, so it cannot host apps that declare their own auth providers:
 
 ```typescript
-// Invalid configuration throws
+// Throws AuthConfigurationError: BillingApp declares its own `auth`
 @FrontMcp({
-  auth: {
-    mode: 'local',
-    providers: [], // Error: No providers specified
-  },
+  info: { name: 'server', version: '1.0.0' },
+  apps: [BillingApp],
+  auth: { mode: 'transparent', provider: 'https://auth.example.com' },
 })
 class InvalidServer { }
 ```
@@ -204,16 +203,16 @@ For request-scoped role/permission/scope checks, use `this.auth` (a
 
 ## Session Integration
 
-Auth integrates with session management:
+In `local` and `remote` mode, `tokenStorage` decides where the server keeps its tokens: `'memory'` (the default, lost on restart), `{ redis }` to share them across instances, or `{ sqlite }` for a single node that must survive a restart. See [Production Auth](/frontmcp/authentication/production).
 
 ```typescript
 @FrontMcp({
+  info: { name: 'server', version: '1.0.0' },
+  apps: [MyApp],
   auth: {
     mode: 'local',
-    sessionStore: {
-      provider: 'redis',
-      host: 'localhost',
-      keyPrefix: 'auth:session:',
+    tokenStorage: {
+      redis: { host: 'localhost', port: 6379 },
     },
   },
 })
@@ -226,7 +225,7 @@ When multiple apps have different auth requirements:
 
 ```typescript
 @FrontMcp({
-  name: 'server',
+  info: { name: 'server', version: '1.0.0' },
   apps: [PublicApp, ProtectedApp],
 })
 class MultiAuthServer { }
@@ -237,7 +236,7 @@ const detection = scope.authProviders.detection;
 const providerIds = Array.from(detection.providers.keys());
 // e.g. ['public', 'auth_example_com']
 for (const provider of detection.providers.values()) {
-  // provider.mode is one of 'public' | 'transparent' | 'local' | 'remote'
+  // provider.mode is one of 'public' | 'static' | 'transparent' | 'local' | 'remote'
   console.log(`${provider.id} -> ${provider.mode} (apps=[${provider.appIds.join(', ')}])`);
 }
 ```
