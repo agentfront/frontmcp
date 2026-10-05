@@ -179,12 +179,20 @@ validateAllTools(): Promise<SkillValidationReport>
 **Example:**
 
 ```typescript
-const report = await registry.validateAllTools();
-if (!report.isValid) {
-  for (const result of report.results) {
-    if (result.status === 'failed') {
-      console.error(`${result.skillName}: missing tools ${result.missingTools.join(', ')}`);
-    }
+import { SkillValidationError, type SkillValidationReport } from '@frontmcp/sdk';
+
+let report: SkillValidationReport;
+try {
+  report = await registry.validateAllTools();
+} catch (error) {
+  // A 'strict' skill that references a missing tool throws, unless failOnInvalidSkills is false
+  if (!(error instanceof SkillValidationError)) throw error;
+  report = error.report;
+}
+
+for (const result of report.results) {
+  if (result.status === 'failed') {
+    console.error(`${result.skillName}: missing tools ${result.missingTools.join(', ')}`);
   }
 }
 ```
@@ -331,6 +339,7 @@ interface SkillChangeEvent {
   sessionId?: string;
   relatedRequestId?: string;
   validationReport?: SkillValidationReport;
+  syncResult?: SyncResult; // set on 'synced'
 }
 ```
 
@@ -406,7 +415,7 @@ class DataPipeline extends SkillContext { }
 
 Validation modes (`toolValidation`):
 
-- **strict**: The server refuses to start if a referenced tool is not registered
+- **strict**: The server refuses to start if a referenced tool is not registered (`validateAllTools()` throws `SkillValidationError`, unless the registry was created with `failOnInvalidSkills: false`)
 - **warn**: Log warning for missing tools (default)
 - **ignore**: Skip validation
 

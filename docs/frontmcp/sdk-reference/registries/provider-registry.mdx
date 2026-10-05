@@ -73,7 +73,7 @@ const service = registry.resolve(MyService);
 
 ### resolveBootstrapDep()
 
-Resolve a dependency usable during bootstrap phase; it must be GLOBAL-scoped. Async because it may walk the parent registry hierarchy and instantiate global providers.
+Resolve a GLOBAL-scoped provider during the bootstrap phase, from this registry or a parent registry. It returns an instance that already exists and never instantiates one: it throws `PluginDependencyError` when the provider is not GLOBAL-scoped, is not instantiated yet, or is not found, so instantiate the provider before a bootstrap caller resolves it.
 
 ```typescript
 resolveBootstrapDep(t: Token): Promise<any>
@@ -154,7 +154,7 @@ getScopeRegistry(): ScopeRegistryInterface
 
 ### mergeFromRegistry()
 
-Merge providers from another registry. With `visibleBelow`, only that registry's subtree resolves the merged providers.
+Merge providers from another registry. With `visibleBelow`, the merged providers resolve for this registry's own lookups and for `visibleBelow`'s subtree; other registries below this one resolve them as if they were not merged.
 
 ```typescript
 mergeFromRegistry(
@@ -294,7 +294,7 @@ Provider views represent the hierarchy of available providers:
 ```typescript
 interface ProviderViews {
   global: ReadonlyMap<Token, unknown>;  // Server-wide singletons, created at boot
-  context: Map<Token, unknown>;         // CONTEXT-scoped instances for this invocation
+  context: Map<Token, unknown>;         // CONTEXT-scoped instances: rebuilt per request, or reused across a verified session's requests while the session cache is on
 }
 ```
 
