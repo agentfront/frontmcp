@@ -63,6 +63,8 @@ import MySimplePlugin from './plugins/my-simple.plugin';
 export default class MyApp {}
 ```
 
+In the factory form, `inject` is optional: without it, `useFactory` is called with no arguments.
+
 ## Dynamic Plugin with Options
 
 For plugins that need runtime configuration, extend `DynamicPlugin`:

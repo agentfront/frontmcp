@@ -169,7 +169,7 @@ MyCustomAdapter.init({
 });
 ```
 
-A factory may also return an adapter instance it built itself, which is used as is; its `options.name` must be the `name` given to `init()`, or startup fails with an `InvalidEntityError`. A factory that returns neither fails startup with an `InvalidEntityError` that says what it expected. Until 1.8.7 the factory's options were used as the adapter, so startup failed with `Cannot read properties of undefined (reading 'name')`, and a second, unhandled rejection could end a Node process that had no handler.
+`inject` is optional: without it, the factory is called with no arguments. A factory may also return an adapter instance it built itself, which is used as is; its `options.name` must be the `name` given to `init()`, or startup fails with an `InvalidEntityError`. A factory that returns neither fails startup with an `InvalidEntityError` that says what it expected. Until 1.8.7 the factory's options were used as the adapter, so startup failed with `Cannot read properties of undefined (reading 'name')`, and a second, unhandled rejection could end a Node process that had no handler.
 
 ### Adapter Best Practices
 

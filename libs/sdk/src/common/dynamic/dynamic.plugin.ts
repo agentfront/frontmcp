@@ -22,7 +22,7 @@ type ExtraProvidersOption<TInput> = 'providers' extends keyof TInput
 type InitOptions<TInput> =
   | (TInput & { useFactory?: never; inject?: never } & ExtraProvidersOption<TInput>)
   | {
-      inject: () => readonly Reference<any>[];
+      inject?: () => readonly Reference<any>[];
       useFactory: (...args: any[]) => TInput | Promise<TInput>;
       providers?: readonly ProviderType[];
     };
@@ -38,7 +38,7 @@ type PluginClassWithOptions<TInput, TOptions> = {
 type ValueMcpPlugin<T> = { provide: any; useValue: T; providers?: ProviderType[] };
 type FactoryMcpPlugin<T> = {
   provide: any;
-  inject: () => readonly Reference<any>[];
+  inject?: () => readonly Reference<any>[];
   useFactory: (...args: any[]) => T | Promise<T>;
 };
 
@@ -117,7 +117,7 @@ export abstract class DynamicPlugin<TOptions extends object, TInput extends obje
       return {
         ...pluginMetadataFromOptions(typedOptions, []),
         provide: this,
-        inject: options.inject as () => Reference<any>[],
+        inject: options.inject,
         useFactory: options.useFactory as any,
         providers: dedupePluginProviders(extraProviders),
       };

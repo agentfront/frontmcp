@@ -10,10 +10,12 @@ export interface AuthProviderInterface {
 
 export type AuthProviderClassType<Provide> = ClassType<Provide> & AuthProviderMetadata;
 export type AuthProviderValueType<Provide> = ValueType<Provide> & AuthProviderMetadata;
-export type AuthProviderFactoryType<Provide, Tokens extends readonly (ClassToken | Token)[]> = FactoryType<
-  Provide,
-  Tokens
+/** A factory auth provider; without `inject`, the factory receives no dependencies. */
+export type AuthProviderFactoryType<Provide, Tokens extends readonly (ClassToken | Token)[]> = Omit<
+  FactoryType<Provide, Tokens>,
+  'inject'
 > &
+  Partial<Pick<FactoryType<Provide, Tokens>, 'inject'>> &
   AuthProviderMetadata;
 
 export type AuthProviderType<
