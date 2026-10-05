@@ -17,9 +17,10 @@ import {
   wrapWithIpFilter,
   type CheckClientIpFn,
 } from '../server/custom-routes.helper';
+import { loadExternalToolRecords } from '../tool/tool-external.loader';
 import { ToolInstance } from '../tool/tool.instance';
 import type ToolRegistry from '../tool/tool.registry';
-import { normalizeTool } from '../tool/tool.utils';
+import { isExternalToolRecord, normalizeTool } from '../tool/tool.utils';
 import { ChannelNotificationService } from './channel-notification.service';
 import ChannelRegistry from './channel.registry';
 import ListChannelsFlow from './flows/list-channels.flow';
@@ -205,14 +206,19 @@ export async function registerChannelCapabilities(
       for (const toolDef of channelTools) {
         try {
           const toolRecord = normalizeTool(toolDef);
-          const toolInstance = new ToolInstance(toolRecord, providers, {
-            kind: 'scope',
-            id: `_channel:${instance.name}`,
-            ref: toolDef as any,
-          });
-          await toolInstance.ready;
-          toolRegistry.registerToolInstance(toolInstance);
-          channelToolCount++;
+          const toolRecords = isExternalToolRecord(toolRecord)
+            ? await loadExternalToolRecords(providers.getActiveScope(), toolRecord)
+            : [toolRecord];
+          for (const record of toolRecords) {
+            const toolInstance = new ToolInstance(record, providers, {
+              kind: 'scope',
+              id: `_channel:${instance.name}`,
+              ref: toolDef as any,
+            });
+            await toolInstance.ready;
+            toolRegistry.registerToolInstance(toolInstance);
+            channelToolCount++;
+          }
         } catch (error) {
           logger.warn(
             `Failed to register tool from channel "${instance.name}": ${error instanceof Error ? error.message : String(error)}`,

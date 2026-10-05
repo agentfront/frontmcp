@@ -2,7 +2,13 @@ import { type Type } from '@frontmcp/di';
 
 import { type ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
 import { type PromptEntry } from '../entries';
-import { type EsmOptions, type PromptMetadata, type RemoteAuthConfig, type RemoteTransportOptions } from '../metadata';
+import {
+  type EsmOptions,
+  type PromptMetadata,
+  type RemoteAuthConfig,
+  type RemoteOptions,
+  type RemoteTransportOptions,
+} from '../metadata';
 
 export enum PromptKind {
   CLASS_TOKEN = 'CLASS_TOKEN',
@@ -39,7 +45,7 @@ export type PromptEsmTargetRecord = {
   specifier: ParsedPackageSpecifier;
   /** Which prompt to load from the package */
   targetName: string;
-  options?: EsmOptions;
+  options?: EsmOptions<PromptMetadata>;
   metadata: PromptMetadata;
 };
 
@@ -53,8 +59,12 @@ export type PromptRemoteRecord = {
   targetName: string;
   transportOptions?: RemoteTransportOptions;
   remoteAuth?: RemoteAuthConfig;
+  options?: RemoteOptions<PromptMetadata>;
   metadata: PromptMetadata;
 };
+
+/** A record whose prompts are loaded from a package or a remote server when its registry starts. */
+export type PromptExternalRecord = PromptEsmRecord | PromptEsmTargetRecord | PromptRemoteRecord;
 
 export type PromptRecord =
   | PromptClassTokenRecord

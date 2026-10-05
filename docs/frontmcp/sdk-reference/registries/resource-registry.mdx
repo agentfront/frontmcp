@@ -34,7 +34,7 @@ const resource = resources.findByUri('file:///config.json');
 Get all static resources (not templates).
 
 ```typescript
-getResources(includeHidden?: boolean): ReadonlyArray<ResourceEntry>
+getResources(includeHidden?: boolean): ResourceEntry[]
 ```
 
 | Parameter       | Type      | Default | Description              |
@@ -56,7 +56,7 @@ const allResources = registry.getResources(true);
 Get all resource templates.
 
 ```typescript
-getResourceTemplates(): ReadonlyArray<ResourceEntry>
+getResourceTemplates(): ResourceEntry[]
 ```
 
 **Example:**
@@ -91,7 +91,7 @@ Match a URI against template resources.
 
 ```typescript
 matchTemplateByUri(uri: string): {
-  template: ResourceEntry;
+  instance: ResourceEntry;
   params: Record<string, string>;
 } | undefined
 ```
@@ -102,32 +102,36 @@ matchTemplateByUri(uri: string): {
 // Given template: 'file:///users/{userId}/profile'
 const match = registry.matchTemplateByUri('file:///users/123/profile');
 if (match) {
-  console.log(match.template.name); // user-profile
+  console.log(match.instance.name); // user-profile
   console.log(match.params); // { userId: '123' }
 }
 ```
 
 ### findResourceForUri()
 
-Find resource by URI (exact match or template).
+Find resource by URI (exact match or template). `params` is empty for an exact match.
 
 ```typescript
-findResourceForUri(uri: string): ResourceEntry | undefined
+findResourceForUri(uri: string): {
+  instance: ResourceEntry;
+  params: Record<string, string>;
+} | undefined
 ```
 
 **Example:**
 
 ```typescript
 // Will try exact match first, then template matching
-const resource = registry.findResourceForUri('file:///users/123/profile');
+const found = registry.findResourceForUri('file:///users/123/profile');
+console.log(found?.instance.name, found?.params); // user-profile { userId: '123' }
 ```
 
 ### getExported()
 
-Lookup a resource by its exported (resolved) name.
+Lookup a resource by its exported (resolved) name: the name [`exportResolvedNames(opts)`](#exportresolvednames) gives it, compared exactly.
 
 ```typescript
-getExported(name: string, opts?: { ignoreCase?: boolean }): ResourceEntry | undefined
+getExported(name: string, opts?: ResourceExportOptions): ResourceEntry | undefined
 ```
 
 ### exportResolvedNames()
@@ -135,15 +139,17 @@ getExported(name: string, opts?: { ignoreCase?: boolean }): ResourceEntry | unde
 Produce unique, conflict-aware exported names.
 
 ```typescript
-exportResolvedNames(opts?: ExportResolvedNamesOptions): Map<string, ResourceEntry>
+exportResolvedNames(opts?: ResourceExportOptions): Array<{ name: string; instance: ResourceEntry }>
 ```
+
+`ResourceExportOptions` (not exported from `@frontmcp/sdk`) takes the same fields as the tool registry's [`ExportNameOptions`](/frontmcp/sdk-reference/registries/tool-registry#exportresolvednames): `case` (default `'snake'`), `maxLen` (default `64`), `prefixChildrenOnConflict` (default `true`) and `prefixSource` (default `'provider'`).
 
 ### getInlineResources()
 
 Get resources defined inline (local only).
 
 ```typescript
-getInlineResources(): ReadonlyArray<ResourceEntry>
+getInlineResources(): ResourceEntry[]
 ```
 
 ### listAllInstances()
@@ -172,23 +178,28 @@ registerResourceInstance(resource: ResourceEntry): void
 
 ### registerDynamicResource()
 
-Register a resource or template at runtime.
+Register a resource or template at runtime: a `@Resource` or `@ResourceTemplate` class, a function resource built with `resource()` or `resourceTemplate()`, or a resource record. A resource whose token is already registered is skipped.
 
 ```typescript
-registerDynamicResource(resourceDef: DynamicResourceDef): ResourceEntry
+registerDynamicResource(resourceDef: ResourceType | ResourceRecord | ResourceTemplateRecord): void
 ```
 
 **Example:**
 
 ```typescript
-// Register a dynamic resource
-const entry = registry.registerDynamicResource({
+import { resource } from '@frontmcp/sdk';
+
+const RuntimeConfig = resource({
   name: 'dynamic-config',
   uri: 'config://runtime',
   description: 'Runtime configuration',
   mimeType: 'application/json',
-  read: async () => ({ text: JSON.stringify(config) }),
-});
+})((uri) => ({
+  contents: [{ uri, text: JSON.stringify(config) }],
+}));
+
+// Register a dynamic resource
+registry.registerDynamicResource(RuntimeConfig);
 ```
 
 ### subscribe()
@@ -197,7 +208,7 @@ Subscribe to resource change events.
 
 ```typescript
 subscribe(
-  opts: SubscribeOptions,
+  opts: { immediate?: boolean; filter?: (i: ResourceEntry) => boolean },
   cb: (event: ResourceChangeEvent) => void
 ): () => void
 ```
@@ -223,15 +234,17 @@ unsubscribe();
 Get MCP capabilities for resources.
 
 ```typescript
-getCapabilities(): { subscribe: boolean; listChanged: boolean }
+getCapabilities(): Partial<ServerCapabilities>
 ```
 
 **Example:**
 
 ```typescript
 const caps = registry.getCapabilities();
-// { subscribe: false, listChanged: true }
+// { resources: { subscribe: true, listChanged: true } }
 ```
+
+Both flags are `true` when the registry holds any resource.
 
 ### hasAny()
 
@@ -246,7 +259,7 @@ hasAny(): boolean
 Adopt resources from a child registry.
 
 ```typescript
-adoptFromChild(child: ResourceRegistry, childOwner: Owner): void
+adoptFromChild(child: ResourceRegistry, _childOwner: EntryOwnerRef): void
 ```
 
 ## Change Events

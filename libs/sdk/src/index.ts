@@ -218,6 +218,8 @@ export {
   SkillEmitter,
   // Providers
   MemorySkillProvider,
+  // Base class for skill storage outside the server, installed with SkillRegistry.setExternalProvider()
+  ExternalSkillProviderBase,
   // Validator
   SkillToolValidator,
   // Factory
@@ -245,6 +247,8 @@ export {
   authorizeSkillHttpRequest,
   createSkillHttpAuthValidator,
   SkillHttpAuthValidator,
+  // Thrown by validateAllTools() when a 'strict' skill references a missing tool
+  SkillValidationError,
 } from './skill';
 export type {
   SkillAuditFactory,
@@ -264,6 +268,14 @@ export type {
   SkillChangeScope,
   SkillStorageProvider,
   SkillStorageProviderType,
+  ExternalSkillMode,
+  ExternalSkillProviderOptions,
+  ExternalSkillSearchOptions,
+  ExternalSkillListOptions,
+  SkillSyncStateStore,
+  SkillSyncState,
+  SkillSyncEntry,
+  SkillSyncStatus,
   SkillSearchOptions,
   SkillSearchResult,
   SkillLoadResult,
@@ -277,6 +289,10 @@ export type {
   InstructionsScope,
   SkillIndexCache,
   SkillIndexScoring,
+  SkillValidationReport,
+  SkillValidationResult,
+  SyncResult,
+  SkillSessionManager,
 } from './skill';
 
 // Agent exports - only user-facing APIs

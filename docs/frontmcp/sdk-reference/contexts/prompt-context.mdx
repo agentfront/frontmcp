@@ -13,23 +13,28 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 
 ```typescript
 export abstract class PromptContext {
-  readonly args: Record<string, string>;
   readonly metadata: PromptMetadata;
-  readonly runId: string;
+  readonly args: Record<string, string>;
+  readonly authInfo: AuthInfo;
+  protected readonly runId: string;
+  protected readonly promptId: string;
+  protected readonly promptName: string;
+  protected readonly logger: FrontMcpLogger;
 }
 ```
 
 ## Properties
 
-| Property     | Type                           | Description                               |
-| ------------ | ------------------------------ | ----------------------------------------- |
-| `metadata`   | `PromptMetadata`               | Prompt metadata (name, description, etc.) |
-| `args`       | `Record<string, string>`       | Arguments passed to the prompt            |
-| `output`     | `GetPromptResult \| undefined` | Prompt result (after execution)           |
-| `promptName` | `string`                       | Prompt name                               |
-| `promptId`   | `string`                       | Prompt ID                                 |
-| `authInfo`   | `AuthInfo`                     | Authentication information                |
-| `runId`      | `string`                       | Unique execution identifier               |
+| Property     | Type                               | Description                                 |
+| ------------ | ---------------------------------- | ------------------------------------------- |
+| `metadata`   | `PromptMetadata`                   | Prompt metadata (name, description, etc.)   |
+| `args`       | `Record<string, string>`           | Arguments passed to the prompt              |
+| `output`     | `PromptExecuteResult \| undefined` | What `execute()` returned (after execution) |
+| `authInfo`   | `AuthInfo`                         | Authentication information                  |
+| `promptName` | `string`                           | Prompt name (protected)                     |
+| `promptId`   | `string`                           | Prompt ID, the metadata name (protected)    |
+| `runId`      | `string`                           | Unique execution identifier (protected)     |
+| `logger`     | `FrontMcpLogger`                   | Logger scoped to the prompt (protected)     |
 
 ## Abstract Method
 
@@ -38,22 +43,29 @@ export abstract class PromptContext {
 The main execution method that must be implemented.
 
 ```typescript
-abstract execute(args: Record<string, string>): Promise<GetPromptResult>
+abstract execute(args: Record<string, string>): Promise<PromptExecuteResult>
 ```
 
 ### Return Format
 
-Prompts must return `GetPromptResult`:
+`execute()` may return any `PromptExecuteResult`, and the result is turned into a `GetPromptResult`:
 
 ```typescript
+type PromptExecuteResult = string | PromptMessageInput[] | Record<string, unknown> | GetPromptResult;
+
 interface GetPromptResult {
   description?: string;
   messages: Array<{
     role: 'user' | 'assistant';
-    content: TextContent | ImageContent | EmbeddedResource;
+    content: TextContent | ImageContent | AudioContent | ResourceLink | EmbeddedResource;
   }>;
 }
 ```
+
+- An object with a `messages` array is used as the result; without a `description`, the prompt's metadata description is used.
+- A string becomes one `user` text message.
+- An array becomes the message list.
+- Any other value becomes one `user` text message holding its JSON.
 
 ## Methods
 
@@ -68,7 +80,7 @@ get<T>(token: Token<T>): T
 ```
 
 ```typescript
-const templateEngine = this.get(TemplateEngineToken);
+const templateEngine = this.get(TemplateEngine);
 ```
 
 #### tryGet\<T\>(token)
@@ -133,7 +145,7 @@ type HistoryEntry<T> = {
   note?: string;
 };
 
-get outputHistory(): ReadonlyArray<HistoryEntry<GetPromptResult>>
+get outputHistory(): ReadonlyArray<HistoryEntry<PromptExecuteResult>>
 ```
 
 ## Content Types
@@ -264,11 +276,9 @@ class CodeReviewPrompt extends PromptContext {
 ## With Template Engine
 
 ```typescript
-import { Prompt, PromptContext, Provider, Token } from '@frontmcp/sdk';
+import { App, Prompt, PromptContext, Provider } from '@frontmcp/sdk';
 
-export const TemplateEngineToken = new Token<TemplateEngine>('TemplateEngine');
-
-@Provider()
+@Provider({ name: 'TemplateEngine' })
 class TemplateEngine {
   render(template: string, vars: Record<string, string>): string {
     return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || '');
@@ -298,7 +308,7 @@ Please write a complete email including:
 `;
 
   async execute(args: Record<string, string>) {
-    const engine = this.get(TemplateEngineToken);
+    const engine = this.get(TemplateEngine);
     const promptText = engine.render(this.template, {
       recipient: args.recipient,
       subject: args.subject,
@@ -316,6 +326,13 @@ Please write a complete email including:
     };
   }
 }
+
+@App({
+  name: 'email',
+  providers: [TemplateEngine],
+  prompts: [EmailDraftPrompt],
+})
+class EmailApp {}
 ```
 
 ## Full Example

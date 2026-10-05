@@ -34,7 +34,7 @@ const agentTools = agents.getAgentsAsTools();
 Get all agents (local + adopted).
 
 ```typescript
-getAgents(includeHidden?: boolean): ReadonlyArray<AgentEntry>
+getAgents(includeHidden?: boolean): AgentEntry[]
 ```
 
 | Parameter       | Type      | Default | Description           |
@@ -46,7 +46,7 @@ getAgents(includeHidden?: boolean): ReadonlyArray<AgentEntry>
 ```typescript
 const agents = registry.getAgents();
 for (const agent of agents) {
-  console.log(`Agent: ${agent.id} - ${agent.description}`);
+  console.log(`Agent: ${agent.id} - ${agent.metadata.description}`);
 }
 ```
 
@@ -86,7 +86,7 @@ const agent = registry.findByName('research');
 Get agents visible to a specific agent.
 
 ```typescript
-getVisibleAgentsFor(agentId: string): ReadonlyArray<AgentEntry>
+getVisibleAgentsFor(agentId: string): AgentEntry[]
 ```
 
 **Example:**
@@ -98,13 +98,13 @@ const visibleAgents = registry.getVisibleAgentsFor('orchestrator');
 
 ### getAgentsAsTools()
 
-Get tool definitions for all agents.
+Get the MCP tool definitions of the agents visible to other agents.
 
 ```typescript
-getAgentsAsTools(): ReadonlyArray<ToolDefinition>
+getAgentsAsTools(): Tool[]
 ```
 
-Agents are automatically registered as tools so they can be called by other agents or the MCP client.
+Each agent is exposed as a tool named `invoke_<agent id>`, so it can be called by other agents or the MCP client.
 
 **Example:**
 
@@ -118,7 +118,7 @@ const agentTools = registry.getAgentsAsTools();
 Get tool definitions for agents visible to a specific agent.
 
 ```typescript
-getAgentToolsFor(agentId: string): ReadonlyArray<ToolDefinition>
+getAgentToolsFor(agentId: string): Tool[]
 ```
 
 **Example:**
@@ -133,7 +133,7 @@ const tools = registry.getAgentToolsFor('coordinator');
 Get only agents defined inline in this registry.
 
 ```typescript
-getInlineAgents(): ReadonlyArray<AgentEntry>
+getInlineAgents(): AgentEntry[]
 ```
 
 ### listAllInstances()
@@ -150,7 +150,7 @@ Subscribe to agent change events.
 
 ```typescript
 subscribe(
-  opts: SubscribeOptions,
+  opts: { immediate?: boolean; filter?: (i: AgentInstance) => boolean },
   cb: (event: AgentChangeEvent) => void
 ): () => void
 ```
@@ -170,10 +170,10 @@ unsubscribe();
 
 ### getCapabilities()
 
-Get MCP capabilities for agents.
+Get MCP capabilities for agents. Agents are served as tools, so this is `{ tools: { listChanged: true } }` when the registry holds any agent, and `{}` otherwise.
 
 ```typescript
-getCapabilities(): { listChanged: boolean }
+getCapabilities(): Partial<ServerCapabilities>
 ```
 
 ### hasAny()
@@ -189,7 +189,7 @@ hasAny(): boolean
 Adopt agents from a child registry.
 
 ```typescript
-adoptFromChild(child: AgentRegistry, childOwner: Owner): void
+adoptFromChild(child: AgentRegistry, _childOwner: EntryOwnerRef): void
 ```
 
 ### removeChild()
@@ -243,14 +243,18 @@ interface AgentChangeEvent {
 
 ## Agent Visibility
 
-Agents can control which other agents they can see and call:
+Agents can control which other agents they can see and call, through `swarm`:
 
 ```typescript
 @Agent({
   id: 'coordinator',
   name: 'Coordinator',
   description: 'Coordinates research tasks',
-  visibleAgents: ['researcher', 'writer'], // Can only call these agents
+  llm: { provider: 'openai', model: 'gpt-4o', apiKey: { env: 'OPENAI_API_KEY' } },
+  swarm: {
+    canSeeOtherAgents: true,
+    visibleAgents: ['researcher', 'writer'], // Can only call these agents
+  },
 })
 class CoordinatorAgent extends AgentContext { }
 ```
@@ -264,12 +268,13 @@ const visible = registry.getVisibleAgentsFor('coordinator');
 
 ## Agents as Tools
 
-Agents are automatically registered in the parent scope's ToolRegistry:
+Agents are automatically registered in the parent scope's ToolRegistry, as `invoke_<agent id>`:
 
 ```typescript
 @Agent({
   id: 'research',
   name: 'Research Agent',
+  llm: { provider: 'openai', model: 'gpt-4o', apiKey: { env: 'OPENAI_API_KEY' } },
   inputSchema: {
     topic: z.string(),
     depth: z.enum(['shallow', 'deep']),
@@ -278,7 +283,7 @@ Agents are automatically registered in the parent scope's ToolRegistry:
 class ResearchAgent extends AgentContext { }
 
 // The agent becomes callable as a tool
-await client.callTool('research', {
+await client.callTool('invoke_research', {
   topic: 'AI advancements',
   depth: 'deep',
 });

@@ -9,16 +9,20 @@ import {
   type EntryLineage,
   type EntryOwnerRef,
   type ResourceEntry,
+  type ResourceExternalRecord,
   type ResourceRecord,
   type ResourceTemplateRecord,
   type ResourceType,
   type ScopeEntry,
 } from '../common';
 import { logAvailabilityFiltering } from '../common/availability';
-import { ResourceTemplateKind } from '../common/records/resource.record';
+import { ResourceKind, ResourceTemplateKind } from '../common/records/resource.record';
+import { externalEntryAfterStartup } from '../common/utils/external-entry.utils';
 import { EntryValidationError, NameDisambiguationError } from '../errors';
+import { loadEsmResourceEntries } from '../esm-loader/esm-entries';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { loadRemoteResourceEntry } from '../remote-mcp/remote-entries';
 import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
 import ReadResourceFlow from './flows/read-resource.flow';
@@ -30,6 +34,7 @@ import { ResourceEmitter, type ResourceChangeEvent } from './resource.events';
 import { ResourceInstance } from './resource.instance';
 import { DEFAULT_RESOURCE_EXPORT_OPTS, type IndexedResource, type ResourceExportOptions } from './resource.types';
 import {
+  isExternalResourceRecord,
   isResourceTemplate,
   normalizeResource,
   normalizeResourceTemplate,
@@ -129,6 +134,7 @@ export default class ResourceRegistry extends RegistryAbstract<
     // Instantiate each local resource once and store in this.instances
     for (const token of this.tokens) {
       const rec = this.defs.get(token)!;
+      if (isExternalResourceRecord(rec)) continue;
 
       // Single, authoritative instance per local resource
       const ri = new ResourceInstance(rec, this.providers, this.owner);
@@ -179,6 +185,8 @@ export default class ResourceRegistry extends RegistryAbstract<
     // An entry whose hooks cannot run fails startup here, after the synchronous adoption that keeps siblings acyclic (#678).
     await Promise.all([...this.instances.values()].map((ri) => ri.ready));
 
+    await this.registerExternalResources([...this.defs.values()].filter(isExternalResourceRecord));
+
     // Register resource flows with the scope (scope already declared above)
     await scope.registryFlows(
       ReadResourceFlow,
@@ -187,6 +195,19 @@ export default class ResourceRegistry extends RegistryAbstract<
       SubscribeResourceFlow,
       UnsubscribeResourceFlow,
     );
+  }
+
+  /** Load the resources `.esm()` / `.remote()` records name and register them like local ones. */
+  private async registerExternalResources(records: readonly ResourceExternalRecord[]): Promise<void> {
+    const scope = this.providers.getActiveScope();
+    const loads = records.map((record) =>
+      record.kind === ResourceKind.ESM ? loadEsmResourceEntries(scope, record) : loadRemoteResourceEntry(scope, record),
+    );
+    for (const record of (await Promise.all(loads)).flat()) {
+      const instance = new ResourceInstance(record, this.providers, this.owner);
+      await instance.ready;
+      this.registerResourceInstance(instance);
+    }
   }
 
   /* -------------------- Adoption: reference child instances (no cloning) -------------------- */
@@ -625,6 +646,10 @@ export default class ResourceRegistry extends RegistryAbstract<
    * Used by adapter polling to hot-swap resources when specs change.
    */
   replaceAll(list: ResourceType[], owner: EntryOwnerRef): void {
+    const { tokens, defs, graph } = this.buildMap(list);
+    const external = [...defs.values()].find(isExternalResourceRecord);
+    if (external) throw externalEntryAfterStartup('resource', external);
+
     // Clear local rows and instances
     this.localRows = [];
     this.instances.clear();
@@ -635,7 +660,6 @@ export default class ResourceRegistry extends RegistryAbstract<
     this.graph.clear();
 
     // Rebuild from new list
-    const { tokens, defs, graph } = this.buildMap(list);
     for (const [key, val] of defs) {
       this.defs.set(key, val);
       this.graph.set(key, graph.get(key) ?? new Set());
@@ -784,6 +808,7 @@ export default class ResourceRegistry extends RegistryAbstract<
       const isTemplate = isResourceTemplate(def);
       rec = isTemplate ? normalizeResourceTemplate(def) : normalizeResource(def);
     }
+    if (isExternalResourceRecord(rec)) throw externalEntryAfterStartup('resource', rec);
     const token = rec.provide;
 
     // Skip if already registered

@@ -37,6 +37,7 @@ tags: [config, skills, skills-http, llm-txt, instructions, audit, injection]
       enabled: true,
       signer: customSigner, // SkillAuditSigner — see audit section below
       store: customStore, // SkillAuditStore — see audit section below
+      metrics: createSkillAuditMetrics({ createCounter }), // counts failed and dropped writes
       subjectMode: 'hash', // 'plain' | 'hash' | 'omit'
       headAnchorIntervalMs: 300_000,
     },
@@ -137,12 +138,15 @@ Memory cache is the default; for multi-pod deployments use Redis or another supp
 | `enabled`              | `boolean`                     | `false`   | Turn the audit writer on                                                                                  |
 | `signer`               | `SkillAuditSigner`            | dev HS256 | The signer used to sign each record. **Use `Rs256AuditSigner` in production.**                            |
 | `store`                | `SkillAuditStore`             | memory    | Where records are persisted. Use `StorageAdapterAuditStore` for Redis/Vercel KV/SQLite-backed persistence |
+| `metrics`              | `SkillAuditMetrics`           | unset     | Counts failed and dropped writes. Build it with `createSkillAuditMetrics({ createCounter })`              |
 | `subjectMode`          | `'plain' \| 'hash' \| 'omit'` | `'hash'`  | Redaction policy for the subject (e.g., user ID) embedded in each record                                  |
-| `headAnchorIntervalMs` | `number`                      | unset     | Periodically anchor the chain head out-of-band so tail truncation is detectable (queued for v1.3.0 use)   |
+| `headAnchorIntervalMs` | `number`                      | unset     | Reserved for out-of-band head anchoring (tail-truncation detection); validated but not read yet           |
 
-**Production constraint:** `Hs256AuditSigner` initialized with an in-memory `randomBytes` key refuses to fire when `NODE_ENV === 'production'`. The recommended production pattern is `Rs256AuditSigner` reusing the bundle-signing keypair.
+The audit module lives in `@frontmcp/adapters/skills`, which the SDK does not import: register it once at boot with `setSkillAuditFactory(() => auditModule)` (see `skill-audit-log`). With `audit.enabled` and no factory, the server runs without the audit log in development and refuses to start when `NODE_ENV` is `production`.
 
-**Multi-pod constraint (v1.2.0):** the audit chain is **single-writer**. Running multiple pods that share the same `SkillAuditStore` will produce a loud warning; CAS-based atomic chain-head updates are queued for v1.3.0. Until then, route audit writes to a single elected leader pod or to per-pod chains that you stitch offline.
+**Production constraint:** without a `signer`, the SDK falls back to an HS256 signer with a random, process-local secret, and refuses to start when `NODE_ENV === 'production'`. A random secret also makes records unverifiable after a restart. The recommended production pattern is `Rs256AuditSigner` reusing the bundle-signing keypair.
+
+**Multi-pod constraint:** the audit chain is **single-writer**. Pods that share the same `SkillAuditStore` can link records to the same tail, and `verifyChain` then reports a `prevHash` mismatch; nothing warns at write time. Route audit writes to a single elected leader pod or to per-pod chains that you stitch offline.
 
 See [`skill-audit-log`](../../frontmcp-extensibility/references/skill-audit-log.md) for the full architecture, threat model, custom signer / custom store recipes, and chain verification with `verifyChain(...)`.
 

@@ -29,15 +29,18 @@ Shows how to minimize Lambda cold starts with lazy initialization on first call 
 // src/providers/db-connection.provider.ts
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export const DB_CLIENT = Symbol('DbClient');
+export interface QueryConnection {
+  query(sql: string, params: unknown[]): Promise<{ rows: unknown[] }>;
+}
 
 // Module-scope cache — survives freeze/thaw between Lambda invocations.
-let cachedConnectionPromise: Promise<unknown> | undefined;
+let cachedConnectionPromise: Promise<QueryConnection> | undefined;
 
-@Provider({ token: DB_CLIENT, scope: ProviderScope.GLOBAL })
+// The class is its own DI token: list it in `providers` and resolve it with `this.get(DbConnectionProvider)`
+@Provider({ name: 'DbConnectionProvider', scope: ProviderScope.GLOBAL })
 export class DbConnectionProvider {
   // Lazy on first getConnection() — heavy SDK import does not run at module load.
-  async getConnection(): Promise<unknown> {
+  async getConnection(): Promise<QueryConnection> {
     if (!cachedConnectionPromise) {
       const promise = (async () => {
         const { Client } = await import('pg');
@@ -66,7 +69,7 @@ export class DbConnectionProvider {
 // src/tools/optimized-query.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { DB_CLIENT } from '../providers/db-connection.provider';
+import { DbConnectionProvider } from '../providers/db-connection.provider';
 
 @Tool({
   name: 'query_data',
@@ -81,7 +84,7 @@ import { DB_CLIENT } from '../providers/db-connection.provider';
 })
 export class OptimizedQueryTool extends ToolContext {
   async execute(input: { id: string }) {
-    const db = this.get(DB_CLIENT) as { getConnection: () => Promise<{ query: Function }> };
+    const db = this.get(DbConnectionProvider);
 
     // Parameterized query — prevents SQL injection
     const conn = await db.getConnection();

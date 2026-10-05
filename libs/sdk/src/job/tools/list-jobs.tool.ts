@@ -3,7 +3,6 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '../../common';
 import { type JobEntry } from '../../common/entries/job.entry';
 import { JobPermissionGuard } from '../job-permission.guard';
-import type { JobRegistryInterface } from '../job.registry';
 
 @Tool({
   name: 'list_jobs',
@@ -29,7 +28,7 @@ import type { JobRegistryInterface } from '../job.registry';
 })
 export default class ListJobsTool extends ToolContext {
   async execute(input: { tags?: string[]; labels?: Record<string, string>; query?: string }) {
-    const jobRegistry = (this.scope as unknown as { jobs?: JobRegistryInterface }).jobs;
+    const jobRegistry = this.scope.jobs;
     if (!jobRegistry) {
       return { jobs: [], count: 0 };
     }

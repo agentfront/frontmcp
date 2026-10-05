@@ -180,7 +180,7 @@ import { OpenAIAdapter } from '@frontmcp/sdk';
   llm: {
     adapter: new OpenAIAdapter({
       model: 'gpt-4o',
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: process.env.OPENAI_API_KEY ?? '',
       api: 'responses',
     }),
   },
@@ -197,7 +197,7 @@ import { OpenAIAdapter } from '@frontmcp/sdk';
   llm: {
     adapter: new OpenAIAdapter({
       model: 'gpt-4o',
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: process.env.OPENAI_API_KEY ?? '',
       baseUrl: 'https://api.groq.com/openai/v1',  // OpenAI-compatible APIs
     }),
   },
@@ -286,7 +286,8 @@ protected async completion(
 
 protected async *streamCompletion(
   prompt: AgentPrompt,
-  tools?: AgentToolDefinition[]
+  tools?: AgentToolDefinition[],
+  options?: AgentCompletionOptions
 ): AsyncGenerator<AgentCompletionChunk>
 ```
 
@@ -326,7 +327,7 @@ protected async elicit<S extends ZodType>(
   message: string,
   requestedSchema: S,
   options?: ElicitOptions
-): Promise<ElicitResult>
+): Promise<ElicitResult<z.infer<S>>>
 ```
 
 ## Agent Visibility
@@ -336,6 +337,7 @@ Agents can invoke other agents: their nested agents (`agents`), and with `swarm.
 ```typescript
 @Agent({
   name: 'orchestrator',
+  inputSchema: { task: z.string() },
   llm: { provider: 'openai', model: 'gpt-4o', apiKey: { env: 'OPENAI_API_KEY' } },
   agents: [ResearchAgent], // Nested: private to the orchestrator
   swarm: { canSeeOtherAgents: true, visibleAgents: ['writer-agent'] }, // Registered in the same app
@@ -363,7 +365,7 @@ import { z } from '@frontmcp/sdk';
   inputSchema: { query: z.string(), table: z.string() },
 })
 class SearchDatabaseTool extends ToolContext {
-  async execute(input) {
+  async execute(input: { query: string; table: string }) {
     const db = this.get(DatabaseToken);
     return db.search(input.table, input.query);
   }
@@ -374,7 +376,7 @@ class SearchDatabaseTool extends ToolContext {
   inputSchema: { title: z.string(), data: z.unknown() },
 })
 class CreateReportTool extends ToolContext {
-  async execute(input) {
+  async execute(input: { title: string; data: unknown }) {
     return { reportId: 'rpt_123', title: input.title };
   }
 }
@@ -408,7 +410,7 @@ Always explain your reasoning before taking actions.`,
 })
 class DataAnalystAgent extends AgentContext {
   // Override for custom pre/post processing
-  async execute(input) {
+  async execute(input: { request: string; tables: string[] }) {
     await this.notify(`Starting analysis: ${input.request}`, 'info');
     await this.progress(0, 100, 'Initializing...');
 

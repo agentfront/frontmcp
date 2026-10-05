@@ -4,6 +4,7 @@ import { type JobContext, type JobType } from '../common/interfaces/job.interfac
 import { type JobMetadata } from '../common/metadata/job.metadata';
 import { JobKind, type JobFunctionTokenRecord, type JobRecord } from '../common/records/job.record';
 import { extendedJobMetadata, FrontMcpJobTokens } from '../common/tokens/job.tokens';
+import { isExternalEntryRecord, unsupportedExternalEntry } from '../common/utils/external-entry.utils';
 import { InvalidEntityError } from '../errors';
 
 export function collectJobMetadata(cls: JobType): JobMetadata {
@@ -22,14 +23,8 @@ export function collectJobMetadata(cls: JobType): JobMetadata {
 }
 
 export function normalizeJob(item: unknown): JobRecord {
-  // ESM/REMOTE record objects (from Job.esm() / Job.remote())
-  if (item && typeof item === 'object' && 'kind' in item && 'provide' in item && 'metadata' in item) {
-    if (item.kind === JobKind.ESM && 'specifier' in item && 'targetName' in item) {
-      return item as JobRecord;
-    }
-    if (item.kind === JobKind.REMOTE && 'url' in item && 'targetName' in item) {
-      return item as JobRecord;
-    }
+  if (isExternalEntryRecord(item)) {
+    throw unsupportedExternalEntry('job', item);
   }
 
   // Function-style job

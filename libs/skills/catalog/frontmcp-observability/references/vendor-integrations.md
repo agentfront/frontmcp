@@ -154,11 +154,11 @@ Counters created by `this.telemetry.createCounter(...)` and the built-in framewo
 ```typescript
 import { metrics } from '@opentelemetry/api';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
-import { Resource } from '@opentelemetry/resources';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 
 const meterProvider = new MeterProvider({
-  resource: new Resource({ 'service.name': 'my-mcp-server' }),
+  resource: resourceFromAttributes({ 'service.name': 'my-mcp-server' }),
   readers: [
     new PeriodicExportingMetricReader({
       exporter: new OTLPMetricExporter({

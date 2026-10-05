@@ -5,6 +5,7 @@ level: basic
 description: "Create child spans, events, and attributes inside a tool's execute method using this.telemetry."
 tags: [telemetry, tool, spans, events, attributes]
 features:
+  - "`import type {} from '@frontmcp/observability'` brings in the `this.telemetry` type (a module augmentation of `ExecutionContextBase`)"
   - 'this.telemetry.withSpan() creates auto-managed child spans'
   - 'this.telemetry.addEvent() adds events to the parent tool span'
   - 'this.telemetry.setAttributes() adds metadata to the parent tool span'
@@ -20,6 +21,12 @@ Create child spans, events, and attributes inside a tool's execute method using 
 ```typescript
 // src/apps/my-app/tools/weather.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
+import type {} from '@frontmcp/observability'; // declares this.telemetry
+
+interface WeatherResponse {
+  current: { temp_c: number; condition: { text: string } };
+}
 
 @Tool({
   name: 'get_weather',
@@ -40,7 +47,7 @@ export class GetWeatherTool extends ToolContext {
       span.setAttribute('api.status', response.status);
       span.addEvent('response-received');
 
-      return response.json();
+      return (await response.json()) as WeatherResponse;
     });
 
     // Attributes on the tool span (visible in trace backend)
@@ -60,6 +67,7 @@ export class GetWeatherTool extends ToolContext {
 
 ## What This Demonstrates
 
+- `import type {} from '@frontmcp/observability'` brings in the `this.telemetry` type (a module augmentation of `ExecutionContextBase`)
 - this.telemetry.withSpan() creates auto-managed child spans
 - this.telemetry.addEvent() adds events to the parent tool span
 - this.telemetry.setAttributes() adds metadata to the parent tool span

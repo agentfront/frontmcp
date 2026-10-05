@@ -7,13 +7,11 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 
 ## Overview
 
-The plugin registry is internal: `PluginRegistry` is not exported from `@frontmcp/sdk`, and `ScopeEntry` does not declare it. At runtime the scope holds the registry of its server-level plugins (`@FrontMcp({ plugins })`) under `plugins`, `undefined` when there are none; plugins installed on an app live in that app's registry, which the scope does not expose. The exported `PluginRegistryInterface` types the part this page describes:
+The `PluginRegistry` class is internal: `@frontmcp/sdk` does not export it. `scope.plugins` holds the registry of the server-level plugins (`@FrontMcp({ plugins })`), typed as the exported `PluginRegistryInterface`, and is `undefined` when there are none. Plugins installed on an app live in that app's registry, which the scope does not expose.
 
 ```typescript
-import type { PluginRegistryInterface } from '@frontmcp/sdk';
-
-// Access via scope (runtime only: ScopeEntry does not declare `plugins`)
-const plugins = (scope as unknown as { plugins?: PluginRegistryInterface }).plugins;
+// Access via scope: undefined when the server installs no plugins
+const plugins = scope.plugins;
 
 // List all server-level plugins
 const allPlugins = plugins?.getPlugins() ?? [];
@@ -23,10 +21,10 @@ const allPlugins = plugins?.getPlugins() ?? [];
 
 ### getPlugins()
 
-Get the registered plugin instances: the objects your plugin classes construct. They are typed `PluginEntry`, but a plugin class need not carry `metadata`, so read the names from `getPluginNames()`.
+Get the registered plugin instances: the objects your plugin classes, values or factories produced. A `PluginInstance` declares only `get(token)`, which resolves from the plugin's providers. It is not a `PluginEntry` and carries no `metadata`, so read the names from `getPluginNames()`, and narrow with `instanceof` to reach your plugin's own members.
 
 ```typescript
-getPlugins(): PluginEntry[]
+getPlugins(): PluginInstance[]
 ```
 
 **Example:**
@@ -186,7 +184,7 @@ class MyTool extends ToolContext {
 
 A plugin's `providers` stay in the plugin's own registry, where its hooks, tools and nested plugins resolve them. The ones it lists in `exports` are merged into the host registry, the app (or server) that installed it, so the host's tools can resolve them with `this.get()`. The providers derived from a dynamic plugin's options (`dynamicProviders(options)` and `init({ providers })`) are merged into the host registry and the scope registry.
 
-A factory provider takes a `provide` token, a `name`, `inject` (the tokens of its dependencies) and a `useFactory`. `scope` is `ProviderScope.GLOBAL` (the default, one instance) or `ProviderScope.CONTEXT` (one per request context). `exports` takes provider definitions, so list the same definition in both arrays:
+A factory provider takes a `provide` token, a `name` and a `useFactory`, plus `inject` when the factory has dependencies: a function returning their tokens, resolved in order into the factory's parameters. `@FrontMcp`, `@App`, `@Plugin` and `@Agent` refuse a factory provider without a `name`. `scope` is `ProviderScope.GLOBAL` (the default, one instance) or `ProviderScope.CONTEXT` (one per request context). `exports` takes provider definitions, so list the same definition in both arrays:
 
 ```typescript
 import { Plugin, ProviderScope } from '@frontmcp/sdk';
@@ -196,7 +194,6 @@ export const CacheToken = Symbol('Cache');
 const cacheProvider = {
   name: 'cache',
   provide: CacheToken,
-  inject: () => [],
   useFactory: () => new RedisCache(),
   scope: ProviderScope.GLOBAL,
 };

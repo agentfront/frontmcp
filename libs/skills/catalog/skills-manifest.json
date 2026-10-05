@@ -80,7 +80,7 @@
         { "name": "registration", "description": "@App({ tools }) vs @FrontMcp({ tools }), multi-app composition." },
         {
           "name": "remote-and-esm",
-          "description": "Tool.esm / Tool.remote — load tools from ESM URLs or remote MCP servers."
+          "description": "Tool.esm / Tool.remote — load tools from npm packages or remote MCP servers."
         },
         {
           "name": "testing",
@@ -174,7 +174,7 @@
           "tags": ["di", "provider", "this.get", "error-handling"],
           "features": [
             "Defining a typed DI token with `Symbol('UserService')` and `Token<UserService>`",
-            "Implementing a `@Provider` and registering it in the same `@App` as the tool",
+            "Binding the token with a factory provider (`{ name, provide, inject, useFactory }`) and registering it in the same `@App` as the tool",
             "Resolving the service inside `execute()` via `this.get(USER_SERVICE)` (throws when missing)",
             "Translating \"not found\" into `ResourceNotFoundError` via `this.fail(...)` so the client gets a proper MCP error code (-32002)"
           ]
@@ -1076,7 +1076,7 @@
               "features": [
                 "Bootstraps the audit subsystem via setSkillAuditFactory(...) before FrontMcp registers",
                 "MemoryAuditStore keeps records in-process — perfect for tests, lost on restart",
-                "Hs256AuditSigner refuses to start when NODE_ENV === production with a random key",
+                "A random-key Hs256AuditSigner cannot verify records after a restart: use Rs256AuditSigner in production",
                 "subjectMode: 'hash' redacts user identifiers while keeping them correlatable"
               ]
             },
@@ -1827,7 +1827,7 @@
               "features": [
                 "Declarative `permissions` as an array of `{ action, roles, scopes, custom }` rules",
                 "Using `tags` and `labels` for categorization and filtering",
-                "The `job()` function builder for simple jobs that need no class",
+                "The `job()` function builder for simple jobs that need no class, reporting through `ctx.log()` and `ctx.progress()`",
                 "Full server registration with `jobs.enabled: true` and a Redis store"
               ]
             },
@@ -1912,9 +1912,10 @@
               "tags": ["development", "plugin", "configurable", "dynamic"],
               "features": [
                 "Extending `DynamicPlugin<TOptions, TInput>` for runtime-configurable plugins",
-                "Implementing `static dynamicProviders()` to create providers from the input options",
-                "Using `TInput` with optional fields and applying defaults in the constructor",
+                "Implementing `static dynamicProviders()` to return a named factory provider built from the input options",
+                "Using `TInput` with optional fields and resolving defaults in one helper shared by the constructor and `dynamicProviders()`",
                 "Extending decorator metadata via `declare global { interface ExtendFrontMcpToolMetadata }`",
+                "Reading the custom metadata in a `@ToolHook.Did` hook that receives the flow context (`FlowCtxOf`)",
                 "Augmenting both `ExecutionContextBase` and `PromptContext` for full context extension coverage",
                 "Registering the plugin with `MyPlugin.init({ ... })` in the `plugins` array"
               ]
@@ -1926,10 +1927,11 @@
               "tags": ["development", "sdk", "plugin", "context", "extension"],
               "features": [
                 "Defining a typed DI token with `Token<T> = Symbol('...')` in a dedicated symbols file",
-                "Module augmentation via `declare module '@frontmcp/sdk'` to add `readonly auditLog` to `ExecutionContextBase`",
+                "Binding the token with a named factory provider and listing that same definition in `providers` and `exports`",
+                "Module augmentation via `declare module '@frontmcp/sdk'` to add `readonly auditLog` to `ExecutionContextBase` and `PromptContext`",
                 "Registering `contextExtensions` in `@Plugin` metadata with `property`, `token`, and `errorMessage`",
                 "Side-effect import of the context extension file in both the plugin and the barrel export",
-                "Accessing the extended property (`this.auditLog`) in tool execution contexts"
+                "Accessing the extended property (`this.auditLog`) in a tool, with the caller identity from `this.auth.user.sub`"
               ]
             }
           ]
@@ -2119,8 +2121,7 @@
                 "Loading a skill from a directory with `skillDir()` including SKILL.md frontmatter and bundled resources",
                 "The SKILL.md YAML frontmatter format for metadata (name, description, tags, parameters, examples)",
                 "File-based instructions with `{ file: './path.md' }` resolved relative to the skill file",
-                "URL-based instructions with `{ url: '...' }` fetched at build time",
-                "ESM loading with `Skill.esm()` and remote loading with `Skill.remote()`"
+                "URL-based instructions with `{ url: '...' }` fetched at build time"
               ]
             },
             {
@@ -2389,10 +2390,10 @@
               "level": "intermediate",
               "tags": ["extensibility", "audit", "verification", "chain", "rs256"],
               "features": [
-                "verifyChain returns { ok, breakAt?, reason? } and exits with the first detected break",
+                "verifyChain returns { ok: true, verified } or { ok: false, breakAt, reason } for the first detected break",
                 "defaultAuditSignatureVerifier dispatches on record.signatureAlg (HS256 or RS256)",
-                "Trusted-keys registry maps signatureKeyId → public key PEM",
-                "iterate() reads the chain in order from any SkillAuditStore implementation"
+                "Trusted keys are an AuditTrustedKey[] list; each record's signatureKeyId selects its key",
+                "read() returns the chain in sequence order from any SkillAuditStore implementation"
               ]
             }
           ]
@@ -2705,6 +2706,7 @@
               "level": "basic",
               "tags": ["telemetry", "tool", "spans", "events", "attributes"],
               "features": [
+                "`import type {} from '@frontmcp/observability'` brings in the `this.telemetry` type (a module augmentation of `ExecutionContextBase`)",
                 "this.telemetry.withSpan() creates auto-managed child spans",
                 "this.telemetry.addEvent() adds events to the parent tool span",
                 "this.telemetry.setAttributes() adds metadata to the parent tool span",
@@ -2842,7 +2844,7 @@
                 "Using Redis for session storage in multi-instance deployments",
                 "Defining both `inputSchema` and `outputSchema` on tools to prevent data leaks",
                 "Enabling the tamper-evident skill audit log with RS256 + a persistent store and a CI verifier",
-                "Wiring an OTel MeterProvider so framework counters (bundle pulls, signature failures, replay rejects) are exported",
+                "Wiring an OTel MeterProvider so framework counters (bundle pulls, signature failures, replay rejects, audit write failures and drops) are exported",
                 "Keeping the auto-injected skill catalog summary inside the 16 KB initialize ceiling"
               ]
             }
@@ -3123,11 +3125,11 @@
             },
             {
               "name": "multi-instance-cleanup",
-              "description": "Shows how multiple SDK instances can coexist without conflicts, and how to clean up timers and listeners — given that `@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. The pattern is: initialize in the constructor, expose an explicit `stop()` method, and have the host app call it before `server.dispose()`.",
+              "description": "Shows how multiple SDK instances can coexist without conflicts, and how to clean up timers and listeners — given that `@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. The pattern is: initialize in the constructor, expose a `stop()` method, and register it with `scope.onDispose()` from a factory provider so `server.dispose()` runs it.",
               "level": "advanced",
               "tags": ["production", "sdk", "node", "multi", "instance", "cleanup"],
               "features": [
-                "Explicit `stop()` method on providers (since `@Provider` classes have no `onDestroy` lifecycle hook)",
+                "`stop()` registered with `scope.onDispose()` from a factory provider that injects `ScopeEntry` (since `@Provider` classes have no `onDestroy` lifecycle hook)",
                 "Ensuring multiple instances coexist without sharing global state",
                 "Testing that dispose removes all event listeners (no leaks)",
                 "Verifying one instance still works after another is disposed"

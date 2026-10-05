@@ -18,6 +18,7 @@ import {
   type ParsedToolResult,
   type ToolContext,
   type ToolEntry,
+  type ToolExternalRecord,
   type ToolMetadata,
   type ToolRecord,
   type ToolType,
@@ -91,6 +92,11 @@ export function normalizeTool(item: any): ToolRecord {
   }
   const name = (item as any)?.name ?? String(item);
   throw new InvalidEntityError('tool', name, 'a class or a tool object');
+}
+
+/** True for a record whose tools are loaded from a package or a remote server when its registry starts. */
+export function isExternalToolRecord(record: ToolRecord): record is ToolExternalRecord {
+  return record.kind === ToolKind.ESM || record.kind === ToolKind.REMOTE;
 }
 
 /**

@@ -66,7 +66,7 @@ import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
 import { NotificationService } from '../notification';
-import { findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
+import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
 import PromptRegistry from '../prompt/prompt.registry';
 import ProviderRegistry from '../provider/provider.registry';
@@ -1727,8 +1727,7 @@ export class Scope extends ScopeEntry {
     for (const agent of this.scopeAgents.getAgents(true)) {
       add(`Agent "${agent.name}"`, agent.metadata);
       // An agent's own tools are called for the caller the agent runs for, through the same flow.
-      for (const toolType of agent.metadata.tools ?? []) {
-        const { metadata } = normalizeTool(toolType);
+      for (const metadata of agentToolMetadata(agent)) {
         add(`Tool "${agent.name}:${metadata.name}"`, metadata);
       }
     }

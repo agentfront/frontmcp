@@ -88,12 +88,11 @@ type ChannelChangeEvent = {
 
 ## Accessing the Registry
 
-The channel registry is available on the scope after initialization:
+The channel registry is available on the scope after initialization, as `scope.channels` (`undefined` unless channels are enabled):
 
 ```typescript
 // From a tool context
-const scope = this.scope as unknown as { channels?: ChannelRegistry };
-const channels = scope.channels;
+const channels = this.scope.channels;
 
 if (channels?.hasAny()) {
   const allChannels = channels.getChannels();

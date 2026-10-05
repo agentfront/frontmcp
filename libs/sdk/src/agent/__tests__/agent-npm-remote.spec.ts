@@ -1,6 +1,7 @@
 import { Agent } from '../../common/decorators/agent.decorator';
-import { AgentKind } from '../../common/records/agent.record';
-import type { AgentEsmTargetRecord, AgentRemoteRecord } from '../../common/records/agent.record';
+import { AgentKind, type AgentEsmTargetRecord, type AgentRemoteRecord } from '../../common/records/agent.record';
+import { ExternalEntryNotSupportedError } from '../../errors';
+import { normalizeAgent } from '../agent.utils';
 
 describe('Agent.esm()', () => {
   it('creates AgentEsmTargetRecord with kind ESM', () => {
@@ -108,5 +109,18 @@ describe('Agent.remote()', () => {
     expect(record.metadata.name).toBe('assistant');
     expect(record.metadata.description).toContain('assistant');
     expect(record.metadata.llm).toBeDefined();
+  });
+});
+
+describe('normalizeAgent() with ESM/REMOTE records', () => {
+  it('refuses an Agent.esm() record, naming the agent and the package', () => {
+    const record = Agent.esm('@acme/agents@^1.0.0', 'research');
+    expect(() => normalizeAgent(record)).toThrow(ExternalEntryNotSupportedError);
+    expect(() => normalizeAgent(record)).toThrow('Agent "research" from @acme/agents@^1.0.0 is not supported');
+  });
+
+  it('refuses an Agent.remote() record, naming the agent and the server', () => {
+    const record = Agent.remote('https://api.example.com/mcp', 'assistant');
+    expect(() => normalizeAgent(record)).toThrow('Agent "assistant" from https://api.example.com/mcp is not supported');
   });
 });

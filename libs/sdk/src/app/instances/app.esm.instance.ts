@@ -14,45 +14,40 @@ import {
   type AdapterRegistryInterface,
   type AppRecord,
   type EntryOwnerRef,
-  type PluginEntry,
+  type PluginInstance,
   type PluginRegistryInterface,
   type ProviderRegistryInterface,
   type RemoteAppMetadata,
   type SkillEntry,
 } from '../../common';
 import { InternalMcpError } from '../../errors';
-import { EsmCacheManager, EsmModuleLoader } from '../../esm-loader';
-import { type EsmRegistryAuth } from '../../esm-loader/esm-auth.types';
+import { type EsmModuleLoader } from '../../esm-loader';
+import {
+  createPackageModuleLoader,
+  esmManifestRecords,
+  esmPromptRecord,
+  esmResourceRecord,
+  esmToolRecord,
+  registryAuthOf,
+} from '../../esm-loader/esm-entries';
 import { type FrontMcpPackageManifest } from '../../esm-loader/esm-manifest';
 import { type EsmLoadResult } from '../../esm-loader/esm-module-loader';
-import { createEsmPromptInstance, createEsmResourceInstance, createEsmToolInstance } from '../../esm-loader/factories';
 import { parsePackageSpecifier, type ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
 import { VersionPoller } from '../../esm-loader/version-poller';
 import { PromptInstance } from '../../prompt/prompt.instance';
 import PromptRegistry from '../../prompt/prompt.registry';
-import { normalizePrompt } from '../../prompt/prompt.utils';
 import type ProviderRegistry from '../../provider/provider.registry';
 import { ResourceInstance } from '../../resource/resource.instance';
 import ResourceRegistry from '../../resource/resource.registry';
-import { normalizeResource } from '../../resource/resource.utils';
 import { type SkillRegistryInterface } from '../../skill/skill.registry';
 import { ToolInstance } from '../../tool/tool.instance';
 import ToolRegistry from '../../tool/tool.registry';
-import { normalizeTool } from '../../tool/tool.utils';
-import {
-  isDecoratedPromptClass,
-  isDecoratedResourceClass,
-  isDecoratedToolClass,
-  normalizePromptFromEsmExport,
-  normalizeResourceFromEsmExport,
-  normalizeToolFromEsmExport,
-} from './esm-normalize.utils';
 
 /**
  * Empty plugin registry for ESM apps.
  */
 class EmptyPluginRegistry implements PluginRegistryInterface {
-  getPlugins(): PluginEntry[] {
+  getPlugins(): PluginInstance[] {
     return [];
   }
   getPluginNames(): string[] {
@@ -189,23 +184,12 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     this.specifier = parsePackageSpecifier(this.metadata.url);
 
     // Merge gateway-level loader with app-level packageConfig.loader
-    const scopeMetadata = scopeProviders.getActiveScope().metadata;
+    const scope = scopeProviders.getActiveScope();
     const appConfig = this.metadata.packageConfig;
-    const mergedLoader = appConfig?.loader ?? scopeMetadata.loader;
-
-    const registryAuth = this.deriveRegistryAuth(mergedLoader);
-    const esmBaseUrl = mergedLoader?.url;
-
-    // Initialize the ESM module loader with cache
-    const cache = new EsmCacheManager({
-      maxAgeMs: appConfig?.cacheTTL,
-    });
-
-    this.loader = new EsmModuleLoader({
-      cache,
-      registryAuth,
-      logger: scopeProviders.getActiveScope().logger,
-      esmBaseUrl,
+    this.loader = createPackageModuleLoader({
+      loader: appConfig?.loader ?? scope.metadata.loader,
+      cacheTTL: appConfig?.cacheTTL,
+      logger: scope.logger,
     });
 
     // Initialize standard registries (empty initially - populated on load)
@@ -245,7 +229,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
 
         this.poller = new VersionPoller({
           intervalMs: autoUpdate.intervalMs,
-          registryAuth: this.deriveRegistryAuth(pollerLoader),
+          registryAuth: registryAuthOf(pollerLoader),
           logger,
           onNewVersion: (pkg, oldVer, newVer) => this.handleVersionUpdate(pkg, oldVer, newVer),
         });
@@ -337,88 +321,28 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     const logger = this.scopeProviders.getActiveScope().logger;
     const namespace = this.metadata.namespace ?? this.metadata.name;
 
-    let toolCount = 0;
-    let resourceCount = 0;
-    let promptCount = 0;
+    const tools = esmManifestRecords(manifest.tools, (raw) => esmToolRecord(raw, namespace));
+    const resources = esmManifestRecords(manifest.resources, (raw) => esmResourceRecord(raw, namespace));
+    const prompts = esmManifestRecords(manifest.prompts, (raw) => esmPromptRecord(raw, namespace));
 
-    // Register tools
-    if (manifest.tools?.length) {
-      for (const rawTool of manifest.tools) {
-        if (isDecoratedToolClass(rawTool)) {
-          // Real @Tool-decorated class → standard normalization (full DI)
-          const record = normalizeTool(rawTool);
-          const prefixedName = namespace ? `${namespace}:${record.metadata.name}` : record.metadata.name;
-          record.metadata.name = prefixedName;
-          record.metadata.id = prefixedName;
-          const instance = new ToolInstance(record, this.scopeProviders, this.appOwner);
-          await instance.ready;
-          this._tools.registerToolInstance(instance);
-          toolCount++;
-        } else {
-          // Plain object → existing path
-          const toolDef = normalizeToolFromEsmExport(rawTool);
-          if (toolDef) {
-            const instance = createEsmToolInstance(toolDef, this.scopeProviders, this.appOwner, namespace);
-            await instance.ready;
-            this._tools.registerToolInstance(instance);
-            toolCount++;
-          }
-        }
-      }
+    for (const record of tools) {
+      const instance = new ToolInstance(record, this.scopeProviders, this.appOwner);
+      await instance.ready;
+      this._tools.registerToolInstance(instance);
     }
-
-    // Register resources
-    if (manifest.resources?.length) {
-      for (const rawResource of manifest.resources) {
-        if (isDecoratedResourceClass(rawResource)) {
-          // Real @Resource-decorated class → standard normalization (full DI)
-          const record = normalizeResource(rawResource);
-          const prefixedName = namespace ? `${namespace}:${record.metadata.name}` : record.metadata.name;
-          record.metadata.name = prefixedName;
-          const instance = new ResourceInstance(record, this.scopeProviders, this.appOwner);
-          await instance.ready;
-          this._resources.registerResourceInstance(instance);
-          resourceCount++;
-        } else {
-          // Plain object → existing path
-          const resourceDef = normalizeResourceFromEsmExport(rawResource);
-          if (resourceDef) {
-            const instance = createEsmResourceInstance(resourceDef, this.scopeProviders, this.appOwner, namespace);
-            await instance.ready;
-            this._resources.registerResourceInstance(instance);
-            resourceCount++;
-          }
-        }
-      }
+    for (const record of resources) {
+      const instance = new ResourceInstance(record, this.scopeProviders, this.appOwner);
+      await instance.ready;
+      this._resources.registerResourceInstance(instance);
     }
-
-    // Register prompts
-    if (manifest.prompts?.length) {
-      for (const rawPrompt of manifest.prompts) {
-        if (isDecoratedPromptClass(rawPrompt)) {
-          // Real @Prompt-decorated class → standard normalization (full DI)
-          const record = normalizePrompt(rawPrompt);
-          const prefixedName = namespace ? `${namespace}:${record.metadata.name}` : record.metadata.name;
-          record.metadata.name = prefixedName;
-          const instance = new PromptInstance(record, this.scopeProviders, this.appOwner);
-          await instance.ready;
-          this._prompts.registerPromptInstance(instance);
-          promptCount++;
-        } else {
-          // Plain object → existing path
-          const promptDef = normalizePromptFromEsmExport(rawPrompt);
-          if (promptDef) {
-            const instance = createEsmPromptInstance(promptDef, this.scopeProviders, this.appOwner, namespace);
-            await instance.ready;
-            this._prompts.registerPromptInstance(instance);
-            promptCount++;
-          }
-        }
-      }
+    for (const record of prompts) {
+      const instance = new PromptInstance(record, this.scopeProviders, this.appOwner);
+      await instance.ready;
+      this._prompts.registerPromptInstance(instance);
     }
 
     logger.info(
-      `ESM app ${this.id} registered: ${toolCount} tools, ${resourceCount} resources, ${promptCount} prompts`,
+      `ESM app ${this.id} registered: ${tools.length} tools, ${resources.length} resources, ${prompts.length} prompts`,
     );
   }
 
@@ -454,23 +378,5 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     } finally {
       this.updateInProgress = false;
     }
-  }
-
-  /**
-   * Map a public PackageLoader config to internal EsmRegistryAuth.
-   */
-  private deriveRegistryAuth(loader?: {
-    url?: string;
-    registryUrl?: string;
-    token?: string;
-    tokenEnvVar?: string;
-  }): EsmRegistryAuth | undefined {
-    return loader
-      ? {
-          registryUrl: loader.registryUrl ?? loader.url,
-          token: loader.token,
-          tokenEnvVar: loader.tokenEnvVar,
-        }
-      : undefined;
   }
 }

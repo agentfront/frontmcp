@@ -15,18 +15,16 @@ import {
   type AdapterRegistryInterface,
   type AppRecord,
   type EntryOwnerRef,
-  type FrontMcpLogger,
-  type PluginEntry,
+  type PluginInstance,
   type PluginRegistryInterface,
   type ProviderRegistryInterface,
   type RemoteAppMetadata,
-  type RemoteAuthConfig,
   type SkillEntry,
 } from '../../common';
 import { InternalMcpError } from '../../errors';
 import PromptRegistry from '../../prompt/prompt.registry';
 import type ProviderRegistry from '../../provider/provider.registry';
-import { McpClientService } from '../../remote-mcp';
+import { type McpClientService } from '../../remote-mcp';
 import { CapabilityCache } from '../../remote-mcp/cache';
 import {
   createRemotePromptInstance,
@@ -34,25 +32,17 @@ import {
   createRemoteResourceTemplateInstance,
   createRemoteToolInstance,
 } from '../../remote-mcp/factories';
-import type { McpConnectRequest, McpRemoteAuthConfig, McpTransportType } from '../../remote-mcp/mcp-client.types';
+import type { McpTransportType } from '../../remote-mcp/mcp-client.types';
+import { buildRemoteConnectRequest, mcpClientServiceOf } from '../../remote-mcp/remote-entries';
 import ResourceRegistry from '../../resource/resource.registry';
 import type { SkillRegistryInterface } from '../../skill/skill.registry';
 import ToolRegistry from '../../tool/tool.registry';
 
 /**
- * Interface for scope with optional MCP client service cache.
- * Used for proper typing in getOrCreateMcpClientService.
- */
-interface ScopeWithMcpClient {
-  logger: FrontMcpLogger;
-  mcpClientService?: McpClientService;
-}
-
-/**
  * Empty plugin registry for remote apps (remote apps don't have local plugins)
  */
 class EmptyPluginRegistry implements PluginRegistryInterface {
-  getPlugins(): PluginEntry[] {
+  getPlugins(): PluginInstance[] {
     return [];
   }
 
@@ -224,9 +214,9 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     this._adapters = new EmptyAdapterRegistry();
     this._skills = new EmptySkillRegistry();
 
-    // Get or create MCP client service
-    const scope = this.scopeProviders.getActiveScope();
-    this.mcpClient = this.getOrCreateMcpClientService(scope);
+    this.mcpClient = mcpClientServiceOf(this.scopeProviders.getActiveScope(), {
+      capabilityRefreshInterval: this.metadata.refreshInterval ?? 0,
+    });
 
     this.ready = this.initialize();
   }
@@ -239,11 +229,17 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
       // Wait for registries to be ready
       await Promise.all([this._tools.ready, this._resources.ready, this._prompts.ready]);
 
-      // Build connection request
-      const connectRequest = this.buildConnectRequest();
-
-      // Connect to remote server
-      await this.mcpClient.connect(connectRequest);
+      await this.mcpClient.connect(
+        buildRemoteConnectRequest({
+          appId: this.id,
+          name: this.metadata.name,
+          url: this.metadata.url,
+          transportType: this.mapUrlTypeToTransportType(this.metadata.urlType),
+          transportOptions: this.metadata.transportOptions,
+          remoteAuth: this.metadata.remoteAuth,
+          namespace: this.metadata.namespace,
+        }),
+      );
       this.isConnected = true;
 
       // Subscribe to capability changes
@@ -394,51 +390,6 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   // ═══════════════════════════════════════════════════════════════════
 
   /**
-   * Get or create the MCP client service from scope
-   */
-  private getOrCreateMcpClientService(scope: ScopeWithMcpClient): McpClientService {
-    // Try to get existing service from scope
-    const existingService = scope.mcpClientService;
-    if (existingService) {
-      return existingService;
-    }
-
-    // Create new service
-    const service = new McpClientService(scope.logger, {
-      capabilityRefreshInterval: this.metadata.refreshInterval ?? 0,
-    });
-
-    // Store on scope for reuse
-    scope.mcpClientService = service;
-
-    return service;
-  }
-
-  /**
-   * Build the connection request from metadata
-   */
-  private buildConnectRequest(): McpConnectRequest {
-    const transportType = this.mapUrlTypeToTransportType(this.metadata.urlType);
-
-    return {
-      appId: this.id,
-      name: this.metadata.name,
-      transportType,
-      url: this.metadata.url,
-      transportOptions: {
-        timeout: this.metadata.transportOptions?.timeout,
-        retryAttempts: this.metadata.transportOptions?.retryAttempts,
-        retryDelayMs: this.metadata.transportOptions?.retryDelayMs,
-        fallbackToSSE: this.metadata.transportOptions?.fallbackToSSE,
-        headers: this.metadata.transportOptions?.headers,
-        protocolVersion: this.metadata.transportOptions?.protocolVersion,
-      },
-      auth: this.mapRemoteAuth(this.metadata.remoteAuth),
-      namespace: this.metadata.namespace,
-    };
-  }
-
-  /**
    * Map urlType to transport type
    */
   private mapUrlTypeToTransportType(urlType: 'worker' | 'url' | 'npm' | 'esm'): McpTransportType {
@@ -454,16 +405,6 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
       default:
         return 'http';
     }
-  }
-
-  /**
-   * Map remote auth config from metadata format to MCP client format
-   */
-  private mapRemoteAuth(remoteAuth?: RemoteAuthConfig): McpRemoteAuthConfig | undefined {
-    if (!remoteAuth) {
-      return undefined;
-    }
-    return remoteAuth as McpRemoteAuthConfig;
   }
 
   /**

@@ -30,27 +30,25 @@ function Provider(providedMetadata: ProviderMetadata): ClassDecorator
 
 ## Configuration Options
 
-| Property      | Type                    | Default    | Description                  |
-| ------------- | ----------------------- | ---------- | ---------------------------- |
-| `name`        | `string` (required)     | —          | Human-readable provider name |
-| `id`          | `string`                | —          | Optional unique identifier   |
-| `description` | `string`                | —          | Optional description         |
-| `scope`       | `'global' \| 'context'` | `'global'` | Provider lifetime scope      |
+| Property      | Type                                                              | Default                | Description                  |
+| ------------- | ----------------------------------------------------------------- | ---------------------- | ---------------------------- |
+| `name`        | `string` (required)                                               | —                      | Human-readable provider name |
+| `id`          | `string`                                                          | —                      | Optional unique identifier   |
+| `description` | `string`                                                          | —                      | Optional description         |
+| `scope`       | `ProviderScope` (`ProviderScope.GLOBAL \| ProviderScope.CONTEXT`) | `ProviderScope.GLOBAL` | Provider lifetime scope      |
 
-`'session'` and `'request'` are kept as deprecated aliases of `'context'`.
+The metadata is strict: any other key (such as `provide` or `useClass`) is rejected when the class is decorated. `ProviderScope.SESSION` and `ProviderScope.REQUEST` are kept as deprecated aliases of `ProviderScope.CONTEXT`.
 
 ### Global (Default)
 
 Single instance shared across all requests:
 
 ```typescript
-@Provider({ name: 'ConfigService' }) // scope defaults to 'global'
-class ConfigService {
-  private config: Record<string, string>;
+import { Provider } from '@frontmcp/sdk';
 
-  constructor() {
-    this.config = loadConfig();
-  }
+@Provider({ name: 'ConfigService' }) // scope defaults to ProviderScope.GLOBAL
+class ConfigService {
+  private readonly config: Record<string, string | undefined> = { ...process.env };
 
   get(key: string) {
     return this.config[key];
@@ -60,10 +58,12 @@ class ConfigService {
 
 ### Context
 
-New instance per execution context (combines session + request scope):
+One instance per session the server verified, and a new instance on every request for a caller without one (a stateless request, or MCP 2026-07-28):
 
 ```typescript
-@Provider({ name: 'RequestLogger', scope: 'context' })
+import { Provider, ProviderScope } from '@frontmcp/sdk';
+
+@Provider({ name: 'RequestLogger', scope: ProviderScope.CONTEXT })
 class RequestLogger {
   private logs: string[] = [];
 
@@ -79,10 +79,12 @@ class RequestLogger {
 
 ## Using Providers
 
+A decorated class is its own DI token: register it in `providers`, then resolve it with `this.get(TheClass)`.
+
 ### In Tools
 
 ```typescript
-import { Tool, ToolContext } from '@frontmcp/sdk';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 import { UserService } from './user.service';
 
 @Tool({
@@ -115,33 +117,34 @@ class DataResource extends ResourceContext {
 ### In Agents
 
 ```typescript
-import { Agent, AgentContext } from '@frontmcp/sdk';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
 import { AnalyticsService } from './analytics.service';
 
 @Agent({
   name: 'analyst',
+  inputSchema: { question: z.string() },
   llm: { provider: 'openai', model: 'gpt-4o', apiKey: { env: 'OPENAI_API_KEY' } },
 })
 class AnalystAgent extends AgentContext {
-  async execute(input) {
+  async execute(input: { question: string }) {
     const analytics = this.get(AnalyticsService);
-    // Use analytics in agent logic
+    analytics.track('question', input.question);
+    return super.execute(input); // run the default agent loop
   }
 }
 ```
 
 ## Provider Dependencies
 
-Providers can depend on other providers:
+Providers can depend on other providers through their constructor. The parameter types are read from the `design:paramtypes` metadata, so the project needs `emitDecoratorMetadata` (and `experimentalDecorators`) enabled:
 
 ```typescript
+import { Provider } from '@frontmcp/sdk';
+import { Pool } from 'pg';
+
 @Provider({ name: 'DatabaseService' })
 class DatabaseService {
-  private pool: Pool;
-
-  constructor() {
-    this.pool = createPool(process.env.DATABASE_URL);
-  }
+  private pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
   query(sql: string, params?: unknown[]) {
     return this.pool.query(sql, params);
@@ -189,9 +192,12 @@ class Server {}
 @Plugin({
   name: 'cache-plugin',
   providers: [CacheService],
+  exports: [CacheService], // also visible to the host app's tools
 })
 class CachePlugin {}
 ```
+
+`providers` accepts `@Provider` classes, factory providers (below), and named `{ name, provide, useValue }` and `{ name, provide, useClass }` objects.
 
 ## Optional Dependencies
 
@@ -209,96 +215,125 @@ class MyTool extends ToolContext {
     if (optional) {
       optional.doSomething();
     }
-  }
-}
-```
 
-## Provider Tokens
-
-For interface-based injection, use tokens:
-
-```typescript
-import { Token } from '@frontmcp/sdk';
-
-// Define token
-export const CACHE_TOKEN = new Token<CacheInterface>('CacheService');
-
-// Interface
-export interface CacheInterface {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string): Promise<void>;
-}
-
-// Implementation
-@Provider({ name: 'RedisCacheService' })
-class RedisCacheService implements CacheInterface {
-  async get(key: string) { /* ... */ }
-  async set(key: string, value: string) { /* ... */ }
-}
-
-// Register with token
-@App({
-  name: 'app',
-  providers: [
-    { provide: CACHE_TOKEN, useClass: RedisCacheService },
-  ],
-})
-
-// Use with token
-class MyTool extends ToolContext {
-  async execute() {
-    const cache = this.get(CACHE_TOKEN);
+    return { ok: true };
   }
 }
 ```
 
 ## Factory Providers
 
-Use factories for complex initialization:
+A factory provider binds a token to the value its `useFactory` returns. It takes `name` (required, like `@Provider`), `provide` (the token), an optional `inject` function that returns the dependency tokens, `useFactory` (called with the resolved dependencies, in order, and may be `async`), and an optional `scope`:
 
 ```typescript
+import { App } from '@frontmcp/sdk';
+
+class DatabaseService {
+  constructor(readonly url: string) {}
+}
+
 @App({
   name: 'app',
   providers: [
+    ConfigService,
     {
+      name: 'DatabaseService',
       provide: DatabaseService,
-      useFactory: (config: ConfigService) => {
-        return new DatabaseService(config.get('DATABASE_URL'));
-      },
-      deps: [ConfigService],
+      inject: () => [ConfigService] as const,
+      useFactory: (config: ConfigService) => new DatabaseService(config.get('DATABASE_URL') ?? ''),
     },
   ],
 })
+class MyApp {}
 ```
 
-## Value Providers
+`inject` is a function, not an array, so it can reference classes declared later in the file. Without `inject`, the factory receives no arguments.
 
-Provide static values:
+## Provider Tokens
+
+A token can be any class or a `Symbol`. Type a `Symbol` token with `Token<T>` so `this.get()` returns `T`, and bind it with a factory provider. This lets tools depend on an interface instead of an implementation:
 
 ```typescript
-export const API_URL_TOKEN = new Token<string>('API_URL');
+import { App, Provider, Tool, ToolContext, type Token, z } from '@frontmcp/sdk';
 
+// Interface
+export interface CacheStore {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+}
+
+// Token
+export const CACHE_STORE: Token<CacheStore> = Symbol('CacheStore');
+
+// Implementation
+@Provider({ name: 'MemoryCacheStore' })
+class MemoryCacheStore implements CacheStore {
+  private entries = new Map<string, string>();
+
+  async get(key: string) {
+    return this.entries.get(key) ?? null;
+  }
+
+  async set(key: string, value: string) {
+    this.entries.set(key, value);
+  }
+}
+
+// Use with token
+@Tool({ name: 'cache_lookup', inputSchema: { key: z.string() } })
+class CacheLookupTool extends ToolContext {
+  async execute(input: { key: string }) {
+    const cache = this.get(CACHE_STORE); // typed as CacheStore
+    return { value: await cache.get(input.key) };
+  }
+}
+
+// Bind the token to the implementation
 @App({
   name: 'app',
   providers: [
-    { provide: API_URL_TOKEN, useValue: 'https://api.example.com' },
+    MemoryCacheStore,
+    {
+      name: 'CacheStore',
+      provide: CACHE_STORE,
+      inject: () => [MemoryCacheStore] as const,
+      useFactory: (store: MemoryCacheStore) => store,
+    },
   ],
+  tools: [CacheLookupTool],
 })
+class CacheApp {}
+```
+
+## Static Values
+
+Provide a configuration value with a factory that takes no dependencies (a named `{ name, provide, useValue }` object works too):
+
+```typescript
+import { App, type Token } from '@frontmcp/sdk';
+
+export const API_URL: Token<string> = Symbol('API_URL');
+
+@App({
+  name: 'app',
+  providers: [{ name: 'ApiUrl', provide: API_URL, useFactory: () => 'https://api.example.com' }],
+})
+class ApiApp {}
 ```
 
 ## Full Example
 
 ```typescript
-import { Provider, Tool, ToolContext, App, FrontMcp, Token } from '@frontmcp/sdk';
+import { Provider, ProviderScope, Tool, ToolContext, App, FrontMcp, type Token } from '@frontmcp/sdk';
 import { z } from '@frontmcp/sdk';
-
-// Token for interface
-export const NOTIFICATION_TOKEN = new Token<NotificationService>('NotificationService');
 
 // Interface
 interface NotificationService {
   send(to: string, message: string): Promise<void>;
 }
+
+// Token for the interface
+export const NOTIFICATION_SERVICE: Token<NotificationService> = Symbol('NotificationService');
 
 // Provider implementations
 @Provider({ name: 'ConfigService' })
@@ -322,12 +357,12 @@ class EmailNotificationService implements NotificationService {
 
   async send(to: string, message: string) {
     const apiKey = this.config.require('EMAIL_API_KEY');
-    // Send email...
+    // Send email with apiKey...
     console.log(`Sending email to ${to}: ${message}`);
   }
 }
 
-@Provider({ name: 'RequestTracker', scope: 'context' })
+@Provider({ name: 'RequestTracker', scope: ProviderScope.CONTEXT })
 class RequestTracker {
   private startTime = Date.now();
   private events: string[] = [];
@@ -350,11 +385,11 @@ class RequestTracker {
   },
 })
 class SendNotificationTool extends ToolContext {
-  async execute(input) {
+  async execute(input: { recipient: string; message: string }) {
     const tracker = this.get(RequestTracker);
     tracker.track('Tool started');
 
-    const notification = this.get(NOTIFICATION_TOKEN);
+    const notification = this.get(NOTIFICATION_SERVICE);
     await notification.send(input.recipient, input.message);
 
     tracker.track('Notification sent');
@@ -371,7 +406,13 @@ class SendNotificationTool extends ToolContext {
   providers: [
     ConfigService,
     RequestTracker,
-    { provide: NOTIFICATION_TOKEN, useClass: EmailNotificationService },
+    EmailNotificationService,
+    {
+      name: 'NotificationService',
+      provide: NOTIFICATION_SERVICE,
+      inject: () => [EmailNotificationService] as const,
+      useFactory: (email: EmailNotificationService) => email,
+    },
   ],
   tools: [SendNotificationTool],
 })

@@ -11,7 +11,7 @@ type InitOptions<T, TAdapter> =
       name: string;
     })
   | {
-      inject: () => readonly Reference<any>[];
+      inject?: () => readonly Reference<any>[];
       /**
        * Returns the adapter's options (or a promise of them), from which the adapter is built, or
        * an adapter the factory built itself, named by the `name` given to `init()`.
@@ -150,7 +150,7 @@ export abstract class DynamicAdapter<TOptions extends object> implements Adapter
       return {
         ...rest,
         provide: uniqueToken,
-        inject: inject as () => Reference<any>[],
+        inject,
         // The factory returns the adapter's options, as a DynamicPlugin factory does; the adapter is
         // built from them here, so the registry gets an adapter rather than its options (#678).
         useFactory: (...args: unknown[]) => adapterFromFactoryResult(adapterClass, adapterName, factory(...args)),

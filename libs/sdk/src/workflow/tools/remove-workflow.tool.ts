@@ -3,7 +3,6 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '../../common';
 import { JobNotAuthorizedError } from '../../errors';
 import { JobPermissionGuard } from '../../job/job-permission.guard';
-import type { WorkflowRegistryInterface } from '../workflow.registry';
 
 @Tool({
   name: 'remove_workflow',
@@ -19,8 +18,7 @@ import type { WorkflowRegistryInterface } from '../workflow.registry';
 })
 export default class RemoveWorkflowTool extends ToolContext {
   async execute(input: { name: string }) {
-    const scope = this.scope as unknown as { workflows?: WorkflowRegistryInterface };
-    const workflowRegistry = scope.workflows;
+    const workflowRegistry = this.scope.workflows;
 
     if (!workflowRegistry) {
       return this.fail(new Error('Workflows system is not enabled'));

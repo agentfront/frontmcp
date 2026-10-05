@@ -150,7 +150,7 @@ If a request seems to conflict with an inherited default (e.g., "wrap `inputSche
    │   See: examples/02-basic-function-tool.md
    ├── Anything with DI, lifecycle, hooks, or UI → class-style
    │   See: examples/01-basic-class-tool.md
-   └── Externally hosted (ESM URL or remote MCP server) → Tool.esm / Tool.remote
+   └── Externally hosted (npm package or remote MCP server) → Tool.esm / Tool.remote
        See: references/remote-and-esm.md
 
 2. What does it return?
@@ -285,7 +285,7 @@ Before considering a tool "done":
 | [`ui-widgets.md`](./references/ui-widgets.md)                         | `@Tool({ ui })` — template formats, `servingMode`, `resourceMode` host-detect, CSP, ignored options, MCP Apps spec |
 | [`annotations.md`](./references/annotations.md)                       | `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`                                      |
 | [`function-style-builder.md`](./references/function-style-builder.md) | `tool({...})(handler)` — when to pick over a class, register, ctx parameter                                        |
-| [`remote-and-esm.md`](./references/remote-and-esm.md)                 | `Tool.esm(...)` / `Tool.remote(...)` — load tools from ESM URLs or remote MCP servers                              |
+| [`remote-and-esm.md`](./references/remote-and-esm.md)                 | `Tool.esm(...)` / `Tool.remote(...)` — load tools from npm packages or remote MCP servers                          |
 | [`registration.md`](./references/registration.md)                     | `@App({ tools })` vs `@FrontMcp({ tools })`, multi-app composition                                                 |
 | [`file-layout.md`](./references/file-layout.md)                       | Flat-sibling vs folder-per-tool, `<name>.schema.ts` / `<name>.tool.ts` / `<name>.tool.spec.ts`                     |
 | [`testing.md`](./references/testing.md)                               | Per-tool unit tests — `@frontmcp/testing`, mocking DI, asserting output validation                                 |

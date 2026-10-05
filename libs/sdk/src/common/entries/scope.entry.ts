@@ -1,6 +1,7 @@
 import type { AuthoritiesContextBuilder, AuthoritiesEngine, AuthoritiesScopeMapping } from '@frontmcp/auth';
 import type { Token, Type } from '@frontmcp/di';
 import type { GuardManager } from '@frontmcp/guard';
+import type { EventStore } from '@frontmcp/protocol';
 
 import type AgentRegistry from '../../agent/agent.registry';
 import type AppRegistry from '../../app/app.registry';
@@ -12,21 +13,25 @@ import type { ChannelEventBus } from '../../channel/sources/app-event.source';
 import type { ElicitationStore } from '../../elicitation/store/elicitation.store';
 import type { HaManager } from '../../ha';
 import type HookRegistry from '../../hooks/hook.registry';
+import type JobRegistry from '../../job/job.registry';
 import type { NotificationService } from '../../notification';
 import type PromptRegistry from '../../prompt/prompt.registry';
 import type ResourceRegistry from '../../resource/resource.registry';
+import type { SkillSessionManager } from '../../skill/session/skill-session.manager';
 import type { SkillRegistryInterface } from '../../skill/skill.registry';
 import type { TaskStore } from '../../task/store/task.store';
 import type { TaskRegistry } from '../../task/task.registry';
 import type ToolRegistry from '../../tool/tool.registry';
 import type { ToolUIRegistry } from '../../tool/ui/ui-shared';
 import type { TransportService } from '../../transport/transport.registry';
+import type WorkflowRegistry from '../../workflow/workflow.registry';
 import type {
   FlowInputOf,
   FlowOutputOf,
   FlowType,
   FrontMcpAuth,
   FrontMcpLogger,
+  PluginRegistryInterface,
   ProviderRegistryInterface,
 } from '../interfaces';
 import type { FlowName, ScopeMetadata } from '../metadata';
@@ -64,9 +69,21 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
 
   abstract get skills(): SkillRegistryInterface;
 
+  /** Enforces the active skills' tool allowlists per session; `undefined` when the scope has no skills and no `dynamicSkills` plugin. */
+  abstract get skillSession(): SkillSessionManager | undefined;
+
   abstract get notifications(): NotificationService;
 
   abstract get agents(): AgentRegistry;
+
+  /** The server-level plugins (`@FrontMcp({ plugins })`, and the one `observability` loads); `undefined` when there are none. */
+  abstract get plugins(): PluginRegistryInterface | undefined;
+
+  /** The scope's jobs; `undefined` unless jobs are on (`jobs.enabled`, or a job or workflow declared on an app). */
+  abstract get jobs(): JobRegistry | undefined;
+
+  /** The scope's workflows; `undefined` when `jobs` is. */
+  abstract get workflows(): WorkflowRegistry | undefined;
 
   abstract get toolUI(): ToolUIRegistry | undefined;
 
@@ -78,6 +95,9 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   abstract get authUi(): AuthUiRegistry | undefined;
 
   abstract get transportService(): TransportService | undefined;
+
+  /** The SSE resumability store every session shares; `undefined` unless `transport.eventStore` (or distributed Redis) enables it. */
+  abstract get eventStore(): EventStore | undefined;
 
   haManager?: HaManager;
 

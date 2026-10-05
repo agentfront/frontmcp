@@ -42,7 +42,12 @@ export interface FrontMcpAdapterResponse {
 
 export type AdapterClassType<Provide> = ClassType<Provide> & AdapterMetadata;
 export type AdapterValueType<Provide> = ValueType<Provide> & AdapterMetadata;
-export type AdapterFactoryType<Provide, Tokens extends readonly Token[]> = FactoryType<Provide, Tokens> &
+/** A factory adapter; without `inject`, the factory receives no dependencies. */
+export type AdapterFactoryType<Provide, Tokens extends readonly Token[]> = Omit<
+  FactoryType<Provide, Tokens>,
+  'inject'
+> &
+  Partial<Pick<FactoryType<Provide, Tokens>, 'inject'>> &
   AdapterMetadata;
 
 export type AdapterType<Provide extends AdapterInterface = any> =

@@ -9,7 +9,7 @@ import {
   isDynamicPluginClass,
   PluginKind,
   type EntryOwnerRef,
-  type PluginEntry,
+  type PluginInstance,
   type PluginRecord,
   type PluginRegistryInterface,
   type PluginType,
@@ -50,7 +50,7 @@ export interface PluginScopeInfo {
 const installedPluginValues = new WeakSet<object>();
 
 export default class PluginRegistry
-  extends RegistryAbstract<PluginEntry, PluginRecord, PluginType[]>
+  extends RegistryAbstract<PluginInstance, PluginRecord, PluginType[]>
   implements PluginRegistryInterface
 {
   /** providers by token */
@@ -96,7 +96,7 @@ export default class PluginRegistry
     }
   }
 
-  getPlugins(): PluginEntry[] {
+  getPlugins(): PluginInstance[] {
     return [...this.instances.values()];
   }
 
@@ -238,8 +238,11 @@ export default class PluginRegistry
         // - scope='app' (default): register hooks to own scope (app-level)
         // - scope='server': register hooks to parent scope (gateway-level) if available
         let targetHookScope: ScopeEntry;
+        let hookOwner = this.owner;
         if (pluginScope === 'server' && this.scopeInfo?.parentScope) {
           targetHookScope = this.scopeInfo.parentScope;
+          // Owned by the plugin, not the app that installed it, so they run for every app's entries.
+          hookOwner = pluginOwner;
         } else {
           targetHookScope = this.scope;
           // Warn if server scope was requested but no parent scope is available
@@ -257,14 +260,14 @@ export default class PluginRegistry
           ...hook,
           metadata: {
             ...hook.metadata,
-            owner: this.owner,
+            owner: hookOwner,
           },
         }));
         // Register hooks to the determined target scope
         await targetHookScope.hooks.registerHooks(false, ...hooksWithOwner);
       }
 
-      pluginInstance.get = providers.get.bind(providers) as any;
+      pluginInstance.get = providers.get.bind(providers);
 
       // Install context extensions declared by the plugin
       // This adds properties like `this.remember` to ExecutionContextBase
@@ -327,7 +330,7 @@ export default class PluginRegistry
     rec: PluginRecord,
     deps: Set<Token>,
   ): Promise<{
-    pluginInstance: PluginEntry;
+    pluginInstance: PluginInstance;
     dynamicProviders: ProviderType[] | undefined;
     dynamicTools: readonly ToolType[];
   }> {
@@ -336,13 +339,13 @@ export default class PluginRegistry
     switch (rec.kind) {
       case PluginKind.CLASS:
         return {
-          pluginInstance: new (rec.useClass as Ctor<PluginEntry>)(...depsInstances),
+          pluginInstance: new (rec.useClass as Ctor<PluginInstance>)(...depsInstances),
           dynamicProviders: rec.providers,
           dynamicTools: [],
         };
       case PluginKind.CLASS_TOKEN:
         return {
-          pluginInstance: new (rec.provide as Ctor<PluginEntry>)(...depsInstances),
+          pluginInstance: new (rec.provide as Ctor<PluginInstance>)(...depsInstances),
           dynamicProviders: rec.providers,
           dynamicTools: [],
         };
@@ -352,12 +355,12 @@ export default class PluginRegistry
         // from the same options, so `get`, fields (ES `#private` ones too) and state belong to that
         // registry, not to whichever installed the record last (#647). A hand-written value record
         // names its instance, so it stays that instance everywhere.
-        const value = rec.useValue as PluginEntry;
+        const value = rec.useValue as PluginInstance;
         const init = installedPluginValues.has(value) ? initOptionsOf(value) : undefined;
         installedPluginValues.add(value);
         if (init && isDynamicPluginClass(rec.provide)) {
           return {
-            pluginInstance: new rec.provide(init.options) as PluginEntry,
+            pluginInstance: new rec.provide(init.options) as PluginInstance,
             dynamicProviders: rec.providers,
             dynamicTools: [],
           };
@@ -372,7 +375,7 @@ export default class PluginRegistry
         if (isDynamicPluginClass(rec.provide) && !(produced instanceof rec.provide)) {
           const optionDerived = collectDynamicProviders(rec.provide, produced);
           return {
-            pluginInstance: new rec.provide(produced) as PluginEntry,
+            pluginInstance: new rec.provide(produced) as PluginInstance,
             dynamicProviders:
               optionDerived.length > 0
                 ? dedupePluginProviders([...optionDerived, ...(rec.providers ?? [])])
@@ -381,7 +384,7 @@ export default class PluginRegistry
             dynamicTools: collectDynamicTools(rec.provide, produced),
           };
         }
-        return { pluginInstance: produced as PluginEntry, dynamicProviders: rec.providers, dynamicTools: [] };
+        return { pluginInstance: produced as PluginInstance, dynamicProviders: rec.providers, dynamicTools: [] };
       }
       default:
         throw new InvalidRegistryKindError('plugin', (rec as { kind?: string }).kind);

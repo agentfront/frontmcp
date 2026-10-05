@@ -17,11 +17,11 @@ import {
   type AdapterEntry,
   type FlowEntry,
   type LoggerEntry,
-  type PluginEntry,
   type ProviderEntry,
   type ScopeEntry,
 } from '../../entries';
 import { type FlowName } from '../../metadata';
+import { type PluginInstance } from '../plugin.interface';
 
 export interface ScopeRegistryInterface {
   getScopes(): ScopeEntry[];
@@ -48,12 +48,15 @@ export interface ProviderRegistryInterface {
 
   getRegistries<T extends RegistryKind>(type: T): RegistryType[T][];
 
-  // TODO: fix session type
-  buildViews(session: any): Promise<ProviderViews>;
+  buildViews(
+    sessionKey: string,
+    contextProviders?: Map<Token, unknown>,
+    contextSource?: ProviderRegistryInterface,
+  ): Promise<ProviderViews>;
 }
 
 export interface PluginRegistryInterface {
-  getPlugins(): PluginEntry[];
+  getPlugins(): PluginInstance[];
   getPluginNames(): string[];
 }
 

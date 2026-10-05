@@ -63,6 +63,8 @@ import MySimplePlugin from './plugins/my-simple.plugin';
 export default class MyApp {}
 ```
 
+In the factory form, `inject` is optional: without it, `useFactory` is called with no arguments.
+
 ## Dynamic Plugin with Options
 
 For plugins that need runtime configuration, extend `DynamicPlugin`:
@@ -429,14 +431,13 @@ declare global {
 }
 ```
 
-Tools can then use this metadata:
+Tools then set the field at the top level of their `@Tool` options:
 
 ```ts
 @Tool({
   name: 'my-tool',
-  metadata: {
-    cache: { ttl: 3600 },
-  },
+  inputSchema: { query: z.string() },
+  cache: { ttl: 3600 },
 })
 ```
 
@@ -485,6 +486,13 @@ export default class GlobalLoggerPlugin {
   Using `scope: 'server'` in a standalone app will throw an `InvalidPluginScopeError`.
 </Warning>
 
+Only the hooks reach every app, those declared on the plugin's providers included. The plugin's providers and context extensions (`this.remember`, `this.approval`) stay
+with the app that installed it, as described in [Installing a Plugin in Several Apps](#installing-a-plugin-in-several-apps).
+Its hooks see every app's tool inputs and outputs, resource reads and prompts, so give `scope: 'server'` only to a
+plugin trusted with every app's traffic. Install it on one app: each app that installs it adds its own copy of the
+hooks, and every copy runs for every app. Up to 1.9.0 the hooks of a server-scoped plugin installed on an app ran only
+for that app's tools, resources and prompts.
+
 ### When to Use Each Scope
 
 | Use Case                | Scope    | Example                          |
@@ -497,9 +505,11 @@ export default class GlobalLoggerPlugin {
 
 ### Accessing Other Apps (Server Scope)
 
-Server-scoped plugins can access other apps via `scope.apps`:
+Server-scoped plugins can access other apps through the scope's app registry. The flow a hook receives keeps its `scope` protected, so resolve `ScopeEntry` with `ctx.get()`, the flow's DI lookup:
 
 ```ts
+import { Plugin, ScopeEntry, ToolHook, type FlowCtxOf } from '@frontmcp/sdk';
+
 @Plugin({
   name: 'cross-app-plugin',
   scope: 'server',
@@ -508,7 +518,7 @@ export default class CrossAppPlugin {
   @ToolHook.Will('execute')
   async checkOtherApps(ctx: FlowCtxOf<'tools:call-tool'>) {
     // Access all registered apps
-    const apps = ctx.scope.apps.getApps();
+    const apps = ctx.get(ScopeEntry).apps.getApps();
 
     // Find a specific app by ID
     const otherApp = apps.find((a) => a.id === 'other-app-id');

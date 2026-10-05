@@ -7,7 +7,7 @@ tags: [development, redis, job, permissions]
 features:
   - 'Declarative `permissions` as an array of `{ action, roles, scopes, custom }` rules'
   - 'Using `tags` and `labels` for categorization and filtering'
-  - 'The `job()` function builder for simple jobs that need no class'
+  - 'The `job()` function builder for simple jobs that need no class, reporting through `ctx.log()` and `ctx.progress()`'
   - 'Full server registration with `jobs.enabled: true` and a Redis store'
 ---
 
@@ -70,13 +70,13 @@ const CleanupTempFiles = job({
     deleted: z.number().int(),
     freedBytes: z.number().int(),
   },
-})((input, ctx) => {
+})(async (input, ctx) => {
   ctx.log(`Cleaning ${input.directory}, max age: ${input.maxAgeDays} days`);
-  ctx.progress(0, 100, 'Scanning directory');
+  await ctx.progress(0, 100, 'Scanning');
 
   // ... scan and delete logic ...
 
-  ctx.progress(100, 100, 'Cleanup complete');
+  await ctx.progress(100, 100, 'Done');
   return { deleted: 42, freedBytes: 1024000 };
 });
 ```
@@ -115,7 +115,7 @@ class DataServer {}
   (**enforced from 1.7.2 onward** — see GHSA-58v2-gpcc-jmqv; earlier versions
   stored the rules without evaluating them)
 - Using `tags` and `labels` for categorization and filtering
-- The `job()` function builder for simple jobs that need no class
+- The `job()` function builder for simple jobs that need no class, reporting through `ctx.log()` and `ctx.progress()`
 - Full server registration with `jobs.enabled: true` and a Redis store
 
 ## Related

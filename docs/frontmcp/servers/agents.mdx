@@ -163,28 +163,18 @@ Each agent is automatically exposed as a tool:
 - `invoke_calculator-agent`
 - `invoke_writer-agent`
 
-### Loading from npm or Remote Servers
+### Agents from npm or Remote Servers
 
-Mix local agents with those loaded from npm or proxied from remote servers:
+`Agent.esm()` and `Agent.remote()` exist, but startup refuses them: per-entry `.esm()` and `.remote()` loading covers tools, resources and prompts only. An `agents` array that lists one fails startup with `ExternalEntryNotSupportedError`, naming the agent and its source:
 
-```ts
-import { App, Agent } from '@frontmcp/sdk';
-
-@App({
-  id: 'my-app',
-  name: 'My Application',
-  agents: [
-    ResearchAgent,                                                  // Local class
-    Agent.esm('@acme/agents@^1.0.0', 'writer'),                    // Single agent from npm
-    Agent.remote('https://api.example.com/mcp', 'assistant'),      // Single agent from remote
-  ],
-})
-class MyApp {}
+```text
+Agent "writer" from @acme/agents@^1.0.0 is not supported: per-entry .esm() and .remote() loading is supported for tools, resources and prompts only; declare the agent with @Agent() or agent() instead
 ```
 
-<Info>
-`Agent.esm()` and `Agent.remote()` load individual agents. For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
-</Info>
+Use one of these instead:
+
+- **Declare the agent locally** with `@Agent()` or `agent()`. Its `tools` can include [`Tool.esm()` and `Tool.remote()`](/frontmcp/servers/tools#loading-from-npm-or-remote-servers) entries, so the agent can use tools from a package or another server.
+- **Call an agent another FrontMCP server hosts** through the `invoke_<agent>` tool that server exposes for it, e.g. `Tool.remote('https://agents.example.com/mcp', 'invoke_writer')`, or proxy the whole server with [`App.remote()`](/frontmcp/servers/apps#remote-apps).
 
 ---
 

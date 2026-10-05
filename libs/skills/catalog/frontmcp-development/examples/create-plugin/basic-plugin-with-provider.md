@@ -20,7 +20,7 @@ A minimal plugin that contributes an injectable service via the `providers` and 
 // src/plugins/audit-log/providers/audit-logger.provider.ts
 import { Provider } from '@frontmcp/sdk';
 
-@Provider()
+@Provider({ name: 'AuditLogger' })
 export class AuditLogger {
   async logToolCall(toolName: string, userId: string, input: unknown): Promise<void> {
     console.log(`[AUDIT] ${userId} called ${toolName}`, input);
@@ -31,6 +31,7 @@ export class AuditLogger {
 ```typescript
 // src/plugins/audit-log/audit-log.plugin.ts
 import { Plugin } from '@frontmcp/sdk';
+
 import { AuditLogger } from './providers/audit-logger.provider';
 
 @Plugin({
@@ -44,7 +45,8 @@ export default class AuditLogPlugin {}
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
+
 import AuditLogPlugin from './plugins/audit-log/audit-log.plugin';
 
 @App({ name: 'MyApp' })

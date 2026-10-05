@@ -10,6 +10,7 @@
 
 import 'reflect-metadata';
 
+import { ScopeConfigurationError } from '../../errors';
 import {
   hasSkillAuditFactory,
   registerSkillAuditWriter,
@@ -60,6 +61,8 @@ class FakeWriter {
   constructor(
     public readonly store: unknown,
     public readonly signer: unknown,
+    public readonly logger: unknown,
+    public readonly metrics: unknown,
   ) {
     FakeWriter.instances.push(this);
   }
@@ -123,6 +126,32 @@ describe('registerSkillAuditWriter', () => {
     expect(providers.injectProvider).toHaveBeenCalledTimes(1);
     expect(providers.injected[0]!.provide).toBe(FAKE_TOKEN);
     expect(FakeWriter.instances.length).toBe(1);
+  });
+
+  it('hands the configured metrics sink to the writer', () => {
+    setSkillAuditFactory(() => fakeModule);
+    const metrics = { incrementWriteFailure: jest.fn() };
+
+    registerSkillAuditWriter({
+      providers: makeProviders() as never,
+      audit: { enabled: true, metrics },
+      logger: makeLogger() as never,
+    });
+
+    expect(FakeWriter.instances[0]?.metrics).toBe(metrics);
+  });
+
+  it('refuses a metrics sink without incrementWriteFailure()', () => {
+    setSkillAuditFactory(() => fakeModule);
+
+    expect(() =>
+      registerSkillAuditWriter({
+        providers: makeProviders() as never,
+        audit: { enabled: true, metrics: {} },
+        logger: makeLogger() as never,
+      }),
+    ).toThrow(ScopeConfigurationError);
+    expect(FakeWriter.instances).toHaveLength(0);
   });
 
   it('falls back to globalThis.__frontmcp_skill_audit_module__ when no factory is set', () => {

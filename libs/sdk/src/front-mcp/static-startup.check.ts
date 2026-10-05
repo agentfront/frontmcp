@@ -16,8 +16,8 @@
  * - an entry declares a field only a plugin enforces (`approval`, `featureFlag`, ...) and no plugin
  *   that reaches it enforces it. Outside an agent, a plugin enforces the fields it declares only
  *   through its hooks, so one without hooks enforces none. The server's plugins reach every entry.
- *   An app's plugins reach its entries, and other apps' too when one of their hooks is
- *   `appliesTo: 'uncovered-apps'` or their hooks can't be read here. Skills, and entries outside
+ *   An app's plugins reach its entries, and other apps' too when the plugin has `scope: 'server'`,
+ *   one of its hooks is `appliesTo: 'uncovered-apps'` or its hooks can't be read here. Skills, and entries outside
  *   every app, are reached by every plugin outside an agent. A tool declared inside an `@Agent` is
  *   reached only by that agent's plugins (by none with `execution.useToolFlow: false`), and an
  *   agent's plugins reach nothing else.
@@ -155,7 +155,10 @@ function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType):
       if (!record) continue;
       const hooks = pluginHooksOf(record);
       if (hooks === undefined || hooks.length > 0) {
-        const gatesOnlyItsApp = hooks !== undefined && !hooks.some((hook) => hook.appliesTo === 'uncovered-apps');
+        const gatesOnlyItsApp =
+          record.metadata.scope !== 'server' &&
+          hooks !== undefined &&
+          !hooks.some((hook) => hook.appliesTo === 'uncovered-apps');
         const keys = app && gatesOnlyItsApp ? keysOfApp(app) : everyAppKeys;
         for (const key of record.metadata.enforcesMetadata ?? []) keys.add(key);
       }

@@ -6,7 +6,31 @@ tags: [telemetry, api, spans, events, attributes, this-telemetry, custom]
 
 # Telemetry API (`this.telemetry`)
 
-Every execution context (tools, resources, prompts, agents) gets a `this.telemetry` API when observability is enabled. No imports, no context construction — it automatically inherits the current request's trace ID, session ID, and scope.
+Every execution context (tools, resources, prompts, agents) gets a `this.telemetry` API when observability is enabled. No context construction: it automatically inherits the current request's trace ID, session ID, and scope.
+
+## Typing `this.telemetry`
+
+`observability: true` installs `this.telemetry` at runtime, but its type comes from `@frontmcp/observability`: the package declares it on `ExecutionContextBase` and on `PromptContext` (which does not extend `ExecutionContextBase`) with a `declare module '@frontmcp/sdk'` augmentation, which TypeScript applies only when the package is part of the compilation. Without it, `this.telemetry` fails with `Property 'telemetry' does not exist`. Import the package in the file that uses `this.telemetry`, or once in any file the project compiles (such as the server entry). A type-only import is enough and is erased at runtime:
+
+```typescript
+import type {} from '@frontmcp/observability'; // declares this.telemetry
+```
+
+The same import types `this.telemetry` in a prompt:
+
+```typescript
+import { Prompt, PromptContext } from '@frontmcp/sdk';
+
+import type {} from '@frontmcp/observability'; // declares this.telemetry
+
+@Prompt({ name: 'summarize', arguments: [{ name: 'topic', required: true }] })
+class SummarizePrompt extends PromptContext {
+  async execute({ topic }: Record<string, string>) {
+    this.telemetry.addEvent('prompt-built', { topic });
+    return `Summarize what we know about ${topic}.`;
+  }
+}
+```
 
 ## Available Methods
 
@@ -25,6 +49,8 @@ Every execution context (tools, resources, prompts, agents) gets a `this.telemet
 ```typescript
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
+import type {} from '@frontmcp/observability'; // declares this.telemetry
+
 @Tool({
   name: 'analyze_data',
   description: 'Analyze dataset with custom telemetry',
@@ -38,9 +64,9 @@ class AnalyzeDataTool extends ToolContext {
     // Child span for a specific operation
     const data = await this.telemetry.withSpan('fetch-dataset', async (span) => {
       span.setAttribute('dataset.id', datasetId);
-      const res = await this.fetch(`/api/datasets/${datasetId}`);
+      const res = await this.fetch(`https://api.example.com/datasets/${datasetId}`);
       span.addEvent('data-received', { rows: res.headers.get('x-total-count') ?? '0' });
-      return res.json();
+      return (await res.json()) as number[];
     });
 
     // Attributes on the execution span
@@ -75,16 +101,21 @@ tool analyze_data
 
 ## Usage in Plugins
 
-External plugins use the same `this.telemetry` API. Events appear on the parent tool/resource span:
+External plugins use the same `telemetry` API through the tool's context. Events appear on the parent tool/resource span. The `telemetry` getter throws when `ObservabilityPlugin` is installed with tracing disabled, so a truthiness check such as `if (toolCtx?.telemetry)` does not guard it; wrap the call instead:
 
 ```typescript
-@Plugin({ name: 'my-audit-plugin', contextExtensions: [...] })
-class AuditPlugin extends DynamicPlugin<AuditOptions> {
+import { Plugin, ToolHook, type FlowCtxOf } from '@frontmcp/sdk';
+
+import type {} from '@frontmcp/observability'; // declares toolContext.telemetry
+
+@Plugin({ name: 'my-audit-plugin' })
+export default class AuditPlugin {
   @ToolHook.Will('execute')
   willExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): void {
-    const toolCtx = flowCtx.state.toolContext;
-    if (toolCtx?.telemetry) {
-      toolCtx.telemetry.addEvent('audit.pre-check', { policy: 'strict' });
+    try {
+      flowCtx.state.required.toolContext.telemetry.addEvent('audit.pre-check', { policy: 'strict' });
+    } catch {
+      // telemetry throws when observability is not installed or tracing is disabled
     }
   }
 }
@@ -95,7 +126,16 @@ class AuditPlugin extends DynamicPlugin<AuditOptions> {
 Agents have the same API. Nested tool calls automatically share the trace ID:
 
 ```typescript
-@Agent({ name: 'research-agent', tools: [WebSearchTool, SummarizerTool] })
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
+
+import type {} from '@frontmcp/observability'; // declares this.telemetry
+
+@Agent({
+  name: 'research-agent',
+  inputSchema: { query: z.string() },
+  llm: { provider: 'openai', model: 'gpt-4o', apiKey: { env: 'OPENAI_API_KEY' } },
+  tools: [WebSearchTool, SummarizerTool],
+})
 class ResearchAgent extends AgentContext {
   async execute(input: { query: string }) {
     this.telemetry.addEvent('research-started', { query: input.query });
@@ -122,8 +162,7 @@ try {
   }
   span.end();
 } catch (err) {
-  span.recordError(err);
-  span.endWithError(err);
+  span.endWithError(err instanceof Error ? err : String(err)); // records the exception and sets ERROR status
   throw err;
 }
 ```
@@ -146,14 +185,19 @@ Counters are cumulative, monotonically-increasing metrics. Unlike spans (which d
 ### `createCounter(name, description?)`
 
 ```typescript
-createCounter(name: string, description?: string): Counter
+createCounter(name: string, description?: string): TelemetryCounter
 
-interface Counter {
-  inc(by?: number, attrs?: Record<string, string | number | boolean>): void;
+interface TelemetryCounter {
+  inc(by?: number, attributes?: Record<string, string>): void;
+  readonly name: string;
 }
 ```
 
 ```typescript
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
+import type {} from '@frontmcp/observability'; // declares this.telemetry
+
 @Tool({ name: 'process_widget', inputSchema: { id: z.string() } })
 class ProcessWidgetTool extends ToolContext {
   async execute({ id }: { id: string }) {
@@ -167,6 +211,10 @@ class ProcessWidgetTool extends ToolContext {
       throw err;
     }
   }
+
+  private async processWidget(id: string): Promise<{ id: string }> {
+    return { id };
+  }
 }
 ```
 
@@ -174,14 +222,17 @@ class ProcessWidgetTool extends ToolContext {
 
 When `skillsConfig.enabled: true` is set on `@FrontMcp`, the framework emits the following counters automatically:
 
-| Counter                                         | Attributes                                                                                                                                                                                | Description                                                          |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `frontmcp_skills_bundle_pulls_total`            | `status: 'ok' \| 'error'`, `source: 'static' \| 'npm' \| 'saas-pull' \| 'filesystem' \| 'unknown'`, `reason: 'pinned' \| 'invalid_bundle' \| 'listener_error' \| 'unknown'` (errors only) | Number of skill bundle pulls / hot-swaps                             |
-| `frontmcp_skills_signature_verifications_total` | `status: 'ok' \| 'error'`                                                                                                                                                                 | Number of bundle signature verifications attempted                   |
-| `frontmcp_skills_signature_failures_total`      | `reason: <bounded vocabulary>`                                                                                                                                                            | Number of signature failures, classified by reason                   |
-| `frontmcp_skills_replay_checks_total`           | `status: 'ok' \| 'error'`                                                                                                                                                                 | Number of replay-protection checks                                   |
-| `frontmcp_skills_replay_rejects_total`          | `reason: <bounded vocabulary>`                                                                                                                                                            | Number of replay rejections, classified by reason                    |
-| `frontmcp_skills_audit_dropped_total`           | `reason: <queue overflow / write failure>`                                                                                                                                                | Audit log records dropped due to back-pressure or persistence errors |
+| Counter                                         | Attributes                                                                                                                                                                                | Description                                            |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `frontmcp_skills_bundle_pulls_total`            | `status: 'ok' \| 'error'`, `source: 'static' \| 'npm' \| 'saas-pull' \| 'filesystem' \| 'unknown'`, `reason: 'pinned' \| 'invalid_bundle' \| 'listener_error' \| 'unknown'` (errors only) | Number of skill bundle pulls / hot-swaps               |
+| `frontmcp_skills_signature_verifications_total` | `status: 'ok' \| 'error'`                                                                                                                                                                 | Number of bundle signature verifications attempted     |
+| `frontmcp_skills_signature_failures_total`      | `reason: <bounded vocabulary>`                                                                                                                                                            | Number of signature failures, classified by reason     |
+| `frontmcp_skills_replay_checks_total`           | `status: 'ok' \| 'error'`                                                                                                                                                                 | Number of replay-protection checks                     |
+| `frontmcp_skills_replay_rejects_total`          | `reason: <bounded vocabulary>`                                                                                                                                                            | Number of replay rejections, classified by reason      |
+| `frontmcp_skills_audit_write_failures_total`    | `reason: 'sign' \| 'append' \| 'unexpected'`                                                                                                                                              | Audit records that failed to sign or append            |
+| `frontmcp_skills_audit_dropped_total`           | `reason: 'queue-overflow'`                                                                                                                                                                | Audit records dropped because the write queue was full |
+
+The two audit counters are emitted only when `skillsConfig.audit.metrics` is set to `createSkillAuditMetrics({ createCounter })` from `@frontmcp/adapters/skills`.
 
 The framework also emits a `skill.bundle.swap` span (with `source`, `bundle_id`, `version`, `skill_count`, `from_version` attributes) for every successful bundle swap, and adds `skill_search.query`, `skill_search.results`, and `skill_action.phase` events to the active flow span when the skill HTTP catalog is exercised.
 
@@ -193,10 +244,16 @@ Counters live in two places:
 2. **In-memory snapshot** — when no `MeterProvider` is registered, counters still increment internally and can be read with `getMetricSnapshot()` from `@frontmcp/observability` (intended for tests and local debugging only).
 
 ```typescript
-import { getMetricSnapshot } from '@frontmcp/observability';
+import { getCounterTotal, getMetricSnapshot } from '@frontmcp/observability';
 
-const snapshot = getMetricSnapshot();
-expect(snapshot['frontmcp_skills_bundle_pulls_total']).toBeGreaterThan(0);
+// One entry per counter name and attribute combination: { name, count, attributes }
+const okPulls = getMetricSnapshot().filter(
+  (entry) => entry.name === 'frontmcp_skills_bundle_pulls_total' && entry.attributes['status'] === 'ok',
+);
+expect(okPulls.length).toBeGreaterThan(0);
+
+// Sum across every attribute combination
+expect(getCounterTotal('frontmcp_skills_bundle_pulls_total')).toBeGreaterThan(0);
 ```
 
 See [`vendor-integrations`](./vendor-integrations.md) for the metrics-side wiring (PeriodicExportingMetricReader + OTLP exporter).
