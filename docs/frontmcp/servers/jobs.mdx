@@ -123,28 +123,15 @@ import { App } from '@frontmcp/sdk';
 class TextProcessingApp {}
 ```
 
-### Loading from npm or Remote Servers
+### Jobs from npm or Remote Servers
 
-Mix local jobs with those loaded from npm or proxied from remote servers:
+`Job.esm()` and `Job.remote()` exist, but startup refuses them: per-entry `.esm()` and `.remote()` loading covers tools, resources and prompts only. A `jobs` array that lists one fails startup with `ExternalEntryNotSupportedError`, naming the job and its source:
 
-```ts
-import { App, Job } from '@frontmcp/sdk';
-
-@App({
-  id: 'text-processing',
-  name: 'Text Processing',
-  jobs: [
-    AnalyzeTextJob,                                                 // Local class
-    Job.esm('@acme/jobs@^1.0.0', 'cleanup'),                       // Single job from npm
-    Job.remote('https://api.example.com/mcp', 'sync-data'),        // Single job from remote
-  ],
-})
-class TextProcessingApp {}
+```text
+Job "cleanup" from @acme/jobs@^1.0.0 is not supported: per-entry .esm() and .remote() loading is supported for tools, resources and prompts only; declare the job with @Job() or job() instead
 ```
 
-<Info>
-`Job.esm()` and `Job.remote()` load individual jobs. For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
-</Info>
+Declare the job locally with `@Job()` or `job()` instead. To run work that lives on another server, call the tool that server exposes for it with [`Tool.remote()`](/frontmcp/servers/tools#loading-from-npm-or-remote-servers).
 
 To enable the jobs system on your server, configure the top-level `jobs` option:
 

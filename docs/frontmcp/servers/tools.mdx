@@ -106,15 +106,31 @@ import { App, Tool } from '@frontmcp/sdk';
   tools: [
     GreetTool,                                                // Local class
     Tool.esm('@acme/tools@^1.0.0', 'echo'),                  // Single tool from npm
-    Tool.remote('https://api.example.com/mcp', 'search'),     // Single tool from remote server
+    Tool.esm('@acme/tools@^1.0.0', 'search', {               // Same package, loaded once
+      metadata: { name: 'acme_search', description: 'Search the Acme catalog' },
+    }),
+    Tool.remote('https://api.example.com/mcp', 'translate'),  // Single tool from a remote server
+    '@acme/more-tools@^2.0.0',                                // Every tool in the package
   ],
 })
 class MyApp {}
 ```
 
+`Tool.esm(specifier, name, options?)` loads the tool named `name` from an npm package and runs it in-process. `Tool.remote(url, name, options?)` proxies the tool named `name` on a remote MCP server. A package specifier string registers every tool of that package.
+
+- **Loading happens at startup.** The server loads each package and connects to each remote server while it starts, and does not serve requests until every entry is loaded.
+- **The tool keeps its own name.** `Tool.esm('@acme/tools@^1.0.0', 'echo')` is listed and called as `echo`, with no namespace prefix.
+- **`options.metadata` overrides the loaded metadata.** Fields you set (`name`, `description`, `annotations`, ...) replace the package's or server's. A new `name` renames the tool; calls still run the original.
+- **One load per package, one connection per URL.** Entries that name the same package share a single load, and entries that name the same server share a single connection.
+- **The tool belongs to the app or server that lists it.** Calls run through the regular `tools:call-tool` flow, so that owner's hooks, plugins, `authorities` and `availableWhen` apply as they do to a local tool.
+- **Options:** `.esm()` takes `loader` (registry and bundle CDN; defaults to the server's [`loader`](/frontmcp/servers/esm-packages#gateway-level-loader)) and `cacheTTL`; `.remote()` takes `transportOptions` and `remoteAuth`.
+
+<Warning>
+A missing tool fails startup instead of being skipped. `ExternalEntryLoadError` means the package did not load or the server was unreachable; `ExternalEntryNotFoundError` means the package or server has no tool with that name. Both messages name the tool and its source, e.g. `Tool "serch" was not found in @acme/tools@^1.0.0 (tools there: echo, search)`.
+</Warning>
+
 <Info>
-`Tool.esm()` loads a single named tool from an npm package at runtime. `Tool.remote()` proxies a single tool from a remote MCP server.
-For loading **entire apps** (all tools, resources, prompts), use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
+For loading **entire apps** (all tools, resources, prompts, under a namespace), use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
 </Info>
 
 ---

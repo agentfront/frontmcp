@@ -9,7 +9,6 @@ features:
   - 'The SKILL.md YAML frontmatter format for metadata (name, description, tags, parameters, examples)'
   - "File-based instructions with `{ file: './path.md' }` resolved relative to the skill file"
   - "URL-based instructions with `{ url: '...' }` fetched at build time"
-  - 'ESM loading with `Skill.esm()` and remote loading with `Skill.remote()`'
 ---
 
 # Directory-Based Skill with File References and Registration
@@ -80,18 +79,9 @@ import { App, FrontMcp, Skill, SkillContext } from '@frontmcp/sdk';
 })
 class ApiStandardsSkill extends SkillContext {}
 
-// ESM and remote loading
-const ExternalGuide = Skill.esm('@my-org/skills@^1.0.0', 'ExternalGuide', {
-  metadata: { description: 'A skill loaded from an ES module' },
-});
-
-const CloudGuide = Skill.remote('https://example.com/mcp', 'CloudGuide', {
-  metadata: { description: 'A skill loaded from a remote MCP server' },
-});
-
 @App({
   name: 'standards-app',
-  skills: [CodingStandards, DeployGuide, ApiStandardsSkill, ExternalGuide, CloudGuide],
+  skills: [CodingStandards, DeployGuide, ApiStandardsSkill],
 })
 class StandardsApp {}
 
@@ -108,7 +98,6 @@ class DevServer {}
 - The SKILL.md YAML frontmatter format for metadata (name, description, tags, parameters, examples)
 - File-based instructions with `{ file: './path.md' }` resolved relative to the skill file
 - URL-based instructions with `{ url: '...' }` fetched at build time
-- ESM loading with `Skill.esm()` and remote loading with `Skill.remote()`
 
 ## Related
 

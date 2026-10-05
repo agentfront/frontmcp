@@ -272,25 +272,30 @@ Register them the same way as class resources: `resources: [SystemInfo, LogFile]
 
 ## Remote and ESM Loading
 
-Load resources from external modules or remote URLs.
+Load a single resource from an npm package or proxy one from a remote MCP server, by its name there.
 
-**ESM loading:**
+**ESM loading** -- the resource named `status` in an npm package, read in-process:
 
 ```typescript
-const ExternalResource = Resource.esm('@my-org/resources@^1.0.0', 'ExternalResource', {
-  metadata: { description: 'A resource loaded from an ES module' },
+const StatusResource = Resource.esm('@my-org/resources@^1.0.0', 'status', {
+  metadata: { description: 'Service status from @my-org/resources' },
 });
 ```
 
-**Remote loading:**
+**Remote loading** -- the resource (or resource template) named `health` on a remote MCP server:
 
 ```typescript
-const CloudResource = Resource.remote('https://example.com/mcp', 'CloudResource', {
-  metadata: { description: 'A resource loaded from a remote MCP server' },
+const HealthResource = Resource.remote('https://example.com/mcp', 'health', {
+  metadata: { description: 'Health of the example service' },
 });
 ```
 
-Both return values that can be registered in `resources: [ExternalResource, CloudResource]`.
+Register both like class resources: `resources: [StatusResource, HealthResource]`. The server loads them at startup, before it serves requests:
+
+- Each keeps its own name and URI (no namespace prefix); `metadata` overrides the loaded metadata.
+- Entries naming the same package load it once; entries naming the same URL share one connection.
+- The resource belongs to the app or server that lists it, so that owner's hooks and plugins apply to reads.
+- A package that does not load or a server that is unreachable fails startup with `ExternalEntryLoadError`; a name it does not have fails it with `ExternalEntryNotFoundError`.
 
 ## Binary Content with Blob
 

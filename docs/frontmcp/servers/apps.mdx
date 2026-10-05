@@ -260,7 +260,7 @@ See the full [ESM Packages reference](/frontmcp/servers/esm-packages) for `App.e
 
 ## Per-Primitive Loading
 
-In addition to loading entire apps, you can load **individual primitives** (tools, resources, prompts, agents, skills, jobs) from npm packages or remote servers using static methods on each decorator:
+In addition to loading entire apps, you can load **individual tools, resources and prompts** from npm packages or remote servers using the static `.esm()` and `.remote()` methods on `Tool`, `Resource` and `Prompt`:
 
 ```ts
 import { FrontMcp, App, Tool, Resource, Prompt } from '@frontmcp/sdk';
@@ -271,21 +271,29 @@ import { FrontMcp, App, Tool, Resource, Prompt } from '@frontmcp/sdk';
   tools: [
     LocalEchoTool,                                            // Local @Tool class
     Tool.esm('@acme/tools@^1.0.0', 'echo'),                  // Single tool from npm
-    Tool.remote('https://api.example.com/mcp', 'search'),     // Proxy single tool from remote
+    Tool.remote('https://api.example.com/mcp', 'search', {    // Proxy single tool from remote
+      metadata: { name: 'api_search' },
+    }),
   ],
   resources: [
     LocalConfig,
-    Resource.esm('@acme/tools@^1.0.0', 'status'),            // Single resource from npm
+    Resource.esm('@acme/tools@^1.0.0', 'status'),            // Same package: loaded once
   ],
   prompts: [
-    Prompt.remote('https://api.example.com/mcp', 'greeting'), // Proxy single prompt
+    Prompt.remote('https://api.example.com/mcp', 'greeting'), // Same server: one connection
   ],
 })
 class MyApp {}
 ```
 
+Unlike `App.esm()` and `App.remote()`, a per-primitive entry adds just the one entry, under its own name with no namespace prefix, and belongs to the app (or server) whose array lists it, so that owner's hooks, plugins and authorities apply. The server loads every entry at startup: each package once and each remote server over one connection, however many entries name it. `options.metadata` overrides the loaded metadata, and an entry the package or server does not have fails startup with a typed error that names it.
+
+<Warning>
+`Agent.esm()`, `Agent.remote()`, `Skill.esm()`, `Skill.remote()`, `Job.esm()` and `Job.remote()` are refused at startup with `ExternalEntryNotSupportedError`. Declare agents, skills and jobs locally; see [Agents](/frontmcp/servers/agents), [Skills](/frontmcp/servers/skills) and [Jobs](/frontmcp/servers/jobs) for the alternatives.
+</Warning>
+
 <Tip>
-Per-primitive loading gives you fine-grained control. Instead of importing an entire package's tools, you can pick exactly the ones you need. See each component's documentation page ([Tools](/frontmcp/servers/tools), [Resources](/frontmcp/servers/resources), [Prompts](/frontmcp/servers/prompts), [Agents](/frontmcp/servers/agents), [Skills](/frontmcp/servers/skills), [Jobs](/frontmcp/servers/jobs)) for details.
+Per-primitive loading gives you fine-grained control. Instead of importing an entire package's tools, you can pick exactly the ones you need. See [Tools](/frontmcp/servers/tools#loading-from-npm-or-remote-servers), [Resources](/frontmcp/servers/resources#loading-from-npm-or-remote-servers) and [Prompts](/frontmcp/servers/prompts#loading-from-npm-or-remote-servers) for details.
 </Tip>
 
 ---

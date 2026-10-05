@@ -147,7 +147,7 @@ const GenerateImage = Tool.esm('@some-org/some-package@^1.0.0', 'generate_image'
 const SearchApi = Tool.remote('https://search.example.com/mcp', 'search');
 ```
 
-Each factory takes the package specifier or server URL, the entry's name, and optional overrides: `.esm()` accepts `{ loader, cacheTTL, metadata }` and `.remote()` accepts `{ transportOptions, remoteAuth, metadata }`. Put the result in the matching `@App` array (`tools`, `resources`, `prompts`, `agents`, `skills`, `jobs`) or in the server-level `tools`, `resources`, and `skills` of `@FrontMcp`, just like a class-based entry:
+Each factory takes the package specifier or server URL, the entry's name, and optional overrides: `.esm()` accepts `{ loader, cacheTTL, metadata }` and `.remote()` accepts `{ transportOptions, remoteAuth, metadata }`. Put the result in the matching `@App` array (`tools`, `resources`, `prompts`) or in the server-level `tools` and `resources` of `@FrontMcp`, just like a class-based entry:
 
 ```typescript
 @FrontMcp({
@@ -155,11 +155,20 @@ Each factory takes the package specifier or server URL, the entry's name, and op
   apps: [MainApp],
   tools: [
     Tool.esm('@some-org/some-package@^1.0.0', 'generate_image'),
-    Tool.remote('https://search.example.com/mcp', 'search'),
+    Tool.remote('https://search.example.com/mcp', 'search', { metadata: { name: 'web_search' } }),
   ],
 })
 class Gateway {}
 ```
+
+The server loads these entries when it starts, before it serves requests:
+
+- Each entry keeps the name it has in its package or on its server, with no namespace prefix; `metadata` overrides the loaded metadata (a new `name` renames it).
+- Entries that name the same package load it once; entries that name the same server URL share one connection.
+- The entry belongs to the app or server whose array lists it and runs through the regular flows, so that owner's hooks, plugins and authorities apply.
+- A package that does not load or a server that is unreachable fails startup with `ExternalEntryLoadError`; a name the package or server does not have fails it with `ExternalEntryNotFoundError`.
+
+`Agent.esm()`, `Agent.remote()`, `Skill.esm()`, `Skill.remote()`, `Job.esm()` and `Job.remote()` type-check, but startup refuses them with `ExternalEntryNotSupportedError`: declare agents, skills and jobs with their decorators or builders instead.
 
 `App.esm(specifier, options?)` and `App.remote(url, options?)` take no entry name: they load a whole app, and go in `apps`.
 

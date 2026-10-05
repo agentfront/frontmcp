@@ -384,25 +384,7 @@ Register it the same way as a class job: `jobs: [CleanupTempFiles]`.
 
 ## Remote and ESM Loading
 
-Load jobs from external modules or remote URLs without importing them directly.
-
-**ESM loading** -- load a job from an ES module:
-
-```typescript
-const ExternalJob = Job.esm('@my-org/jobs@^1.0.0', 'ExternalJob', {
-  metadata: { description: 'A job loaded from an ES module' },
-});
-```
-
-**Remote loading** -- load a job from a remote MCP server:
-
-```typescript
-const CloudJob = Job.remote('https://example.com/mcp', 'CloudJob', {
-  metadata: { description: 'A job loaded from a remote MCP server' },
-});
-```
-
-Both return values that can be registered in `jobs: [ExternalJob, CloudJob]`.
+`Job.esm()` and `Job.remote()` exist, but startup refuses them with `ExternalEntryNotSupportedError`: per-entry `.esm()` and `.remote()` loading covers tools, resources and prompts only. Do not put them in `jobs`; declare the job locally with `@Job` or `job()`. To run work that lives on another server, proxy the tool that server exposes for it with `Tool.remote(url, name)`.
 
 ## Registration and Configuration
 

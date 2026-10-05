@@ -2121,8 +2121,7 @@
                 "Loading a skill from a directory with `skillDir()` including SKILL.md frontmatter and bundled resources",
                 "The SKILL.md YAML frontmatter format for metadata (name, description, tags, parameters, examples)",
                 "File-based instructions with `{ file: './path.md' }` resolved relative to the skill file",
-                "URL-based instructions with `{ url: '...' }` fetched at build time",
-                "ESM loading with `Skill.esm()` and remote loading with `Skill.remote()`"
+                "URL-based instructions with `{ url: '...' }` fetched at build time"
               ]
             },
             {

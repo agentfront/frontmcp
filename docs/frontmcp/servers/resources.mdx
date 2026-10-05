@@ -164,14 +164,28 @@ import { App, Resource } from '@frontmcp/sdk';
   resources: [
     AppConfig,                                                        // Local class
     Resource.esm('@acme/tools@^1.0.0', 'status'),                    // Single resource from npm
-    Resource.remote('https://api.example.com/mcp', 'system-health'), // Single resource from remote
+    Resource.remote('https://api.example.com/mcp', 'system-health', { // Single resource from remote
+      metadata: { description: 'Health of the Example API' },
+    }),
   ],
 })
 class MyApp {}
 ```
 
+`Resource.esm(specifier, name, options?)` loads the resource named `name` from an npm package and reads it in-process. `Resource.remote(url, name, options?)` proxies the resource, or resource template, named `name` on a remote MCP server.
+
+- **Loading happens at startup.** The server does not serve requests until every entry is loaded.
+- **The resource keeps its own name and URI**, with no namespace prefix. `options.metadata` overrides the loaded metadata field by field.
+- **One load per package, one connection per URL**, shared by every entry that names it.
+- **The resource belongs to the app or server that lists it**, and is read through the regular `resources:read-resource` flow, so that owner's hooks and plugins apply.
+- **Options:** `.esm()` takes `loader` and `cacheTTL`; `.remote()` takes `transportOptions` and `remoteAuth`.
+
+<Warning>
+A missing resource fails startup: `ExternalEntryLoadError` when the package does not load or the server is unreachable, `ExternalEntryNotFoundError` when it has no resource with that name. Both name the resource and its source.
+</Warning>
+
 <Info>
-`Resource.esm()` and `Resource.remote()` load individual resources. For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
+For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
 </Info>
 
 ---

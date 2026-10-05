@@ -161,29 +161,15 @@ Skills are automatically:
 - Indexed for search via `searchSkills`
 - Loadable via `loadSkill` with tool availability info
 
-### Loading from npm or Remote Servers
+### Skills from npm or Remote Servers
 
-Mix local skills with those loaded from npm or proxied from remote servers:
+`Skill.esm()` and `Skill.remote()` exist, but startup refuses them: per-entry `.esm()` and `.remote()` loading covers tools, resources and prompts only. A `skills` array (of an app or of `@FrontMcp`) that lists one fails startup with `ExternalEntryNotSupportedError`, naming the skill and its source:
 
-```ts
-import { App, Skill } from '@frontmcp/sdk';
-
-@App({
-  id: 'my-app',
-  name: 'My Application',
-  tools: [GitHubTool, DockerTool, K8sTool],
-  skills: [
-    ReviewPRSkill,                                                  // Local class
-    Skill.esm('@acme/skills@^1.0.0', 'deploy'),                    // Single skill from npm
-    Skill.remote('https://api.example.com/mcp', 'security-audit'), // Single skill from remote
-  ],
-})
-class MyApp {}
+```text
+Skill "deploy" from @acme/skills@^1.0.0 is not supported: per-entry .esm() and .remote() loading is supported for tools, resources and prompts only; declare the skill with @Skill() or skill() instead
 ```
 
-<Info>
-`Skill.esm()` and `Skill.remote()` load individual skills. For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
-</Info>
+Declare the skill locally with `@Skill()` or `skill()` instead. The tools it names can come from a package or another server: list them as [`Tool.esm()` or `Tool.remote()`](/frontmcp/servers/tools#loading-from-npm-or-remote-servers) entries in the app's `tools`.
 
 ---
 

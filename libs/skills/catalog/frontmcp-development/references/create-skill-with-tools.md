@@ -412,25 +412,16 @@ Register it the same way as a class skill: `skills: [QuickDeploySkill]`.
 
 ## Remote and ESM Loading
 
-Load skills from external modules or remote URLs without importing them directly.
-
-**ESM loading** -- load a skill from an ES module:
+`Skill.esm()` and `Skill.remote()` exist, but startup refuses them with `ExternalEntryNotSupportedError`: per-entry `.esm()` and `.remote()` loading covers tools, resources and prompts only. Do not put them in `skills`. Declare the skill locally (`@Skill` class, `skill()` or `skillDir()`) instead; the tools it names can come from a package or another server as `Tool.esm()` / `Tool.remote()` entries in the app's `tools`:
 
 ```typescript
-const ExternalSkill = Skill.esm('@my-org/skills@^1.0.0', 'ExternalSkill', {
-  metadata: { description: 'A skill loaded from an ES module' },
-});
+@App({
+  name: 'deploy-app',
+  tools: [Tool.esm('@my-org/tools@^1.0.0', 'build_project'), Tool.remote('https://example.com/mcp', 'health_check')],
+  skills: [QuickDeploySkill],
+})
+class DeployApp {}
 ```
-
-**Remote loading** -- load a skill from a remote MCP server:
-
-```typescript
-const CloudSkill = Skill.remote('https://example.com/mcp', 'CloudSkill', {
-  metadata: { description: 'A skill loaded from a remote MCP server' },
-});
-```
-
-Both return values that can be registered in `skills: [ExternalSkill, CloudSkill]`.
 
 ## Registration
 
