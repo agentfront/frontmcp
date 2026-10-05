@@ -1,6 +1,6 @@
 ---
 name: registration
-description: @App({ tools }) vs @FrontMcp({ tools }), multi-app composition.
+description: '@App({ tools }) vs @FrontMcp({ tools }), multi-app composition.'
 ---
 
 # Registering tools
