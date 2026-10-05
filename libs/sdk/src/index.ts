@@ -245,6 +245,8 @@ export {
   authorizeSkillHttpRequest,
   createSkillHttpAuthValidator,
   SkillHttpAuthValidator,
+  // Thrown by validateAllTools() when a 'strict' skill references a missing tool
+  SkillValidationError,
 } from './skill';
 export type {
   SkillAuditFactory,
@@ -277,6 +279,9 @@ export type {
   InstructionsScope,
   SkillIndexCache,
   SkillIndexScoring,
+  SkillValidationReport,
+  SkillValidationResult,
+  SyncResult,
 } from './skill';
 
 // Agent exports - only user-facing APIs
