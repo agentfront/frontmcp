@@ -21,6 +21,8 @@ import { createHostValidationMiddleware } from '../middleware/host-validation.mi
 import { allowedHostsFromEnv, deriveAllowedHosts, shouldEnforceDerivedHosts } from '../security/resolve-allowed-hosts';
 import { HostServerAdapter } from './base.host.adapter';
 
+const SERVER_DRAIN_MS = 5_000;
+
 /**
  * Default request body size for the Express host. Lifts body-parser's silent
  * 100KB default, which routinely rejected base64-encoded PDFs, DOCXes, and
@@ -80,6 +82,7 @@ export class ExpressHostAdapter extends HostServerAdapter {
   private app = express();
   private router = express.Router();
   private prepared = false;
+  private httpServer?: http.Server;
   /** Active host-validation middleware, or undefined while nothing is enforced. */
   private hostValidation?: ReturnType<typeof createHostValidationMiddleware>;
   /** Builds the derived allow-list, once this process commits to listening. */
@@ -317,6 +320,7 @@ export class ExpressHostAdapter extends HostServerAdapter {
   async start(portOrSocketPath: number | string, bindAddress?: string) {
     this.prepare();
     const server = http.createServer(this.app);
+    this.httpServer = server;
     server.requestTimeout = 0;
     server.headersTimeout = 0;
     server.keepAliveTimeout = 75_000;
@@ -358,6 +362,24 @@ export class ExpressHostAdapter extends HostServerAdapter {
           resolve();
         });
       });
+    }
+  }
+
+  /**
+   * Stop accepting connections, close idle keep-alive connections, and give requests in
+   * flight `drainMs` to finish before closing what is left (SSE streams never finish) (#712).
+   */
+  override async stop(drainMs = SERVER_DRAIN_MS): Promise<void> {
+    const server = this.httpServer;
+    if (!server) return;
+    this.httpServer = undefined;
+    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+    server.closeIdleConnections();
+    const forceClose = setTimeout(() => server.closeAllConnections(), drainMs);
+    try {
+      await closed;
+    } finally {
+      clearTimeout(forceClose);
     }
   }
 

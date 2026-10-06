@@ -650,3 +650,43 @@ describe('ExpressHostAdapter — derived host allow-list scope', () => {
     }
   });
 });
+
+describe('ExpressHostAdapter.stop() (#712)', () => {
+  async function startAdapter(): Promise<{ adapter: ExpressHostAdapter; server: http.Server }> {
+    const opened: http.Server[] = [];
+    const realCreateServer = http.createServer.bind(http);
+    const spy = jest.spyOn(http, 'createServer').mockImplementation(((...args: never[]) => {
+      const created = (realCreateServer as (...a: never[]) => http.Server)(...args);
+      opened.push(created);
+      return created;
+    }) as never);
+    const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const adapter = new ExpressHostAdapter();
+      await adapter.start(0, '127.0.0.1');
+      return { adapter, server: opened[0] };
+    } finally {
+      spy.mockRestore();
+      log.mockRestore();
+    }
+  }
+
+  it('stops listening and closes a connection still open once the drain time is up', async () => {
+    const { adapter, server } = await startAdapter();
+    const { port } = server.address() as import('node:net').AddressInfo;
+    const net = await import('node:net');
+    const socket = net.connect(port, '127.0.0.1');
+    socket.on('error', () => undefined);
+    await new Promise<void>((resolve) => socket.once('connect', () => resolve()));
+    const closed = new Promise<void>((resolve) => socket.once('close', () => resolve()));
+
+    await adapter.stop(20);
+    await closed;
+
+    expect(server.listening).toBe(false);
+  });
+
+  it('does nothing when the server never started', async () => {
+    await expect(new ExpressHostAdapter().stop()).resolves.toBeUndefined();
+  });
+});

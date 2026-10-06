@@ -30,7 +30,7 @@ Create and start an HTTP server.
 ```typescript
 static async bootstrap(
   options: FrontMcpConfigInput | FrontMcpConfigType
-): Promise<void>
+): Promise<FrontMcpInstance | undefined>
 ```
 
 Best for: Standalone HTTP server deployments.
@@ -42,6 +42,8 @@ import config from './server';
 await FrontMcpInstance.bootstrap(config);
 // Server running on configured port
 ```
+
+On `SIGTERM` or `SIGINT` the server shuts down gracefully with [`shutdown()`](#shutdown) and the process exits with code 0, or 1 if the shutdown fails or takes longer than 10 seconds. Up to 1.9.1 the HTTP server had no signal handler, so a stopped pod kept its HA heartbeat until it expired and its sessions answered `503` meanwhile. `bootstrap()` resolves to the running instance (`undefined` in daemon socket mode).
 
 ### createHandler(options)
 
@@ -246,6 +248,14 @@ Start the HTTP server (called internally by bootstrap).
 
 ```typescript
 start(): Promise<void>
+```
+
+### shutdown()
+
+Shut the server down gracefully. It stops accepting connections and closes idle ones, shuts every scope down (HA heartbeat, session relay, the HA Redis connections, channels) so other pods take its sessions over at once, gives requests in flight 5 seconds to finish before closing what is left (SSE streams), then disposes every scope (`onDispose` callbacks and providers run). Calling it again returns the same promise. `bootstrap()` runs it on `SIGTERM` and `SIGINT`.
+
+```typescript
+shutdown(): Promise<void>
 ```
 
 ## Initialization Sequence
