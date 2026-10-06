@@ -603,6 +603,17 @@ OpenapiAdapter.init({
 | `hideFromDiscovery` | `boolean`            | Hide tool from listing                     |
 | `ui`                | `ToolUIConfig`       | UI configuration for tool forms            |
 
+#### What the generator derives
+
+Each tool starts from what `mcp-from-openapi` derives for its operation, and `tools/list` lists it:
+
+- `annotations` inferred from the HTTP method (`GET` → `readOnlyHint`, `DELETE` → `destructiveHint`, ...). Turn this off with `generateOptions: { inferAnnotations: false }`.
+- `title` from the operation summary.
+- `icons` from `x-frontmcp.icons` / `x-mcp.icons`, or the document's `info['x-logo']` with `generateOptions: { inheritDocumentIcons: true }`.
+- `_meta` with the `dev.agentfront.openapi/operation` entry when `generateOptions: { emitMeta: true }` is set, plus any `meta` from the extensions.
+
+`x-frontmcp` annotations are merged over the derived ones, and `toolTransforms` over both. Up to 1.9.1 the adapter dropped all four, so OpenAPI tools listed no hints, title, icons or `_meta` unless each was configured by hand.
+
 ### Output Schema Display
 
 Control how output schemas appear in tool definitions via the `outputSchema` option:

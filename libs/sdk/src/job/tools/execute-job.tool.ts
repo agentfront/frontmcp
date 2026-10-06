@@ -42,6 +42,7 @@ export default class ExecuteJobTool extends ToolContext {
       background: input.background,
       sessionId: this.authInfo.sessionId,
       authInfo: this.authInfo,
+      context: this.context,
       authoritiesContextBuilder: this.scope.authoritiesContextBuilder,
     });
 

@@ -45,8 +45,26 @@ describe('createSkillHttpCache with the vercel-kv provider', () => {
     expect(mockCreateClient).toHaveBeenCalledWith({
       url: 'https://kv.example.com',
       token: 'token',
+      cache: undefined,
       automaticDeserialization: false,
     });
+  });
+
+  it('leaves the fetch cache mode unset, which Cloudflare Workers require (#711)', async () => {
+    await createSkillHttpCache({ redis: { provider: 'vercel-kv' } });
+
+    const [config] = mockCreateClient.mock.calls[0] as unknown as [Record<string, unknown>];
+    expect(config).toHaveProperty('cache', undefined);
+  });
+
+  it('connects to the url and token passed in the options before the environment (#711)', async () => {
+    await createSkillHttpCache({
+      redis: { provider: 'vercel-kv', url: 'https://options-kv.example.com', token: 'options-token' },
+    });
+
+    expect(mockCreateClient).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'https://options-kv.example.com', token: 'options-token' }),
+    );
   });
 
   it('reads cached entries back from the stored JSON strings', async () => {

@@ -4,9 +4,11 @@ import { type JobEntry } from '../../common/entries/job.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobRetryConfig } from '../../common/metadata/job.metadata';
 import { type WorkflowStep, type WorkflowStepResult } from '../../common/metadata/workflow.metadata';
+import { type FrontMcpContext } from '../../context';
 import { InvalidEntityError, InvalidOutputError } from '../../errors';
 import { JobNotAuthorizedError } from '../../errors/job.errors';
 import { WorkflowJobTimeoutError } from '../../errors/workflow.errors';
+import { jobContextProviders } from '../../job/job-context-providers';
 import { JobPermissionGuard } from '../../job/job-permission.guard';
 import { type JobRegistryInterface } from '../../job/job.registry';
 import { runJobAttempt } from '../../job/job.utils';
@@ -14,6 +16,8 @@ import { runJobAttempt } from '../../job/job.utils';
 export interface WorkflowStepExecutorExtra {
   authInfo: Partial<Record<string, unknown>>;
   contextProviders?: unknown;
+  /** The run's request context; each step's job builds its CONTEXT-scoped providers for it (#705). */
+  context?: FrontMcpContext;
   /**
    * The scope's authorities context builder, so a step's permission check
    * resolves roles through the server's own `claimsMapping` rather than a
@@ -101,10 +105,7 @@ export class WorkflowStepExecutor {
     attempt: number,
   ): Promise<unknown> {
     const parsedInput = job.parseInput(input);
-    const ctx = job.create(parsedInput, {
-      ...this.extra,
-      attempt,
-    });
+    const { context, ...extra } = this.extra;
 
     // Race a timer against the job promise. Note: this does NOT cancel the
     // underlying job execution — it only rejects the caller early on timeout.
@@ -115,11 +116,13 @@ export class WorkflowStepExecutor {
         reject(new WorkflowJobTimeoutError(job.name, timeout));
       }, timeout);
 
-      // Async `authorities.pipes` load `this.auth` within the timed attempt, so a hung pipe times out like a hung job.
-      ctx
-        .loadAuthContext()
-        .then(() => {
-          // An attempt that timed out while its auth loaded is abandoned, so its job never starts.
+      // CONTEXT providers and async `authorities.pipes` are built within the timed attempt, so a hung one times out like a hung job.
+      Promise.resolve(context ? jobContextProviders(job, context) : extra.contextProviders)
+        .then(async (contextProviders) => {
+          if (timedOut) return undefined;
+          const ctx = job.create(parsedInput, { ...extra, contextProviders, attempt });
+          await ctx.loadAuthContext();
+          // An attempt that timed out while its providers or auth loaded is abandoned, so its job never starts.
           if (timedOut) return undefined;
           return runJobAttempt(job, ctx, parsedInput);
         })

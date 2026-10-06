@@ -311,6 +311,10 @@ OpenapiAdapter.init({
 });
 ```
 
+## Generated Tool Metadata
+
+Each tool starts from what `mcp-from-openapi` derives for its operation, and `tools/list` lists it: `annotations` inferred from the HTTP method (`GET` → `readOnlyHint`, `DELETE` → `destructiveHint`; turn off with `generateOptions: { inferAnnotations: false }`), the `title` from the operation summary, `icons` from `x-frontmcp.icons` / `x-mcp.icons` (or `info['x-logo']` with `generateOptions: { inheritDocumentIcons: true }`), and `_meta` with `dev.agentfront.openapi/operation` when `generateOptions: { emitMeta: true }`. `x-frontmcp` annotations merge over the derived ones and `toolTransforms` over both. Up to 1.9.1 the adapter dropped all four.
+
 ## Format Resolution
 
 Enrich generated tool schemas with concrete constraints from OpenAPI `format` values (uuid, date-time, email, int32, etc.):

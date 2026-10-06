@@ -482,6 +482,10 @@ export interface SkillsConfigCacheOptions {
     password?: string;
     /** Redis database number */
     db?: number;
+    /** Vercel KV REST URL (`vercel-kv` provider); defaults to `KV_REST_API_URL` */
+    url?: string;
+    /** Vercel KV REST token (`vercel-kv` provider); defaults to `KV_REST_API_TOKEN` */
+    token?: string;
   };
 
   /**

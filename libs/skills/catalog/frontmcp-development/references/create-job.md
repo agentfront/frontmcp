@@ -128,6 +128,7 @@ class GenerateReportJob extends JobContext {
 
 - `this.attempt` -- the current attempt number (1-based). On the first run, `this.attempt` is `1`. On the first retry, it is `2`, and so on (up to 1.9.1 it was always `1`).
 - `this.get(token)` -- a job declared on an `@App` resolves that app's providers, as the app's tools do (up to 1.9.1 it saw only the server's).
+- `this.context`, `this.remember`, `this.featureFlags` and other CONTEXT-scoped providers -- a job started by `execute_job` or `execute_workflow` runs with the caller's request context; a background run gets its own copy (same session, auth and trace, no transport). Up to 1.9.1 they threw inside a job.
 - `this.input` -- the validated input object.
 - `this.metadata` -- job metadata from the decorator.
 - `this.scope` -- the current scope instance.

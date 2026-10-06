@@ -15,6 +15,7 @@ import { Tool } from '../../common/decorators/tool.decorator';
 import { DynamicPlugin } from '../../common/dynamic/dynamic.plugin';
 import { ToolContext } from '../../common/interfaces';
 import PluginRegistry from '../plugin.registry';
+import { normalizePlugin } from '../plugin.utils';
 
 @Tool({
   name: 'option_collision_tool',
@@ -224,5 +225,64 @@ describe('PluginRegistry — options named like plugin metadata (#647)', () => {
     expect(record['enforcesMetadata']).toBeUndefined();
     expect(record.useValue.options).toEqual({ contextExtensions: { a: 1 }, enforcesMetadata: { b: 2 } });
     expect((await install(record)).getPluginNames()).toEqual(['option-collision-toggle']);
+  });
+});
+
+describe('PluginRegistry — options named like scalar plugin metadata (#707)', () => {
+  interface IdentityOptions {
+    name?: string;
+    id?: string;
+    description?: string;
+    scope?: string;
+  }
+
+  @FrontMcpPlugin({ name: 'option-collision-identity', description: 'From @Plugin' })
+  class IdentityPlugin extends DynamicPlugin<IdentityOptions> {
+    readonly options: IdentityOptions;
+
+    constructor(options: IdentityOptions = {}) {
+      super();
+      this.options = options;
+    }
+  }
+
+  const identityOptions = { name: 'eu', id: 'tenant-eu', description: 'EU region', scope: 'tenant' };
+
+  it('keeps the @Plugin name, so options do not rename the plugin', async () => {
+    const registry = await install(IdentityPlugin.init(identityOptions));
+
+    expect(registry.getPluginNames()).toEqual(['option-collision-identity']);
+  });
+
+  it('keeps the @Plugin scope, so an option named scope does not change where the plugin installs', () => {
+    const { metadata } = normalizePlugin(IdentityPlugin.init({ scope: 'server' }) as never);
+
+    expect(metadata.scope ?? 'app').toBe('app');
+    expect(metadata.description).toBe('From @Plugin');
+  });
+
+  it('leaves the options out of the record and hands them to the plugin instance', () => {
+    const record = IdentityPlugin.init(identityOptions) as unknown as Record<string, unknown> & {
+      useValue: IdentityPlugin;
+    };
+
+    expect(record['name']).toBeUndefined();
+    expect(record['id']).toBeUndefined();
+    expect(record['description']).toBeUndefined();
+    expect(record['scope']).toBeUndefined();
+    expect(record.useValue.options).toEqual(identityOptions);
+  });
+
+  it('applies the same rule to a plugin built with useFactory', async () => {
+    const record = IdentityPlugin.init({
+      inject: () => [] as const,
+      useFactory: () => identityOptions,
+      name: 'eu',
+      scope: 'server',
+    } as never) as unknown as Record<string, unknown>;
+
+    expect(record['name']).toBeUndefined();
+    expect(record['scope']).toBeUndefined();
+    expect((await install(record)).getPluginNames()).toEqual(['option-collision-identity']);
   });
 });

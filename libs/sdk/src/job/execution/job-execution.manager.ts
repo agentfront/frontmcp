@@ -5,8 +5,10 @@ import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobPermission } from '../../common/metadata/job.metadata';
 import { resolvePrincipal } from '../../common/utils/principal.utils';
+import { type FrontMcpContext } from '../../context';
 import { InvalidOutputError, JobNotAuthorizedError } from '../../errors';
 import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
+import { detachedRunContext, jobContextProviders } from '../job-context-providers';
 import { JobPermissionGuard } from '../job-permission.guard';
 import { type JobRegistryInterface } from '../job.registry';
 import { runJobAttempt } from '../job.utils';
@@ -22,6 +24,12 @@ export interface ExecuteJobOptions {
   sessionId?: string;
   authInfo?: Partial<Record<string, unknown>>;
   contextProviders?: unknown;
+  /**
+   * The caller's request context. Each job builds its CONTEXT-scoped providers for it, so
+   * `this.context` and context accessors work inside the job; a background run gets a copy of its
+   * own that outlives the request (#705).
+   */
+  context?: FrontMcpContext;
   /**
    * The scope's authorities context builder, when one is configured. Passed
    * through so the permission guard resolves roles/claims using the server's
@@ -104,8 +112,9 @@ export class JobExecutionManager {
     await this.stateStore.createRun(runRecord);
 
     if (opts.background) {
+      const runOpts = withDetachedContext(opts);
       // Spawn background execution, as its own request (it outlives this one; a no-op on Node)
-      runRequestExclusive(() => this.executeJobBackground(job, input, runId, opts)).catch(async (err) => {
+      runRequestExclusive(() => this.executeJobBackground(job, input, runId, runOpts)).catch(async (err) => {
         this.logger.error(`Background job execution failed: ${err}`);
         try {
           await this.updateState(runId, {
@@ -156,7 +165,8 @@ export class JobExecutionManager {
     await this.stateStore.createRun(runRecord);
 
     if (opts.background) {
-      runRequestExclusive(() => this.executeWorkflowBackground(workflow, jobRegistry, runId, opts)).catch(
+      const runOpts = withDetachedContext(opts);
+      runRequestExclusive(() => this.executeWorkflowBackground(workflow, jobRegistry, runId, runOpts)).catch(
         async (err) => {
           this.logger.error(`Background workflow execution failed: ${err}`);
           try {
@@ -243,9 +253,10 @@ export class JobExecutionManager {
       failedAttempt = attempt;
       try {
         const parsedInput = job.parseInput(input);
+        const contextProviders = opts.context ? await jobContextProviders(job, opts.context) : opts.contextProviders;
         const ctx = job.create(parsedInput, {
           authInfo: opts.authInfo ?? {},
-          contextProviders: opts.contextProviders,
+          contextProviders,
           attempt,
         });
         // `authorities.pipes` may be async: run them before execute() reads `this.auth`.
@@ -318,6 +329,7 @@ export class JobExecutionManager {
       const engine = new WorkflowEngine(workflow.metadata, jobRegistry, this.logger, {
         authInfo: opts.authInfo ?? {},
         contextProviders: opts.contextProviders,
+        context: opts.context,
         authoritiesContextBuilder: opts.authoritiesContextBuilder,
       });
 
@@ -377,4 +389,9 @@ export class JobExecutionManager {
       }
     }
   }
+}
+
+/** A background run outlives the request, so it runs with a copy of the caller's context. */
+function withDetachedContext<Options extends ExecuteJobOptions>(opts: Options): Options {
+  return opts.context ? { ...opts, context: detachedRunContext(opts.context) } : opts;
 }
