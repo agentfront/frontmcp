@@ -169,6 +169,8 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
       this.logger.verbose(`findResources: scope resources=${scopeResources.length}`);
 
       for (const resource of scopeResources) {
+        // A resource whose URI another app registered first is never read, so it is not listed either
+        if (resource.uri && this.scope.resources.findByUri(resource.uri) !== resource) continue;
         // Deduplicate resources by owner + URI/name combination
         // This prevents the same resource from being registered twice while allowing
         // different owners to have resources with the same name (for conflict resolution)

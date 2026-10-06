@@ -80,16 +80,16 @@ import CodeCallPlugin from '@frontmcp/plugin-codecall';
   plugins: [
     CodeCallPlugin.init({
       mode: 'codecall_only', // 'codecall_only' | 'codecall_opt_in' | 'metadata_driven'
-      topK: 8, // Number of search results returned
-      maxDefinitions: 8, // Max tool definitions per describe call
+      topK: 8, // Search results per query when a codecall:search call names no topK
+      maxDefinitions: 8, // Max tool definitions per codecall:describe call (more is refused)
       vm: {
         preset: 'secure', // 'locked_down' | 'secure' | 'balanced' | 'experimental'
         timeoutMs: 5000,
-        allowLoops: false,
+        allowLoops: false, // false: only for-of loops; true: for and for-of
       },
       embedding: {
         strategy: 'tfidf', // 'tfidf' | 'ml'
-        synonymExpansion: { enabled: true },
+        synonymExpansion: { enabled: true }, // false turns synonym matching off
       },
     }),
   ],
@@ -100,7 +100,7 @@ class MyServer {}
 ### Modes
 
 - `codecall_only` -- Hides all tools from `list_tools` except CodeCall meta-tools. All other tools are discovered only via `codecall:search` and reached only through CodeCall: a client's direct `tools/call` of a hidden tool is refused. Best when the server has a large number of tools and you want the AI to search-then-execute. When `appIds` is set, only tools from those apps are hidden — tools from other apps remain visible.
-- `codecall_opt_in` -- Shows all tools in `list_tools` normally. Tools opt-in to CodeCall execution via metadata. Useful when only some tools benefit from orchestrated execution.
+- `codecall_opt_in` -- Shows tools in `list_tools` normally, except a tool with `visibleInListTools: false`. Tools opt-in to CodeCall execution via metadata. Useful when only some tools benefit from orchestrated execution.
 - `metadata_driven` -- Per-tool `metadata.codecall` controls visibility and CodeCall availability independently. Most granular control.
 
 ### Multi-App Scoping
@@ -121,7 +121,8 @@ Without `appIds`, `codecall_only` mode hides every tool the plugin judges: all t
 ### Hidden Tools Are Not Directly Callable
 
 A tool CodeCall hides from `list_tools` (in any mode: every non-meta tool in `codecall_only` unless it sets
-`visibleInListTools: true`, any tool with `visibleInListTools: false` otherwise) is reachable only through CodeCall. A
+`visibleInListTools: true`, any tool with `visibleInListTools: false` otherwise) is reachable only through CodeCall, and
+so, in every mode, is a `visibility: 'hidden'` tool unless it sets `visibleInListTools: true`. A
 client's direct `tools/call` of it -- MCP, an MCP Apps widget, an in-page WebMCP agent, `DirectMcpServer.callTool()` --
 is answered exactly like a call of an unknown tool (`Tool "<name>" not found`), before its input is validated. Still
 allowed: CodeCall's own calls (`codecall:execute`, `codecall:invoke`), server-side composition (`this.callTool()` from
@@ -134,17 +135,22 @@ namespaces and `directCalls`.
 
 The sandboxed VM runs AgentScript (a restricted JavaScript subset). Presets control security boundaries:
 
-- `locked_down` -- Most restrictive. No loops, no console, minimal builtins. Suitable for untrusted environments.
-- `secure` -- Default. Reasonable limits for production use. Loops disabled, console available.
-- `balanced` -- Relaxed constraints for development. Loops allowed with iteration limits.
-- `experimental` -- Minimal restrictions. Full loop support, extended builtins. Development only.
+- `locked_down` -- Most restrictive. Only `for-of` loops, minimal builtins. Suitable for untrusted environments.
+- `secure` -- Default. Reasonable limits for production use. Only `for-of` loops (`allowLoops: false`).
+- `balanced` -- Relaxed constraints for development. `for` and `for-of` loops, with iteration limits.
+- `experimental` -- Minimal restrictions. `for` and `for-of` loops, extended builtins. Development only.
+
+`while`, `do-while` and `for-in` loops are always refused by the sandbox. Scripts have no `console` in any preset
+(`vm.allowConsole` has no effect); a script that refers to the global `console` is refused before it runs (a field named
+`console` is fine). Log with `mcpLog(level, message)`. The `codecall:execute` description advertises `for-of` and names
+`for` as needing `vm.allowLoops`.
 
 ### Meta-Tools Exposed
 
 CodeCall contributes 4 tools to your server:
 
-- `codecall:search` -- Semantic search over all registered tools using TF-IDF scoring with synonym expansion. Input: `{ queries: string[] }` (array of atomic action phrases, max 10). Decompose complex requests into simple actions (e.g., "delete users and send email" becomes `queries: ["delete user", "send email"]`). Returns ranked tool names, descriptions, and relevance scores.
-- `codecall:describe` -- Returns full input/output JSON schemas for one or more tools. Input: `{ toolNames: string[] }` (tool names from search results). Use after search to understand tool interfaces before execution. If `notFound` array is non-empty in the response, re-search with corrected queries. Results are cached for 60 seconds per server and per caller.
+- `codecall:search` -- Semantic search over all registered tools using TF-IDF scoring with synonym expansion. Input: `{ queries: string[], topK?: number }` (array of atomic action phrases, max 10; `topK` defaults to the plugin's `topK`). Decompose complex requests into simple actions (e.g., "delete users and send email" becomes `queries: ["delete user", "send email"]`). Returns ranked tool names, descriptions, and relevance scores.
+- `codecall:describe` -- Returns full input/output JSON schemas for one or more tools. Input: `{ toolNames: string[] }` (tool names from search results; a call that would describe more than `maxDefinitions` tools is refused). Use after search to understand tool interfaces before execution. If `notFound` array is non-empty in the response, re-search with corrected queries. Results are cached for 60 seconds per server and per caller.
 - `codecall:execute` -- Runs an AgentScript program in the sandboxed VM. Input: `{ script: string }` (AgentScript code). Use `callTool(name, args)` to invoke tools within scripts. The script can call multiple tools, branch on results, and compose outputs.
 - `codecall:invoke` -- Direct single-tool invocation (available when `directCalls` is enabled). Bypasses the VM for simple one-shot calls.
 
@@ -341,7 +347,9 @@ session id is not a secret -- the client knows it and it travels in the `mcp-ses
 header -- so it cannot be the key material on its own. Instances with different secrets cannot
 read each other's entries. With none of `REMEMBER_SECRET`, `MCP_MEMORY_SECRET` or
 `MCP_SESSION_SECRET` set in production, the plugin falls back to a random in-memory secret and
-logs a warning once; its encrypted memory is then lost on restart.
+logs a warning once; its encrypted memory is then lost on restart. `encryption.customKey`, when
+set, replaces that secret for the plugin (each scope, session and user still gets its own key); an
+empty or blank value stops startup with `RememberConfigurationError`.
 
 **Upgrading past that change moves existing `session`, `tool` and `user` entries.** The key
 derivation change orphans `session` and `tool` ciphertext, and the namespace now percent-encodes
@@ -354,6 +362,10 @@ the plugin **purges the pre-`v2` entries automatically**, warning with the numbe
 version segment is what makes that safe -- a purge pattern of `remember:session:*` cannot match a
 live `remember:v2:session:*` key. `global` is not versioned and not purged: neither its keys nor
 its key derivation changed.
+
+The Redis and Vercel KV stores keep each key under `keyPrefix` once. Releases up to 1.9.1 added it
+twice there (`remember:remember:v2:…`); such an entry is still listed and read in place (TTL kept).
+Reading never copies it, so a rollback to 1.9.1 still finds it; writing or forgetting the key removes it.
 
 **The purge runs 24 hours after the fleet first reached the `v2:` layout -- not after this
 process started -- on an unreferenced timer, never on the request path.** The first instance to
@@ -467,7 +479,8 @@ authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectI
 1. `skipApproval: true`, or approval not required: the tool runs.
 2. A recorded **denial** for the caller (session, user, time-limited or context scope): refused
    with state `denied`. A denial outranks pre-approved contexts and any approval.
-3. The session context is one of `preApprovedContexts`: the tool runs.
+3. The session context is one of `preApprovedContexts`, and the tool does not set `alwaysPrompt`: the tool runs.
+   An `alwaysPrompt` tool needs an approval per call in a pre-approved context too.
 4. An approval for the caller that the tool's policy accepts: the tool runs. The caller's session,
    user, time-limited and context approvals all count (a context approval only when the session
    carries that context); its scope must be in `allowedScopes`, and it must be younger than
@@ -855,7 +868,7 @@ class CustomFlagServer {}
 - `splitio` -- Split.io integration. Requires `@splitsoftware/splitio` package.
 - `launchdarkly` -- LaunchDarkly integration. Requires `launchdarkly-node-server-sdk` package.
 - `unleash` -- Unleash integration. Requires `unleash-client` package.
-- `custom` -- Provide your own adapter instance (`adapterInstance`, required) implementing the `FeatureFlagAdapter` interface.
+- `custom` -- Provide your own adapter instance (`adapterInstance`, required) implementing the `FeatureFlagAdapter` interface. Its optional `initialize()` runs before the server serves and `destroy()` when the server is disposed, as for the built-in adapters (up to 1.9.1 neither was called).
 
 ### Using `this.featureFlags` in Tools
 

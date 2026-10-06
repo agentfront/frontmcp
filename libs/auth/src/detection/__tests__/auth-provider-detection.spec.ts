@@ -1,15 +1,15 @@
 /**
  * Auth Provider Detection Tests
  */
+import { assertDefined } from '../../__test-utils__/assertion.helpers';
 import type { AuthOptions } from '../../options/schema';
 import {
+  appRequiresOrchestration,
   deriveProviderId,
   detectAuthProviders,
-  appRequiresOrchestration,
-  getProviderScopes,
   getProviderApps,
+  getProviderScopes,
 } from '../auth-provider-detection';
-import { assertDefined } from '../../__test-utils__/assertion.helpers';
 
 // ============================================
 // Test Fixtures
@@ -227,13 +227,67 @@ describe('auth-provider-detection', () => {
       );
     });
 
-    it('should produce warning for public parent + app providers', () => {
+    it('refuses a protected app on the shared endpoint of a public server, which would not enforce it (#766)', () => {
       const parent = publicAuth();
       const apps = [{ id: 'app1', name: 'App1', auth: transparentAuth('https://auth.child.com') }];
       const result = detectAuthProviders(parent, apps);
-      expect(result.warnings.length).toBeGreaterThan(0);
-      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('public mode')]));
-      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('local or remote mode')]));
+      expect(result.validationErrors).toEqual([
+        expect.stringContaining('App-level auth is not enforced on the shared endpoint of a server in public mode'),
+      ]);
+      expect(result.validationErrors[0]).toContain('app1');
+      expect(result.validationErrors[0]).toContain('standalone: true');
+      expect(result.validationErrors[0]).toContain('incrementalAuth');
+      expect(result.validationErrors[0]).not.toContain('checks the app');
+    });
+
+    it('refuses a protected app under a static server too, and when the server names no auth', () => {
+      const apps = [{ id: 'app1', name: 'App1', auth: transparentAuth('https://auth.child.com') }];
+      const staticParent = { mode: 'static', token: 'secret' } as unknown as AuthOptions;
+      expect(detectAuthProviders(staticParent, apps).validationErrors).toHaveLength(1);
+      expect(detectAuthProviders(undefined, apps).validationErrors).toHaveLength(1);
+    });
+
+    it('refuses a static app under a static server whose tokens it does not share, though both derive the same provider id', () => {
+      const staticParent = { mode: 'static', tokens: ['parent-token'] } as AuthOptions;
+      const apps = [
+        { id: 'billing', name: 'Billing', auth: { mode: 'static', tokens: ['billing-token'] } as AuthOptions },
+      ];
+
+      expect(deriveProviderId(staticParent)).toBe(deriveProviderId(apps[0].auth));
+      expect(detectAuthProviders(staticParent, apps).validationErrors).toEqual([
+        expect.stringContaining('App-level auth is not enforced on the shared endpoint of a server in static mode'),
+      ]);
+    });
+
+    it('accepts a static app whose tokens include every token the static server checks', () => {
+      const staticParent = { mode: 'static', tokens: ['shared-token'] } as AuthOptions;
+      const apps = [
+        { id: 'billing', name: 'Billing', auth: { mode: 'static', tokens: ['shared-token', 'extra'] } as AuthOptions },
+      ];
+
+      expect(detectAuthProviders(staticParent, apps).validationErrors).toEqual([]);
+    });
+
+    it('refuses a static app that shares the tokens but expects them in another header', () => {
+      const staticParent = { mode: 'static', tokens: ['shared-token'] } as AuthOptions;
+      const apps = [
+        {
+          id: 'billing',
+          name: 'Billing',
+          auth: { mode: 'static', tokens: ['shared-token'], header: 'x-api-key', scheme: '' } as AuthOptions,
+        },
+      ];
+
+      expect(detectAuthProviders(staticParent, apps).validationErrors).toHaveLength(1);
+    });
+
+    it('lets a public app sit under a public server, and a protected app under a local server', () => {
+      const publicApps = [{ id: 'app1', name: 'App1', auth: publicAuth() }];
+      expect(detectAuthProviders(publicAuth(), publicApps).validationErrors).toEqual([]);
+
+      const localParent = { mode: 'local' } as AuthOptions;
+      const protectedApps = [{ id: 'app1', name: 'App1', auth: transparentAuth('https://auth.child.com') }];
+      expect(detectAuthProviders(localParent, protectedApps).validationErrors).toEqual([]);
     });
 
     it('should not produce warning for single public provider', () => {
@@ -284,6 +338,44 @@ describe('auth-provider-detection', () => {
   // ------------------------------------------
   // appRequiresOrchestration
   // ------------------------------------------
+  describe("remoteAuth: { mode: 'forward' }", () => {
+    const forwardingApp = { id: 'upstream', name: 'Upstream', remoteAuthMode: 'forward' };
+
+    it.each([
+      ['public', publicAuth()],
+      ['local', localAuth()],
+      ['remote', remoteAuth('https://auth.example.com')],
+      ['static', { mode: 'static', token: 'secret' } as unknown as AuthOptions],
+      ['unset', undefined],
+    ])('refuses to forward a caller token a %s server minted or holds itself (#766)', (_mode, parent) => {
+      const errors = detectAuthProviders(parent, [forwardingApp]).validationErrors;
+
+      expect(errors).toEqual([expect.stringContaining("remoteAuth: { mode: 'forward' }")]);
+      expect(errors[0]).toContain('upstream');
+      expect(errors[0]).toContain("mode: 'static'");
+    });
+
+    it("accepts forwarding under a transparent server, whose callers' tokens come from the identity provider", () => {
+      const parent = transparentAuth('https://idp.example.com');
+
+      expect(detectAuthProviders(parent, [forwardingApp]).validationErrors).toEqual([]);
+    });
+
+    it("refuses a forwarding app whose own auth is transparent when the shared endpoint authenticates with the server's local policy", () => {
+      const app = { ...forwardingApp, auth: transparentAuth('https://idp.example.com') };
+
+      const errors = detectAuthProviders(localAuth(), [app]).validationErrors;
+
+      expect(errors).toEqual(expect.arrayContaining([expect.stringContaining("remoteAuth: { mode: 'forward' }")]));
+    });
+
+    it('accepts a forwarding app on its own endpoint, whose scope auth is its transparent auth', () => {
+      const appAuth = transparentAuth('https://idp.example.com');
+
+      expect(detectAuthProviders(appAuth, [{ ...forwardingApp, auth: appAuth }]).validationErrors).toEqual([]);
+    });
+  });
+
   describe('appRequiresOrchestration', () => {
     it('should return false when app has no auth', () => {
       expect(appRequiresOrchestration(undefined, publicAuth())).toBe(false);

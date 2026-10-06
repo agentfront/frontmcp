@@ -32,6 +32,7 @@ import {
   llmSafeAuthContextSchema,
   OrchestratedAuthorization,
   PublicAuthorization,
+  scopesFromClaims,
   TransparentAuthorization,
   validateAudience,
   type Authorization,
@@ -373,7 +374,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     // Check required scopes
     const requiredScopes = (authOptionsForAudience?.['requiredScopes'] as string[] | undefined) ?? [];
     if (requiredScopes.length > 0) {
-      const tokenScopes = this.parseScopes(verifyResult.payload?.['scope']);
+      const tokenScopes = scopesFromClaims(verifyResult.payload);
       const hasAllScopes = requiredScopes.every((s: string) => tokenScopes.includes(s));
 
       if (!hasAllScopes) {
@@ -465,7 +466,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
           email: user.email,
           picture: user.picture,
         },
-        scopes: this.parseScopes(jwtPayload?.['scope']),
+        scopes: scopesFromClaims(jwtPayload),
         claims: jwtPayload,
         expiresAt: jwtPayload?.['exp'] ? (jwtPayload['exp'] as number) * 1000 : undefined,
         primaryProviderId: this.scope.auth?.id ?? 'default',
@@ -479,7 +480,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     } else {
       // Public mode with token (authenticated public)
       authorization = PublicAuthorization.create({
-        scopes: this.parseScopes(jwtPayload?.['scope']) || ['anonymous'],
+        scopes: scopesFromClaims(jwtPayload),
         ttlMs: jwtPayload?.['exp'] ? (jwtPayload['exp'] as number) * 1000 - Date.now() : 3600000,
         issuer: baseUrl,
       });
@@ -525,10 +526,4 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
   /**
    * Parse scopes from JWT claim
    */
-  private parseScopes(scope: unknown): string[] {
-    if (!scope) return [];
-    if (Array.isArray(scope)) return scope.map(String);
-    if (typeof scope === 'string') return scope.split(/\s+/).filter(Boolean);
-    return [];
-  }
 }

@@ -26,7 +26,7 @@ This means the deny list always takes precedence over the allow list.
 ## Exports
 
 - `IpFilter` -- the filter class
-- `IpFilterConfig` -- configuration type (`allowList`, `denyList`, `defaultAction`; `trustProxy` and `trustedProxyDepth` are accepted but not read -- the SDK takes proxy trust from `FRONTMCP_TRUST_PROXY` / `FRONTMCP_TRUSTED_PROXY_DEPTH`)
+- `IpFilterConfig` -- configuration type (`allowList`, `denyList`, `defaultAction`; `trustProxy: true` makes the SDK read the client IP from `X-Forwarded-For`, counting back `trustedProxyDepth` hops, as `FRONTMCP_TRUST_PROXY` / `FRONTMCP_TRUSTED_PROXY_DEPTH` do)
 - `IpFilterResult` -- result type (`allowed`, `reason`, `matchedRule`)
 
 ## Usage

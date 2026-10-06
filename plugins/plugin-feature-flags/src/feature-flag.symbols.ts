@@ -1,7 +1,8 @@
-import { Reference } from '@frontmcp/sdk';
+import { type Reference } from '@frontmcp/sdk';
+
 import type { FeatureFlagAdapter } from './adapters/feature-flag-adapter.interface';
-import type { FeatureFlagAccessor } from './providers/feature-flag-accessor.provider';
 import type { FeatureFlagPluginOptions } from './feature-flag.types';
+import type { FeatureFlagAccessor } from './providers/feature-flag-accessor.provider';
 
 /**
  * DI token for the feature flag adapter.

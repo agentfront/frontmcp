@@ -78,6 +78,7 @@ export default class ResourceRegistry extends RegistryAbstract<
    * app's resources into them, and the scope would then list those resources twice.
    */
   private readonly adopt: boolean;
+  private readonly warnedDuplicateUris = new Set<string>();
 
   constructor(
     providers: ProviderRegistry,
@@ -250,13 +251,7 @@ export default class ResourceRegistry extends RegistryAbstract<
     // Helper to adopt/re-adopt resources from the remote app
     const adoptRemoteResources = () => {
       try {
-        // Remove any previously adopted resources from this remote app
-        const appPrefix = `resource:${app.id}:`;
-        this.localRows = this.localRows.filter((row) => {
-          const tokenDesc = typeof row.token === 'symbol' ? row.token.description : undefined;
-          return !tokenDesc?.startsWith(appPrefix);
-        });
-
+        const rows: IndexedResource[] = [];
         const remoteResources = app.resources.getResources();
         const remoteTemplates = app.resources.getResourceTemplates();
         const allRemoteResources = [...remoteResources, ...remoteTemplates];
@@ -269,10 +264,11 @@ export default class ResourceRegistry extends RegistryAbstract<
             }
             // Use Symbol.for() for stable, deterministic tokens across registry operations
             const stableToken = Symbol.for(`resource:${app.id}:${remoteResource.name}`);
-            const row = this.makeRow(stableToken, remoteResource, prepend, this);
-            this.localRows.push(row);
+            rows.push(this.makeRow(stableToken, remoteResource, prepend, this));
           }
         }
+        // Keyed by the remote registry from startup on, in app order: a refresh keeps the app's place
+        this.adopted.set(remoteRegistry, rows);
         this.reindex();
         this.bump('reset');
       } catch (error) {
@@ -351,12 +347,19 @@ export default class ResourceRegistry extends RegistryAbstract<
   }
 
   /**
+   * Find the resource template that serves a URI template: the first one registered for it
+   */
+  findByUriTemplate(uriTemplate: string): ResourceEntry | undefined {
+    return this.byUriTemplate.get(uriTemplate)?.instance;
+  }
+
+  /**
    * Match a URI against template resources and extract parameters
    */
   matchTemplateByUri(uri: string): { instance: ResourceEntry; params: Record<string, string> } | undefined {
-    // Try each template resource
+    // Try each template resource; one another app registered first is never served
     for (const row of this.listAllIndexed()) {
-      if (!row.isTemplate) continue;
+      if (!row.isTemplate || (row.uriTemplate && this.findByUriTemplate(row.uriTemplate) !== row.instance)) continue;
 
       const match = row.instance.matchUri(uri);
       if (match.matches) {
@@ -427,13 +430,26 @@ export default class ResourceRegistry extends RegistryAbstract<
       const on = `${r.ownerKey}:${r.baseName}`;
       if (!this.byOwnerAndName.has(on)) this.byOwnerAndName.set(on, r);
 
-      // Index by URI or URI template
-      if (r.isTemplate && r.uriTemplate) {
-        this.byUriTemplate.set(r.uriTemplate, r);
-      } else if (r.uri) {
-        this.byUri.set(r.uri, r);
-      }
+      // Index by URI or URI template; the first entry registered for one is the one served
+      const uriIndex = r.isTemplate ? this.byUriTemplate : this.byUri;
+      const uriKey = r.isTemplate ? r.uriTemplate : r.uri;
+      if (!uriKey) continue;
+      const served = uriIndex.get(uriKey);
+      if (!served) uriIndex.set(uriKey, r);
+      else if (served.instance !== r.instance) this.warnDuplicateUri(uriKey, served, r);
     }
+  }
+
+  private warnDuplicateUri(uri: string, served: IndexedResource, shadowed: IndexedResource): void {
+    const key = `${uri}|${served.ownerKey}|${shadowed.ownerKey}`;
+    if (this.warnedDuplicateUris.has(key)) return;
+    this.warnedDuplicateUris.add(key);
+    this.providers
+      .getActiveScope()
+      .logger.warn(
+        `Resource URI "${uri}" is registered by both "${served.qualifiedName}" and "${shadowed.qualifiedName}"; ` +
+          `"${served.qualifiedName}" serves it and the other is not listed or read. Give each a distinct URI.`,
+      );
   }
 
   /* -------------------- Conflict-aware exported names -------------------- */

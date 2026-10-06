@@ -188,6 +188,10 @@ A missing resource fails startup: `ExternalEntryLoadError` when the package does
 For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
 </Info>
 
+A URI names one resource on a server. When two apps register the same URI (or URI template), the first app listed
+serves it; the other is neither listed nor read, and the server logs a warning that names both. Give each resource a
+distinct URI, for example by prefixing it with the app (`desk://config`). Up to 1.9.1 the last app won, silently.
+
 ---
 
 ## Return Values

@@ -26,7 +26,7 @@ import { ProviderScope } from '../common/metadata';
 import { ServerRequestTokens } from '../common/tokens';
 import { RequestContextNotAvailableError } from '../errors/mcp.error';
 import { FrontMcpContext, type FrontMcpContextArgs, type FrontMcpContextConfig } from './frontmcp-context';
-import { extractMetadata } from './metadata.utils';
+import { extractMetadata, type ClientIpOptions } from './metadata.utils';
 import { parseTraceContext } from './trace-context';
 
 /**
@@ -62,15 +62,18 @@ export function workerEnvOf(context: FrontMcpContext | undefined): Readonly<Reco
 })
 export class FrontMcpContextStorage {
   private contextConfig: FrontMcpContextConfig = {};
+  private proxyTrust: Omit<ClientIpOptions, 'peerAddress'> = {};
 
   /**
    * Apply server-wide defaults (from `@FrontMcp({ fetch })`) to every context this storage creates.
    *
    * @param contextConfig - Defaults; a context's own config still overrides them
+   * @param proxyTrust - Whether to read the client address from `X-Forwarded-For` (`throttle.ipFilter`)
    * @returns This storage
    */
-  configure(contextConfig: FrontMcpContextConfig = {}): this {
+  configure(contextConfig: FrontMcpContextConfig = {}, proxyTrust: Omit<ClientIpOptions, 'peerAddress'> = {}): this {
     this.contextConfig = contextConfig;
+    this.proxyTrust = proxyTrust;
     return this;
   }
 
@@ -106,7 +109,7 @@ export class FrontMcpContextStorage {
     const traceContext = parseTraceContext(headers);
     // The socket peer is the only client address a caller cannot forge; forwarding headers
     // are used in its place only behind a trusted proxy (GHSA-p3qf-fcwm-35x4).
-    const metadata = extractMetadata(headers, { peerAddress });
+    const metadata = extractMetadata(headers, { ...this.proxyTrust, peerAddress });
     const context = new FrontMcpContext(
       this.withServerConfig({
         ...contextArgs,

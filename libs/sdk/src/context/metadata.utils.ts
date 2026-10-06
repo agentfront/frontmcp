@@ -17,6 +17,18 @@ export interface ClientIpOptions {
   trustedProxyDepth?: number;
 }
 
+/**
+ * The proxy trust `throttle.ipFilter` gives a context's client address. `trustProxy: true` reads it
+ * from `X-Forwarded-For`, counting back `trustedProxyDepth` hops, as `FRONTMCP_TRUST_PROXY` does;
+ * `false` or no `ipFilter` leaves the decision to the environment.
+ */
+export function proxyTrustOf(
+  throttle: { ipFilter?: { trustProxy?: boolean; trustedProxyDepth?: number } } | undefined,
+): Omit<ClientIpOptions, 'peerAddress'> {
+  const ipFilter = throttle?.ipFilter;
+  return ipFilter?.trustProxy === true ? { trustProxy: true, trustedProxyDepth: ipFilter.trustedProxyDepth } : {};
+}
+
 const IPV4_PATTERN = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
 const IPV6_ZONE_ID_PATTERN = /^[A-Za-z0-9_.~-]+$/;
 

@@ -1,12 +1,12 @@
 import {
-  EsmPackageLoadError,
-  EsmVersionResolutionError,
-  EsmManifestInvalidError,
   EsmCacheError,
-  EsmRegistryAuthError,
   EsmInvalidSpecifierError,
+  EsmManifestInvalidError,
+  EsmPackageLoadError,
+  EsmRegistryAuthError,
+  EsmVersionResolutionError,
 } from '../esm.errors';
-import { InternalMcpError, PublicMcpError, MCP_ERROR_CODES } from '../mcp.error';
+import { InternalMcpError, MCP_ERROR_CODES, PublicMcpError } from '../mcp.error';
 
 describe('ESM Error Classes', () => {
   describe('EsmPackageLoadError', () => {
@@ -88,6 +88,7 @@ describe('ESM Error Classes', () => {
       const error = new EsmRegistryAuthError('https://npm.pkg.github.com', 'invalid token');
       expect(error.registryUrl).toBe('https://npm.pkg.github.com');
       expect(error.details).toBe('invalid token');
+      expect(error.message).toBe('Authentication failed for npm registry: invalid token');
     });
   });
 
@@ -97,6 +98,11 @@ describe('ESM Error Classes', () => {
       expect(error).toBeInstanceOf(PublicMcpError);
       expect(error.specifier).toBe('invalid!!!');
       expect(error.mcpErrorCode).toBe(MCP_ERROR_CODES.INVALID_PARAMS);
+      expect(error.message).toBe('Invalid package specifier: "invalid!!!"');
+    });
+
+    it('says an empty specifier is empty', () => {
+      expect(new EsmInvalidSpecifierError('  ').message).toBe('Package specifier cannot be empty');
     });
   });
 });

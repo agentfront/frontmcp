@@ -4,7 +4,7 @@ import 'reflect-metadata';
 // opaque `__require("@frontmcp/auth")` in the ESM build that a worker bundler cannot follow, so
 // the authorities engine failed to load on Cloudflare Workers (#680).
 import { AuthoritiesContextBuilder } from '@frontmcp/auth';
-import { createGuardManager, type GuardManager } from '@frontmcp/guard';
+import { createGuardManager, type GuardConfig, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
 import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
 
@@ -43,6 +43,7 @@ import { resolveDefaultSqlitePath, type SqliteOptionsInput } from '../common/typ
 import { resolveEntryPath } from '../common/utils/path.utils';
 import CompleteFlow from '../completion/flows/complete.flow';
 import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
+import { proxyTrustOf } from '../context/metadata.utils';
 import { createElicitationStore, type ElicitationStore } from '../elicitation';
 import { ElicitationRequestFlow, ElicitationResultFlow } from '../elicitation/flows';
 import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
@@ -103,6 +104,7 @@ import HttpIpFilterFlow from './flows/http.ip-filter.flow';
 import HttpRequestFlow from './flows/http.request.flow';
 import { probeOptionalDependency, requireOptionalModule } from './optional-dependency.util';
 import { registerServerEntries } from './server-entries.helper';
+import { hasRegisteredTracerProvider } from './tracer-provider.utils';
 
 /**
  * Flows the web-fetch adapter must NOT auto-dispatch by HTTP match: `http:request`
@@ -174,6 +176,7 @@ export class Scope extends ScopeEntry {
 
   /** Guard manager for rate limiting, concurrency, IP filtering (optional) */
   private _rateLimitManager?: GuardManager;
+  private _publicAccessGuard?: GuardManager;
 
   /** Authorities engine for RBAC/ABAC/ReBAC enforcement (optional) */
   private _authoritiesEngine?: import('@frontmcp/auth').AuthoritiesEngine;
@@ -675,6 +678,13 @@ export class Scope extends ScopeEntry {
                   contextAccessor,
                 );
 
+                // Each entry logged during a request joins that request's log (`observability.requestLogs`)
+                transport.onEntry = (entry: unknown) => {
+                  const requestLog = contextStorage
+                    ?.getStore()
+                    ?.get(Symbol.for('frontmcp:observability:request-log-collector'));
+                  (requestLog as { addEntry?: (logged: unknown) => void } | undefined)?.addEntry?.(entry);
+                };
                 loggerRegistry.addTransport(transport);
                 loggerRegistry._hasStructuredTransport = true;
                 this.logger.verbose('observability: wired StructuredLogTransport into SDK logger');
@@ -689,11 +699,7 @@ export class Scope extends ScopeEntry {
           // Auto-configure tracing exporter if none is set
           if (pluginOptions.tracing !== false) {
             try {
-              const { trace } = require('@opentelemetry/api');
-              const currentProvider = trace.getTracerProvider();
-              // ProxyTracerProvider is the default no-op when nothing is configured
-              const isNoop = !currentProvider || currentProvider.constructor?.name === 'ProxyTracerProvider';
-              if (isNoop) {
+              if (!hasRegisteredTracerProvider(require('@opentelemetry/api'))) {
                 const { isDevelopment: checkDev } = require('@frontmcp/utils');
                 if (checkDev()) {
                   const { BasicTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
@@ -1390,7 +1396,7 @@ export class Scope extends ScopeEntry {
         scope: ProviderScope.GLOBAL,
         name: 'FrontMcpContextStorage',
         provide: FrontMcpContextStorage,
-        useValue: new FrontMcpContextStorage().configure(this.metadata.fetch),
+        useValue: new FrontMcpContextStorage().configure(this.metadata.fetch, proxyTrustOf(this.metadata.throttle)),
       },
       // FrontMcpContextProvider is a factory that retrieves from AsyncLocalStorage
       FrontMcpContextProvider,
@@ -1548,6 +1554,10 @@ export class Scope extends ScopeEntry {
     return this._rateLimitManager;
   }
 
+  get publicAccessGuard(): GuardManager | undefined {
+    return this._rateLimitManager ?? this._publicAccessGuard;
+  }
+
   /**
    * Health service for liveness and readiness probes.
    * Returns undefined if health endpoints are disabled.
@@ -1695,11 +1705,17 @@ export class Scope extends ScopeEntry {
    */
   private async initGuardForDeclaredLimits(): Promise<void> {
     const throttleConfig = this.metadata.throttle;
-    if (this._rateLimitManager || this.cliMode || throttleConfig?.enabled === false) return;
+    if (this._rateLimitManager || this.cliMode) return;
+    if (throttleConfig?.enabled === false) {
+      await this.initPublicAccessGuard(throttleConfig.storage);
+      return;
+    }
 
     const guardedEntries = [...this.scopeTools.getTools(true), ...this.scopeAgents.getAgents(true)];
     const declaresLimits =
       guardedEntries.some((entry) => entry.metadata.rateLimit || entry.metadata.concurrency) ||
+      // `publicAccess.rateLimit` counts anonymous calls per IP
+      !!(this.auth.options as { publicAccess?: unknown } | undefined)?.publicAccess ||
       // The tools and nested agents an agent runs in its private scope, which uses this manager too
       this.scopeAgents.listAllInstances().some((agent) => agent.declaresScopedLimits());
     if (!declaresLimits) return;
@@ -1708,6 +1724,16 @@ export class Scope extends ScopeEntry {
       config: { ...throttleConfig, enabled: true },
       logger: this.logger,
     });
+  }
+
+  /**
+   * `throttle.enabled: false` turns off the server's limits, not the documented `publicAccess.rateLimit`:
+   * that gets a guard of its own, on `throttle.storage`, that counts nothing else.
+   */
+  private async initPublicAccessGuard(storage: GuardConfig['storage']): Promise<void> {
+    const publicAccess = (this.auth.options as { publicAccess?: { rateLimit?: number } } | undefined)?.publicAccess;
+    if (!publicAccess?.rateLimit) return;
+    this._publicAccessGuard = await createGuardManager({ config: { enabled: true, storage }, logger: this.logger });
   }
 
   /**

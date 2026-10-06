@@ -40,7 +40,7 @@ interface ToolMatch {
 })
 export default class SearchTool extends ToolContext {
   async execute(input: SearchToolInput): Promise<SearchToolOutput> {
-    const { queries, appIds, excludeToolNames = [], topK = 5, minRelevanceScore = 0.3 } = input;
+    const { queries, appIds, excludeToolNames = [], topK, minRelevanceScore = 0.3 } = input;
 
     const searchService = this.get(ToolSearchService);
     const warnings: SearchToolOutput['warnings'] = [];

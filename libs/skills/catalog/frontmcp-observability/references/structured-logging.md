@@ -56,6 +56,8 @@ Every `this.logger.info()` call produces:
 }
 ```
 
+`prefix` is the logger's name (`logger.child('MyTool')`), after the server's `logging.prefix` when one is set (`billing-edge:MyTool`).
+
 ## Configure Sinks
 
 ```typescript

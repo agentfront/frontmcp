@@ -25,11 +25,17 @@ export type EncryptedBlob = EncBlob;
  * Key derivation source configuration.
  */
 export type EncryptionKeySource =
+  | (ScopeKeySource & {
+      /** The secret keys are derived from, in place of the server secret (`encryption.customKey`). */
+      secret?: string;
+    })
+  | { type: 'custom'; key: string };
+
+type ScopeKeySource =
   | { type: 'session'; sessionId: string }
   | { type: 'user'; userId: string }
   | { type: 'tool'; toolName: string; sessionId: string }
-  | { type: 'global' }
-  | { type: 'custom'; key: string };
+  | { type: 'global' };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Key Derivation
@@ -52,6 +58,11 @@ async function getBaseSecret(): Promise<string> {
 
   // Fall back to persisted secret (will generate if needed)
   return getOrCreatePersistedSecret();
+}
+
+/** The secret a scope's keys are derived from: `encryption.customKey` when set, otherwise the server secret. */
+async function secretFor(source: ScopeKeySource & { secret?: string }): Promise<string> {
+  return source.secret ? source.secret : getBaseSecret();
 }
 
 /** Text encoder for string to Uint8Array conversion */
@@ -87,24 +98,24 @@ export async function deriveEncryptionKey(source: EncryptionKeySource): Promise<
 
   switch (source.type) {
     case 'session':
-      ikm = (await getBaseSecret()) + source.sessionId;
+      ikm = (await secretFor(source)) + source.sessionId;
       context = `remember:session:${source.sessionId}`;
       break;
 
     case 'tool':
-      ikm = (await getBaseSecret()) + source.sessionId;
+      ikm = (await secretFor(source)) + source.sessionId;
       context = `remember:tool:${source.toolName}:${source.sessionId}`;
       break;
 
     case 'user':
       // User-scoped: use baseSecret + userId as IKM
-      ikm = (await getBaseSecret()) + source.userId;
+      ikm = (await secretFor(source)) + source.userId;
       context = `remember:user:${source.userId}`;
       break;
 
     case 'global':
       // Global-scoped: use baseSecret as IKM
-      ikm = await getBaseSecret();
+      ikm = await secretFor(source);
       context = 'remember:global';
       break;
 
@@ -131,20 +142,22 @@ export function getKeySourceForScope(
     userId?: string;
     toolName?: string;
   },
+  secret?: string,
 ): EncryptionKeySource {
   switch (scope) {
     case 'session':
-      return { type: 'session', sessionId: context.sessionId };
+      return { type: 'session', sessionId: context.sessionId, secret };
     case 'user':
-      return { type: 'user', userId: context.userId ?? 'anonymous' };
+      return { type: 'user', userId: context.userId ?? 'anonymous', secret };
     case 'tool':
       return {
         type: 'tool',
         toolName: context.toolName ?? 'unknown',
         sessionId: context.sessionId,
+        secret,
       };
     case 'global':
-      return { type: 'global' };
+      return { type: 'global', secret };
   }
 }
 

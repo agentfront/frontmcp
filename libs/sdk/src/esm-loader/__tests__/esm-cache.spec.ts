@@ -1,13 +1,14 @@
-import * as os from 'node:os';
-import * as path from 'node:path';
+import { execFile } from 'node:child_process';
 // NOTE: The native Node imports below (fs, child_process, url, util) are required
 // by the importWrappedModule helper which spawns a subprocess to validate real ESM
 // module evaluation. This is an intentional exception to the @frontmcp/utils rule
 // because subprocess-based ESM validation cannot use the mocked utils FS layer.
 import * as fs from 'node:fs/promises';
-import { execFile } from 'node:child_process';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+
 import { EsmCacheManager } from '../esm-cache';
 
 /**
@@ -39,6 +40,7 @@ function hasEntriesUnder(dirPath: string): boolean {
 
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
   readFile: jest.fn(async (p: string) => {
     const val = store.get(p);
     if (val === undefined) throw new Error(`ENOENT: ${p}`);

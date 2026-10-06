@@ -42,6 +42,7 @@ import {
 
 import {
   computeIssuer,
+  defaultHttpPort,
   FrontMcpAuth,
   getPinnedPublicUrl,
   ProviderScope,
@@ -476,7 +477,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   ) {
     super(options);
     this.logger = this.providers.getActiveScope().logger.child('LocalPrimaryAuth');
-    this.port = this.providers.getActiveScope().metadata.http?.port ?? 3001;
+    this.port = this.providers.getActiveScope().metadata.http?.port ?? defaultHttpPort();
     // Boot-time host fallback for the issuer. Previously hard-coded to
     // 'localhost', which produced wrong issuer/discovery URLs behind a proxy
     // or tunnel (#467). An explicit `local.issuer` (preferred) or the

@@ -7,7 +7,14 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import type { AuthOptions } from '../options/schema';
-import { isOrchestratedMode, isOrchestratedRemote, isPublicMode, isTransparentMode } from '../options/utils';
+import { staticAuthOptionsSchema } from '../options/static.schema';
+import {
+  isOrchestratedMode,
+  isOrchestratedRemote,
+  isPublicMode,
+  isStaticMode,
+  isTransparentMode,
+} from '../options/utils';
 
 // ============================================
 // Schemas
@@ -43,6 +50,8 @@ export interface AppAuthInfo {
   id: string;
   name: string;
   auth?: AuthOptions;
+  /** A remote app's `remoteAuth.mode`. */
+  remoteAuthMode?: string;
 }
 
 // ============================================
@@ -154,10 +163,29 @@ export function detectAuthProviders(
     );
   }
 
-  if (uniqueProviderCount > 1 && parentAuth && isPublicMode(parentAuth)) {
-    warnings.push(
-      `Parent uses public mode but apps have auth providers configured. ` +
-        `App-level auth will be used, but consider using local or remote mode at parent for unified auth management.`,
+  const sharedEndpointUnenforced = !parentAuth || isPublicMode(parentAuth) || isStaticMode(parentAuth);
+  const unenforcedAppIds = apps
+    .filter((app) => app.auth && !isPublicMode(app.auth) && !staticParentEnforces(parentAuth, app.auth))
+    .map((app) => app.id);
+  if (sharedEndpointUnenforced && unenforcedAppIds.length > 0) {
+    validationErrors.push(
+      `App-level auth is not enforced on the shared endpoint of a server in ${parentAuth?.mode ?? 'public'} mode, ` +
+        `so the tools of ${unenforcedAppIds.join(', ')} would be served without it. ` +
+        `Serve the app on its own endpoint with standalone: true or splitByApp: true, or run the server in local or ` +
+        `remote mode with incrementalAuth enabled, which checks each tool call against the apps the caller has ` +
+        `authorized (without incrementalAuth, local and remote mode do not check app grants per tool call).`,
+    );
+  }
+
+  const tokenMintingAppIds = apps
+    .filter((app) => app.remoteAuthMode === 'forward' && !(parentAuth && isTransparentMode(parentAuth)))
+    .map((app) => app.id);
+  if (tokenMintingAppIds.length > 0) {
+    validationErrors.push(
+      `remoteAuth: { mode: 'forward' } on ${tokenMintingAppIds.join(', ')} would send the remote a token this ` +
+        `server minted or holds itself: only a server in transparent mode receives its callers' tokens from the ` +
+        `identity provider. Use remoteAuth: { mode: 'static', credentials } (or transportOptions.headers) for the ` +
+        `remote, or run the server in transparent mode.`,
     );
   }
 
@@ -170,6 +198,21 @@ export function detectAuthProviders(
     validationErrors,
     warnings,
   };
+}
+
+/**
+ * Whether a static server's shared endpoint enforces a static app's auth: it checks the same header and
+ * scheme, and every token it accepts is one the app accepts. Provider ids can't tell this apart, since
+ * every static config derives the same one.
+ */
+function staticParentEnforces(parentAuth: AuthOptions | undefined, appAuth: AuthOptions): boolean {
+  if (!parentAuth || !isStaticMode(parentAuth) || !isStaticMode(appAuth)) return false;
+  const parent = staticAuthOptionsSchema.safeParse(parentAuth);
+  const app = staticAuthOptionsSchema.safeParse(appAuth);
+  if (!parent.success || !app.success) return false;
+  const sameChallenge =
+    parent.data.header.toLowerCase() === app.data.header.toLowerCase() && parent.data.scheme === app.data.scheme;
+  return sameChallenge && parent.data.tokens.every((token) => app.data.tokens.includes(token));
 }
 
 function getProviderUrl(options: AuthOptions): string | undefined {

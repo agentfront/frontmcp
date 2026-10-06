@@ -44,6 +44,7 @@ import {
 } from '@frontmcp/utils';
 
 import {
+  enforceGlobalRateLimit,
   enforceIpFilter,
   Flow,
   FlowBase,
@@ -99,7 +100,14 @@ const stateSchema = z.object({
 const outputSchema = z.union([HttpRedirectSchema, HttpHtmlSchema]);
 
 const plan = {
-  pre: ['checkIpFilter', 'parseInput', 'handleConsentSubmission', 'loadFederatedSession', 'validateProviderCallback'],
+  pre: [
+    'checkIpFilter',
+    'acquireQuota',
+    'parseInput',
+    'handleConsentSubmission',
+    'loadFederatedSession',
+    'validateProviderCallback',
+  ],
   execute: ['exchangeProviderCode', 'storeProviderTokens', 'handleNextProviderOrComplete'],
 } as const satisfies FlowPlan<string>;
 
@@ -148,6 +156,11 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
   @Stage('checkIpFilter')
   async checkIpFilter() {
     enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
+
+  @Stage('acquireQuota')
+  async acquireQuota() {
+    await enforceGlobalRateLimit(this.scope, this.tryGetContext());
   }
 
   @Stage('parseInput')

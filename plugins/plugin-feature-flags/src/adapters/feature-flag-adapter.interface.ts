@@ -5,8 +5,8 @@ import type { FeatureFlagContext, FeatureFlagVariant } from '../feature-flag.typ
  * All adapters (static, Split.io, LaunchDarkly, Unleash, custom) implement this.
  */
 export interface FeatureFlagAdapter {
-  /** Initialize the adapter (connect to service, etc.). */
-  initialize(): Promise<void>;
+  /** Initialize the adapter (connect to service, etc.). Optional: the plugin awaits it before serving when present. */
+  initialize?(): Promise<void>;
 
   /** Check if a flag is enabled for the given context. */
   isEnabled(flagKey: string, context: FeatureFlagContext): Promise<boolean>;
@@ -27,6 +27,6 @@ export interface FeatureFlagAdapter {
    */
   evaluateFlags(flagKeys: string[], context: FeatureFlagContext): Promise<Map<string, boolean>>;
 
-  /** Destroy the adapter (disconnect, cleanup). */
-  destroy(): Promise<void>;
+  /** Destroy the adapter (disconnect, cleanup). Optional: the plugin calls it when the server is disposed. */
+  destroy?(): Promise<void>;
 }

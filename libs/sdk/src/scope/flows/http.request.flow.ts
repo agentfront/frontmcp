@@ -15,6 +15,7 @@ import {
   authInfoFromAuthorization,
   authorizeSessionTermination,
   buildPartitionContext,
+  challengeHeaders,
   decideIntent,
   decisionSchema,
   enforceIpFilter,
@@ -479,11 +480,11 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           request[ServerRequestTokens.auth] = verify.authorization;
         } else if (verify.kind === 'forbidden') {
           this.logger.warn(`[${this.requestId}] mcp-20260728: forbidden, insufficient scope`);
-          this.respond(httpRespond.forbidden({ headers: { 'WWW-Authenticate': verify.prmMetadataHeader } }));
+          this.respond(httpRespond.forbidden({ headers: challengeHeaders(verify.prmMetadataHeader) }));
           return;
         } else {
           this.logger.warn(`[${this.requestId}] mcp-20260728: unauthorized`);
-          this.respond(httpRespond.unauthorized({ headers: { 'WWW-Authenticate': verify.prmMetadataHeader } }));
+          this.respond(httpRespond.unauthorized({ headers: challengeHeaders(verify.prmMetadataHeader) }));
           return;
         }
 
@@ -564,9 +565,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           this.logger.warn(`[${this.requestId}] DELETE session denied: request is not authenticated`);
           this.respond(
             httpRespond.unauthorized({
-              headers: {
-                'WWW-Authenticate': (deleteVerify as { prmMetadataHeader?: string }).prmMetadataHeader ?? 'Bearer',
-              },
+              headers: challengeHeaders((deleteVerify as { prmMetadataHeader?: string }).prmMetadataHeader ?? 'Bearer'),
             }),
           );
           return;
@@ -670,9 +669,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         this.logger.warn(`[${this.requestId}] forbidden: insufficient scope`);
         this.respond(
           httpRespond.forbidden({
-            headers: {
-              'WWW-Authenticate': verifyResult.prmMetadataHeader,
-            },
+            headers: challengeHeaders(verifyResult.prmMetadataHeader),
           }),
         );
       } else {
@@ -693,9 +690,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         // then respond with 401
         this.respond(
           httpRespond.unauthorized({
-            headers: {
-              'WWW-Authenticate': verifyResult.prmMetadataHeader,
-            },
+            headers: challengeHeaders(verifyResult.prmMetadataHeader),
           }),
         );
       }

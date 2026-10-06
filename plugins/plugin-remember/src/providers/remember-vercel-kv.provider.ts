@@ -1,7 +1,12 @@
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 import { getEnv } from '@frontmcp/utils';
 
-import type { VercelKvRememberPluginOptions } from '../remember.types';
+import {
+  callerKeyOf,
+  doubledPrefixKey,
+  prefixedStoreKey,
+  SET_IF_NEITHER_KEY_EXISTS_SCRIPT,
+} from './remember-key-prefix';
 import type { RememberStoreInterface } from './remember-store.interface';
 
 /**
@@ -15,6 +20,7 @@ interface VercelKvClient {
   exists(key: string): Promise<number>;
   keys(pattern: string): Promise<string[]>;
   scan(cursor: string | number, options?: { match?: string; count?: number }): Promise<[string | number, string[]]>;
+  eval(script: string, keys: string[], args: string[]): Promise<unknown>;
 }
 
 interface VercelKvModule {
@@ -85,7 +91,7 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
   }
 
   private prefixKey(key: string): string {
-    return `${this.keyPrefix}${key}`;
+    return prefixedStoreKey(this.keyPrefix, key);
   }
 
   /**
@@ -101,18 +107,32 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
     } else {
       await this.kv.set(fullKey, strValue);
     }
+    await this.deleteDoubledPrefixKey(key);
   }
 
   /**
    * Store a value only if the key is absent, via the `nx` option.
    *
    * Resolves to `'OK'` when it created the key and `null` when the key already existed, so two
-   * callers racing cannot both win.
+   * callers racing cannot both win. A key that releases up to 1.9.1 may hold under the doubled
+   * prefix counts as present too: one script checks both keys and writes, so an entry still there
+   * is never shadowed.
    */
   async setIfAbsent(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
     const fullKey = this.prefixKey(key);
     const strValue = JSON.stringify(value);
     const ttl = ttlSeconds ?? this.defaultTTL;
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
+
+    if (doubledKey) {
+      const ttlArgument = ttl && ttl > 0 ? String(ttl) : '';
+      const created = await this.kv.eval(
+        SET_IF_NEITHER_KEY_EXISTS_SCRIPT,
+        [fullKey, doubledKey],
+        [strValue, ttlArgument],
+      );
+      return Number(created) === 1;
+    }
 
     const result =
       ttl && ttl > 0
@@ -126,8 +146,7 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
    * Retrieve a value by key.
    */
   async getValue<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined> {
-    const fullKey = this.prefixKey(key);
-    const raw = await this.kv.get(fullKey);
+    const raw = (await this.kv.get(this.prefixKey(key))) ?? (await this.readDoubledPrefixValue(key));
 
     if (raw === null) return defaultValue;
 
@@ -142,55 +161,71 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
    * Delete a key.
    */
   async delete(key: string): Promise<void> {
-    const fullKey = this.prefixKey(key);
-    await this.kv.del(fullKey);
+    await this.kv.del(this.prefixKey(key));
+    await this.deleteDoubledPrefixKey(key);
   }
 
   /**
    * Check if a key exists.
    */
   async exists(key: string): Promise<boolean> {
-    const fullKey = this.prefixKey(key);
-    return (await this.kv.exists(fullKey)) === 1;
+    if ((await this.kv.exists(this.prefixKey(key))) === 1) return true;
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
+    return doubledKey !== undefined && (await this.kv.exists(doubledKey)) === 1;
   }
 
   /**
    * List keys matching a pattern.
    * Uses SCAN for efficient iteration.
    */
-  async keys(pattern?: string): Promise<string[]> {
-    const searchPattern = this.prefixKey(pattern ?? '*');
-    const result: string[] = [];
+  async keys(pattern = '*'): Promise<string[]> {
+    const result = new Set<string>();
+    for (const key of await this.scan(this.prefixKey(pattern))) {
+      result.add(callerKeyOf(this.keyPrefix, pattern, key));
+    }
+    const doubledPattern = doubledPrefixKey(this.keyPrefix, pattern);
+    if (doubledPattern) {
+      for (const key of await this.scan(doubledPattern)) result.add(key.slice(this.keyPrefix.length));
+    }
+    return [...result];
+  }
 
+  private async scan(match: string): Promise<string[]> {
+    const found: string[] = [];
     try {
       // Try using scan if available (Upstash Redis API)
       let cursor: string | number = 0;
       do {
-        const [nextCursor, keys] = await this.kv.scan(cursor, {
-          match: searchPattern,
-          count: 100,
-        });
+        const [nextCursor, keys] = await this.kv.scan(cursor, { match, count: 100 });
         cursor = nextCursor;
-
-        // Strip prefix from keys
-        for (const key of keys) {
-          result.push(key.slice(this.keyPrefix.length));
-        }
+        found.push(...keys);
       } while (String(cursor) !== '0');
     } catch {
       // Fallback to keys command if scan not available
       try {
-        const keys = await this.kv.keys(searchPattern);
-        for (const key of keys) {
-          result.push(key.slice(this.keyPrefix.length));
-        }
+        found.push(...(await this.kv.keys(match)));
       } catch {
         // If keys also fails, return empty array
         console.warn('[RememberPlugin:VercelKV] keys() operation not supported');
       }
     }
+    return found;
+  }
 
-    return result;
+  /**
+   * The stored text of an entry a release up to 1.9.1 wrote under the doubled key, or null. It is read
+   * in place, not copied: the entry keeps its TTL, a rolled-back release still finds it, and a
+   * concurrent `delete()` cannot be undone by a copy. The next write or delete of the key removes it.
+   */
+  private async readDoubledPrefixValue(key: string): Promise<string | null> {
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
+    return doubledKey ? this.kv.get(doubledKey) : null;
+  }
+
+  /** Drops what releases up to 1.9.1 left under the doubled key, so it cannot come back once this key is gone. */
+  private async deleteDoubledPrefixKey(key: string): Promise<void> {
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
+    if (doubledKey) await this.kv.del(doubledKey);
   }
 
   /**

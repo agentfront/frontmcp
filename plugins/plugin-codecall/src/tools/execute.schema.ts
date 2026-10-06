@@ -19,8 +19,8 @@ for (const u of users.items) {
 }
 return results;
 
-ALLOWED: for, for-of, arrow fn, map/filter/reduce/find, Math.*, JSON.*, if/else, destructuring, spread, template literals
-BLOCKED: while, do-while, function decl, eval, require, fetch, setTimeout, process, globalThis
+ALLOWED: for-of, arrow fn, map/filter/reduce/find, Math.*, JSON.*, if/else, destructuring, spread, template literals
+BLOCKED: while, do-while, for (unless the server sets vm.allowLoops), console (use mcpLog), function decl, eval, require, fetch, setTimeout, process, globalThis
 
 ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED
 STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout

@@ -104,8 +104,14 @@ export abstract class ExecutionContextBase<Out = unknown> {
 
     // The request context is the source of truth (it is populated as the request is authenticated);
     // the constructor's copy only fills what the request context does not carry.
-    this._authContext = buildAuthContext(this.resolveAuthSource(), this.scope.metadata.authorities?.claimsMapping);
-    if (this.scope.metadata.authorities?.pipes?.length) {
+    const authorities = this.scope.metadata.authorities;
+    this._authContext = buildAuthContext(
+      this.resolveAuthSource(),
+      authorities?.claimsMapping,
+      undefined,
+      authorities?.claimsResolver,
+    );
+    if (authorities?.pipes?.length) {
       this.logger.warn(
         '`this.auth` was read before the `authorities.pipes` ran for this context; the fields they add are undefined.',
       );
@@ -125,7 +131,12 @@ export abstract class ExecutionContextBase<Out = unknown> {
     const authorities = this.scope.metadata.authorities;
     const pipes = authorities?.pipes;
     if (!pipes?.length) return;
-    this._authContext = await buildAuthContext(this.resolveAuthSource(), authorities?.claimsMapping, pipes);
+    this._authContext = await buildAuthContext(
+      this.resolveAuthSource(),
+      authorities?.claimsMapping,
+      pipes,
+      authorities?.claimsResolver,
+    );
   }
 
   private resolveAuthSource(): Partial<AuthInfo> {

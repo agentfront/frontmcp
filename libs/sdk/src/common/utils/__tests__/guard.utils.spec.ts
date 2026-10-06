@@ -1,6 +1,19 @@
-import { ConcurrencyLimitError, createGuardManager, QueueTimeoutError, type GuardConfig } from '@frontmcp/guard';
+import {
+  ConcurrencyLimitError,
+  createGuardManager,
+  GuardStorageUnavailableError,
+  QueueTimeoutError,
+  type GuardConfig,
+  type GuardManager,
+} from '@frontmcp/guard';
 
-import { acquireConcurrencySlots, buildPartitionContext, partitionsByIdentity } from '../guard.utils';
+import { FlowControl } from '../../interfaces/flow.interface';
+import {
+  acquireConcurrencySlots,
+  buildPartitionContext,
+  enforceGlobalRateLimit,
+  partitionsByIdentity,
+} from '../guard.utils';
 
 describe('buildPartitionContext', () => {
   it('keeps a session the server verified, and the signed-in user', () => {
@@ -127,5 +140,25 @@ describe('acquireConcurrencySlots', () => {
     await expect(acquireConcurrencySlots(manager, 'tool-a', queued, undefined)).rejects.toThrow(QueueTimeoutError);
 
     await expect(acquireConcurrencySlots(manager, 'tool-b', undefined, undefined)).resolves.toBeDefined();
+  });
+});
+
+describe('enforceGlobalRateLimit', () => {
+  it('answers 503 with Retry-After when the limit store is unreachable (#766)', async () => {
+    const manager = {
+      config: { global: { maxRequests: 10, windowMs: 60_000, partitionBy: 'global' } },
+      checkGlobalRateLimit: async () => {
+        throw new GuardStorageUnavailableError('redis', new Error('Connection is closed.'), 'runtime');
+      },
+    } as unknown as GuardManager;
+
+    const outcome = await enforceGlobalRateLimit({ rateLimitManager: manager }, undefined).catch(
+      (thrown: unknown) => thrown,
+    );
+
+    expect(outcome).toBeInstanceOf(FlowControl);
+    const output = (outcome as FlowControl).output as { status: number; headers?: Record<string, string> };
+    expect(output.status).toBe(503);
+    expect(output.headers?.['Retry-After']).toBe('1');
   });
 });

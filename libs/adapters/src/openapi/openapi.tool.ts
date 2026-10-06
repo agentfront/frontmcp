@@ -1,7 +1,7 @@
 import { type McpOpenAPITool } from 'mcp-from-openapi';
 
 import { z, type JSONSchema } from '@frontmcp/lazy-zod';
-import { tool, type FrontMcpLogger } from '@frontmcp/sdk';
+import { InvalidInputError, tool, type FrontMcpLogger } from '@frontmcp/sdk';
 import { isRedirectResponse } from '@frontmcp/utils';
 
 import { validateFrontMcpExtension, type ValidatedFrontMcpExtension } from './openapi.frontmcp-schema';
@@ -41,6 +41,9 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
 
   // Convert JSON Schema to Zod schema for input validation
   const schemaResult = getZodSchemaFromJsonSchema(openapiTool.inputSchema, openapiTool.name, logger);
+  const argumentCheck = schemaResult.conversionFailed
+    ? undefined
+    : getZodSchemaFromJsonSchema(toArgumentJsonSchema(openapiTool), openapiTool.name, logger);
 
   // Build output schema from OpenAPI response definitions
   // mcp-from-openapi generates outputSchema from response definitions
@@ -127,6 +130,15 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
   return tool(toolMetadata as unknown as Parameters<typeof tool>[0])(async (input, toolCtx) => {
     // Get the FrontMcpContext for full context access (sessionId, traceId, authInfo, etc.)
     const ctx = toolCtx.context;
+
+    // 0. The SDK passes a raw-schema tool's arguments through, so check them against the spec here
+    if (argumentCheck && !argumentCheck.conversionFailed) {
+      const validation = argumentCheck.schema.safeParse(input);
+      if (!validation.success) {
+        const problems = validation.error.issues.map((issue) => `${issue.path.join('.') || 'input'}: ${issue.message}`);
+        throw new InvalidInputError(`Invalid arguments for tool '${openapiTool.name}': ${problems.join('; ')}`);
+      }
+    }
 
     // 1. Inject transformed values (from inputTransforms)
     const transformContext: InputTransformContext = {
@@ -425,6 +437,76 @@ async function injectTransformedValues(
   }
 
   return result;
+}
+
+const SUBSCHEMA_KEYWORDS = [
+  'items',
+  'additionalProperties',
+  'not',
+  'if',
+  'then',
+  'else',
+  'contains',
+  'propertyNames',
+  'unevaluatedItems',
+  'unevaluatedProperties',
+];
+const SUBSCHEMA_LIST_KEYWORDS = ['allOf', 'anyOf', 'prefixItems'];
+const SUBSCHEMA_MAP_KEYWORDS = ['properties', 'patternProperties', 'dependentSchemas', '$defs', 'definitions'];
+
+/**
+ * The schema a call's arguments are checked against. It is the input schema, relaxed where a
+ * strict check would refuse calls the API takes: `format` is an annotation in draft 2020-12, an
+ * open `oneOf` matches more than one branch for most objects, and a credential argument
+ * (`securitySchemesInInput`) may be left to the server, which `assertRequestHasCredential` checks
+ * on the built request.
+ */
+function toArgumentJsonSchema(openapiTool: McpOpenAPITool): JsonSchema {
+  const argumentSchema = relaxSchema(openapiTool.inputSchema) as Record<string, unknown>;
+  const credentialKeys = new Set(
+    openapiTool.mapper.filter((mapper) => mapper.security).map((mapper) => mapper.inputKey),
+  );
+  const required = argumentSchema['required'];
+  if (Array.isArray(required)) {
+    argumentSchema['required'] = required.filter((key) => !credentialKeys.has(key));
+  }
+  return argumentSchema as JsonSchema;
+}
+
+function relaxSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(relaxSchema);
+  if (typeof schema !== 'object' || schema === null) return schema;
+
+  const relaxed: Record<string, unknown> = { ...(schema as Record<string, unknown>) };
+  delete relaxed['format'];
+  for (const keyword of SUBSCHEMA_KEYWORDS) {
+    if (keyword in relaxed) relaxed[keyword] = relaxSchema(relaxed[keyword]);
+  }
+  for (const keyword of SUBSCHEMA_LIST_KEYWORDS) {
+    const subschemas = relaxed[keyword];
+    if (Array.isArray(subschemas)) relaxed[keyword] = subschemas.map(relaxSchema);
+  }
+  for (const keyword of SUBSCHEMA_MAP_KEYWORDS) {
+    const subschemasByName = relaxed[keyword];
+    if (typeof subschemasByName === 'object' && subschemasByName !== null) {
+      relaxed[keyword] = Object.fromEntries(
+        Object.entries(subschemasByName).map(([name, subschema]) => [name, relaxSchema(subschema)]),
+      );
+    }
+  }
+
+  const exclusiveBranches = relaxed['oneOf'];
+  if (Array.isArray(exclusiveBranches)) {
+    delete relaxed['oneOf'];
+    const branches = exclusiveBranches.map(relaxSchema);
+    if (Array.isArray(relaxed['anyOf'])) {
+      const allOf = Array.isArray(relaxed['allOf']) ? relaxed['allOf'] : [];
+      relaxed['allOf'] = [...allOf, { anyOf: branches }];
+    } else {
+      relaxed['anyOf'] = branches;
+    }
+  }
+  return relaxed;
 }
 
 /**

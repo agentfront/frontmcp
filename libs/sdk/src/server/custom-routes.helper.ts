@@ -15,6 +15,7 @@
 //      scope computes from `entryPath` + `routeBase` (split-by-app aware).
 
 import {
+  challengeHeaders,
   FlowControl,
   httpRespond,
   normalizeEntryPrefix,
@@ -167,7 +168,7 @@ export function wrapWithAuth(
       return writeHttpResponse(
         res,
         httpRespond.unauthorized({
-          headers: result?.kind === 'unauthorized' ? { 'WWW-Authenticate': result.prmMetadataHeader } : undefined,
+          headers: result?.kind === 'unauthorized' ? challengeHeaders(result.prmMetadataHeader) : undefined,
         }),
       );
     }
@@ -177,7 +178,7 @@ export function wrapWithAuth(
       return writeHttpResponse(
         res,
         httpRespond.forbidden({
-          headers: { 'WWW-Authenticate': result.prmMetadataHeader },
+          headers: challengeHeaders(result.prmMetadataHeader),
         }),
       );
     }

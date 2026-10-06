@@ -3,7 +3,8 @@
  *
  * The gateway proxies the same local server twice — `legacy:*` over the
  * session transports, `modern:*` over MCP 2026-07-28 — and lists every remote
- * entry once, including after the capability cache expires.
+ * entry once, including after the capability cache expires. A URI template
+ * both remotes share is served by the first remote listed, `legacy`.
  */
 import { expect, test, TestServer } from '@frontmcp/testing';
 
@@ -52,13 +53,15 @@ test.describe('App.remote() protocol revisions', () => {
     expect(connectionInfo(result).session).toBe(true);
   });
 
-  test('each remote resource template is listed once, also after re-discovery', async ({ mcp }) => {
+  test('a URI template both remotes share is listed once, from the first remote, also after re-discovery', async ({
+    mcp,
+  }) => {
     const names = async () => (await mcp.resources.listTemplates()).map((t) => t.name).sort();
 
-    expect(await names()).toEqual(['legacy:item', 'modern:item']);
-    // cacheTTL is 200ms: the next listing re-discovers both remotes.
+    expect(await names()).toEqual(['legacy:item']);
+    // cacheTTL is 200ms: the next listing re-discovers both remotes, and the first one listed keeps the template.
     await new Promise((resolve) => setTimeout(resolve, 400));
-    expect(await names()).toEqual(['legacy:item', 'modern:item']);
+    expect(await names()).toEqual(['legacy:item']);
   });
 
   test('each remote tool is listed once, also after re-discovery', async ({ mcp }) => {

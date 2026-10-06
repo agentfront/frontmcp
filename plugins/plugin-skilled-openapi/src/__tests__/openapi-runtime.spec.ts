@@ -514,3 +514,40 @@ describe('executeOperation — IPv6-literal service hosts (GHSA-4r57-gvgj-5crm)'
     },
   );
 });
+
+describe('executeOperation outbound.egressProxy (#767)', () => {
+  const proxiedRequests: Array<{ url: string; proxyUrl: string }> = [];
+
+  beforeAll(() => {
+    jest.doMock('undici', () => {
+      class ProxyAgent {
+        constructor(readonly proxyUrl: string) {}
+      }
+      return {
+        ProxyAgent,
+        fetch: async (url: string, init: { dispatcher: ProxyAgent }) => {
+          proxiedRequests.push({ url, proxyUrl: init.dispatcher.proxyUrl });
+          return new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } });
+        },
+      };
+    });
+  });
+
+  afterAll(() => {
+    jest.dontMock('undici');
+  });
+
+  it('sends the request through the configured proxy', async () => {
+    const result = await executeOperation({
+      entry: buildEntry(),
+      bundleId: 'acme',
+      input: { id: 'inv_1', amount: 5 },
+      deps: buildDeps({ outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128' }), fetchImpl: undefined }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(proxiedRequests).toEqual([
+      { url: 'http://localhost:9999/v1/invoices/inv_1', proxyUrl: 'http://proxy.internal:3128' },
+    ]);
+  });
+});

@@ -20,6 +20,7 @@ import {
   type RemoteAppMetadata,
   type SkillEntry,
 } from '../../common';
+import { isPrimitiveIncluded } from '../../common/utils/primitive-filter';
 import { InternalMcpError } from '../../errors';
 import { type EsmModuleLoader } from '../../esm-loader';
 import {
@@ -189,6 +190,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     this.loader = createPackageModuleLoader({
       loader: appConfig?.loader ?? scope.metadata.loader,
       cacheTTL: appConfig?.cacheTTL,
+      importMap: appConfig?.importMap,
       logger: scope.logger,
     });
 
@@ -321,9 +323,20 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     const logger = this.scopeProviders.getActiveScope().logger;
     const namespace = this.metadata.namespace ?? this.metadata.name;
 
-    const tools = esmManifestRecords(manifest.tools, (raw) => esmToolRecord(raw, namespace));
-    const resources = esmManifestRecords(manifest.resources, (raw) => esmResourceRecord(raw, namespace));
-    const prompts = esmManifestRecords(manifest.prompts, (raw) => esmPromptRecord(raw, namespace));
+    const filter = this.metadata.filter;
+    const prefixLength = namespace ? namespace.length + 1 : 0;
+    const included =
+      (kind: 'tools' | 'resources' | 'prompts') =>
+      (record: { metadata: { name: string } }): boolean =>
+        isPrimitiveIncluded(record.metadata.name.slice(prefixLength), kind, filter);
+
+    const tools = esmManifestRecords(manifest.tools, (raw) => esmToolRecord(raw, namespace)).filter(included('tools'));
+    const resources = esmManifestRecords(manifest.resources, (raw) => esmResourceRecord(raw, namespace)).filter(
+      included('resources'),
+    );
+    const prompts = esmManifestRecords(manifest.prompts, (raw) => esmPromptRecord(raw, namespace)).filter(
+      included('prompts'),
+    );
 
     for (const record of tools) {
       const instance = new ToolInstance(record, this.scopeProviders, this.appOwner);

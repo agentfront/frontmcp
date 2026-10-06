@@ -5,7 +5,9 @@ import { z } from '@frontmcp/lazy-zod';
 import { GetPromptRequestSchema, GetPromptResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
+import { enforcePublicAccess, publicAccessFor } from '../../auth/public-access.utils';
 import {
+  buildPartitionContext,
   Flow,
   FlowBase,
   FlowControl,
@@ -61,7 +63,14 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'ensureRemoteCapabilities', 'findPrompt', 'checkEntryAuthorities', 'createPromptContext'],
+  pre: [
+    'parseInput',
+    'ensureRemoteCapabilities',
+    'findPrompt',
+    'checkPublicAccess',
+    'checkEntryAuthorities',
+    'createPromptContext',
+  ],
   execute: ['execute', 'validateOutput'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
@@ -196,8 +205,11 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     const { name } = this.state.required.input;
     this.logger.info(`findPrompt: looking for prompt with name "${name}"`);
 
-    // Try to find a prompt that matches this name
-    const prompt = resolvedPrompts.take(this.rawInput, name) ?? this.scope.prompts.findByName(name);
+    // Its name, or its app-qualified name (`desk:summarize`), which prompts/list hands out when names collide
+    const prompt =
+      resolvedPrompts.take(this.rawInput, name) ??
+      this.scope.prompts.findByName(name) ??
+      this.scope.prompts.getPrompts(true).find((entry) => entry.fullName === name);
 
     if (!prompt) {
       this.logger.warn(`findPrompt: prompt "${name}" not found`);
@@ -231,6 +243,20 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
    * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in prompt metadata.
    * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
    */
+  /** An anonymous caller may get only the prompts `publicAccess` lists, within its rate limit. */
+  @Stage('checkPublicAccess')
+  async checkPublicAccess() {
+    const { prompt, authInfo } = this.state;
+    const publicAccess = publicAccessFor(this.scope.auth?.options, authInfo);
+    if (!prompt || !publicAccess) return;
+    await enforcePublicAccess(
+      publicAccess,
+      { kind: 'prompt', names: [prompt.fullName || prompt.name, prompt.name] },
+      this.scope.publicAccessGuard,
+      buildPartitionContext(this.tryGetContext()),
+    );
+  }
+
   @Stage('checkEntryAuthorities')
   async checkEntryAuthorities() {
     this.logger.verbose('checkEntryAuthorities:start');

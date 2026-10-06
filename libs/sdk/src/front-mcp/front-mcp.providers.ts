@@ -1,8 +1,8 @@
 import { ProviderScope } from '@frontmcp/di';
-import { getEnv } from '@frontmcp/utils';
 
 import {
   AsyncProvider,
+  defaultHttpPort,
   FrontMcpServer,
   type FrontMcpConfigType,
   type ProviderType,
@@ -28,7 +28,7 @@ const frontMcpConfig = {
 // behaviour is unchanged either way (fix for CI build break on PR #422).
 // Built when the server is created, not when this module loads: a browser bundle has no
 // `process` to read PORT from at load (#681).
-const defaultHttpOptions = () => ({ port: Number(getEnv('PORT')) || 3000, entryPath: '/mcp', bodyLimit: '4mb' });
+const defaultHttpOptions = () => ({ port: defaultHttpPort(), entryPath: '/mcp', bodyLimit: '4mb' });
 
 const frontMcpServer = AsyncProvider({
   name: 'frontmcp:server',

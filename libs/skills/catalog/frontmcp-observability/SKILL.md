@@ -122,7 +122,7 @@ Follow the scenario routing table above to find the right reference for your use
 
 - [ ] `@frontmcp/observability` installed
 - [ ] `observability` field added to `@FrontMcp` config
-- [ ] TracerProvider configured (via `setupOTel()` or external SDK)
+- [ ] TracerProvider configured (via `setupOTel()` or external SDK); the startup warning about a missing provider appears only when none is registered
 - [ ] Logging sinks configured for production (stdout or OTLP)
 
 ### Runtime
