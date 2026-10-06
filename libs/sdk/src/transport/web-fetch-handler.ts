@@ -427,11 +427,22 @@ export function createServerFetchHandler(
     })
     .sort((a, b) => b.basePath.length - a.basePath.length);
   const primaryRoute = routes.find((route) => route.scope === primary) ?? routes[routes.length - 1];
+  const isUnder = (path: string, basePath: string) =>
+    basePath !== '' && (path === basePath || path.startsWith(`${basePath}/`));
+
+  // `/metrics` is answered by `primary`, so another scope served at or above it would take the scrape
+  const metricsConfig = options.metrics?.config;
+  if (metricsConfig?.enabled === true) {
+    const metricsEndpoint = normalizeEntryPrefix(metricsPath(metricsConfig));
+    if (routes.some(({ scope, basePath }) => scope !== primary && isUnder(metricsEndpoint, basePath))) {
+      throw new MetricsPathConflictError(metricsPath(metricsConfig));
+    }
+  }
 
   return (request, ctx, env) => {
     const path = scopePathOf(new URL(request.url).pathname);
     const route =
-      routes.find(({ basePath }) => basePath !== '' && (path === basePath || path.startsWith(`${basePath}/`))) ??
+      routes.find(({ basePath }) => isUnder(path, basePath)) ??
       routes.find(({ basePath }) => basePath === '') ??
       primaryRoute;
     return route.handler(request, ctx, env);

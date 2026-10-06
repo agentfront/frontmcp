@@ -4,6 +4,7 @@ import { MCP_20260728_META, PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
 
 import { createTestJwtIssuer, TEST_CLIENT_INFO } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { App, LogLevel, Tool, ToolContext } from '../../common';
+import { MetricsPathConflictError } from '../../metrics/metrics.errors';
 import { FrontMcpInstance } from '../front-mcp';
 
 function namedTool(name: string) {
@@ -24,6 +25,9 @@ class SupportApp {}
 
 @App({ id: 'console', name: 'Console', standalone: true, tools: [namedTool('inspect')] })
 class ConsoleApp {}
+
+@App({ id: 'metrics', name: 'Metrics', tools: [namedTool('report')] })
+class MetricsApp {}
 
 async function toolNamesAt(handler: (request: Request) => Promise<Response>, path: string): Promise<string[]> {
   const response = await handler(
@@ -103,5 +107,17 @@ describe('createFetchHandler() with several scopes', () => {
     expect(metadata.status).toBe(200);
     const body = (await metadata.json()) as { resource?: string };
     expect(body.resource).toBe(`http://localhost/${appId}`);
+  });
+
+  it('refuses a metrics path that a splitByApp app is served at', async () => {
+    const creating = FrontMcpInstance.createFetchHandler({
+      info: { name: 'split-fetch-metrics', version: '1.0.0' },
+      apps: [BillingApp, MetricsApp],
+      splitByApp: true,
+      metrics: { enabled: true },
+      logging: { level: LogLevel.Off },
+    });
+
+    await expect(creating).rejects.toBeInstanceOf(MetricsPathConflictError);
   });
 });

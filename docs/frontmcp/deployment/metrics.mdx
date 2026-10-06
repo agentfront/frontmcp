@@ -144,7 +144,7 @@ metrics: { enabled: true, path: '/mcp' }
 // → throws MetricsPathConflictError at boot
 ```
 
-`createFetchHandler()` also refuses a `metrics.path` equal to its MCP entry path (`http.entryPath`, `/` when unset), with the same `MetricsPathConflictError`, because the metrics route would otherwise answer the `GET` that MCP clients use to open the event stream.
+`createFetchHandler()` also refuses a `metrics.path` equal to its MCP entry path (`http.entryPath`, `/` when unset), with the same `MetricsPathConflictError`, because the metrics route would otherwise answer the `GET` that MCP clients use to open the event stream. For the same reason it refuses a `metrics.path` at or under the path of a `splitByApp` or `standalone` app (`<entryPath>/<appId>`), such as `/metrics` with an app whose id is `metrics`.
 
 ## Off-by-default rationale
 
