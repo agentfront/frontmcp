@@ -57,7 +57,7 @@ import type {
   McpUnsubscribeFn,
 } from './mcp-client.types';
 import { McpStatelessClientAdapter, negotiateRemoteProtocol } from './mcp-stateless-client.adapter';
-import { fetchWithRemoteRequestHeaders, withRemoteRequestHeaders } from './remote-request-headers';
+import { createRemoteRequestFetch, withRemoteRequestHeaders } from './remote-request-headers';
 import {
   CircuitBreakerManager,
   CircuitOpenError,
@@ -847,14 +847,15 @@ export class McpClientService {
       }
       return undefined;
     }
-    const negotiated = await negotiateRemoteProtocol(request.url, httpOptions?.protocolVersion, headers);
+    const remoteFetch = createRemoteRequestFetch(headers !== undefined);
+    const negotiated = await negotiateRemoteProtocol(request.url, httpOptions?.protocolVersion, headers, remoteFetch);
     if (negotiated !== '2026-07-28') return undefined;
 
     const adapter = new McpStatelessClientAdapter({
       url: request.url,
       clientInfo: { name: this.options.clientName, version: this.options.clientVersion },
       headers,
-      fetchImpl: fetchWithRemoteRequestHeaders,
+      fetchImpl: remoteFetch,
     });
     await adapter.connect();
 
@@ -873,7 +874,10 @@ export class McpClientService {
 
   private createTransport(request: McpConnectRequest, headers: Record<string, string> | undefined): Transport {
     const { transportType, url } = request;
-    const options = { requestInit: headers ? { headers } : undefined, fetch: fetchWithRemoteRequestHeaders };
+    const options = {
+      requestInit: headers ? { headers } : undefined,
+      fetch: createRemoteRequestFetch(headers !== undefined),
+    };
 
     switch (transportType) {
       case 'http':
@@ -903,7 +907,7 @@ export class McpClientService {
   ): Transport {
     return new SSEClientTransport(new URL(request.url), {
       requestInit: headers ? { headers } : undefined,
-      fetch: fetchWithRemoteRequestHeaders,
+      fetch: createRemoteRequestFetch(headers !== undefined),
     });
   }
 
