@@ -43,6 +43,7 @@ import { resolveDefaultSqlitePath, type SqliteOptionsInput } from '../common/typ
 import { resolveEntryPath } from '../common/utils/path.utils';
 import CompleteFlow from '../completion/flows/complete.flow';
 import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
+import { proxyTrustOf } from '../context/metadata.utils';
 import { createElicitationStore, type ElicitationStore } from '../elicitation';
 import { ElicitationRequestFlow, ElicitationResultFlow } from '../elicitation/flows';
 import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
@@ -1970,13 +1971,4 @@ export class Scope extends ScopeEntry {
       await this.notificationService.destroy();
     }
   }
-}
-
-/**
- * `throttle.ipFilter.trustProxy: true` reads the client address from `X-Forwarded-For`, counting back
- * `trustedProxyDepth` hops, as `FRONTMCP_TRUST_PROXY` does; without it the environment decides.
- */
-function proxyTrustOf(throttle: { ipFilter?: { trustProxy?: boolean; trustedProxyDepth?: number } } | undefined) {
-  const ipFilter = throttle?.ipFilter;
-  return ipFilter?.trustProxy === true ? { trustProxy: true, trustedProxyDepth: ipFilter.trustedProxyDepth } : {};
 }

@@ -46,4 +46,29 @@ describe('throttle.global on OAuth and discovery routes', () => {
     expect(second.status).toBe(429);
     expect(second.headers.get('retry-after')).toBeTruthy();
   });
+
+  it('answers /oauth/token 429 once the limit is reached', async () => {
+    const server = await createTestFetchServer({
+      info: { name: 'desk', version: '1.0.0' },
+      apps: [DeskApp],
+      auth: { mode: 'local' },
+      throttle: { enabled: true, global: { maxRequests: 1, windowMs: 60_000, partitionBy: 'global' } },
+    });
+    servers.push(server);
+    const tokenRequest = () =>
+      server.handler(
+        new Request(`${ORIGIN}/oauth/token`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: 'grant_type=authorization_code&code=unknown&code_verifier=v&client_id=c&redirect_uri=http%3A%2F%2F127.0.0.1%2Fcb',
+        }),
+      );
+
+    const first = await tokenRequest();
+    const second = await tokenRequest();
+
+    expect(first.status).not.toBe(429);
+    expect(second.status).toBe(429);
+    expect(second.headers.get('retry-after')).toBeTruthy();
+  });
 });
