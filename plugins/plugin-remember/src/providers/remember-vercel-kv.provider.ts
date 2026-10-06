@@ -1,5 +1,5 @@
 import { Provider, ProviderScope } from '@frontmcp/sdk';
-import { getEnv } from '@frontmcp/utils';
+import { createVercelKvClient, type VercelKvConnection } from '@frontmcp/utils';
 
 import {
   callerKeyOf,
@@ -21,10 +21,6 @@ interface VercelKvClient {
   keys(pattern: string): Promise<string[]>;
   scan(cursor: string | number, options?: { match?: string; count?: number }): Promise<[string | number, string[]]>;
   eval(script: string, keys: string[], args: string[]): Promise<unknown>;
-}
-
-interface VercelKvModule {
-  createClient(config: { url: string; token: string; automaticDeserialization: boolean }): VercelKvClient;
 }
 
 /**
@@ -51,16 +47,12 @@ export interface RememberVercelKvProviderOptions {
   scope: ProviderScope.GLOBAL,
 })
 export default class RememberVercelKvProvider implements RememberStoreInterface {
-  private readonly createClient: VercelKvModule['createClient'];
-  private readonly connection: { url?: string; token?: string };
-  private client?: VercelKvClient;
+  private readonly connection: VercelKvConnection;
+  private client?: Promise<VercelKvClient>;
   private readonly keyPrefix: string;
   private readonly defaultTTL?: number;
 
   constructor(options: RememberVercelKvProviderOptions = {}) {
-    // Lazy import @vercel/kv to avoid bundling when not used
-    const vercelKv: VercelKvModule = require('@vercel/kv');
-
     // Validate partial configuration
     const hasUrl = options.url !== undefined;
     const hasToken = options.token !== undefined;
@@ -71,22 +63,21 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
       );
     }
 
-    this.createClient = vercelKv.createClient;
     this.connection = { url: options.url, token: options.token };
     this.keyPrefix = options.keyPrefix ?? 'remember:';
     this.defaultTTL = options.defaultTTL;
   }
 
-  /** Built on first use, like the module's `kv` singleton, which would JSON-parse what it reads. */
-  private get kv(): VercelKvClient {
-    if (!this.client) {
-      const url = this.connection.url ?? getEnv('KV_REST_API_URL');
-      const token = this.connection.token ?? getEnv('KV_REST_API_TOKEN');
-      if (!url || !token) {
-        throw new Error('RememberVercelKvProvider: pass url and token, or set KV_REST_API_URL and KV_REST_API_TOKEN.');
-      }
-      this.client = this.createClient({ url, token, automaticDeserialization: false });
-    }
+  /**
+   * The client, built on first use from the url and token (or KV_REST_API_URL / KV_REST_API_TOKEN)
+   * by the shared loader, which a Cloudflare Worker can bundle (#711). Values are read back as
+   * stored. A failed attempt is retried.
+   */
+  private kv(): Promise<VercelKvClient> {
+    this.client ??= createVercelKvClient<VercelKvClient>(this.connection).catch((error: unknown) => {
+      this.client = undefined;
+      throw error;
+    });
     return this.client;
   }
 
@@ -101,11 +92,12 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
     const fullKey = this.prefixKey(key);
     const strValue = JSON.stringify(value);
     const ttl = ttlSeconds ?? this.defaultTTL;
+    const kv = await this.kv();
 
     if (ttl && ttl > 0) {
-      await this.kv.set(fullKey, strValue, { ex: ttl });
+      await kv.set(fullKey, strValue, { ex: ttl });
     } else {
-      await this.kv.set(fullKey, strValue);
+      await kv.set(fullKey, strValue);
     }
     await this.deleteDoubledPrefixKey(key);
   }
@@ -123,21 +115,18 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
     const strValue = JSON.stringify(value);
     const ttl = ttlSeconds ?? this.defaultTTL;
     const doubledKey = doubledPrefixKey(this.keyPrefix, key);
+    const kv = await this.kv();
 
     if (doubledKey) {
       const ttlArgument = ttl && ttl > 0 ? String(ttl) : '';
-      const created = await this.kv.eval(
-        SET_IF_NEITHER_KEY_EXISTS_SCRIPT,
-        [fullKey, doubledKey],
-        [strValue, ttlArgument],
-      );
+      const created = await kv.eval(SET_IF_NEITHER_KEY_EXISTS_SCRIPT, [fullKey, doubledKey], [strValue, ttlArgument]);
       return Number(created) === 1;
     }
 
     const result =
       ttl && ttl > 0
-        ? await this.kv.set(fullKey, strValue, { nx: true, ex: ttl })
-        : await this.kv.set(fullKey, strValue, { nx: true });
+        ? await kv.set(fullKey, strValue, { nx: true, ex: ttl })
+        : await kv.set(fullKey, strValue, { nx: true });
 
     return result === 'OK';
   }
@@ -146,7 +135,8 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
    * Retrieve a value by key.
    */
   async getValue<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined> {
-    const raw = (await this.kv.get(this.prefixKey(key))) ?? (await this.readDoubledPrefixValue(key));
+    const kv = await this.kv();
+    const raw = (await kv.get(this.prefixKey(key))) ?? (await this.readDoubledPrefixValue(key));
 
     if (raw === null) return defaultValue;
 
@@ -161,7 +151,8 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
    * Delete a key.
    */
   async delete(key: string): Promise<void> {
-    await this.kv.del(this.prefixKey(key));
+    const kv = await this.kv();
+    await kv.del(this.prefixKey(key));
     await this.deleteDoubledPrefixKey(key);
   }
 
@@ -169,9 +160,10 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
    * Check if a key exists.
    */
   async exists(key: string): Promise<boolean> {
-    if ((await this.kv.exists(this.prefixKey(key))) === 1) return true;
+    const kv = await this.kv();
+    if ((await kv.exists(this.prefixKey(key))) === 1) return true;
     const doubledKey = doubledPrefixKey(this.keyPrefix, key);
-    return doubledKey !== undefined && (await this.kv.exists(doubledKey)) === 1;
+    return doubledKey !== undefined && (await kv.exists(doubledKey)) === 1;
   }
 
   /**
@@ -192,18 +184,19 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
 
   private async scan(match: string): Promise<string[]> {
     const found: string[] = [];
+    const kv = await this.kv();
     try {
       // Try using scan if available (Upstash Redis API)
       let cursor: string | number = 0;
       do {
-        const [nextCursor, keys] = await this.kv.scan(cursor, { match, count: 100 });
+        const [nextCursor, keys] = await kv.scan(cursor, { match, count: 100 });
         cursor = nextCursor;
         found.push(...keys);
       } while (String(cursor) !== '0');
     } catch {
       // Fallback to keys command if scan not available
       try {
-        found.push(...(await this.kv.keys(match)));
+        found.push(...(await kv.keys(match)));
       } catch {
         // If keys also fails, return empty array
         console.warn('[RememberPlugin:VercelKV] keys() operation not supported');
@@ -219,13 +212,17 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
    */
   private async readDoubledPrefixValue(key: string): Promise<string | null> {
     const doubledKey = doubledPrefixKey(this.keyPrefix, key);
-    return doubledKey ? this.kv.get(doubledKey) : null;
+    if (!doubledKey) return null;
+    const kv = await this.kv();
+    return kv.get(doubledKey);
   }
 
   /** Drops what releases up to 1.9.1 left under the doubled key, so it cannot come back once this key is gone. */
   private async deleteDoubledPrefixKey(key: string): Promise<void> {
     const doubledKey = doubledPrefixKey(this.keyPrefix, key);
-    if (doubledKey) await this.kv.del(doubledKey);
+    if (!doubledKey) return;
+    const kv = await this.kv();
+    await kv.del(doubledKey);
   }
 
   /**

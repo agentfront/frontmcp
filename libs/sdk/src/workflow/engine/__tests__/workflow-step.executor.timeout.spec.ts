@@ -5,6 +5,7 @@
  */
 import type { JobEntry } from '../../../common/entries/job.entry';
 import type { WorkflowStep } from '../../../common/metadata/workflow.metadata';
+import { FrontMcpContext } from '../../../context';
 import { InvalidOutputError } from '../../../errors/mcp.error';
 import { WorkflowJobTimeoutError } from '../../../errors/workflow.errors';
 import type { JobRegistryInterface } from '../../../job/job.registry';
@@ -59,6 +60,25 @@ describe('WorkflowStepExecutor — step timeout', () => {
     await expect(executor.executeStep(step, {})).resolves.toEqual({ outputs: { ok: true }, state: 'completed' });
     expect(execute).toHaveBeenCalledTimes(1);
   });
+
+  it('times out an attempt whose CONTEXT providers never finish building', async () => {
+    const execute = jest.fn();
+    const create = jest.fn(() => ({ loadAuthContext: async () => undefined, execute }));
+    const job = {
+      name: 'slow-providers',
+      metadata: { name: 'slow-providers' },
+      parseInput: (input: unknown) => input,
+      parseOutput: (output: unknown) => output,
+      providers: { buildViews: hang },
+      create,
+    } as unknown as JobEntry;
+    const step = { id: 'step-1', jobName: 'slow-providers', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;
+    const context = new FrontMcpContext({ sessionId: 'session-1', scopeId: 'scope' });
+    const executor = new WorkflowStepExecutor(registryWith(job), logger, { authInfo: {}, context });
+
+    await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
+    expect(create).not.toHaveBeenCalled();
+  }, 2000);
 
   it('does not start the job when its auth pipes settle after the attempt timed out', async () => {
     let finishAuthLoad: () => void = () => undefined;

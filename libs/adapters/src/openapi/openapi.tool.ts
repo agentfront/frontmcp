@@ -66,15 +66,19 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
   }
 
   // Build tool metadata with transforms applied
-  // Priority: OpenAPI x-frontmcp → toolTransforms (adapter can override spec)
+  // Priority: what the generator derives → OpenAPI x-frontmcp → toolTransforms (adapter can override spec)
   const toolMetadata: Record<string, unknown> = {
     id: openapiTool.name,
     name: openapiTool.name,
+    ...(openapiTool.title && { title: openapiTool.title }),
     description: openapiTool.description,
     inputSchema: schemaResult.schema.shape || {},
     rawInputSchema: openapiTool.inputSchema,
     // Add output schema for tool/list to expose (only if not moved to description)
     ...(wrappedOutputSchema && { rawOutputSchema: wrappedOutputSchema }),
+    ...(openapiTool.annotations && { annotations: { ...openapiTool.annotations } }),
+    ...(openapiTool.icons?.length && { icons: openapiTool.icons.map((icon) => ({ ...icon })) }),
+    ...(openapiTool._meta && { _meta: { ...openapiTool._meta } }),
   };
 
   // Track schema conversion failure in metadata for debugging
@@ -86,7 +90,10 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
   // 1. Apply validated x-frontmcp extensions from OpenAPI spec (base layer)
   if (frontmcpExt) {
     if (frontmcpExt.annotations) {
-      toolMetadata['annotations'] = { ...frontmcpExt.annotations };
+      toolMetadata['annotations'] = {
+        ...((toolMetadata['annotations'] as object) || {}),
+        ...frontmcpExt.annotations,
+      };
     }
     if (frontmcpExt.tags) {
       toolMetadata['tags'] = [...frontmcpExt.tags];

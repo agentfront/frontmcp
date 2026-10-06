@@ -51,6 +51,13 @@ describe('RememberVercelKvProvider', () => {
       });
     });
 
+    it('leaves the fetch cache mode unset, which Cloudflare Workers require (#711)', async () => {
+      await new RememberVercelKvProvider().exists('key');
+
+      const [config] = mockCreateClient.mock.calls[0] as unknown as [Record<string, unknown>];
+      expect(config).toHaveProperty('cache', undefined);
+    });
+
     it('should fail on first use when neither options nor the environment give a url and token', async () => {
       const url = process.env['KV_REST_API_URL'];
       delete process.env['KV_REST_API_URL'];

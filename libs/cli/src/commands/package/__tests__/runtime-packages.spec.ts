@@ -2,9 +2,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { OPTIONAL_SDK_PEERS, resolveRuntimePackageSpecs } from '../runtime-packages';
+import { OPTIONAL_RUNTIME_PEERS, resolveRuntimePackageSpecs } from '../runtime-packages';
 
 const SDK_PACKAGE_JSON = path.resolve(__dirname, '../../../../../sdk/package.json');
+const UTILS_PACKAGE_JSON = path.resolve(__dirname, '../../../../../utils/package.json');
 
 describe('resolveRuntimePackageSpecs', () => {
   let dir: string;
@@ -85,15 +86,19 @@ describe('resolveRuntimePackageSpecs', () => {
     expect([...required, ...optional].some((spec) => spec.endsWith('@1.8.0'))).toBe(false);
   });
 
-  it("lists every optional peer of @frontmcp/sdk (kept in sync with the SDK's package.json)", () => {
-    const sdk = JSON.parse(fs.readFileSync(SDK_PACKAGE_JSON, 'utf-8')) as {
-      peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+  it('lists every optional peer of @frontmcp/sdk and @frontmcp/utils', () => {
+    const optionalPeersOf = (packageJsonPath: string): string[] => {
+      const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {
+        peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+      };
+      return Object.entries(pkg.peerDependenciesMeta ?? {})
+        .filter(([, meta]) => meta.optional)
+        .map(([name]) => name);
     };
-    const optional = Object.entries(sdk.peerDependenciesMeta ?? {})
-      .filter(([, meta]) => meta.optional)
-      .map(([name]) => name)
-      .sort();
-    expect([...OPTIONAL_SDK_PEERS].sort()).toEqual(optional);
+    const optional = [
+      ...new Set([...optionalPeersOf(SDK_PACKAGE_JSON), ...optionalPeersOf(UTILS_PACKAGE_JSON)]),
+    ].sort();
+    expect([...OPTIONAL_RUNTIME_PEERS].sort()).toEqual(optional);
   });
 
   it('ignores an unparsable package.json', () => {

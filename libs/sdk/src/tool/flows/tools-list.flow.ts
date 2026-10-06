@@ -485,7 +485,9 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           ...(tool.metadata.title && { title: tool.metadata.title }),
           description: tool.metadata.description,
           annotations: tool.metadata.annotations,
+          ...(tool.metadata.icons && { icons: tool.metadata.icons }),
           inputSchema,
+          ...(tool.metadata._meta && { _meta: { ...tool.metadata._meta } }),
         };
 
         // Expose execution.taskSupport per MCP 2025-11-25 tasks spec so clients
@@ -664,7 +666,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
             }
           }
 
-          item._meta = meta;
+          item._meta = { ...item._meta, ...meta };
         }
 
         return item;

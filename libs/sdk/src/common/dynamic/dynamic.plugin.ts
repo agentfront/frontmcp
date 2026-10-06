@@ -115,7 +115,7 @@ export abstract class DynamicPlugin<TOptions extends object, TInput extends obje
 
     if ('useFactory' in options) {
       return {
-        ...pluginMetadataFromOptions(typedOptions, []),
+        ...(pluginMetadataFromOptions(typedOptions, []) as typeof typedOptions),
         provide: this,
         inject: options.inject,
         useFactory: options.useFactory as any,
@@ -129,7 +129,7 @@ export abstract class DynamicPlugin<TOptions extends object, TInput extends obje
     const instance = new this(options);
     initOptionsByInstance.set(instance, options);
     return {
-      ...pluginMetadataFromOptions(typedOptions, dynamicTools),
+      ...(pluginMetadataFromOptions(typedOptions, dynamicTools) as typeof typedOptions),
       provide: this,
       useValue: instance,
       providers: mergedProviders,

@@ -36,6 +36,7 @@ class MyApp {}
     enabled: true,
     cache: {
       enabled: true,
+      // Reads KV_REST_API_URL / KV_REST_API_TOKEN; pass url and token to set them here instead
       redis: { provider: 'vercel-kv' },
       ttlMs: 60000,
     },

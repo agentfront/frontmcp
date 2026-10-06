@@ -1,3 +1,5 @@
+import CacheVercelKvProvider from '../providers/cache-vercel-kv.provider';
+
 // Mock @vercel/kv before importing the provider
 const mockKvSet = jest.fn();
 const mockKvGet = jest.fn();
@@ -20,29 +22,73 @@ jest.mock('@vercel/kv', () => ({
   }),
 }));
 
-import CacheVercelKvProvider from '../providers/cache-vercel-kv.provider';
-
 describe('CacheVercelKvProvider', () => {
+  const savedEnv = { url: process.env['KV_REST_API_URL'], token: process.env['KV_REST_API_TOKEN'] };
+
+  beforeAll(() => {
+    process.env['KV_REST_API_URL'] = 'https://env-kv.vercel.com';
+    process.env['KV_REST_API_TOKEN'] = 'env-token';
+  });
+
+  afterAll(() => {
+    process.env['KV_REST_API_URL'] = savedEnv.url;
+    process.env['KV_REST_API_TOKEN'] = savedEnv.token;
+    if (savedEnv.url === undefined) delete process.env['KV_REST_API_URL'];
+    if (savedEnv.token === undefined) delete process.env['KV_REST_API_TOKEN'];
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   describe('constructor', () => {
-    it('should use default kv instance when no url/token provided', () => {
-      new CacheVercelKvProvider();
-      expect(mockCreateClient).not.toHaveBeenCalled();
+    it('connects to KV_REST_API_URL and KV_REST_API_TOKEN when no url/token is provided', async () => {
+      await new CacheVercelKvProvider().setValue('key', 'value');
+
+      expect(mockCreateClient).toHaveBeenCalledWith(
+        expect.objectContaining({ url: 'https://env-kv.vercel.com', token: 'env-token' }),
+      );
     });
 
-    it('should create custom client when url and token provided', () => {
-      new CacheVercelKvProvider({
-        url: 'https://custom-kv.vercel.com',
-        token: 'custom-token',
-      });
+    it('builds its own client from the url and token provided', async () => {
+      await new CacheVercelKvProvider({ url: 'https://custom-kv.vercel.com', token: 'custom-token' }).setValue(
+        'key',
+        'value',
+      );
 
-      expect(mockCreateClient).toHaveBeenCalledWith({
-        url: 'https://custom-kv.vercel.com',
-        token: 'custom-token',
+      expect(mockCreateClient).toHaveBeenCalledWith(
+        expect.objectContaining({ url: 'https://custom-kv.vercel.com', token: 'custom-token' }),
+      );
+    });
+
+    it('leaves the fetch cache mode unset, which Cloudflare Workers require (#711)', async () => {
+      await new CacheVercelKvProvider().setValue('key', 'value');
+
+      const [config] = mockCreateClient.mock.calls[0] as unknown as [Record<string, unknown>];
+      expect(config).toHaveProperty('cache', undefined);
+      expect(config).toHaveProperty('automaticDeserialization', false);
+    });
+
+    it('builds the client once', async () => {
+      const provider = new CacheVercelKvProvider();
+
+      await provider.setValue('a', 'value');
+      await provider.getValue('a');
+
+      expect(mockCreateClient).toHaveBeenCalledTimes(1);
+    });
+
+    it('builds the client again after a failed attempt', async () => {
+      mockCreateClient.mockImplementationOnce(() => {
+        throw new Error('kv unavailable');
       });
+      const provider = new CacheVercelKvProvider();
+
+      await expect(provider.setValue('key', 'value')).rejects.toThrow('kv unavailable');
+      await provider.setValue('key', 'value');
+
+      expect(mockCreateClient).toHaveBeenCalledTimes(2);
+      expect(mockKvSet).toHaveBeenCalledTimes(1);
     });
 
     it('should throw error when only url is provided without token', () => {
@@ -57,28 +103,28 @@ describe('CacheVercelKvProvider', () => {
       }).toThrow("Both 'url' and 'token' must be provided together");
     });
 
-    it('should use default keyPrefix of "cache:"', () => {
+    it('should use default keyPrefix of "cache:"', async () => {
       const provider = new CacheVercelKvProvider();
       // We can verify this indirectly through the setValue call
-      provider.setValue('testkey', 'value');
+      await provider.setValue('testkey', 'value');
       expect(mockKvSet).toHaveBeenCalledWith('cache:testkey', expect.any(String), expect.any(Object));
     });
 
-    it('should use custom keyPrefix when provided', () => {
+    it('should use custom keyPrefix when provided', async () => {
       const provider = new CacheVercelKvProvider({ keyPrefix: 'myapp:' });
-      provider.setValue('testkey', 'value');
+      await provider.setValue('testkey', 'value');
       expect(mockKvSet).toHaveBeenCalledWith('myapp:testkey', expect.any(String), expect.any(Object));
     });
 
-    it('should use default TTL of 1 day', () => {
+    it('should use default TTL of 1 day', async () => {
       const provider = new CacheVercelKvProvider();
-      provider.setValue('testkey', 'value');
+      await provider.setValue('testkey', 'value');
       expect(mockKvSet).toHaveBeenCalledWith(expect.any(String), expect.any(String), { ex: 60 * 60 * 24 });
     });
 
-    it('should use custom defaultTTL when provided', () => {
+    it('should use custom defaultTTL when provided', async () => {
       const provider = new CacheVercelKvProvider({ defaultTTL: 3600 });
-      provider.setValue('testkey', 'value');
+      await provider.setValue('testkey', 'value');
       expect(mockKvSet).toHaveBeenCalledWith(expect.any(String), expect.any(String), { ex: 3600 });
     });
   });
@@ -192,8 +238,7 @@ describe('CacheVercelKvProvider', () => {
       expect(result).toBe('plain string');
     });
 
-    it('should handle already parsed objects from Vercel KV', async () => {
-      // Vercel KV auto-parses JSON in some cases
+    it('should return a non-string value as it is', async () => {
       mockKvGet.mockResolvedValue({ already: 'parsed' });
       const provider = new CacheVercelKvProvider();
 

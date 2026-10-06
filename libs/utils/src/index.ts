@@ -282,6 +282,8 @@ export {
   RedisStorageAdapter,
   createRedisClient,
   VercelKvStorageAdapter,
+  createVercelKvClient,
+  type VercelKvConnection,
   UpstashStorageAdapter,
   FileSystemStorageAdapter,
   type FileSystemAdapterOptions,
