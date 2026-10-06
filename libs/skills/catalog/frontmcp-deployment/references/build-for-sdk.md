@@ -221,6 +221,8 @@ const billing = await connect(config, { app: 'billing' });
 const billingServer = await FrontMcpInstance.createDirect(config, { app: 'billing' });
 ```
 
+`server.dispose()` shuts the whole server down (every scope, the endpoints it doesn't serve included), as `FrontMcpInstance.shutdown()` does. An `app` without an endpoint of its own rejects after the server built for it is shut down; `connect()` then also disposes the shared server when no other client uses it, so the next `connect()` builds a new one.
+
 ## DirectClient API
 
 All `connect*()` functions return a `DirectClient` with these methods:

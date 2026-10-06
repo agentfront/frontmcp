@@ -52,7 +52,7 @@ Public mode allows all connections without authentication. Use this for developm
 class MyApp {}
 ```
 
-- `sessionTtl` -- lifetime in seconds (default 3600) of the anonymous tokens `/oauth/token` issues (`expires_in` and `exp`); session ids don't expire.
+- `sessionTtl` -- lifetime in seconds (a positive whole number, default 3600) of the anonymous tokens `/oauth/token` issues (`expires_in` and `exp`); session ids don't expire.
 - `anonymousScopes` -- scopes granted to all unauthenticated clients (`this.auth.scopes`).
 - `publicAccess` -- `{ tools, prompts, rateLimit }`: the tools and prompts an anonymous caller may list and call (`'all'` by default; others answer `PUBLIC_ACCESS_DENIED`), and its calls per IP per minute (default 60).
 
@@ -329,7 +329,9 @@ the upstream IdP** — there is no FrontMCP login page and no provider-selection
 page. The IdP returns to `/oauth/provider/{id}/callback`; FrontMCP exchanges the
 code, stores the upstream tokens encrypted (server-side), derives the session
 identity (`sub`/`email`/`name`) from the **upstream user**, and mints its own
-HS256 session token for the MCP client.
+HS256 session token for the MCP client: an access token that lasts an hour and a
+refresh token that lasts 30 days (rotated on each use). The IdP controls only the
+upstream tokens' lifetime.
 
 ```typescript
 @FrontMcp({
@@ -371,10 +373,13 @@ class Whoami extends ToolContext {
 }
 ```
 
-An expired upstream token (or one within `refresh.skewSeconds`, default 60, of
-expiry) is renewed with the provider's refresh token when a tool reads it;
+An expired upstream token (or one within `refresh.skewSeconds` of expiry: default 60,
+never negative) is renewed with the provider's refresh token when a tool reads it;
 `refresh: { enabled: false }` turns that off. When the client refreshes FrontMCP's
-own token at `/oauth/token`, the upstream tokens move to the new token.
+own token at `/oauth/token`, the upstream tokens move to the new token. They leave the
+old token only once the refresh token has been rotated, so a failed refresh can be
+retried with the same refresh token; of two redemptions of one refresh token at once,
+one may get `invalid_grant`.
 
 **Deferred (not yet wired):** upstream **Dynamic Client Registration**
 (`providerConfig.dcrEnabled` / `registrationEndpoint`) — provide a pre-registered

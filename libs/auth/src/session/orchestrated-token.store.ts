@@ -401,45 +401,43 @@ export class InMemoryOrchestratedTokenStore implements TokenStore {
    * @param toAuthId - Target authorization ID (e.g., "def456")
    */
   async migrateTokens(fromAuthId: string, toAuthId: string): Promise<void> {
-    const prefix = `${fromAuthId}:`;
-    const keysToMigrate: string[] = [];
-
-    // Find all keys with the source authorization ID
-    for (const key of this.tokens.keys()) {
-      if (key.startsWith(prefix)) {
-        keysToMigrate.push(key);
-      }
-    }
-
-    // Migrate each token to the new authorization ID
-    for (const oldKey of keysToMigrate) {
-      const providerId = oldKey.slice(prefix.length);
-      const newKey = this.buildKey(toAuthId, providerId);
-
-      // Get the stored value (encrypted or not)
-      const stored = this.tokens.get(oldKey);
-      if (!stored) {
-        continue;
-      }
-
-      // If encrypted, we need to decrypt with old key and re-encrypt with new key
-      if (this.encryptionKey) {
-        try {
-          const record = await this.decryptRecord(oldKey, stored as string);
-          const encrypted = await this.encryptRecord(newKey, record);
-          this.tokens.set(newKey, encrypted);
-        } catch {
-          // Skip corrupted records
-          continue;
-        }
-      } else {
-        // Plain storage, just copy
-        this.tokens.set(newKey, stored);
-      }
-
-      // Delete old entry
+    for (const oldKey of await this.copyRecords(fromAuthId, toAuthId)) {
       this.tokens.delete(oldKey);
       this.derivedKeys.delete(oldKey);
     }
+  }
+
+  /**
+   * Copy tokens from one authorization ID to another, keeping them under the source ID too.
+   */
+  async copyTokens(fromAuthId: string, toAuthId: string): Promise<void> {
+    await this.copyRecords(fromAuthId, toAuthId);
+  }
+
+  /** Copy every record of `fromAuthId` to `toAuthId`, skipping a corrupted one; returns the keys copied. */
+  private async copyRecords(fromAuthId: string, toAuthId: string): Promise<string[]> {
+    const prefix = `${fromAuthId}:`;
+    const sourceKeys = [...this.tokens.keys()].filter((key) => key.startsWith(prefix));
+    const copiedKeys: string[] = [];
+
+    for (const oldKey of sourceKeys) {
+      const stored = this.tokens.get(oldKey);
+      if (!stored) continue;
+      const newKey = this.buildKey(toAuthId, oldKey.slice(prefix.length));
+
+      // An encrypted record is decrypted with the old key and re-encrypted with the new one
+      if (this.encryptionKey) {
+        try {
+          const record = await this.decryptRecord(oldKey, stored as string);
+          this.tokens.set(newKey, await this.encryptRecord(newKey, record));
+        } catch {
+          continue;
+        }
+      } else {
+        this.tokens.set(newKey, stored);
+      }
+      copiedKeys.push(oldKey);
+    }
+    return copiedKeys;
   }
 }
