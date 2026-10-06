@@ -406,7 +406,7 @@ describe('runCreate', () => {
         expect(runnerStage).toContain('RUN chown node:node /app');
         expect(runnerStage).toMatch(/^USER node$/m);
         expect(runnerStage.indexOf('USER node')).toBeLessThan(runnerStage.indexOf('CMD ["node"'));
-        expect(runnerStage).toMatch(/^HEALTHCHECK .*\\\n\s+CMD node -e .*\/healthz/m);
+        expect(runnerStage).toMatch(/^HEALTHCHECK .*\\\n\s+CMD node -e .*'\/health'\)/m);
       });
     });
 
