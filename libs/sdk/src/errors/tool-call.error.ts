@@ -13,7 +13,7 @@ export class ToolCallError extends PublicMcpError {
   readonly result: CallToolResult;
 
   constructor(toolName: string, result: CallToolResult) {
-    const text = result.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n');
+    const text = (result.content ?? []).flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n');
     super(text || `Tool "${toolName}" failed`, 'TOOL_CALL_ERROR', 400);
     this.toolName = toolName;
     this.result = result;
