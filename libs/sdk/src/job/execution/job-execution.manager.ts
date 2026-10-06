@@ -5,11 +5,11 @@ import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobPermission } from '../../common/metadata/job.metadata';
 import { resolvePrincipal } from '../../common/utils/principal.utils';
-import { runOnSurface } from '../../context/call-surface';
-import { JobNotAuthorizedError } from '../../errors';
+import { InvalidOutputError, JobNotAuthorizedError } from '../../errors';
 import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
 import { JobPermissionGuard } from '../job-permission.guard';
 import { type JobRegistryInterface } from '../job.registry';
+import { runJobAttempt } from '../job.utils';
 import {
   type JobExecutionState,
   type JobRunRecord,
@@ -237,18 +237,20 @@ export class JobExecutionManager {
     const maxBackoffMs = retryConfig.maxBackoffMs ?? 60000;
 
     let lastError: Error | undefined;
+    let failedAttempt = 1;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      failedAttempt = attempt;
       try {
         const parsedInput = job.parseInput(input);
         const ctx = job.create(parsedInput, {
           authInfo: opts.authInfo ?? {},
           contextProviders: opts.contextProviders,
+          attempt,
         });
         // `authorities.pipes` may be async: run them before execute() reads `this.auth`.
         await ctx.loadAuthContext();
-        // The job's code runs on the 'job' surface, which `getCallSurface()` reports and its tool calls carry.
-        const result = await runOnSurface('job', async () => ctx.execute(parsedInput));
+        const result = await runJobAttempt(job, ctx, parsedInput);
         const logs = ctx.getLogs();
 
         await this.updateState(runId, {
@@ -263,6 +265,8 @@ export class JobExecutionManager {
         return { runId, result, state: 'completed', logs: [...logs] };
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
+        // The job ran to completion, so running it again would repeat its side effects
+        if (lastError instanceof InvalidOutputError) break;
 
         if (attempt < maxAttempts) {
           await this.updateState(runId, { state: 'retrying', attempt });
@@ -279,6 +283,7 @@ export class JobExecutionManager {
       state: 'failed',
       error: { message: error.message, name: error.name, stack: error.stack },
       completedAt: Date.now(),
+      attempt: failedAttempt,
     });
     await this.notify({ type: 'job:status', runId, state: 'failed', jobName: job.name });
 

@@ -172,7 +172,7 @@ class StrictWorkflowSkill extends SkillContext {}
 | `'warn'`   | Logs a warning for missing tools but continues. Use during development when tools may not all be available yet.                  |
 | `'ignore'` | Silently ignores missing tools. Use for optional tool references or cross-server skills.                                         |
 
-In `'strict'` mode the server refuses to start, with `SkillValidationError: Skill '<name>' failed tool validation: missing tools [...]`. Up to 1.8.7 it started anyway, silently.
+In `'strict'` mode the server refuses to start, with `SkillValidationError: Skill '<name>' failed tool validation: missing tools [...]`. Set `@FrontMcp({ skillsConfig: { failOnInvalidSkills: false } })` to start anyway and log such skills as errors. Up to 1.8.7 it started anyway, silently.
 
 When a caller loads the skill (`skills/load`, the `skills:load` flow, `GET /skills/{id}`, `/llm_full.txt`), a referenced tool that `availableWhen.surface` doesn't offer that caller (an agent-only tool, for an MCP client) is reported as missing, without its input schema, just as `tools/list` leaves it out. The same skill loaded by an agent lists it as available.
 

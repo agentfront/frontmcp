@@ -4,8 +4,12 @@
  * Tests that the middleware correctly injects upstream provider tokens into
  * outgoing fetch requests and handles all edge cases gracefully.
  */
-import { FetchCredentialMiddleware } from '../fetch-credential-middleware';
-import type { TokenAccessor, FrontMcpFetchInit } from '../fetch-credential-middleware';
+import {
+  FetchCredentialMiddleware,
+  providerHeadersCredentials,
+  type FrontMcpFetchInit,
+  type TokenAccessor,
+} from '../fetch-credential-middleware';
 
 describe('FetchCredentialMiddleware', () => {
   const TEST_URL = 'https://api.github.com/user/repos';
@@ -289,5 +293,34 @@ describe('FetchCredentialMiddleware', () => {
       expect(result.init.signal).toBe(signal);
       expect(result.init.credentials).toBeUndefined();
     });
+  });
+});
+
+describe('providerHeadersCredentials', () => {
+  const headersByProvider: Record<string, Record<string, string>> = { maps: { 'X-API-Key': 'maps-key' } };
+  const applier = providerHeadersCredentials(async (provider) => headersByProvider[provider] ?? {});
+
+  it("adds the provider's headers and drops the credentials object", async () => {
+    const { init } = await applier.applyCredentials('https://maps.example.com', {
+      credentials: { provider: 'maps' },
+      headers: { accept: 'application/json' },
+    });
+
+    expect(new Headers(init.headers).get('x-api-key')).toBe('maps-key');
+    expect(new Headers(init.headers).get('accept')).toBe('application/json');
+    expect(init.credentials).toBeUndefined();
+  });
+
+  it('adds nothing for a provider without a credential', async () => {
+    const { init } = await applier.applyCredentials('https://x.example.com', { credentials: { provider: 'none' } });
+
+    expect(new Headers(init.headers).get('authorization')).toBeNull();
+    expect(init.credentials).toBeUndefined();
+  });
+
+  it('passes standard RequestCredentials through', async () => {
+    const { init } = await applier.applyCredentials('https://x.example.com', { credentials: 'include' });
+
+    expect(init.credentials).toBe('include');
   });
 });

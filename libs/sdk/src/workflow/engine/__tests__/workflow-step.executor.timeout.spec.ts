@@ -5,6 +5,7 @@
  */
 import type { JobEntry } from '../../../common/entries/job.entry';
 import type { WorkflowStep } from '../../../common/metadata/workflow.metadata';
+import { InvalidOutputError } from '../../../errors/mcp.error';
 import { WorkflowJobTimeoutError } from '../../../errors/workflow.errors';
 import type { JobRegistryInterface } from '../../../job/job.registry';
 import { WorkflowStepExecutor } from '../workflow-step.executor';
@@ -22,6 +23,7 @@ function jobWithAuthLoads(loads: Array<() => Promise<void>>, execute: jest.Mock)
     name: 'piped',
     metadata: { name: 'piped' },
     parseInput: (input: unknown) => input,
+    parseOutput: (output: unknown) => output,
     create: () => ({ loadAuthContext: loads[attempt++], execute }),
   } as unknown as JobEntry;
 }
@@ -71,5 +73,25 @@ describe('WorkflowStepExecutor — step timeout', () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(execute).not.toHaveBeenCalled();
+  });
+});
+
+describe('WorkflowStepExecutor — output check', () => {
+  it('does not retry a step whose job result fails its outputSchema', async () => {
+    const execute = jest.fn().mockResolvedValue({ receipt: 42 });
+    const job = {
+      name: 'charge',
+      metadata: { name: 'charge' },
+      parseInput: (input: unknown) => input,
+      parseOutput: () => {
+        throw new InvalidOutputError();
+      },
+      create: () => ({ loadAuthContext: async () => undefined, execute }),
+    } as unknown as JobEntry;
+    const step = { id: 'step-1', jobName: 'charge', retry: { maxAttempts: 3, backoffMs: 1 } } as WorkflowStep;
+    const executor = new WorkflowStepExecutor(registryWith(job), logger, { authInfo: {} });
+
+    await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(InvalidOutputError);
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });

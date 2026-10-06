@@ -75,10 +75,12 @@ class CodeReviewerAgent extends AgentContext {
 **Agent-Specific Methods:**
 
 - `execute(input: In): Promise<Out>` -- the main method; default runs the agent loop
-- `completion(prompt: AgentPrompt, options?): Promise<AgentCompletion>` -- make a single LLM call
+- `completion(prompt: AgentPrompt, tools?, options?): Promise<AgentCompletion>` -- make a single LLM call; every completion of the default loop goes through it, with `options` from `completionOptions()`
+- `completionOptions(): AgentCompletionOptions` -- (protected) the options the loop passes to every completion: `llm.temperature` and `llm.maxTokens` when set, else `{}`
 - `streamCompletion(prompt: AgentPrompt, options?): AsyncIterable<AgentCompletionChunk>` -- stream an LLM response
 - `executeTool(name, args): Promise<unknown>` -- (protected) run one of the tools the model is offered; every model tool call goes through it, so an override sees them all
 - `invokeAgent(agentId, input): Promise<unknown>` -- (protected) call a nested agent, or a swarm agent this agent sees, and get its output
+- `this.callTool(name, args?)` -- call a tool through its flow: the agent's own tools and nested agents' `invoke_<id>` tools first, then the server's
 
 **Inherited Methods:**
 
@@ -87,8 +89,8 @@ class CodeReviewerAgent extends AgentContext {
 - `this.fail(err)` -- abort execution, triggers error flow (never returns)
 - `this.mark(stage)` -- set the active execution stage for debugging/tracking
 - `this.fetch(input, init?)` -- HTTP fetch with context propagation
-- `this.notify(message, level?)` -- send a log-level notification to the client
-- `this.progress(progress, total?, message?)` -- send a progress notification to the client
+- `this.notify(message, level?)` -- send a log-level notification to the client (the request's stream under MCP 2026-07-28, else the session once the client set a log level)
+- `this.progress(progress, total?, message?)` -- send a progress notification to the client (needs the request's `progressToken`)
 
 **Properties:**
 
@@ -387,7 +389,7 @@ Swarm mode lets agents discover and call each other at runtime. The framework of
 | `canSeeOtherAgents` | `boolean`  | `false` | If `true`, this agent can discover and call other agents in the same scope           |
 | `visibleAgents`     | `string[]` | --      | Whitelist of agent IDs this agent is allowed to see (when `canSeeOtherAgents: true`) |
 | `isVisible`         | `boolean`  | `true`  | If `false`, this agent is hidden from peers (never offered or callable by them)      |
-| `maxCallDepth`      | `number`   | `3`     | Maximum nested agent-to-agent call depth (1-10)                                      |
+| `maxCallDepth`      | `number`   | `3`     | Maximum agent-to-agent calls in one chain (1-10): `3` lets four agents run           |
 
 There is no `role`, `handoff`, or `condition` field -- routing is driven by the orchestrator's LLM choosing among the visible `invoke_*` tools.
 
@@ -436,7 +438,7 @@ class BillingAgent extends AgentContext {}
 
 ### Call Depth
 
-`maxCallDepth` counts agent-to-agent calls in one chain, however they are made (the model, `invokeAgent()`, or `this.callTool('invoke_<id>')`): an agent called by a client that calls another makes call 1. The smallest `maxCallDepth` of the agents running applies, and agents without `swarm` count with the default of 3. A deeper call fails with `AgentCallDepthExceededError` (`AGENT_CALL_DEPTH_EXCEEDED`), which stops agents that call each other from looping forever.
+`maxCallDepth` counts agent-to-agent calls in one chain, however they are made (the model, `invokeAgent()`, or `this.callTool('invoke_<id>')`): an agent called by a client that calls another makes call 1. The smallest `maxCallDepth` of the agents running applies, and agents without `swarm` count with the default of 3. It counts calls, not agents: with the default of 3, a chain of four agents runs (the one the client called and three more). A deeper call fails with `AgentCallDepthExceededError` (`AGENT_CALL_DEPTH_EXCEEDED`), which stops agents that call each other from looping forever.
 
 ## Function-Style Builder
 
@@ -545,7 +547,7 @@ class ExpensiveAgent extends AgentContext {
 
 ## Agent with Providers and Plugins
 
-Agents can include their own providers and plugins for self-contained dependency management. The agent's tools can inject its providers without the app registering them too, and its plugins' hooks run for its tools. Set `execution: { inheritPlugins: true }` to also run the plugins installed on the app and the server for the agent's tools (a plugin installed in both places runs once).
+Agents can include their own providers and plugins for self-contained dependency management. The agent's tools can inject its providers without the app registering them too, and they also see the providers of the agent's app and the server. Its plugins' hooks run for its tools. Set `execution: { inheritPlugins: true }` to also run the plugins installed on the app and the server for the agent's tools (a plugin installed in both places runs once); then an `ApprovalPlugin` or `FeatureFlagPlugin` on the app also satisfies the startup check for the `approval` or `featureFlag` of the agent's tools.
 
 ```typescript
 @Agent({
@@ -594,15 +596,16 @@ class DocsAgent extends AgentContext {}
 
 ## Execution Options
 
-| Option                         | Default  | Effect                                                                                                                                          |
-| ------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `execution.maxIterations`      | `10`     | Max tool-call rounds of the LLM loop                                                                                                            |
-| `execution.timeout`            | `120000` | Max run time in ms                                                                                                                              |
-| `execution.inheritParentTools` | `false`  | Also offer the model the tools of the scope the agent is registered in, other than agents; they run through that scope's `tools:call-tool` flow |
-| `execution.inheritPlugins`     | `false`  | Also run the app's and server's plugin hooks for the agent's own tools                                                                          |
-| `execution.useToolFlow`        | `true`   | Own tools through its `tools:call-tool` flow (hooks, limits, authorization); `false` runs them directly. Nested agents always use their flow    |
-| `execution.enableAutoProgress` | `false`  | Send progress notifications during the loop                                                                                                     |
-| `execution.enableStreaming`    | `false`  | Not supported yet: the agent replies once the run completes, and `true` is reported at startup                                                  |
+| Option                           | Default  | Effect                                                                                                                                          |
+| -------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execution.maxIterations`        | `10`     | Max tool-call rounds of the LLM loop                                                                                                            |
+| `execution.timeout`              | `120000` | Max run time in ms                                                                                                                              |
+| `execution.inheritParentTools`   | `false`  | Also offer the model the tools of the scope the agent is registered in, other than agents; they run through that scope's `tools:call-tool` flow |
+| `execution.inheritPlugins`       | `false`  | Also run the app's and server's plugin hooks for the agent's own tools                                                                          |
+| `execution.useToolFlow`          | `true`   | Own tools through its `tools:call-tool` flow (hooks, limits, authorization); `false` runs them directly. Nested agents always use their flow    |
+| `execution.enableAutoProgress`   | `false`  | Send progress notifications during the loop                                                                                                     |
+| `execution.notificationInterval` | `1000`   | Least ms between two automatic progress updates; sooner ones are skipped, the last one is always sent                                           |
+| `execution.enableStreaming`      | `false`  | Not supported yet: the agent replies once the run completes, and `true` is reported at startup                                                  |
 
 Through that flow the agent's own tools get the `rateLimit`, `concurrency` and `timeout` they declare (else the `throttle` defaults), as the app's tools do; a `rateLimit` or `concurrency` there is enforced without a `throttle` option. The calls an agent makes during its run (its model's tool calls, its nested and swarm agents) run inside the `throttle.globalConcurrency` slot of the call that runs the agent.
 
@@ -646,6 +649,7 @@ Through that flow the agent's own tools get the `rateLimit`, `concurrency` and `
 | `AGENT_CALL_DEPTH_EXCEEDED`                                   | Agents call each other deeper than `swarm.maxCallDepth` (default 3) allows                                                | Stop the loop in `systemInstructions`, or raise `maxCallDepth` (max 10) on every agent in the chain                                                                              |
 | `AGENT_VISIBILITY_DENIED`                                     | `this.invokeAgent()` names an agent this agent doesn't see                                                                | Add it to `swarm.visibleAgents` (with `canSeeOtherAgents: true`), or nest it in `agents`                                                                                         |
 | Startup warning `declares resources [...] that nothing reads` | The agent's resources or prompts aren't exported; its model is sent tools only                                            | Export them (`exports: { resources, prompts }`) or remove them                                                                                                                   |
+| Agent's tool fails with `Provider "X" is not available`       | The provider is registered nowhere the agent's scope reaches                                                              | Register it in the agent's `providers`, its app's, or the server's: the agent's tools see all three                                                                              |
 | Agent call fails with `INVALID_OUTPUT`                        | The model's reply does not match the agent's `outputSchema` (a value outside an enum, or text that is not JSON)           | Tighten the prompt or loosen the schema; the error message names the field, for example `output does not match outputSchema at priority`. The result never carries a stack trace |
 
 ## Examples

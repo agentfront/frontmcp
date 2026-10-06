@@ -1,3 +1,5 @@
+import { type Token } from '@frontmcp/di';
+
 import {
   completionEventsOf,
   completionOutputText,
@@ -57,6 +59,8 @@ export interface RegisterJobCapabilitiesArgs {
   providers: ProviderRegistry;
   owner: EntryOwnerRef;
   jobsList: JobType[];
+  /** The provider registry of each job declared on an app, by its token (see `appEntryProviders`). */
+  jobProviders?: ReadonlyMap<Token, ProviderRegistry>;
   workflowsList: WorkflowType[];
   jobsConfig: JobsConfig;
   logger: FrontMcpLogger;
@@ -77,7 +81,7 @@ export interface JobCapabilitiesResult {
  * Follows the skill-scope.helper.ts pattern.
  */
 export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs): Promise<JobCapabilitiesResult> {
-  const { providers, owner, jobsList, workflowsList, jobsConfig, logger, notifyFn } = args;
+  const { providers, owner, jobsList, jobProviders, workflowsList, jobsConfig, logger, notifyFn } = args;
 
   // 1. Create stores
   const storeOpts: JobStateStoreOptions = {
@@ -101,7 +105,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
   const dynamicWorkflows = await definitionStore.listWorkflowDefinitions();
 
   // 3. Initialize registries
-  const jobRegistry = new JobRegistry(providers, jobsList, owner);
+  const jobRegistry = new JobRegistry(providers, jobsList, owner, jobProviders);
   await jobRegistry.ready;
 
   // Register dynamic jobs

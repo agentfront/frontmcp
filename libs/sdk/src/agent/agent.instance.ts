@@ -55,6 +55,7 @@ import { normalizeProvider } from '../provider/provider.utils';
 import { isResourceTemplate, normalizeResource, normalizeResourceTemplate } from '../resource/resource.utils';
 import { ToolInstance } from '../tool/tool.instance';
 import { buildAgentToolDefinitions, buildParsedToolResult, normalizeTool } from '../tool/tool.utils';
+import { errorBehindFlowControl } from '../transport/mcp-handlers/mcp-error.utils';
 import { createAdapter, type ConfigResolver, type CreateAdapterOptions } from './adapters';
 import { type ToolExecutor } from './agent-execution-loop';
 import { AgentScope } from './agent.scope';
@@ -281,7 +282,10 @@ export class AgentInstance<
     }
 
     // Create the agent's private scope
-    this.agentScope = new AgentScope(this.scope, this.id, metadata, this.record.provide, { ownerId: this.owner.id });
+    this.agentScope = new AgentScope(this.scope, this.id, metadata, this.record.provide, {
+      ownerId: this.owner.id,
+      providers: this.providerRegistry,
+    });
 
     await this.agentScope.ready;
 
@@ -782,6 +786,7 @@ export class AgentInstance<
       toolDefinitions: buildAgentToolDefinitions(modelTools.map((tool) => tool.entry)),
       toolExecutor: this.createToolExecutor(ctx, modelTools),
       agentInvoker: this.createAgentInvoker(ctx),
+      ...(this.agentScope && { privateScope: this.agentScope }),
       progressToken: ctx.progressToken,
     };
   }
@@ -899,11 +904,15 @@ export class AgentInstance<
       await this.assertToolAuthorized(tool, ctx.authInfo, args);
       const runningTool = { name: tool.name, fullName: tool.fullName };
       // The tool's code sees the agent's surface as `getCallSurface()`, as it would through the flow.
-      return runOnSurface(AGENT_SURFACE, () => {
+      return runOnSurface(AGENT_SURFACE, async () => {
         // The agent's context providers are the agent's, not the tool's: the tool builds its own.
         const { contextProviders: _agentProviders, ...toolCtx } = ctx;
         const toolContext = runAsTool(runningTool, () => tool.create(args, toolCtx as ToolCallExtra));
-        return runAsTool(runningTool, () => Promise.resolve(toolContext.execute(args)));
+        try {
+          return await runAsTool(runningTool, () => Promise.resolve(toolContext.execute(args)));
+        } catch (error) {
+          throw errorBehindFlowControl(error);
+        }
       });
     };
   }
@@ -918,18 +927,23 @@ export class AgentInstance<
     args: Record<string, unknown>,
     ctx: AgentCallExtra,
   ): Promise<unknown> {
-    const result = await scope.runFlowForOutput('tools:call-tool', {
-      request: {
-        method: 'tools/call',
-        params: { name: tool.fullName, arguments: args },
-      },
-      ctx: {
-        authInfo: ctx.authInfo,
-        _skipUI: true, // Skip UI rendering - agent returns structured data
-        surface: AGENT_SURFACE,
-        ...(this.isAgentPrivateScope(scope) && { agentPrivateCall: true }),
-      },
-    });
+    const result = await scope
+      .runFlowForOutput('tools:call-tool', {
+        request: {
+          method: 'tools/call',
+          params: { name: tool.fullName, arguments: args },
+        },
+        ctx: {
+          authInfo: ctx.authInfo,
+          _skipUI: true, // Skip UI rendering - agent returns structured data
+          surface: AGENT_SURFACE,
+          ...(this.isAgentPrivateScope(scope) && { agentPrivateCall: true }),
+        },
+      })
+      .catch((error: unknown) => {
+        // A tool that called `this.fail(error)` fails the flow with that error, which the model reads
+        throw errorBehindFlowControl(error);
+      });
 
     // Extract the actual result from MCP CallToolResult format
     return this.extractToolResult(result);

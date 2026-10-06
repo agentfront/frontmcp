@@ -39,6 +39,11 @@ export interface AgentScopeOptions {
    * `execution.inheritPlugins`, the agent's tools get the parent scope's hooks for entries of this owner.
    */
   ownerId: string;
+  /**
+   * The provider registry the agent is registered with (its app's, or its parent agent's private
+   * scope's). The agent's own providers fall back to it, so its tools see the providers of its app.
+   */
+  providers?: ProviderRegistry;
 }
 
 /**
@@ -154,7 +159,7 @@ export class AgentScope {
         // Add any agent-specific providers from metadata
         ...(this.metadata.providers ?? []),
       ],
-      this.parentScope.providers as ProviderRegistry,
+      this.options?.providers ?? (this.parentScope.providers as ProviderRegistry),
     );
 
     await this.agentProviders.ready;

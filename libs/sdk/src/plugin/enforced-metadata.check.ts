@@ -83,8 +83,9 @@ function problemsOf(label: string, metadata: unknown, isEnforced: (key: string) 
  * `resources/read` for resources and templates, `prompts/get` for prompts, `skills:filter` for
  * skills), for the entry's hook owner. So a server-level plugin covers every entry, an app's plugin
  * covers its app, and, with `appliesTo: 'uncovered-apps'`, the apps that have no instance of it.
- * Tools declared inside an `@Agent` run through the agent's own flow, so only the agent's plugins
- * cover them, and none do with `execution.useToolFlow: false`. Hidden entries are included.
+ * Tools declared inside an `@Agent` run through the agent's own flow, so the agent's plugins cover
+ * them, and with `execution.inheritPlugins` also those that cover the agent's app; none do with
+ * `execution.useToolFlow: false`. Hidden entries are included.
  */
 export function findUnenforcedMetadata(scope: EnforcedMetadataScope): string[] {
   const coveredBy = (flow: FlowName, ownerId: string | undefined) => {
@@ -103,16 +104,19 @@ export function findUnenforcedMetadata(scope: EnforcedMetadataScope): string[] {
     const ownerId = tool ? toolOwnerId(tool) : hookOwnerIdOf([], agent.owner);
     problems.push(...problemsOf(`Agent "${agent.name}"`, agent.metadata, coveredBy('tools:call-tool', ownerId)));
 
-    // The agent's own tools are called through the agent's private scope, which has only its plugins.
+    // The agent's own tools are called through the agent's private scope, which has its plugins, and
+    // with `execution.inheritPlugins` the hooks the server runs for the agent's owner (AgentScope).
     // They include the tools its plugins contribute, so read the tools that scope holds.
     const agentPlugins = keysEnforcedByPlugins(agent.metadata.plugins);
+    const inheritedPlugins =
+      agent.metadata.execution?.inheritPlugins === true ? coveredBy('tools:call-tool', agent.owner.id) : () => false;
     const usesToolFlow = agent.metadata.execution?.useToolFlow !== false;
     for (const metadata of agentToolMetadata(agent)) {
       problems.push(
         ...problemsOf(
           `Tool "${agent.name}:${metadata.name}"`,
           metadata,
-          (key) => usesToolFlow && agentPlugins.has(key),
+          (key) => usesToolFlow && (agentPlugins.has(key) || inheritedPlugins(key)),
         ),
       );
     }

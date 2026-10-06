@@ -105,11 +105,14 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     requestedSchema: S,
     options?: ElicitOptions,
   ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
-    const { mode = 'form', ttl = DEFAULT_ELICIT_TTL, elicitationId } = options ?? {};
+    const { mode = 'form', ttl = DEFAULT_ELICIT_TTL, elicitationId, url } = options ?? {};
 
-    // URL mode requires elicitationId for out-of-band tracking
+    // URL mode requires elicitationId for out-of-band tracking, and the url the client opens
     if (mode === 'url' && !elicitationId) {
       throw new InvalidInputError('elicitationId is required when mode is "url"');
+    }
+    if (mode === 'url' && !url) {
+      throw new InvalidInputError('url is required when mode is "url"');
     }
 
     // Cancel any previous pending elicit (only one per session)
@@ -141,6 +144,7 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     // Add elicitationId for URL mode
     if (mode === 'url' && elicitationId) {
       params['elicitationId'] = elicitationId;
+      params['url'] = url;
     }
 
     this.logger.info('sendElicitRequest', { relatedRequestId, elicitId, mode, ttl });

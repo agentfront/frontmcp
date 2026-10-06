@@ -102,13 +102,14 @@ Build push-based notification channels that stream real-time events into Claude 
 
 - [ ] `@FrontMcp({ channels: { enabled: true } })` is set
 - [ ] Channel classes extend `ChannelContext` with `@Channel()` decorator
-- [ ] Channels are listed in `@App({ channels: [...] })`
+- [ ] Channels are listed in `@App({ channels: [...] })`; a channel resolves its app's providers with `this.get()`, and one whose `availableWhen` the runtime doesn't meet is left out at startup
 - [ ] `onEvent()` returns `{ content: string, meta?: Record<string, string> }`
 
 ### Capability
 
 - [ ] Server advertises `experimental: { 'claude/channel': {} }` in capabilities
 - [ ] Only sessions with matching capability receive notifications
+- [ ] An MCP 2026-07-28 client (no session) gets them on a `subscriptions/listen` stream whose request's client capabilities include `experimental['claude/channel']`: the global notifications of the channels `channels:list` returns
 - [ ] `instructions` field mentions `<channel>` tags when channels are active
 
 ### Two-Way

@@ -108,7 +108,7 @@ export abstract class ToolContext<
    * cancelled or timed-out call stops its outbound requests.
    */
   override fetch(input: RequestInfo | URL, init?: FrontMcpFetchInit | RequestInit): Promise<Response> {
-    const context = this.tryGetContext();
+    const context = this.fetchContext(init);
     if (context && this.signal) return context.fetch(input, init, this.signal);
     return super.fetch(input, init);
   }

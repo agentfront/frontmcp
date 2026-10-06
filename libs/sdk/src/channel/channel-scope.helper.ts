@@ -1,5 +1,7 @@
 // file: libs/sdk/src/channel/channel-scope.helper.ts
 
+import { type Token } from '@frontmcp/di';
+
 import { type EntryOwnerRef, type FrontMcpLogger, type FrontMcpServer, type ServerRequestHandler } from '../common';
 import { type ChannelType } from '../common/interfaces/channel.interface';
 import {
@@ -39,6 +41,8 @@ export interface RegisterChannelCapabilitiesArgs {
   providers: ProviderRegistry;
   owner: EntryOwnerRef;
   channelsList: ChannelType[];
+  /** The provider registry of each channel declared on an app, by its token (see `appEntryProviders`). */
+  channelProviders?: ReadonlyMap<Token, ProviderRegistry>;
   channelsConfig: ChannelsConfigOptions;
   notificationService: NotificationService;
   flowRegistry: FlowRegistry;
@@ -82,6 +86,7 @@ export async function registerChannelCapabilities(
     providers,
     owner,
     channelsList,
+    channelProviders,
     channelsConfig,
     notificationService,
     flowRegistry,
@@ -103,7 +108,7 @@ export async function registerChannelCapabilities(
   const webhookPaths = new Map<string, string>();
 
   // 1. Initialize channel registry
-  const channelRegistry = new ChannelRegistry(providers, channelsList, owner);
+  const channelRegistry = new ChannelRegistry(providers, channelsList, owner, channelProviders);
   await channelRegistry.ready;
 
   // 2. Create notification service (with server-level default metadata if configured). Its `send()`
