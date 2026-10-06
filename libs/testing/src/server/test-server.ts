@@ -4,11 +4,15 @@
  */
 
 import { execFile, spawn, type ChildProcess } from 'child_process';
+import { connect } from 'net';
 
 import { sha256Hex } from '@frontmcp/utils';
 
 import { ServerStartError } from '../errors';
-import { reservePort } from './port-registry';
+import { pidIsAlive, reservePort } from './port-registry';
+
+// Longer than a FrontMCP server's own 10s shutdown deadline (#712)
+const SERVER_EXIT_TIMEOUT_MS = 12_000;
 
 // Environment variable to enable debug output for all test servers
 const DEBUG_SERVER = process.env['DEBUG_SERVER'] === '1' || process.env['DEBUG'] === '1';
@@ -267,11 +271,14 @@ export class TestServer {
   private async stopProcess(): Promise<void> {
     if (this.process) {
       this.log('Stopping server...');
+      const serverPid = this._info.pid !== this._info.shellPid ? this._info.pid : undefined;
 
-      // If process already exited, just clean up the reference
+      // If the shell already exited, the server it started may still be running
       if (this.process.exitCode !== null || this.process.signalCode !== null) {
         this.log(`Server already exited (code: ${this.process.exitCode}, signal: ${this.process.signalCode})`);
         this.process = null;
+        if (serverPid !== undefined) signalIfRunning(serverPid, 'SIGTERM');
+        await this.waitForServerGone(serverPid);
         return;
       }
 
@@ -316,7 +323,25 @@ export class TestServer {
       await exitPromise;
       clearTimeout(killTimeout);
       this.process = null;
+      await this.waitForServerGone(serverPid);
       this.log('Server stopped');
+    }
+  }
+
+  /**
+   * Wait until the server process has exited and its port refuses connections. A server that
+   * drains on SIGTERM can keep listening after the shell it was started through has exited.
+   */
+  private async waitForServerGone(serverPid: number | undefined): Promise<void> {
+    const deadline = Date.now() + SERVER_EXIT_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const serverRunning = serverPid !== undefined && pidIsAlive(serverPid);
+      if (!serverRunning && !(await acceptsConnections(this._info.port))) return;
+      await sleep(100);
+    }
+    if (serverPid !== undefined && pidIsAlive(serverPid)) {
+      this.log('Force killing server process after timeout...');
+      signalIfRunning(serverPid, 'SIGKILL');
     }
   }
 
@@ -591,6 +616,31 @@ export class TestServer {
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Send a signal to a process, ignoring one that has already exited.
+ */
+function signalIfRunning(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(pid, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
+}
+
+/**
+ * Whether something accepts TCP connections on a local port.
+ */
+function acceptsConnections(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = connect(port, '127.0.0.1');
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('error', () => resolve(false));
+  });
 }
 
 /**
