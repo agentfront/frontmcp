@@ -177,6 +177,13 @@ describe('RedisStorageAdapter', () => {
       expect(MockRedisClass).toHaveBeenCalledWith('rediss://cache', expect.objectContaining({ db: 3 }));
     });
 
+    it('treats a config whose url is undefined as a host config', async () => {
+      const adapter = new RedisStorageAdapter({ config: { host: 'cache', port: 6390, url: undefined } });
+      await adapter.connect();
+      expect(MockRedisClass).toHaveBeenCalledWith(expect.objectContaining({ host: 'cache', port: 6390 }));
+      expect(MockRedisClass).not.toHaveBeenCalledWith(undefined, expect.anything());
+    });
+
     it('rejects a field that contradicts the URL', () => {
       expect(() => new RedisStorageAdapter({ url: 'redis://cache:6379', config: { host: 'other' } })).toThrow(
         'redis host contradicts redis.url',

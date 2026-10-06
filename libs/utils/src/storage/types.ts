@@ -398,12 +398,14 @@ export interface RedisHostConnectionConfig {
   password?: string;
   db?: number;
   tls?: boolean;
+  /** Unset for a host config (a config built from optional settings may carry `url: undefined`). */
+  url?: undefined;
 }
 
 /**
  * Redis connection by URL (`redis://` / `rediss://`).
  */
-export interface RedisUrlConnectionConfig extends Partial<RedisHostConnectionConfig> {
+export interface RedisUrlConnectionConfig extends Partial<Omit<RedisHostConnectionConfig, 'url'>> {
   url: string;
 }
 

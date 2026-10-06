@@ -104,7 +104,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
     this.options = options;
     this.ownsClient = !hasClient;
     this.keyPrefix = options.keyPrefix ?? '';
-    this.connectionUrl = options.url ?? (options.config && 'url' in options.config ? options.config.url : undefined);
+    const configUrl = options.config?.url;
+    this.connectionUrl = options.url ?? (typeof configUrl === 'string' ? configUrl : undefined);
     this.urlFillIns = this.connectionUrl ? resolveUrlFillIns(this.connectionUrl, options) : {};
   }
 
@@ -458,7 +459,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
     }
 
     const config = this.options.config;
-    if (!config || 'url' in config) {
+    if (!config || typeof config.url === 'string' || config.host === undefined) {
       throw new StorageConfigError('redis', 'Redis config is required when URL is not provided');
     }
     return {
