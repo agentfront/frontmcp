@@ -7,7 +7,12 @@
 
 import { StorageConfigError, StorageConnectionError } from '../errors';
 import { attachRedisErrorListener, type RedisErrorListenerOptions } from '../redis-error-listener';
-import { describeRedisUrlConflicts, mergeRedisUrlFields, type RedisUrlMerge } from '../redis-url';
+import {
+  describeRedisUrlConflicts,
+  mergeRedisUrlFields,
+  type RedisUrlMerge,
+  type RedisUrlSiblingFields,
+} from '../redis-url';
 import type { MessageHandler, RedisAdapterOptions, SetOptions, Unsubscribe } from '../types';
 import { validateTTL } from '../utils';
 import { COMPARE_AND_DELETE_SCRIPT } from '../utils/compare-and-delete';
@@ -446,16 +451,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
    */
   private buildRedisOptions(): RedisOptions {
     if (this.connectionUrl) {
-      const { port, password, db, tls } = this.urlFillIns;
-      // ioredis keeps what the URL states and takes only the missing fields from here.
-      return {
-        ...(port !== undefined ? { port } : {}),
-        ...(password !== undefined ? { password } : {}),
-        ...(db !== undefined ? { db } : {}),
-        ...(tls ? { tls: {} } : {}),
-        lazyConnect: false,
-        maxRetriesPerRequest: 3,
-      };
+      return { ...toFillInOptions(this.urlFillIns), lazyConnect: false, maxRetriesPerRequest: 3 };
     }
 
     const config = this.options.config;
@@ -541,11 +537,26 @@ function resolveUrlFillIns(connectionUrl: string, options: RedisAdapterOptions):
   if (options.url && configUrl && configUrl !== options.url) {
     throw new StorageConfigError('redis', 'redis.url and redis.config.url name different servers; set one of them.');
   }
-  const merge = mergeRedisUrlFields(connectionUrl, siblingFields);
+  return checkedUrlFillIns(connectionUrl, siblingFields);
+}
+
+/** The fields beside a url fill in what it leaves out; one that contradicts it throws a StorageConfigError. */
+function checkedUrlFillIns(url: string, fields: RedisUrlSiblingFields): RedisUrlMerge['fillIns'] {
+  const merge = mergeRedisUrlFields(url, fields);
   if (merge && merge.conflicts.length > 0) {
     throw new StorageConfigError('redis', describeRedisUrlConflicts(merge.conflicts));
   }
   return merge?.fillIns ?? {};
+}
+
+/** ioredis keeps what a URL states and takes only the missing fields from these options. */
+function toFillInOptions({ port, password, db, tls }: RedisUrlMerge['fillIns']): RedisOptions {
+  return {
+    ...(port !== undefined ? { port } : {}),
+    ...(password !== undefined ? { password } : {}),
+    ...(db !== undefined ? { db } : {}),
+    ...(tls ? { tls: {} } : {}),
+  };
 }
 
 export interface CreateRedisClientOptions {
@@ -563,12 +574,16 @@ export interface CreateRedisClientOptions {
 /**
  * Create a plain ioredis client that reconnects on its own and never emits an unhandled
  * 'error' event. The caller owns the client and must `quit()`/`disconnect()` it.
+ *
+ * With a `url`, the other connection fields fill in only what the URL leaves out (port,
+ * password, db, tls), and one that contradicts it throws a `StorageConfigError`.
  */
 export function createRedisClient(options: CreateRedisClientOptions): Redis {
+  const urlOptions = options.url ? toFillInOptions(checkedUrlFillIns(options.url, options)) : undefined;
   const RedisClass = getRedisClass();
   const baseOptions: RedisOptions = { lazyConnect: false, maxRetriesPerRequest: 3 };
   const client = options.url
-    ? new RedisClass(options.url, baseOptions)
+    ? new RedisClass(options.url, { ...baseOptions, ...urlOptions })
     : new RedisClass({
         ...baseOptions,
         host: options.host ?? 'localhost',

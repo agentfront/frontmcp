@@ -432,6 +432,8 @@ import { FrontMcp } from '@frontmcp/sdk';
 class MyServer {}
 ```
 
+`store.redis` takes the same connection fields as the server's `redis` option (`host`, `port`, `password`, `db`, `tls`, or a `url` they fill in; a field that contradicts the `url` stops startup), and the job stores connect with all of them. Up to 1.9.2 they used `host` and `port` alone, dropping `password`, `db` and `tls`.
+
 Setting `jobs: { enabled: false }` is an explicit opt-out — declared jobs will NOT be activated and the framework logs a warning so the configuration mismatch is loud.
 
 ### Calling Jobs from an Agent

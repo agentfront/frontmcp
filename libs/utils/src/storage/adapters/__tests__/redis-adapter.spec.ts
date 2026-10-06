@@ -1084,4 +1084,20 @@ describe('createRedisClient', () => {
     createRedisClient({});
     expect(MockRedisClass).toHaveBeenLastCalledWith(expect.objectContaining({ host: 'localhost', port: 6379 }));
   });
+
+  it('fills in from the fields beside a url only what the url leaves out', () => {
+    createRedisClient({ url: 'redis://cache.internal:6380', password: 'secret', db: 2, tls: true });
+
+    expect(MockRedisClass).toHaveBeenLastCalledWith(
+      'redis://cache.internal:6380',
+      expect.objectContaining({ password: 'secret', db: 2, tls: {} }),
+    );
+  });
+
+  it('refuses a field that contradicts the url, before connecting', () => {
+    MockRedisClass.mockClear();
+
+    expect(() => createRedisClient({ url: 'redis://cache.internal:6380', port: 6379 })).toThrow(StorageConfigError);
+    expect(MockRedisClass).not.toHaveBeenCalled();
+  });
 });
