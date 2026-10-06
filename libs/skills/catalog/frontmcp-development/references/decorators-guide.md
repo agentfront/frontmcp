@@ -116,23 +116,23 @@ class MyServer {}
 
 **Key fields:**
 
-| Field            | Description                                                                                                                        |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `name`           | Application name (unique within server)                                                                                            |
-| `description?`   | Human-readable description for docs and UIs                                                                                        |
-| `tools?`         | Array of tool classes or function-built tools                                                                                      |
-| `resources?`     | Array of resource classes or function-built resources                                                                              |
-| `prompts?`       | Array of prompt classes or function-built prompts                                                                                  |
-| `agents?`        | Array of agent classes (each exposed as an `invoke_<id>` tool)                                                                     |
-| `skills?`        | Array of skill definitions                                                                                                         |
-| `plugins?`       | App-scoped plugins                                                                                                                 |
-| `providers?`     | App-scoped DI providers                                                                                                            |
-| `authProviders?` | Named auth providers (e.g., GitHub, Google OAuth) separate from `auth`                                                             |
-| `adapters?`      | External source adapters (e.g., OpenAPI)                                                                                           |
-| `auth?`          | App-level auth; on the shared endpoint enforced only under a `local`/`remote` server (else use `standalone: true` or `splitByApp`) |
-| `standalone?`    | `boolean \| 'includeInParent'` — `true`: isolated scope, excluded. `'includeInParent'`: isolated scope but tools exposed in parent |
-| `jobs?`          | Background job definitions                                                                                                         |
-| `workflows?`     | Multi-step workflow definitions                                                                                                    |
+| Field            | Description                                                                                                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`           | Application name (unique within server)                                                                                                                                |
+| `description?`   | Human-readable description for docs and UIs                                                                                                                            |
+| `tools?`         | Array of tool classes or function-built tools                                                                                                                          |
+| `resources?`     | Array of resource classes or function-built resources                                                                                                                  |
+| `prompts?`       | Array of prompt classes or function-built prompts                                                                                                                      |
+| `agents?`        | Array of agent classes (each exposed as an `invoke_<id>` tool)                                                                                                         |
+| `skills?`        | Array of skill definitions                                                                                                                                             |
+| `plugins?`       | App-scoped plugins                                                                                                                                                     |
+| `providers?`     | App-scoped DI providers                                                                                                                                                |
+| `authProviders?` | Named auth providers (e.g., GitHub, Google OAuth) separate from `auth`                                                                                                 |
+| `adapters?`      | External source adapters (e.g., OpenAPI)                                                                                                                               |
+| `auth?`          | App-level auth; on the shared endpoint checked per tool call only under a `local`/`remote` server with `incrementalAuth` (else use `standalone: true` or `splitByApp`) |
+| `standalone?`    | `boolean \| 'includeInParent'` — `true`: isolated scope, excluded. `'includeInParent'`: isolated scope but tools exposed in parent                                     |
+| `jobs?`          | Background job definitions                                                                                                                                             |
+| `workflows?`     | Multi-step workflow definitions                                                                                                                                        |
 
 ```typescript
 import { App } from '@frontmcp/sdk';

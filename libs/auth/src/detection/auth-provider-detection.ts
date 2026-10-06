@@ -168,8 +168,9 @@ export function detectAuthProviders(
     validationErrors.push(
       `App-level auth is not enforced on the shared endpoint of a server in ${parentAuth?.mode ?? 'public'} mode, ` +
         `so the tools of ${unenforcedAppIds.join(', ')} would be served without it. ` +
-        `Run the server in local or remote mode (it federates each app's provider and checks the app's grant on ` +
-        `every tool call), or serve the app on its own endpoint with standalone: true or splitByApp: true.`,
+        `Serve the app on its own endpoint with standalone: true or splitByApp: true, or run the server in local or ` +
+        `remote mode with incrementalAuth enabled, which checks each tool call against the apps the caller has ` +
+        `authorized (without incrementalAuth, local and remote mode do not check app grants per tool call).`,
     );
   }
 

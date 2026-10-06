@@ -149,7 +149,7 @@ Everything else is optional with sensible defaults.
 FrontMCP can host **many apps**. Choose how they’re exposed:
 
 - **Multi-App (default)**: `splitByApp: false`
-  One server scope. You _may_ configure **server-level `auth`** and all apps inherit it. An app's own `auth` is enforced on this shared endpoint only when the server runs `local` or `remote` mode, which federates the app's provider and checks the app's grant on every tool call. Under a `public` or `static` server, startup refuses a protected app on the shared endpoint; serve it on its own endpoint with `standalone: true` or `splitByApp: true`.
+  One server scope. You _may_ configure **server-level `auth`** and all apps inherit it. On this shared endpoint, a server in `local` or `remote` mode federates each app's provider, and checks every tool call against the apps the caller has authorized only when `incrementalAuth` is enabled; without it, app grants are not checked per tool call. Under a `public` or `static` server, startup refuses a protected app on the shared endpoint. To enforce an app's own auth regardless, serve it on its own endpoint with `standalone: true` or `splitByApp: true`.
 
 - **Split-By-App**: `splitByApp: true`
   Each app is isolated under its own scope/base path (for example `/billing`). Streamable HTTP, the `/message` SSE endpoint, and OAuth issuers reuse that scope automatically. **Server-level `auth` is disallowed**; configure auth per app. (See _Authentication → Overview_.)

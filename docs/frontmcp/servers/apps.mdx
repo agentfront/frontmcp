@@ -88,7 +88,7 @@ export default class Server {}
 **Scoping & auth**
 
 - If the server uses **`splitByApp: true`**, each app is isolated and **must** configure its own auth (server-level `auth` is disallowed).
-- On the shared endpoint (the default), an app's own `auth` is enforced only when the server runs `local` or `remote` mode: the server federates the app's provider and checks the app's grant on every tool call. A server in `public` or `static` mode refuses to start with a protected app on its shared endpoint, since it would serve that app's tools without the app's auth; mark the app `standalone: true` (or use `splitByApp: true`) to give it an endpoint of its own.
+- On the shared endpoint (the default), a server in `local` or `remote` mode federates the app's provider, and checks each tool call against the apps the caller has authorized only when `incrementalAuth` is enabled; without it, app grants are not checked per tool call. A server in `public` or `static` mode refuses to start with a protected app on its shared endpoint, since it would serve that app's tools without the app's auth. To enforce an app's own auth regardless of the server's mode, mark the app `standalone: true` (or use `splitByApp: true`) to give it an endpoint of its own.
 - `standalone: true` makes the app expose its own scope/entry; `'includeInParent'` lists it under the parent while keeping isolation.
 
 **Dependency resolution**
