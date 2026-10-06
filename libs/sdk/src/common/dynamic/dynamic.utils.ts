@@ -45,8 +45,8 @@ export function collectDynamicTools<T>(klass: any, options: T): ToolType[] {
 }
 
 /**
- * Metadata keys whose value is a list of entries; an option of the same name is not one of them.
- * `providers` is not listed: `init` always sets it on the record to the providers it collects.
+ * The plugin metadata `init(options)` may set: lists of entries the plugin installs. `providers` is
+ * not listed: `init` always sets it on the record to the providers it collects.
  */
 const LIST_METADATA_KEYS = [
   'exports',
@@ -61,19 +61,21 @@ const LIST_METADATA_KEYS = [
 ] as const;
 
 /**
- * The part of a plugin's options that the registry reads as plugin metadata. A plugin option that
- * shares a name with a list-valued metadata key (RememberPlugin's `tools: { enabled }`) stays an
- * option: it reaches the plugin instance, not the registry. `tools` is the list given under it
- * (if it is one) plus the tools the plugin contributes for its options.
+ * The part of a plugin's options that the registry reads as plugin metadata: only the list-valued
+ * keys above, when the option under that name is a list. Every other option (`name`, `id`,
+ * `description`, `scope`, RememberPlugin's `tools: { enabled }`) stays the plugin's own and reaches
+ * the plugin instance, never the registry, so options cannot rename a plugin or change its install
+ * scope (#707). `tools` is the list given under it plus the tools the plugin contributes.
  */
-export function pluginMetadataFromOptions<T extends object>(options: T, dynamicTools: readonly ToolType[]): T {
-  const out: Record<string, unknown> = { ...(options as Record<string, unknown>) };
+export function pluginMetadataFromOptions(options: object, dynamicTools: readonly ToolType[]): Record<string, unknown> {
+  const optionValues = options as Record<string, unknown>;
+  const metadata: Record<string, unknown> = {};
   for (const key of LIST_METADATA_KEYS) {
-    if (key in out && !Array.isArray(out[key])) delete out[key];
+    if (Array.isArray(optionValues[key])) metadata[key] = optionValues[key];
   }
-  const tools = [...((out['tools'] as ToolType[] | undefined) ?? []), ...dynamicTools];
-  if (tools.length > 0) out['tools'] = tools;
-  return out as T;
+  const tools = [...((metadata['tools'] as ToolType[] | undefined) ?? []), ...dynamicTools];
+  if (tools.length > 0) metadata['tools'] = tools;
+  return metadata;
 }
 
 export function dedupePluginProviders(providers: readonly ProviderType[]): ProviderType[] {
