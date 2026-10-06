@@ -79,6 +79,7 @@ Globals:
       Variables:
         NODE_ENV: production
         LOG_LEVEL: info
+        MCP_SESSION_SECRET: !Ref McpSessionSecret
 
 Resources:
   FrontMcpFunction:
@@ -119,6 +120,10 @@ Conditions:
   HasRedis: !Not [!Equals [!Ref RedisUrl, '']]
 
 Parameters:
+  McpSessionSecret:
+    Type: String
+    NoEcho: true
+    Description: MCP_SESSION_SECRET for session-ID encryption, required in production (openssl rand -hex 32)
   RedisUrl:
     Type: String
     Default: ''
