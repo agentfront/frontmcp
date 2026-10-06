@@ -157,6 +157,8 @@ export default class Server {}
 | `headers`         | `Record<string, string>`             | -          | Additional headers for all requests                                                                                        |
 | `protocolVersion` | `'legacy' \| '2026-07-28' \| 'auto'` | `'legacy'` | MCP revision: session + `initialize`, the stateless 2026-07-28 client (URL remotes only), or probe `server/discover` first |
 
+A transient error is a network failure or timeout, or an HTTP `408`, `425`, `429` or `5xx` answer other than `501` and `505`, whatever its body says; a `400` or `404` is not retried. On a 2026-07-28 remote, a `Retry-After` header on the answer sets the wait, up to the backoff's longest one.
+
 Each remote tool, resource, resource template and prompt is listed once; when `cacheTTL` expires the gateway re-reads the remote's lists and replaces what it proxied before (dropped entries disappear, nothing is duplicated).
 
 `RemoteAuthConfig` modes:

@@ -71,10 +71,20 @@ export class McpStatelessError extends Error {
     readonly code: number,
     message: string,
     readonly data?: unknown,
+    /** The HTTP status of a response that wasn't a success, and the wait its `Retry-After` asked for. */
+    readonly http?: { status: number; retryAfterMs?: number },
   ) {
     super(message);
     this.name = 'McpStatelessError';
   }
+}
+
+/** A `Retry-After` header in milliseconds: delay seconds, or an HTTP date. */
+function retryAfterMsOf(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number(header);
+  const ms = Number.isNaN(seconds) ? Date.parse(header) - Date.now() : seconds * 1000;
+  return Number.isNaN(ms) ? undefined : Math.max(0, ms);
 }
 
 interface JsonRpcResponse {
@@ -376,6 +386,7 @@ export class McpStatelessClient {
         signal: controller.signal,
       });
 
+      if (!response.ok) throw await this.httpError(response);
       payload = await this.readResponse(response);
     } finally {
       // Cleared on BOTH paths, or a rejected request would keep the timer (and
@@ -438,6 +449,21 @@ export class McpStatelessClient {
    * notifications followed by the final response, so notifications are forwarded
    * as they arrive and the terminating message is returned.
    */
+  /** The error for a response that wasn't a success: its JSON-RPC error, else its body, with the HTTP status. */
+  private async httpError(response: Response): Promise<McpStatelessError> {
+    const text = await response.text();
+    let rpcError: JsonRpcResponse['error'];
+    try {
+      rpcError = (JSON.parse(text) as JsonRpcResponse).error;
+    } catch {
+      rpcError = undefined;
+    }
+    const http = { status: response.status, retryAfterMs: retryAfterMsOf(response.headers.get('retry-after')) };
+    return rpcError
+      ? new McpStatelessError(rpcError.code, rpcError.message, rpcError.data, http)
+      : new McpStatelessError(-32603, `HTTP ${response.status}${text ? `: ${text}` : ''}`, undefined, http);
+  }
+
   private async readResponse(response: Response): Promise<JsonRpcResponse> {
     const contentType = response.headers.get('content-type') ?? '';
 
