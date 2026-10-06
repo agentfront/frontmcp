@@ -151,7 +151,9 @@ non-standard IdPs, override them with
 
 Upstream tokens are renewed with the provider's refresh token once expired (or
 within `refresh.skewSeconds`, default 60; `refresh.enabled: false` turns it off),
-and move to the new token when the client refreshes FrontMCP's own.
+and move to the new token when the client refreshes FrontMCP's own. The IdP
+controls only the upstream tokens' lifetime: FrontMCP's own access token lasts an
+hour and its refresh token 30 days (rotated on each use).
 
 **Deferred (not yet wired):** upstream **Dynamic Client Registration**
 (`providerConfig.dcrEnabled` / `registrationEndpoint`) — a pre-registered

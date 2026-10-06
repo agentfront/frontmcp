@@ -602,7 +602,7 @@ export const tokenRefreshConfigSchema = z.object({
    * Refresh token before expiry by this many seconds
    * @default 60
    */
-  skewSeconds: z.number().default(60),
+  skewSeconds: z.number().nonnegative().default(60),
 });
 
 export type TokenRefreshConfig = z.infer<typeof tokenRefreshConfigSchema>;

@@ -552,14 +552,21 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
-    // The scope holding the server's own apps (not a standalone app's), or the one `endpoint.app` names
-    const scope = endpoint?.app === undefined ? frontMcp.getPrimaryScope() : frontMcp.getAppScope(endpoint.app);
-    if (!scope) {
-      throw new InternalMcpError('No scopes initialized. Ensure at least one app is configured.');
-    }
+    try {
+      // The scope holding the server's own apps (not a standalone app's), or the one `endpoint.app` names
+      const scope = endpoint?.app === undefined ? frontMcp.getPrimaryScope() : frontMcp.getAppScope(endpoint.app);
+      if (!scope) {
+        throw new InternalMcpError('No scopes initialized. Ensure at least one app is configured.');
+      }
 
-    frontMcp.log?.info('FrontMCP direct server created');
-    return new DirectMcpServerImpl(scope as Scope);
+      frontMcp.log?.info('FrontMCP direct server created');
+      // Disposing the server tears down every scope of the instance, not only the one it serves
+      return new DirectMcpServerImpl(scope as Scope, () => frontMcp.shutdown());
+    } catch (error) {
+      // shutdown() logs any step that fails; the caller needs the reason no server was created
+      await frontMcp.shutdown().catch(() => undefined);
+      throw error;
+    }
   }
 
   /**

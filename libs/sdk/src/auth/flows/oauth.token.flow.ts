@@ -73,7 +73,6 @@ import {
   NO_STORE_HEADERS,
   resourceUriMatches,
   StageHookOf,
-  type FlowOutputOf,
   type FlowPlan,
   type FlowRunOptions,
   type ServerRequest,
@@ -257,15 +256,12 @@ const Stage = StageHookOf(name);
   middleware: {
     method: 'POST',
     path: '/oauth/token',
+    // Never cached, errors included (RFC 6749 §5.1, §5.2)
+    responseHeaders: NO_STORE_HEADERS,
   },
 })
 export default class OauthTokenFlow extends FlowBase<typeof name> {
   private logger = this.scope.logger.child('OauthTokenFlow');
-
-  /** Every token endpoint response, errors included, is never cached (RFC 6749 §5.1, §5.2). */
-  override respond(output: FlowOutputOf<typeof name>): void {
-    super.respond({ ...output, headers: { ...output.headers, ...NO_STORE_HEADERS } });
-  }
 
   @Stage('checkIpFilter')
   async checkIpFilter() {
