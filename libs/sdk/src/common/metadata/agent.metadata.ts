@@ -293,7 +293,9 @@ export interface AgentExecutionConfig {
   enableStreaming?: boolean;
 
   /**
-   * Enable MCP notifications for progress updates.
+   * Send a log message for each tool call of the model (`Calling tool: <name>`, and on failure
+   * `Tool <name> failed: <message>` with the error's public message only), and allow
+   * `enableAutoProgress`.
    * @default true
    */
   enableNotifications?: boolean;
