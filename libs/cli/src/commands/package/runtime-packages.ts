@@ -5,17 +5,14 @@
  * the bundle copied into `~/.frontmcp/apps/<name>/` cannot run without them.
  * `@frontmcp/sdk` brings `@frontmcp/di`, `utils`, `auth`, ... as dependencies.
  *
+ * `vectoriadb`, which the skill search loads, is a regular SDK dependency and
+ * declares its own `tslib`, so it arrives with the SDK.
+ *
  * The SDK `import()`s its optional peers lazily from its own location, so a peer
  * the project had installed is missing next to the installed SDK unless it is
- * installed there too (#679):
- *
- *   - `vectoriadb` is optional on paper, but every local `@App` builds a skill
- *     registry that loads it while the server starts. In a project it is always
- *     present (the `frontmcp` CLI depends on it); an installed app crashed with
- *     "skill storage needs the optional peer dependency 'vectoriadb'".
- *   - `tslib` — vectoriadb `require()`s it without declaring it as a dependency.
- *   - Any other optional SDK peer the project declares (`@frontmcp/storage-sqlite`,
- *     `@frontmcp/observability`, ...) is installed with the declared range.
+ * installed there too (#679): any optional SDK peer the project declares
+ * (`@frontmcp/storage-sqlite`, `@frontmcp/observability`, ...) is installed with
+ * the declared range.
  */
 
 import * as fs from 'fs';
@@ -24,12 +21,11 @@ import * as path from 'path';
 import { getSelfDependencyRange, getSelfVersion } from '../../core/version';
 
 /** Installed for every app. */
-const REQUIRED_PACKAGES = ['@frontmcp/sdk', 'reflect-metadata', 'vectoriadb', 'tslib'] as const;
+const REQUIRED_PACKAGES = ['@frontmcp/sdk', 'reflect-metadata'] as const;
 
 /**
- * The SDK's optional peers other than `vectoriadb` (`peerDependenciesMeta` in
- * libs/sdk/package.json — a unit test keeps the two in sync). Installed only
- * when the project declares them.
+ * The SDK's optional peers (`peerDependenciesMeta` in libs/sdk/package.json — a
+ * unit test keeps the two in sync). Installed only when the project declares them.
  */
 export const OPTIONAL_SDK_PEERS = [
   '@anthropic-ai/sdk',
@@ -44,8 +40,6 @@ export const OPTIONAL_SDK_PEERS = [
 
 const FALLBACK_RANGES: Record<string, string> = {
   'reflect-metadata': '^0.2.2',
-  vectoriadb: '^2.3.0',
-  tslib: '^2.3.0',
 };
 
 interface DeclaredRanges {
