@@ -1,3 +1,5 @@
+import { type Token } from '@frontmcp/di';
+
 import { type ProviderRegistryInterface } from '../common';
 import { type JobEntry } from '../common/entries/job.entry';
 import { FRONTMCP_CONTEXT, FrontMcpContext } from '../context';
@@ -5,15 +7,18 @@ import { FlowContextProviders } from '../provider/flow-context-providers';
 
 /**
  * The providers a job run resolves against (#705): the job's own provider hierarchy (its app's)
- * plus the CONTEXT-scoped providers it defines, built for `context`. So `this.context` and accessors
- * such as `this.remember` and `this.featureFlags` work inside the job.
+ * plus the CONTEXT-scoped providers it defines, built for `context` and the context tokens installed
+ * on it. So `this.context` and accessors such as `this.remember` and `this.featureFlags` work inside
+ * the job.
  *
  * @param job - The job about to run
  * @param context - The request context the run belongs to
  * @returns Context-aware providers to create the job context with
  */
 export async function jobContextProviders(job: JobEntry, context: FrontMcpContext): Promise<ProviderRegistryInterface> {
-  const views = await job.providers.buildViews(context.sessionId, new Map([[FRONTMCP_CONTEXT, context]]));
+  const contextDeps = new Map<Token, unknown>([[FRONTMCP_CONTEXT, context]]);
+  for (const [token, instance] of context.getContextTokens()) contextDeps.set(token as Token, instance);
+  const views = await job.providers.buildViews(context.sessionId, contextDeps);
   return new FlowContextProviders(job.providers, views.context);
 }
 
