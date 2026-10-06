@@ -1266,6 +1266,34 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   }
 
   /**
+   * Copy the upstream provider tokens stored under `fromAuthorizationId` to the authorization id of
+   * `accessToken`. Returns that id, or undefined when the copy failed: the token is still issued, its
+   * tools find no provider token, and the next refresh copies them from `fromAuthorizationId` again.
+   */
+  private async copyProviderTokens(fromAuthorizationId: string, accessToken: string): Promise<string | undefined> {
+    const toAuthorizationId = deriveAuthorizationId(accessToken);
+    try {
+      await this.orchestratedTokenStore.copyTokens(fromAuthorizationId, toAuthorizationId);
+      return toAuthorizationId;
+    } catch (err) {
+      this.logger.warn(`Failed to copy provider tokens: ${err}`);
+      await this.discardProviderTokens(toAuthorizationId);
+      return undefined;
+    }
+  }
+
+  /** Remove the upstream provider tokens stored under `authorizationId`; a failure leaves them to expire. */
+  private async discardProviderTokens(authorizationId: string): Promise<void> {
+    const store = this.orchestratedTokenStore;
+    try {
+      const providerIds = await store.getProviderIds(authorizationId);
+      await Promise.all(providerIds.map((providerId) => store.deleteTokens(authorizationId, providerId)));
+    } catch (err) {
+      this.logger.warn(`Failed to discard provider tokens: ${err}`);
+    }
+  }
+
+  /**
    * Refresh an access token using a refresh token
    */
   async refreshAccessToken(
@@ -1329,10 +1357,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // A refresh token issued before tokens named their resource gets one now (#269).
     const resource = tokenRecord.resource ?? defaultAudience;
     const accessToken = await this.signAccessToken(user, tokenRecord.scopes, resource, consentMetadata, issuer);
-    // The provider tokens of the grant follow it to the new access token.
-    const providerTokensId = tokenRecord.providerTokensId
-      ? await this.moveProviderTokens(tokenRecord.providerTokensId, accessToken)
-      : undefined;
+    // Provider tokens are copied to the new access token, and leave the old one only once the rotation succeeded.
+    const sourceId = tokenRecord.providerTokensId;
+    const copiedTo = sourceId ? await this.copyProviderTokens(sourceId, accessToken) : undefined;
+    // A concurrent redemption may have rotated this refresh token, and removed the copied source, since it was read.
+    if (sourceId && !(await this.authorizationStore.getRefreshToken(refreshToken))) {
+      if (copiedTo) await this.discardProviderTokens(copiedTo);
+      this.logger.warn('Refresh token was redeemed by a concurrent request');
+      return { error: 'invalid_grant', error_description: 'Refresh token is invalid or expired' };
+    }
 
     // Rotate refresh token — forward the same grant metadata to the new record.
     const newRefreshRecord = this.authorizationStore.createRefreshTokenRecord({
@@ -1349,9 +1382,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       federatedLoginUsed: tokenRecord.federatedLoginUsed,
       selectedProviderIds: tokenRecord.selectedProviderIds,
       skippedProviderIds: tokenRecord.skippedProviderIds,
-      providerTokensId,
+      providerTokensId: copiedTo ?? sourceId,
     });
-    await this.authorizationStore.rotateRefreshToken(refreshToken, newRefreshRecord);
+    try {
+      await this.authorizationStore.rotateRefreshToken(refreshToken, newRefreshRecord);
+    } catch (err) {
+      if (copiedTo) await this.discardProviderTokens(copiedTo);
+      throw err;
+    }
+    if (sourceId && copiedTo) await this.discardProviderTokens(sourceId);
 
     this.logger.info(`Tokens refreshed for user: ${user.sub}`);
 

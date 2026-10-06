@@ -139,13 +139,42 @@ export class StorageOrchestratedTokenStore implements TokenStore {
   }
 
   async migrateTokens(fromAuthId: string, toAuthId: string): Promise<void> {
+    for (const oldComposite of await this.copyRecords(fromAuthId, toAuthId)) {
+      await this.storage.delete(this.storageKey(oldComposite));
+      this.derivedKeys.delete(oldComposite);
+    }
+  }
+
+  async copyTokens(fromAuthId: string, toAuthId: string): Promise<void> {
+    await this.copyRecords(fromAuthId, toAuthId);
+  }
+
+  /**
+   * Delete all tokens for an authorization id.
+   */
+  async deleteAllForAuthorization(authorizationId: string): Promise<void> {
+    const prefix = `${authorizationId}:`;
+    const compositeKeys = await this.listCompositeKeys(`${prefix}*`);
+    for (const compositeKey of compositeKeys) {
+      if (!compositeKey.startsWith(prefix)) continue;
+      await this.storage.delete(this.storageKey(compositeKey));
+      this.derivedKeys.delete(compositeKey);
+    }
+  }
+
+  // ============================================
+  // Internals
+  // ============================================
+
+  /** Copy every record of `fromAuthId` to `toAuthId`, skipping a corrupted one; returns the composite keys copied. */
+  private async copyRecords(fromAuthId: string, toAuthId: string): Promise<string[]> {
     const prefix = `${fromAuthId}:`;
     const compositeKeys = await this.listCompositeKeys(`${prefix}*`);
+    const copiedKeys: string[] = [];
 
     for (const oldComposite of compositeKeys) {
       if (!oldComposite.startsWith(prefix)) continue;
-      const providerId = oldComposite.slice(prefix.length);
-      const newComposite = this.compositeKey(toAuthId, providerId);
+      const newComposite = this.compositeKey(toAuthId, oldComposite.slice(prefix.length));
 
       const stored = await this.storage.get(this.storageKey(oldComposite));
       if (stored === null) continue;
@@ -171,28 +200,10 @@ export class StorageOrchestratedTokenStore implements TokenStore {
         }
         await this.storage.set(this.storageKey(newComposite), stored, this.ttlOptions(dropAt));
       }
-
-      await this.storage.delete(this.storageKey(oldComposite));
-      this.derivedKeys.delete(oldComposite);
+      copiedKeys.push(oldComposite);
     }
+    return copiedKeys;
   }
-
-  /**
-   * Delete all tokens for an authorization id.
-   */
-  async deleteAllForAuthorization(authorizationId: string): Promise<void> {
-    const prefix = `${authorizationId}:`;
-    const compositeKeys = await this.listCompositeKeys(`${prefix}*`);
-    for (const compositeKey of compositeKeys) {
-      if (!compositeKey.startsWith(prefix)) continue;
-      await this.storage.delete(this.storageKey(compositeKey));
-      this.derivedKeys.delete(compositeKey);
-    }
-  }
-
-  // ============================================
-  // Internals
-  // ============================================
 
   private async getRecord(authorizationId: string, providerId: string): Promise<ProviderTokenRecord | null> {
     const compositeKey = this.compositeKey(authorizationId, providerId);

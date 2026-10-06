@@ -374,7 +374,10 @@ class Whoami extends ToolContext {
 An expired upstream token (or one within `refresh.skewSeconds` of expiry: default 60,
 never negative) is renewed with the provider's refresh token when a tool reads it;
 `refresh: { enabled: false }` turns that off. When the client refreshes FrontMCP's
-own token at `/oauth/token`, the upstream tokens move to the new token.
+own token at `/oauth/token`, the upstream tokens move to the new token. They leave the
+old token only once the refresh token has been rotated, so a failed refresh can be
+retried with the same refresh token; of two redemptions of one refresh token at once,
+one may get `invalid_grant`.
 
 **Deferred (not yet wired):** upstream **Dynamic Client Registration**
 (`providerConfig.dcrEnabled` / `registrationEndpoint`) — provide a pre-registered
