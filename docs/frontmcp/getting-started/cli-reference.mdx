@@ -424,8 +424,9 @@ frontmcp service install my-app
 # Install from npm (private registry)
 frontmcp install @company/my-mcp --registry https://npm.company.com
 
-# Install from local path
+# Install from local path (`.` installs the current project)
 frontmcp install ./my-local-app
+frontmcp install .
 
 # Install from GitHub
 frontmcp install github:user/repo

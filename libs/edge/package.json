@@ -48,14 +48,11 @@
   "engines": {
     "node": ">=24.0.0"
   },
-  "peerDependencies": {
-    "@frontmcp/plugin-skilled-openapi": "1.9.1",
-    "@frontmcp/sdk": "1.9.1"
+  "dependencies": {
+    "@frontmcp/plugin-skilled-openapi": "1.9.1"
   },
-  "peerDependenciesMeta": {
-    "@frontmcp/plugin-skilled-openapi": {
-      "optional": true
-    }
+  "peerDependencies": {
+    "@frontmcp/sdk": "1.9.1"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

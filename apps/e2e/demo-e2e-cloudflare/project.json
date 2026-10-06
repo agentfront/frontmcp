@@ -11,6 +11,7 @@
       "dependsOn": [
         { "projects": ["cli"], "target": "build" },
         { "projects": ["sdk"], "target": "build" },
+        { "projects": ["observability"], "target": "build" },
         { "projects": ["edge"], "target": "build" },
         { "projects": ["plugin-skilled-openapi"], "target": "build" }
       ],
@@ -26,6 +27,7 @@
       "dependsOn": [
         { "projects": ["cli"], "target": "build" },
         { "projects": ["sdk"], "target": "build" },
+        { "projects": ["observability"], "target": "build" },
         { "projects": ["edge"], "target": "build" },
         { "projects": ["plugin-skilled-openapi"], "target": "build" }
       ],

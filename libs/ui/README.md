@@ -43,12 +43,12 @@ import { McpBridgeProvider, useCallTool, useToolOutput } from '@frontmcp/ui/reac
 
 function WeatherWidget() {
   const output = useToolOutput<{ temp: number }>();
-  const { call, loading } = useCallTool('get_weather');
+  const [callWeather, { loading }] = useCallTool<{ city: string }>('get_weather');
 
   return (
     <div>
       <p>{output?.temp}C</p>
-      <button onClick={() => call({ city: 'London' })} disabled={loading}>
+      <button onClick={() => callWeather({ city: 'London' })} disabled={loading}>
         Refresh
       </button>
     </div>

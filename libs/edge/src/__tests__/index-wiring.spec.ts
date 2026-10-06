@@ -28,13 +28,15 @@ const createWebFetchHandler = jest.fn();
 
 jest.mock('@frontmcp/sdk', () => {
   // The deferred-build helpers are plain logic; use the real ones.
-  const { createDeferredServerBuild, startupFailureResponse } = jest.requireActual('@frontmcp/sdk');
+  const { createDeferredServerBuild, describeConfigIssues, startupFailureResponse } =
+    jest.requireActual('@frontmcp/sdk');
   return {
     // The startup checks on the config (see index.spec.ts); none of these configs declares anything they refuse.
     assertStaticStartupConfig: () => undefined,
     FrontMcpInstance: { createForGraph: (...args: unknown[]) => createForGraph(...args) },
     createWebFetchHandler: (...args: unknown[]) => createWebFetchHandler(...args),
     createDeferredServerBuild,
+    describeConfigIssues,
     startupFailureResponse,
   };
 });

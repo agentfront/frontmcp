@@ -50,6 +50,46 @@ export function findMisconfiguration(error: unknown): { code: string; remedy: st
   return undefined;
 }
 
+interface ConfigIssueLike {
+  path?: ReadonlyArray<PropertyKey>;
+  message?: string;
+  /** The branches of a failed union (`invalid_union`), each with its own issues. */
+  errors?: ReadonlyArray<ReadonlyArray<ConfigIssueLike>>;
+}
+
+/** A union's failure is reported through the branch closest to matching: the one with the fewest issues. */
+function flattenConfigIssue(issue: ConfigIssueLike, parentPath: ReadonlyArray<PropertyKey>): ConfigIssueLike[] {
+  const path = [...parentPath, ...(issue.path ?? [])];
+  const branches = issue.errors?.filter((branch) => branch.length > 0) ?? [];
+  if (branches.length === 0) return [{ path, message: issue.message }];
+  const closestBranch = branches.reduce((closest, branch) => (branch.length < closest.length ? branch : closest));
+  return closestBranch.flatMap((nested) => flattenConfigIssue(nested, path));
+}
+
+/**
+ * The invalid fields of a configuration that failed validation, as `path: message` pairs (the
+ * CONFIG_INVALID remedy points at the log for them), or `undefined` when no validation error is in
+ * `error`'s cause chain. Zod messages name the expected shape, not the value.
+ */
+export function describeConfigIssues(error: unknown): string | undefined {
+  let current: unknown = error;
+  for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+    if (current.name === 'ZodError') {
+      const issues = ((current as { issues?: ConfigIssueLike[] }).issues ?? []).flatMap((issue) =>
+        flattenConfigIssue(issue, []),
+      );
+      return issues
+        .map(
+          (issue) =>
+            `${issue.path?.length ? issue.path.map(String).join('.') : '(root)'}: ${issue.message ?? 'invalid'}`,
+        )
+        .join('; ');
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
 const CONFIG_INVALID_REMEDY =
   'The FrontMCP configuration failed validation, so the server refuses to start. The server log names the ' +
   'invalid fields.';
