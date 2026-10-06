@@ -6,11 +6,6 @@ import { validateCSPDomain } from '@frontmcp/uipack/shell';
  * that there is none.
  */
 const IGNORED_UI_OPTIONS = [
-  'widgetDescription',
-  'widgetAccessible',
-  'displayMode',
-  'prefersBorder',
-  'sandboxDomain',
   'contentSecurity',
   'hydrate',
   'runtimeOptions',

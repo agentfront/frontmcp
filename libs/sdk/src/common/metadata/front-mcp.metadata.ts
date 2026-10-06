@@ -278,7 +278,7 @@ export interface FrontMcpBaseMetadata {
     /**
      * Default for each tool's `ui.escapeStringResults`: HTML-escape plain strings returned by
      * template functions, while `ctx.helpers.html` / `trustedHtml` results stay markup.
-     * Unset is the 1.9 default (strings are escaped, with a one-time notice per tool when one
+     * Unset is the default since 1.9.2 (strings are escaped, with a one-time notice per tool when one
      * looked like markup); `false` renders strings that look like HTML as markup.
      */
     escapeStringResults?: boolean;

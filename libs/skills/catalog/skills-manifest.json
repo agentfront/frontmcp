@@ -333,7 +333,7 @@
             "Adding a `ui:` block with a function template that returns markup built with the `ctx.helpers.html` tagged template",
             "Annotating `ctx` explicitly to dodge the TS7006 inference gap on the union `ui.template` type",
             "Letting `ctx.helpers.html` escape every interpolated value so tool output can't inject markup into the widget",
-            "Relying on the 1.9 default (`escapeStringResults` unset), which escapes any plain string result while `html` results stay markup",
+            "Relying on the default since 1.9.2 (`escapeStringResults` unset), which escapes any plain string result while `html` results stay markup",
             "Reading from `ctx.output` and `ctx.helpers` — the typed runtime context the template renderer hands you"
           ]
         },

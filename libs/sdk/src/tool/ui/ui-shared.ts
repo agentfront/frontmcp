@@ -89,6 +89,12 @@ export interface UIResourceMeta {
    * `uiConfig.permissions` if present so it round-trips to the resource).
    */
   permissions?: unknown;
+  /** `ui.prefersBorder`: whether the host should draw a border around the widget. */
+  prefersBorder?: boolean;
+  /** `ui.sandboxDomain`: the dedicated origin the host should load the widget from. */
+  domain?: string;
+  /** `ui.widgetDescription`: what the widget shows, for the model (OpenAI Apps SDK). */
+  description?: string;
 }
 
 /**
@@ -214,6 +220,7 @@ export class ToolUIRegistry {
       resolver: this.resolver,
       resourceMode,
       sizing: extractSizing(uiConfig),
+      displayMode: uiConfig?.['displayMode'] as RenderToolTemplateOptions['displayMode'],
       csp: pageCsp(uiConfig),
       ...this.stringResultOptions(uiConfig),
     });
@@ -233,10 +240,15 @@ export class ToolUIRegistry {
    * `ui.csp` / `ui.permissions` field on re-compile.
    */
   private updateResourceMetaFromConfig(toolName: string, uiConfig: Record<string, unknown> | undefined): void {
-    const csp = uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined;
-    const permissions = uiConfig?.['permissions'] as UIResourceMeta['permissions'] | undefined;
-    if (csp || permissions !== undefined) {
-      this.resourceMeta.set(toolName, { csp, permissions });
+    const resourceMeta: UIResourceMeta = {
+      csp: uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined,
+      permissions: uiConfig?.['permissions'],
+      prefersBorder: uiConfig?.['prefersBorder'] as boolean | undefined,
+      domain: uiConfig?.['sandboxDomain'] as string | undefined,
+      description: uiConfig?.['widgetDescription'] as string | undefined,
+    };
+    if (Object.values(resourceMeta).some((value) => value !== undefined)) {
+      this.resourceMeta.set(toolName, resourceMeta);
     } else {
       this.resourceMeta.delete(toolName);
     }
@@ -311,6 +323,7 @@ export class ToolUIRegistry {
       resolver: this.resolver,
       resourceMode,
       sizing: extractSizing(uiConfig),
+      displayMode: uiConfig?.['displayMode'] as RenderToolTemplateOptions['displayMode'],
       csp: pageCsp(uiConfig),
       ...this.stringResultOptions(uiConfig),
     });

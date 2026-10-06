@@ -966,15 +966,17 @@ Markdown strings are converted on the server (headings, paragraphs, fenced code,
 
 ### UI Configuration Options
 
-| Option                | Description                                                                                                                                |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `template`            | `{ file }` FileSource, HTML function, or HTML / Markdown string (a bare React component reference cannot be bundled — see below)           |
-| `csp`                 | Content Security Policy (allowed origins: `https://` / `wss://`, `http://` / `ws://` on localhost)                                         |
-| `servingMode`         | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`                                                              |
-| `resourceMode`        | `'cdn'` or `'inline'` bundling for `.tsx` widgets (host-detected when unset)                                                               |
-| `escapeStringResults` | Escape plain string results (unset is the 1.9 default and escapes too); `false` renders them as markup; `html` / `trustedHtml` stay markup |
+| Option                | Description                                                                                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `template`            | `{ file }` FileSource, HTML function, or HTML / Markdown string (a bare React component reference cannot be bundled — see below)                   |
+| `csp`                 | Content Security Policy (allowed origins: `https://` / `wss://`, `http://` / `ws://` on localhost)                                                 |
+| `servingMode`         | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`                                                                      |
+| `resourceMode`        | `'cdn'` or `'inline'` bundling for `.tsx` widgets (host-detected when unset)                                                                       |
+| `escapeStringResults` | Escape plain string results (unset is the default since 1.9.2 and escapes too); `false` renders them as markup; `html` / `trustedHtml` stay markup |
 
-**Options with no effect yet.** These pass validation but nothing reads them, so setting one changes nothing; startup logs a warning per tool that lists them: `widgetDescription`, `widgetAccessible`, `displayMode`, `prefersBorder`, `sandboxDomain`, `contentSecurity`, `hydrate`, `runtimeOptions`, `mdxComponents`, `bundlingMode`, `uiType` and `htmlResponsePrefix`. There is no dual HTML payload for Claude, so `htmlResponsePrefix` does nothing.
+**Options the host reads.** `widgetDescription` goes on the widget resource as `_meta['openai/widgetDescription']`; `widgetAccessible` in `tools/list` as `_meta['openai/widgetAccessible']`; `prefersBorder` and `sandboxDomain` on the resource as `_meta.ui.prefersBorder` / `_meta.ui.domain` (MCP Apps) and `_meta['openai/widgetPrefersBorder']` / `_meta['openai/widgetDomain']`; `csp` also as `_meta['openai/widgetCSP']`. With `displayMode` the page asks the host for that mode once its bridge connects (`ui/request-display-mode`, or `window.openai.requestDisplayMode()`). Up to 1.9.2 these were accepted and ignored.
+
+**Options with no effect yet.** These pass validation but nothing reads them, so setting one changes nothing; startup logs a warning per tool that lists them: `contentSecurity`, `hydrate`, `runtimeOptions`, `mdxComponents`, `bundlingMode`, `uiType` and `htmlResponsePrefix`. There is no dual HTML payload for Claude, so `htmlResponsePrefix` does nothing.
 
 **Serving modes.** `'direct-url'` and `'custom-url'` are not implemented: the widget is served inline, as with `'inline'`, and startup logs a warning. `'hybrid'` pre-compiles the shell at startup and sends only a reference in each call's `_meta['ui/component']` (`{ type, hash, toolName }`) — no component code and no data.
 
@@ -985,7 +987,7 @@ Markdown strings are converted on the server (headings, paragraphs, fenced code,
 **Sanitization.** Markup you author (template literals, HTML strings, `.tsx` files) is trusted and not sanitized. Values interpolated into `` html`…` `` are escaped; plain string results are escaped unless `escapeStringResults: false`; Markdown strings are always escaped.
 
 <Warning>
-**Build template markup with `ctx.helpers.html`.** Since FrontMCP 1.9 a plain string a template function returns is HTML-escaped and shown as text, so a template that returns markup as a plain string displays its tags. The `html` tagged template escapes interpolated values and renders as markup; `ctx.helpers.trustedHtml(markup)` marks markup you already made safe. `ui.escapeStringResults: false` (or `@FrontMcp({ ui: { escapeStringResults: false } })`) restores the 1.8 behaviour of rendering strings that look like HTML as markup, which lets unescaped tool output inject tags. See [Trusted markup](/frontmcp/guides/building-tool-ui#trusted-markup).
+**Build template markup with `ctx.helpers.html`.** Since FrontMCP 1.9.2 a plain string a template function returns is HTML-escaped and shown as text, so a template that returns markup as a plain string displays its tags. The `html` tagged template escapes interpolated values and renders as markup; `ctx.helpers.trustedHtml(markup)` marks markup you already made safe. `ui.escapeStringResults: false` (or `@FrontMcp({ ui: { escapeStringResults: false } })`) restores the earlier behaviour of rendering strings that look like HTML as markup, which lets unescaped tool output inject tags. See [Trusted markup](/frontmcp/guides/building-tool-ui#trusted-markup).
 </Warning>
 
 <Info>

@@ -80,8 +80,9 @@ function generatePlaceholderWidget(toolName: string): string {
 
 /**
  * Build the `_meta` payload to attach to the widget resource's `contents[]`
- * item. Returns `undefined` when no CSP / permissions were configured so the
- * caller can omit `_meta` entirely.
+ * item: the MCP Apps `_meta.ui` fields and their OpenAI Apps SDK `openai/widget*`
+ * aliases. Returns `undefined` when nothing was configured so the caller can
+ * omit `_meta` entirely.
  *
  * Issue #455: MCP Apps hosts (Claude in particular) only honor CSP declared
  * on the UI resource (i.e. the `resources/read` content item's `_meta`), not
@@ -98,13 +99,20 @@ function buildResourceMetaForWidget(registry: ToolUIRegistry, toolName: string):
   if (meta.permissions !== undefined) {
     ui['permissions'] = meta.permissions;
   }
-  if (Object.keys(ui).length === 0) return undefined;
+  if (meta.prefersBorder !== undefined) ui['prefersBorder'] = meta.prefersBorder;
+  if (meta.domain !== undefined) ui['domain'] = meta.domain;
   // Emit BOTH the nested form (`_meta.ui.csp` — what MCP Apps spec docs use)
   // and the slash form (`_meta['ui/csp']` — what the broader FrontMCP `_meta`
   // convention uses) so hosts on either side resolve it. They're cheap.
-  const out: Record<string, unknown> = { ui };
-  if (ui['csp'] !== undefined) out['ui/csp'] = ui['csp'];
+  const out: Record<string, unknown> = Object.keys(ui).length > 0 ? { ui } : {};
+  if (ui['csp'] !== undefined) {
+    out['ui/csp'] = ui['csp'];
+    out['openai/widgetCSP'] = ui['csp'];
+  }
   if (ui['permissions'] !== undefined) out['ui/permissions'] = ui['permissions'];
+  if (meta.prefersBorder !== undefined) out['openai/widgetPrefersBorder'] = meta.prefersBorder;
+  if (meta.domain !== undefined) out['openai/widgetDomain'] = meta.domain;
+  if (meta.description !== undefined) out['openai/widgetDescription'] = meta.description;
   return out;
 }
 

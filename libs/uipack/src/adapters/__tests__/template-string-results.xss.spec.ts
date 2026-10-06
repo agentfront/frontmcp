@@ -7,7 +7,7 @@
  * A template that returns a plain string, such as `(ctx) => ctx.output`, has that string rendered
  * as HTML, so untrusted tool output returned unescaped injects markup. `escapeStringResults: true`
  * escapes plain strings; markup built with `ctx.helpers.html` or wrapped with
- * `ctx.helpers.trustedHtml` still renders. Unset is the 1.9 default: plain strings are escaped and a
+ * `ctx.helpers.trustedHtml` still renders. Unset is the default since 1.9.2: plain strings are escaped and a
  * one-time notice per tool points at the API and the `false` opt-out (#769).
  */
 import type { TemplateHelpers } from '../../shell/data-injector';
@@ -114,7 +114,7 @@ describe('template string results — escapeStringResults: true', () => {
   });
 });
 
-describe('template string results — option unset (the 1.9 default)', () => {
+describe('template string results — option unset (the default since 1.9.2)', () => {
   it('escapes a plain markup string (#769)', () => {
     const { doc } = render((ctx) => ctx.output);
 
@@ -148,7 +148,7 @@ describe('template string results — option unset (the 1.9 default)', () => {
     expect(message).toContain(toolName);
     expect(message).toContain('html`');
     expect(message).toContain('escapeStringResults: false');
-    expect(message).toContain('FrontMCP 1.9 HTML-escapes plain string results by default');
+    expect(message).toContain('Since 1.9.2, FrontMCP HTML-escapes plain string results by default');
     expect(message).not.toContain('will HTML-escape');
   });
 

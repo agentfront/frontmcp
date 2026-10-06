@@ -113,6 +113,8 @@ export function generateBridgeIIFE(options: IIFEGeneratorOptions = {}): string {
   parts.push('bridge.initialize().then(function() {');
   parts.push('  log("Bridge initialized with adapter: " + bridge.adapterId);');
   parts.push('  window.dispatchEvent(new CustomEvent("bridge:ready", { detail: { adapter: bridge.adapterId } }));');
+  // The display mode the tool's `ui.displayMode` asks for; a host that can't give it says no
+  parts.push('  if (window.__mcpDisplayMode) bridge.requestDisplayMode(window.__mcpDisplayMode).catch(function() {});');
   parts.push('}).catch(function(err) {');
   parts.push('  console.error("[FrontMcpBridge] Init failed:", err);');
   parts.push('  window.dispatchEvent(new CustomEvent("bridge:error", { detail: { error: err } }));');
@@ -496,6 +498,9 @@ var OpenAIAdapter = {
     return Promise.resolve();
   },
   requestDisplayMode: function(context, mode) {
+    if (window.openai && typeof window.openai.requestDisplayMode === 'function') {
+      return Promise.resolve(window.openai.requestDisplayMode({ mode: mode }));
+    }
     return Promise.resolve();
   },
   setSize: function(context, size) {
@@ -786,7 +791,7 @@ var ExtAppsAdapter = {
     return this.sendRequest('ui/openLink', { url: url });
   },
   requestDisplayMode: function(context, mode) {
-    return this.sendRequest('ui/setDisplayMode', { mode: mode });
+    return this.sendRequest('ui/request-display-mode', { mode: mode });
   },
   setSize: function(context, size) {
     // Standard ext-apps sizing: the view tells the host its dimensions with the

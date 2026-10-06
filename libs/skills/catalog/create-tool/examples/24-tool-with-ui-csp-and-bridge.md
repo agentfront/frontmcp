@@ -121,8 +121,8 @@ export class ShowQuoteTool extends ToolContext {
 
 ## Why these choices
 
-- **No `widgetAccessible` / `widgetDescription`** — both are accepted by the schema but nothing reads them yet (startup logs a warning), so they are left out. Whether the widget may call tools is decided by the host.
+- **No `widgetAccessible` / `widgetDescription`** — left out to keep the example small. `widgetAccessible: true` (sent as `_meta['openai/widgetAccessible']`) is what the OpenAI Apps SDK needs before `window.openai.callTool()` works; `widgetDescription` goes on the widget resource as `_meta['openai/widgetDescription']`. MCP Apps hosts let a widget call tools by default.
 - **`csp.connectDomains`** — limits what the widget can `fetch` to. Without a CSP, the host's default applies (which may block everything in Claude). With `connectDomains: ['https://api.market.example']`, only that origin is reachable.
 - **`window.FrontMcpBridge.callTool` not `window.openai.callTool`** — the bridge handles host detection. `window.openai.*` works on OpenAI Apps SDK but breaks everywhere else.
 - **`jsonEmbed` not `JSON.stringify`** — `JSON.stringify` doesn't escape `</script>` or `<!--` and can break out of the inline script tag. `jsonEmbed` writes `<`, `>` and `&` as `\u003c`, `\u003e`, `\u0026`.
-- **`html` with `trustedHtml(jsonEmbed(...))`** — `ctx.helpers.html` escapes the symbol and timestamp for you, so tool output can't inject markup. Inside the `<script>` the JSON must stay as-is: `html` would HTML-escape its quotes, so the script-safe `jsonEmbed` output is wrapped with `trustedHtml`. The result renders as markup under the 1.9 default, which escapes only plain string results.
+- **`html` with `trustedHtml(jsonEmbed(...))`** — `ctx.helpers.html` escapes the symbol and timestamp for you, so tool output can't inject markup. Inside the `<script>` the JSON must stay as-is: `html` would HTML-escape its quotes, so the script-safe `jsonEmbed` output is wrapped with `trustedHtml`. The result renders as markup under the default since 1.9.2, which escapes only plain string results.
