@@ -18,11 +18,15 @@ describe('pm pid files written by a compiled CLI daemon (#768)', () => {
   const temporaryHome = os.homedir();
   const pidsDir = path.join(temporaryHome, '.frontmcp', 'pids');
   const daemonPidData = { pid: 999999, startedAt: '2026-10-06T10:00:00.000Z', socketPath: '/tmp/demo.sock' };
+  const invalidPids = { zero: 0, negative: -1, fractional: 1.5 };
 
   beforeAll(() => {
     fs.mkdirSync(pidsDir, { recursive: true });
     fs.writeFileSync(path.join(pidsDir, 'demo.pid'), JSON.stringify(daemonPidData));
     fs.writeFileSync(path.join(pidsDir, 'broken.pid'), JSON.stringify({ name: 'broken' }));
+    for (const [name, pid] of Object.entries(invalidPids)) {
+      fs.writeFileSync(path.join(pidsDir, `${name}.pid`), JSON.stringify({ pid }));
+    }
   });
 
   afterAll(() => {
@@ -43,6 +47,11 @@ describe('pm pid files written by a compiled CLI daemon (#768)', () => {
   it('skips a pid file without a numeric pid', () => {
     expect(readPidFile('broken')).toBeNull();
     expect(listPidFiles().map((data) => data.name)).toEqual(['demo']);
+  });
+
+  it.each(Object.keys(invalidPids))('skips a pid file whose pid is not a positive integer (%s)', (name) => {
+    expect(readPidFile(name)).toBeNull();
+    expect(listPidFiles().map((data) => data.name)).not.toContain(name);
   });
 
   it('lists and shows the daemon without crashing', () => {

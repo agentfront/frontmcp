@@ -27,7 +27,7 @@ export function readPidFile(name: string): PidFileData | null {
 
 // Compiled CLI daemons write only pid, startedAt and port/socketPath.
 function normalizePidFileData(name: string, data: Partial<PidFileData>): PidFileData | null {
-  if (typeof data.pid !== 'number') return null;
+  if (typeof data.pid !== 'number' || !Number.isInteger(data.pid) || data.pid <= 0) return null;
   return {
     ...data,
     pid: data.pid,
