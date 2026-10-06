@@ -385,8 +385,8 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         if (e.type === 'respond') {
           responded = e.output as FlowOutputOf<Name>;
           const status = (e.output as { status?: unknown } | undefined)?.status;
-          // Finalize stages and their hooks read the HTTP status a flow responded with from `state.statusCode`
-          if (typeof status === 'number') context.state.set('statusCode' as never, status as never);
+          // Finalize stages and their hooks read the HTTP status of the latest response from `state.statusCode`
+          context.state.set('statusCode' as never, (typeof status === 'number' ? status : undefined) as never);
         }
         return { outcome: e.type, control: e };
       }
