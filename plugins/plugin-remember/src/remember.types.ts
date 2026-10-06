@@ -148,7 +148,10 @@ export interface BaseRememberPluginOptions {
   encryption?: {
     /** Whether encryption is enabled (default: true) */
     enabled?: boolean;
-    /** Custom encryption key (overrides derived keys) */
+    /**
+     * Secret every encryption key is derived from, in place of `REMEMBER_SECRET` (or `MCP_MEMORY_SECRET` /
+     * `MCP_SESSION_SECRET`). Each scope, session and user still gets its own key.
+     */
     customKey?: string;
   };
 

@@ -2,6 +2,7 @@ import { Provider, ProviderScope } from '@frontmcp/sdk';
 import { getEnv } from '@frontmcp/utils';
 
 import type { VercelKvRememberPluginOptions } from '../remember.types';
+import { callerKeyOf, doubledPrefixKey, prefixedStoreKey } from './remember-key-prefix';
 import type { RememberStoreInterface } from './remember-store.interface';
 
 /**
@@ -9,9 +10,10 @@ import type { RememberStoreInterface } from './remember-store.interface';
  */
 interface VercelKvClient {
   /** Resolves to `'OK'` on write, or `null` when `nx` was set and the key already existed. */
-  set(key: string, value: string, options?: { ex?: number; nx?: boolean }): Promise<string | null>;
+  set(key: string, value: string, options?: { ex?: number; px?: number; nx?: boolean }): Promise<string | null>;
   get(key: string): Promise<string | null>;
   del(key: string): Promise<void>;
+  pttl(key: string): Promise<number>;
   exists(key: string): Promise<number>;
   keys(pattern: string): Promise<string[]>;
   scan(cursor: string | number, options?: { match?: string; count?: number }): Promise<[string | number, string[]]>;
@@ -85,7 +87,7 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
   }
 
   private prefixKey(key: string): string {
-    return `${this.keyPrefix}${key}`;
+    return prefixedStoreKey(this.keyPrefix, key);
   }
 
   /**
@@ -101,6 +103,7 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
     } else {
       await this.kv.set(fullKey, strValue);
     }
+    await this.deleteDoubledPrefixKey(key);
   }
 
   /**
@@ -126,8 +129,7 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
    * Retrieve a value by key.
    */
   async getValue<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined> {
-    const fullKey = this.prefixKey(key);
-    const raw = await this.kv.get(fullKey);
+    const raw = (await this.kv.get(this.prefixKey(key))) ?? (await this.takeDoubledPrefixValue(key));
 
     if (raw === null) return defaultValue;
 
@@ -142,55 +144,75 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
    * Delete a key.
    */
   async delete(key: string): Promise<void> {
-    const fullKey = this.prefixKey(key);
-    await this.kv.del(fullKey);
+    await this.kv.del(this.prefixKey(key));
+    await this.deleteDoubledPrefixKey(key);
   }
 
   /**
    * Check if a key exists.
    */
   async exists(key: string): Promise<boolean> {
-    const fullKey = this.prefixKey(key);
-    return (await this.kv.exists(fullKey)) === 1;
+    if ((await this.kv.exists(this.prefixKey(key))) === 1) return true;
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
+    return doubledKey !== undefined && (await this.kv.exists(doubledKey)) === 1;
   }
 
   /**
    * List keys matching a pattern.
    * Uses SCAN for efficient iteration.
    */
-  async keys(pattern?: string): Promise<string[]> {
-    const searchPattern = this.prefixKey(pattern ?? '*');
-    const result: string[] = [];
+  async keys(pattern = '*'): Promise<string[]> {
+    const result = new Set<string>();
+    for (const key of await this.scan(this.prefixKey(pattern))) {
+      result.add(callerKeyOf(this.keyPrefix, pattern, key));
+    }
+    const doubledPattern = doubledPrefixKey(this.keyPrefix, pattern);
+    if (doubledPattern) {
+      for (const key of await this.scan(doubledPattern)) result.add(key.slice(this.keyPrefix.length));
+    }
+    return [...result];
+  }
 
+  private async scan(match: string): Promise<string[]> {
+    const found: string[] = [];
     try {
       // Try using scan if available (Upstash Redis API)
       let cursor: string | number = 0;
       do {
-        const [nextCursor, keys] = await this.kv.scan(cursor, {
-          match: searchPattern,
-          count: 100,
-        });
+        const [nextCursor, keys] = await this.kv.scan(cursor, { match, count: 100 });
         cursor = nextCursor;
-
-        // Strip prefix from keys
-        for (const key of keys) {
-          result.push(key.slice(this.keyPrefix.length));
-        }
+        found.push(...keys);
       } while (String(cursor) !== '0');
     } catch {
       // Fallback to keys command if scan not available
       try {
-        const keys = await this.kv.keys(searchPattern);
-        for (const key of keys) {
-          result.push(key.slice(this.keyPrefix.length));
-        }
+        found.push(...(await this.kv.keys(match)));
       } catch {
         // If keys also fails, return empty array
         console.warn('[RememberPlugin:VercelKV] keys() operation not supported');
       }
     }
+    return found;
+  }
 
-    return result;
+  /** Moves an entry from the key releases up to 1.9.1 wrote it under, keeping its TTL; its stored text, or null. */
+  private async takeDoubledPrefixValue(key: string): Promise<string | null> {
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
+    if (!doubledKey) return null;
+    const raw = await this.kv.get(doubledKey);
+    if (raw === null) return null;
+
+    const fullKey = this.prefixKey(key);
+    const ttlMs = await this.kv.pttl(doubledKey);
+    await this.kv.set(fullKey, raw, ttlMs > 0 ? { px: ttlMs, nx: true } : { nx: true });
+    await this.kv.del(doubledKey);
+    return (await this.kv.get(fullKey)) ?? raw;
+  }
+
+  /** Drops what releases up to 1.9.1 left under the doubled key, so it cannot come back once this key is gone. */
+  private async deleteDoubledPrefixKey(key: string): Promise<void> {
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
+    if (doubledKey) await this.kv.del(doubledKey);
   }
 
   /**

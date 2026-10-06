@@ -402,11 +402,15 @@ export class RememberAccessor {
     // same constant for every client, exactly as the storage key was.
     const needsSessionIdentity = scope === 'session' || scope === 'tool';
 
-    return getKeySourceForScope(scope, {
-      sessionId: needsSessionIdentity ? this.resolveSessionIdentity() : this.ctx.sessionId,
-      userId: this.userId,
-      toolName: scope === 'tool' ? this.toolName : undefined,
-    });
+    return getKeySourceForScope(
+      scope,
+      {
+        sessionId: needsSessionIdentity ? this.resolveSessionIdentity() : this.ctx.sessionId,
+        userId: this.userId,
+        toolName: scope === 'tool' ? this.toolName : undefined,
+      },
+      this.config.encryption?.customKey,
+    );
   }
 
   /** The entry stored under `storageKey`, if readable and unexpired; an expired one is deleted. */
