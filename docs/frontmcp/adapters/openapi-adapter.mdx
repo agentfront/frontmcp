@@ -21,7 +21,9 @@ The OpenAPI Adapter automatically converts OpenAPI 3.x specifications into fully
 - **Production-ready** — Comprehensive security validation and error handling
 - **Arguments checked against the spec** — a call whose arguments the operation's schema refuses (a value outside an
   `enum`, a missing required field) fails with `Invalid arguments for tool '<name>': <field>: <problem>` before any
-  request is sent; up to 1.9.1 such arguments were sent as given
+  request is sent; up to 1.9.1 such arguments were sent as given. `format` is not enforced (it is an annotation in
+  JSON Schema 2020-12), a `oneOf` is accepted when any branch matches, and a credential argument
+  (`securitySchemesInInput`) may be left out when the server supplies the credential
 - **Flexible** — Filter operations, customize schemas, and inject custom logic
 
 ## Installation
