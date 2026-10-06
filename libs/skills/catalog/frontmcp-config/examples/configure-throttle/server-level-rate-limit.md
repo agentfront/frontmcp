@@ -60,7 +60,7 @@ class ApiApp {}
     ipFilter: {
       allowList: ['10.0.0.0/8'],
       defaultAction: 'deny',
-      // trustProxy is NOT read: use the FRONTMCP_TRUST_PROXY environment variable.
+      // trustProxy: true reads X-Forwarded-For behind a trusted proxy, like FRONTMCP_TRUST_PROXY.
     },
   },
 })

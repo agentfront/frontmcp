@@ -147,6 +147,8 @@ A `'session'` bucket is only ever a session the server verified: a `mcp-session-
 
 `throttle.global` partitioned by `'ip'` or `'global'` is checked before authentication. Partitioned by `'session'`, `'userId'` or a function, it is checked right after authentication, on the verified identity.
 
+The OAuth endpoints (`/oauth/*`), the discovery documents (`/.well-known/*`) and the skills HTTP endpoints count against `throttle.global` too, in the `acquireQuota` stage each of their flows runs after `checkIpFilter`, when it is partitioned by `'ip'` or `'global'` (they run before any caller is verified). Over the limit they answer 429 with `Retry-After`. Up to 1.9.1 they were not counted.
+
 **Custom partition key example:**
 
 ```typescript
@@ -327,9 +329,8 @@ entries but only your own proxies append to it. A chain shorter than the configu
 ignored in favour of the socket peer.
 
 <Note>
-  `ipFilter.trustProxy` and `ipFilter.trustedProxyDepth` exist in the schema but are not read:
-  client-IP extraction happens in the SDK context layer, before guard configuration is
-  reachable, and setting either logs a startup warning. Use the environment variables above.
+  `ipFilter.trustProxy: true` (with `ipFilter.trustedProxyDepth`) does the same as the environment
+  variables above; `false` leaves the decision to them. Up to 1.9.1 both options were ignored.
 </Note>
 
 <Warning>
@@ -560,13 +561,13 @@ The agent flow follows the same stage ordering: `acquireQuota` → `acquireSemap
 
 ### `IpFilterConfig`
 
-| Field               | Type                | Default   | Description                                                        |
-| ------------------- | ------------------- | --------- | ------------------------------------------------------------------ |
-| `allowList`         | `string[]`          | `[]`      | IPs or CIDR ranges to always allow                                 |
-| `denyList`          | `string[]`          | `[]`      | IPs or CIDR ranges to always block                                 |
-| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list, or no client IP is known      |
-| `trustProxy`        | `boolean`           | `false`   | **Not read** (startup warning); set `FRONTMCP_TRUST_PROXY`         |
-| `trustedProxyDepth` | `number`            | `1`       | **Not read** (startup warning); set `FRONTMCP_TRUSTED_PROXY_DEPTH` |
+| Field               | Type                | Default   | Description                                                                                                           |
+| ------------------- | ------------------- | --------- | --------------------------------------------------------------------------------------------------------------------- |
+| `allowList`         | `string[]`          | `[]`      | IPs or CIDR ranges to always allow                                                                                    |
+| `denyList`          | `string[]`          | `[]`      | IPs or CIDR ranges to always block                                                                                    |
+| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list, or no client IP is known                                                         |
+| `trustProxy`        | `boolean`           | `false`   | `true` reads the client IP from `X-Forwarded-For`, as `FRONTMCP_TRUST_PROXY` does; `false` leaves it to that variable |
+| `trustedProxyDepth` | `number`            | `1`       | Proxies that append to `X-Forwarded-For`; read with `trustProxy: true` (else `FRONTMCP_TRUSTED_PROXY_DEPTH`)          |
 
 ### `GuardConfig` (App-Level)
 

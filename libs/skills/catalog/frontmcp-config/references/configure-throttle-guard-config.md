@@ -62,8 +62,8 @@ interface IpFilterConfig {
   allowList?: string[]; // IP addresses or CIDR ranges
   denyList?: string[];
   defaultAction?: 'allow' | 'deny'; // default: 'allow'; also applies when no client IP is known
-  trustProxy?: boolean; // NOT read (startup warning) -- set FRONTMCP_TRUST_PROXY
-  trustedProxyDepth?: number; // NOT read (startup warning) -- set FRONTMCP_TRUSTED_PROXY_DEPTH
+  trustProxy?: boolean; // true reads X-Forwarded-For (like FRONTMCP_TRUST_PROXY); false defers to it
+  trustedProxyDepth?: number; // proxies appending to X-Forwarded-For, read with trustProxy: true
 }
 ```
 

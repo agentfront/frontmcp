@@ -1,0 +1,49 @@
+/**
+ * `throttle.global` counts the OAuth and discovery endpoints (#766): each of their flows runs an
+ * `acquireQuota` stage after `checkIpFilter`, so a client cannot hammer `/oauth/*` or
+ * `/.well-known/*` past the server's limit.
+ */
+import 'reflect-metadata';
+
+import { createTestFetchServer, type TestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
+import { disposeServers } from '../../__test-utils__/helpers/oauth-flow.helpers';
+import { App, Tool, ToolContext } from '../../common';
+
+@Tool({ name: 'ping', inputSchema: {} })
+class PingTool extends ToolContext {
+  async execute() {
+    return 'pong';
+  }
+}
+
+@App({ id: 'desk', name: 'Desk', tools: [PingTool] })
+class DeskApp {}
+
+const ORIGIN = 'https://desk.example.com';
+const servers: TestFetchServer[] = [];
+
+afterAll(async () => {
+  await disposeServers(servers);
+});
+
+describe('throttle.global on OAuth and discovery routes', () => {
+  it.each([
+    '/.well-known/oauth-authorization-server',
+    '/.well-known/oauth-protected-resource',
+    '/.well-known/jwks.json',
+  ])('answers %s 429 once the limit is reached', async (path) => {
+    const server = await createTestFetchServer({
+      info: { name: 'desk', version: '1.0.0' },
+      apps: [DeskApp],
+      throttle: { enabled: true, global: { maxRequests: 1, windowMs: 60_000, partitionBy: 'global' } },
+    });
+    servers.push(server);
+
+    const first = await server.handler(new Request(`${ORIGIN}${path}`));
+    const second = await server.handler(new Request(`${ORIGIN}${path}`));
+
+    expect(first.status).not.toBe(429);
+    expect(second.status).toBe(429);
+    expect(second.headers.get('retry-after')).toBeTruthy();
+  });
+});

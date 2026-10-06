@@ -6,6 +6,7 @@ import { z } from '@frontmcp/lazy-zod';
 
 import {
   computeResource,
+  enforceGlobalRateLimit,
   enforceIpFilter,
   Flow,
   FlowBase,
@@ -44,7 +45,7 @@ const outputSchema = HttpJsonSchema.extend({
 });
 
 const plan = {
-  pre: ['checkIpFilter', 'parseInput'],
+  pre: ['checkIpFilter', 'acquireQuota', 'parseInput'],
   execute: ['collectData'],
   post: ['validateOutput'],
 } as const satisfies FlowPlan<string>;
@@ -82,6 +83,11 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
   @Stage('checkIpFilter')
   async checkIpFilter() {
     enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
+
+  @Stage('acquireQuota')
+  async acquireQuota() {
+    await enforceGlobalRateLimit(this.scope, this.tryGetContext());
   }
 
   @Stage('parseInput')
