@@ -79,6 +79,7 @@ export {
   RedisStorageAdapter,
   createRedisClient,
   VercelKvStorageAdapter,
+  createVercelKvClient,
   UpstashStorageAdapter,
   FileSystemStorageAdapter,
   LocalStorageAdapter,
@@ -86,6 +87,7 @@ export {
 } from './adapters';
 export type {
   CreateRedisClientOptions,
+  VercelKvConnection,
   FileSystemAdapterOptions,
   LocalStorageAdapterOptions,
   IndexedDBAdapterOptions,

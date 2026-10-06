@@ -310,7 +310,7 @@ export class RedisSkillHttpCache implements SkillHttpCache {
  * Minimal Redis client interface used by the cache.
  * Compatible with ioredis and @vercel/kv.
  */
-interface RedisClient {
+export interface RedisClient {
   get(key: string): Promise<string | null>;
   setex(key: string, seconds: number, value: string): Promise<unknown>;
   del(...keys: string[]): Promise<unknown>;

@@ -224,6 +224,8 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 
 `init(options)` spreads your options into the plugin's metadata, so an option whose name matches a list-valued metadata key (`tools`, `resources`, `prompts`, `skills`, `adapters`, `plugins`, `exports`, `contextExtensions`, `enforcesMetadata`) used to be read as that list. `RememberPlugin.init({ tools: { enabled: true } })` crashed at startup for that reason. A value that is not an array under one of those keys is now an option and is left out of the metadata; an array still contributes, as before.
 
+No other option reaches the metadata. Options named `name`, `id`, `description` or `scope` stay the plugin's own and reach the plugin instance, so `MyPlugin.init({ name: 'eu', scope: 'tenant' })` keeps the name and install scope from `@Plugin`. Up to 1.9.1 they renamed the plugin (and changed its owner id) or set its install scope. Set `name` and `scope` in `@Plugin`.
+
 `providers` follows the same rule. An array under it adds providers to the plugin, as before; any other value is the plugin's own option and reaches the plugin instance, so `MyPlugin.init({ providers: { region: 'eu' } })` no longer throws `(extraProviders ?? []) is not iterable` when the module loads. When the plugin's options type declares `providers`, `init()` types the key as that option.
 
 A plugin that registers tools only when an option asks for it declares `static dynamicTools(options)`, the counterpart of `dynamicProviders`. Its tools are added to the ones from `@Plugin({ tools })` and from an array `tools` option:

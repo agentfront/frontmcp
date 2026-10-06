@@ -7,7 +7,14 @@ import {
   type TimeoutConfig,
 } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
-import { AudioContentSchema, EmbeddedResourceSchema, ImageContentSchema, ResourceLinkSchema } from '@frontmcp/protocol';
+import {
+  AudioContentSchema,
+  EmbeddedResourceSchema,
+  IconSchema,
+  ImageContentSchema,
+  ResourceLinkSchema,
+  type Icon,
+} from '@frontmcp/protocol';
 import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils';
 
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
@@ -316,6 +323,17 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
   annotations?: ToolAnnotations;
 
   /**
+   * Icons `tools/list` shows for the tool (MCP 2025-11-25).
+   */
+  icons?: Icon[];
+
+  /**
+   * Free-form metadata forwarded as the tool's `_meta` in `tools/list`. Reserve reverse-DNS prefixed
+   * keys per the MCP spec. A tool's `ui` configuration adds its own `ui` keys on top.
+   */
+  _meta?: Record<string, unknown>;
+
+  /**
    * Visibility of this tool to external MCP clients vs internal SDK callers.
    *
    * - `'public'` (default): listed in `tools/list` and callable via `tools/call`.
@@ -531,6 +549,8 @@ export const frontMcpToolMetadataSchema = z
     outputSchema: toolOutputSchema.optional(),
     tags: z.array(z.string().min(1)).optional(),
     annotations: mcpToolAnnotationsSchema.optional(),
+    icons: z.array(IconSchema).optional(),
+    _meta: z.record(z.string(), z.unknown()).optional(),
     visibility: z.enum(['public', 'hidden', 'internal']).optional(),
     hideFromDiscovery: z.boolean().optional().default(false),
     examples: z.array(toolExampleSchema).optional(),

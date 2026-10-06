@@ -24,10 +24,11 @@ import { getSelfDependencyRange, getSelfVersion } from '../../core/version';
 const REQUIRED_PACKAGES = ['@frontmcp/sdk', 'reflect-metadata'] as const;
 
 /**
- * The SDK's optional peers (`peerDependenciesMeta` in libs/sdk/package.json — a
- * unit test keeps the two in sync). Installed only when the project declares them.
+ * The optional peers of `@frontmcp/sdk` and `@frontmcp/utils` (`peerDependenciesMeta` in
+ * their package.json — a unit test keeps them in sync). Both packages load these lazily,
+ * so each is installed when the project declares it.
  */
-export const OPTIONAL_SDK_PEERS = [
+export const OPTIONAL_RUNTIME_PEERS = [
   '@anthropic-ai/sdk',
   '@enclave-vm/core',
   '@frontmcp/observability',
@@ -35,6 +36,7 @@ export const OPTIONAL_SDK_PEERS = [
   '@opentelemetry/api',
   '@opentelemetry/sdk-trace-base',
   '@vercel/kv',
+  'ioredis',
   'openai',
 ] as const;
 
@@ -103,7 +105,7 @@ export function resolveRuntimePackageSpecs(packageDir: string): RuntimePackageSp
     const range = ranges[name];
     return `${name}@${range ? normalizeRange(name, range, packageDir) : defaultRange(name)}`;
   });
-  const declaredPeers = OPTIONAL_SDK_PEERS.filter((name) => ranges[name]);
+  const declaredPeers = OPTIONAL_RUNTIME_PEERS.filter((name) => ranges[name]);
   const specOf = (name: string): string => `${name}@${normalizeRange(name, ranges[name], packageDir)}`;
   return {
     required: [...required, ...declaredPeers.filter((name) => !optional.has(name)).map(specOf)],

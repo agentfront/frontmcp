@@ -418,6 +418,8 @@ The reverse does not work: an option-derived provider cannot inject a provider t
 
 `init(options)` spreads the options into the plugin's metadata, so an option named like a list-valued metadata key (`tools`, `resources`, `prompts`, `skills`, `adapters`, `plugins`, `exports`, `contextExtensions`, `enforcesMetadata`) used to be read as that list: `RememberPlugin.init({ tools: { enabled: true } })` crashed at startup. A non-array value under one of those keys is now an option and stays out of the metadata; an array still contributes.
 
+No other option reaches the metadata: `name`, `id`, `description` and `scope` options stay the plugin's own and reach the instance, so `MyPlugin.init({ name: 'eu', scope: 'tenant' })` keeps the `@Plugin` name and install scope (up to 1.9.1 they renamed the plugin or set its scope). Set `name` and `scope` in `@Plugin`.
+
 `providers` follows the same rule: an array adds providers to the plugin; any other value (`MyPlugin.init({ providers: { region: 'eu' } })`) is the plugin's own option and reaches the instance instead of throwing `(extraProviders ?? []) is not iterable` at module load. When the options type declares `providers`, `init()` types the key as that option.
 
 To register tools only when an option asks for it, declare `static dynamicTools(options)`, the counterpart of `dynamicProviders`. Its tools are added to those from `@Plugin({ tools })` and from an array `tools` option:

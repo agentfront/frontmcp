@@ -6,10 +6,15 @@
  * @module skill/cache/skill-http-cache.factory
  */
 
-import { attachRedisErrorListener, getEnv, StorageConfigError } from '@frontmcp/utils';
+import { attachRedisErrorListener, createVercelKvClient } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../../common/index.js';
-import { MemorySkillHttpCache, RedisSkillHttpCache, type SkillHttpCache } from './skill-http-cache.js';
+import {
+  MemorySkillHttpCache,
+  RedisSkillHttpCache,
+  type RedisClient,
+  type SkillHttpCache,
+} from './skill-http-cache.js';
 
 /**
  * Redis configuration options for the cache.
@@ -27,6 +32,10 @@ export interface SkillHttpCacheRedisOptions {
   password?: string;
   /** Redis database number */
   db?: number;
+  /** Vercel KV REST URL (`vercel-kv` provider); defaults to `KV_REST_API_URL` */
+  url?: string;
+  /** Vercel KV REST token (`vercel-kv` provider); defaults to `KV_REST_API_TOKEN` */
+  token?: string;
 }
 
 /**
@@ -140,14 +149,7 @@ async function createRedisCache(
   const provider = redis.provider;
 
   if (provider === 'vercel-kv' || provider === '@vercel/kv') {
-    const url = getEnv('KV_REST_API_URL');
-    const token = getEnv('KV_REST_API_TOKEN');
-    if (!url || !token) {
-      throw new StorageConfigError('vercel-kv', 'KV_REST_API_URL and KV_REST_API_TOKEN must be set.');
-    }
-    // Lazy-load Vercel KV - use require for CommonJS compatibility
-    const { createClient } = require('@vercel/kv');
-    const client = createClient({ url, token, automaticDeserialization: false });
+    const client = await createVercelKvClient<RedisClient>({ url: redis.url, token: redis.token });
     return new RedisSkillHttpCache({
       getClient: async () => client,
       keyPrefix,
