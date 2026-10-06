@@ -162,6 +162,24 @@ describe('ensureUiPackage', () => {
       expect(readJson(tree, 'ui/shells/project.json').targets.test).toBeUndefined();
     });
 
+    it('leaves the test target to @nx/jest/plugin registered without options', () => {
+      const nxJson = readNxJson(tree) ?? {};
+      updateNxJson(tree, { ...nxJson, plugins: ['@nx/jest/plugin'] });
+
+      ensureUiPackage(tree, { packageRoot: 'ui/shells', projectName: 'ui-shells', kind: 'shell' });
+
+      expect(readJson(tree, 'ui/shells/project.json').targets.test).toBeUndefined();
+    });
+
+    it('adds a test target when @nx/jest/plugin infers its target under another name', () => {
+      const nxJson = readNxJson(tree) ?? {};
+      updateNxJson(tree, { ...nxJson, plugins: [{ plugin: '@nx/jest/plugin', options: { targetName: 'unit' } }] });
+
+      ensureUiPackage(tree, { packageRoot: 'ui/shells', projectName: 'ui-shells', kind: 'shell' });
+
+      expect(readJson(tree, 'ui/shells/project.json').targets.test).toBeDefined();
+    });
+
     it("installs @nx/esbuild at the workspace's Nx version", () => {
       tree.write('package.json', JSON.stringify({ devDependencies: { nx: '23.2.0' } }));
 

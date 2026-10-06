@@ -42,9 +42,14 @@ const REACT_DEV_DEPENDENCIES: Record<string, string> = {
   'jest-environment-jsdom': '^30.0.2',
 };
 
-function hasJestPlugin(tree: Tree): boolean {
+function jestPluginInfersTestTarget(tree: Tree): boolean {
   const plugins = readNxJson(tree)?.plugins ?? [];
-  return plugins.some((entry) => (typeof entry === 'string' ? entry : entry.plugin) === '@nx/jest/plugin');
+  return plugins.some((entry) => {
+    if (typeof entry === 'string') return entry === '@nx/jest/plugin';
+    if (entry.plugin !== '@nx/jest/plugin') return false;
+    const targetName = (entry.options as { targetName?: unknown } | undefined)?.targetName;
+    return targetName === undefined || targetName === 'test';
+  });
 }
 
 /** The Nx version the workspace runs, so `@nx/*` packages added here match it. */
@@ -129,7 +134,7 @@ export function ensureUiPackage(tree: Tree, options: EnsureUiPackageOptions): Ge
       targets: {
         ...buildTargets(packageRoot),
         // A workspace without @nx/jest/plugin (e.g. `create-nx-workspace --preset=ts`) infers no test target.
-        ...(!hasJestPlugin(tree) && { test: testTarget(packageRoot) }),
+        ...(!jestPluginInfersTestTarget(tree) && { test: testTarget(packageRoot) }),
       },
     });
     writeJson(tree, `${packageRoot}/tsconfig.json`, {
