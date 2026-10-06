@@ -201,6 +201,8 @@ class Server {}
 
 A successful registration responds `201 Created`. This `dcr` block governs the **local Authorization Server only** — it is unrelated to the upstream-provider `providerConfig.dcrEnabled` / `registrationEndpoint` fields (which register THIS server against an upstream IdP).
 
+**CIMD** (`cimd`): `cache.type: 'redis'` with `cache.redis` (`{ url }` or `{ host, port, … }`) caches client metadata documents in Redis, connected at startup (it was always in memory up to 1.9.2). With `cimd.enabled: false`, a CIMD URL client id that isn't registered is refused (`CimdDisabledError`, 400 page) even with `requireRegisteredClients: false`.
+
 ### Custom login + verification (`login` / `authenticate`)
 
 ```typescript

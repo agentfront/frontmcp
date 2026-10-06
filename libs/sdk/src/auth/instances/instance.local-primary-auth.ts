@@ -1451,8 +1451,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       provide: JwksService,
     });
 
-    // Register CIMD service if initialized
+    // Register CIMD service if initialized; its cache (Redis with `cimd.cache.type: 'redis'`) is created now
     if (this.cimdService) {
+      if (this.cimdService.enabled) await this.cimdService.initialize();
       this.providers.injectProvider({
         value: this.cimdService,
         metadata: {

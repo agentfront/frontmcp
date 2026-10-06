@@ -7,7 +7,7 @@
  */
 import { isRedirectResponse } from '@frontmcp/utils';
 
-import { InMemoryCimdCache, type CimdCacheBackend } from './cimd.cache';
+import { createCimdCache, type CimdCacheBackend } from './cimd.cache';
 import {
   CimdClientIdMismatchError,
   CimdFetchError,
@@ -43,7 +43,7 @@ export class CimdService {
   private readonly cacheConfig: CimdCacheConfig;
   private readonly securityConfig: CimdSecurityConfig;
   private readonly networkConfig: CimdNetworkConfig;
-  private readonly cache: CimdCacheBackend;
+  private cacheBackend?: Promise<CimdCacheBackend>;
   private readonly logger: CimdLogger;
 
   /**
@@ -68,9 +68,6 @@ export class CimdService {
     this.securityConfig = cimdSecurityConfigSchema.parse(this.config.security ?? {});
     this.networkConfig = cimdNetworkConfigSchema.parse(this.config.network ?? {});
 
-    // Initialize cache
-    this.cache = new InMemoryCimdCache(this.cacheConfig);
-
     this.logger.debug('CimdService initialized', {
       enabled: this.config.enabled,
       cacheDefaultTtlMs: this.cacheConfig.defaultTtlMs,
@@ -85,6 +82,28 @@ export class CimdService {
           'This should NEVER be enabled in production!',
       );
     }
+  }
+
+  /**
+   * Create the cache now (connecting to Redis with `cache.type: 'redis'`), so a misconfigured or
+   * unreachable cache fails at startup rather than on the first CIMD client.
+   */
+  async initialize(): Promise<void> {
+    await this.cache();
+  }
+
+  /**
+   * The cache `cache.type` selects, created once through the `createCimdCache` factory. A failed
+   * creation is retried on the next use.
+   */
+  private cache(): Promise<CimdCacheBackend> {
+    if (!this.cacheBackend) {
+      this.cacheBackend = createCimdCache(this.cacheConfig).catch((error: unknown) => {
+        this.cacheBackend = undefined;
+        throw error;
+      });
+    }
+    return this.cacheBackend;
   }
 
   /**
@@ -119,7 +138,8 @@ export class CimdService {
     validateClientIdUrl(clientId, this.securityConfig);
 
     // Check cache first
-    const cached = await this.cache.get(clientId);
+    const cache = await this.cache();
+    const cached = await cache.get(clientId);
     if (cached) {
       this.logger.debug(`Cache hit for CIMD client: ${clientId}`);
       return {
@@ -145,8 +165,8 @@ export class CimdService {
     }
 
     // Cache the result
-    await this.cache.set(clientId, document, headers);
-    const entry = await this.cache.get(clientId);
+    await cache.set(clientId, document, headers);
+    const entry = await cache.get(clientId);
 
     return {
       isCimdClient: true,
@@ -181,11 +201,12 @@ export class CimdService {
    * @param clientId - Optional client_id to clear; clears all if not provided
    */
   async clearCache(clientId?: string): Promise<void> {
+    const cache = await this.cache();
     if (clientId) {
-      await this.cache.delete(clientId);
+      await cache.delete(clientId);
       this.logger.debug(`Cache cleared for: ${clientId}`);
     } else {
-      await this.cache.clear();
+      await cache.clear();
       this.logger.debug('Cache cleared');
     }
   }
@@ -194,8 +215,9 @@ export class CimdService {
    * Get cache statistics.
    */
   async getCacheStats(): Promise<{ size: number }> {
+    const cache = await this.cache();
     return {
-      size: await this.cache.size(),
+      size: await cache.size(),
     };
   }
 
@@ -210,7 +232,8 @@ export class CimdService {
 
     try {
       // Check for conditional request headers
-      const conditionalHeaders = await this.cache.getConditionalHeaders(clientId);
+      const cache = await this.cache();
+      const conditionalHeaders = await cache.getConditionalHeaders(clientId);
       const originalOrigin = new URL(clientId).origin;
       const maxRedirects = this.networkConfig.maxRedirects;
 
@@ -247,9 +270,9 @@ export class CimdService {
 
         // Handle 304 Not Modified
         if (response.status === 304) {
-          const staleEntry = await this.cache.getStale(clientId);
+          const staleEntry = await cache.getStale(clientId);
           if (staleEntry) {
-            await this.cache.revalidate(clientId, response.headers);
+            await cache.revalidate(clientId, response.headers);
             this.logger.debug(`CIMD document not modified: ${clientId}`);
             return {
               document: staleEntry.document,
