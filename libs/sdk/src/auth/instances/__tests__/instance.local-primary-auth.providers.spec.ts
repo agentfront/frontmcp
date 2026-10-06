@@ -32,7 +32,7 @@ function createProviders() {
 }
 
 function createScope() {
-  return { fullPath: '' } as never;
+  return { fullPath: '', onDispose: jest.fn() } as never;
 }
 
 async function makeAuth(options: Record<string, unknown>) {

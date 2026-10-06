@@ -1,4 +1,4 @@
-import { fileExists, getEnv, isEdgeRuntime, randomUUID, unlink } from '@frontmcp/utils';
+import { getEnv, isEdgeRuntime, randomUUID, stat, unlink } from '@frontmcp/utils';
 
 import {
   FrontMcpLogger,
@@ -614,18 +614,17 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
     await frontMcp.start();
     frontMcp.log?.info(`MCP server listening on unix://${socketPath}`);
+    const ownSocket = await stat(socketPath).catch(() => undefined);
 
     // The graceful shutdown of the TCP server (#712), then the socket file if the server left it behind.
     const shutdown = async () => {
       try {
         await frontMcp.shutdown();
       } finally {
-        try {
-          if (await fileExists(socketPath)) {
-            await unlink(socketPath);
-          }
-        } catch {
-          // Ignore cleanup errors
+        // Only this server's own file: a replacement may already be listening at the same path.
+        const currentSocket = await stat(socketPath).catch(() => undefined);
+        if (ownSocket && currentSocket?.ino === ownSocket.ino && currentSocket.dev === ownSocket.dev) {
+          await unlink(socketPath).catch(() => undefined);
         }
       }
     };

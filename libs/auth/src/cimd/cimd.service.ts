@@ -106,6 +106,15 @@ export class CimdService {
     return this.cacheBackend;
   }
 
+  /** Close the cache's connection (Redis with `cache.type: 'redis'`), if one was created. */
+  async dispose(): Promise<void> {
+    const backend = this.cacheBackend;
+    this.cacheBackend = undefined;
+    if (!backend) return;
+    const createdBackend = await backend.catch(() => undefined);
+    await createdBackend?.close?.();
+  }
+
   /**
    * Check if a client_id is a CIMD URL.
    *

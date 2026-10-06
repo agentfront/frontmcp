@@ -8,10 +8,15 @@ import { CimdService } from '../cimd.service';
  */
 const mockRedisConnect = jest.fn().mockResolvedValue(undefined);
 const mockRedisKeys = jest.fn().mockResolvedValue(['cimd:a', 'cimd:b']);
+const mockRedisDisconnect = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('@frontmcp/utils', () => ({
   ...jest.requireActual('@frontmcp/utils'),
-  RedisStorageAdapter: jest.fn().mockImplementation(() => ({ connect: mockRedisConnect, keys: mockRedisKeys })),
+  RedisStorageAdapter: jest.fn().mockImplementation(() => ({
+    connect: mockRedisConnect,
+    keys: mockRedisKeys,
+    disconnect: mockRedisDisconnect,
+  })),
 }));
 
 describe('CimdService cache', () => {
@@ -30,6 +35,17 @@ describe('CimdService cache', () => {
     expect(mockRedisConnect).toHaveBeenCalledTimes(1);
     expect(await service.getCacheStats()).toEqual({ size: 2 });
     expect(mockRedisConnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the Redis connection on dispose', async () => {
+    const service = new CimdService(undefined, {
+      cache: { type: 'redis', redis: { url: 'redis://cache.example.com:6379', keyPrefix: 'cimd:' } },
+    });
+    await service.initialize();
+
+    await service.dispose();
+
+    expect(mockRedisDisconnect).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the in-memory cache by default', async () => {
