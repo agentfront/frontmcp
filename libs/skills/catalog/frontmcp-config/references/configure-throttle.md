@@ -113,7 +113,7 @@ class ExpensiveQueryTool extends ToolContext {
 }
 ```
 
-A tool's own `rateLimit` and `concurrency` are enforced without a `throttle` option, as are those of an agent, of the tools declared inside an `@Agent` and of its nested agents. `throttle.enabled: false` turns every guard off, including these.
+A tool's own `rateLimit` and `concurrency` are enforced without a `throttle` option, as are those of an agent, of the tools declared inside an `@Agent` and of its nested agents. `throttle.enabled: false` turns every guard off, including these, but not the auth option `publicAccess.rateLimit`, which still counts anonymous calls on `throttle.storage`.
 
 ## `ipFilter` is enforced on every HTTP route
 

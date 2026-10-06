@@ -126,6 +126,22 @@ describe('publicAccess on a public server', () => {
     expect(JSON.stringify(third).toLowerCase()).toContain('rate limit');
   });
 
+  it('counts anonymous calls against rateLimit when throttle.enabled is false', async () => {
+    const server = await createTestFetchServer({
+      info: { name: 'desk', version: '1.0.0' },
+      apps: [DeskApp],
+      auth: { mode: 'public', publicAccess: { rateLimit: 1 } },
+      throttle: { enabled: false },
+    });
+    servers.push(server);
+    const send = await session(server);
+
+    await send('tools/call', { name: 'search', arguments: {} });
+    const second = await send('tools/call', { name: 'search', arguments: {} });
+
+    expect(JSON.stringify(second).toLowerCase()).toContain('rate limit');
+  });
+
   it('gives anonymous callers the anonymousScopes', async () => {
     const send = await session(await serverWith({ mode: 'public', anonymousScopes: ['tickets:read'] }));
 
