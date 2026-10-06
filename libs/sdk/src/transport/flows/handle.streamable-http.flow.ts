@@ -789,6 +789,10 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       );
     }
 
+    const { user, scopes, claims } = request[ServerRequestTokens.auth] as Authorization & {
+      scopes?: string[];
+      claims?: Record<string, unknown>;
+    };
     const handler = createExtAppsMessageHandler({
       context: {
         sessionId: session.id,
@@ -801,10 +805,15 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
           const result = await this.scope.runFlow('tools:call-tool', {
             request: { method: 'tools/call', params: { name, arguments: args } },
             ctx: {
+              // The caller the widget's session belongs to, as the transport adapter builds it for `tools/call`
               authInfo: {
                 sessionId: session.id,
                 sessionIdPayload: session.payload,
                 token,
+                user,
+                scopes: Array.isArray(scopes) ? [...scopes] : [],
+                ...(claims ? { claims: structuredClone(claims) } : {}),
+                clientId: user?.sub ?? '',
               },
               surface: mcpRequestSurface(this.scope),
               _skipUI: true,
