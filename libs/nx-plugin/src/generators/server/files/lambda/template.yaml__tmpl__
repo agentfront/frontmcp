@@ -6,7 +6,7 @@ Parameters:
   McpSessionSecret:
     Type: String
     NoEcho: true
-    Description: MCP_SESSION_SECRET for session-ID encryption, required in production (openssl rand -hex 32)
+    Description: MCP_SESSION_SECRET for session-ID encryption, required in production. Generate it once (openssl rand -hex 32) and pass the same value on every deploy; a new value ends every open session
 
 Globals:
   Function:

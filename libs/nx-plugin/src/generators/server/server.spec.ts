@@ -48,7 +48,7 @@ describe('server generator', () => {
       expect(dockerfile).not.toContain('dist/main.js');
       expect(dockerfile).toContain('ENV FRONTMCP_BIND_ADDRESS=all');
       expect(dockerfile).toMatch(
-        /HEALTHCHECK [^\n]+\\\n\s+CMD node -e "fetch\('http:\/\/127\.0\.0\.1:' [^\n]+'\/healthz'\)/,
+        /HEALTHCHECK [^\n]+\\\n\s+CMD node -e "fetch\('http:\/\/127\.0\.0\.1:' [^\n]+'\/health'\)/,
       );
     });
 

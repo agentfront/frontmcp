@@ -7,7 +7,7 @@ import 'reflect-metadata';
 
 import { EventEmitter } from 'node:events';
 import * as http from 'node:http';
-import type * as net from 'node:net';
+import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -209,6 +209,35 @@ describe('FrontMcpInstance.runUnixSocket() shutdown', () => {
       shutdown.mockRestore();
       exit.mockRestore();
       log.mockRestore();
+    }
+  });
+
+  it('leaves the socket of a replacement that binds the same path while it shuts down', async () => {
+    const socketPath = path.join(os.tmpdir(), `fmcp-${randomUUID().slice(0, 8)}.sock`);
+    const replacement = net.createServer();
+    const realShutdown = FrontMcpInstance.prototype.shutdown;
+    const shutdown = jest.spyOn(FrontMcpInstance.prototype, 'shutdown').mockImplementation(async function (
+      this: FrontMcpInstance,
+    ) {
+      await realShutdown.call(this);
+      await new Promise<void>((resolve) => replacement.listen(socketPath, resolve));
+    });
+    const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const handle = await FrontMcpInstance.runUnixSocket({
+        info: { name: 'replaced-socket', version: '1.0.0' },
+        apps: [DemoApp],
+        logging: { level: LogLevel.Off },
+        socketPath,
+      });
+
+      await handle.close();
+
+      expect(await fileExists(socketPath)).toBe(true);
+    } finally {
+      shutdown.mockRestore();
+      log.mockRestore();
+      await new Promise<void>((resolve) => replacement.close(() => resolve()));
     }
   });
 });
