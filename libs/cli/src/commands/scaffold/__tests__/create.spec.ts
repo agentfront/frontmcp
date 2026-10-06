@@ -422,7 +422,9 @@ describe('runCreate', () => {
         expect(content).toContain("'127.0.0.1:6379:6379'");
         expect(content).not.toContain("- '6379:6379'");
         expect(content).toContain('NODE_ENV=${NODE_ENV:-production}');
-        expect(content).toContain('MCP_SESSION_SECRET=${MCP_SESSION_SECRET:-}');
+        // A missing secret fails at compose time instead of every initialize answering 500
+        expect(content).toContain('MCP_SESSION_SECRET=${MCP_SESSION_SECRET:?set MCP_SESSION_SECRET in ci/.env.docker');
+        expect(content).not.toContain('MCP_SESSION_SECRET:-');
         expect(content).toContain('redis-data:/data');
         expect(content).toContain('redis-cli');
 
@@ -491,7 +493,7 @@ describe('runCreate', () => {
         expect(content).toContain('REDIS_HOST=redis');
         expect(content).toContain('PORT=3000');
         expect(content).toContain('NODE_ENV=production');
-        expect(content).toContain('MCP_SESSION_SECRET=');
+        expect(content).toMatch(/^MCP_SESSION_SECRET=$/m);
         expect(content).toContain('REDIS_PORT=6379');
       });
     });
@@ -515,9 +517,16 @@ describe('runCreate', () => {
 
         const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'docker-scripts-app', 'package.json'), 'utf8'));
 
-        expect(pkgJson.scripts['docker:up']).toBe('docker compose -f ci/docker-compose.yml up');
-        expect(pkgJson.scripts['docker:down']).toBe('docker compose -f ci/docker-compose.yml down');
-        expect(pkgJson.scripts['docker:build']).toBe('docker compose -f ci/docker-compose.yml build');
+        // Compose reads only .env by itself; the secret lives in ci/.env.docker
+        expect(pkgJson.scripts['docker:up']).toBe(
+          'docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up',
+        );
+        expect(pkgJson.scripts['docker:down']).toBe(
+          'docker compose -f ci/docker-compose.yml --env-file ci/.env.docker down',
+        );
+        expect(pkgJson.scripts['docker:build']).toBe(
+          'docker compose -f ci/docker-compose.yml --env-file ci/.env.docker build',
+        );
       });
     });
 

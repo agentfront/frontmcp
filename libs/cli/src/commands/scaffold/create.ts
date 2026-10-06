@@ -414,7 +414,7 @@ Run tests with \`${cfg.run} test\` (which runs \`frontmcp test\` under the hood)
 
 ## Docker
 
-Docker Compose config is in \`ci/docker-compose.yml\` (includes Redis). Redis-only: \`docker compose -f ci/docker-compose.yml up redis -d\`.
+Docker Compose config is in \`ci/docker-compose.yml\` (includes Redis); run it with \`--env-file ci/.env.docker\` (the \`docker:*\` scripts do), after setting \`MCP_SESSION_SECRET\` there. Redis-only: \`docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up redis -d\`.
 
 ## Environment
 
@@ -576,8 +576,8 @@ services:
       - NODE_ENV=\${NODE_ENV:-production}
       - PORT=\${PORT:-3000}
       - FRONTMCP_BIND_ADDRESS=all
-      # Required in production (session-ID encryption): openssl rand -hex 32
-      - MCP_SESSION_SECRET=\${MCP_SESSION_SECRET:-}
+      # Required in production (session-ID encryption). Compose stops here when it is unset.
+      - MCP_SESSION_SECRET=\${MCP_SESSION_SECRET:?set MCP_SESSION_SECRET in ci/.env.docker (openssl rand -hex 32)}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
@@ -587,9 +587,11 @@ services:
 volumes:
   redis-data:
 
+# Run with the env file, which holds MCP_SESSION_SECRET (npm run docker:up does this):
+#   docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up
 # Selective rebuild:
-#   docker compose -f ci/docker-compose.yml up --build app   # rebuild only the app
-#   docker compose -f ci/docker-compose.yml up --build       # rebuild everything
+#   docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up --build app   # rebuild only the app
+#   docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up --build       # rebuild everything
 `;
 }
 
@@ -606,11 +608,13 @@ services:
       - NODE_ENV=\${NODE_ENV:-production}
       - PORT=\${PORT:-3000}
       - FRONTMCP_BIND_ADDRESS=all
-      # Required in production (session-ID encryption): openssl rand -hex 32
-      - MCP_SESSION_SECRET=\${MCP_SESSION_SECRET:-}
+      # Required in production (session-ID encryption). Compose stops here when it is unset.
+      - MCP_SESSION_SECRET=\${MCP_SESSION_SECRET:?set MCP_SESSION_SECRET in ci/.env.docker (openssl rand -hex 32)}
 
+# Run with the env file, which holds MCP_SESSION_SECRET (npm run docker:up does this):
+#   docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up
 # Selective rebuild:
-#   docker compose -f ci/docker-compose.yml up --build app   # rebuild only the app
+#   docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up --build app   # rebuild only the app
 `;
 }
 
@@ -624,6 +628,8 @@ NODE_ENV=production
 # The server binds 127.0.0.1 by default; a published container port needs every interface
 FRONTMCP_BIND_ADDRESS=all
 # Required with NODE_ENV=production (session-ID encryption): openssl rand -hex 32
+# Compose refuses to start until it is set. A value exported in your shell wins over this file,
+# so a real secret can stay out of version control.
 MCP_SESSION_SECRET=
 
 # Redis - use 'redis' (service name) as host inside Docker network
@@ -1002,8 +1008,8 @@ ${cfg.run} docker:build
 Redis is included in the Docker Compose setup. For local development without Docker:
 
 \`\`\`bash
-# Start only Redis
-docker compose -f ci/docker-compose.yml up redis -d
+# Start only Redis (set MCP_SESSION_SECRET in ci/.env.docker first; compose checks it for every service)
+docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up redis -d
 \`\`\`
 `;
     }
@@ -1913,9 +1919,9 @@ async function upsertPackageJsonWithTarget(
 
   // Add target-specific scripts
   if (deploymentTarget === 'node') {
-    baseScripts['docker:up'] = 'docker compose -f ci/docker-compose.yml up';
-    baseScripts['docker:down'] = 'docker compose -f ci/docker-compose.yml down';
-    baseScripts['docker:build'] = 'docker compose -f ci/docker-compose.yml build';
+    baseScripts['docker:up'] = 'docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up';
+    baseScripts['docker:down'] = 'docker compose -f ci/docker-compose.yml --env-file ci/.env.docker down';
+    baseScripts['docker:build'] = 'docker compose -f ci/docker-compose.yml --env-file ci/.env.docker build';
   }
 
   if (deploymentTarget === 'lambda') {
