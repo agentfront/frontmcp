@@ -2003,7 +2003,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   providerTokenRefresher(): TokenRefreshCallback | undefined {
     if (!isOrchestratedMode(this.options) || this.options.refresh?.enabled === false) return undefined;
     return (providerId, refreshToken) => {
-      const key = `${providerId}:${refreshToken}`;
+      const key = JSON.stringify([providerId, refreshToken]);
       const inFlight = this.providerRenewals.get(key);
       if (inFlight) return inFlight;
       const renewal = this.renewProviderToken(providerId, refreshToken).finally(() =>
