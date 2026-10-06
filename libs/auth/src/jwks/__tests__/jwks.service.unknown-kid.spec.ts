@@ -91,6 +91,17 @@ describe('JwksService — unknown kid', () => {
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 
+  it('refuses a token when the refetch fails and the cached keys are past the stale window', async () => {
+    const service = new JwksService();
+    await service.getJwksForProvider(PROVIDER);
+
+    jest.advanceTimersByTime(25 * 60 * 60 * 1000);
+    mockFetch.mockImplementation(async () => new Response('unavailable', { status: 503 }));
+    const result = await service.verifyTransparentToken(await sign(currentPrivateKey, 'desk-2'), [PROVIDER]);
+
+    expect(result.ok).toBe(false);
+  });
+
   it('never fetches for a provider with inline keys', async () => {
     const service = new JwksService();
 

@@ -32,7 +32,7 @@ function createProviders(metadata: Record<string, unknown> = { http: { port: 300
   } as never;
 }
 
-const scope = { fullPath: '/mcp', entryPath: '/mcp', routeBase: '' } as never;
+const scope = { fullPath: '/mcp', entryPath: '/mcp', routeBase: '', onDispose: jest.fn() } as never;
 
 async function makeAuth(
   options: Record<string, unknown>,

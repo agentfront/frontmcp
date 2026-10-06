@@ -432,16 +432,16 @@ export class JwksService {
    * Fetch a provider's keys again for a token whose `kid` the cached keys don't have (a key the
    * provider started using since), ahead of the cache's TTL. At most one refetch per provider per
    * {@link UNKNOWN_KID_REFETCH_COOLDOWN_MS}: tokens that arrive meanwhile wait for the one in flight or
-   * use its result, so a flood of tokens with made-up `kid`s can't hammer the provider.
+   * use its result, so a flood of tokens with made-up `kid`s can't hammer the provider. Only freshly
+   * fetched keys are returned: a failed refetch never revives cached keys past the stale window.
    */
-  private async refetchForUnknownKid(ref: ProviderVerifyRef): Promise<JSONWebKeySet | undefined> {
+  private refetchForUnknownKid(ref: ProviderVerifyRef): Promise<JSONWebKeySet | undefined> {
     let refetch = this.unknownKidRefetches.get(ref.id);
     if (!refetch || Date.now() - refetch.startedAt >= UNKNOWN_KID_REFETCH_COOLDOWN_MS) {
       refetch = { startedAt: Date.now(), done: this.fetchProviderJwks(ref) };
       this.unknownKidRefetches.set(ref.id, refetch);
     }
-    await refetch.done;
-    return this.providerJwks.get(ref.id)?.jwks;
+    return refetch.done;
   }
 
   /**
