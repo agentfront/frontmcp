@@ -36,6 +36,17 @@ class OkTool extends ToolContext {
 @App({ id: 'desk', name: 'Desk', tools: [CrashTool, OkTool], plugins: [FlowErrorProbe] })
 class DeskApp {}
 
+@Plugin({ name: 'zero-thrower' })
+class ZeroThrower {
+  @ToolHook.Will('execute')
+  throwZero() {
+    throw 0;
+  }
+}
+
+@App({ id: 'zero', name: 'Zero', tools: [OkTool], plugins: [ZeroThrower, FlowErrorProbe] })
+class ZeroApp {}
+
 describe('state.flowError', () => {
   it('is the error a failed call threw, and unset for a successful one', async () => {
     const server = await FrontMcpInstance.createDirect({ info: { name: 'desk', version: '1.0.0' }, apps: [DeskApp] });
@@ -47,5 +58,18 @@ describe('state.flowError', () => {
     expect(seen).toHaveLength(2);
     expect(String(seen[0])).toContain('tool crashed');
     expect(seen[1]).toBeUndefined();
+  });
+
+  it('is an Error even when a stage threw a falsy value', async () => {
+    seen.length = 0;
+    const zeroServer = await FrontMcpInstance.createDirect({
+      info: { name: 'zero', version: '1.0.0' },
+      apps: [ZeroApp],
+    });
+    await zeroServer.callTool('ok', {}).catch(() => undefined);
+    await zeroServer.dispose();
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBeInstanceOf(Error);
   });
 });

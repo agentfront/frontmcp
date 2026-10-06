@@ -486,9 +486,13 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       return { outcome: 'ok' };
     };
 
-    // The error and finalize stages, and their hooks, read why the flow failed from `state.flowError`
+    // The error and finalize stages read why the flow failed from `state.flowError`, always an Error
     const recordFailure = (control: unknown) => {
-      context.state.set('flowError' as never, control as never);
+      const flowError =
+        control instanceof Error
+          ? control
+          : new InternalMcpError(`Flow failed with a non-Error value: ${String(control)}`);
+      context.state.set('flowError' as never, flowError as never);
     };
 
     const runErrorStage = async () => {
