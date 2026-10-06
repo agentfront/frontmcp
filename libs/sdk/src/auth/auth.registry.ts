@@ -192,17 +192,37 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
       }
 
       // Throw with first error (most important)
-      const parentMode = isTransparentMode(this.parsedOptions) ? 'transparent' : this.parsedOptions.mode;
       throw new AuthConfigurationError(`Invalid auth configuration: ${validationErrors[0]}`, {
         errors: validationErrors,
-        suggestion:
-          `1. Change your parent auth mode from '${parentMode}' to 'local' or 'remote'\n` +
-          `2. Example:\n` +
-          `   auth: {\n` +
-          `     mode: 'local', // or 'remote' with your provider config\n` +
-          `   }`,
+        suggestion: this.suggestionFor(validationErrors[0]),
       });
     }
+  }
+
+  /**
+   * The fix for a detection error: each one has its own way out.
+   */
+  private suggestionFor(error: string): string {
+    if (error.includes("remoteAuth: { mode: 'forward' }")) {
+      return (
+        `Give the remote its own credentials, or run the server in transparent mode:\n` +
+        `   App.remote(url, { remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: '...' } } })`
+      );
+    }
+    if (error.startsWith('App-level auth is not enforced')) {
+      return (
+        `1. Serve the app on its own endpoint: @App({ standalone: true }) or @FrontMcp({ splitByApp: true })\n` +
+        `2. Or run the server in local or remote mode with incrementalAuth, which checks app grants per tool call`
+      );
+    }
+    const parentMode = isTransparentMode(this.parsedOptions) ? 'transparent' : this.parsedOptions.mode;
+    return (
+      `1. Change your parent auth mode from '${parentMode}' to 'local' or 'remote'\n` +
+      `2. Example:\n` +
+      `   auth: {\n` +
+      `     mode: 'local', // or 'remote' with your provider config\n` +
+      `   }`
+    );
   }
 
   /**
