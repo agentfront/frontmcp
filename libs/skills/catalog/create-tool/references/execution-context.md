@@ -9,22 +9,22 @@ description: What ToolContext provides at runtime — this.get, this.fetch, this
 
 ## Methods
 
-| Method                                                           | Purpose                                                                                                        |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `execute(input: In): Promise<Out>`                               | The method you implement                                                                                       |
-| `this.get(token)`                                                | Resolve a DI dependency. Throws `ProviderNotAvailableError` if not registered.                                 |
-| `this.tryGet(token)`                                             | Resolve a DI dependency. Returns `undefined` if not registered.                                                |
-| `this.fail(err)`                                                 | Abort execution, trigger the error flow. **Never returns.** Use for business-logic errors.                     |
-| `this.respond(value)`                                            | Early-return with a value. Validates against `outputSchema`. **Never returns** (throws `FlowControl.respond`). |
-| `this.mark(stage)`                                               | Set the active execution stage for debugging / tracing                                                         |
-| `this.fetch(input, init?)`                                       | HTTP fetch with context propagation (trace headers, etc.)                                                      |
-| `this.callTool(name, args?)`                                     | Call another tool through its `tools:call-tool` flow. `name` is its name, or `app:name` / `app.name`           |
-| `this.notify(message, level?)`                                   | Send a log-level notification to the client                                                                    |
-| `this.progress(progress, total?, message?)`                      | Send a progress notification. Returns `Promise<boolean>` (false when no progress token in request)             |
-| `this.notifyResourceUpdated(uri)`                                | Tell subscribed clients a resource's contents changed (`notifications/resources/updated`)                      |
-| `this.notifyResourceListChanged()`                               | Tell clients the resource list changed (`notifications/resources/list_changed`)                                |
-| `this.elicit(message, schema)`                                   | Request interactive input from the user mid-execution. See [`elicitation.md`](./elicitation.md)                |
-| `this.isPlatform(os)` / `this.isRuntime(rt)` / `this.isEnv(env)` | Imperative platform checks (declarative form is `availableWhen` — see [`availability.md`](./availability.md))  |
+| Method                                                           | Purpose                                                                                                                                           |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execute(input: In): Promise<Out>`                               | The method you implement                                                                                                                          |
+| `this.get(token)`                                                | Resolve a DI dependency. Throws `ProviderNotAvailableError` if not registered.                                                                    |
+| `this.tryGet(token)`                                             | Resolve a DI dependency. Returns `undefined` if not registered.                                                                                   |
+| `this.fail(err)`                                                 | Abort execution, trigger the error flow. **Never returns.** Use for business-logic errors.                                                        |
+| `this.respond(value)`                                            | Early-return with a value. Validates against `outputSchema`. **Never returns** (throws `FlowControl.respond`).                                    |
+| `this.mark(stage)`                                               | Set the active execution stage for debugging / tracing                                                                                            |
+| `this.fetch(input, init?)`                                       | HTTP fetch with context propagation (trace headers, etc.)                                                                                         |
+| `this.callTool(name, args?)`                                     | Call another tool through its `tools:call-tool` flow. `name` is its name, or `app:name` / `app.name` (remote apps and the `-`/`_` alias included) |
+| `this.notify(message, level?)`                                   | Send a log-level notification to the client                                                                                                       |
+| `this.progress(progress, total?, message?)`                      | Send a progress notification. Returns `Promise<boolean>` (false when no progress token in request)                                                |
+| `this.notifyResourceUpdated(uri)`                                | Tell subscribed clients a resource's contents changed (`notifications/resources/updated`)                                                         |
+| `this.notifyResourceListChanged()`                               | Tell clients the resource list changed (`notifications/resources/list_changed`)                                                                   |
+| `this.elicit(message, schema)`                                   | Request interactive input from the user mid-execution. See [`elicitation.md`](./elicitation.md)                                                   |
+| `this.isPlatform(os)` / `this.isRuntime(rt)` / `this.isEnv(env)` | Imperative platform checks (declarative form is `availableWhen` — see [`availability.md`](./availability.md))                                     |
 
 ## Properties
 

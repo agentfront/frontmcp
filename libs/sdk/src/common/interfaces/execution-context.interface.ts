@@ -19,6 +19,7 @@ import { workerEnvOf } from '../../context/frontmcp-context-storage';
 import { RequestContextNotAvailableError } from '../../errors/mcp.error';
 import { type CallSurface } from '../availability';
 import { type ScopeEntry } from '../entries';
+import { callableToolName, type ToolLookupScope } from '../utils/tool-lookup.utils';
 import { FlowControl } from './flow.interface';
 import { type ProviderRegistryInterface } from './internal';
 import { type FrontMcpLogger } from './logger.interface';
@@ -31,18 +32,6 @@ export type ExecutionContextBaseArgs = {
   logger: FrontMcpLogger;
   authInfo: Partial<AuthInfo>;
 };
-
-/**
- * The name `callTool()` asks the flow for: `name` itself when a tool is called that (by name or by its
- * full name, `owner:name`), else `owner.name` read as the full name `owner:name` when one matches.
- */
-function qualifiedToolName(scope: Partial<Pick<ScopeEntry, 'tools'>>, name: string): string {
-  const separator = name.indexOf('.');
-  const tools = scope.tools?.getTools(true);
-  if (separator <= 0 || !tools || tools.some((tool) => tool.name === name || tool.fullName === name)) return name;
-  const fullName = `${name.slice(0, separator)}:${name.slice(separator + 1)}`;
-  return tools.some((tool) => tool.fullName === fullName) ? fullName : name;
-}
 
 /**
  * Abstract base class for execution contexts (tools, resources, prompts, etc.).
@@ -273,7 +262,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
     const request = {
       method: 'tools/call' as const,
       params: {
-        name: qualifiedToolName(callScope, name),
+        name: callableToolName(callScope, name),
         arguments: args ?? {},
         ...(Object.keys(requestMeta).length > 0 && { _meta: requestMeta }),
       },
@@ -306,7 +295,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * The scope whose `tools:call-tool` flow a {@link callTool} of `name` runs in: this context's scope,
    * unless a context with tools of its own (an agent) holds that tool.
    */
-  protected callToolScope(_name: string): Pick<ScopeEntry, 'runFlow'> & Partial<Pick<ScopeEntry, 'tools'>> {
+  protected callToolScope(_name: string): Pick<ScopeEntry, 'runFlow'> & Partial<ToolLookupScope> {
     return this.scope;
   }
 

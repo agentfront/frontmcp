@@ -114,7 +114,8 @@ class CallerAgent extends AgentContext {
   override async execute(_input: Record<string, never>) {
     const nested = await this.callTool('invoke_helper', { note: 'hi' });
     const own = await this.callTool('list_tickets', {});
-    return { nested: nested.structuredContent, own: own.structuredContent };
+    const dotted = await this.callTool('agent:caller.list_tickets', {});
+    return { nested: nested.structuredContent, own: own.structuredContent, dotted: dotted.structuredContent };
   }
 }
 
@@ -193,7 +194,11 @@ describe('agent context wiring', () => {
   it("reaches the agent's nested agents and own tools through this.callTool()", async () => {
     const result = await server.callTool('invoke_caller', {});
 
-    expect(result.structuredContent).toEqual({ nested: { helped: 'hi' }, own: { tickets: ['T-1', 'T-2'] } });
+    expect(result.structuredContent).toEqual({
+      nested: { helped: 'hi' },
+      own: { tickets: ['T-1', 'T-2'] },
+      dotted: { tickets: ['T-1', 'T-2'] },
+    });
   });
 
   it("runs the loop's completions through an overridden completion()", async () => {

@@ -46,11 +46,14 @@ describe('this.callTool() tool names', () => {
     await server.dispose();
   });
 
-  it.each([['get_ticket'], ['desk:get_ticket'], ['desk.get_ticket']])('finds a tool called %s', async (name) => {
-    const result = await server.callTool('call_by_name', { name });
+  it.each([['get_ticket'], ['desk:get_ticket'], ['desk.get_ticket'], ['desk.get-ticket']])(
+    'finds a tool called %s',
+    async (name) => {
+      const result = await server.callTool('call_by_name', { name });
 
-    expect(result.structuredContent).toEqual({ result: { id: 'T-1', title: 'Printer on fire' } });
-  });
+      expect(result.structuredContent).toEqual({ result: { id: 'T-1', title: 'Printer on fire' } });
+    },
+  );
 
   it('still finds a tool whose own name has a dot', async () => {
     const result = await server.callTool('call_by_name', { name: 'mail.send' });
