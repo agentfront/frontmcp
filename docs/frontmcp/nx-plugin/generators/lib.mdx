@@ -25,7 +25,7 @@ nx g @frontmcp/nx:lib my-lib
 | `importPath`  | `string`                                              | `<scope>/<name>` | The npm scope/import path. Defaults to the workspace's npm scope (from the root `package.json` name, e.g. `@acme/source` → `@acme/<name>`), or the bare name when the workspace has no scope |
 | `tags`        | `string`                                              | —                | Comma-separated tags for the project                                                                                                                                                         |
 
-The generator refuses an import path that `tsconfig.base.json` already maps, or one that names a package the workspace depends on (such as `@frontmcp/sdk`), so a new library never shadows existing code. Pass `--importPath` with another name.
+The generator refuses an import path that `tsconfig.base.json` already maps, by its exact key or a wildcard such as `@acme/*`, or one that names a package the workspace depends on (such as `@frontmcp/sdk`), so a new library never shadows existing code. Pass `--importPath` with another name.
 
 ## Library Types
 

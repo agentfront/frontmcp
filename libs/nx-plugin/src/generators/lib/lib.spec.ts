@@ -69,6 +69,31 @@ describe('lib generator', () => {
       expect(tree.exists('libs/utils/project.json')).toBe(false);
     });
 
+    it('refuses an import path that a wildcard mapping in tsconfig.base.json already resolves', async () => {
+      tree.write(
+        'tsconfig.base.json',
+        JSON.stringify({ compilerOptions: { paths: { '@proj/*': ['./libs/*/src/index.ts'] } } }),
+      );
+
+      await expect(libGenerator(tree, { name: 'utils', skipFormat: true })).rejects.toThrow(
+        'The import path "@proj/utils" is already mapped in tsconfig.base.json by "@proj/*" to ./libs/*/src/index.ts',
+      );
+      expect(tree.exists('libs/utils/project.json')).toBe(false);
+    });
+
+    it('accepts an import path that no wildcard mapping matches', async () => {
+      tree.write(
+        'tsconfig.base.json',
+        JSON.stringify({ compilerOptions: { paths: { '@other/*': ['./vendor/*/index.ts'] } } }),
+      );
+
+      await libGenerator(tree, { name: 'utils', skipFormat: true });
+
+      expect(readJson(tree, 'tsconfig.base.json').compilerOptions.paths['@proj/utils']).toEqual([
+        './libs/utils/src/index.ts',
+      ]);
+    });
+
     it('refuses an import path that names a package the workspace depends on', async () => {
       tree.write('package.json', JSON.stringify({ name: '@frontmcp/source', dependencies: { '@frontmcp/sdk': '1.9.1' } }));
 

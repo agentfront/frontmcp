@@ -35,15 +35,32 @@ function defaultImportPath(workspace: WorkspaceManifest, fileName: string): stri
   return scope ? `${scope}/${fileName}` : fileName;
 }
 
+/** A `paths` key that resolves the import path: the exact key, else a single-`*` wildcard key, as TypeScript matches them. */
+function findMappingKey(paths: Record<string, string[]>, importPath: string): string | undefined {
+  if (paths[importPath]) return importPath;
+  return Object.keys(paths).find((key) => {
+    const [prefix, suffix, ...rest] = key.split('*');
+    return (
+      suffix !== undefined &&
+      rest.length === 0 &&
+      importPath.length >= prefix.length + suffix.length &&
+      importPath.startsWith(prefix) &&
+      importPath.endsWith(suffix)
+    );
+  });
+}
+
 /** Refuse an import path that would point an existing alias or an installed package at the new library. */
 function assertImportPathIsFree(tree: Tree, workspace: WorkspaceManifest, importPath: string): void {
-  const existingAlias = tree.exists('tsconfig.base.json')
-    ? readJson<{ compilerOptions?: { paths?: Record<string, string[]> } }>(tree, 'tsconfig.base.json').compilerOptions
-        ?.paths?.[importPath]
-    : undefined;
-  if (existingAlias) {
+  const paths = tree.exists('tsconfig.base.json')
+    ? (readJson<{ compilerOptions?: { paths?: Record<string, string[]> } }>(tree, 'tsconfig.base.json').compilerOptions
+        ?.paths ?? {})
+    : {};
+  const mappingKey = findMappingKey(paths, importPath);
+  if (mappingKey) {
+    const via = mappingKey === importPath ? '' : ` by "${mappingKey}"`;
     throw new Error(
-      `The import path "${importPath}" is already mapped in tsconfig.base.json to ${existingAlias.join(', ')}. Pass --importPath with another name.`,
+      `The import path "${importPath}" is already mapped in tsconfig.base.json${via} to ${paths[mappingKey].join(', ')}. Pass --importPath with another name.`,
     );
   }
   if (workspace.dependencies?.[importPath] ?? workspace.devDependencies?.[importPath]) {
