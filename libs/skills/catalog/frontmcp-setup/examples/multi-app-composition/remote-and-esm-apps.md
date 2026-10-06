@@ -7,7 +7,7 @@ tags: [setup, oauth, auth, transport, multi-app, remote]
 features:
   - '`app.esm()` loads an `@App` class from an npm package with namespace and auto-update'
   - '`app.remote()` proxies tools from external MCP servers with configurable auth modes'
-  - "`remoteAuth` supports `'static'` (fixed credentials), `'forward'` (pass gateway user token), and `'oauth'`"
+  - "`remoteAuth` supports `'static'` (fixed credentials), `'forward'` (pass gateway user token), `'mapped'` (credentials from a per-caller mapper), and `'oauth'` (no gateway credentials)"
   - '`namespace` prevents tool name collisions between apps (`crm:tool_name`, `slack:tool_name`)'
   - '`transportOptions` configure timeout, retries, and SSE fallback for remote connections'
 ---
@@ -21,7 +21,8 @@ Compose local, ESM (npm package), and remote (external MCP server) apps into a s
 ```typescript
 // src/main.ts
 import 'reflect-metadata';
-import { FrontMcp, App, app } from '@frontmcp/sdk';
+
+import { App, app, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   id: 'local',
@@ -72,7 +73,7 @@ export default class Server {}
 
 - `app.esm()` loads an `@App` class from an npm package with namespace and auto-update
 - `app.remote()` proxies tools from external MCP servers with configurable auth modes
-- `remoteAuth` supports `'static'` (fixed credentials), `'forward'` (pass gateway user token), and `'oauth'`
+- `remoteAuth` supports `'static'` (fixed credentials), `'forward'` (pass gateway user token), `'mapped'` (credentials from a per-caller mapper), and `'oauth'` (no gateway credentials)
 - `namespace` prevents tool name collisions between apps (`crm:tool_name`, `slack:tool_name`)
 - `transportOptions` configure timeout, retries, and SSE fallback for remote connections
 

@@ -206,9 +206,18 @@ remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: process.env[
 remoteAuth: { mode: 'forward' }
 remoteAuth: { mode: 'forward', tokenClaim: 'upstream_token', headerName: 'X-Upstream-Auth' }
 
+// Credentials mapped from each caller's auth info, on that caller's calls
+remoteAuth: { mode: 'mapped', mapper: (authInfo) => ({ type: 'apiKey', value: keyFor(authInfo?.clientId) }) }
+
 // No gateway credentials: the remote runs its own OAuth
 remoteAuth: { mode: 'oauth' }
 ```
+
+`mapped` calls `mapper` for each tool call, resource read and prompt request with the caller's auth info,
+and sends the credentials it returns (`bearer`, `basic` or `apiKey`, as in `static`). A mapper that throws
+fails the call with `RemoteAuthError` (`REMOTE_AUTH_ERROR`, JSON-RPC `-32001`), and so does a call the remote
+refuses with HTTP `401`, whatever the mode. `oauth` adds no credentials: the gateway does not run an OAuth flow
+against the remote, so it only fits a remote that serves the gateway without them.
 
 With `forward`, the gateway sends `Bearer <token>` in `headerName` (default `Authorization`); with
 `tokenClaim`, the token is the value of that claim of the caller's JWT instead of the whole token. A call

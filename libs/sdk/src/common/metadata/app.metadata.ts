@@ -1,5 +1,6 @@
 import { authOptionsSchema } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
+import type { AuthInfo } from '@frontmcp/protocol';
 import { isValidMcpUri } from '@frontmcp/utils';
 
 import type {
@@ -296,6 +297,14 @@ export type RemoteAuthConfig =
     }
   | {
       /**
+       * Map each caller's auth info to the credentials sent with that caller's calls. A mapper that
+       * throws fails the call with `RemoteAuthError`.
+       */
+      mode: 'mapped';
+      mapper: (authInfo: AuthInfo | undefined) => RemoteStaticCredentials | Promise<RemoteStaticCredentials>;
+    }
+  | {
+      /**
        * Let remote server handle its own OAuth flow.
        * No auth headers are added by the gateway.
        */
@@ -483,6 +492,12 @@ const remoteAuthConfigSchema = z.discriminatedUnion('mode', [
     mode: z.literal('forward'),
     tokenClaim: z.string().optional(),
     headerName: z.string().optional(),
+  }),
+  z.object({
+    mode: z.literal('mapped'),
+    mapper: z.custom<Extract<RemoteAuthConfig, { mode: 'mapped' }>['mapper']>((value) => typeof value === 'function', {
+      message: 'remoteAuth.mapper must be a function',
+    }),
   }),
   z.object({
     mode: z.literal('oauth'),

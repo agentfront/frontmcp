@@ -64,6 +64,7 @@ import {
   HealthCheckManager,
   isConnectionError,
   isTransientError,
+  remoteHttpFailureOf,
   withRetry,
   type CircuitBreaker,
   type CircuitBreakerOptions,
@@ -567,7 +568,7 @@ export class McpClientService {
         if (error instanceof RemoteTimeoutError) {
           throw error;
         }
-        throw new RemoteToolExecutionError(appId, toolName, error as Error);
+        throw this.authFailureOf(appId, error) ?? new RemoteToolExecutionError(appId, toolName, error as Error);
       }
     };
 
@@ -617,7 +618,7 @@ export class McpClientService {
       if (errorMessage.includes('not found') || errorMessage.includes('404')) {
         throw new RemoteResourceNotFoundError(appId, uri);
       }
-      throw new RemoteResourceReadError(appId, uri, error as Error);
+      throw this.authFailureOf(appId, error) ?? new RemoteResourceReadError(appId, uri, error as Error);
     }
   }
 
@@ -659,7 +660,7 @@ export class McpClientService {
       if (error instanceof RemotePromptNotFoundError) {
         throw error;
       }
-      throw new RemotePromptGetError(appId, promptName, error as Error);
+      throw this.authFailureOf(appId, error) ?? new RemotePromptGetError(appId, promptName, error as Error);
     }
   }
 
@@ -779,6 +780,14 @@ export class McpClientService {
   // ═══════════════════════════════════════════════════════════════════
   // PRIVATE HELPERS
   // ═══════════════════════════════════════════════════════════════════
+
+  /** A call whose `remoteAuth` mapper failed, or whose credentials the remote refused (HTTP 401), fails with `RemoteAuthError`. */
+  private authFailureOf(appId: string, error: unknown): RemoteAuthError | undefined {
+    if (error instanceof RemoteAuthError) return error;
+    return remoteHttpFailureOf(error)?.status === 401
+      ? new RemoteAuthError(appId, 'the remote server refused the credentials (HTTP 401)')
+      : undefined;
+  }
 
   /** The headers every request to the remote carries: `transportOptions.headers` and static `remoteAuth` credentials. */
   private async connectionHeaders(request: McpConnectRequest): Promise<Record<string, string> | undefined> {

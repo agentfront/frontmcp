@@ -5,6 +5,7 @@
  * replaced, by a minimal MCP server that records each request's headers.
  */
 import { createMockLogger } from '../../__test-utils__/fixtures/flow.fixtures';
+import { RemoteAuthError } from '../../errors';
 import { McpClientService } from '../mcp-client.service';
 import type { McpConnectRequest } from '../mcp-client.types';
 
@@ -137,6 +138,32 @@ describe('McpClientService — remoteAuth and retries', () => {
     await service.callTool('upstream', 'echo', {}, { authInfo: { clientId: 'desk' } });
 
     expect(requests.find((request) => request.method === 'tools/call')?.apiKey).toBe('key-for-desk');
+  });
+
+  it('fails the call with RemoteAuthError when the mapper throws', async () => {
+    fakeMcpServer();
+    await service.connect(
+      connectRequest({
+        auth: {
+          mode: 'mapped',
+          mapper: () => {
+            throw new Error('no key for this caller');
+          },
+        },
+      }),
+    );
+
+    await expect(service.callTool('upstream', 'echo', {})).rejects.toThrow(RemoteAuthError);
+  });
+
+  it('fails a call the remote refused with HTTP 401 with RemoteAuthError, without retrying it', async () => {
+    const { requests } = fakeMcpServer({ failCallsBeforeSuccess: 1, failWithStatus: 401 });
+    await service.connect(connectRequest({ transportOptions: { retryAttempts: 2, retryDelayMs: 1 } }));
+
+    await expect(service.callTool('upstream', 'echo', {})).rejects.toThrow(
+      'Authentication failed for remote server "upstream": the remote server refused the credentials (HTTP 401)',
+    );
+    expect(requests.filter((request) => request.method === 'tools/call')).toHaveLength(1);
   });
 
   it('retries a call retryAttempts times, waiting retryDelayMs', async () => {

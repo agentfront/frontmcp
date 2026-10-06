@@ -165,7 +165,10 @@ Each remote tool, resource, resource template and prompt is listed once; when `c
 
 - `{ mode: 'static', credentials: { type: 'bearer' | 'basic' | 'apiKey', value: string } }` -- static credentials for trusted internal services, sent on every request (discovery included)
 - `{ mode: 'forward', tokenClaim?: string, headerName?: string }` -- forward the calling user's token (or one claim of it with `tokenClaim`) as `Bearer <token>` in `headerName` (default `Authorization`) on that user's calls; discovery runs outside any request and carries only `transportOptions.headers`
-- `{ mode: 'oauth' }` -- let the remote server handle its own OAuth flow
+- `{ mode: 'mapped', mapper: (authInfo) => credentials }` -- credentials (as in `static`) computed from each caller's auth info, on that caller's calls; a mapper that throws fails the call with `RemoteAuthError`
+- `{ mode: 'oauth' }` -- no gateway credentials; the gateway runs no OAuth flow against the remote, so this only fits a remote that serves it without credentials
+
+A call the remote refuses with HTTP `401` fails with `RemoteAuthError` (`REMOTE_AUTH_ERROR`, JSON-RPC `-32001`), whatever the mode.
 
 `filter` matches the remote's entry names before the namespace prefix; resource templates match under `resources`.
 
