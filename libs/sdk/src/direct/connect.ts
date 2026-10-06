@@ -16,6 +16,10 @@ import { PLATFORM_CLIENT_INFO } from './llm-platform';
 // Using let to allow reassignment in clearScopeCache()
 let scopeCache = new WeakMap<object, Promise<Scope>>();
 
+/** The config each cached scope was built for, and how many connected clients share it. */
+const scopeKeys = new WeakMap<Scope, object>();
+const scopeClients = new WeakMap<Scope, number>();
+
 /**
  * Get or create a scope for the given config.
  * Uses WeakMap caching to ensure singleton behavior per config object.
@@ -56,6 +60,7 @@ async function getScope(config: FrontMcpConfigInput, mode?: 'full' | 'cli'): Pro
           throw new PublicMcpError('No scopes initialized. Ensure at least one app is configured.', 'NO_SCOPES', 500);
         }
 
+        scopeKeys.set(scope as Scope, cacheKey);
         return scope as Scope;
       } catch (error) {
         // Remove from cache on failure to allow retry
@@ -112,7 +117,22 @@ export async function connect(
 ): Promise<DirectClient> {
   const { DirectClientImpl } = await import('./direct-client.js');
   const scope = await getScope(config, options?.mode);
-  return DirectClientImpl.create(scope, options);
+  // Clients of the same config share its scope, which is disposed when the last of them closes
+  scopeClients.set(scope, (scopeClients.get(scope) ?? 0) + 1);
+  const release = async () => {
+    const remaining = (scopeClients.get(scope) ?? 1) - 1;
+    scopeClients.set(scope, remaining);
+    if (remaining > 0) return;
+    const cacheKey = scopeKeys.get(scope);
+    if (cacheKey) scopeCache.delete(cacheKey);
+    await scope.dispose();
+  };
+  try {
+    return await DirectClientImpl.create(scope, options, release);
+  } catch (error) {
+    scopeClients.set(scope, (scopeClients.get(scope) ?? 1) - 1);
+    throw error;
+  }
 }
 
 /**

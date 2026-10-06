@@ -5,9 +5,11 @@
  * Useful for testing, embedding in applications, and LangChain integration.
  */
 
+import { toJSONSchema, type ZodType } from '@frontmcp/lazy-zod';
 import { type AuthInfo, type Transport } from '@frontmcp/protocol';
 import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
+import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult } from '../elicitation';
 import { type Scope } from '../scope/scope.instance';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { buildScopedServerOptions } from './build-scoped-server-options';
@@ -93,7 +95,7 @@ export async function createInMemoryServer(
   options?: CreateInMemoryServerOptions,
 ): Promise<InMemoryServerResult> {
   // Dynamically import to avoid bundling issues
-  const { InMemoryTransport, McpServer } = await importWithRequireFallback(
+  const { ElicitResultSchema, InMemoryTransport, McpServer } = await importWithRequireFallback(
     () => import('@frontmcp/protocol'),
     () => require('@frontmcp/protocol') as typeof import('@frontmcp/protocol'),
   );
@@ -106,6 +108,37 @@ export async function createInMemoryServer(
 
   // Track current auth info (can be updated dynamically)
   let currentAuthInfo: Partial<AuthInfo> = options?.authInfo ?? {};
+
+  // `this.elicit()` asks the in-process client directly, which answers through its `onElicitation`
+  const elicitTransport = {
+    type: 'in-memory',
+    sendElicitRequest: async <S extends ZodType>(
+      relatedRequestId: number | string,
+      message: string,
+      requestedSchema: S,
+      elicitOptions?: ElicitOptions,
+    ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> => {
+      // The client's capabilities were checked by `this.elicit()` (the SDK server never saw its initialize)
+      const answer = await mcpServer.request(
+        {
+          method: 'elicitation/create',
+          params: {
+            mode: elicitOptions?.mode ?? 'form',
+            message,
+            requestedSchema: toJSONSchema(requestedSchema),
+            ...(elicitOptions?.url !== undefined && { url: elicitOptions.url }),
+            ...(elicitOptions?.elicitationId !== undefined && { elicitationId: elicitOptions.elicitationId }),
+          },
+        },
+        ElicitResultSchema,
+        { relatedRequestId, timeout: elicitOptions?.ttl ?? DEFAULT_ELICIT_TTL },
+      );
+      return {
+        status: answer.action,
+        ...(answer.action === 'accept' && answer.content !== undefined && { content: answer.content }),
+      } as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
+    },
+  };
 
   // Build server options + capabilities (shared with the Web-fetch handler so
   // every transport advertises the SAME capability set for a given Scope).
@@ -127,6 +160,7 @@ export async function createInMemoryServer(
         authInfo: {
           ...currentAuthInfo,
           sessionId,
+          transport: elicitTransport,
         },
       };
       // One request at a time in a browser build without AsyncContext, so overlapping requests

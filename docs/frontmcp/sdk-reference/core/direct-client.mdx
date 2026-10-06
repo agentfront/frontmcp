@@ -139,7 +139,7 @@ const tools = await client.listTools();
 
 ### callTool(name, args?)
 
-Execute a tool and get platform-formatted result.
+Execute a tool and get platform-formatted result. The OpenAI, Claude, LangChain and Vercel AI formats have no place for a result's `isError`, so with them a failed call rejects with `ToolCallError`: `message` is the tool's error text and `result` the raw `CallToolResult` (pass it to the model as an error, for example Claude's `is_error: true`). The raw format returns the result with `isError`. Up to 1.9.1 the platform formats dropped `isError`.
 
 ```typescript
 const result = await client.callTool('my_tool', {
@@ -318,7 +318,7 @@ console.log(status.stepResults);    // { step1: { state, outputs }, ... }
 
 ### onElicitation(handler)
 
-Register handler for elicitation requests.
+Register handler for elicitation requests: the questions the tools ask with `this.elicit()` (form or URL mode). The client declares the `elicitation` capability (`form` and `url`), so without a handler a question is declined. Up to 1.9.1 the questions never reached the handler.
 
 ```typescript
 const unsubscribe = client.onElicitation(async (request) => {
@@ -351,7 +351,7 @@ await client.submitElicitationResult('elicit-123', {
 
 ### close()
 
-Close the client connection.
+Close the client connection. `connect()` clients of the same config object share one server, which is disposed when the last of them closes; closing one leaves the others' sessions as they are. Up to 1.9.1 closing one disposed the server under the others, clearing their client info.
 
 ```typescript
 await client.close();

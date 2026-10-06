@@ -6,6 +6,7 @@
 
 import {
   Client,
+  type CallToolResult,
   type CompleteResult,
   type GetPromptResult,
   type Implementation,
@@ -19,7 +20,7 @@ import {
 import { fileExists, pathResolve, randomUUID } from '@frontmcp/utils';
 
 import { listAllPages } from '../common/utils/list-all-pages.utils';
-import { PublicMcpError } from '../errors';
+import { PublicMcpError, ToolCallError } from '../errors';
 import type { Scope } from '../scope/scope.instance';
 import {
   SkillsListResultSchema,
@@ -98,6 +99,9 @@ export class DirectClientImpl implements DirectClient {
   // Scope reference for build-time operations (collectSkillAssets)
   private scopeRef?: Scope;
 
+  // Releases the scope when this client closes (see `create()`)
+  private releaseScope?: () => Promise<void>;
+
   private constructor(
     mcpClient: any,
     sessionId: string,
@@ -122,7 +126,11 @@ export class DirectClientImpl implements DirectClient {
    *
    * @internal Use `connect()` or LLM-specific helpers instead.
    */
-  static async create(scope: Scope, options?: ConnectOptions): Promise<DirectClient> {
+  static async create(
+    scope: Scope,
+    options?: ConnectOptions,
+    releaseScope: () => Promise<void> = () => scope.dispose(),
+  ): Promise<DirectClient> {
     // Dynamic imports for tree-shaking
     const { createInMemoryServer } = await import('../transport/in-memory-server.js');
 
@@ -149,12 +157,10 @@ export class DirectClientImpl implements DirectClient {
     });
 
     try {
-      // Build client capabilities
-      const clientCapabilities = options?.capabilities
-        ? {
-            capabilities: options.capabilities,
-          }
-        : undefined;
+      // The client always answers elicitation requests (onElicitation, else a decline), so it declares the capability
+      const clientCapabilities = {
+        capabilities: { elicitation: { form: {}, url: {} }, ...options?.capabilities },
+      };
 
       // Connect MCP client
       // Note: Using 'any' cast for clientTransport to handle ESM/CJS type incompatibility
@@ -177,6 +183,7 @@ export class DirectClientImpl implements DirectClient {
       const client = new DirectClientImpl(mcpClient, sessionId, clientInfo, serverInfo, serverCapabilities);
       client.closeServer = close;
       client.scopeRef = scope;
+      client.releaseScope = releaseScope;
 
       // Set up internal handlers for notifications and requests
       // Note: MCP SDK uses typed notification/request handlers with zod schemas
@@ -289,6 +296,8 @@ export class DirectClientImpl implements DirectClient {
       name,
       arguments: args ?? {},
     });
+    // An LLM platform's format has no place for isError, so a failed call rejects with the raw result
+    if (result.isError && this.platform !== 'raw') throw new ToolCallError(name, result as CallToolResult);
     // The result type may vary depending on MCP SDK version
     // formatResultForPlatform handles both content-based and toolResult-based responses
     return formatResultForPlatform(result, this.platform);
@@ -374,14 +383,12 @@ export class DirectClientImpl implements DirectClient {
     } finally {
       // Ensure server cleanup runs even if mcpClient.close() throws
       await this.closeServer?.();
-      // Dispose scope to clean up providers, timers, and native resources.
-      // Prevents mutex crashes from addons (ONNX runtime, etc.) during process exit.
-      if (this.scopeRef) {
-        try {
-          await this.scopeRef.dispose();
-        } catch {
-          /* best-effort */
-        }
+      // Release the scope (disposing it once nothing else uses it) to clean up providers, timers, and
+      // native resources. Prevents mutex crashes from addons (ONNX runtime, etc.) during process exit.
+      try {
+        await this.releaseScope?.();
+      } catch {
+        /* best-effort */
       }
     }
   }
@@ -599,7 +606,7 @@ export class DirectClientImpl implements DirectClient {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async setLogLevel(level: McpLogLevel): Promise<void> {
-    await this.mcpClient.setLoggingLevel({ level });
+    await this.mcpClient.setLoggingLevel(level);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@
  */
 
 import 'reflect-metadata';
+
 import type { FrontMcpConfigInput } from '../../common';
 import type { DirectClient } from '../client.types';
 
@@ -126,7 +127,7 @@ describe('connect utilities', () => {
 
       expect(Client).toHaveBeenCalledWith(
         { name: 'mcp-client', version: '1.0.0' },
-        undefined, // No capabilities when not provided
+        { capabilities: { elicitation: { form: {}, url: {} } } }, // It always answers elicitation requests
       );
     });
 
@@ -139,7 +140,10 @@ describe('connect utilities', () => {
         clientInfo: { name: 'custom-agent', version: '2.0.0' },
       });
 
-      expect(Client).toHaveBeenCalledWith({ name: 'custom-agent', version: '2.0.0' }, undefined);
+      expect(Client).toHaveBeenCalledWith(
+        { name: 'custom-agent', version: '2.0.0' },
+        { capabilities: { elicitation: { form: {}, url: {} } } },
+      );
     });
 
     it('should pass authToken to in-memory server', async () => {
@@ -252,7 +256,7 @@ describe('connect utilities', () => {
       expect(Client).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          capabilities: { roots: { listChanged: true } },
+          capabilities: { elicitation: { form: {}, url: {} }, roots: { listChanged: true } },
         }),
       );
     });
@@ -266,7 +270,10 @@ describe('connect utilities', () => {
 
       await connectOpenAI(config);
 
-      expect(Client).toHaveBeenCalledWith({ name: 'openai', version: '1.0.0' }, undefined);
+      expect(Client).toHaveBeenCalledWith(
+        { name: 'openai', version: '1.0.0' },
+        { capabilities: { elicitation: { form: {}, url: {} } } },
+      );
     });
 
     it('should pass options through', async () => {
@@ -299,7 +306,10 @@ describe('connect utilities', () => {
 
       await connectClaude(config);
 
-      expect(Client).toHaveBeenCalledWith({ name: 'claude', version: '1.0.0' }, undefined);
+      expect(Client).toHaveBeenCalledWith(
+        { name: 'claude', version: '1.0.0' },
+        { capabilities: { elicitation: { form: {}, url: {} } } },
+      );
     });
   });
 
@@ -311,7 +321,10 @@ describe('connect utilities', () => {
 
       await connectLangChain(config);
 
-      expect(Client).toHaveBeenCalledWith({ name: 'langchain', version: '1.0.0' }, undefined);
+      expect(Client).toHaveBeenCalledWith(
+        { name: 'langchain', version: '1.0.0' },
+        { capabilities: { elicitation: { form: {}, url: {} } } },
+      );
     });
   });
 
@@ -323,7 +336,10 @@ describe('connect utilities', () => {
 
       await connectVercelAI(config);
 
-      expect(Client).toHaveBeenCalledWith({ name: 'vercel-ai', version: '1.0.0' }, undefined);
+      expect(Client).toHaveBeenCalledWith(
+        { name: 'vercel-ai', version: '1.0.0' },
+        { capabilities: { elicitation: { form: {}, url: {} } } },
+      );
     });
   });
 

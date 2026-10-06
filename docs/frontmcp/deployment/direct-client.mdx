@@ -245,7 +245,7 @@ unsubscribe();
 ```
 
 <Warning>
-If no handler is registered, elicitation requests are automatically declined.
+If no handler is registered, elicitation requests are automatically declined. The client declares the `elicitation` capability (`form` and `url`) so the tools' `this.elicit()` reaches it; up to 1.9.1 it never did.
 </Warning>
 
 ### Manual Submission
@@ -310,6 +310,8 @@ Set server-side logging level:
 // Levels: 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency'
 await client.setLogLevel('debug');
 ```
+
+Up to 1.9.1 `setLogLevel()` always failed with an invalid `level`.
 
 ---
 
@@ -386,6 +388,21 @@ DirectClient automatically formats tools and results based on the detected platf
 ---
 
 ## Error Handling
+
+With an LLM platform format (`connectOpenAI()`, `connectClaude()`, `connectLangChain()`, `connectVercelAI()`), a tool call whose result has `isError` rejects with `ToolCallError`, whose `message` is the tool's error text and `result` the raw `CallToolResult`:
+
+```typescript
+import { ToolCallError } from '@frontmcp/sdk';
+
+try {
+  content = await client.callTool(name, args);
+} catch (error) {
+  if (!(error instanceof ToolCallError)) throw error;
+  content = error.message; // send it to the model as a failed tool result
+}
+```
+
+Other failures reject with the JSON-RPC error:
 
 ```typescript
 try {
