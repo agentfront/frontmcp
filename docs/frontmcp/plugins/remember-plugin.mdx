@@ -363,6 +363,13 @@ key, not even one written concurrently by another instance.
 
 `global` is not versioned and is not purged -- neither its keys nor its key derivation changed.
 
+<Note>
+  The Redis and Vercel KV stores keep each key under `keyPrefix` once (`remember:v2:user:<id>:<key>`). Releases up to
+  1.9.1 added the prefix twice there (`remember:remember:v2:user:<id>:<key>`); such an entry is still listed and read,
+  and moves to the single-prefix key, with its TTL, the first time it is read. Writing or forgetting a key removes its
+  doubled copy.
+</Note>
+
 ### When the purge runs
 
 Twenty-four hours after the **fleet** first reached the `v2:` layout -- not after this process
@@ -461,11 +468,15 @@ RememberPlugin.init({
   type: 'redis',
   encryption: {
     enabled: true, // default
-    customKey: process.env.CUSTOM_ENCRYPTION_KEY, // optional override
+    customKey: process.env.CUSTOM_ENCRYPTION_KEY, // optional: replaces REMEMBER_SECRET for this plugin
   },
   config: { host: 'localhost', port: 6379 },
 });
 ```
+
+`customKey` is the secret every key is derived from, in place of `REMEMBER_SECRET` (or `MCP_MEMORY_SECRET` /
+`MCP_SESSION_SECRET`); each scope, session and user still gets its own key. Entries written with another secret read as
+absent. Up to 1.9.1 the option was never read.
 
 ---
 

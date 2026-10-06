@@ -345,7 +345,8 @@ session id is not a secret -- the client knows it and it travels in the `mcp-ses
 header -- so it cannot be the key material on its own. Instances with different secrets cannot
 read each other's entries. With none of `REMEMBER_SECRET`, `MCP_MEMORY_SECRET` or
 `MCP_SESSION_SECRET` set in production, the plugin falls back to a random in-memory secret and
-logs a warning once; its encrypted memory is then lost on restart.
+logs a warning once; its encrypted memory is then lost on restart. `encryption.customKey`, when
+set, replaces that secret for the plugin (each scope, session and user still gets its own key).
 
 **Upgrading past that change moves existing `session`, `tool` and `user` entries.** The key
 derivation change orphans `session` and `tool` ciphertext, and the namespace now percent-encodes
@@ -358,6 +359,10 @@ the plugin **purges the pre-`v2` entries automatically**, warning with the numbe
 version segment is what makes that safe -- a purge pattern of `remember:session:*` cannot match a
 live `remember:v2:session:*` key. `global` is not versioned and not purged: neither its keys nor
 its key derivation changed.
+
+The Redis and Vercel KV stores keep each key under `keyPrefix` once. Releases up to 1.9.1 added it
+twice there (`remember:remember:v2:…`); such an entry is still listed and read, and moves to the
+single-prefix key (TTL kept) the first time it is read.
 
 **The purge runs 24 hours after the fleet first reached the `v2:` layout -- not after this
 process started -- on an unreferenced timer, never on the request path.** The first instance to
