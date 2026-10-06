@@ -4,7 +4,7 @@ import { ToolAnnotationsSchema } from '@frontmcp/protocol';
 
 export const describeToolDescription = `Get input/output schemas for tools from search results.
 
-INPUT: toolNames: string[] - tool names from search
+INPUT: toolNames: string[] - tool names from search, at most the server's maxDefinitions (8 unless configured) per call
 OUTPUT per tool: inputSchema (JSON Schema), outputSchema (JSON Schema), usageExamples (up to 5 callTool examples)
 
 IMPORTANT: If notFound array is non-empty → re-search with corrected queries.

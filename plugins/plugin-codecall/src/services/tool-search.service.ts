@@ -369,14 +369,9 @@ export class ToolSearchService implements ToolSearch {
     }
 
     // Initialize synonym expansion for TF-IDF strategy (ML already handles semantic similarity)
-    if (config.synonymExpansion === false) {
-      this.synonymService = null;
-    } else if (this.strategy === 'tfidf') {
-      const synonymConfig = typeof config.synonymExpansion === 'object' ? config.synonymExpansion : {};
-      // Only enable if not explicitly disabled
-      if (synonymConfig.enabled !== false) {
-        this.synonymService = new SynonymExpansionService(synonymConfig);
-      }
+    const synonymExpansion = config.synonymExpansion ?? embeddingOptions.synonymExpansion;
+    if (this.strategy === 'tfidf' && synonymExpansion !== false && synonymExpansion?.enabled !== false) {
+      this.synonymService = new SynonymExpansionService(synonymExpansion ?? {});
     }
 
     // Create subscription promise - resolves when subscribed to tool changes, rejects on disposal

@@ -101,19 +101,15 @@ codecallContext.tenantId = 'other'; // ❌ Throws error
 
 ---
 
-### console (if enabled)
+### console (not available)
 
-Standard console methods, captured in the response `logs` array.
+Scripts have no `console`, whatever `vm.allowConsole` says: a script that uses it is refused before it runs, with
+`console is not available in CodeCall scripts; use mcpLog(level, message)`. Log with `mcpLog`, whose lines are
+returned in the response's `logs` array.
 
 ```ts
-console.log('Processing users...');
-console.warn('Large dataset detected');
-console.error('Validation failed');
+mcpLog('info', 'Processing users...');
 ```
-
-<Note>
-  Console is only available if `vm.allowConsole: true` in plugin config. Logs are returned in the `logs` array of the response.
-</Note>
 
 ---
 
@@ -178,9 +174,9 @@ let count = 0;
 const names = users.map(u => u.name);
 const total = users.reduce((sum, u) => sum + u.score, 0);
 
-// ✅ Bounded loops
+// ✅ Bounded loops (a `for` loop needs vm.allowLoops: true; the default secure preset allows for-of only)
+for (const user of users) { count++; }
 for (let i = 0; i < users.length; i++) { count++; }
-for (const user of users) { console.log(user.name); }
 
 // ✅ Template literals
 const greeting = `Hello, ${user.name}!`;
