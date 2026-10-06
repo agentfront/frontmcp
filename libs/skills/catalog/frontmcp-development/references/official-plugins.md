@@ -1049,13 +1049,13 @@ The plugin is a transport adapter: it lists tools through the `tools:list-tools`
 
 ### Options
 
-| Option         | Default                   | Description                                                                |
-| -------------- | ------------------------- | -------------------------------------------------------------------------- |
-| `prefix`       | `''`                      | Prepended to every exposed name                                            |
-| `include`      | all                       | `(tool) => boolean`, runs after `availableWhen` and authorities            |
-| `exposedTo`    | —                         | Other origins (e.g. an iframe's parent) the tools are offered to           |
-| `authContext`  | anonymous `webmcp` caller | `DirectAuthContext` or a function returning it, resolved per list and call |
-| `modelContext` | `document.modelContext`   | A polyfill or test double                                                  |
+| Option         | Default                                                               | Description                                                                |
+| -------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `prefix`       | `''`                                                                  | Prepended to every exposed name                                            |
+| `include`      | all                                                                   | `(tool) => boolean`, runs after `availableWhen` and authorities            |
+| `exposedTo`    | —                                                                     | Other origins (e.g. an iframe's parent) the tools are offered to           |
+| `authContext`  | anonymous caller (`sub: 'anon:webmcp'`, `this.auth.isAnonymous` true) | `DirectAuthContext` or a function returning it, resolved per list and call |
+| `modelContext` | `document.modelContext`                                               | A polyfill or test double                                                  |
 
 ### Choosing what agents see
 
@@ -1069,7 +1069,7 @@ The plugin is a transport adapter: it lists tools through the `tools:list-tools`
 - Names: `prefix + name`, characters outside `[A-Za-z0-9_.-]` become `_` (`app:tool` → `app_tool`), max 128, collisions get `_2`, `_3`, …
 - Annotations: `readOnlyHint` → `readOnlyHint`; explicit `destructiveHint: true` → `consequentialHint`; explicit `openWorldHint: true` → `untrustedContentHint`.
 - Results: `{ content, structuredContent? }` without `_meta`; an `isError` result or server error rejects with its message.
-- Tools only — resources and prompts stay MCP-only; elicitation is unavailable to WebMCP callers.
+- Tools only — resources and prompts stay MCP-only; elicitation works only through the fallback `sendElicitationResult` tool when `elicitation.enabled` is on (otherwise a tool that elicits fails for WebMCP callers); no sampling.
 
 For other browsers, load a polyfill that installs `document.modelContext` (e.g. `@mcp-b/global`) before `create()`, or pass one as `modelContext`.
 
