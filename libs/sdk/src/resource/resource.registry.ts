@@ -78,6 +78,7 @@ export default class ResourceRegistry extends RegistryAbstract<
    * app's resources into them, and the scope would then list those resources twice.
    */
   private readonly adopt: boolean;
+  private readonly warnedDuplicateUris = new Set<string>();
 
   constructor(
     providers: ProviderRegistry,
@@ -427,13 +428,26 @@ export default class ResourceRegistry extends RegistryAbstract<
       const on = `${r.ownerKey}:${r.baseName}`;
       if (!this.byOwnerAndName.has(on)) this.byOwnerAndName.set(on, r);
 
-      // Index by URI or URI template
-      if (r.isTemplate && r.uriTemplate) {
-        this.byUriTemplate.set(r.uriTemplate, r);
-      } else if (r.uri) {
-        this.byUri.set(r.uri, r);
-      }
+      // Index by URI or URI template; the first entry registered for one is the one served
+      const uriIndex = r.isTemplate ? this.byUriTemplate : this.byUri;
+      const uriKey = r.isTemplate ? r.uriTemplate : r.uri;
+      if (!uriKey) continue;
+      const served = uriIndex.get(uriKey);
+      if (!served) uriIndex.set(uriKey, r);
+      else if (served.instance !== r.instance) this.warnDuplicateUri(uriKey, served, r);
     }
+  }
+
+  private warnDuplicateUri(uri: string, served: IndexedResource, shadowed: IndexedResource): void {
+    const key = `${uri}|${served.ownerKey}|${shadowed.ownerKey}`;
+    if (this.warnedDuplicateUris.has(key)) return;
+    this.warnedDuplicateUris.add(key);
+    this.providers
+      .getActiveScope()
+      .logger.warn(
+        `Resource URI "${uri}" is registered by both "${served.qualifiedName}" and "${shadowed.qualifiedName}"; ` +
+          `"${served.qualifiedName}" serves it and the other is not listed or read. Give each a distinct URI.`,
+      );
   }
 
   /* -------------------- Conflict-aware exported names -------------------- */

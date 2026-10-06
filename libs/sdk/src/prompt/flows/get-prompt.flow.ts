@@ -205,8 +205,11 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     const { name } = this.state.required.input;
     this.logger.info(`findPrompt: looking for prompt with name "${name}"`);
 
-    // Try to find a prompt that matches this name
-    const prompt = resolvedPrompts.take(this.rawInput, name) ?? this.scope.prompts.findByName(name);
+    // Its name, or its app-qualified name (`desk:summarize`), which prompts/list hands out when names collide
+    const prompt =
+      resolvedPrompts.take(this.rawInput, name) ??
+      this.scope.prompts.findByName(name) ??
+      this.scope.prompts.getPrompts(true).find((entry) => entry.fullName === name);
 
     if (!prompt) {
       this.logger.warn(`findPrompt: prompt "${name}" not found`);

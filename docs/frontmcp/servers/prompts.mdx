@@ -157,6 +157,10 @@ A missing prompt fails startup: `ExternalEntryLoadError` when the package does n
 For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
 </Info>
 
+When two apps of a server have prompts with the same name, `prompts/list` names each by its app (`desk:summarize`,
+`billing:summarize`), and `prompts/get` accepts that app-qualified name, as well as the bare name of a prompt no other
+app shares. Up to 1.9.1, `prompts/get` refused the app-qualified name.
+
 ---
 
 ## Return Values
