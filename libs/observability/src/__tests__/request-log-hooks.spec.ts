@@ -3,6 +3,8 @@
  * tracing the request, the entry flows name what it served and record a failure, and the HTTP
  * finalize closes it, which fires the callback once.
  */
+import { toMcpError } from '@frontmcp/sdk';
+
 import {
   completeRequestLog,
   currentRequestLog,
@@ -49,19 +51,26 @@ describe('request log hooks', () => {
     });
   });
 
-  it("records an entry flow's failure and the HTTP error status", async () => {
+  it("records an entry flow's failure as the client sees it, and the HTTP error status", async () => {
     const onRequestComplete = jest.fn();
     const { http, tool } = requestFlow();
+    const crash = new Error('tool crashed');
 
     startRequestLog(http, { onRequestComplete });
-    tool.state['flowError'] = new Error('tool crashed');
+    tool.state['flowError'] = crash;
     recordRequestLogFailure(tool);
     http.state['statusCode'] = 500;
     await completeRequestLog(http);
 
+    const answered = toMcpError(crash);
     expect(onRequestComplete.mock.calls[0][0]).toMatchObject({
       status: 'error',
-      error: { type: 'Error', message: 'tool crashed' },
+      error: {
+        type: 'GenericServerError',
+        message: answered.getPublicMessage(),
+        code: 'SERVER_ERROR',
+        error_id: answered.errorId,
+      },
     });
   });
 });

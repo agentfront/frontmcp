@@ -29,7 +29,7 @@ import {
   type Tracer,
 } from '@opentelemetry/api';
 
-import { FlowControl, McpError } from '@frontmcp/sdk';
+import { FlowControl, InternalMcpError, toMcpError } from '@frontmcp/sdk';
 import { sha256Hex } from '@frontmcp/utils';
 
 import { FrontMcpAttributes, McpAttributes, type TracingOptions } from '../otel/otel.types';
@@ -170,28 +170,28 @@ export interface FlowFailure {
   error: Error;
   type: string;
   message: string;
-  code?: string;
-  errorId?: string;
+  code: string;
+  errorId: string;
 }
 
-/** The failure behind a flow's `state.flowError`. */
+/** The failure behind a flow's `state.flowError`, mapped as the SDK maps it for the client (same error ID). */
 export function flowFailureOf(flowError: unknown): FlowFailure {
   const failed = (flowError as { originalError?: unknown } | undefined)?.originalError;
   const error =
     flowError instanceof FlowControl
       ? failed instanceof Error
         ? failed
-        : new Error(`Flow ended with: ${flowError.type}`)
+        : new InternalMcpError(`Flow ended with: ${flowError.type}`)
       : flowError instanceof Error
         ? flowError
         : new Error(String(flowError));
-  const code = (error as { code?: unknown }).code;
+  const reported = toMcpError(error);
   return {
     error,
-    type: error.name,
-    message: error instanceof McpError ? error.getPublicMessage() : error.message,
-    ...(typeof code === 'string' && { code }),
-    ...(error instanceof McpError && { errorId: error.errorId }),
+    type: reported.name,
+    message: reported.getPublicMessage(),
+    code: reported.code,
+    errorId: reported.errorId,
   };
 }
 
@@ -859,7 +859,7 @@ export function installHookObserver(flowCtx: FlowContextLike, observer: HookObse
   if (ctx && !ctx.get?.(HOOK_OBSERVER_KEY)) ctx.set?.(HOOK_OBSERVER_KEY, observer);
 }
 
-/** Runs one hook inside a `hook <stage>` span, a child of its flow's span. A control-flow signal other than `fail` ends it OK. */
+/** Runs one hook inside a `hook <stage>` span, a child of its flow's span. `fail` and `abort` end it as an error; other control-flow signals end it OK. */
 export async function runInHookSpan(
   flowCtx: any,
   hook: { flowName: string; stage: string; owner?: string },
