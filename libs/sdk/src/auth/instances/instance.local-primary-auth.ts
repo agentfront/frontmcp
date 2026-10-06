@@ -948,10 +948,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt()
       .setIssuer(options.issuer ?? this.issuer)
-      .setExpirationTime('1d')
+      .setExpirationTime(`${this.anonymousTokenTtlSeconds()}s`)
       .setJti(randomUUID());
     if (options.audience) jwt.setAudience(options.audience);
     return jwt.sign(this.secret);
+  }
+
+  /** How long an anonymous token lives: public mode's `sessionTtl` (default an hour), a day otherwise. */
+  anonymousTokenTtlSeconds(): number {
+    return isPublicMode(this.options) ? (this.options.sessionTtl ?? 3600) : 86400;
   }
 
   /** The scopes an anonymous caller holds: `anonymousScopes`, default `['anonymous']`. */

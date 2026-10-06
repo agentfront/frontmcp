@@ -79,7 +79,7 @@ class Server {}
 - Configuring Redis-backed token storage for production persistence
 - `GET /oauth/authorize` redirects straight to the upstream IdP (no in-tree login page)
 - Session identity (sub/email/name) is derived from the upstream user
-- Tools read the upstream token via `this.orchestration.getToken(providerId)`; an expired one is renewed with the provider's refresh token (`refresh`), and the tokens follow FrontMCP's own token when the client refreshes it
+- Tools read the upstream token via `this.orchestration.getToken(providerId)`
 
 ## Not Yet Wired
 

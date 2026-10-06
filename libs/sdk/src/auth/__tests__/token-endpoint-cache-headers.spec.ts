@@ -1,12 +1,13 @@
 /**
  * Responses that carry tokens or client credentials are never cached (RFC 6749 §5.1): every
  * `/oauth/token` response, errors included, and every `/oauth/register` response send
- * `Cache-Control: no-store` and `Pragma: no-cache`.
+ * `Cache-Control: no-store` and `Pragma: no-cache`. A public server's anonymous tokens live for its
+ * `sessionTtl`.
  */
 import 'reflect-metadata';
 
 import { createTestFetchServer, type TestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
-import { disposeServers, postForm } from '../../__test-utils__/helpers/oauth-flow.helpers';
+import { decodeJwtPayload, disposeServers, postForm } from '../../__test-utils__/helpers/oauth-flow.helpers';
 import { App, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 
 @Tool({ name: 'ping', inputSchema: {} })
@@ -55,6 +56,23 @@ describe('token-bearing responses are never cached', () => {
     expect(response.status).toBe(200);
     expect(((await response.json()) as Record<string, unknown>)['access_token']).toEqual(expect.any(String));
     expectNoStore(response);
+  });
+
+  it("gives a public server's anonymous token the sessionTtl lifetime, an hour by default", async () => {
+    const byDefault = await serverWith({ mode: 'public' } as AuthConfig);
+    const configured = await serverWith({ mode: 'public', sessionTtl: 600 } as AuthConfig);
+
+    for (const [server, ttl] of [
+      [byDefault, 3600],
+      [configured, 600],
+    ] as const) {
+      const response = await postForm(server.handler, '/oauth/token', { grant_type: 'anonymous', client_id: 'desk' });
+      const body = (await response.json()) as { access_token: string; expires_in: number };
+      const claims = decodeJwtPayload(body.access_token);
+
+      expect(body.expires_in).toBe(ttl);
+      expect(Number(claims['exp']) - Number(claims['iat'])).toBe(ttl);
+    }
   });
 
   it('sends no-store with a token endpoint error', async () => {

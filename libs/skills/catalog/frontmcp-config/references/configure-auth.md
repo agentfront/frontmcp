@@ -52,7 +52,7 @@ Public mode allows all connections without authentication. Use this for developm
 class MyApp {}
 ```
 
-- `sessionTtl` -- session lifetime in seconds.
+- `sessionTtl` -- lifetime in seconds (default 3600) of the anonymous tokens `/oauth/token` issues (`expires_in` and `exp`); session ids don't expire.
 - `anonymousScopes` -- scopes granted to all unauthenticated clients (`this.auth.scopes`).
 - `publicAccess` -- `{ tools, prompts, rateLimit }`: the tools and prompts an anonymous caller may list and call (`'all'` by default; others answer `PUBLIC_ACCESS_DENIED`), and its calls per IP per minute (default 60).
 
