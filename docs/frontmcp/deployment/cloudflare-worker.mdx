@@ -218,6 +218,7 @@ The other Vercel KV / Upstash stores load on a Worker too: the skills HTTP cache
 A custom store can use the same loader: `createVercelKvClient()` from `@frontmcp/utils` returns a `@vercel/kv` client with the fetch `cache` mode unset and values read back as stored (no JSON parsing). Its `url` and `token` fall back to `KV_REST_API_URL` / `KV_REST_API_TOKEN`; with neither, it throws `StorageConfigError`.
 
 ```ts
+import { env } from 'cloudflare:workers';
 import { createVercelKvClient } from '@frontmcp/utils';
 
 const kv = await createVercelKvClient<{ get(key: string): Promise<unknown> }>({
