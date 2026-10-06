@@ -63,3 +63,51 @@ describe('App.esm()', () => {
     expect(loader.importMap).toEqual({ zod: 'https://cdn.example.com/zod.mjs' });
   });
 });
+
+describe('App.esm() of one package more than once', () => {
+  const echoTool = { name: 'echo', execute: async () => ({ content: [] }) };
+  let server: DirectMcpServer | undefined;
+
+  beforeEach(() => {
+    let delayMs = 50;
+    jest.spyOn(EsmModuleLoader.prototype, 'load').mockImplementation(async () => {
+      delayMs -= 10;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return { ...loadResult, manifest: { name: '@acme/deploy-tools', version: '1.0.0', tools: [echoTool] } };
+    });
+  });
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    await server?.dispose().catch(() => undefined);
+    server = undefined;
+  });
+
+  async function createGateway(...apps: ReturnType<typeof App.esm>[]): Promise<DirectMcpServer> {
+    const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
+    server = await FrontMcpInstance.createDirect({ info: { name: 'esm-gateway', version: '1.0.0' }, apps });
+    return server;
+  }
+
+  it('gives each unnamed app the id of its namespace, so every one of their tools is listed', async () => {
+    const namespaces = ['stable', 'pinned', 'beta', 'latest', 'canary'];
+    const srv = await createGateway(
+      ...namespaces.map((namespace) => App.esm(`@acme/deploy-tools@${namespace}`, { namespace })),
+    );
+
+    expect((await srv.listTools()).tools.map((tool) => tool.name).sort()).toEqual(
+      namespaces.map((namespace) => `${namespace}:echo`).sort(),
+    );
+  });
+
+  it('keeps the id of a named app', () => {
+    expect(App.esm('@acme/deploy-tools@1.0.0', { name: 'pinned', namespace: 'old' }).id).toBeUndefined();
+    expect(App.esm('@acme/deploy-tools@1.0.0', { namespace: 'old' }).id).toBe('old');
+  });
+
+  it('stops the server when two apps of the package have neither a name nor a namespace of their own', async () => {
+    await expect(
+      createGateway(App.esm('@acme/deploy-tools@^1.0.0'), App.esm('@acme/deploy-tools@next')),
+    ).rejects.toThrow(/apps share the id "acme-deploy-tools".*name/);
+  });
+});

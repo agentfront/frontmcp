@@ -6,8 +6,6 @@
  * AppEsmInstance loads the package code locally and executes in-process.
  */
 
-import { idFromString } from '@frontmcp/utils';
-
 import {
   AppEntry,
   type AdapterEntry,
@@ -43,6 +41,7 @@ import ResourceRegistry from '../../resource/resource.registry';
 import { type SkillRegistryInterface } from '../../skill/skill.registry';
 import { ToolInstance } from '../../tool/tool.instance';
 import ToolRegistry from '../../tool/tool.registry';
+import { appIdOf } from '../app.utils';
 
 /**
  * Empty plugin registry for ESM apps.
@@ -172,7 +171,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
 
   constructor(record: AppRecord, scopeProviders: ProviderRegistry) {
     super(record);
-    this.id = this.metadata.id ?? idFromString(this.metadata.name);
+    this.id = appIdOf(this.metadata);
     this.scopeProviders = scopeProviders;
 
     this.appOwner = {

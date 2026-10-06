@@ -162,6 +162,8 @@ export default class GatewayServer {}
 | `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities                                        |
 | `filter`           | `AppFilterConfig`              | Include/exclude filter for selectively importing primitives             |
 
+The app's id is its `name`; without one, its `namespace`, else the hostname's first label. Two `App.remote()` or `App.esm()` apps with one id (for example `https://mcp.github.com` and `https://mcp.linear.app`, both `mcp`) stop the server at startup with `DuplicateAppIdError`: give each its own `name` or `namespace`.
+
 ### Transport Options
 
 ```ts

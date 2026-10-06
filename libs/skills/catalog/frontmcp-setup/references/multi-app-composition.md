@@ -221,6 +221,8 @@ app.esm('@acme/tools@^1.0.0', { namespace: 'acme' });
 // ESM tools are exposed as: acme:tool_name
 ```
 
+A remote or ESM app's id is its `name`, else its `namespace`, else the package name (or the URL's first host label). Two such apps with one id stop startup with `DuplicateAppIdError`, so give each `app.esm()` of the same package its own `name` or `namespace`.
+
 ## Shared Tools
 
 Tools declared directly on `@FrontMcp` (not inside an `@App`) are served next to every app's tools, through the same flows: server-level plugin hooks, hooks on the tool class, `authorities`, rate limits, `availableWhen` and the startup checks apply to them as to app tools. They resolve server-level `providers`, not an app's.
