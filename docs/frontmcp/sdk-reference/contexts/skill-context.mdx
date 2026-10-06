@@ -75,6 +75,7 @@ Default behaviour: assembles the content from the decorator metadata, with the
 instructions `loadInstructions()` returns (your override included).
 
 ```typescript
+@Skill({ name: 'triage', description: 'Triage incoming tickets', instructions: 'Sort tickets by severity.' })
 class TriageSkill extends SkillContext {
   async build() {
     const content = await super.build();
