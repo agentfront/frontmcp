@@ -21,6 +21,7 @@ import { extractBearerToken } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
 import {
+  enforceGlobalRateLimit,
   enforceIpFilter,
   Flow,
   FlowBase,
@@ -44,7 +45,7 @@ const stateSchema = z.object({
 const outputSchema = HttpJsonSchema;
 
 const plan = {
-  pre: ['checkIpFilter', 'parseInput'],
+  pre: ['checkIpFilter', 'acquireQuota', 'parseInput'],
   execute: ['verifyAndRespond'],
 } as const satisfies FlowPlan<string>;
 
@@ -80,6 +81,11 @@ export default class OauthUserInfoFlow extends FlowBase<typeof name> {
   @Stage('checkIpFilter')
   async checkIpFilter() {
     enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
+
+  @Stage('acquireQuota')
+  async acquireQuota() {
+    await enforceGlobalRateLimit(this.scope, this.tryGetContext());
   }
 
   @Stage('parseInput')

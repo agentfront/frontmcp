@@ -286,6 +286,11 @@ export const httpOutputSchema = z.discriminatedUnion('kind', [
 
 export type HttpOutput = z.infer<typeof httpOutputSchema>;
 
+/** The `WWW-Authenticate` header of `challenge`, or none when there is no challenge (a bare-token static server). */
+export function challengeHeaders(challenge: string | undefined): Record<string, string> | undefined {
+  return challenge ? { 'WWW-Authenticate': challenge } : undefined;
+}
+
 /**
  * Convenience factories
  */

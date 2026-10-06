@@ -509,6 +509,22 @@ export class QuotaExceededError extends PublicMcpError {
 }
 
 /**
+ * An anonymous caller asked for a tool or prompt that `publicAccess` does not list.
+ * Mapped to JSON-RPC -32003 (FORBIDDEN): the entry exists, signed-in callers may use it.
+ */
+export class PublicAccessDeniedError extends PublicMcpError {
+  readonly mcpErrorCode = MCP_ERROR_CODES.FORBIDDEN;
+
+  constructor(kind: 'tool' | 'prompt', name: string) {
+    super(`The ${kind} "${name}" is not available to anonymous callers`, 'PUBLIC_ACCESS_DENIED', 403);
+  }
+
+  toJsonRpcError(): { code: number; message: string } {
+    return { code: this.mcpErrorCode, message: this.getPublicMessage() };
+  }
+}
+
+/**
  * Unauthorized error
  */
 export class UnauthorizedError extends PublicMcpError {

@@ -42,10 +42,14 @@ export function registryAuthOf(loader?: PackageLoader): EsmRegistryAuth | undefi
     : undefined;
 }
 
-/** A module loader for packages fetched through `loader` (the registry and bundle CDN) and cached for `cacheTTL` ms. */
+/**
+ * A module loader for packages fetched through `loader` (the registry and bundle CDN), cached for `cacheTTL` ms,
+ * with the imports `importMap` names rewritten.
+ */
 export function createPackageModuleLoader(options: {
   loader?: PackageLoader;
   cacheTTL?: number;
+  importMap?: Record<string, string>;
   logger?: FrontMcpLogger;
 }): EsmModuleLoader {
   return new EsmModuleLoader({
@@ -53,6 +57,7 @@ export function createPackageModuleLoader(options: {
     registryAuth: registryAuthOf(options.loader),
     logger: options.logger,
     esmBaseUrl: options.loader?.url,
+    importMap: options.importMap,
   });
 }
 

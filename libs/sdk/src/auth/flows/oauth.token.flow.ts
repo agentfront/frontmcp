@@ -62,6 +62,7 @@ import { randomUUID } from '@frontmcp/utils';
 import {
   allowsPublicAccess,
   computeResource,
+  enforceGlobalRateLimit,
   enforceIpFilter,
   Flow,
   FlowBase,
@@ -225,7 +226,7 @@ const stateSchema = z.object({
 const outputSchema = HttpJsonSchema;
 
 const plan = {
-  pre: ['checkIpFilter', 'parseInput', 'validateInput'],
+  pre: ['checkIpFilter', 'acquireQuota', 'parseInput', 'validateInput'],
   execute: ['handleAuthorizationCodeGrant', 'handleRefreshTokenGrant', 'handleAnonymousGrant', 'buildTokenResponse'],
   post: ['validateOutput'],
 } as const satisfies FlowPlan<string>;
@@ -262,6 +263,11 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
   @Stage('checkIpFilter')
   async checkIpFilter() {
     enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
+
+  @Stage('acquireQuota')
+  async acquireQuota() {
+    await enforceGlobalRateLimit(this.scope, this.tryGetContext());
   }
 
   @Stage('parseInput')

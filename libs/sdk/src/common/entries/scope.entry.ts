@@ -103,6 +103,9 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
 
   abstract get rateLimitManager(): GuardManager | undefined;
 
+  /** The guard `publicAccess.rateLimit` counts on: the throttle's, else its own when `throttle.enabled` is `false`. */
+  abstract get publicAccessGuard(): GuardManager | undefined;
+
   abstract get elicitationStore(): ElicitationStore | undefined;
 
   /** Persistent store for MCP 2025-11-25 background task records. */

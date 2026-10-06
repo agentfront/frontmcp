@@ -1,6 +1,7 @@
 import { isAnonymousSubject } from '@frontmcp/auth';
 import {
   ConcurrencyLimitError,
+  GuardStorageUnavailableError,
   type ConcurrencyConfig,
   type GuardManager,
   type PartitionKey,
@@ -82,6 +83,48 @@ function verifiedSessionOf(source: PartitionSource): string | undefined {
  */
 export function partitionsByIdentity(partitionBy: PartitionKey | undefined): boolean {
   return partitionBy === 'session' || partitionBy === 'userId' || typeof partitionBy === 'function';
+}
+
+/**
+ * `throttle.global` for the HTTP flows that serve no MCP request (OAuth, discovery, skills), from the
+ * `acquireQuota` stage each starts with. They run before any caller is verified, so a `'session'` or
+ * `'userId'` limit does not count them; any other limit does, a function partition resolved with the
+ * request's IP and no verified identity, and answers 429 once reached.
+ */
+export async function enforceGlobalRateLimit(
+  scope: Pick<ScopeEntry, 'rateLimitManager'>,
+  context: (PartitionSource & { set(key: symbol, value: boolean): void }) | undefined,
+): Promise<void> {
+  const manager = scope.rateLimitManager;
+  const globalConfig = manager?.config?.global;
+  const partitionBy = globalConfig?.partitionBy;
+  if (!manager || !globalConfig || partitionBy === 'session' || partitionBy === 'userId') return;
+  let result: Awaited<ReturnType<typeof manager.checkGlobalRateLimit>>;
+  try {
+    result = await manager.checkGlobalRateLimit(buildPartitionContext(context));
+  } catch (error) {
+    // Rate limits fail closed: an unreachable store refuses with the guard's 503, as `http:request` does.
+    if (!(error instanceof GuardStorageUnavailableError)) throw error;
+    FlowControl.respond(
+      httpRespond.json(
+        {
+          error: 'service_unavailable',
+          message: 'Service temporarily unavailable: the rate-limit store cannot be reached',
+          code: error.code,
+        },
+        { status: error.statusCode, headers: { 'Retry-After': '1' } },
+      ),
+    );
+  }
+  context?.set(GLOBAL_RATE_LIMIT_CHECKED, true);
+  if (result.allowed) return;
+  const retryAfter = Math.ceil((result.retryAfterMs ?? 60_000) / 1000);
+  FlowControl.respond(
+    httpRespond.json(
+      { error: 'rate_limited', message: `Rate limit exceeded. Retry after ${retryAfter} seconds` },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+    ),
+  );
 }
 
 /**

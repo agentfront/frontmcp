@@ -45,7 +45,7 @@ type AuthConfig = NonNullable<FrontMcpConfigInput['auth']>;
 
 const servers: TestFetchServer[] = [];
 const savedEnv: Record<string, string | undefined> = {};
-const ENV_KEYS = ['JWT_SECRET', 'FRONTMCP_PUBLIC_URL', 'FRONTMCP_PUBLIC_HOST'] as const;
+const ENV_KEYS = ['JWT_SECRET', 'FRONTMCP_PUBLIC_URL', 'FRONTMCP_PUBLIC_HOST', 'PORT'] as const;
 
 beforeAll(() => {
   for (const key of ENV_KEYS) savedEnv[key] = process.env[key];
@@ -55,6 +55,7 @@ beforeAll(() => {
 afterEach(() => {
   delete process.env['FRONTMCP_PUBLIC_URL'];
   delete process.env['FRONTMCP_PUBLIC_HOST'];
+  delete process.env['PORT'];
 });
 
 afterAll(async () => {
@@ -250,7 +251,7 @@ describe('one issuer for every entry point (#629)', () => {
     }
   });
 
-  it('uses the FRONTMCP_PUBLIC_HOST boot-time issuer everywhere when it is the only pin', async () => {
+  it('uses the FRONTMCP_PUBLIC_HOST boot-time issuer, on the default server port, everywhere when it is the only pin', async () => {
     process.env['FRONTMCP_PUBLIC_HOST'] = 'boot.example.com';
     const { server, scope } = await serverWith(localAuth());
 
@@ -259,10 +260,10 @@ describe('one issuer for every entry point (#629)', () => {
       await issuersViaFetch(server, 'desk.example.com'),
     ]) {
       expect(seen).toMatchObject({
-        discovered: 'http://boot.example.com:3001',
-        authorizationServer: 'http://boot.example.com:3001',
-        errorRedirectIss: 'http://boot.example.com:3001',
-        tokenIss: 'http://boot.example.com:3001',
+        discovered: 'http://boot.example.com:3000',
+        authorizationServer: 'http://boot.example.com:3000',
+        errorRedirectIss: 'http://boot.example.com:3000',
+        tokenIss: 'http://boot.example.com:3000',
       });
     }
   });

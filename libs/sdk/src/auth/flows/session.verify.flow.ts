@@ -35,6 +35,7 @@ import {
   extractBearerToken,
   isJwt,
   JwksService,
+  scopesFromClaims,
   validateAudience,
   type ProviderVerifyRef,
   type VerifyResult,
@@ -505,7 +506,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     this.createAnonymousSession({
       authMode: 'public',
       issuer: 'public',
-      scopes: ['public'],
+      scopes: authOptions.anonymousScopes ?? ['anonymous'],
       sessionIdHeader: this.state.sessionIdHeader,
     });
   }
@@ -707,13 +708,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
         | string[]
         | undefined;
       if (requiredScopes && requiredScopes.length > 0) {
-        const scopeClaim = result.payload?.['scope'];
-        const tokenScopes =
-          typeof scopeClaim === 'string'
-            ? scopeClaim.split(/\s+/).filter(Boolean)
-            : Array.isArray(scopeClaim)
-              ? (scopeClaim as string[])
-              : [];
+        const tokenScopes = scopesFromClaims(result.payload);
         const hasAll = requiredScopes.every((s: string) => tokenScopes.includes(s));
         if (!hasAll) {
           this.logger.warn('verifyIfJwt: insufficient scopes', {

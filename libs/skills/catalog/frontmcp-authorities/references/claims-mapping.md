@@ -254,7 +254,7 @@ authorities: {
 - Permissions require runtime transformation (e.g., wildcard expansion)
 - The token structure is deeply nested or unconventional
 
-`claimsResolver` takes precedence over `claimsMapping` when both are provided.
+`claimsResolver` takes precedence over `claimsMapping` when both are provided, for the authorities policies and for `this.auth` alike (`this.auth.roles`, `permissions`, `claims`, `hasRole()`, `hasPermission()` read what it returns).
 
 ## Quick Reference Table
 

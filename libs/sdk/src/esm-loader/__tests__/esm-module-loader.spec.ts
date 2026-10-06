@@ -1,5 +1,7 @@
+import { EsmCacheError, EsmManifestInvalidError, EsmPackageLoadError } from '../../errors/esm.errors';
+import type { EsmCacheEntry, EsmCacheManager } from '../esm-cache';
+import { normalizeEsmExport } from '../esm-manifest';
 import { EsmModuleLoader } from '../esm-module-loader';
-import type { EsmCacheManager, EsmCacheEntry } from '../esm-cache';
 import { VersionResolver } from '../version-resolver';
 
 // Mock VersionResolver
@@ -215,6 +217,7 @@ describe('EsmModuleLoader', () => {
       });
 
       await expect(loader.load(specifier)).rejects.toThrow('esm.sh returned 500');
+      await expect(loader.load(specifier)).rejects.toThrow(EsmPackageLoadError);
     });
 
     it('throws on generic fetch error', async () => {
@@ -255,6 +258,84 @@ describe('EsmModuleLoader', () => {
 
       const url = mockFetch.mock.calls[0][0] as string;
       expect(url).toContain('https://my-esm.example.com/');
+    });
+  });
+
+  describe('typed errors (#766)', () => {
+    beforeEach(() => {
+      mockResolve.mockResolvedValue({ resolvedVersion: '1.2.0', availableVersions: ['1.2.0'] });
+    });
+
+    it('names the package in an EsmManifestInvalidError when the export is not a manifest', async () => {
+      mockCache.get.mockResolvedValue({
+        packageUrl: 'https://esm.sh/@acme/tools@1.2.0?bundle',
+        packageName: '@acme/tools',
+        resolvedVersion: '1.2.0',
+        cachedAt: Date.now(),
+        bundlePath: '/tmp/cache/bundle.mjs',
+      });
+      jest
+        .spyOn(loader as unknown as Record<string, unknown>, 'importFromPath' as never)
+        .mockResolvedValue({} as never);
+      (normalizeEsmExport as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('ESM module export must be an object');
+      });
+
+      const failure = loader.load(specifier);
+
+      await expect(failure).rejects.toThrow(EsmManifestInvalidError);
+      await expect(failure).rejects.toThrow('Invalid manifest in ESM package "@acme/tools"');
+    });
+
+    it('throws an EsmCacheError for a cached entry with nothing to import', async () => {
+      mockCache.get.mockResolvedValue({
+        packageUrl: 'https://esm.sh/@acme/tools@1.2.0?bundle',
+        packageName: '@acme/tools',
+        resolvedVersion: '1.2.0',
+        cachedAt: Date.now(),
+        bundlePath: '',
+      });
+
+      await expect(loader.load(specifier)).rejects.toThrow(EsmCacheError);
+    });
+  });
+
+  describe('importMap (#766)', () => {
+    const mapped = { zod: 'https://cdn.example.com/zod.mjs' };
+
+    beforeEach(() => {
+      mockResolve.mockResolvedValue({ resolvedVersion: '1.2.0', availableVersions: ['1.2.0'] });
+      (globalThis as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => 'import{z}from"zod";export default {}',
+        headers: { get: () => null },
+      });
+      mockCache.get.mockResolvedValue(undefined);
+      mockCache.put.mockResolvedValue({
+        packageUrl: 'url',
+        packageName: '@acme/tools',
+        resolvedVersion: '1.2.0',
+        cachedAt: Date.now(),
+        bundlePath: '/tmp/cache/bundle.mjs',
+      });
+    });
+
+    it('fetches the bundle with the mapped packages external and caches it rewritten, apart from unmapped builds', async () => {
+      const mapLoader = new EsmModuleLoader({ cache: mockCache, importMap: mapped });
+      jest
+        .spyOn(mapLoader as unknown as Record<string, unknown>, 'importFromPath' as never)
+        .mockResolvedValue({} as never);
+
+      const result = await mapLoader.load(specifier);
+
+      const fetchMock = (globalThis as unknown as { fetch: jest.Mock }).fetch;
+      expect(fetchMock.mock.calls[0][0]).toBe('https://esm.sh/@acme/tools@1.2.0?bundle&external=zod');
+      const [, cacheVersion, content] = mockCache.put.mock.calls[0];
+      expect(cacheVersion).toMatch(/^1\.2\.0\+import-map\.[0-9a-f]{12}$/);
+      expect(mockCache.get).toHaveBeenCalledWith('@acme/tools', cacheVersion);
+      expect(content).toBe('import{z}from"https://cdn.example.com/zod.mjs";export default {}');
+      expect(result.resolvedVersion).toBe('1.2.0');
     });
   });
 

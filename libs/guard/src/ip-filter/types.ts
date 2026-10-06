@@ -12,9 +12,9 @@ export interface IpFilterConfig {
   denyList?: string[];
   /** Default action when IP matches neither list, or no client IP could be established. @default 'allow' */
   defaultAction?: 'allow' | 'deny';
-  /** Not read; setting it logs a startup warning. Set `FRONTMCP_TRUST_PROXY` to trust X-Forwarded-For. @default false */
+  /** Read the client IP from X-Forwarded-For behind `trustedProxyDepth` proxies; `false` leaves it to `FRONTMCP_TRUST_PROXY`. @default false */
   trustProxy?: boolean;
-  /** Not read; setting it logs a startup warning. Set `FRONTMCP_TRUSTED_PROXY_DEPTH` instead. @default 1 */
+  /** Proxies in front of the server that append to X-Forwarded-For; read when `trustProxy` is true. @default 1 */
   trustedProxyDepth?: number;
 }
 

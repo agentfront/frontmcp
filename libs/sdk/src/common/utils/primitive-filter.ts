@@ -56,13 +56,25 @@ function matchesAny(name: string, patterns: string[]): boolean {
 }
 
 /**
- * Apply include/exclude filtering to an array of named items.
+ * Whether `filter` lets the primitive named `name` of `primitiveType` through.
  *
- * Filtering logic:
- * - `default: 'include'` (default): item is included unless it matches an `exclude` pattern
- * - `default: 'exclude'`: item is excluded unless it matches an `include` pattern
- * - If both `include` and `exclude` match, `exclude` takes precedence when default is 'include',
- *   and `include` takes precedence when default is 'exclude'
+ * - `default: 'include'` (default): included unless it matches an `exclude` pattern
+ * - `default: 'exclude'`: excluded unless it matches an `include` pattern
+ */
+export function isPrimitiveIncluded(
+  name: string,
+  primitiveType: PrimitiveFilterKey,
+  config?: AppFilterConfig,
+): boolean {
+  if (!config) return true;
+  if ((config.default ?? 'include') === 'include') {
+    return !matchesAny(name, config.exclude?.[primitiveType] ?? []);
+  }
+  return matchesAny(name, config.include?.[primitiveType] ?? []);
+}
+
+/**
+ * Apply include/exclude filtering to an array of named items (see {@link isPrimitiveIncluded}).
  *
  * @param items - Array of items with a `name` property
  * @param primitiveType - The primitive type key (e.g., 'tools', 'resources')
@@ -74,35 +86,5 @@ export function applyPrimitiveFilter<T extends { name: string }>(
   primitiveType: PrimitiveFilterKey,
   config?: AppFilterConfig,
 ): T[] {
-  if (!config) return items;
-
-  const defaultMode = config.default ?? 'include';
-  const includePatterns = config.include?.[primitiveType];
-  const excludePatterns = config.exclude?.[primitiveType];
-
-  // No patterns for this type — use default mode
-  if (!includePatterns?.length && !excludePatterns?.length) {
-    // If default is 'exclude' and no include patterns exist for this type,
-    // check if there are ANY include patterns at all. If the entire include
-    // map is empty, default behavior applies (exclude all).
-    if (defaultMode === 'exclude') {
-      return [];
-    }
-    return items;
-  }
-
-  return items.filter((item) => {
-    const matchesInclude = includePatterns?.length ? matchesAny(item.name, includePatterns) : false;
-    const matchesExclude = excludePatterns?.length ? matchesAny(item.name, excludePatterns) : false;
-
-    if (defaultMode === 'include') {
-      // Include by default, exclude wins over include
-      if (matchesExclude) return false;
-      return true;
-    } else {
-      // Exclude by default, include wins over exclude
-      if (matchesInclude) return true;
-      return false;
-    }
-  });
+  return items.filter((item) => isPrimitiveIncluded(item.name, primitiveType, config));
 }

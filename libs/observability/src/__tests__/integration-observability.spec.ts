@@ -16,43 +16,41 @@
  * - Jobs/workflows (via tool execution)
  */
 
+import { diag, DiagLogLevel, SpanStatusCode, trace } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { SpanStatusCode, diag, DiagLogLevel, trace } from '@opentelemetry/api';
 
+import { CallbackSink } from '../logging/sinks/callback.sink';
 import { StructuredLogTransport, type ContextSnapshot } from '../logging/structured-log-transport';
 import type { StructuredLogEntry } from '../logging/structured-log.types';
-import { CallbackSink } from '../logging/sinks/callback.sink';
-import { TelemetryAccessor } from '../telemetry/telemetry.accessor';
-
+import type { TracingOptions } from '../otel/otel.types';
 import {
-  onToolWillParse,
-  onToolWillExecute,
-  onToolDidExecute,
-  onToolDidFinalize,
-  onResourceWillParse,
-  onResourceWillExecute,
-  onResourceDidExecute,
-  onResourceDidFinalize,
-  onPromptWillParse,
-  onPromptWillExecute,
-  onPromptDidExecute,
-  onPromptDidFinalize,
-  onAgentWillParse,
-  onAgentWillExecute,
   onAgentDidExecute,
   onAgentDidFinalize,
-  onHttpWillTrace,
-  onHttpDidFinalize,
-  onTransportWillStart,
-  onTransportDidRoute,
-  onTransportDidFinalize,
-  onAuthWillStart,
+  onAgentWillExecute,
+  onAgentWillParse,
   onAuthDidFinalize,
-  onGenericFlowWillStart,
+  onAuthWillStart,
   onGenericFlowDidFinalize,
+  onGenericFlowWillStart,
+  onHttpDidFinalize,
+  onHttpWillTrace,
+  onPromptDidExecute,
+  onPromptDidFinalize,
+  onPromptWillExecute,
+  onPromptWillParse,
+  onResourceDidExecute,
+  onResourceDidFinalize,
+  onResourceWillExecute,
+  onResourceWillParse,
+  onToolDidExecute,
+  onToolDidFinalize,
+  onToolWillExecute,
+  onToolWillParse,
+  onTransportDidFinalize,
+  onTransportDidRoute,
+  onTransportWillStart,
 } from '../plugin/observability.hooks';
-
-import type { TracingOptions } from '../otel/otel.types';
+import { TelemetryAccessor } from '../telemetry/telemetry.accessor';
 
 // ─── Global OTel test setup ────────────────────────────────────────────────
 const exporter = new InMemorySpanExporter();
@@ -236,7 +234,7 @@ describe('Integration: Tool execution observability', () => {
     const ctx = makeFlowCtx();
     onToolWillParse(TRACE_OPTS, ctx);
     onToolWillExecute(TRACE_OPTS, ctx);
-    ctx.state.error = new Error('tool crashed');
+    ctx.state.flowError = new Error('tool crashed');
     onToolDidFinalize(ctx);
 
     const rpcSpan = exporter.getFinishedSpans().find((s) => s.name === 'tools/call');

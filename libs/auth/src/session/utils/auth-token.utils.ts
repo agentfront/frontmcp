@@ -43,7 +43,12 @@ export function deriveTypedUser(claims: Record<string, unknown>): UserClaim {
     ...claims,
     iss: extractClaimValue(claims, 'iss', isString) ?? '',
     sid: extractClaimValue(claims, 'sid', isString),
-    sub: extractClaimValue(claims, 'sub', isString) ?? '',
+    // RFC 9068 §2.2: a client-credentials token names the client as its subject; some IdPs only put it in client_id / azp
+    sub:
+      extractClaimValue(claims, 'sub', isString) ??
+      extractClaimValue(claims, 'client_id', isString) ??
+      extractClaimValue(claims, 'azp', isString) ??
+      '',
     exp: extractClaimValue(claims, 'exp', isNumber),
     iat: extractClaimValue(claims, 'iat', isNumber),
     aud: extractClaimValue(claims, 'aud', isStringOrStringArray),

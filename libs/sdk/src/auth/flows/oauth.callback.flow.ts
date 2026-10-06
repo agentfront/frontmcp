@@ -40,6 +40,7 @@ import {
 } from '@frontmcp/utils';
 
 import {
+  enforceGlobalRateLimit,
   enforceIpFilter,
   Flow,
   FlowBase,
@@ -134,7 +135,7 @@ const stateSchema = z.object({
 const outputSchema = z.union([HttpRedirectSchema, HttpHtmlSchema]);
 
 const plan = {
-  pre: ['checkIpFilter', 'parseInput', 'validatePendingAuth'],
+  pre: ['checkIpFilter', 'acquireQuota', 'parseInput', 'validatePendingAuth'],
   execute: ['handleIncrementalAuth', 'handleFederatedAuth', 'createAuthorizationCode', 'redirectToClient'],
 } as const satisfies FlowPlan<string>;
 
@@ -187,6 +188,11 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   @Stage('checkIpFilter')
   async checkIpFilter() {
     enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
+
+  @Stage('acquireQuota')
+  async acquireQuota() {
+    await enforceGlobalRateLimit(this.scope, this.tryGetContext());
   }
 
   @Stage('parseInput')

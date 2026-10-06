@@ -95,3 +95,35 @@ describe('completion:complete flow', () => {
     expect(message.result?.['completion']).toMatchObject({ values: [] });
   });
 });
+
+@Prompt({ name: 'escalate', arguments: [{ name: 'ticketId' }], authorities: 'admin' })
+class EscalatePrompt extends PromptContext {
+  async ticketIdCompleter(partial: string) {
+    return { values: ['T-secret'].filter((id) => id.startsWith(partial)) };
+  }
+
+  async execute(): Promise<GetPromptResult> {
+    return { messages: [{ role: 'user', content: { type: 'text', text: 'escalate' } }] };
+  }
+}
+
+@App({ id: 'ops', name: 'Ops', prompts: [EscalatePrompt] })
+class OpsApp {}
+
+describe('completion:complete authorities', () => {
+  it('refuses a completion for a prompt whose authorities refuse the caller, as prompts/get does (#766)', async () => {
+    const server = await createTestFetchServer({
+      info: { name: 'completion-authorities', version: '1.0.0' },
+      apps: [OpsApp],
+      authorities: { claimsMapping: { roles: 'roles' }, profiles: { admin: { roles: { any: ['admin'] } } } },
+    });
+
+    const { message } = await rpc20260728(server.handler, 'completion/complete', {
+      ref: { type: 'ref/prompt', name: 'escalate' },
+      argument: { name: 'ticketId', value: 'T' },
+    });
+
+    expect(message.error).toMatchObject({ code: -32003 });
+    expect(JSON.stringify(message)).not.toContain('T-secret');
+  });
+});

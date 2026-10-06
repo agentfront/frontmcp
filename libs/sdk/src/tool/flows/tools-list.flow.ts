@@ -21,6 +21,7 @@ import { buildCDNInfoForUIType, type AdapterPlatformType as AIPlatformType } fro
 import { isUIType, type UIType } from '@frontmcp/uipack/types';
 import { base64Decode, base64Encode } from '@frontmcp/utils';
 
+import { isPubliclyListed, publicAccessFor } from '../../auth/public-access.utils';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { DEFAULT_TOOL_PAGINATION, type ToolPaginationOptions } from '../../common/types/options/pagination';
 import { InternalMcpError, InvalidInputError, InvalidMethodError } from '../../errors';
@@ -46,6 +47,15 @@ const stateSchema = z.object({
       tool: z.instanceof(ToolEntry),
     }),
   ),
+  /** Every tool `findTools` collected, before any filter: names that collide here stay qualified. */
+  foundTools: z
+    .array(
+      z.object({
+        appName: z.string(),
+        tool: z.instanceof(ToolEntry),
+      }),
+    )
+    .optional(),
   resolvedTools: z.array(
     z.object({
       appName: z.string(),
@@ -73,7 +83,7 @@ type ResponseToolItem = BaseResponseToolItem & {
 // TODO: add support for session based tools
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findTools', 'filterByAuthorities', 'resolveConflicts'],
+  execute: ['findTools', 'filterByAuthorities', 'filterByPublicAccess', 'resolveConflicts'],
   post: ['parseTools'],
 } as const satisfies FlowPlan<string>;
 
@@ -312,6 +322,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       }
 
       this.state.set('tools', tools);
+      this.state.set('foundTools', tools);
       this.logger.verbose('findTools:done');
     } catch (error) {
       this.logger.error('findTools: failed to collect tools', error);
@@ -355,6 +366,19 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     this.logger.verbose('filterByAuthorities:done');
   }
 
+  /** An anonymous caller sees only the tools `publicAccess` lists. */
+  @Stage('filterByPublicAccess')
+  async filterByPublicAccess() {
+    const publicAccess = publicAccessFor(this.scope.auth?.options, this.state.authInfo);
+    if (!publicAccess) return;
+    this.state.set(
+      'tools',
+      this.state.required.tools.filter(({ tool }) =>
+        isPubliclyListed(publicAccess, 'tools', [tool.fullName, tool.name]),
+      ),
+    );
+  }
+
   @Stage('resolveConflicts')
   async resolveConflicts() {
     this.logger.verbose('resolveConflicts:start');
@@ -363,7 +387,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       const found = this.state.required.tools;
 
       const counts = new Map<string, number>();
-      for (const { tool } of found) {
+      for (const { tool } of this.state.foundTools ?? found) {
         const baseName = tool.metadata.id ?? tool.metadata.name;
         counts.set(baseName, (counts.get(baseName) ?? 0) + 1);
       }
