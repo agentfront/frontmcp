@@ -97,6 +97,8 @@ static async createDirect(options: FrontMcpConfigInput, endpoint?: { app?: strin
 
 It serves the server's main endpoint ([`getPrimaryScope()`](#getprimaryscope)). `{ app }` serves the endpoint an app has of its own instead: each app's with `splitByApp`, a `standalone` app's otherwise ([`getAppScope()`](#getappscopeapp)). `connect(config, { app })` takes the same option. Up to 1.9.2 a `splitByApp` server's other apps couldn't be reached in-process.
 
+`server.dispose()` shuts the whole server down, as [`shutdown()`](#shutdown) does: every scope is disposed, the endpoints it doesn't serve included (`onDispose` callbacks and providers run). Up to 1.9.2 it ran the `onDispose` callbacks of the scope it served only, leaving its providers and every other scope alive. An `app` without an endpoint of its own rejects once the server built for it is shut down; `connect(config, { app })` rejects the same way and, when no other client shares that server, disposes it, so the next `connect()` builds a new one.
+
 Best for: Testing, embedding, CLI tools, agent backends.
 
 ```typescript
