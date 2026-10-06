@@ -181,6 +181,13 @@ function evaluateCondition(
   return applyOperator(actual, condition.op, expected);
 }
 
+const REDACTED_ENV_VALUE = '[redacted]';
+
+/** A value read from `env.*` stays out of a denial: denials reach the client, environment variables may be secrets. */
+function reportableActual(path: string, actual: unknown): unknown {
+  return path === 'env' || path.startsWith('env.') ? REDACTED_ENV_VALUE : actual;
+}
+
 /**
  * Evaluate ABAC policy.
  */
@@ -193,10 +200,11 @@ export function evaluateAbac(policy: AbacPolicy, ctx: AuthoritiesEvaluationConte
       const actual = resolveDotPath(envelope, path);
       const expected = resolveValue(expectedRaw, ctx);
       if (expected === undefined || actual !== expected) {
+        const reported = reportableActual(path, actual);
         return {
           granted: false,
-          deniedBy: `attributes.match: '${path}' expected '${String(expected)}' but got '${String(actual)}'`,
-          denial: { kind: 'attributes', path: 'attributes.match', expected, actual },
+          deniedBy: `attributes.match: '${path}' expected '${String(expected)}' but got '${String(reported)}'`,
+          denial: { kind: 'attributes', path: 'attributes.match', expected, actual: reported },
           evaluatedPolicies: ['attributes.match'],
         };
       }
@@ -209,7 +217,7 @@ export function evaluateAbac(policy: AbacPolicy, ctx: AuthoritiesEvaluationConte
       const condition = policy.conditions[i];
       if (!evaluateCondition(condition, envelope, ctx)) {
         const expected = resolveValue(condition.value, ctx);
-        const actual = resolveDotPath(envelope, condition.path);
+        const actual = reportableActual(condition.path, resolveDotPath(envelope, condition.path));
         return {
           granted: false,
           deniedBy: `attributes.conditions: '${condition.path}' failed '${condition.op}' check against '${String(expected)}'`,
