@@ -36,6 +36,11 @@ export async function startMockBillingServer(port = 9876): Promise<http.Server> 
       if (!auth || Array.isArray(auth) || !auth.startsWith('Bearer ')) {
         return reply(res, 401, { error: 'missing bearer token' });
       }
+      // A JSON body sent as text/plain (the #690 regression) must fail, not parse anyway.
+      const contentType = req.headers['content-type'] ?? '';
+      if (req.method === 'POST' && !contentType.startsWith('application/json')) {
+        return reply(res, 415, { error: 'expected an application/json body', contentType });
+      }
 
       if (req.method === 'POST' && url.pathname === '/v1/invoices') {
         const body = JSON.parse((await readBody(req)) || '{}');
