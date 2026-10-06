@@ -245,6 +245,8 @@ A run's result is what `execute()` returns, or the value it passes to `this.resp
 
 A job declared on an `@App` runs with that app's providers (`this.get(TicketStore)`), as the app's tools do, and a job declared on `@FrontMcp` with the server's.
 
+A job started with `execute_job` or `execute_workflow` runs with the caller's request context: `this.context` and CONTEXT-scoped providers, including the `this.remember` and `this.featureFlags` accessors, work inside it as they do in a tool. A background run outlives the request that started it, so it gets a context of its own with the caller's session, auth and trace, a request id of its own, and no transport. Up to 1.9.1 `this.context` threw `RequestContextNotAvailableError` in a job and CONTEXT-scoped providers threw `ProviderScopedAccessError`.
+
 Up to 1.9.1 the `outputSchema` was not checked, `this.respond()` replaced the whole `execute_job` response with its value instead of becoming the job's result, and a job on an `@App` saw only the server's providers.
 
 ---

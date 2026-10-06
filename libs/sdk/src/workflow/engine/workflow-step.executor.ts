@@ -4,9 +4,11 @@ import { type JobEntry } from '../../common/entries/job.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobRetryConfig } from '../../common/metadata/job.metadata';
 import { type WorkflowStep, type WorkflowStepResult } from '../../common/metadata/workflow.metadata';
+import { type FrontMcpContext } from '../../context';
 import { InvalidEntityError, InvalidOutputError } from '../../errors';
 import { JobNotAuthorizedError } from '../../errors/job.errors';
 import { WorkflowJobTimeoutError } from '../../errors/workflow.errors';
+import { jobContextProviders } from '../../job/job-context-providers';
 import { JobPermissionGuard } from '../../job/job-permission.guard';
 import { type JobRegistryInterface } from '../../job/job.registry';
 import { runJobAttempt } from '../../job/job.utils';
@@ -14,6 +16,8 @@ import { runJobAttempt } from '../../job/job.utils';
 export interface WorkflowStepExecutorExtra {
   authInfo: Partial<Record<string, unknown>>;
   contextProviders?: unknown;
+  /** The run's request context; each step's job builds its CONTEXT-scoped providers for it (#705). */
+  context?: FrontMcpContext;
   /**
    * The scope's authorities context builder, so a step's permission check
    * resolves roles through the server's own `claimsMapping` rather than a
@@ -101,10 +105,9 @@ export class WorkflowStepExecutor {
     attempt: number,
   ): Promise<unknown> {
     const parsedInput = job.parseInput(input);
-    const ctx = job.create(parsedInput, {
-      ...this.extra,
-      attempt,
-    });
+    const { context, ...extra } = this.extra;
+    const contextProviders = context ? await jobContextProviders(job, context) : extra.contextProviders;
+    const ctx = job.create(parsedInput, { ...extra, contextProviders, attempt });
 
     // Race a timer against the job promise. Note: this does NOT cancel the
     // underlying job execution — it only rejects the caller early on timeout.
