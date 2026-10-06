@@ -103,7 +103,8 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
       });
     }
 
-    if (this.isPreApprovedContext(approvalConfig, currentContext)) {
+    // alwaysPrompt asks every call for an approval of its own, in a pre-approved context too.
+    if (!approvalConfig.alwaysPrompt && this.isPreApprovedContext(approvalConfig, currentContext)) {
       return;
     }
 

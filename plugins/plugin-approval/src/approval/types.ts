@@ -349,7 +349,7 @@ export interface ToolApprovalRequirement {
 
   /**
    * Contexts where this tool is pre-approved.
-   * E.g., "allow without approval in repo Z"
+   * E.g., "allow without approval in repo Z". Ignored when `alwaysPrompt` is set.
    */
   preApprovedContexts?: ApprovalContext[];
 }
