@@ -165,7 +165,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
   /**
    * Shut the server down gracefully (#712): stop accepting connections, shut every scope down
    * (HA heartbeat, session relay, Redis, channels) so other nodes take its sessions over at once,
-   * let requests in flight finish, then dispose every scope. Safe to call more than once.
+   * let requests in flight finish, then dispose every scope. Every step runs even when one fails;
+   * the returned promise then rejects. Safe to call more than once.
    * `bootstrap()` runs it on SIGTERM and SIGINT; call it yourself to manage signals.
    */
   shutdown(): Promise<void> {
@@ -175,20 +176,24 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
   private async runShutdown(): Promise<void> {
     const scopes = this.getScopes() as Scope[];
+    const failures: unknown[] = [];
     const serverStopped = this.providers.get(FrontMcpServer)?.stop();
     for (const scope of scopes) {
-      await this.bestEffort('scope shutdown', () => scope.shutdown());
+      await this.bestEffort('scope shutdown', () => scope.shutdown(), failures);
     }
-    await this.bestEffort('server stop', () => serverStopped);
+    await this.bestEffort('server stop', () => serverStopped, failures);
     for (const scope of scopes) {
-      await this.bestEffort('scope dispose', () => scope.dispose());
+      await this.bestEffort('scope dispose', () => scope.dispose(), failures);
     }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, `Graceful shutdown: ${failures.length} steps failed`);
   }
 
-  private async bestEffort(step: string, run: () => Promise<void> | undefined): Promise<void> {
+  private async bestEffort(step: string, run: () => Promise<void> | undefined, failures: unknown[]): Promise<void> {
     try {
       await run();
     } catch (error) {
+      failures.push(error);
       this.log?.error(`Graceful shutdown: ${step} failed`, error as Error);
     }
   }

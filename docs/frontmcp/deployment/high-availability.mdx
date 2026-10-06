@@ -152,7 +152,7 @@ The scanner starts automatically in distributed mode when sessions are persisted
 
 ## Graceful Shutdown
 
-On `SIGTERM` or `SIGINT` (a rolling deploy or a scale-down) a pod started with `bootstrap()` (or the `distributed` build) stops accepting connections, stops its heartbeat (deleting its key, so the other pods take its sessions over at once instead of after `heartbeatTtlMs`), closes its relay and HA Redis connections and its channels, gives requests in flight 5 seconds, then exits; it exits with code 1 if this takes more than 10 seconds. Call `instance.shutdown()` to run the same steps yourself. Up to 1.9.1 the HTTP server had no signal handler, so a stopped pod's sessions answered `503` until its heartbeat expired.
+On `SIGTERM` or `SIGINT` (a rolling deploy or a scale-down) a pod started with `bootstrap()` (or the `distributed` build) stops accepting connections, stops its heartbeat (deleting its key, so the other pods take its sessions over at once instead of after `heartbeatTtlMs`), closes its relay and HA Redis connections and its channels, gives requests in flight 5 seconds, then exits; it exits with code 1 if a step fails (the other steps still run) or this takes more than 10 seconds. Call `instance.shutdown()` to run the same steps yourself. Up to 1.9.1 the HTTP server had no signal handler, so a stopped pod's sessions answered `503` until its heartbeat expired.
 
 ## Redis Connection
 

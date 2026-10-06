@@ -252,7 +252,7 @@ start(): Promise<void>
 
 ### shutdown()
 
-Shut the server down gracefully. It stops accepting connections and closes idle ones, shuts every scope down (HA heartbeat, session relay, the HA Redis connections, channels) so other pods take its sessions over at once, gives requests in flight 5 seconds to finish before closing what is left (SSE streams), then disposes every scope (`onDispose` callbacks and providers run). Calling it again returns the same promise. `bootstrap()` runs it on `SIGTERM` and `SIGINT`.
+Shut the server down gracefully. It stops accepting connections and closes idle ones, shuts every scope down (HA heartbeat, session relay, the HA Redis connections, channels) so other pods take its sessions over at once, gives requests in flight 5 seconds to finish before closing what is left (SSE streams), then disposes every scope (`onDispose` callbacks and providers run). Every step runs even when one fails; the promise then rejects with that error (an `AggregateError` when several fail), so the signal handler exits with code 1. Calling it again returns the same promise. `bootstrap()` runs it on `SIGTERM` and `SIGINT`.
 
 ```typescript
 shutdown(): Promise<void>

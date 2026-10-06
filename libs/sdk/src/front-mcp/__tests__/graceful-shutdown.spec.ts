@@ -147,6 +147,19 @@ describe('FrontMcpInstance.shutdown()', () => {
     expect(Date.now() - started).toBeLessThan(2_000);
   });
 
+  it('finishes every step when one fails, then rejects so the process exits 1', async () => {
+    const { instance, server } = await startServer();
+    const scope = instance.getScopes()[0] as Scope;
+    jest.spyOn(scope, 'shutdown').mockRejectedValue(new Error('redis gone'));
+    const disposed = jest.fn();
+    scope.onDispose(disposed);
+
+    await expect(instance.shutdown()).rejects.toThrow('redis gone');
+
+    expect(server.listening).toBe(false);
+    expect(disposed).toHaveBeenCalledTimes(1);
+  });
+
   it('shuts down once however often it is called', async () => {
     const { instance } = await startServer();
     const scope = instance.getScopes()[0] as Scope;
