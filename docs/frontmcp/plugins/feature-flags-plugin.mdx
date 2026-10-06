@@ -249,6 +249,11 @@ FeatureFlagPlugin.init({
 })
 ```
 
+The plugin calls `initialize()` before the server serves, and `destroy()` when the server is disposed (`dispose()` on
+what `create()` returns, or `Scope.dispose()`), for this adapter as for the built-in ones; both are optional on a custom
+adapter. One instance passed to several servers is initialized, and destroyed, once per server. Up to 1.9.1 a custom
+adapter's `initialize()` and `destroy()` were never called.
+
 The `FeatureFlagAdapter` interface:
 
 ```ts
