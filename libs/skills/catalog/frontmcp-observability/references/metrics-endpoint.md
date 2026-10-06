@@ -31,7 +31,7 @@ Then scrape: `curl http://localhost:3000/metrics` (the default port is `PORT`, e
 
 `FrontMcpInstance.createFetchHandler(config)` (the Web-standard `(Request) => Response` handler) answers `GET /metrics` too — same body, auth and headers as the Express listener (it needs `@frontmcp/observability` installed, like the Express endpoint).
 
-On Cloudflare Workers `require()` cannot reach bundled modules, so `frontmcp build --target cloudflare` imports `@frontmcp/observability` in the generated worker entry and registers it with `registerOptionalModule()` whenever `metrics` or `observability` is enabled (the build warns when the package is missing). Process gauges the runtime does not implement (CPU, event-loop lag, handles) are omitted instead of failing the scrape.
+On Cloudflare Workers `require()` cannot reach bundled modules, so `frontmcp build --target cloudflare` imports `@frontmcp/observability` in the generated worker entry and registers it with `registerOptionalModule()` whenever the `@FrontMcp` source names `metrics` or `observability` and the package is installed, env-gated blocks included (the build warns when the config enables them and the package is missing). Process gauges the runtime does not implement (CPU, event-loop lag, handles) are omitted instead of failing the scrape.
 
 ## Configuration
 

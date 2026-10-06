@@ -30,11 +30,24 @@ describe('detectOptionalPeers (#768)', () => {
     expect(detection.installed).toEqual(['@frontmcp/observability']);
   });
 
-  it('needs nothing when metrics are present but disabled', () => {
+  it('bundles the peer for an env-gated metrics block that evaluated to undefined at build time', () => {
     const detection = detectOptionalPeers(
-      { decoratorConfig: { metrics: { enabled: false } }, keysSeenInSource: ['metrics'] },
+      { decoratorConfig: { info: {} }, keysSeenInSource: ['info', 'metrics'] },
       PROJECT_WITH_PEERS,
     );
+    expect(detection).toEqual({ installed: ['@frontmcp/observability'], missing: [] });
+  });
+
+  it('does not report the peer missing when the source names metrics but the evaluated config leaves them off', () => {
+    const detection = detectOptionalPeers(
+      { decoratorConfig: { metrics: { enabled: false } }, keysSeenInSource: ['metrics'] },
+      PROJECT_WITHOUT_PEERS,
+    );
+    expect(detection).toEqual({ installed: [], missing: [] });
+  });
+
+  it('needs nothing when the source never names metrics or observability', () => {
+    const detection = detectOptionalPeers({ decoratorConfig: { info: {} }, keysSeenInSource: ['info'] }, PROJECT_WITH_PEERS);
     expect(detection).toEqual({ installed: [], missing: [] });
   });
 

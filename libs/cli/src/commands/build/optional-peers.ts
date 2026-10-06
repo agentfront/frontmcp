@@ -16,10 +16,16 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function needsObservability({ decoratorConfig, keysSeenInSource }: EntryDecoratorInfo): boolean {
-  if (!decoratorConfig) return keysSeenInSource.includes('metrics') || keysSeenInSource.includes('observability');
+/** The config, as evaluated at build time, turns metrics or observability on. */
+function enablesObservability({ decoratorConfig, keysSeenInSource }: EntryDecoratorInfo): boolean {
+  if (!decoratorConfig) return namesObservability(keysSeenInSource);
   const metrics = decoratorConfig['metrics'];
   return (isObject(metrics) && metrics['enabled'] === true) || Boolean(decoratorConfig['observability']);
+}
+
+/** The source names metrics or observability, possibly behind an env check that was off at build time. */
+function namesObservability(keysSeenInSource: string[]): boolean {
+  return keysSeenInSource.includes('metrics') || keysSeenInSource.includes('observability');
 }
 
 function isResolvable(moduleName: string, cwd: string): boolean {
@@ -32,13 +38,16 @@ function isResolvable(moduleName: string, cwd: string): boolean {
 }
 
 /**
- * Optional peers the SDK loads with `require()` that this entry's config turns
- * on (`metrics.enabled`, `observability` → `@frontmcp/observability`).
+ * Optional peers the SDK loads with `require()` that this entry's config may turn
+ * on (`metrics`, `observability` → `@frontmcp/observability`). An installed peer
+ * is bundled whenever the source names the option, since an env-gated block can be
+ * off at build time and on in the deployment; it is reported missing only when
+ * the config is known to enable it.
  */
 export function detectOptionalPeers(entryInfo: EntryDecoratorInfo, cwd: string): OptionalPeerDetection {
-  const needed = needsObservability(entryInfo) ? [OBSERVABILITY_PEER] : [];
-  return {
-    installed: needed.filter((moduleName) => isResolvable(moduleName, cwd)),
-    missing: needed.filter((moduleName) => !isResolvable(moduleName, cwd)),
-  };
+  const enabled = enablesObservability(entryInfo);
+  const named = enabled || namesObservability(entryInfo.keysSeenInSource);
+  if (!named) return { installed: [], missing: [] };
+  if (isResolvable(OBSERVABILITY_PEER, cwd)) return { installed: [OBSERVABILITY_PEER], missing: [] };
+  return { installed: [], missing: enabled ? [OBSERVABILITY_PEER] : [] };
 }
