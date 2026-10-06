@@ -94,7 +94,7 @@ export default class Server {}
 | `importMap`   | `Record<string, string>`                    | Rewrites the package's imports (import-map rules)  |
 | `filter`      | `AppFilterConfig`                           | Include/exclude primitives by their package names  |
 
-`importMap` keys match an exact specifier, or every specifier under a key ending in `/`. The bundle is fetched with those packages external (esm.sh `external`) and their imports are rewritten to the targets; Node cannot import `https://` URLs, so map to a `file://` URL or an installed package name there.
+`importMap` keys match an exact specifier, or every specifier under a key ending in `/` (the longest matching key wins); only real import and re-export specifiers are rewritten, never text in strings or comments. The bundle is fetched with those packages external (esm.sh `external`) and their imports are rewritten to the targets; Node cannot import `https://` URLs, so map to a `file://` URL or an installed package name there.
 
 Example with custom loader and auto-update:
 

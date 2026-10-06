@@ -4,6 +4,7 @@
  */
 
 import { EsmInvalidSpecifierError } from '../errors/esm.errors';
+import { findModuleSpecifiers } from './module-specifiers';
 
 /**
  * Parsed representation of an npm package specifier.
@@ -105,23 +106,30 @@ export function importMapPackages(importMap: Record<string, string>): string[] {
   return [...new Set(Object.keys(importMap).map((specifier) => specifier.replace(/\/$/, '')))];
 }
 
-const IMPORT_SPECIFIER_RE = /(\bfrom\s*|\bimport\s*\(?\s*)(["'])([^"'\n]+)\2/g;
-
 /**
  * Rewrites the import specifiers of `bundle` that `importMap` names, with import-map semantics:
- * a key matches its exact specifier, and a key ending in `/` also matches every specifier under it.
+ * a key matches its exact specifier, and a key ending in `/` also matches every specifier under it,
+ * the longest such key winning. Only real import and re-export specifiers change, never text in
+ * strings, comments or templates.
  */
 export function applyImportMap(bundle: string, importMap: Record<string, string>): string {
-  const entries = Object.entries(importMap);
-  if (entries.length === 0) return bundle;
+  const prefixEntries = Object.entries(importMap)
+    .filter(([key]) => key.endsWith('/'))
+    .sort(([left], [right]) => right.length - left.length);
+  if (Object.keys(importMap).length === 0) return bundle;
   const remap = (specifier: string): string => {
     const exact = importMap[specifier];
     if (exact !== undefined) return exact;
-    const prefix = entries.find(([key]) => key.endsWith('/') && specifier.startsWith(key));
+    const prefix = prefixEntries.find(([key]) => specifier.startsWith(key));
     return prefix ? `${prefix[1]}${specifier.slice(prefix[0].length)}` : specifier;
   };
-  return bundle.replace(
-    IMPORT_SPECIFIER_RE,
-    (_match, keyword: string, quote: string, specifier: string) => `${keyword}${quote}${remap(specifier)}${quote}`,
-  );
+  let rewritten = '';
+  let copiedUpTo = 0;
+  for (const range of findModuleSpecifiers(bundle)) {
+    const target = remap(range.specifier);
+    if (target === range.specifier) continue;
+    rewritten += bundle.slice(copiedUpTo, range.start) + target;
+    copiedUpTo = range.end;
+  }
+  return rewritten + bundle.slice(copiedUpTo);
 }
