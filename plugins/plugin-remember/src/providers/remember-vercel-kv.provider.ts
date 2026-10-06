@@ -1,7 +1,12 @@
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 import { getEnv } from '@frontmcp/utils';
 
-import { callerKeyOf, doubledPrefixKey, prefixedStoreKey } from './remember-key-prefix';
+import {
+  callerKeyOf,
+  doubledPrefixKey,
+  prefixedStoreKey,
+  SET_IF_NEITHER_KEY_EXISTS_SCRIPT,
+} from './remember-key-prefix';
 import type { RememberStoreInterface } from './remember-store.interface';
 
 /**
@@ -15,6 +20,7 @@ interface VercelKvClient {
   exists(key: string): Promise<number>;
   keys(pattern: string): Promise<string[]>;
   scan(cursor: string | number, options?: { match?: string; count?: number }): Promise<[string | number, string[]]>;
+  eval(script: string, keys: string[], args: string[]): Promise<unknown>;
 }
 
 interface VercelKvModule {
@@ -108,12 +114,25 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
    * Store a value only if the key is absent, via the `nx` option.
    *
    * Resolves to `'OK'` when it created the key and `null` when the key already existed, so two
-   * callers racing cannot both win.
+   * callers racing cannot both win. A key that releases up to 1.9.1 may hold under the doubled
+   * prefix counts as present too: one script checks both keys and writes, so an entry still there
+   * is never shadowed.
    */
   async setIfAbsent(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
     const fullKey = this.prefixKey(key);
     const strValue = JSON.stringify(value);
     const ttl = ttlSeconds ?? this.defaultTTL;
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
+
+    if (doubledKey) {
+      const ttlArgument = ttl && ttl > 0 ? String(ttl) : '';
+      const created = await this.kv.eval(
+        SET_IF_NEITHER_KEY_EXISTS_SCRIPT,
+        [fullKey, doubledKey],
+        [strValue, ttlArgument],
+      );
+      return Number(created) === 1;
+    }
 
     const result =
       ttl && ttl > 0

@@ -3,7 +3,12 @@ import Redis, { type Redis as RedisClient } from 'ioredis';
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 import type { RedisClientRememberPluginOptions, RedisRememberPluginOptions } from '../remember.types';
-import { callerKeyOf, doubledPrefixKey, prefixedStoreKey } from './remember-key-prefix';
+import {
+  callerKeyOf,
+  doubledPrefixKey,
+  prefixedStoreKey,
+  SET_IF_NEITHER_KEY_EXISTS_SCRIPT,
+} from './remember-key-prefix';
 import type { RememberStoreInterface } from './remember-store.interface';
 
 /**
@@ -106,16 +111,32 @@ export default class RememberRedisProvider implements RememberStoreInterface {
    *
    * `set` resolves to `'OK'` when it created the key and `null` when the key already existed,
    * so the whole check-and-write is one round trip and two callers racing cannot both win.
+   * A key that releases up to 1.9.1 may hold under the doubled prefix counts as present too: one
+   * script checks both keys and writes, so an entry still there is never shadowed.
    */
   async setIfAbsent(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
     const fullKey = prefixedStoreKey(this.keyPrefix, key);
     const strValue = JSON.stringify(value);
     const ttl = ttlSeconds ?? this.defaultTTL;
+    const hasTtl = ttl !== undefined && ttl > 0;
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
 
-    const result =
-      ttl !== undefined && ttl > 0
-        ? await this.client.set(fullKey, strValue, 'EX', ttl, 'NX')
-        : await this.client.set(fullKey, strValue, 'NX');
+    if (doubledKey) {
+      const ttlArgument = hasTtl ? String(ttl) : '';
+      const created = await this.client.eval(
+        SET_IF_NEITHER_KEY_EXISTS_SCRIPT,
+        2,
+        fullKey,
+        doubledKey,
+        strValue,
+        ttlArgument,
+      );
+      return created === 1;
+    }
+
+    const result = hasTtl
+      ? await this.client.set(fullKey, strValue, 'EX', ttl, 'NX')
+      : await this.client.set(fullKey, strValue, 'NX');
 
     return result === 'OK';
   }
