@@ -172,6 +172,8 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
       this.logger.verbose(`findTemplates: scope templates=${scopeTemplates.length}`);
 
       for (const template of scopeTemplates) {
+        // A template whose URI template another app registered first is never matched, so it is not listed either
+        if (template.uriTemplate && this.scope.resources.findByUriTemplate(template.uriTemplate) !== template) continue;
         templates.push({ ownerName: template.owner.id, template });
       }
 
