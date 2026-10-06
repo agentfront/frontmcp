@@ -452,9 +452,9 @@ describe('Dashboard tools without the HTTP gate', () => {
 });
 
 /**
- * `createFetchHandler` serves one scope: the dashboard's standalone scope when `DashboardApp` is
- * the server's only app. No Express middleware runs there. The gate is a hook on the scope's own
- * `http:request` flow, so it holds on this path too.
+ * `createFetchHandler` serves the standalone dashboard at `/dashboard`, as the Node server does, and
+ * only the empty main endpoint at `/`. No Express middleware runs there. The gate is a hook on the
+ * dashboard scope's own `http:request` flow, so it holds on this path too.
  */
 describe('Dashboard MCP endpoint through createFetchHandler', () => {
   async function fetchHandler(options: DashboardPluginOptionsInput) {
@@ -467,8 +467,8 @@ describe('Dashboard MCP endpoint through createFetchHandler', () => {
     });
   }
 
-  function graphRequest(headers: Record<string, string> = {}): Request {
-    return new Request('http://localhost/', {
+  function graphRequest(headers: Record<string, string> = {}, path = '/dashboard'): Request {
+    return new Request(`http://localhost${path}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -515,5 +515,13 @@ describe('Dashboard MCP endpoint through createFetchHandler', () => {
 
     const served = await handler(graphRequest({ 'x-frontmcp-dashboard-token': TOKEN }));
     expect(await served.text()).toContain(GRAPH_MARKER);
+  });
+
+  it('never serves the inventory from the main endpoint at /', async () => {
+    const handler = await fetchHandler({ enabled: true });
+
+    const res = await handler(graphRequest({}, '/'));
+
+    expect(await res.text()).not.toContain(GRAPH_MARKER);
   });
 });
