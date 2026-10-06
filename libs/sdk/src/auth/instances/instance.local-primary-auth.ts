@@ -574,11 +574,17 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     return this.configuredIssuer(options) ?? `http://${this.host}:${this.port}${this.scope.fullPath}`;
   }
 
-  /** The issuer the options name: `issuer` in public mode, `local.issuer` in local and remote mode. */
+  /**
+   * The issuer the options name: `issuer` in public mode, `local.issuer` in local and remote mode,
+   * without a trailing slash, since the callback and metadata URLs are built by appending paths to it.
+   */
   private configuredIssuer(options: LocalPrimaryAuthOptions): string | undefined {
-    if (isPublicMode(options)) return options.issuer;
-    if (isOrchestratedMode(options)) return options.local?.issuer;
-    return undefined;
+    const configured = isPublicMode(options)
+      ? options.issuer
+      : isOrchestratedMode(options)
+        ? options.local?.issuer
+        : undefined;
+    return configured === undefined ? undefined : normalizeIssuer(configured);
   }
 
   /**

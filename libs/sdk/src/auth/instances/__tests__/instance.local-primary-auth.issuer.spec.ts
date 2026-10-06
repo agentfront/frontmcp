@@ -116,6 +116,19 @@ describe('LocalPrimaryAuth.issuerFor', () => {
     expect(auth.issuerFor(nodeRequest('desk.example.com'))).toBe(expected);
   });
 
+  it('drops a trailing slash from local.issuer, so the provider callback has no double slash', async () => {
+    const auth = await makeAuth({
+      mode: 'remote',
+      provider: 'https://idp.example.com',
+      clientId: 'desk',
+      providerConfig: { id: 'idp' },
+      local: { issuer: 'https://desk.example.com/' },
+    });
+
+    expect(auth.issuerFor(webRequest('https://desk.example.com/mcp'))).toBe('https://desk.example.com');
+    expect(auth.getProviderConfig('idp')?.callbackUrl).toBe('https://desk.example.com/oauth/provider/idp/callback');
+  });
+
   it('is FRONTMCP_PUBLIC_URL plus the scope path when it is pinned', async () => {
     process.env['FRONTMCP_PUBLIC_URL'] = 'https://mcp.example.com/';
     const auth = await makeAuth({ mode: 'local' });

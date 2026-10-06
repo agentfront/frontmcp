@@ -290,7 +290,7 @@ A client meets the issuer in four places, and FrontMCP names the same one in all
 
 It is, in this order:
 
-1. **`local.issuer`** (`issuer` in public mode) when set — the full issuer string. Use it when clients reach the server at a different scheme or port (e.g. `https://mcp.example.com` behind a TLS-terminating proxy).
+1. **`local.issuer`** (`issuer` in public mode) when set — the full issuer string, without a trailing slash (one is dropped, so the callback and metadata URLs built from it never get `//`). Use it when clients reach the server at a different scheme or port (e.g. `https://mcp.example.com` behind a TLS-terminating proxy).
 2. **`FRONTMCP_PUBLIC_URL`** plus the entry path, when pinned.
 3. **`FRONTMCP_PUBLIC_HOST`**, when set: the boot-time issuer with that host. The scheme stays `http` and the port stays the configured HTTP port.
 4. Otherwise, **the request's own origin** plus the entry path.
