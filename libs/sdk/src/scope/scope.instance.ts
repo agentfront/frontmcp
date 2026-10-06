@@ -107,6 +107,7 @@ import HttpIpFilterFlow from './flows/http.ip-filter.flow';
 import HttpRequestFlow from './flows/http.request.flow';
 import { probeOptionalDependency } from './optional-dependency.util';
 import { registerServerEntries } from './server-entries.helper';
+import { hasRegisteredTracerProvider } from './tracer-provider.utils';
 
 /**
  * Flows the web-fetch adapter must NOT auto-dispatch by HTTP match: `http:request`
@@ -677,6 +678,13 @@ export class Scope extends ScopeEntry {
                   contextAccessor,
                 );
 
+                // Each entry logged during a request joins that request's log (`observability.requestLogs`)
+                transport.onEntry = (entry: unknown) => {
+                  const requestLog = contextStorage
+                    ?.getStore()
+                    ?.get(Symbol.for('frontmcp:observability:request-log-collector'));
+                  (requestLog as { addEntry?: (logged: unknown) => void } | undefined)?.addEntry?.(entry);
+                };
                 loggerRegistry.addTransport(transport);
                 loggerRegistry._hasStructuredTransport = true;
                 this.logger.verbose('observability: wired StructuredLogTransport into SDK logger');
@@ -691,11 +699,7 @@ export class Scope extends ScopeEntry {
           // Auto-configure tracing exporter if none is set
           if (pluginOptions.tracing !== false) {
             try {
-              const { trace } = require('@opentelemetry/api');
-              const currentProvider = trace.getTracerProvider();
-              // ProxyTracerProvider is the default no-op when nothing is configured
-              const isNoop = !currentProvider || currentProvider.constructor?.name === 'ProxyTracerProvider';
-              if (isNoop) {
+              if (!hasRegisteredTracerProvider(require('@opentelemetry/api'))) {
                 const { isDevelopment: checkDev } = require('@frontmcp/utils');
                 if (checkDev()) {
                   const { BasicTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');

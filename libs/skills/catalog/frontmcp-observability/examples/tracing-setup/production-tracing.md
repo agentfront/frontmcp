@@ -50,6 +50,7 @@ setupOTel({
     },
     requestLogs: {
       maxEntries: 500,
+      // Called once per HTTP request, when its response is finalized (tool/resource/prompt name, entries, status, error)
       onRequestComplete: async (log) => {
         if (log.status === 'error') {
           // No `this.logger` is available in this callback. Emit a structured

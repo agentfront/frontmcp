@@ -474,6 +474,11 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       return { outcome: 'ok' };
     };
 
+    // The error and finalize stages, and their hooks, read why the flow failed from `state.flowError`
+    const recordFailure = (control: unknown) => {
+      context.state.set('flowError' as never, control as never);
+    };
+
     const runErrorStage = async () => {
       await runStageGroup((plan as any).error, false, { ignoreRespond: true });
     };
@@ -504,6 +509,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       if (pre.outcome === 'respond') {
         const post = await runStageGroup((plan as any).post, false);
         if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
+          recordFailure(post.control);
           try {
             await runErrorStage();
           } finally {
@@ -522,6 +528,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         return responded;
       }
       if (pre.outcome === 'unknown_error' || pre.outcome === 'fail') {
+        recordFailure(pre.control);
         try {
           await runErrorStage();
         } finally {
@@ -545,6 +552,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       if (exec.outcome === 'respond') {
         // continue to post + finalize
       } else if (exec.outcome === 'unknown_error' || exec.outcome === 'fail') {
+        recordFailure(exec.control);
         try {
           await runErrorStage();
         } finally {
@@ -565,6 +573,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       const post = await runStageGroup((plan as any).post, false);
       this.logger.verbose(`run: POST completed, outcome=${post.outcome}`);
       if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
+        recordFailure(post.control);
         try {
           await runErrorStage();
         } finally {
