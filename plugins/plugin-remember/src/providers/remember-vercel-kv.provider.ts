@@ -1,7 +1,6 @@
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 import { getEnv } from '@frontmcp/utils';
 
-import type { VercelKvRememberPluginOptions } from '../remember.types';
 import { callerKeyOf, doubledPrefixKey, prefixedStoreKey } from './remember-key-prefix';
 import type { RememberStoreInterface } from './remember-store.interface';
 
