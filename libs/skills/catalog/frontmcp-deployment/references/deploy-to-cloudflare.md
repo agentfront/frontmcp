@@ -129,6 +129,18 @@ To use it for sessions, install `@vercel/kv` in the project (the build bundles i
 
 The other Vercel KV / Upstash stores load on a Worker too: the skills HTTP cache (`skillsConfig.cache.redis: { provider: 'vercel-kv' }`, which also takes `url` and `token` instead of the `KV_REST_API_*` variables), the `CachePlugin` and `RememberPlugin` Vercel KV stores, and `type: 'upstash'` / auto-detected Upstash storage. Each loads `@vercel/kv` or `@upstash/redis` with a dynamic `import()` the build can bundle, and the Vercel KV ones build their own client with the fetch `cache` mode unset. Up to 1.9.1 they loaded the package with `require()`, which wrangler cannot bundle, so they failed on Workers while sessions worked.
 
+A custom store can use the same loader: `createVercelKvClient()` from `@frontmcp/utils` returns a `@vercel/kv` client with the fetch `cache` mode unset and values read back as stored (no JSON parsing). Its `url` and `token` fall back to `KV_REST_API_URL` / `KV_REST_API_TOKEN`; with neither, it throws `StorageConfigError`.
+
+```ts
+import { createVercelKvClient } from '@frontmcp/utils';
+
+const kv = await createVercelKvClient<{ get(key: string): Promise<unknown> }>({
+  url: env.KV_REST_API_URL,
+  token: env.KV_REST_API_TOKEN,
+});
+const raw = await kv.get('greeting');
+```
+
 ## Step 4: Configure the Server
 
 ```typescript
