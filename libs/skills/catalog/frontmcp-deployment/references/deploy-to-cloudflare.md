@@ -191,6 +191,8 @@ Background tasks need a store that outlives a single request and is shared betwe
 
 ### Startup checks
 
+`createFetchHandler()` (and so a Worker) serves every scope at its own path, as the Express host does: each `splitByApp` app and each `standalone` app at `<entryPath>/<appId>`, the server's apps at the entry path.
+
 The server is built on its first request, but the checks the config's metadata settles run when the module evaluates, so `createEdgeMcp` throws and the worker fails to deploy: an `approval` or `featureFlag` field no plugin that reaches the entry enforces (`UnenforcedMetadataError`), `authorities` without the `authorities` option, or an `authorities` rule or profile that checks nothing or names a profile the `authorities` option does not define (`AuthConfigurationError`). A plugin installed on an app reaches only that app's entries, unless one of its hooks is `appliesTo: 'uncovered-apps'` as the built-in approval and feature-flag plugins' are. A tool declared inside an `@Agent` is reached only by that agent's plugins (none with `execution.useToolFlow: false`), and an agent's plugins reach nothing else. The remaining checks run when the first request builds the server.
 
 ## Step 5: Deploy

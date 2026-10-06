@@ -27,7 +27,7 @@ import { computeTaskCapabilities } from '../task';
 import { IpcServerTransport, isIpcStdioRequested } from '../transport/ipc-server.transport';
 import {
   createDeferredServerBuild,
-  createWebFetchHandler,
+  createServerFetchHandler,
   startupFailureResponse,
   type FetchHandlerCtx,
   type WebFetchHandler,
@@ -347,8 +347,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
       const metricsService = frontMcp.createMetricsService();
       const metricsConfig = frontMcp.config.metrics;
       frontMcp.log?.info('FrontMCP fetch handler created (web-standard transport)');
-      return createWebFetchHandler(
+      return createServerFetchHandler(
         scope,
+        frontMcp.getScopes() as Scope[],
         metricsService && metricsConfig ? { metrics: { service: metricsService, config: metricsConfig } } : {},
       );
     };

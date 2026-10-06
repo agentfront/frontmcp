@@ -220,6 +220,12 @@ this is the first scope.
   tools instead of the server's.
 </Note>
 
+`createFetchHandler()` serves every scope, as the Express host does: a `splitByApp` app or a `standalone` app at its
+own path (`<entryPath>/<appId>`, for example `/billing`), the server's apps at the entry path. A request goes to the
+scope whose path is the longest prefix of its own; the primary scope also answers the entry path when no scope with
+apps is mounted there. Up to 1.9.1 it served only the primary scope, so a `splitByApp` server answered for its first
+app alone and a standalone app was not served at all.
+
 ### start()
 
 Start the HTTP server (called internally by bootstrap).

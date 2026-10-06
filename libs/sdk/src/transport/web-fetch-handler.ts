@@ -19,7 +19,7 @@ import { type HttpOutput } from '../common/schemas/http-output.schema';
 import { ServerRequestTokens } from '../common/tokens/server.tokens';
 import { type CorsOptions } from '../common/types/options/http/interfaces';
 import { type MetricsOptionsInterface } from '../common/types/options/metrics';
-import { normalizeEntryPrefix, resolveEntryPath } from '../common/utils/path.utils';
+import { normalizeEntryPrefix, normalizeScopeBase, resolveEntryPath } from '../common/utils/path.utils';
 import { PayloadTooLargeError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
 import { machineIdHeader } from '../ha/ha-headers';
@@ -393,6 +393,48 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
 
   return async function handle(request: Request, ctx?: FetchHandlerCtx, env?: unknown): Promise<Response> {
     return withSecurityHeaders(await handleRequest(request, ctx, env));
+  };
+}
+
+/**
+ * A fetch handler for every scope of a server: a `splitByApp` app, or a `standalone` one, has a scope
+ * of its own served at its path (`<entryPath>/<appId>`), as the Express host serves it. A request goes
+ * to the scope whose path is the longest prefix of the request's, else to `primary`, which also serves
+ * the entry path itself when no scope with apps is mounted there, and answers the health probes and
+ * `/metrics` outside every scope's path.
+ */
+export function createServerFetchHandler(
+  primary: Scope,
+  scopes: readonly Scope[],
+  options: CreateWebFetchHandlerOptions = {},
+): WebFetchHandler {
+  const basePathOf = (scope: Scope) => `${normalizeEntryPrefix(scope.entryPath)}${normalizeScopeBase(scope.routeBase)}`;
+  const served = scopes.filter((scope) => scope === primary || scope.apps.getApps().length > 0);
+  if (served.length <= 1) return createWebFetchHandler(primary, options);
+
+  const entryPath = normalizeEntryPrefix(primary.entryPath);
+  const rootServed = served.some((scope) => scope !== primary && basePathOf(scope) === entryPath);
+  const routes = served
+    .map((scope) => {
+      const basePath = basePathOf(scope);
+      const paths = scope === primary && !rootServed ? [basePath || '/', entryPath || '/'] : [basePath || '/'];
+      const scopeOptions = {
+        ...options,
+        entryPath: [...new Set(paths)],
+        ...(scope !== primary && { metrics: undefined }),
+      };
+      return { scope, basePath, handler: createWebFetchHandler(scope, scopeOptions) };
+    })
+    .sort((a, b) => b.basePath.length - a.basePath.length);
+  const primaryRoute = routes.find((route) => route.scope === primary) ?? routes[routes.length - 1];
+
+  return (request, ctx, env) => {
+    const path = new URL(request.url).pathname;
+    const route =
+      routes.find(({ basePath }) => basePath !== '' && (path === basePath || path.startsWith(`${basePath}/`))) ??
+      routes.find(({ basePath }) => basePath === '') ??
+      primaryRoute;
+    return route.handler(request, ctx, env);
   };
 }
 
