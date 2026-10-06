@@ -6,6 +6,7 @@
  * and `readOnlyOnly` (and every other option it didn't list) were accepted and ignored: every
  * operation became a tool.
  */
+import { OpenAPIToolGenerator } from 'mcp-from-openapi';
 import type { OpenAPIV3 } from 'openapi-types';
 
 import { FrontMcpToolTokens } from '@frontmcp/sdk';
@@ -114,5 +115,96 @@ describe('OpenapiAdapter generateOptions filters', () => {
     const names = await toolNames({ includeOperations: ['listAuditEvents'], maxToolNameLength: 8 });
     expect(names).toHaveLength(1);
     expect(names[0]?.length).toBeLessThanOrEqual(8);
+  });
+});
+
+describe('OpenapiAdapter options that 1.9.1 ignored (#767)', () => {
+  const specWithAnonymousOperation: OpenAPIV3.Document = {
+    ...spec,
+    paths: { ...spec.paths, '/health': { get: { summary: 'Health check', responses: ok } } },
+  };
+
+  function adapterFor(options: Partial<OpenApiAdapterOptions>): OpenapiAdapter {
+    return new OpenapiAdapter({
+      name: 'shop',
+      baseUrl: 'https://api.example.com',
+      spec: specWithAnonymousOperation,
+      logger: createMockLogger(),
+      ...options,
+    } as OpenApiAdapterOptions);
+  }
+
+  async function namesOf(adapter: OpenapiAdapter): Promise<string[]> {
+    const { tools } = await adapter.fetch();
+    return (tools ?? [])
+      .map((tool) => (tool as unknown as Record<symbol, { name: string } | undefined>)[FrontMcpToolTokens.metadata])
+      .map((metadata) => metadata?.name ?? '')
+      .sort();
+  }
+
+  it('matches excludeMethods and includeMethods whatever their case', async () => {
+    const excludeUpper = ['DELETE', 'Put', 'POST'] as unknown as NonNullable<
+      OpenApiAdapterOptions['generateOptions']
+    >['excludeMethods'];
+
+    expect(await namesOf(adapterFor({ generateOptions: { excludeMethods: excludeUpper } }))).not.toContain(
+      'deleteUser',
+    );
+    expect(
+      await namesOf(adapterFor({ generateOptions: { includeMethods: ['DELETE'] as unknown as ['delete'] } })),
+    ).toEqual(['deleteUser']);
+  });
+
+  it('refuses a method name that is not an HTTP method', () => {
+    expect(() => adapterFor({ generateOptions: { excludeMethods: ['remove'] as unknown as ['delete'] } })).toThrow(
+      /generateOptions.excludeMethods lists "remove", which is not an HTTP method/,
+    );
+  });
+
+  it('includeOperations leaves out an operation that has no operationId', async () => {
+    expect(await namesOf(adapterFor({ generateOptions: { includeOperations: ['listUsers'] } }))).toEqual(['listUsers']);
+  });
+
+  it('still applies filterFn together with includeOperations', async () => {
+    const adapter = adapterFor({
+      generateOptions: {
+        includeOperations: ['listUsers', 'getUser'],
+        filterFn: (operation) => operation.method === 'get' && operation.path === '/users',
+      },
+    });
+
+    expect(await namesOf(adapter)).toEqual(['listUsers']);
+  });
+
+  it('applies loadOptions.overlays', async () => {
+    const adapter = adapterFor({
+      descriptionMode: 'full',
+      generateOptions: { includeOperations: ['listUsers'] },
+      loadOptions: {
+        overlays: {
+          overlay: '1.0.0',
+          actions: [{ target: "$.paths['/users'].get", update: { description: 'Lists every customer account' } }],
+        },
+      },
+    });
+    const { tools } = await adapter.fetch();
+    const metadata = (tools?.[0] as unknown as Record<symbol, { description?: string } | undefined>)[
+      FrontMcpToolTokens.metadata
+    ];
+
+    expect(metadata?.description).toContain('Lists every customer account');
+  });
+
+  it('passes loadOptions.secureDefaults to the generator', async () => {
+    const fromJSON = jest.spyOn(OpenAPIToolGenerator, 'fromJSON');
+    try {
+      await adapterFor({ loadOptions: { secureDefaults: true } }).fetch();
+      expect(fromJSON).toHaveBeenCalledWith(
+        specWithAnonymousOperation,
+        expect.objectContaining({ secureDefaults: true }),
+      );
+    } finally {
+      fromJSON.mockRestore();
+    }
   });
 });

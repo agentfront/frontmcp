@@ -33,6 +33,7 @@ import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import type { OutboundOptions } from '../skilled-openapi.types';
 import { callerTokenRefusal } from './caller-token';
 import type { CredentialResolver } from './credential-resolver';
+import { proxiedFetch } from './egress-proxy';
 import { withHostConcurrency } from './host-concurrency';
 import { checkOutboundUrl } from './ssrf-guard';
 
@@ -196,7 +197,6 @@ export async function executeOperation(args: {
 }): Promise<ExecutionResult> {
   const { entry, bundleId, input, callerToken, deps } = args;
   const { outbound, resolver, allowedHosts, logger } = deps;
-  const fetchImpl = deps.fetchImpl ?? fetch;
 
   let mcpTool: McpOpenAPITool;
   try {
@@ -256,6 +256,13 @@ export async function executeOperation(args: {
   }
   if (body !== undefined && !req.headers.has('content-type')) {
     req.headers.set('content-type', 'application/json');
+  }
+
+  let fetchImpl: typeof fetch;
+  try {
+    fetchImpl = deps.fetchImpl ?? (outbound.egressProxy ? await proxiedFetch(outbound.egressProxy) : fetch);
+  } catch (e) {
+    return failure(0, `egress proxy unavailable: ${(e as Error).message}`);
   }
 
   const timeoutMs = entry.op.timeoutMs ?? outbound.defaultTimeoutMs;

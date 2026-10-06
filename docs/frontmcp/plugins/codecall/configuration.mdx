@@ -38,6 +38,12 @@ CodeCallPlugin.init({
   // Embedding/search configuration
   embedding: { /* ... */ },
 
+  // Search results per query when a codecall:search call names no topK (default 8)
+  topK: 8,
+
+  // Most tools one codecall:describe call describes (default 8); a call that would describe more is refused
+  maxDefinitions: 8,
+
   // Tool filtering
   includeTools: (tool) => boolean,
 
@@ -76,7 +82,10 @@ CodeCallPlugin.init({
   `tools/call` of it is answered exactly like a call of an unknown tool (`Tool "<name>" not found`), before its input
   is validated, so the refusal reveals nothing about it. CodeCall's own calls (`codecall:execute`, `codecall:invoke`)
   and server-side composition (a tool, agent or job calling it with `this.callTool()`) still reach it, and the
-  server's own system tools (such as `sendElicitationResult`) are never refused. Releases up to 1.8.7 hid the tool from
+  server's own system tools (such as `sendElicitationResult`) are never refused. A `visibility: 'hidden'` tool, which
+  the SDK keeps out of `list_tools`, is refused the same way in every mode unless it sets `visibleInListTools: true`
+  (up to 1.9.1 a client could call it directly in `codecall_opt_in` and `metadata_driven`, and in `codecall_opt_in`
+  `visibleInListTools: false` hid nothing). Releases up to 1.8.7 hid the tool from
   the listing only, so a client that knew its name called it directly, past `includeTools`, `enabledInCodeCall`,
   the blocked namespaces and `directCalls`. A tool that clients or widgets must call directly sets
   `visibleInListTools: true`.
@@ -100,10 +109,11 @@ CodeCallPlugin.init({
 });
 ```
 
-| Tool Location | Behavior                                  |
-| ------------- | ----------------------------------------- |
-| `list_tools`  | All tools visible (default MCP behavior)  |
-| CodeCall      | Only tools with `enabledInCodeCall: true` |
+| Tool Location       | Behavior                                                         |
+| ------------------- | ---------------------------------------------------------------- |
+| `list_tools`        | All tools visible, except those with `visibleInListTools: false` |
+| CodeCall            | Only tools with `enabledInCodeCall: true`                        |
+| Direct `tools/call` | Refused for a tool with `visibleInListTools: false`, as unknown  |
 
 **Best for:** Gradual migration, mixed direct/CodeCall access.
 
@@ -266,7 +276,7 @@ CodeCallPlugin.init({
     // Or override individual settings
     timeoutMs: 5000,
     maxSteps: 10000,
-    allowConsole: true,
+    allowLoops: true, // for and for-of; false allows for-of only
 
     // Blocked identifiers (in addition to preset)
     disabledBuiltins: ['eval', 'Function'],
@@ -277,12 +287,19 @@ CodeCallPlugin.init({
 
 ### VM Presets
 
-| Preset         | Timeout | Max Steps | Console | Use Case                     |
-| -------------- | ------- | --------- | ------- | ---------------------------- |
-| `locked_down`  | 2s      | 2,000     | No      | Ultra-sensitive environments |
-| `secure`       | 3.5s    | 5,000     | Yes     | **Production default**       |
-| `balanced`     | 5s      | 10,000    | Yes     | Complex workflows            |
-| `experimental` | 10s     | 20,000    | Yes     | Development only             |
+| Preset         | Timeout | Max Steps | Loops           | Use Case                     |
+| -------------- | ------- | --------- | --------------- | ---------------------------- |
+| `locked_down`  | 2s      | 2,000     | `for-of`        | Ultra-sensitive environments |
+| `secure`       | 3.5s    | 5,000     | `for-of`        | **Production default**       |
+| `balanced`     | 5s      | 10,000    | `for`, `for-of` | Complex workflows            |
+| `experimental` | 10s     | 20,000    | `for`, `for-of` | Development only             |
+
+`allowLoops: false` refuses every loop but `for-of` before the script runs; `allowLoops: true` adds `for`. The
+sandbox refuses `while`, `do-while` and `for-in` whatever `allowLoops` says. Scripts have no `console` in any
+preset, so `allowConsole` has no effect: a script that refers to the global `console` is refused before it runs (a
+field named `console`, as in `result.platform.console`, is fine), and `mcpLog(level, message)` is the way to log. The
+`codecall:execute` description advertises `for-of` and names `for` as needing `allowLoops`, so a model's scripts run on
+every preset. Up to 1.9.1 `allowLoops: false` let a `for` loop run.
 
 ### Preset Details
 
@@ -293,7 +310,6 @@ CodeCallPlugin.init({
       preset: 'locked_down',
       timeoutMs: 2000,
       maxSteps: 2000,
-      allowConsole: false,
       allowLoops: false,  // Only for-of allowed
       disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
       disabledGlobals: [
@@ -312,7 +328,6 @@ CodeCallPlugin.init({
       preset: 'secure',
       timeoutMs: 3500,
       maxSteps: 5000,
-      allowConsole: true,
       allowLoops: false,  // Only for-of allowed
       disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
       disabledGlobals: [
@@ -331,8 +346,7 @@ CodeCallPlugin.init({
       preset: 'balanced',
       timeoutMs: 5000,
       maxSteps: 10000,
-      allowConsole: true,
-      allowLoops: true,  // for, for-of, while allowed
+      allowLoops: true,  // for and for-of allowed
       disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
       disabledGlobals: ['require', 'process', 'fetch'],
     }
@@ -346,7 +360,6 @@ CodeCallPlugin.init({
       preset: 'experimental',
       timeoutMs: 10000,
       maxSteps: 20000,
-      allowConsole: true,
       allowLoops: true,
       disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
       disabledGlobals: ['require', 'process'],
@@ -425,6 +438,9 @@ CodeCallPlugin.init({
     // ML specific (requires VectoriaDB)
     modelName: 'Xenova/all-MiniLM-L6-v2',
     cacheDir: './.cache/transformers',
+
+    // TF-IDF only: expand queries with synonyms ("add issue" finds create_ticket); false turns it off
+    synonymExpansion: { enabled: true },
   },
 });
 ```
@@ -568,7 +584,6 @@ import { CodeCallPlugin } from '@frontmcp/plugin-codecall';
       vm: {
         preset: 'secure',
         timeoutMs: 5000,  // 5 second timeout
-        allowConsole: true,
       },
 
       // Fast TF-IDF search

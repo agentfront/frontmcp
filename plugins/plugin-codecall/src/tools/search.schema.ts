@@ -13,7 +13,7 @@ INPUT:
 - queries: string[] (required) - atomic action phrases, max 10
 - appIds?: string[] - filter by app
 - excludeToolNames?: string[] - skip known tools
-- topK?: number (default 5) - results per query
+- topK?: number (default: the server's topK, 8 unless configured) - results per query
 - minRelevanceScore?: number (default 0.3) - minimum match threshold
 
 OUTPUT: Flat deduplicated tool list. relevanceScore: 0.5+=good, 0.7+=strong match.
@@ -28,7 +28,13 @@ export const searchToolInputSchema = {
     .describe('Atomic action queries. Split complex requests into simple actions.'),
   appIds: z.array(z.string()).max(10).optional().describe('Filter by app IDs'),
   excludeToolNames: z.array(z.string()).max(50).optional().describe('Skip already-known tool names'),
-  topK: z.number().int().positive().max(50).optional().default(10).describe('Results per query (default 10)'),
+  topK: z
+    .number()
+    .int()
+    .positive()
+    .max(50)
+    .optional()
+    .describe("Results per query (defaults to the server's CodeCall topK, 8 unless configured)"),
   minRelevanceScore: z
     .number()
     .min(0)
