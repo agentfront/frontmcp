@@ -321,6 +321,10 @@ prompt failed, with the failure in `error`; `status_code` is the status the serv
 included, a 401 from authentication or a 429 from the throttle too) and its duration. `error` is
 `{ type, message, code, error_id }` with the message the client sees in production: after
 `this.fail(new PublicMcpError('no such ticket'))` it is `{ type: 'PublicMcpError', message: 'no such ticket', code: 'PUBLIC_ERROR' }`.
+A plain `Error` (thrown by a hook, say) is recorded as the client receives it,
+`{ type: 'GenericServerError', message: 'Internal FrontMCP error. Please contact support with error ID: err_…', code: 'SERVER_ERROR' }`,
+and `error_id` is the error ID the client and the server's error log carry; up to 1.9.2 its own message was recorded
+and `error_id` was missing.
 `authenticated` is `true` for a caller with a verified, non-anonymous identity, and `auth_type` is the scheme of its
 `Authorization` header (`bearer`), or `anonymous`. `hooks_triggered` names each stage a plugin, app or entry hook ran
 at, as `<flow>:<stage>` (`tools:call-tool:willExecute`). `includeSummaries` is accepted but not read. The callback runs
@@ -330,7 +334,7 @@ off the response path: the response is sent without waiting for it. Up to 1.9.1 
 
 A tool, resource or prompt that fails ends its spans with an error status, the execution span included, with the
 message the client sees in production and an `exception` event of the error's code (`PUBLIC_ERROR`), the one
-`this.fail()` was given included; up to 1.9.1 a failed tool's span was left open and never exported, and up to 1.9.2
+`this.fail()` was given included (a plain `Error` gives the masked message with its error ID and `SERVER_ERROR`); up to 1.9.1 a failed tool's span was left open and never exported, and up to 1.9.2
 a `this.fail()` gave an empty message. The `tools/call`, `resources/read` and other MCP method spans are children of
 the request's `POST /` span, and `this.fetch()` sends a `traceparent` that names its `GET` client span as the parent,
 so the service called nests under it (up to 1.9.2 the method spans were siblings of `POST /`, and the caller's own

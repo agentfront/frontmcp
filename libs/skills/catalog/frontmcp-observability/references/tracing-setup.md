@@ -113,7 +113,7 @@ observability: {
 }
 ```
 
-- A failed call ends its spans with status ERROR and the message the client sees in production, and an `exception` event of the error's code (`PUBLIC_ERROR`), the error `this.fail()` was given included.
+- A failed call ends its spans with status ERROR and the message the client sees in production, and an `exception` event of the error's code (`PUBLIC_ERROR`), the error `this.fail()` was given included. A plain `Error` (thrown by a hook, say) is recorded as the client receives it: the masked `Internal FrontMCP error. Please contact support with error ID: err_…` message and `SERVER_ERROR`; the request log's `error` is `{ type: 'GenericServerError', message, code: 'SERVER_ERROR', error_id }` with the error ID the client and the server's error log carry.
 - `this.fetch()` in a tool sends a `traceparent` naming its `GET` client span (or, with `fetchSpans: false`, the running span) as the parent, so the service called nests under it. A `traceparent` you set yourself is kept.
 - With `NODE_ENV=development` and no TracerProvider registered, FrontMCP registers one that prints each span to the console.
 
