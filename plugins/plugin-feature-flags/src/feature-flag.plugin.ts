@@ -67,6 +67,30 @@ function assertCustomAdapter(adapterInstance: unknown): asserts adapterInstance 
   );
 }
 
+/** An adapter whose `initialize()` and `destroy()` may be missing: `assertCustomAdapter` never required them. */
+type AdapterWithOptionalLifecycle = Omit<FeatureFlagAdapter, 'initialize' | 'destroy'> &
+  Partial<Pick<FeatureFlagAdapter, 'initialize' | 'destroy'>>;
+
+/**
+ * The adapter for one server: initialized before the server serves, destroyed when the server is
+ * disposed (`dispose()` on what `create()` returns, or `Scope.dispose()`).
+ */
+function adapterProvider(kind: string, createAdapter: () => AdapterWithOptionalLifecycle): ProviderType {
+  return {
+    name: `feature-flags:adapter:${kind}`,
+    provide: FeatureFlagAdapterToken,
+    inject: () => [ScopeEntry] as const,
+    useFactory: async (scope: ScopeEntry) => {
+      const adapter = createAdapter();
+      await adapter.initialize?.();
+      scope.onDispose(async () => {
+        await adapter.destroy?.();
+      });
+      return adapter;
+    },
+  };
+}
+
 /**
  * FeatureFlagPlugin - Dynamic capability gating for FrontMCP.
  *
@@ -127,63 +151,42 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
 
     switch (options.adapter) {
       case 'static':
-        providers.push({
-          name: 'feature-flags:adapter:static',
-          provide: FeatureFlagAdapterToken,
-          useValue: new StaticFeatureFlagAdapter(options.flags),
-        });
+        providers.push(adapterProvider('static', () => new StaticFeatureFlagAdapter(options.flags)));
         break;
 
       case 'splitio':
-        providers.push({
-          name: 'feature-flags:adapter:splitio',
-          provide: FeatureFlagAdapterToken,
-          inject: () => [] as const,
-          useFactory: async () => {
+        providers.push(
+          adapterProvider('splitio', () => {
             const { SplitioFeatureFlagAdapter } = require('./adapters/splitio.adapter');
-            const adapter = new SplitioFeatureFlagAdapter(options.config);
-            await adapter.initialize();
-            return adapter;
-          },
-        });
+            return new SplitioFeatureFlagAdapter(options.config);
+          }),
+        );
         break;
 
       case 'launchdarkly':
-        providers.push({
-          name: 'feature-flags:adapter:launchdarkly',
-          provide: FeatureFlagAdapterToken,
-          inject: () => [] as const,
-          useFactory: async () => {
+        providers.push(
+          adapterProvider('launchdarkly', () => {
             const { LaunchDarklyFeatureFlagAdapter } = require('./adapters/launchdarkly.adapter');
-            const adapter = new LaunchDarklyFeatureFlagAdapter(options.config);
-            await adapter.initialize();
-            return adapter;
-          },
-        });
+            return new LaunchDarklyFeatureFlagAdapter(options.config);
+          }),
+        );
         break;
 
       case 'unleash':
-        providers.push({
-          name: 'feature-flags:adapter:unleash',
-          provide: FeatureFlagAdapterToken,
-          inject: () => [] as const,
-          useFactory: async () => {
+        providers.push(
+          adapterProvider('unleash', () => {
             const { UnleashFeatureFlagAdapter } = require('./adapters/unleash.adapter');
-            const adapter = new UnleashFeatureFlagAdapter(options.config);
-            await adapter.initialize();
-            return adapter;
-          },
-        });
+            return new UnleashFeatureFlagAdapter(options.config);
+          }),
+        );
         break;
 
-      case 'custom':
-        assertCustomAdapter(options.adapterInstance);
-        providers.push({
-          name: 'feature-flags:adapter:custom',
-          provide: FeatureFlagAdapterToken,
-          useValue: options.adapterInstance,
-        });
+      case 'custom': {
+        const { adapterInstance } = options;
+        assertCustomAdapter(adapterInstance);
+        providers.push(adapterProvider('custom', () => adapterInstance));
         break;
+      }
     }
 
     // ─────────────────────────────────────────────────────────────────────
