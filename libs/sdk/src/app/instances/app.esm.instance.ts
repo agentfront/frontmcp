@@ -43,6 +43,9 @@ import { ToolInstance } from '../../tool/tool.instance';
 import ToolRegistry from '../../tool/tool.registry';
 import { appIdOf } from '../app.utils';
 
+/** The kinds of entry a package manifest may export that an ESM app does not load. */
+const UNLOADED_MANIFEST_KINDS = ['skills', 'agents', 'jobs', 'workflows', 'providers'] as const;
+
 /**
  * Empty plugin registry for ESM apps.
  */
@@ -356,6 +359,13 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     logger.info(
       `ESM app ${this.id} registered: ${tools.length} tools, ${resources.length} resources, ${prompts.length} prompts`,
     );
+    const notLoaded = UNLOADED_MANIFEST_KINDS.filter((kind) => (manifest[kind]?.length ?? 0) > 0);
+    if (notLoaded.length > 0) {
+      logger.warn(
+        `ESM app ${this.id}: App.esm() loads only tools, resources and prompts; ` +
+          `the package's ${notLoaded.join(', ')} are not loaded`,
+      );
+    }
   }
 
   /**

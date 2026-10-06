@@ -68,7 +68,7 @@ The `App.esm()` method creates an app entry that loads the npm package `@acme/mc
     The export is normalized into a `FrontMcpPackageManifest` — supporting plain objects, decorated classes, or named exports.
   </Step>
   <Step title="Register Primitives">
-    Tools, resources, and prompts from the manifest are registered into standard registries with full hook and lifecycle support.
+    Tools, resources, and prompts from the manifest are registered into standard registries with full hook and lifecycle support. The manifest's skills, agents, jobs, workflows and providers are not loaded; the server logs a warning naming them.
   </Step>
 </Steps>
 

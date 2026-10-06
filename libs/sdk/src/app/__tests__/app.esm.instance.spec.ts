@@ -4,7 +4,7 @@
  */
 import 'reflect-metadata';
 
-import { App, type EsmAppOptions } from '../../common';
+import { App, LogLevel, LogTransport, LogTransportInterface, type EsmAppOptions, type LogRecord } from '../../common';
 import type { DirectMcpServer } from '../../direct/direct.types';
 import { EsmModuleLoader, type EsmLoadResult } from '../../esm-loader/esm-module-loader';
 
@@ -24,6 +24,15 @@ const loadResult: EsmLoadResult = {
   loadedAt: Date.now(),
   rawModule: {},
 };
+
+const warnings: string[] = [];
+
+@LogTransport({ name: 'EsmWarningCapture', description: 'Keeps the warnings for assertions' })
+class WarningCapture extends LogTransportInterface {
+  log(record: LogRecord): void {
+    if (record.level === LogLevel.Warn) warnings.push(record.message);
+  }
+}
 
 describe('App.esm()', () => {
   let server: DirectMcpServer | undefined;
@@ -54,6 +63,20 @@ describe('App.esm()', () => {
     expect((await srv.listTools()).tools.map((tool) => tool.name)).toEqual(['acme:echo']);
     expect((await srv.listPrompts()).prompts).toEqual([]);
     expect((await srv.listResources()).resources.map((resource) => resource.uri)).toEqual(['status://acme']);
+  });
+
+  it('warns that the skills, agents, jobs, workflows and providers of the package are not loaded', async () => {
+    load.mockResolvedValue({ ...loadResult, manifest: { ...loadResult.manifest, skills: [{}], providers: [{}] } });
+    const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'esm-gateway', version: '1.0.0' },
+      apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme' })],
+      logging: { transports: [WarningCapture] },
+    });
+
+    expect(warnings).toContain(
+      "ESM app acme: App.esm() loads only tools, resources and prompts; the package's skills, providers are not loaded",
+    );
   });
 
   it('hands the import map to the loader', async () => {

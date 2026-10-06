@@ -69,7 +69,7 @@ export default class Server {}
 
 ## ESM Apps (npm Packages)
 
-Load an `@App`-decorated class from an npm package at runtime using `app.esm()`. The package is fetched, cached, and its default export is treated as a local app.
+Load an npm package at runtime using `app.esm()`. The package is fetched and cached, and the `tools`, `resources` and `prompts` its manifest exports are registered under the namespace. Its `skills`, `agents`, `jobs`, `workflows` and `providers` are not loaded; the server logs a warning naming them.
 
 ```typescript
 import { app, FrontMcp } from '@frontmcp/sdk';
