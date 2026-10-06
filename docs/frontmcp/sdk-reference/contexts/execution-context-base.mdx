@@ -225,6 +225,22 @@ if (!response.ok) {
 return response.json();
 ```
 
+### Calling Other Tools
+
+#### callTool(name, args?, opts?)
+
+Call another tool through its `tools:call-tool` flow, with this request's caller, and get its `CallToolResult`. Hooks, authorities and input validation apply; tools with `visibility: 'internal'` are reachable.
+
+```typescript
+callTool(name: string, args?: Record<string, unknown>, opts?: { progressToken?: string | number; signal?: AbortSignal }): Promise<CallToolResult>
+```
+
+`name` is the tool's name, or its name qualified with the id of its app: `desk:get_ticket` or `desk.get_ticket`. A tool whose own name has a dot (`mail.send`) is still found by that name first. Up to 1.9.1 `desk.get_ticket` answered `Tool "desk.get_ticket" not found`.
+
+```typescript
+const ticket = await this.callTool('desk.get_ticket', { id: 'T-1' });
+```
+
 ### Configuration
 
 #### get config

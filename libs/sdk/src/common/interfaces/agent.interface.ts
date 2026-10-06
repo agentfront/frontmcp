@@ -511,7 +511,7 @@ export class AgentContext<
   }
 
   /** The agent's own tools and its nested agents' `invoke_<agent>` tools run in its private scope. */
-  protected override callToolScope(name: string): Pick<ScopeEntry, 'runFlow'> {
+  protected override callToolScope(name: string): Pick<ScopeEntry, 'runFlow'> & Partial<Pick<ScopeEntry, 'tools'>> {
     const isPrivateTool = this.privateScope?.tools
       .getTools(true)
       .some((tool) => tool.name === name || tool.fullName === name);

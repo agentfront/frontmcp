@@ -25,6 +25,18 @@ export type ExecutionContextBaseArgs = {
 };
 
 /**
+ * The name `callTool()` asks the flow for: `name` itself when a tool is called that (by name or by its
+ * full name, `owner:name`), else `owner.name` read as the full name `owner:name` when one matches.
+ */
+function qualifiedToolName(scope: Partial<Pick<ScopeEntry, 'tools'>>, name: string): string {
+  const separator = name.indexOf('.');
+  const tools = scope.tools?.getTools(true);
+  if (separator <= 0 || !tools || tools.some((tool) => tool.name === name || tool.fullName === name)) return name;
+  const fullName = `${name.slice(0, separator)}:${name.slice(separator + 1)}`;
+  return tools.some((tool) => tool.fullName === fullName) ? fullName : name;
+}
+
+/**
  * Abstract base class for execution contexts (tools, resources, prompts, etc.).
  * Provides common functionality for dependency injection, logging, and flow control.
  */
@@ -231,7 +243,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * `'job'`, an agent's `'agent'`, and an HTTP trigger's `'http-trigger'`, so a tool whose `surface`
    * leaves that caller out answers as an unknown tool.
    *
-   * @param name Tool name (or fully-qualified `owner.name`).
+   * @param name Tool name, or one qualified with its app's id: `owner:name` or `owner.name`.
    * @param args Tool arguments — validated by the tool's input schema.
    * @param opts Optional progress token / abort signal forwarded into `_meta`.
    * @returns The tool's `CallToolResult`.
@@ -241,7 +253,8 @@ export abstract class ExecutionContextBase<Out = unknown> {
     args?: Record<string, unknown>,
     opts?: { progressToken?: string | number; signal?: AbortSignal },
   ): Promise<CallToolResult> {
-    const scope = this.callToolScope(name) as unknown as {
+    const callScope = this.callToolScope(name);
+    const scope = callScope as unknown as {
       runFlow: (
         flowName: 'tools:call-tool',
         input: { request: unknown; ctx: unknown },
@@ -252,7 +265,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
     const request = {
       method: 'tools/call' as const,
       params: {
-        name,
+        name: qualifiedToolName(callScope, name),
         arguments: args ?? {},
         ...(Object.keys(requestMeta).length > 0 && { _meta: requestMeta }),
       },
@@ -285,7 +298,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * The scope whose `tools:call-tool` flow a {@link callTool} of `name` runs in: this context's scope,
    * unless a context with tools of its own (an agent) holds that tool.
    */
-  protected callToolScope(_name: string): Pick<ScopeEntry, 'runFlow'> {
+  protected callToolScope(_name: string): Pick<ScopeEntry, 'runFlow'> & Partial<Pick<ScopeEntry, 'tools'>> {
     return this.scope;
   }
 

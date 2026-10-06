@@ -18,6 +18,7 @@ description: What ToolContext provides at runtime — this.get, this.fetch, this
 | `this.respond(value)`                                            | Early-return with a value. Validates against `outputSchema`. **Never returns** (throws `FlowControl.respond`). |
 | `this.mark(stage)`                                               | Set the active execution stage for debugging / tracing                                                         |
 | `this.fetch(input, init?)`                                       | HTTP fetch with context propagation (trace headers, etc.)                                                      |
+| `this.callTool(name, args?)`                                     | Call another tool through its `tools:call-tool` flow. `name` is its name, or `app:name` / `app.name`           |
 | `this.notify(message, level?)`                                   | Send a log-level notification to the client                                                                    |
 | `this.progress(progress, total?, message?)`                      | Send a progress notification. Returns `Promise<boolean>` (false when no progress token in request)             |
 | `this.notifyResourceUpdated(uri)`                                | Tell subscribed clients a resource's contents changed (`notifications/resources/updated`)                      |
