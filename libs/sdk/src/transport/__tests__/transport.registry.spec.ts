@@ -830,6 +830,37 @@ describe('TransportService', () => {
   });
 
   // ============================================
+  // deleteStoredSession Tests (#713)
+  // ============================================
+
+  describe('deleteStoredSession', () => {
+    it('deletes the stored record', async () => {
+      service = new TransportService(mockScope as never, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+
+      await service.deleteStoredSession('deleted-session');
+
+      expect(mockRedisSessionStore.delete).toHaveBeenCalledWith('deleted-session');
+    });
+
+    it('is a no-op when no session store is configured', async () => {
+      service = new TransportService(mockScope as never);
+      await service.ready;
+
+      await expect(service.deleteStoredSession('any-session')).resolves.toBeUndefined();
+      expect(mockRedisSessionStore.delete).not.toHaveBeenCalled();
+    });
+
+    it('logs and swallows a store failure', async () => {
+      service = new TransportService(mockScope as never, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+      mockRedisSessionStore.delete.mockRejectedValueOnce(new Error('Redis down'));
+
+      await expect(service.deleteStoredSession('failing-session')).resolves.toBeUndefined();
+    });
+  });
+
+  // ============================================
   // updateStoredSessionCapabilities Tests
   // ============================================
 

@@ -92,6 +92,8 @@ describe('Distributed cross-node sessions (#680)', () => {
       headers: { 'mcp-session-id': sessionId },
     });
     expect(deleted.status).toBe(204);
+    // A public session's stored record is gone too, so no restart or takeover brings it back (#713).
+    expect(await redis.exists(`mcp:session:${sessionId}`)).toBe(0);
 
     const after = await callTool(other.info.baseUrl, sessionId, 'echo', { message: 'gone' });
     expect(after.status).toBe(404);

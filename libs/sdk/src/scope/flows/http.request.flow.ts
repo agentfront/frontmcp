@@ -987,19 +987,18 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       // for a session that has a live transport. We always proceed with transport cleanup.
       this.scope.notifications.terminateSession(sessionId);
 
-      // Destroy the transport to free resources and clean up Redis.
+      // Destroy the transport and the stored session. Public and anonymous sessions carry an empty token (#713).
       const authorization = request[ServerRequestTokens.auth] as Authorization | undefined;
-      if (authorization?.token) {
-        const transportService = this.scope.transportService;
-        if (transportService) {
-          for (const protocol of ['streamable-http', 'sse'] as const) {
-            try {
-              await transportService.destroyTransporter(protocol, authorization.token, sessionId);
-            } catch {
-              // Transport may already be evicted or not found — non-critical
-            }
+      const transportService = this.scope.transportService;
+      if (authorization && transportService) {
+        for (const protocol of ['streamable-http', 'sse'] as const) {
+          try {
+            await transportService.destroyTransporter(protocol, authorization.token ?? '', sessionId);
+          } catch {
+            // Transport may already be evicted or not found — non-critical
           }
         }
+        await transportService.deleteStoredSession(sessionId);
       }
 
       this.logger.info(`[${this.requestId}] Session terminated: ${sessionId}`);

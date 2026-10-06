@@ -132,6 +132,8 @@ A pod whose heartbeat lapsed (Redis unreachable for `heartbeatTtlMs`) may have l
 
 Takeover needs `transport.persistence` (Streamable HTTP only — an SSE stream cannot move to another pod).
 
+A session its client ended with `DELETE` is removed from `transport.persistence` too, public and anonymous sessions included, so no restart or takeover brings it back (up to 1.9.1 a public session's record stayed).
+
 ### Notification Relay
 
 Each pod subscribes to `mcp:ha:notify:{nodeId}` via Redis Pub/Sub. A notification for a session on another pod is published to the channel of the pod that owns it (looked up on the bus) and delivered there; it is never relayed twice.
