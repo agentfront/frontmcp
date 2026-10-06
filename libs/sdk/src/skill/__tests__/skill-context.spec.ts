@@ -3,6 +3,9 @@ import 'reflect-metadata';
 import { App, LogLevel, Skill, SkillContext, type SkillContent } from '../../common';
 import { connect } from '../../direct';
 import type { DirectClient } from '../../direct/client.types';
+import { type DirectMcpServer } from '../../direct/direct.types';
+import { FrontMcpInstance } from '../../front-mcp/front-mcp';
+import { type Scope } from '../../scope/scope.instance';
 
 @Skill({ name: 'release-notes', description: 'Write release notes', instructions: 'Static steps.' })
 class ReleaseNotesSkill extends SkillContext {
@@ -57,5 +60,71 @@ describe('SkillContext overrides', () => {
 
   it('serves the decorator instructions when nothing is overridden', async () => {
     await expect(instructionsOf('plain')).resolves.toBe('Plain steps.');
+  });
+});
+
+const overrideCalls = { loadInstructions: 0, build: 0 };
+let failNextLoad = false;
+
+@Skill({ name: 'counted', description: 'Counts override runs', instructions: 'Counted steps.' })
+class CountedSkill extends SkillContext {
+  override async loadInstructions(): Promise<string> {
+    overrideCalls.loadInstructions++;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    if (failNextLoad) {
+      failNextLoad = false;
+      throw new Error('instructions source unavailable');
+    }
+    return 'Counted steps.';
+  }
+
+  override async build(): Promise<SkillContent> {
+    overrideCalls.build++;
+    return super.build();
+  }
+}
+
+@App({ id: 'counter', name: 'Counter', skills: [CountedSkill] })
+class CounterApp {}
+
+describe('SkillContext overrides under concurrent loads', () => {
+  let server: DirectMcpServer;
+
+  beforeAll(async () => {
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'skill-context-concurrency', version: '1.0.0' },
+      apps: [CounterApp],
+      logging: { level: LogLevel.Off },
+    });
+  });
+
+  afterAll(async () => {
+    await server.dispose();
+  });
+
+  function countedSkill() {
+    const skill = (server as unknown as { scope: Scope }).scope.skills.findByName('counted');
+    if (!skill || !('clearCache' in skill)) throw new Error('counted is not registered');
+    (skill as { clearCache(): void }).clearCache();
+    overrideCalls.loadInstructions = 0;
+    overrideCalls.build = 0;
+    return skill;
+  }
+
+  it('runs each override once for loads that start before the first finishes', async () => {
+    const skill = countedSkill();
+
+    await Promise.all([skill.load(), skill.load(), skill.loadInstructions()]);
+
+    expect(overrideCalls).toEqual({ loadInstructions: 1, build: 1 });
+  });
+
+  it('runs the override again after a load fails', async () => {
+    const skill = countedSkill();
+    failNextLoad = true;
+
+    await expect(skill.loadInstructions()).rejects.toThrow('instructions source unavailable');
+    await expect(skill.loadInstructions()).resolves.toBe('Counted steps.');
+    expect(overrideCalls.loadInstructions).toBe(2);
   });
 });

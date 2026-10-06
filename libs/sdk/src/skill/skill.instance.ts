@@ -51,6 +51,10 @@ export class SkillInstance extends SkillEntry {
   /** Cached skill content (built lazily) */
   private cachedContent?: CachedSkillContent;
 
+  /** The loads in progress, shared by concurrent callers and cleared when they settle */
+  private instructionsLoading?: Promise<string>;
+  private contentLoading?: Promise<CachedSkillContent>;
+
   /** Tags for search indexing */
   private readonly tags: string[];
 
@@ -110,6 +114,13 @@ export class SkillInstance extends SkillEntry {
     if (this.cachedInstructions !== undefined) {
       return this.cachedInstructions;
     }
+    this.instructionsLoading ??= this.resolveInstructions().finally(() => {
+      this.instructionsLoading = undefined;
+    });
+    return this.instructionsLoading;
+  }
+
+  private async resolveInstructions(): Promise<string> {
     const context = this.overridingContext('loadInstructions');
     this.cachedInstructions = context ? await context.loadInstructions() : await this.readInstructions();
     return this.cachedInstructions;
@@ -192,7 +203,13 @@ export class SkillInstance extends SkillEntry {
     if (this.cachedContent !== undefined) {
       return this.cachedContent;
     }
+    this.contentLoading ??= this.resolveContent().finally(() => {
+      this.contentLoading = undefined;
+    });
+    return this.contentLoading;
+  }
 
+  private async resolveContent(): Promise<CachedSkillContent> {
     const context = this.overridingContext('build');
     const baseContent = context ? await context.build() : await this.buildContent();
 
