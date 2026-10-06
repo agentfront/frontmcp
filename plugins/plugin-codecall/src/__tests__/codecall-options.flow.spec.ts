@@ -150,6 +150,16 @@ describe('CodeCall vm.allowLoops', () => {
       expect(JSON.stringify(outcome.error)).toContain('vm.allowLoops is false');
     });
 
+    it('refuses a for loop in a script that parses only inside a function', async () => {
+      const outcome = await runScript(
+        server(),
+        'const target = new.target;\nlet total = 0;\nfor (let i = 0; i < 3; i++) { total += i; }\nreturn total;',
+      );
+
+      expect(outcome.status).toBe('illegal_access');
+      expect(JSON.stringify(outcome.error)).toContain('vm.allowLoops is false');
+    });
+
     it('still runs a for-of loop', async () => {
       const outcome = await runScript(
         server(),
@@ -177,6 +187,30 @@ describe('CodeCall console in scripts', () => {
 
     expect(outcome.status).toBe('illegal_access');
     expect(JSON.stringify(outcome.error)).toContain('use mcpLog');
+  });
+
+  it('reads a field named console from a tool result', async () => {
+    const outcome = await runScript(
+      server(),
+      'const game = { platform: { console: "ps5" } };\nreturn game.platform.console;',
+    );
+
+    expect(outcome.status).toBe('ok');
+  });
+});
+
+describe('codecall:execute description', () => {
+  const server = useCodeCallServer({ mode: 'codecall_only' });
+
+  it('advertises only loops the default secure preset runs, and names console as blocked', async () => {
+    const { tools } = await server().client.listTools();
+    const description = tools.find((tool) => tool.name === 'codecall:execute')?.description ?? '';
+    const allowedLine = description.split('\n').find((line) => line.startsWith('ALLOWED:')) ?? '';
+    const blockedLine = description.split('\n').find((line) => line.startsWith('BLOCKED:')) ?? '';
+
+    expect(allowedLine).toContain('for-of');
+    expect(allowedLine).not.toMatch(/\bfor,/);
+    expect(blockedLine).toContain('console');
   });
 });
 

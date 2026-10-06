@@ -141,7 +141,9 @@ The sandboxed VM runs AgentScript (a restricted JavaScript subset). Presets cont
 - `experimental` -- Minimal restrictions. `for` and `for-of` loops, extended builtins. Development only.
 
 `while`, `do-while` and `for-in` loops are always refused by the sandbox. Scripts have no `console` in any preset
-(`vm.allowConsole` has no effect); a script that uses it is refused before it runs. Log with `mcpLog(level, message)`.
+(`vm.allowConsole` has no effect); a script that refers to the global `console` is refused before it runs (a field named
+`console` is fine). Log with `mcpLog(level, message)`. The `codecall:execute` description advertises `for-of` and names
+`for` as needing `vm.allowLoops`.
 
 ### Meta-Tools Exposed
 
