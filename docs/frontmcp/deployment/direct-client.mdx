@@ -234,23 +234,20 @@ const handler: ElicitationHandler = async (request) => {
   };
 };
 
-// Register handler (returns unsubscribe function)
-const unsubscribe = client.onElicitation(handler);
+// Pass the handler when connecting: the client then declares the elicitation capability
+const client = await connect(MyServer, { onElicitation: handler });
 
 // Call a tool that uses elicitation
 const result = await client.callTool('delete-file', { path: 'important.txt' });
-
-// Clean up
-unsubscribe();
 ```
 
 <Warning>
-If no handler is registered, elicitation requests are automatically declined. The client declares the `elicitation` capability (`form` and `url`) so the tools' `this.elicit()` reaches it; up to 1.9.1 it never did.
+Capabilities are fixed when the client connects. Passing `onElicitation` to `connect()` (or the `connectOpenAI()`-style helpers) declares the `elicitation` capability (`form` and `url`), so the tools' `this.elicit()` questions reach the handler; up to 1.9.1 they never did. `client.onElicitation(handler)` registers or replaces the handler later, but only on a client that declared the capability, through `onElicitation` or `capabilities: { elicitation: { form: {} } }`. A client that declared it without a handler declines every question.
 </Warning>
 
 ### Manual Submission
 
-For async or external elicitation handling:
+A client that does not declare elicitation gets the fallback flow: the tool's result asks for the answer and names the `sendElicitationResult` tool and the `elicitId`. Answer it with `submitElicitationResult`:
 
 ```typescript
 await client.submitElicitationResult('elicit-123', {

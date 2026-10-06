@@ -157,9 +157,11 @@ export class DirectClientImpl implements DirectClient {
     });
 
     try {
-      // The client always answers elicitation requests (onElicitation, else a decline), so it declares the capability
       const clientCapabilities = {
-        capabilities: { elicitation: { form: {}, url: {} }, ...options?.capabilities },
+        capabilities: {
+          ...(options?.onElicitation && { elicitation: { form: {}, url: {} } }),
+          ...options?.capabilities,
+        },
       };
 
       // Connect MCP client
@@ -184,6 +186,7 @@ export class DirectClientImpl implements DirectClient {
       client.closeServer = close;
       client.scopeRef = scope;
       client.releaseScope = releaseScope;
+      client.elicitationHandler = options?.onElicitation;
 
       // Set up internal handlers for notifications and requests
       // Note: MCP SDK uses typed notification/request handlers with zod schemas
@@ -385,8 +388,10 @@ export class DirectClientImpl implements DirectClient {
       await this.closeServer?.();
       // Release the scope (disposing it once nothing else uses it) to clean up providers, timers, and
       // native resources. Prevents mutex crashes from addons (ONNX runtime, etc.) during process exit.
+      const releaseScope = this.releaseScope;
+      this.releaseScope = undefined;
       try {
-        await this.releaseScope?.();
+        await releaseScope?.();
       } catch {
         /* best-effort */
       }

@@ -318,7 +318,7 @@ console.log(status.stepResults);    // { step1: { state, outputs }, ... }
 
 ### onElicitation(handler)
 
-Register handler for elicitation requests: the questions the tools ask with `this.elicit()` (form or URL mode). The client declares the `elicitation` capability (`form` and `url`), so without a handler a question is declined. Up to 1.9.1 the questions never reached the handler.
+Register or replace the handler for elicitation requests: the questions the tools ask with `this.elicit()` (form or URL mode). Questions reach a client only if it declared the `elicitation` capability when it connected: pass `onElicitation` in the connect options (which declares `form` and `url`), or `capabilities: { elicitation: { form: {} } }`. A client that declared it without a handler declines every question. A client that did not declare it gets the fallback flow, answered with `submitElicitationResult()`. Up to 1.9.1 the questions never reached the handler.
 
 ```typescript
 const unsubscribe = client.onElicitation(async (request) => {

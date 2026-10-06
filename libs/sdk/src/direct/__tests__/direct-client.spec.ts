@@ -152,10 +152,7 @@ describe('DirectClientImpl', () => {
       const mockScope = createMockScope();
       await DirectClientImpl.create(mockScope as Scope);
 
-      expect(MockClient).toHaveBeenCalledWith(
-        { name: 'mcp-client', version: '1.0.0' },
-        { capabilities: { elicitation: { form: {}, url: {} } } },
-      );
+      expect(MockClient).toHaveBeenCalledWith({ name: 'mcp-client', version: '1.0.0' }, { capabilities: {} });
     });
 
     it('should use custom clientInfo when provided', async () => {
@@ -164,10 +161,18 @@ describe('DirectClientImpl', () => {
         clientInfo: { name: 'custom-agent', version: '2.0.0' },
       });
 
-      expect(MockClient).toHaveBeenCalledWith(
-        { name: 'custom-agent', version: '2.0.0' },
-        { capabilities: { elicitation: { form: {}, url: {} } } },
-      );
+      expect(MockClient).toHaveBeenCalledWith({ name: 'custom-agent', version: '2.0.0' }, { capabilities: {} });
+    });
+
+    it('declares the elicitation capability when an onElicitation handler is passed', async () => {
+      const mockScope = createMockScope();
+      await DirectClientImpl.create(mockScope as Scope, {
+        onElicitation: async () => ({ action: 'decline' }),
+      });
+
+      expect(MockClient).toHaveBeenCalledWith(expect.anything(), {
+        capabilities: { elicitation: { form: {}, url: {} } },
+      });
     });
 
     it('should generate session ID when not provided', async () => {
@@ -279,7 +284,7 @@ describe('DirectClientImpl', () => {
       });
 
       expect(MockClient).toHaveBeenCalledWith(expect.anything(), {
-        capabilities: { elicitation: { form: {}, url: {} }, roots: { listChanged: true } },
+        capabilities: { roots: { listChanged: true } },
       });
     });
 
