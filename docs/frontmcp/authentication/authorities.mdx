@@ -356,6 +356,9 @@ Attribute-based access control evaluates conditions against a context envelope w
 | `input.*`  | Tool/prompt input arguments                                                                 |
 | `env.*`    | Runtime environment variables (`process.env`; empty in a browser); always empty up to 1.9.1 |
 
+A denial never carries the value of an `env.*` path: it reads `[redacted]` in the error the client gets, since
+environment variables may hold secrets.
+
 ### Simple Match
 
 The `match` field provides simple equality checks. All pairs must match (AND semantics).

@@ -164,6 +164,8 @@ All nested policies must pass.
 export default class DeployTool extends ToolContext { ... }
 ```
 
+`env.*` reads the runtime's environment variables. A denial never carries an `env.*` value; it reads `[redacted]`.
+
 ### anyOf (OR)
 
 At least one nested policy must pass.
