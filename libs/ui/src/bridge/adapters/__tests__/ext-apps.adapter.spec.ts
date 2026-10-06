@@ -240,6 +240,96 @@ describe('ExtAppsAdapter', () => {
       });
     });
 
+    describe('MCP Apps spec methods', () => {
+      const HOST_ORIGIN = 'https://host.example';
+      let postMessage: jest.SpyInstance;
+
+      function connectTo(hostCapabilities: Record<string, unknown>): void {
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._hostCapabilities = hostCapabilities;
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._trustedOrigin = HOST_ORIGIN;
+      }
+
+      function sent(method: string): unknown[] {
+        return postMessage.mock.calls
+          .map(([message]) => message as { method?: string; params?: unknown })
+          .filter((message) => message.method === method)
+          .map((message) => message.params);
+      }
+
+      beforeEach(() => {
+        postMessage = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => undefined);
+      });
+
+      afterEach(() => {
+        adapterWithConfig.dispose();
+        jest.restoreAllMocks();
+      });
+
+      it('calls a server tool with tools/call, marked as the widget own call', () => {
+        connectTo({ serverTools: {} });
+
+        adapterWithConfig.callTool('close_ticket', { id: 'T-1' }).catch(() => undefined);
+
+        expect(sent('tools/call')).toEqual([
+          { name: 'close_ticket', arguments: { id: 'T-1' }, _meta: { 'frontmcp/widgetCall': true } },
+        ]);
+        expect(sent('ui/callServerTool')).toEqual([]);
+      });
+
+      it('opens a link with ui/open-link', () => {
+        connectTo({ openLinks: {} });
+
+        adapterWithConfig.openLink('https://example.com/docs').catch(() => undefined);
+
+        expect(sent('ui/open-link')).toEqual([{ url: 'https://example.com/docs' }]);
+        expect(sent('ui/openLink')).toEqual([]);
+      });
+
+      it('asks for a display mode with ui/request-display-mode', () => {
+        connectTo({});
+
+        adapterWithConfig.requestDisplayMode('fullscreen').catch(() => undefined);
+
+        expect(sent('ui/request-display-mode')).toEqual([{ mode: 'fullscreen' }]);
+        expect(sent('ui/setDisplayMode')).toEqual([]);
+      });
+
+      it('sends model context as ui/update-model-context, merging object updates', () => {
+        connectTo({ updateModelContext: { text: {} } });
+
+        adapterWithConfig.updateModelContext({ city: 'Oslo' }).catch(() => undefined);
+        adapterWithConfig.updateModelContext({ unit: 'C' }).catch(() => undefined);
+        adapterWithConfig.updateModelContext('The user picked Oslo', false).catch(() => undefined);
+
+        expect(sent('ui/update-model-context')).toEqual([
+          { content: [{ type: 'text', text: '{"city":"Oslo"}' }], structuredContent: { city: 'Oslo' } },
+          {
+            content: [{ type: 'text', text: '{"city":"Oslo","unit":"C"}' }],
+            structuredContent: { city: 'Oslo', unit: 'C' },
+          },
+          { content: [{ type: 'text', text: 'The user picked Oslo' }] },
+        ]);
+      });
+
+      it('logs with a notifications/message notification at the MCP level', async () => {
+        connectTo({ logging: {} });
+
+        await adapterWithConfig.log('warn', 'Quota low', { remaining: 3 });
+
+        expect(postMessage).toHaveBeenCalledWith(
+          {
+            jsonrpc: '2.0',
+            method: 'notifications/message',
+            params: { level: 'warning', data: { message: 'Quota low', data: { remaining: 3 } } },
+          },
+          HOST_ORIGIN,
+        );
+        expect(sent('ui/log')).toEqual([]);
+      });
+    });
+
     describe('updateModelContext', () => {
       it('should throw ExtAppsNotSupportedError when modelContextUpdate capability is not present', async () => {
         // Host capabilities don't include modelContextUpdate

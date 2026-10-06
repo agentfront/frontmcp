@@ -7,6 +7,8 @@
  * @packageDocumentation
  */
 
+import { WIDGET_CALL_META_KEY } from '@frontmcp/uipack/bridge-runtime';
+
 /**
  * Options for generating the bridge IIFE.
  */
@@ -567,9 +569,9 @@ var ExtAppsAdapter = {
     return this.sendRequest('ui/initialize', params).then(function(result) {
       self.hostCapabilities = result.hostCapabilities || {};
       self.capabilities = Object.assign({}, self.capabilities, {
-        canCallTools: Boolean(self.hostCapabilities.serverToolProxy),
+        canCallTools: Boolean(self.hostCapabilities.serverTools || self.hostCapabilities.serverToolProxy),
         canSendMessages: true,
-        canOpenLinks: Boolean(self.hostCapabilities.openLink),
+        canOpenLinks: Boolean(self.hostCapabilities.openLinks || self.hostCapabilities.openLink),
         supportsDisplayModes: true
       });
       if (result.hostContext) {
@@ -578,23 +580,23 @@ var ExtAppsAdapter = {
     });
   },
   callTool: function(context, name, args) {
-    if (!this.hostCapabilities.serverToolProxy) {
+    if (!this.hostCapabilities.serverTools && !this.hostCapabilities.serverToolProxy) {
       return Promise.reject(new Error('Server tool proxy not supported'));
     }
-    return this.sendRequest('ui/callServerTool', { name: name, arguments: args });
+    return this.sendRequest('tools/call', { name: name, arguments: args || {}, _meta: { '${WIDGET_CALL_META_KEY}': true } });
   },
   sendMessage: function(context, content) {
     return this.sendRequest('ui/message', { content: content });
   },
   openLink: function(context, url) {
-    if (!this.hostCapabilities.openLink) {
+    if (!this.hostCapabilities.openLinks && !this.hostCapabilities.openLink) {
       window.open(url, '_blank', 'noopener,noreferrer');
       return Promise.resolve();
     }
-    return this.sendRequest('ui/openLink', { url: url });
+    return this.sendRequest('ui/open-link', { url: url });
   },
   requestDisplayMode: function(context, mode) {
-    return this.sendRequest('ui/setDisplayMode', { mode: mode });
+    return this.sendRequest('ui/request-display-mode', { mode: mode });
   },
   setSize: function(context, size) {
     // Standard ext-apps sizing: the view tells the host its dimensions with the

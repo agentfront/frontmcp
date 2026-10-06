@@ -543,6 +543,7 @@ var ExtAppsAdapter = {
   hostCapabilities: {},
   handshakeSettled: false,
   pendingSize: null,
+  modelContext: null,
   canHandle: function() {
     if (typeof window === 'undefined') return false;
     if (window.parent === window) return false;
@@ -784,11 +785,11 @@ var ExtAppsAdapter = {
     return this.sendRequest('ui/message', { content: content });
   },
   openLink: function(context, url) {
-    if (!this.hostCapabilities.openLink) {
+    if (!this.hostCapabilities.openLinks && !this.hostCapabilities.openLink) {
       window.open(url, '_blank', 'noopener,noreferrer');
       return Promise.resolve();
     }
-    return this.sendRequest('ui/openLink', { url: url });
+    return this.sendRequest('ui/open-link', { url: url });
   },
   requestDisplayMode: function(context, mode) {
     return this.sendRequest('ui/request-display-mode', { mode: mode });
@@ -816,10 +817,17 @@ var ExtAppsAdapter = {
   },
   // Extended ext-apps methods (full specification)
   updateModelContext: function(context, data, merge) {
-    if (!this.hostCapabilities.modelContextUpdate) {
+    if (!this.hostCapabilities.updateModelContext && !this.hostCapabilities.modelContextUpdate) {
       return Promise.reject(new Error('Model context update not supported'));
     }
-    return this.sendRequest('ui/updateModelContext', { context: data, merge: merge !== false });
+    // The host keeps only the latest update, so an object merges into the last one here.
+    var isObject = data !== null && typeof data === 'object' && !Array.isArray(data);
+    var modelContext = isObject && merge !== false ? Object.assign({}, this.modelContext, data) : data;
+    this.modelContext = isObject ? modelContext : null;
+    var text = typeof modelContext === 'string' ? modelContext : JSON.stringify(modelContext);
+    var params = { content: [{ type: 'text', text: text }] };
+    if (isObject) params.structuredContent = modelContext;
+    return this.sendRequest('ui/update-model-context', params);
   },
   log: function(context, level, message, data) {
     if (!this.hostCapabilities.logging) {
@@ -828,7 +836,10 @@ var ExtAppsAdapter = {
       logFn('[Widget] ' + message, data);
       return Promise.resolve();
     }
-    return this.sendRequest('ui/log', { level: level, message: message, data: data });
+    return this.sendNotification('notifications/message', {
+      level: level === 'warn' ? 'warning' : level,
+      data: data === undefined ? message : { message: message, data: data }
+    });
   },
   registerTool: function(context, name, description, inputSchema) {
     if (!this.hostCapabilities.widgetTools) {

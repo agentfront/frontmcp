@@ -374,15 +374,21 @@ export interface ExtAppsInitializeResult {
     version: string;
   };
   hostCapabilities: {
-    /** Host supports opening links */
+    /** Host supports opening links (MCP Apps spec name) */
+    openLinks?: Record<string, unknown>;
+    /** Host supports opening links (earlier FrontMCP name) */
     openLink?: boolean;
-    /** Host supports proxying tool calls to the MCP server */
+    /** Host can proxy tool calls to the MCP server (MCP Apps spec name) */
+    serverTools?: { listChanged?: boolean };
+    /** Host supports proxying tool calls to the MCP server (earlier FrontMCP name) */
     serverToolProxy?: boolean;
     /** Host supports reading resources */
     resourceRead?: boolean;
     /** Host supports logging */
-    logging?: boolean;
-    /** Host supports model context updates */
+    logging?: boolean | Record<string, unknown>;
+    /** Host accepts `ui/update-model-context`, with the content types it takes (MCP Apps spec name) */
+    updateModelContext?: Record<string, unknown>;
+    /** Host supports model context updates (earlier FrontMCP name) */
     modelContextUpdate?: boolean;
     /** Host supports widget-defined tools */
     widgetTools?: boolean;

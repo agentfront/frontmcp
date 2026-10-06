@@ -32,6 +32,9 @@ export interface BridgeGlobal {
   getStructuredContent(): unknown;
   onToolResult(callback: (result: unknown) => void): () => void;
   callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
+  openLink(url: string): Promise<unknown>;
+  updateModelContext(context: unknown, merge?: boolean): Promise<unknown>;
+  log(level: string, message: string, data?: unknown): Promise<unknown>;
 }
 
 /** Box returned by the stubbed `getBoundingClientRect` for one element. */
