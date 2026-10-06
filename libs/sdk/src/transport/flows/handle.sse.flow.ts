@@ -203,6 +203,9 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
 
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
+    // A verified token (an anonymous grant included) arrives with no session: the transport reads the one minted here
+    const authorization = request[ServerRequestTokens.auth] as Authorization;
+    authorization.session ??= session;
     const transport = await transportService.createTransporter('sse', token, session.id, response);
 
     // Set LB affinity headers in distributed mode
