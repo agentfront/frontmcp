@@ -6,31 +6,31 @@
  */
 
 import type {
-  ServerInfoOptions,
-  RedisOptionsInput,
-  PubsubOptionsInput,
-  TransportOptionsInput,
-  LoggingOptionsInput,
-  PaginationOptions,
-  ElicitationOptionsInput,
-  SkillsConfigOptionsInput,
-  ExtAppsOptionsInput,
-  AuthOptionsInput,
-} from '../common/types';
-
-import type {
-  ToolType,
-  ResourceType,
-  PromptType,
-  PluginType,
-  ProviderType,
   AdapterType,
   AgentType,
-  SkillType,
   AuthProviderType,
   JobType,
+  PluginType,
+  PromptType,
+  ProviderType,
+  ResourceType,
+  SkillType,
+  ToolType,
   WorkflowType,
 } from '../common/interfaces';
+import type { FrontMcpConfigInput } from '../common/metadata';
+import type {
+  AuthOptionsInput,
+  ElicitationOptionsInput,
+  ExtAppsOptionsInput,
+  LoggingOptionsInput,
+  PaginationOptions,
+  PubsubOptionsInput,
+  RedisOptionsInput,
+  ServerInfoOptions,
+  SkillsConfigOptionsInput,
+  TransportOptionsInput,
+} from '../common/types';
 
 /**
  * Flat configuration for the `create()` factory function.
@@ -81,6 +81,12 @@ export interface CreateConfig {
 
   /** MCP Apps (ext-apps) configuration */
   extApps?: ExtAppsOptionsInput;
+
+  /** How tool results the server can't encode are treated (`@FrontMcp({ output })`) */
+  output?: FrontMcpConfigInput['output'];
+
+  /** Rate limits, concurrency and timeouts for every tool (`@FrontMcp({ throttle })`) */
+  throttle?: FrontMcpConfigInput['throttle'];
 
   // ── App-level fields ─────────────────────────────────────────────────
 

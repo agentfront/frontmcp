@@ -109,6 +109,14 @@ const result = await server.callTool('my_tool', { arg: 'value' });
 await server.dispose();
 ```
 
+Each call can name its caller with `{ authContext }`: `user` (its claims, `sub` included), `token`, `sessionId`, `extra`, and `scopes`, the OAuth scopes the caller holds, which `this.auth.scopes` and `requiredScopes` read:
+
+```typescript
+await server.callTool('list_tickets', {}, { authContext: { user: { sub: 'nour' }, scopes: ['tickets:read'] } });
+```
+
+Up to 1.9.1 an in-process call had no scopes. `create()` takes the server-level `output` and `throttle` options like `@FrontMcp()` (up to 1.9.1 it dropped them).
+
 The list methods (`listTools`, `listResources`, `listResourceTemplates`, `listPrompts`) of this server, and of the one `create()` returns, return the whole list: they read every page (a FrontMCP server pages `tools/list` 40 tools at a time by default), so the result carries no `nextCursor`, as with `DirectClient`. To page yourself, as an MCP client does, ask for one page with `paginate` and follow `nextCursor` with `cursor`:
 
 ```typescript
