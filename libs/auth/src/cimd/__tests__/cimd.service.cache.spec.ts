@@ -1,3 +1,5 @@
+import { RedisStorageAdapter } from '@frontmcp/utils';
+
 import { CimdService } from '../cimd.service';
 
 /**
@@ -5,17 +7,11 @@ import { CimdService } from '../cimd.service';
  * `createCimdCache` factory: `'redis'` is a Redis cache (it used to be in memory whatever the type).
  */
 const mockRedisConnect = jest.fn().mockResolvedValue(undefined);
-const mockRedisGet = jest.fn().mockResolvedValue(null);
 const mockRedisKeys = jest.fn().mockResolvedValue(['cimd:a', 'cimd:b']);
-const mockRedisAdapter = jest.fn().mockImplementation(() => ({
-  connect: mockRedisConnect,
-  get: mockRedisGet,
-  keys: mockRedisKeys,
-}));
 
 jest.mock('@frontmcp/utils', () => ({
   ...jest.requireActual('@frontmcp/utils'),
-  RedisStorageAdapter: mockRedisAdapter,
+  RedisStorageAdapter: jest.fn().mockImplementation(() => ({ connect: mockRedisConnect, keys: mockRedisKeys })),
 }));
 
 describe('CimdService cache', () => {
@@ -30,7 +26,7 @@ describe('CimdService cache', () => {
 
     await service.initialize();
 
-    expect(mockRedisAdapter).toHaveBeenCalledWith({ url: 'redis://cache.example.com:6379' });
+    expect(RedisStorageAdapter).toHaveBeenCalledWith({ url: 'redis://cache.example.com:6379' });
     expect(mockRedisConnect).toHaveBeenCalledTimes(1);
     expect(await service.getCacheStats()).toEqual({ size: 2 });
     expect(mockRedisConnect).toHaveBeenCalledTimes(1);
@@ -41,7 +37,7 @@ describe('CimdService cache', () => {
 
     await service.initialize();
 
-    expect(mockRedisAdapter).not.toHaveBeenCalled();
+    expect(RedisStorageAdapter).not.toHaveBeenCalled();
     expect(await service.getCacheStats()).toEqual({ size: 0 });
   });
 
