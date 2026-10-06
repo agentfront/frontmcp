@@ -1249,10 +1249,11 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
   /**
    * Move the upstream provider tokens stored under `fromAuthorizationId` to the authorization id of
-   * `accessToken`, where `this.orchestration` looks for them. Returns that id, or undefined when the
-   * move failed (the token is still issued; its tools then find no provider token).
+   * `accessToken`, where `this.orchestration` looks for them. Returns where they are now: that id, or
+   * `fromAuthorizationId` when the move failed, so the next refresh tries again (the token is still
+   * issued; its tools find no provider token until then).
    */
-  private async moveProviderTokens(fromAuthorizationId: string, accessToken: string): Promise<string | undefined> {
+  private async moveProviderTokens(fromAuthorizationId: string, accessToken: string): Promise<string> {
     const toAuthorizationId = deriveAuthorizationId(accessToken);
     try {
       await this.orchestratedTokenStore.migrateTokens(fromAuthorizationId, toAuthorizationId);
@@ -1260,7 +1261,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       return toAuthorizationId;
     } catch (err) {
       this.logger.warn(`Failed to migrate tokens: ${err}`);
-      return undefined;
+      return fromAuthorizationId;
     }
   }
 
@@ -1458,9 +1459,11 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
     // Register CIMD service if initialized; its cache (Redis with `cimd.cache.type: 'redis'`) is created now
     if (this.cimdService) {
-      if (this.cimdService.enabled) await this.cimdService.initialize();
+      const cimdService = this.cimdService;
+      if (cimdService.enabled) await cimdService.initialize();
+      this.scope.onDispose(() => cimdService.dispose());
       this.providers.injectProvider({
-        value: this.cimdService,
+        value: cimdService,
         metadata: {
           scope: ProviderScope.GLOBAL,
           name: 'auth:cimd-service',
