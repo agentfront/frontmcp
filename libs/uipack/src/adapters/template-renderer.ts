@@ -56,8 +56,9 @@ export interface RenderToolTemplateOptions {
   csp?: { connectDomains?: string[]; resourceDomains?: string[] };
   /**
    * HTML-escape a plain string returned by a template function; results built with
-   * `html` / `trustedHtml` stay markup. When unset, strings that look like HTML render as
-   * markup and a one-time notice per tool is logged; `false` keeps that without the notice.
+   * `html` / `trustedHtml` stay markup. Unset is the 1.9 default: strings are escaped, and a
+   * one-time notice per tool is logged when one looked like markup. `true` escapes without the
+   * notice; `false` renders strings that look like HTML as markup.
    */
   escapeStringResults?: boolean;
   /** Receives the one-time string-result notice. Defaults to `console`. */
@@ -114,10 +115,10 @@ function noticeStringResult(toolName: string, logger: { warn: (message: string) 
   if (noticedStringResultTools.has(toolName)) return;
   noticedStringResultTools.add(toolName);
   logger.warn(
-    `[frontmcp] The UI template of tool "${toolName}" returned a plain string containing markup, which is rendered as HTML. ` +
-      'FrontMCP 1.9 will HTML-escape plain string results by default. Build the markup with ctx.helpers.html`…` ' +
-      '(interpolated values are escaped) or wrap safe markup with ctx.helpers.trustedHtml(), then set ' +
-      'ui.escapeStringResults: true (or escapeStringResults: false to keep the current behaviour without this notice). ' +
+    `[frontmcp] The UI template of tool "${toolName}" returned a plain string containing markup. ` +
+      'FrontMCP 1.9 HTML-escapes plain string results by default, so it is shown as text. Build the markup with ' +
+      'ctx.helpers.html`…` (interpolated values are escaped) or wrap safe markup with ctx.helpers.trustedHtml(). ' +
+      'Set ui.escapeStringResults: false to render plain strings as markup, or true to silence this notice. ' +
       `See ${STRING_RESULT_DOCS}`,
   );
 }
@@ -125,9 +126,9 @@ function noticeStringResult(toolName: string, logger: { warn: (message: string) 
 /**
  * Body markup for a template result no content renderer claimed.
  *
- * `TrustedHtml` is the template's own markup. A plain string detected as HTML is markup unless
- * `escapeStringResults` is on. Text and serialized values carry tool data, so they are escaped
- * (GHSA-rhr9-vhpf-jqp7).
+ * `TrustedHtml` is the template's own markup. A plain string is escaped unless
+ * `escapeStringResults: false` lets one detected as HTML through as markup. Text and serialized
+ * values carry tool data, so they are escaped (GHSA-rhr9-vhpf-jqp7).
  */
 function renderUnwrappedResult(rawResult: unknown, options: RenderToolTemplateOptions): string {
   if (isTrustedHtml(rawResult)) {
@@ -136,16 +137,17 @@ function renderUnwrappedResult(rawResult: unknown, options: RenderToolTemplateOp
   if (typeof rawResult !== 'string') {
     return `<pre>${escapeHtml(JSON.stringify(rawResult, null, 2))}</pre>`;
   }
-  if (detectContentType(rawResult) !== 'html' || options.escapeStringResults === true) {
-    return escapeHtml(rawResult);
+  const looksLikeMarkup = detectContentType(rawResult) === 'html';
+  if (looksLikeMarkup && options.escapeStringResults === false) {
+    return rawResult;
   }
-  if (options.escapeStringResults === undefined) {
+  if (looksLikeMarkup && options.escapeStringResults === undefined) {
     noticeStringResult(options.toolName, options.logger ?? console);
   }
-  return rawResult;
+  return escapeHtml(rawResult);
 }
 
-/** The tools already warned about, per component, so the warning is given once (at startup). */
+/** The tools already warned about, per component, so the warning is given once. */
 const warnedComponentReferences = new WeakMap<object, Set<string>>();
 
 function warnComponentReference(template: object, toolName: string, logger: { warn: (message: string) => void }): void {
@@ -160,7 +162,38 @@ function warnComponentReference(template: object, toolName: string, logger: { wa
   );
 }
 
-function isReactElement(value: unknown): boolean {
+/** Compiled JSX: the automatic runtime's `jsx` / `jsxs` / `jsxDEV` calls (`_`-prefixed too), or `React.createElement`. */
+const COMPILED_JSX_PATTERN = /\b(?:React\.createElement|_?jsx(?:s|DEV)?)\)?\s*\(/;
+
+/**
+ * Whether a template is certainly a React component, decided without calling it: a memo / forwardRef
+ * object, a class, or a capitalized function whose source holds compiled JSX. Anything else (an HTML
+ * builder, a function that throws without call data) is left to the render-time check.
+ */
+function isComponentReference(template: unknown): boolean {
+  if (isReactTypedObject(template)) return true;
+  if (typeof template !== 'function' || detectUIType(template) !== 'react') return false;
+  return isDefinitelyReactComponent(template) || COMPILED_JSX_PATTERN.test(Function.prototype.toString.call(template));
+}
+
+/**
+ * Warn, once per tool, that `template` is a React component reference the widget cannot bundle.
+ * The server calls this while it registers UI tools, so the warning appears at startup (#769).
+ *
+ * @returns Whether the template is a component reference
+ */
+export function warnIfComponentReference(
+  toolName: string,
+  template: unknown,
+  logger: { warn: (message: string) => void } = console,
+): boolean {
+  if (!isComponentReference(template)) return false;
+  warnComponentReference(template as object, toolName, logger);
+  return true;
+}
+
+/** A React element, or the object `React.memo()` / `React.forwardRef()` return. */
+function isReactTypedObject(value: unknown): boolean {
   return typeof value === 'object' && value !== null && '$$typeof' in value;
 }
 
@@ -234,7 +267,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     if (isHtmlBuilder) {
       try {
         rawResult = (template as (ctx: unknown) => unknown)(ctx);
-        isHtmlBuilder = !isReactElement(rawResult);
+        isHtmlBuilder = !isReactTypedObject(rawResult);
       } catch (error) {
         if (uiType !== 'react') throw error;
         isHtmlBuilder = false;
@@ -242,7 +275,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     }
 
     if (!isHtmlBuilder) {
-      // The server compiles each widget at startup, so this warns then, not on every call
+      // Warned once per tool; the server already does so at startup through warnIfComponentReference
       warnComponentReference(template, toolName, options.logger ?? console);
       const shellResult = buildShell('<div id="root"></div>', shellConfig);
       html = shellResult.html;
@@ -268,6 +301,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     size = shellResult.size;
   } else {
     // Unknown template type — produce empty shell
+    if (isReactTypedObject(template)) warnComponentReference(template as object, toolName, options.logger ?? console);
     const shellResult = buildShell('<div id="root"></div>', shellConfig);
     html = shellResult.html;
     hash = shellResult.hash;

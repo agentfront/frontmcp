@@ -256,7 +256,17 @@ Dynamic tools and resources follow React's effect lifecycle:
 2. **Update**: If dependencies change, the old registration is cleaned up and a new one is created
 3. **Unmount**: The tool/resource is automatically unregistered (and the tool removed from the server)
 
-Changes are applied to the server on a microtask, so React StrictMode's mount → unmount → mount settles into one registration. When two mounted components register the same name, the later definition replaces the earlier one on the server too.
+Changes are applied to the server on a microtask, so React StrictMode's mount → unmount → mount settles into one registration. When two mounted components register the same name, the later definition replaces the earlier one on the server too. When that later component unmounts, the tool goes back to the earlier component's definition and `execute`, so a call never reaches an unmounted component.
+
+Outside `FrontMcpProvider`, the same mirroring is available as `bindDynamicTools(registry, server, { onError, app })`: it registers every tool of a `DynamicRegistry` with `server.registerTool()`, follows the registry's changes, and returns a function that stops mirroring and unregisters the tools.
+
+```ts
+import { DynamicRegistry, bindDynamicTools, create } from '@frontmcp/react';
+
+const server = await create({ info: { name: 'page', version: '1.0.0' } });
+const registry = new DynamicRegistry();
+const unbind = bindDynamicTools(registry, server);
+```
 
 This means agents only see tools that correspond to currently rendered UI. When a user navigates away from a page, its tools disappear; when they navigate back, the tools reappear.
 

@@ -12,6 +12,7 @@ import { securityHeadersEnv } from '../../config/security-headers-env';
 import { deploymentHttpPath, serverRuntimeEnv } from '../../config/deployment-env';
 import { type AdapterBuildContext, type AdapterName } from './types';
 import { bundleForServerless } from './bundler';
+import { detectOptionalPeers } from './optional-peers';
 import { resolveEmittedEntry } from '../../shared/emitted-entry';
 import { buildEmittedAliases, readTsPathAliases } from '../../shared/tsconfig-aliases';
 import { shipWidgetSources } from './copy-widgets';
@@ -65,7 +66,7 @@ async function generateAdapterFiles(
 
   // Generate index.js entry point
   const mainModuleName = entryModule.replace(/\.tsx?$/, '.js');
-  const entryContent = template.getEntryTemplate(`./${mainModuleName}`, deployment);
+  const entryContent = template.getEntryTemplate(`./${mainModuleName}`, deployment, context);
 
   // Skip if no entry template (e.g., node adapter)
   if (entryContent) {
@@ -117,21 +118,21 @@ async function generateAdapterFiles(
     };
 
     if (!exists) {
-      await writeContent(template.getConfig(cwd, deployment));
+      await writeContent(template.getConfig(cwd, deployment, outDir));
       console.log(c('green', `  Generated ${template.configFileName}`));
     } else if (template.alwaysWriteConfig) {
       // #535 — an adapter that can reconcile rewrites only the keys it owns, so
       // `[vars]`, bindings, `[triggers]` and comments survive the build.
       if (template.mergeConfig) {
         const existing = await fsp.readFile(configPath, 'utf8');
-        const merged = template.mergeConfig(existing, cwd, deployment);
+        const merged = template.mergeConfig(existing, cwd, deployment, outDir);
         await writeContent(merged.content);
         for (const warning of merged.warnings) {
           console.log(c('yellow', `  ${warning}`));
         }
         console.log(c('green', `  Updated ${template.configFileName} (managed keys only)`));
       } else {
-        await writeContent(template.getConfig(cwd, deployment));
+        await writeContent(template.getConfig(cwd, deployment, outDir));
         console.log(c('green', `  Updated ${template.configFileName} (build output reference)`));
       }
     } else {
@@ -392,11 +393,22 @@ async function runAdapterBuild(
       ),
     );
   }
+  const optionalPeers = detectOptionalPeers(entryInfo, cwd);
+  for (const moduleName of optionalPeers.missing) {
+    console.log(
+      c(
+        'yellow',
+        `[build] The @FrontMcp config enables metrics or observability, which need ${moduleName}, ` +
+          `but it is not installed. Install it: npm install ${moduleName}`,
+      ),
+    );
+  }
   const context: AdapterBuildContext = {
     transportHttpPath,
     securityHeadersEnv: securityHeadersEnv(server),
     haEnv: haEnv(deployment && 'ha' in deployment ? deployment.ha : undefined),
     runtimeEnv: { ...serverRuntimeEnv(server, { listens }), ...deployment?.env },
+    optionalPeers: optionalPeers.installed,
   };
 
   if (

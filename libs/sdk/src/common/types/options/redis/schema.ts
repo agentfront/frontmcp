@@ -2,6 +2,7 @@
 // Zod schema for Redis/storage configuration
 
 import { NEVER, z } from '@frontmcp/lazy-zod';
+import { describeRedisUrlConflicts, mergeRedisUrlFields } from '@frontmcp/utils';
 
 import type { PubsubOptionsInterface, RedisOptionsInterface } from './interfaces';
 
@@ -68,6 +69,9 @@ const redisConnectionSchema = z.object({
    * @default false
    */
   tls: z.boolean().optional().default(false),
+
+  // A config with a `url` belongs to redisUrlSchema; matching it here would drop the URL (#768).
+  url: z.undefined().optional(),
 });
 
 /**
@@ -195,6 +199,10 @@ export function parseRedisUrl(raw: string): ParsedRedisUrl | string {
  * Redis configured from a URL (`redis: { url: process.env.REDIS_URL }`).
  * Normalized to the explicit `provider: 'redis'` shape so downstream code
  * never has to know which form the config used.
+ *
+ * The URL is the base: `host` / `port` / `password` / `db` / `tls` beside it
+ * fill in only what the URL leaves out, and one that contradicts the URL is
+ * rejected rather than silently dropped (#768).
  */
 export const redisUrlSchema = z
   .object({
@@ -207,6 +215,12 @@ export const redisUrlSchema = z
      * Redis connection URL (`redis://` or `rediss://`).
      */
     url: z.string().trim().min(1),
+
+    host: z.string().trim().min(1).optional(),
+    port: z.number().int().positive().max(65535).optional(),
+    password: z.string().optional(),
+    db: z.number().int().nonnegative().optional(),
+    tls: z.boolean().optional(),
   })
   .merge(commonOptionsSchema)
   .transform((val, ctx) => {
@@ -215,9 +229,15 @@ export const redisUrlSchema = z
       ctx.addIssue({ code: 'custom', message: parsed, path: ['url'] });
       return NEVER;
     }
+    const merge = mergeRedisUrlFields(val.url, val);
+    if (merge && merge.conflicts.length > 0) {
+      ctx.addIssue({ code: 'custom', message: describeRedisUrlConflicts(merge.conflicts), path: ['url'] });
+      return NEVER;
+    }
     return {
       provider: 'redis' as const,
       ...parsed,
+      ...merge?.fillIns,
       keyPrefix: val.keyPrefix,
       defaultTtlMs: val.defaultTtlMs,
     };
@@ -289,8 +309,9 @@ function redisUnionError(issue: UnionIssueLike): string | undefined {
  * }
  * ```
  */
+// The URL branch goes first: a `url` beside `host` must not fall into a host-only branch that drops it.
 export const redisOptionsSchema = z.union(
-  [redisProviderSchema, vercelKvProviderSchema, legacyRedisSchema, redisUrlSchema],
+  [redisUrlSchema, redisProviderSchema, vercelKvProviderSchema, legacyRedisSchema],
   { error: redisUnionError },
 );
 
@@ -323,7 +344,7 @@ export type RedisOptionsInput = RedisOptionsInterface;
  * }
  * ```
  */
-export const pubsubOptionsSchema = z.union([redisProviderSchema, legacyRedisSchema, redisUrlSchema], {
+export const pubsubOptionsSchema = z.union([redisUrlSchema, redisProviderSchema, legacyRedisSchema], {
   error: redisUnionError,
 });
 

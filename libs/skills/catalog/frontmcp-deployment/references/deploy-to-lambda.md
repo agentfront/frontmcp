@@ -63,7 +63,7 @@ The handler is auto-generated. It calls `getServerlessHandlerAsync()` from `@fro
 
 ## Step 2: SAM Template
 
-Create `template.yaml` in your project root:
+`frontmcp create --target lambda` scaffolds `ci/template.yaml` with `NODE_ENV: production` and `MCP_SESSION_SECRET` taken from the `NoEcho` parameter `McpSessionSecret` (`sam deploy --parameter-overrides McpSessionSecret=$(openssl rand -hex 32)`). To write one by hand, create `template.yaml` in your project root:
 
 ```yaml
 AWSTemplateFormatVersion: '2010-09-09'
@@ -79,6 +79,7 @@ Globals:
       Variables:
         NODE_ENV: production
         LOG_LEVEL: info
+        MCP_SESSION_SECRET: !Ref McpSessionSecret
 
 Resources:
   FrontMcpFunction:
@@ -119,6 +120,10 @@ Conditions:
   HasRedis: !Not [!Equals [!Ref RedisUrl, '']]
 
 Parameters:
+  McpSessionSecret:
+    Type: String
+    NoEcho: true
+    Description: MCP_SESSION_SECRET for session-ID encryption, required in production (openssl rand -hex 32)
   RedisUrl:
     Type: String
     Default: ''

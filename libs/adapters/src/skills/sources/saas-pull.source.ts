@@ -125,7 +125,7 @@ export class SaasPullSource implements SkillBundleSource {
         bundle = await this.loadCache();
         if (!bundle) {
           throw new Error(
-            `[saas-source] initial pull failed and no cached bundle is available at ${this.cachePath()}: ${(e as Error).message}`,
+            `[saas-source] initial pull failed and no cached bundle is available ${this.cacheLocation()}: ${(e as Error).message}`,
             { cause: e },
           );
         }
@@ -297,6 +297,11 @@ export class SaasPullSource implements SkillBundleSource {
         ? { kind: 'json', content: body }
         : { kind: 'yaml', content: body },
     );
+  }
+
+  /** Where the last-good bundle is kept, for messages: an injected store (a Worker's KV) has no file path. */
+  private cacheLocation(): string {
+    return this.deps.cache ? 'in the injected bundle cache' : `at ${this.cachePath()}`;
   }
 
   private cachePath(): string {

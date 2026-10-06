@@ -113,7 +113,7 @@ WebMcpPlugin.init({
 
 ### Calling as the Signed-In User
 
-By default the server sees an anonymous `webmcp` caller in one session. When the page knows its user, pass it:
+By default the server sees an anonymous caller (`sub: 'anon:webmcp'`, so `this.auth.isAnonymous` is `true` and authorities treat it as no signed-in user) in one session. When the page knows its user, pass it:
 
 ```typescript
 WebMcpPlugin.init({
@@ -174,7 +174,7 @@ console.log(isWebMcpSupported()); // true once a native API or polyfill is prese
 ## Limitations
 
 - **Tools only.** WebMCP has no resources or prompts; they stay MCP-only.
-- **No elicitation or sampling.** WebMCP has no channel back to the agent (`requestUserInteraction` was removed from the draft), so a tool that elicits fails when an in-browser agent calls it.
+- **Elicitation only through the fallback tool; no sampling.** WebMCP has no channel back to the agent (`requestUserInteraction` was removed from the draft). With `@FrontMcp({ elicitation: { enabled: true } })`, a tool that elicits answers the agent with the [fallback instructions](/frontmcp/servers/elicitation#fallback-response-format), the `sendElicitationResult` tool is offered to the agent, and the round trip completes when the agent calls it. Without `elicitation.enabled`, a tool that elicits fails for an in-browser agent. Sampling is unavailable.
 - **The declarative API is not covered.** HTML forms with `toolname` attributes are registered by the browser, not by FrontMCP.
 - **The API is still changing.** The plugin targets the WebMCP draft of 2026-09-30 (`registerTool` with an `AbortSignal`); earlier Chrome builds with `navigator.modelContext` are not supported.
 

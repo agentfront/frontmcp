@@ -54,6 +54,15 @@ interface ProcessStatsCollectorOptions {
 const NS_PER_SECOND = 1e9;
 const MICROS_PER_SECOND = 1e6;
 
+// Edge runtimes (Cloudflare's unenv `process`) throw from probes they do not implement.
+function probeSafely<T>(probe: () => T): T | undefined {
+  try {
+    return probe();
+  } catch {
+    return undefined;
+  }
+}
+
 function defaultMonitorEventLoopDelay(): ELDHistogram | undefined {
   try {
     const { monitorEventLoopDelay } = require('node:perf_hooks') as typeof import('node:perf_hooks');
@@ -103,7 +112,7 @@ export class ProcessStatsCollector {
   private readonly getActiveHandles?: () => unknown[] | undefined;
   private readonly getActiveRequests?: () => unknown[] | undefined;
   private readonly readFdCount: () => number | undefined;
-  private cpuStart: NodeJS.CpuUsage;
+  private cpuStart?: NodeJS.CpuUsage;
 
   constructor(init: ProcessStatsCollectorOptions = {}) {
     this.options = init.options ?? {};
@@ -113,7 +122,7 @@ export class ProcessStatsCollector {
     this.getActiveHandles = init.getActiveHandles ?? defaultGetActiveHandles;
     this.getActiveRequests = init.getActiveRequests ?? defaultGetActiveRequests;
     this.readFdCount = init.readFdCount ?? defaultReadFdCount;
-    this.cpuStart = this.cpuUsage();
+    this.cpuStart = probeSafely(() => this.cpuUsage());
     if (this.options.eventLoopLag !== false) {
       this.histogram = init.monitorEventLoopDelay ? init.monitorEventLoopDelay() : defaultMonitorEventLoopDelay();
     }
@@ -122,50 +131,68 @@ export class ProcessStatsCollector {
   collect(): GaugeSnapshotEntry[] {
     const entries: GaugeSnapshotEntry[] = [];
 
-    const cpu = this.cpuUsage(this.cpuStart);
-    entries.push({
-      name: 'frontmcp_process_cpu_seconds_total',
-      value: cpu.user / MICROS_PER_SECOND,
-      attributes: { mode: 'user' },
-      help: 'CPU time consumed since collector start, by mode (seconds)',
-    });
-    entries.push({
-      name: 'frontmcp_process_cpu_seconds_total',
-      value: cpu.system / MICROS_PER_SECOND,
-      attributes: { mode: 'system' },
-    });
+    this.cpuStart ??= probeSafely(() => this.cpuUsage());
+    const cpu = this.cpuStart && probeSafely(() => this.cpuUsage(this.cpuStart));
+    if (cpu) {
+      entries.push({
+        name: 'frontmcp_process_cpu_seconds_total',
+        value: cpu.user / MICROS_PER_SECOND,
+        attributes: { mode: 'user' },
+        help: 'CPU time consumed since collector start, by mode (seconds)',
+      });
+      entries.push({
+        name: 'frontmcp_process_cpu_seconds_total',
+        value: cpu.system / MICROS_PER_SECOND,
+        attributes: { mode: 'system' },
+      });
+    }
 
-    const mem = this.memoryUsage();
-    entries.push({
-      name: 'frontmcp_process_resident_memory_bytes',
-      value: mem.rss,
-      help: 'Resident memory size in bytes',
-    });
-    entries.push({
-      name: 'frontmcp_process_heap_bytes',
-      value: mem.heapTotal,
-      help: 'Total V8 heap size in bytes',
-    });
-    entries.push({
-      name: 'frontmcp_process_heap_used_bytes',
-      value: mem.heapUsed,
-      help: 'Used V8 heap size in bytes',
-    });
-    entries.push({
-      name: 'frontmcp_process_external_bytes',
-      value: mem.external,
-      help: 'Memory used by C++ objects bound to JS in bytes',
-    });
+    const mem = probeSafely(() => this.memoryUsage());
+    if (mem) {
+      entries.push({
+        name: 'frontmcp_process_resident_memory_bytes',
+        value: mem.rss,
+        help: 'Resident memory size in bytes',
+      });
+      entries.push({
+        name: 'frontmcp_process_heap_bytes',
+        value: mem.heapTotal,
+        help: 'Total V8 heap size in bytes',
+      });
+      entries.push({
+        name: 'frontmcp_process_heap_used_bytes',
+        value: mem.heapUsed,
+        help: 'Used V8 heap size in bytes',
+      });
+      entries.push({
+        name: 'frontmcp_process_external_bytes',
+        value: mem.external,
+        help: 'Memory used by C++ objects bound to JS in bytes',
+      });
+    }
 
-    entries.push({
-      name: 'frontmcp_process_uptime_seconds',
-      value: this.uptime(),
-      help: 'Time since process start in seconds',
-    });
+    const uptime = probeSafely(() => this.uptime());
+    if (uptime !== undefined) {
+      entries.push({
+        name: 'frontmcp_process_uptime_seconds',
+        value: uptime,
+        help: 'Time since process start in seconds',
+      });
+    }
 
-    if (this.options.eventLoopLag !== false && this.histogram) {
-      const meanSeconds = this.histogram.mean / NS_PER_SECOND;
-      const p99Seconds = this.histogram.percentile(99) / NS_PER_SECOND;
+    const histogram = this.options.eventLoopLag !== false ? this.histogram : undefined;
+    const lag =
+      histogram &&
+      probeSafely(() => {
+        const sample = {
+          meanSeconds: histogram.mean / NS_PER_SECOND,
+          p99Seconds: histogram.percentile(99) / NS_PER_SECOND,
+        };
+        histogram.reset();
+        return sample;
+      });
+    if (lag) {
+      const { meanSeconds, p99Seconds } = lag;
       if (Number.isFinite(meanSeconds)) {
         entries.push({
           name: 'frontmcp_nodejs_eventloop_lag_seconds',
@@ -181,7 +208,6 @@ export class ProcessStatsCollector {
           attributes: { quantile: 'p99' },
         });
       }
-      this.histogram.reset();
     }
 
     if (this.options.activeHandles !== false) {

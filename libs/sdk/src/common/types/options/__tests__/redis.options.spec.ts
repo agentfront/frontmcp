@@ -341,3 +341,40 @@ describe('parseRedisUrl', () => {
     expect(problem).not.toEqual(expect.stringContaining('secret'));
   });
 });
+
+describe('redis url beside connection fields (#768)', () => {
+  it('fills in a password the URL leaves out', () => {
+    const parsed = redisOptionsSchema.parse({ url: 'redis://cache:6379', password: 'p' });
+    expect(parsed).toMatchObject({ provider: 'redis', host: 'cache', port: 6379, password: 'p' });
+  });
+
+  it('fills in a port, db and tls the URL leaves out', () => {
+    const parsed = redisOptionsSchema.parse({ url: 'redis://cache', port: 6390, db: 2, tls: true });
+    expect(parsed).toMatchObject({ host: 'cache', port: 6390, db: 2, tls: true });
+  });
+
+  it('keeps the URL when a host beside it names the same server', () => {
+    const parsed = redisOptionsSchema.parse({ url: 'redis://cache:6390', host: 'cache' });
+    expect(parsed).toMatchObject({ host: 'cache', port: 6390 });
+  });
+
+  it.each([
+    [{ url: 'redis://cache:6379', host: 'other' }, 'host'],
+    [{ provider: 'redis', url: 'redis://cache:6379', host: 'other' }, 'host'],
+    [{ url: 'redis://cache:6379', port: 6380 }, 'port'],
+    [{ url: 'redis://:url-secret@cache', password: 'other' }, 'password'],
+    [{ url: 'redis://cache/1', db: 2 }, 'db'],
+    [{ url: 'rediss://cache', tls: false }, 'tls'],
+  ])('rejects %j instead of dropping a field', (input, field) => {
+    const result = redisOptionsSchema.safeParse(input);
+    expect(result.success).toBe(false);
+    const message = result.error?.issues[0]?.message ?? '';
+    expect(message).toContain(`redis ${field} contradicts redis.url`);
+    expect(message).not.toContain('url-secret');
+  });
+
+  it('applies the same rule to pubsub', () => {
+    expect(pubsubOptionsSchema.parse({ url: 'redis://cache', password: 'p' })).toMatchObject({ password: 'p' });
+    expect(pubsubOptionsSchema.safeParse({ url: 'redis://cache', host: 'other' }).success).toBe(false);
+  });
+});

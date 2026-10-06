@@ -39,7 +39,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379' # loopback only: a password-less Redis must not face the network
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
@@ -58,6 +58,8 @@ Start the container:
 ```bash
 docker compose up -d redis
 ```
+
+Projects from `frontmcp create --target node --redis docker` already have `ci/docker-compose.yml`: it publishes Redis on `127.0.0.1:6379` only, runs the app with `NODE_ENV=production` by default, and `ci/Dockerfile` runs as the `node` user with a `/healthz` `HEALTHCHECK`. Set `MCP_SESSION_SECRET` in `ci/.env.docker` (git-ignored; after cloning, copy the committed `ci/.env.docker.example` to it) or export it in the shell, and run compose with `--env-file ci/.env.docker` — the generated `docker:up` / `docker:down` / `docker:build` scripts do; compose refuses to start any service while the secret is unset.
 
 Verify the connection:
 
@@ -146,6 +148,8 @@ redis: {
   keyPrefix: 'mcp:', // optional, as with the other forms
 },
 ```
+
+The URL is the base: `host` / `port` / `password` / `db` / `tls` beside it only fill in what the URL leaves out (`{ url: 'redis://cache:6379', password }` adds the password; `tls: true` upgrades a `redis://` URL). A field that contradicts the URL — another host, port, password or db, or `tls: false` with `rediss://` — is a validation error naming the field, never silently dropped. `pubsub` and `throttle.storage.redis` follow the same rule.
 
 ### For Vercel KV
 
@@ -341,7 +345,7 @@ throttle: {
 },
 ```
 
-`throttle.storage` takes the `@frontmcp/utils` storage shape (`{ type: 'redis', redis: { config } }` or `{ type: 'redis', redis: { url } }`), not the top-level `redis` shape (which takes `{ host, ... }` or `{ url }`).
+`throttle.storage` takes the `@frontmcp/utils` storage shape (`{ type: 'redis', redis: { config } }`, `{ type: 'redis', redis: { url } }` or `{ type: 'redis', redis: { config: { url } } }`), not the top-level `redis` shape (which takes `{ host, ... }` or `{ url }`).
 
 ## Common Patterns
 

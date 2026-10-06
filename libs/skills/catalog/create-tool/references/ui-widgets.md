@@ -76,7 +76,7 @@ Or use the FileSource form — it sidesteps the issue.
 | `autoResize`                                                                                              | `true`      | Report the document height (margins included) to the host after the handshake. Set `false` to opt out (CSS still applies).                                                                                                                         |
 | `csp`                                                                                                     | —           | `{ connectDomains?, resourceDomains? }` — emitted on the resource content's `_meta.ui.csp` (#455). Claude honors CSP only here. See [CSP origins](#csp-origins).                                                                                   |
 | `contentSecurity`                                                                                         | strict      | **No effect yet.**                                                                                                                                                                                                                                 |
-| `escapeStringResults`                                                                                     | unset       | `true` escapes plain string results of a template function; `html` / `trustedHtml` stay markup. Default in 1.9.                                                                                                                                    |
+| `escapeStringResults`                                                                                     | unset       | Unset (1.9 default) and `true` escape plain string results of a template function (unset logs a one-time notice); `false` renders them as markup; `html` / `trustedHtml` stay markup.                                                              |
 | `widgetAccessible`                                                                                        | `false`     | **No effect yet.**                                                                                                                                                                                                                                 |
 | `resourceUri`                                                                                             | auto        | Override the `ui://widget/{toolName}.html` URI.                                                                                                                                                                                                    |
 | `uiType`                                                                                                  | `'auto'`    | **No effect yet** — the type is auto-detected.                                                                                                                                                                                                     |
@@ -111,7 +111,7 @@ export default function Widget({ output }: { output: { id: string } | null }) {
 
 - A string template with both `<` and `>` is HTML and is used as written. Any other string is Markdown: headings, paragraphs, fenced code, lists, bold, italic, inline code and links are converted server-side; raw HTML is escaped; a link survives only if its target starts with `http:`, `https:`, `mailto:`, `/` or `#`.
 - MDX is not compiled: `{output.field}` expressions are not evaluated and `mdxComponents` is ignored. Use a `.tsx` FileSource widget for interactivity.
-- Author-written markup (template literals, HTML strings, `.tsx`) is trusted and not sanitized. Values interpolated into `` html`…` `` are escaped; plain string results are escaped only with `escapeStringResults: true`.
+- Author-written markup (template literals, HTML strings, `.tsx`) is trusted and not sanitized. Values interpolated into `` html`…` `` are escaped; plain string results are escaped unless `escapeStringResults: false`.
 
 ## Widget resources and per-call renders
 
@@ -159,15 +159,15 @@ template: (ctx: TemplateContext<In, Out>) => {
 - In an inline `<script>`, embed data with `${trustedHtml(jsonEmbed(data))}` — `jsonEmbed` writes `<`, `>`, `&`, U+2028 and U+2029 as `\uXXXX`, so it is safe in a script, and `html` would otherwise HTML-escape its quotes.
 - `html`, `trustedHtml`, `isTrustedHtml` and `TrustedHtml` are also exported from `@frontmcp/uipack`; `TrustedHtml` is re-exported from `@frontmcp/sdk`.
 
-A **plain string** a template function returns is rendered as markup when it looks like HTML — `template: (ctx) => ctx.output` renders any tags in the output. `escapeStringResults` opts in to escaping it:
+A **plain string** a template function returns is escaped and shown as text (since 1.9) — `template: (ctx) => ctx.output` cannot inject tags. `escapeStringResults: false` opts out:
 
-| `escapeStringResults` | Plain string result                                 | `html` / `trustedHtml` result |
-| --------------------- | --------------------------------------------------- | ----------------------------- |
-| unset (1.8 default)   | Rendered as markup; one-time notice logged per tool | Markup                        |
-| `true`                | Escaped, shown as text                              | Markup                        |
-| `false`               | Rendered as markup, no notice                       | Markup                        |
+| `escapeStringResults` | Plain string result                               | `html` / `trustedHtml` result |
+| --------------------- | ------------------------------------------------- | ----------------------------- |
+| unset (1.9 default)   | Escaped; one-time notice if it looked like markup | Markup                        |
+| `true`                | Escaped, no notice                                | Markup                        |
+| `false`               | Rendered as markup when it looks like HTML        | Markup                        |
 
-Set it per tool (`ui: { escapeStringResults: true }`) or server-wide (`@FrontMcp({ ui: { escapeStringResults: true } })`; the tool setting wins). **FrontMCP 1.9 escapes plain string results by default** — return `html` / `trustedHtml` from every template function and set `escapeStringResults: true` to migrate now.
+Set it per tool (`ui: { escapeStringResults: false }`) or server-wide (`@FrontMcp({ ui: { escapeStringResults: false } })`; the tool setting wins). Prefer returning `html` / `trustedHtml` from every template function; a widget that shows its markup as text after upgrading to 1.9 returns a plain string.
 
 Everything else is always escaped: plain text as text, objects as JSON inside `<pre>`, chart configs and base64 PDFs (`JVBERi…`) as script data. A value that starts with `JVBERi` but isn't base64 is shown as text. A static string template (`template: '<div>…</div>'`) is author markup and is never escaped.
 

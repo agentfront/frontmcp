@@ -65,7 +65,9 @@ The generator also updates three files in your workspace:
 
 ## Dependencies
 
-The first UI shell creates the `ui/shells` package and adds what it needs to the workspace `package.json`: `@frontmcp/uipack` (at the plugin's version) as a dependency, and `@nx/esbuild` plus `esbuild` (`^0.27.3`) for the package's build targets. The `esbuild` range satisfies the `esbuild >=0.27` peer range of `@frontmcp/uipack` and matches the one the `frontmcp` CLI uses, so the install resolves a single esbuild. Ranges already in your `package.json` are kept, except an `esbuild` range older than `^0.27.3` (such as the `^0.25.0` earlier versions of the UI generators wrote), which would fail the install with `ERESOLVE` and is raised to `^0.27.3` where it is declared.
+The first UI shell creates the `ui/shells` package and adds what it needs to the workspace `package.json`: `@frontmcp/uipack` (at the plugin's version) as a dependency, `@nx/esbuild` (at the workspace's `nx` version) plus `esbuild` (`^0.27.3`) for the package's build targets, and Jest with `@swc/jest` for its specs. The `esbuild` range satisfies the `esbuild >=0.27` peer range of `@frontmcp/uipack` and matches the one the `frontmcp` CLI uses, so the install resolves a single esbuild. Ranges already in your `package.json` are kept, except an `esbuild` range older than `^0.27.3` (such as the `^0.25.0` earlier versions of the UI generators wrote), which would fail the install with `ERESOLVE` and is raised to `^0.27.3` where it is declared.
+
+The package's `build-cjs` target type-checks the sources and emits the declarations; `build-esm` skips the type check, which in an Nx TypeScript-solution workspace (`create-nx-workspace --preset=ts`) would run without `composite` and fail with TS5069. When `nx.json` does not register `@nx/jest/plugin` (which would infer it), the package gets a `test` target that runs `jest --config jest.config.cjs`.
 
 ## Consuming
 

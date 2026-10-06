@@ -209,7 +209,7 @@ describe('Build Adapters', () => {
       expect(config).not.toContain('"nodejs_compat_populate_process_env"');
     });
 
-    it('defaults compatibility_date to one that enables full nodejs_compat (>= 2024-09-23)', () => {
+    it('defaults compatibility_date to the first date on which nodejs_compat turns on nodejs_compat_v2', () => {
       const config = cloudflareAdapter.getConfig?.('/test');
       expect(config).toContain('compatibility_date = "2024-09-23"');
     });
@@ -417,6 +417,25 @@ describe('Build Adapters', () => {
     });
   });
 
+  describe('cloudflareAdapter optional peers (#768)', () => {
+    it('imports each optional peer before the server module and registers it with the SDK', () => {
+      const entry = cloudflareAdapter.getEntryTemplate('./main.js', undefined, {
+        optionalPeers: ['@frontmcp/observability'],
+      });
+      const peerImport = entry.indexOf("import * as optionalPeer0 from '@frontmcp/observability';");
+      expect(peerImport).toBeGreaterThan(entry.indexOf("import './serverless-setup.js';"));
+      expect(peerImport).toBeLessThan(entry.indexOf("import './main.js';"));
+      expect(entry).toContain("import { getServerlessHandlerAsync, registerOptionalModule } from '@frontmcp/sdk';");
+      expect(entry).toContain("registerOptionalModule('@frontmcp/observability', optionalPeer0);");
+    });
+
+    it('leaves the entry unchanged when no optional peer is needed', () => {
+      const entry = cloudflareAdapter.getEntryTemplate('./main.js');
+      expect(entry).toContain("import { getServerlessHandlerAsync } from '@frontmcp/sdk';");
+      expect(entry).not.toContain('registerOptionalModule');
+    });
+  });
+
   describe('cloudflareAdapter wrangler.toml (#374)', () => {
     it('opts in to alwaysWriteConfig so wrangler.toml stays in sync with the build output', () => {
       expect(cloudflareAdapter.alwaysWriteConfig).toBe(true);
@@ -426,6 +445,19 @@ describe('Build Adapters', () => {
       const config = cloudflareAdapter.getConfig?.('/tmp');
       expect(typeof config).toBe('string');
       expect(config).toContain('main = "dist/cloudflare/index.js"');
+    });
+
+    it('points main at the --out-dir the build writes to (#768)', () => {
+      expect(cloudflareAdapter.getConfig?.('/repo', undefined, '/repo/build/worker')).toContain(
+        'main = "build/worker/index.js"',
+      );
+      const merged = cloudflareAdapter.mergeConfig?.(
+        'name = "mine"\nmain = "dist/cloudflare/index.js"\n',
+        '/repo',
+        undefined,
+        '/repo/build/worker',
+      );
+      expect(merged?.content).toContain('main = "build/worker/index.js"');
     });
 
     it('round-2: merges deployments[].wrangler.{name,compatibilityDate} into the rendered TOML', () => {
