@@ -143,10 +143,11 @@ describe('App.remote()', () => {
       const prompts = (await server.listPrompts()).prompts.map((p) => p.name).sort();
       const resources = (await server.listResources()).resources.map((r) => r.name).sort();
 
-      expect(templates).toEqual(['a:item', 'b:item', 'c:item']);
+      // The three remotes share the URI test://status and the URI template test://items/{id}: each names one
+      // resource, the first remote's (#766)
+      expect(templates).toEqual(['a:item']);
       expect(tools).toEqual(['a:echo', 'b:echo', 'c:echo']);
       expect(prompts).toEqual(['a:greeting', 'b:greeting', 'c:greeting']);
-      // The three remotes' resources share the URI test://status, which names one resource: the first remote's (#766)
       expect(resources).toEqual(['a:status']);
     });
 
