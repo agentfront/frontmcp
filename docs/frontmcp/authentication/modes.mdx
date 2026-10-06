@@ -72,6 +72,13 @@ sequenceDiagram
 | `publicAccess.prompts`   | `string[] \| 'all'` | `'all'`         | Prompts accessible without auth       |
 | `publicAccess.rateLimit` | `number`            | `60`            | Rate limit per IP per minute          |
 
+With `publicAccess` set, an anonymous caller lists only the tools and prompts it names (by name or app-qualified
+name), a call to any other answers `PUBLIC_ACCESS_DENIED` (JSON-RPC -32003, HTTP 403), and its tool calls and
+prompt requests are limited to `rateLimit` a minute per IP. A caller with a verified token is not restricted. The
+same applies to the anonymous callers of a transparent server with `allowAnonymous`. Anonymous callers hold
+`anonymousScopes` (`this.auth.scopes`). Up to 1.9.1, `publicAccess` was accepted but not enforced, and public-mode
+sessions held `['public']` whatever `anonymousScopes` said.
+
 ### Use Cases
 
 <CardGroup cols={2}>

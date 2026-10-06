@@ -1700,6 +1700,8 @@ export class Scope extends ScopeEntry {
     const guardedEntries = [...this.scopeTools.getTools(true), ...this.scopeAgents.getAgents(true)];
     const declaresLimits =
       guardedEntries.some((entry) => entry.metadata.rateLimit || entry.metadata.concurrency) ||
+      // `publicAccess.rateLimit` counts anonymous calls per IP
+      !!(this.auth.options as { publicAccess?: unknown } | undefined)?.publicAccess ||
       // The tools and nested agents an agent runs in its private scope, which uses this manager too
       this.scopeAgents.listAllInstances().some((agent) => agent.declaresScopedLimits());
     if (!declaresLimits) return;
