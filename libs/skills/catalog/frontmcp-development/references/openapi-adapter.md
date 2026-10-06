@@ -249,7 +249,7 @@ OpenapiAdapter.init({
   generateOptions: { readOnlyOnly: true },
 });
 
-// Filter by HTTP method (lower-case names)
+// Filter by HTTP method (any case; a name that is not an HTTP method stops the adapter)
 OpenapiAdapter.init({
   name: 'billing-api',
   url: 'https://api.example.com/openapi.json',
@@ -270,7 +270,7 @@ OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   generateOptions: {
-    includeOperations: ['getUser', 'createUser', 'updateUser'],
+    includeOperations: ['getUser', 'createUser', 'updateUser'], // operations without an operationId are left out
   },
 });
 
@@ -465,9 +465,13 @@ OpenapiAdapter.init({
     timeout: 10000,
     validate: true,
     dereference: true,
+    overlays: curationOverlay, // OpenAPI Overlay 1.0 document(s), applied before validation
+    secureDefaults: true, // no redirects, no external $refs (FrontMCP's defaults already are)
   },
 });
 ```
+
+Every `mcp-from-openapi` load option reaches the loader; up to 1.9.1 `overlays` and `secureDefaults` were dropped.
 
 ## Common Patterns
 
