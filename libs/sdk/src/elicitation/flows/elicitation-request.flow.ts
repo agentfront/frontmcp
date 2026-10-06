@@ -135,12 +135,9 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
   async validateRequest() {
     this.logger.verbose('validateRequest:start');
 
-    const { mode, elicitationId, url } = this.state;
+    const { mode, url } = this.state;
 
-    // URL mode requires elicitationId for out-of-band tracking, and the url the client opens
-    if (mode === 'url' && !elicitationId) {
-      throw new InvalidInputError('elicitationId is required when mode is "url"');
-    }
+    // URL mode requires the url the client opens; its elicitationId is generated when not given
     if (mode === 'url' && !url) {
       throw new InvalidInputError('url is required when mode is "url"');
     }
@@ -193,9 +190,7 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
   async buildRequestParams() {
     this.logger.verbose('buildRequestParams:start');
 
-    const { mode, message, requestedSchema } = this.state.required;
-    // elicitationId is optional - access directly from state
-    const elicitationId = this.state.elicitationId;
+    const { mode, message, requestedSchema, elicitId } = this.state.required;
 
     // Build request params based on mode
     const requestParams: Record<string, unknown> = {
@@ -204,9 +199,9 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
       requestedSchema,
     };
 
-    // Add elicitationId (required for out-of-band tracking) and the url for URL mode
-    if (mode === 'url' && elicitationId) {
-      requestParams['elicitationId'] = elicitationId;
+    // URL mode names the page to open and the id that correlates its completion: the caller's or the generated one
+    if (mode === 'url') {
+      requestParams['elicitationId'] = elicitId;
       requestParams['url'] = this.state.url;
     }
 

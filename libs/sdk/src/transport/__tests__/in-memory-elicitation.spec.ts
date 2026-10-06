@@ -29,7 +29,18 @@ class ConfirmTool extends ToolContext {
   }
 }
 
-@App({ id: 'desk', name: 'Desk', tools: [ConfirmTool], plugins: [ElicitationAuditPlugin] })
+@Tool({ name: 'connect_billing', inputSchema: {} })
+class ConnectBillingTool extends ToolContext {
+  async execute() {
+    const answer = await this.elicit('Sign in to billing', z.object({}), {
+      mode: 'url',
+      url: 'https://billing.example/connect',
+    });
+    return { action: answer.status };
+  }
+}
+
+@App({ id: 'desk', name: 'Desk', tools: [ConfirmTool, ConnectBillingTool], plugins: [ElicitationAuditPlugin] })
 class DeskApp {}
 
 function config(): FrontMcpConfigInput {
@@ -56,6 +67,28 @@ describe('elicitation through the in-memory transport', () => {
 
     expect(result.structuredContent).toEqual({ action: 'accept', confirmed: true });
     expect(ranStages).toEqual(['elicitation:request', 'elicitation:result']);
+  });
+
+  it('takes an accepted URL-mode answer without content, and gives the question an elicitationId', async () => {
+    const asked: unknown[] = [];
+    const client = await connect(config(), {
+      onElicitation: async (request) => {
+        asked.push(request);
+        return { action: 'accept' };
+      },
+    });
+
+    const result = (await client.callTool('connect_billing', {})) as { structuredContent?: unknown };
+    await client.close();
+
+    expect(result.structuredContent).toEqual({ action: 'accept' });
+    expect(asked).toEqual([
+      expect.objectContaining({
+        mode: 'url',
+        url: 'https://billing.example/connect',
+        elicitationId: expect.stringMatching(/^elicit-/),
+      }),
+    ]);
   });
 
   it('fails an unanswered question with ElicitationTimeoutError', async () => {

@@ -146,6 +146,12 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
       return;
     }
 
+    // A URL-mode answer carries no content: what the user did reaches the server through the page
+    if (pendingRecord.mode === 'url') {
+      this.logger.verbose('validateContent:skip (url mode)');
+      return;
+    }
+
     // Skip if no schema stored (backward compatibility with older records)
     if (!pendingRecord.requestedSchema) {
       this.logger.verbose('validateContent:skip (no schema stored)');

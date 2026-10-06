@@ -68,8 +68,8 @@ export interface ElicitOptions {
   ttl?: number;
 
   /**
-   * Unique identifier for URL-mode elicitation.
-   * Required for URL mode to track completion via notifications.
+   * Unique identifier for URL-mode elicitation, which correlates its completion.
+   * Generated when a URL-mode elicitation leaves it out.
    */
   elicitationId?: string;
 
