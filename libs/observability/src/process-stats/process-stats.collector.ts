@@ -112,7 +112,7 @@ export class ProcessStatsCollector {
   private readonly getActiveHandles?: () => unknown[] | undefined;
   private readonly getActiveRequests?: () => unknown[] | undefined;
   private readonly readFdCount: () => number | undefined;
-  private readonly cpuStart?: NodeJS.CpuUsage;
+  private cpuStart?: NodeJS.CpuUsage;
 
   constructor(init: ProcessStatsCollectorOptions = {}) {
     this.options = init.options ?? {};
@@ -131,6 +131,7 @@ export class ProcessStatsCollector {
   collect(): GaugeSnapshotEntry[] {
     const entries: GaugeSnapshotEntry[] = [];
 
+    this.cpuStart ??= probeSafely(() => this.cpuUsage());
     const cpu = this.cpuStart && probeSafely(() => this.cpuUsage(this.cpuStart));
     if (cpu) {
       entries.push({

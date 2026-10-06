@@ -283,6 +283,29 @@ describe('ProcessStatsCollector (issue #397)', () => {
     ]);
   });
 
+  it('takes the CPU baseline on a later scrape when the first cpuUsage() probe throws', () => {
+    let cpuProbeFails = true;
+    const cpuUsage = (prev?: NodeJS.CpuUsage): NodeJS.CpuUsage => {
+      if (cpuProbeFails) throw new Error('transient');
+      const total = { user: 3_000_000, system: 1_000_000 };
+      return prev ? { user: total.user - prev.user, system: total.system - prev.system } : total;
+    };
+    const collector = new ProcessStatsCollector({
+      cpuUsage,
+      memoryUsage: () => ({ rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 }),
+      uptime: () => 0,
+      getActiveHandles: () => undefined,
+      getActiveRequests: () => undefined,
+      readFdCount: () => undefined,
+      options: { eventLoopLag: false },
+    });
+    const cpuEntries = () => collector.collect().filter((e) => e.name === 'frontmcp_process_cpu_seconds_total');
+
+    expect(cpuEntries()).toEqual([]);
+    cpuProbeFails = false;
+    expect(cpuEntries().map((e) => e.value)).toEqual([0, 0]);
+  });
+
   it('close() disables the event-loop lag histogram', () => {
     const histogram = makeHistogram({ mean: 0, p99: 0 });
     const collector = new ProcessStatsCollector({
