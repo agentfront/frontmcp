@@ -23,6 +23,8 @@ import {
 } from '@frontmcp/sdk';
 import { randomUUID } from '@frontmcp/utils';
 
+import { logStartFailure } from './start-failure';
+
 /** The FrontMCP scope type, derived to avoid widening the SDK's public surface. */
 type Scope = Parameters<typeof runHttpRequestFlowWeb>[0];
 
@@ -73,8 +75,8 @@ export function createEdgeSessionRouter(bindingName: string): WebFetchSessionRou
 }
 
 /** Log a failed session build once per attempt: the request it refuses carries only a code. */
-function logStartFailure(error: unknown): void {
-  console.error(
+function logSessionStartFailure(error: unknown): void {
+  logStartFailure(
     '[frontmcp/edge] The session Durable Object failed to start; requests are refused until a retry succeeds.',
     error,
   );
@@ -97,10 +99,12 @@ export function createEdgeSessionDurableObject(
     // Built once per instance and shared by concurrent first requests. A failed build is kept and
     // refuses requests until its retry delay passes (1 s, doubling up to 60 s), then the next
     // request tries again, so one transient init error doesn't brick this instance.
-    readonly #scope = createDeferredServerBuild((env: unknown) => buildScope(env), { onFailure: logStartFailure });
+    readonly #scope = createDeferredServerBuild((env: unknown) => buildScope(env), {
+      onFailure: logSessionStartFailure,
+    });
     readonly #pair = createDeferredServerBuild(
       ({ scope, sessionId }: { scope: Scope; sessionId: string }) => this.#buildPair(scope, sessionId),
-      { onFailure: logStartFailure },
+      { onFailure: logSessionStartFailure },
     );
     readonly #doEnv: unknown;
     readonly #storage: DurableObjectStorageLike | undefined;

@@ -52,6 +52,7 @@ import type { EdgeBundleCacheFactory, EdgeBundleCacheStore } from './kv-cache';
 import { buildManagedOpenApiPluginOptions, type ManagedEdgeOptions } from './managed';
 import { createEdgeSessionDurableObject, createEdgeSessionRouter } from './session-host';
 import { kvSkillIndexCacheFromEnv, type EdgeSkillIndexCacheFactory } from './skill-index-cache';
+import { logStartFailure } from './start-failure';
 
 /** On Deno and Bun the second `fetch` argument is `info` / `server`; on Workers it is `env`, never a peer source. */
 function isDenoOrBunRuntime(): boolean {
@@ -364,7 +365,10 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
   // the built scope).
   const server = createDeferredServerBuild(build, {
     onFailure: (error) =>
-      console.error('[frontmcp/edge] The server failed to start; requests are refused until a retry succeeds.', error),
+      logStartFailure(
+        '[frontmcp/edge] The server failed to start; requests are refused until a retry succeeds.',
+        error,
+      ),
   });
   const ensureHandler = (env: unknown): Promise<WebFetchHandler> => server.get(env);
 

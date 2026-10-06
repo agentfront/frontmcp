@@ -113,6 +113,9 @@ describe('the edge module when its server fails to build', () => {
     const { status, error, code } = await answer(await worker.fetch(initialize(), {}));
 
     expect({ status, error, code }).toEqual({ status: 500, error: 'server_misconfigured', code: 'CONFIG_INVALID' });
+    // The remedy points at the log for the invalid fields (#769)
+    const edgeLog = consoleError.mock.calls.find(([message]) => String(message).startsWith('[frontmcp/edge]'));
+    expect(String(edgeLog?.[0])).toMatch(/Invalid configuration: info\.name: .+/);
   });
 
   it('answers 503 from a session Durable Object whose scope fails to build, and recovers after the delay', async () => {

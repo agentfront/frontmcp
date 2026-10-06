@@ -2,7 +2,7 @@
  * Unit tests for the KV-backed last-good bundle cache — the worker-safe
  * replacement for the SaaS source's on-disk cache (no filesystem on a Worker).
  */
-import { createKvBundleCache, type EdgeKvNamespace, kvBundleCacheFromEnv } from '../kv-cache';
+import { createKvBundleCache, kvBundleCacheFromEnv, type EdgeKvNamespace } from '../kv-cache';
 
 interface PutCall {
   key: string;
