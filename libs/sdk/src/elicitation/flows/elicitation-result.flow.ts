@@ -224,11 +224,10 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
 
     const { handled, pendingRecord, elicitResult } = this.state;
 
-    this.state.set('output', {
-      handled: handled ?? false,
-      elicitId: pendingRecord?.elicitId,
-      result: elicitResult,
-    });
+    const output = { handled: handled ?? false, elicitId: pendingRecord?.elicitId, result: elicitResult };
+    this.state.set('output', output);
+    // respond() is what runFlow returns; the state alone never reached the adapters
+    this.respond(output);
 
     this.logger.verbose('finalize:done', { handled });
   }

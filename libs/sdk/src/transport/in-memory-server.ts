@@ -9,7 +9,8 @@ import { toJSONSchema, type ZodType } from '@frontmcp/lazy-zod';
 import { type AuthInfo, type Transport } from '@frontmcp/protocol';
 import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
-import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult } from '../elicitation';
+import { type ElicitOptions, type ElicitResult } from '../elicitation';
+import { ElicitationTimeoutError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { buildScopedServerOptions } from './build-scoped-server-options';
@@ -95,7 +96,7 @@ export async function createInMemoryServer(
   options?: CreateInMemoryServerOptions,
 ): Promise<InMemoryServerResult> {
   // Dynamically import to avoid bundling issues
-  const { ElicitResultSchema, InMemoryTransport, McpServer } = await importWithRequireFallback(
+  const { ElicitResultSchema, ErrorCode, InMemoryTransport, McpError, McpServer } = await importWithRequireFallback(
     () => import('@frontmcp/protocol'),
     () => require('@frontmcp/protocol') as typeof import('@frontmcp/protocol'),
   );
@@ -109,7 +110,8 @@ export async function createInMemoryServer(
   // Track current auth info (can be updated dynamically)
   let currentAuthInfo: Partial<AuthInfo> = options?.authInfo ?? {};
 
-  // `this.elicit()` asks the in-process client directly, which answers through its `onElicitation`
+  // `this.elicit()` asks the in-process client, which answers through its `onElicitation`. The question and the
+  // answer run the same hookable `elicitation:request` / `elicitation:result` flows as on the HTTP transports.
   const elicitTransport = {
     type: 'in-memory',
     sendElicitRequest: async <S extends ZodType>(
@@ -118,25 +120,31 @@ export async function createInMemoryServer(
       requestedSchema: S,
       elicitOptions?: ElicitOptions,
     ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> => {
-      // The client's capabilities were checked by `this.elicit()` (the SDK server never saw its initialize)
-      const answer = await mcpServer.request(
-        {
-          method: 'elicitation/create',
-          params: {
-            mode: elicitOptions?.mode ?? 'form',
-            message,
-            requestedSchema: toJSONSchema(requestedSchema),
-            ...(elicitOptions?.url !== undefined && { url: elicitOptions.url }),
-            ...(elicitOptions?.elicitationId !== undefined && { elicitationId: elicitOptions.elicitationId }),
-          },
-        },
-        ElicitResultSchema,
-        { relatedRequestId, timeout: elicitOptions?.ttl ?? DEFAULT_ELICIT_TTL },
-      );
-      return {
-        status: answer.action,
-        ...(answer.action === 'accept' && answer.content !== undefined && { content: answer.content }),
-      } as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
+      const { elicitId, expiresAt, requestParams } = await scope.runFlowForOutput('elicitation:request', {
+        relatedRequestId,
+        sessionId,
+        message,
+        requestedSchema: toJSONSchema(requestedSchema),
+        options: elicitOptions,
+      });
+      const ttl = Math.max(expiresAt - Date.now(), 0);
+      let answer: { action: 'accept' | 'cancel' | 'decline'; content?: unknown };
+      try {
+        // The client's capabilities were checked by `this.elicit()` (the SDK server never saw its initialize)
+        answer = await mcpServer.request(
+          { method: 'elicitation/create', params: requestParams as never },
+          ElicitResultSchema,
+          { relatedRequestId, timeout: ttl },
+        );
+      } catch (error) {
+        await scope.elicitationStore?.deletePending(sessionId);
+        if (error instanceof McpError && error.code === ErrorCode.RequestTimeout) {
+          throw new ElicitationTimeoutError(elicitId, ttl);
+        }
+        throw error;
+      }
+      const output = await scope.runFlow('elicitation:result', { sessionId, result: answer });
+      return (output?.result ?? { status: answer.action }) as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
     },
   };
 

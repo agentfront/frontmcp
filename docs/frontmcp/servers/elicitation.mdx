@@ -403,7 +403,7 @@ This design ensures predictable behavior and prevents conflicting elicitation UI
 
 ## Elicitation Hooks
 
-FrontMCP provides flow hooks to intercept elicitation requests and results. Hooks are **methods inside plugin classes** that run before, after, or around specific flow stages.
+FrontMCP provides flow hooks to intercept elicitation requests and results. Hooks are **methods inside plugin classes** that run before, after, or around specific flow stages. Both flows run on every transport, including the in-process client of `connect()` and `createDirect()` (since 1.9.2); an unanswered question there fails with `ElicitationTimeoutError` as it does over HTTP.
 
 ### Hook Types
 
