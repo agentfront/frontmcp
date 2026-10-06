@@ -21,3 +21,13 @@ export function doubledPrefixKey(keyPrefix: string, key: string): string | undef
 export function callerKeyOf(keyPrefix: string, pattern: string, backendKey: string): string {
   return keyPrefix && pattern.startsWith(keyPrefix) ? backendKey : backendKey.slice(keyPrefix.length);
 }
+
+/**
+ * Sets KEYS[1] to ARGV[1], with ARGV[2] seconds of TTL when it is not empty, unless KEYS[1] or KEYS[2]
+ * exists. Run as one script, a value still under the doubled key keeps a conditional write out.
+ */
+export const SET_IF_NEITHER_KEY_EXISTS_SCRIPT = `
+if redis.call('EXISTS', KEYS[1], KEYS[2]) > 0 then return 0 end
+if ARGV[2] ~= '' then redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2]) else redis.call('SET', KEYS[1], ARGV[1]) end
+return 1
+`;

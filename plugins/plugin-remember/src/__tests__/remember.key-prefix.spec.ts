@@ -47,6 +47,20 @@ class GlobRedisServer {
     return this.entries.has(key) ? 1 : 0;
   }
 
+  async eval(_script: string, ...args: unknown[]): Promise<number> {
+    const [keys, argv] = Array.isArray(args[0])
+      ? [args[0] as string[], args[1] as string[]]
+      : [args.slice(1, 1 + (args[0] as number)) as string[], args.slice(1 + (args[0] as number)) as string[]];
+    this.evalCalls.push(keys);
+    if (keys.some((key) => this.entries.has(key))) return 0;
+    const [storeKey, value, ttlSeconds] = [keys[0] ?? '', argv[0] ?? '', argv[1] ?? ''];
+    this.entries.set(storeKey, value);
+    if (ttlSeconds !== '') this.ttlMs.set(storeKey, Number(ttlSeconds) * 1000);
+    return 1;
+  }
+
+  readonly evalCalls: string[][] = [];
+
   async keys(match: string): Promise<string[]> {
     const pattern = new RegExp(`^${match.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`);
     return [...this.entries.keys()].filter((key) => pattern.test(key));
@@ -175,5 +189,27 @@ describe.each(stores)('%s keyPrefix', (_name, build) => {
     await rememberOver(store).set('lang', 'he', { scope: 'user' });
 
     expect([...server.entries.keys()]).toEqual(['remember:v2:user:nour:lang']);
+  });
+
+  it('does not create a key whose entry still sits under the doubled prefix', async () => {
+    const doubledKey = await storeUnderDoubledPrefix();
+
+    expect(await store.setIfAbsent?.('remember:v2:user:nour:lang', 'replacement', 60)).toBe(false);
+    expect([...server.entries.keys()]).toEqual([doubledKey]);
+    expect(server.evalCalls).toEqual([['remember:v2:user:nour:lang', doubledKey]]);
+  });
+
+  it('treats an unreadable value under the doubled prefix as occupying the key', async () => {
+    await server.set('remember:remember:__layout__', 'not json');
+
+    expect(await store.setIfAbsent?.('remember:__layout__', 'marker')).toBe(false);
+    expect(server.entries.has('remember:__layout__')).toBe(false);
+  });
+
+  it('creates the key under the prefix once, with its TTL, when neither key exists', async () => {
+    expect(await store.setIfAbsent?.('remember:v2:user:nour:lang', 'he', 60)).toBe(true);
+
+    expect([...server.entries.keys()]).toEqual(['remember:v2:user:nour:lang']);
+    expect(await server.pttl('remember:v2:user:nour:lang')).toBe(60_000);
   });
 });
