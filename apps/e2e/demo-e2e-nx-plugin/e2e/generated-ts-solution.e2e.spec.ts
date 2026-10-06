@@ -79,7 +79,7 @@ describe('generated projects in an Nx TS-solution workspace', () => {
       join(ws, 'apps/demo/src/demo.app.ts'),
       [
         `import { App } from '@frontmcp/sdk';`,
-        `import { SHARED_MARKER } from '@frontmcp/shared';`,
+        `import { SHARED_MARKER } from '@org/shared';`,
         `import HelloTool from './tools/hello.tool';`,
         ``,
         `export const MARKER = SHARED_MARKER;`,
@@ -97,7 +97,7 @@ describe('generated projects in an Nx TS-solution workspace', () => {
     const base = JSON.parse(readFileSync(join(ws, 'tsconfig.base.json'), 'utf8')) as {
       compilerOptions: { paths: Record<string, string[]> };
     };
-    expect(base.compilerOptions.paths['@frontmcp/shared']).toEqual(['./libs/shared/src/index.ts']);
+    expect(base.compilerOptions.paths['@org/shared']).toEqual(['./libs/shared/src/index.ts']);
   });
 
   it.each([

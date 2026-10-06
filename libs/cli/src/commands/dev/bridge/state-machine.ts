@@ -49,7 +49,8 @@ export interface BridgeStateMachine {
   /** Watcher fired. Buffer inbound, start reload timer. */
   onWatcherEvent(trigger: string): void;
   /** Reload deadline elapsed without a ready signal. */
-  onReloadDeadline(): void;
+  /** `detail` (e.g. why the first boot failed) is added to every buffered request's error data. */
+  onReloadDeadline(detail?: Record<string, unknown>): void;
   /** Inbound JSON-RPC frame from stdin. Routes to `forward` or buffers. */
   enqueue(frame: JsonRpcFrame): Promise<void>;
   /** Outbound JSON-RPC frame from upstream — relay to client. */
@@ -66,6 +67,7 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
   const buffer: JsonRpcFrame[] = [];
   const inflight = new Map<string | number, InflightRequest>();
   let reloadTimer: NodeJS.Timeout | undefined;
+  let degradedDetail: Record<string, unknown> | undefined;
   // Monotonic token bumped every time the FSM leaves Ready. The async
   // drain loop started in onChildReady() captures the token at start
   // and bails out as soon as it changes — without this guard a watcher
@@ -121,6 +123,7 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
 
     onChildReady() {
       clearReloadTimer();
+      degradedDetail = undefined;
       transition('Ready', { bufferDepth: buffer.length });
       // Drain buffered requests in FIFO; preserve order on the wire.
       const drain = [...buffer];
@@ -186,13 +189,14 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
       scheduleReloadDeadline();
     },
 
-    onReloadDeadline() {
+    onReloadDeadline(detail) {
       log.error('reload-deadline-elapsed', { bufferDepth: buffer.length });
       transition('Degraded', { reason: 'reload_deadline' });
+      degradedDetail = detail;
       // Deadline path → DEV_RELOAD_DEADLINE (not DEV_SERVER_UNREACHABLE).
       // The two map to distinct public error codes so clients can
       // distinguish "watcher reload took too long" from "child crashed".
-      void flushBufferAsResponses(DEV_RELOAD_DEADLINE, 'deadline', { deadlineMs: reloadDeadlineMs });
+      void flushBufferAsResponses(DEV_RELOAD_DEADLINE, 'deadline', { deadlineMs: reloadDeadlineMs, ...detail });
     },
 
     async enqueue(frame: JsonRpcFrame) {
@@ -223,6 +227,7 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
           await respond(
             makeDevError(frame.id ?? null, DEV_SERVER_UNREACHABLE, {
               reason: state === 'Stopping' ? 'stopping' : 'degraded',
+              ...(state === 'Degraded' ? degradedDetail : undefined),
             }),
           );
         } else {

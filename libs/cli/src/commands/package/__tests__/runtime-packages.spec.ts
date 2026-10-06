@@ -18,14 +18,9 @@ describe('resolveRuntimePackageSpecs', () => {
 
   it('falls back to the CLI version and its own dependency ranges without a package.json', () => {
     const { required: specs, optional } = resolveRuntimePackageSpecs(dir);
-    expect(specs).toHaveLength(4);
     expect(optional).toEqual([]);
-    expect(specs[0]).toMatch(/^@frontmcp\/sdk@\d+\.\d+\.\d+/);
-    expect(specs[1]).toBe('reflect-metadata@^0.2.2');
-    // #679 — the SDK's skill registry loads vectoriadb at start-up, and
-    // vectoriadb requires tslib without declaring it.
-    expect(specs[2]).toMatch(/^vectoriadb@\^2\./);
-    expect(specs[3]).toMatch(/^tslib@\^2\./);
+    // #729 — vectoriadb is a dependency of the SDK and declares tslib itself, so neither is added
+    expect(specs).toEqual([expect.stringMatching(/^@frontmcp\/sdk@\d+\.\d+\.\d+/), 'reflect-metadata@^0.2.2']);
   });
 
   it('prefers the ranges declared in dependencies', () => {
@@ -35,12 +30,7 @@ describe('resolveRuntimePackageSpecs', () => {
         dependencies: { '@frontmcp/sdk': '1.8.3', 'reflect-metadata': '^0.2.0', vectoriadb: '2.3.2', tslib: '2.8.1' },
       }),
     );
-    expect(resolveRuntimePackageSpecs(dir).required).toEqual([
-      '@frontmcp/sdk@1.8.3',
-      'reflect-metadata@^0.2.0',
-      'vectoriadb@2.3.2',
-      'tslib@2.8.1',
-    ]);
+    expect(resolveRuntimePackageSpecs(dir).required).toEqual(['@frontmcp/sdk@1.8.3', 'reflect-metadata@^0.2.0']);
   });
 
   it('reads devDependencies and peerDependencies too', () => {
@@ -70,7 +60,7 @@ describe('resolveRuntimePackageSpecs', () => {
       /^@frontmcp\/observability@\d+\.\d+\.\d+/,
     );
     expect(specs.some((spec) => spec.startsWith('lodash@'))).toBe(false);
-    expect(specs).toHaveLength(6);
+    expect(specs).toHaveLength(4);
   });
 
   it('keeps an SDK peer declared in optionalDependencies optional', () => {
@@ -87,19 +77,16 @@ describe('resolveRuntimePackageSpecs', () => {
     fs.writeFileSync(
       path.join(dir, 'package.json'),
       JSON.stringify({
-        dependencies: { '@frontmcp/storage-sqlite': '1.8.0', vectoriadb: '2.3.0' },
-        optionalDependencies: { '@frontmcp/storage-sqlite': '1.8.7', vectoriadb: '2.3.2' },
+        dependencies: { '@frontmcp/storage-sqlite': '1.8.0' },
+        optionalDependencies: { '@frontmcp/storage-sqlite': '1.8.7' },
       }),
     );
     const { required, optional } = resolveRuntimePackageSpecs(dir);
     expect(optional).toEqual(['@frontmcp/storage-sqlite@1.8.7']);
-    // vectoriadb is needed at start-up: it stays required, at the declared range.
-    expect(required).toContain('vectoriadb@2.3.2');
-    const all = [...required, ...optional];
-    expect(all.some((spec) => spec.endsWith('@1.8.0') || spec.endsWith('@2.3.0'))).toBe(false);
+    expect([...required, ...optional].some((spec) => spec.endsWith('@1.8.0'))).toBe(false);
   });
 
-  it('lists every optional peer of @frontmcp/sdk (except vectoriadb) and @frontmcp/utils', () => {
+  it('lists every optional peer of @frontmcp/sdk and @frontmcp/utils', () => {
     const optionalPeersOf = (packageJsonPath: string): string[] => {
       const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {
         peerDependenciesMeta?: Record<string, { optional?: boolean }>;
@@ -108,9 +95,9 @@ describe('resolveRuntimePackageSpecs', () => {
         .filter(([, meta]) => meta.optional)
         .map(([name]) => name);
     };
-    const optional = [...new Set([...optionalPeersOf(SDK_PACKAGE_JSON), ...optionalPeersOf(UTILS_PACKAGE_JSON)])]
-      .filter((name) => name !== 'vectoriadb')
-      .sort();
+    const optional = [
+      ...new Set([...optionalPeersOf(SDK_PACKAGE_JSON), ...optionalPeersOf(UTILS_PACKAGE_JSON)]),
+    ].sort();
     expect([...OPTIONAL_RUNTIME_PEERS].sort()).toEqual(optional);
   });
 

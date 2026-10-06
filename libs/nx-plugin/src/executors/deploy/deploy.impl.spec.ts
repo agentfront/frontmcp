@@ -30,9 +30,13 @@ describe('deploy executor', () => {
     expect(result.success).toBe(true);
   });
 
-  it('should run vercel for vercel target', async () => {
+  // #726 — `vercel --prod` rebuilt remotely; the deploy target's build already wrote .vercel/output
+  it('deploys the prebuilt output for the vercel target', async () => {
     await deployExecutor({ target: 'vercel' }, mockContext);
-    expect(execSync).toHaveBeenCalledWith('npx vercel --prod', expect.anything());
+    expect(execSync).toHaveBeenCalledWith(
+      'npx vercel deploy --prebuilt --prod',
+      expect.objectContaining({ cwd: '/workspace/servers/prod' }),
+    );
   });
 
   it('should run sam for lambda target', async () => {

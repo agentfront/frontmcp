@@ -54,7 +54,7 @@ export default MyServer;
 # Worker fails to boot.
 name = "frontmcp-worker"
 main = "dist/cloudflare/index.js"
-compatibility_date = "2024-09-23"
+compatibility_date = "2024-11-11"
 compatibility_flags = ["nodejs_compat"]
 ```
 

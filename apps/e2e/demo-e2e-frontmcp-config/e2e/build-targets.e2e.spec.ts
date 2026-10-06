@@ -261,7 +261,7 @@ module.exports = {};
 
       const toml = await readFile(wranglerPath);
       expect(toml).toContain('name = "frontmcp-worker"');
-      expect(toml).toContain('compatibility_date = "2024-09-23"');
+      expect(toml).toContain('compatibility_date = "2024-11-11"');
       // The worker entry require()s @frontmcp/sdk + Express → Node builtins, so
       // the emitted config MUST carry nodejs_compat or the deployed Worker
       // cannot boot. #536 adds the process.env bridge flag alongside it.

@@ -11,6 +11,7 @@ import {
   type ServerRequest,
 } from '../common';
 import { FrontMcpContextStorage } from '../context';
+import { inProcessRequestContext, type InProcessRequestMetadata } from '../context/metadata.utils';
 import { FlowNotRegisteredError, RegistryDependencyNotRegisteredError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
@@ -105,9 +106,16 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
       return flow.run(input, deps ?? new Map()) as Promise<FlowOutputOf<Name> | undefined>;
     }
 
+    // Extract session info from MCP handler context (input.ctx.authInfo)
+    // MCP handlers pass { request, ctx } where ctx has authInfo
+    const mcpCtx = (input as any)?.ctx;
+
+    // Direct calls carry their headers as `ctx.metadata` (#709); such a call is its own request
+    const inProcessMetadata: InProcessRequestMetadata | undefined = mcpCtx?.metadata;
+
     // Check if we're already in a context (e.g., HTTP middleware flow)
     const existingContext = contextStorage.getStore();
-    if (existingContext) {
+    if (existingContext && !inProcessMetadata) {
       // Already in context, run directly
       return flow.run(input, deps ?? new Map()) as Promise<FlowOutputOf<Name> | undefined>;
     }
@@ -125,9 +133,6 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
       );
     }
 
-    // Extract session info from MCP handler context (input.ctx.authInfo)
-    // MCP handlers pass { request, ctx } where ctx has authInfo
-    const mcpCtx = (input as any)?.ctx;
     const authInfo = mcpCtx?.authInfo;
 
     // Get session ID from authInfo (set by ensureAuthInfo in transport adapter)
@@ -143,6 +148,7 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
           sessionId,
           scopeId: scope.id,
           authInfo,
+          ...(inProcessMetadata ? inProcessRequestContext(inProcessMetadata) : {}),
         },
         async () => {
           return flow.run(input, deps ?? new Map()) as Promise<FlowOutputOf<Name> | undefined>;

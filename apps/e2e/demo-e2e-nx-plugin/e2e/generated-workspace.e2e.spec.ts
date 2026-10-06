@@ -53,7 +53,7 @@ describe('generated workspace', () => {
       join(ws, 'apps/demo/src/demo.app.ts'),
       [
         `import { App } from '@frontmcp/sdk';`,
-        `import { SHARED_MARKER } from '@frontmcp/shared';`,
+        `import { SHARED_MARKER } from 'shared';`,
         `import HelloTool from './tools/hello.tool';`,
         ``,
         `export const MARKER = SHARED_MARKER;`,
@@ -66,7 +66,7 @@ describe('generated workspace', () => {
     write(
       join(ws, 'apps/demo/src/hello.spec.ts'),
       [
-        `import { SHARED_MARKER } from '@frontmcp/shared';`,
+        `import { SHARED_MARKER } from 'shared';`,
         ``,
         `describe('workspace jest setup', () => {`,
         `  it('resolves cross-project imports', () => {`,

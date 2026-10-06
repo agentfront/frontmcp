@@ -76,4 +76,9 @@ export abstract class FrontMcpServer {
   abstract start(port: number, bindAddress?: string): Promise<void> | void;
   abstract start(socketPath: string): Promise<void> | void;
   abstract start(portOrSocketPath?: number | string, bindAddress?: string): Promise<void> | void;
+
+  /** Stop accepting connections and close the open ones; a server that never listened has nothing to stop. */
+  async stop(): Promise<void> {
+    return;
+  }
 }

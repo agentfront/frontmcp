@@ -68,7 +68,9 @@ dist/mcpb/
       package.json                  # minimal CJS marker
       _skills/                      # present when the server ships skills
     bin/
+      darwin/launch                 # picks darwin-arm64 or darwin-x64 by `uname -m`
       darwin-arm64/my-server        # present when --sea or --merge-from
+      darwin-x64/my-server
       win32-x64/my-server.exe
     icon.png                        # present when resolved
     README.md                       # present when README.md exists in cwd
@@ -203,22 +205,34 @@ warning and renders those steps unconditionally.
 Pass `--sea` (or set `sea.enabled` in config) to ship a [Node.js
 single-executable](https://nodejs.org/api/single-executable-applications.html)
 alongside the bundled JS. FrontMCP emits a `platform_overrides` block in
-`mcp_config` that routes each supported OS/arch to its binary:
+`mcp_config`. MCPB hosts look it up by OS only (`process.platform`: `darwin`,
+`linux`, `win32`), so the keys are OS names:
 
 ```json
 "mcp_config": {
   "command": "node",
   "args": ["${__dirname}/server/index.js"],
   "platform_overrides": {
-    "darwin-arm64": { "command": "${__dirname}/bin/darwin-arm64/my-server", "args": [] },
-    "linux-x64":    { "command": "${__dirname}/bin/linux-x64/my-server",    "args": [] },
-    "win32-x64":    { "command": "${__dirname}/bin/win32-x64/my-server.exe", "args": [] }
+    "darwin": { "command": "${__dirname}/bin/darwin/launch", "args": [] },
+    "linux":  { "command": "${__dirname}/bin/linux/launch",  "args": [] },
+    "win32":  { "command": "${__dirname}/bin/win32-x64/my-server.exe", "args": [] }
   }
 }
 ```
 
-Platforms without a binary fall through to the Node command — the bundled JS
-runs on any machine with Node installed.
+The spec has no architecture key, so an OS with several architectures (`darwin`
+and `linux`: `arm64` and `x64`) points at `bin/<os>/launch`, a POSIX launcher
+that runs `bin/<os>-<arch>/<name>` for the host's `uname -m`. An OS with a
+single architecture (`win32`: `x64`) points straight at its binary.
+
+An OS gets an override only when every one of its architectures has a binary.
+Otherwise a host on the missing architecture would be sent to a binary it can't
+run, so the build skips that OS and logs which binaries are missing. Hosts on
+an OS without an override run the Node command, and the bundled JS runs on any
+machine with Node installed. A single `--sea` build produces a binary for its
+build host only, so only a build on a Windows x64 host supplies an override on
+its own (for `win32`); a single macOS or Linux build supplies none. Ship every
+architecture of macOS and Linux with `--merge-from`.
 
 The binary is self-contained, like `server/index.js`: the FrontMCP runtime and
 `reflect-metadata` are bundled into it. A single-executable binary resolves a bare
@@ -248,6 +262,9 @@ jobs:
           - os: ubuntu-latest
             arch: x64
             key: linux-x64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            key: linux-arm64
           - os: windows-latest
             arch: x64
             key: win32-x64

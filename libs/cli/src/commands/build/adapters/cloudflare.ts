@@ -4,7 +4,12 @@ import type { CloudflareDeployment, DeploymentTarget } from '../../../config/fro
 import type { AdapterBuildContext, AdapterTemplate } from '../types';
 import { securityHeadersEnvSetupLines } from '../../../config/security-headers-env';
 import { entryPathEnvLine } from './http-entry-path';
-import { mergeWranglerToml, renderWranglerToml, type ManagedWranglerFields } from './wrangler-toml';
+import {
+  mergeWranglerToml,
+  readWranglerCompatibilityDate,
+  renderWranglerToml,
+  type ManagedWranglerFields,
+} from './wrangler-toml';
 
 /**
  * `nodejs_compat` gives the Worker the Node API surface the SDK runtime needs
@@ -24,11 +29,16 @@ const POPULATE_PROCESS_ENV_FLAG = 'nodejs_compat_populate_process_env';
 const OPT_OUT_PROCESS_ENV_FLAG = 'nodejs_compat_do_not_populate_process_env';
 
 /**
- * `nodejs_compat` only provides the full Node API surface (incl. `require` of
- * builtins) from this date onward; default to it so a freshly-built worker
- * boots. Users can still pin an older/newer date.
+ * The Upstash client behind `redis: { provider: 'vercel-kv' }` sends
+ * `cache: 'no-store'`, which Workers reject before this date (#710).
  */
-const DEFAULT_COMPATIBILITY_DATE = '2024-09-23';
+const VERCEL_KV_MIN_COMPATIBILITY_DATE = '2024-11-11';
+
+/**
+ * Late enough for `nodejs_compat` to turn on `nodejs_compat_v2` (2024-09-23)
+ * and for Vercel KV / Upstash to run. A wrangler.toml keeps the date it pins.
+ */
+const DEFAULT_COMPATIBILITY_DATE = VERCEL_KV_MIN_COMPATIBILITY_DATE;
 
 const DEFAULT_WORKER_NAME = 'frontmcp-worker';
 
@@ -206,6 +216,7 @@ ${bridgeCall}    if (!handlerPromise) {
   // the user how to gate them at the source level.
   validate: (decoratorConfig, info) => {
     const errors: string[] = [];
+    const warnings: string[] = [];
 
     const sqliteIsLiteral =
       decoratorConfig?.['sqlite'] !== undefined &&
@@ -276,6 +287,22 @@ ${bridgeCall}    if (!handlerPromise) {
         `[--target cloudflare] config incompatible with Cloudflare Workers:\n  - ${errors.join('\n  - ')}`,
       );
     }
+
+    if (redisIsHttp) {
+      // The build keeps a date wrangler.toml already pins, so that is the one the Worker runs with.
+      const compatibilityDate =
+        (info?.existingConfig && readWranglerCompatibilityDate(info.existingConfig)) ??
+        (info?.deployment as CloudflareDeployment | undefined)?.wrangler?.compatibilityDate ??
+        DEFAULT_COMPATIBILITY_DATE;
+      if (compatibilityDate < VERCEL_KV_MIN_COMPATIBILITY_DATE) {
+        warnings.push(
+          `redis: { provider: 'vercel-kv' } needs compatibility_date ${VERCEL_KV_MIN_COMPATIBILITY_DATE} or later on Workers ` +
+            `(its Upstash client sends cache: 'no-store', which earlier dates reject), but the Worker runs with ` +
+            `${compatibilityDate}: every storage call will fail. Raise compatibility_date in wrangler.toml.`,
+        );
+      }
+    }
+    return warnings;
   },
 
   // #374 — always reconcile wrangler.toml with the build output. Skipping when

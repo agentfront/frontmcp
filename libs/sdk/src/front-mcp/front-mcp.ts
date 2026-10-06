@@ -34,6 +34,7 @@ import {
 } from '../transport/web-fetch-handler';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { createMcpGlobalProviders } from './front-mcp.providers';
+import { exitOnShutdownSignals } from './shutdown-signals';
 import { assertStaticStartupConfig } from './static-startup.check';
 
 /**
@@ -82,6 +83,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
   private providers: ProviderRegistry;
   private scopes: ScopeRegistry;
   private log?: FrontMcpLogger;
+  private shutdownPromise?: Promise<void>;
 
   constructor(config: FrontMcpConfigType) {
     this.config = config;
@@ -158,6 +160,42 @@ export class FrontMcpInstance implements FrontMcpInterface {
    */
   getScopes(): ScopeEntry[] {
     return this.scopes.getScopes();
+  }
+
+  /**
+   * Shut the server down gracefully (#712): stop accepting connections, shut every scope down
+   * (HA heartbeat, session relay, Redis, channels) so other nodes take its sessions over at once,
+   * let requests in flight finish, then dispose every scope. Every step runs even when one fails;
+   * the returned promise then rejects. Safe to call more than once.
+   * `bootstrap()` runs it on SIGTERM and SIGINT; call it yourself to manage signals.
+   */
+  shutdown(): Promise<void> {
+    this.shutdownPromise ??= this.runShutdown();
+    return this.shutdownPromise;
+  }
+
+  private async runShutdown(): Promise<void> {
+    const scopes = this.getScopes() as Scope[];
+    const failures: unknown[] = [];
+    const serverStopped = this.providers.get(FrontMcpServer)?.stop();
+    for (const scope of scopes) {
+      await this.bestEffort('scope shutdown', () => scope.shutdown(), failures);
+    }
+    await this.bestEffort('server stop', () => serverStopped, failures);
+    for (const scope of scopes) {
+      await this.bestEffort('scope dispose', () => scope.dispose(), failures);
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, `Graceful shutdown: ${failures.length} steps failed`);
+  }
+
+  private async bestEffort(step: string, run: () => Promise<void> | undefined, failures: unknown[]): Promise<void> {
+    try {
+      await run();
+    } catch (error) {
+      failures.push(error);
+      this.log?.error(`Graceful shutdown: ${step} failed`, error as Error);
+    }
   }
 
   /**
@@ -244,7 +282,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
     }
   }
 
-  public static async bootstrap(options: FrontMcpConfigInput | FrontMcpConfigType) {
+  public static async bootstrap(
+    options: FrontMcpConfigInput | FrontMcpConfigType,
+  ): Promise<FrontMcpInstance | undefined> {
     // `frontmcp start --db`, `frontmcp socket --db` and the generated installer
     // hand the database location over as FRONTMCP_SQLITE_PATH.
     const sqlitePath = process.env['FRONTMCP_SQLITE_PATH'];
@@ -262,14 +302,16 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const daemonSocket = process.env['FRONTMCP_DAEMON_SOCKET'];
     if (daemonSocket) {
       await FrontMcpInstance.runUnixSocket({ ...parsedConfig, socketPath: daemonSocket });
-      return;
+      return undefined;
     }
 
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
     await frontMcp.start();
+    exitOnShutdownSignals(() => frontMcp.shutdown(), { logger: frontMcp.log });
     frontMcp.log?.info('FrontMCP bootstrap complete');
+    return frontMcp;
   }
 
   /**
