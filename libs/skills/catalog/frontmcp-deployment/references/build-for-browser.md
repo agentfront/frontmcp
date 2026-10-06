@@ -58,6 +58,15 @@ Not all FrontMCP features are available in browser environments:
 | Direct client (`connect()`) | Yes             | In-memory connection                                                   |
 | `ConfigPlugin`              | Yes             | No `.env` / `config.yml` files: schema defaults and `process.env` only |
 
+### NODE_ENV in the browser
+
+`runtimeContext.env`, `isProduction()` / `isDevelopment()` and error formatting all read one value:
+a `process` shim's `NODE_ENV` (`globalThis.process.env.NODE_ENV`) first, then the value the bundler
+inlines for `process.env.NODE_ENV`. With neither, `env` is `development`, as on Node, and errors keep
+their message. Set `NODE_ENV=production` for production errors (an error ID, no stack) and to hide
+`/readyz` probe details. Up to 1.9.1 the browser build reported `env: 'production'` while formatting
+errors for development.
+
 ### Request context in the browser
 
 A browser has no `AsyncLocalStorage`. Unless the runtime provides TC39 `AsyncContext`
