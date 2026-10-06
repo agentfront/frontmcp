@@ -8,6 +8,8 @@
 
 import { z } from '@frontmcp/lazy-zod';
 
+import { getNodeEnv } from './browser-env';
+
 // ============================================
 // Types (identical to Node version — issue #417)
 // ============================================
@@ -126,7 +128,7 @@ export function detectRuntimeContext(): RuntimeContext {
     deployment: 'standalone',
     provider: 'bare',
     target: 'browser',
-    env: 'production',
+    env: getNodeEnv() || 'development',
   };
 }
 
@@ -134,12 +136,25 @@ export function detectRuntimeContext(): RuntimeContext {
 // Singleton
 // ============================================
 
-const browserContext: RuntimeContext = detectRuntimeContext();
+let cached: RuntimeContext | undefined;
 
+/**
+ * The browser runtime context. Its `env` is read live from the same NODE_ENV as
+ * `isProduction()`, defaulting to `development` as on Node (#770).
+ */
 export function getRuntimeContext(): RuntimeContext {
-  return browserContext;
+  if (!cached) {
+    const detected = detectRuntimeContext();
+    Object.defineProperty(detected, 'env', {
+      get: () => getNodeEnv() || 'development',
+      enumerable: true,
+      configurable: true,
+    });
+    cached = detected;
+  }
+  return cached;
 }
 
 export function resetRuntimeContext(): void {
-  // No-op in browser
+  cached = undefined;
 }

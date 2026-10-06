@@ -82,6 +82,8 @@ A pod cut off from Redis for longer than the heartbeat TTL may lose its sessions
 
 Only Streamable HTTP sessions can be taken over: the transport is recreated from `transport.persistence`, so takeover needs a persistence backend. Without one, a session whose pod stopped is unknown to the others and the client re-initializes.
 
+A session its client ended with `DELETE` is removed from `transport.persistence` as well, public and anonymous sessions included, so neither a restart nor a takeover brings it back. If the store cannot delete the record, the `DELETE` fails instead of answering `204`, so the client can retry. Up to 1.9.1 a public session's transport and stored record stayed in place.
+
 ### Notification Relay
 
 MCP notifications (resource updates, list changes) targeting sessions on other pods are relayed over the same channel:
@@ -148,6 +150,10 @@ In addition to on-demand session takeover (when a request arrives for a dead pod
 
 The scanner starts automatically in distributed mode when sessions are persisted to Redis (`transport.persistence.redis`) — no other configuration needed. It scans the same key prefix the session store writes to (`<keyPrefix>session:`, default `mcp:session:` — `keyPrefix` defaults to `mcp:`), so a custom `keyPrefix` is honoured. The first scan runs after one full heartbeat interval plus the grace period to allow the cluster to stabilize.
 
+## Graceful Shutdown
+
+On `SIGTERM` or `SIGINT` (a rolling deploy or a scale-down) a pod started with `bootstrap()` (or the `distributed` build) stops accepting connections, stops its heartbeat (deleting its key, so the other pods take its sessions over at once instead of after `heartbeatTtlMs`), closes its relay and HA Redis connections and its channels, gives requests in flight 5 seconds, then exits; it exits with code 1 if a step fails (the other steps still run) or this takes more than 10 seconds. Call `instance.shutdown()` to run the same steps yourself. Up to 1.9.1 the HTTP server had no signal handler, so a stopped pod's sessions answered `503` until its heartbeat expired.
+
 ## Redis Connection
 
 The heartbeat, takeover, transport bus and relay publishing share one dedicated ioredis client built from your top-level `redis` config (`host`, `port`, `password`, `db`, `tls`, or `url`); a second connection holds the subscription to the pod's relay channel (a subscribed Redis connection runs no other commands). Both reconnect automatically, log connection errors at a rate-limited interval instead of on every retry, and are closed on shutdown. If the subscription cannot be made at startup it is retried with exponential backoff (1s doubling to 30s); until it succeeds the pod serves its own sessions and answers requests for other pods' sessions with `503`. Vercel KV (`provider: 'vercel-kv'`) is REST-only and cannot provide the Lua/pub-sub primitives HA needs, so distributed mode starts without HA when it is configured.
@@ -180,7 +186,7 @@ If Redis cannot be reached while the server starts, session persistence is disab
 FrontMCP sets two identifiers on both Streamable HTTP and SSE responses for load balancer routing:
 
 - **Cookie**: `__frontmcp_node` --- set during the initialize handshake. Its name, `Domain` and `SameSite` come from the deployment's [`server.cookies`](/frontmcp/deployment/frontmcp-config#cookie-options) (`affinity`, `domain`, `sameSite`) — keep the load balancer's cookie name in step with `affinity`
-- **Header**: `X-FrontMCP-Machine-Id` --- set on every response in distributed mode (`FRONTMCP_DEPLOYMENT_MODE=distributed`, which `frontmcp build --target distributed` sets): initialize, message POSTs, DELETE, stateless and MCP 2026-07-28 requests, SSE, `/healthz`, `/readyz`, `/metrics` and 404s. The host adapters (Express and the web-fetch handler) add it where they add the security headers, so no response path misses it; the streamable-HTTP and stateless flows also set it in a hookable `applyNodeHeaders` stage, so plugins can observe or wrap it. Standalone and serverless instances do not send it.
+- **Header**: `X-FrontMCP-Machine-Id` --- set on every response in distributed mode (`FRONTMCP_DEPLOYMENT_MODE=distributed`, which `frontmcp build --target distributed` sets): initialize, message POSTs, DELETE, stateless and MCP 2026-07-28 requests, SSE, `/healthz`, `/readyz`, `/metrics` and 404s. The host adapters (Express and the web-fetch handler) add it where they add the security headers, so no response path misses it; the streamable-HTTP and stateless flows also set it in a hookable `applyNodeHeaders` stage, and `http:request` in its `applyDeleteNodeHeaders` stage for `DELETE`, so plugins can observe or wrap it, and a relayed request, `DELETE` included, names the session's owner. Up to 1.9.1 a relayed `DELETE` named the relaying pod. Standalone and serverless instances do not send it.
 
 ### NGINX Sticky Sessions
 

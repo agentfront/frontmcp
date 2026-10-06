@@ -27,8 +27,14 @@ describe('Browser env polyfill', () => {
   });
 
   describe('getNodeEnv', () => {
-    it('reports no NODE_ENV in a browser', () => {
-      expect(getNodeEnv()).toBeUndefined();
+    it('reports no NODE_ENV when the page defines none', () => {
+      const original = process.env['NODE_ENV'];
+      delete process.env['NODE_ENV'];
+      try {
+        expect(getNodeEnv()).toBeUndefined();
+      } finally {
+        if (original !== undefined) process.env['NODE_ENV'] = original;
+      }
     });
   });
 

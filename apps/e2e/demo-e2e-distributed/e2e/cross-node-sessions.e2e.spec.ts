@@ -86,12 +86,18 @@ describe('Distributed cross-node sessions (#680)', () => {
   skipIf(SKIP)('relays DELETE to the owner, which ends the session for every node', async () => {
     const [owner, other] = nodes;
     const sessionId = await initializeSession(owner.info.baseUrl);
+    // The record exists before the DELETE, so the check below does not pass on a wrong key.
+    expect(await storedOwner(sessionId)).toBe('node-0');
 
     const deleted = await fetch(`${other.info.baseUrl}/`, {
       method: 'DELETE',
       headers: { 'mcp-session-id': sessionId },
     });
     expect(deleted.status).toBe(204);
+    // The owner answered, and names itself as every other relayed response does (#714).
+    expect(deleted.headers.get('x-frontmcp-machine-id')).toBe('node-0');
+    // A public session's stored record is gone too, so no restart or takeover brings it back (#713).
+    expect(await redis.exists(`mcp:session:${sessionId}`)).toBe(0);
 
     const after = await callTool(other.info.baseUrl, sessionId, 'echo', { message: 'gone' });
     expect(after.status).toBe(404);

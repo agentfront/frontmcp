@@ -132,12 +132,15 @@ A pod whose heartbeat lapsed (Redis unreachable for `heartbeatTtlMs`) may have l
 
 Takeover needs `transport.persistence` (Streamable HTTP only — an SSE stream cannot move to another pod).
 
+A session its client ended with `DELETE` is removed from `transport.persistence` too, public and anonymous sessions included, so no restart or takeover brings it back (up to 1.9.1 a public session's record stayed). If the store cannot delete the record, the `DELETE` fails rather than answering `204`, so the client can retry.
+
 ### Notification Relay
 
 Each pod subscribes to `mcp:ha:notify:{nodeId}` via Redis Pub/Sub. A notification for a session on another pod is published to the channel of the pod that owns it (looked up on the bus) and delivered there; it is never relayed twice.
 
 ## Redis Connection, TTL and Recovery
 
+- On `SIGTERM`/`SIGINT` a pod started with `bootstrap()` (or the `distributed` build) shuts down gracefully: it stops accepting connections, stops its heartbeat (deleting the key, so other pods take its sessions over at once), closes its relay, HA Redis connections and channels, gives requests in flight 5s, then exits (code 1 if a step fails, after the others still run, or after 10s). `instance.shutdown()` runs the same steps. Up to 1.9.1 the HTTP server had no signal handler and a stopped pod's sessions answered `503` until its heartbeat expired.
 - HA uses one dedicated ioredis client built from the top-level `redis` config (host/port/password/db/tls or `url`) for commands and publishing, plus a second connection for the relay channel subscription (retried 1s→30s until it succeeds). Both reconnect on their own, log errors at a rate-limited interval, and are closed on shutdown. Vercel KV cannot back HA.
 - The orphan scanner reads `<keyPrefix>session:` (default `mcp:session:`, as `keyPrefix` defaults to `mcp:`), the same prefix the session store writes, and only runs when `transport.persistence.redis` is set. A claimed session is re-advertised on the bus, so every pod relays its next requests to the claimer, which recreates the transport on the first one.
 - Session TTL is `persistence.defaultTtlMs`, then `persistence.redis.defaultTtlMs`, then 1 hour. The pod serving a session refreshes it at most once per quarter TTL.
@@ -149,7 +152,7 @@ Each pod subscribes to `mcp:ha:notify:{nodeId}` via Redis Pub/Sub. A notificatio
 FrontMCP sets:
 
 - **Cookie**: `__frontmcp_node` on Streamable HTTP initialize — name, `Domain` and `SameSite` come from the deployment's `server.cookies` (`affinity`, `domain`, `sameSite`) in `frontmcp.config`; keep the load balancer's cookie name in step
-- **Header**: `X-FrontMCP-Machine-Id` on every distributed response (initialize, message POSTs, DELETE, stateless and MCP 2026-07-28 requests, SSE, `/healthz`, `/readyz`, `/metrics` and 404s). The Express host and the web-fetch handler add it next to the security headers; the session flows also set it in the hookable `applyNodeHeaders` stage. Only distributed mode (`FRONTMCP_DEPLOYMENT_MODE=distributed`) sends it
+- **Header**: `X-FrontMCP-Machine-Id` on every distributed response (initialize, message POSTs, DELETE, stateless and MCP 2026-07-28 requests, SSE, `/healthz`, `/readyz`, `/metrics` and 404s). The Express host and the web-fetch handler add it next to the security headers; the session flows also set it in the hookable `applyNodeHeaders` stage, and `http:request` in `applyDeleteNodeHeaders` for `DELETE`, so a relayed request (DELETE included) names the session's owner (up to 1.9.1 a relayed DELETE named the relaying pod). Only distributed mode (`FRONTMCP_DEPLOYMENT_MODE=distributed`) sends it
 
 Affinity is an optimization: without it a request on the wrong pod is relayed to the owner (one Redis round trip each way). NGINX sticky session example:
 

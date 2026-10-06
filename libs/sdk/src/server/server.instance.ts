@@ -168,4 +168,8 @@ export class FrontMcpServerInstance extends FrontMcpServer {
 
     await this.host.start(this.config.socketPath ?? this.config.port, bindAddress);
   }
+
+  override async stop(): Promise<void> {
+    await this.host.stop();
+  }
 }
