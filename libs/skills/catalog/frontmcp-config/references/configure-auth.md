@@ -52,7 +52,7 @@ Public mode allows all connections without authentication. Use this for developm
 class MyApp {}
 ```
 
-- `sessionTtl` -- lifetime in seconds (default 3600) of the anonymous tokens `/oauth/token` issues (`expires_in` and `exp`); session ids don't expire.
+- `sessionTtl` -- lifetime in seconds (a positive whole number, default 3600) of the anonymous tokens `/oauth/token` issues (`expires_in` and `exp`); session ids don't expire.
 - `anonymousScopes` -- scopes granted to all unauthenticated clients (`this.auth.scopes`).
 - `publicAccess` -- `{ tools, prompts, rateLimit }`: the tools and prompts an anonymous caller may list and call (`'all'` by default; others answer `PUBLIC_ACCESS_DENIED`), and its calls per IP per minute (default 60).
 
@@ -371,8 +371,8 @@ class Whoami extends ToolContext {
 }
 ```
 
-An expired upstream token (or one within `refresh.skewSeconds`, default 60, of
-expiry) is renewed with the provider's refresh token when a tool reads it;
+An expired upstream token (or one within `refresh.skewSeconds` of expiry: default 60,
+never negative) is renewed with the provider's refresh token when a tool reads it;
 `refresh: { enabled: false }` turns that off. When the client refreshes FrontMCP's
 own token at `/oauth/token`, the upstream tokens move to the new token.
 

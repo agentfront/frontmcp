@@ -26,7 +26,7 @@ export const publicAuthOptionsSchema = z.object({
    * Anonymous session TTL in seconds
    * @default 3600 (1 hour)
    */
-  sessionTtl: z.number().default(3600),
+  sessionTtl: z.number().int().positive().default(3600),
 
   /**
    * Scopes granted to anonymous sessions

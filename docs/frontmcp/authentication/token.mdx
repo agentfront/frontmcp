@@ -206,7 +206,7 @@ auth: {
   mode: 'local',
   refresh: {
     enabled: true,      // Renew upstream provider tokens with their refresh token (default true)
-    skewSeconds: 60,    // …this many seconds before THOSE provider tokens expire (default 60)
+    skewSeconds: 60,    // …this many seconds before THOSE provider tokens expire (default 60, 0 or more)
   },
 }
 ```
