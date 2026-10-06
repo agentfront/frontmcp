@@ -5,7 +5,7 @@ import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobPermission } from '../../common/metadata/job.metadata';
 import { resolvePrincipal } from '../../common/utils/principal.utils';
-import { JobNotAuthorizedError } from '../../errors';
+import { InvalidOutputError, JobNotAuthorizedError } from '../../errors';
 import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
 import { JobPermissionGuard } from '../job-permission.guard';
 import { type JobRegistryInterface } from '../job.registry';
@@ -263,6 +263,8 @@ export class JobExecutionManager {
         return { runId, result, state: 'completed', logs: [...logs] };
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
+        // The job ran to completion, so running it again would repeat its side effects
+        if (lastError instanceof InvalidOutputError) break;
 
         if (attempt < maxAttempts) {
           await this.updateState(runId, { state: 'retrying', attempt });

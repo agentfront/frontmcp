@@ -4,7 +4,7 @@ import { type JobEntry } from '../../common/entries/job.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobRetryConfig } from '../../common/metadata/job.metadata';
 import { type WorkflowStep, type WorkflowStepResult } from '../../common/metadata/workflow.metadata';
-import { InvalidEntityError } from '../../errors';
+import { InvalidEntityError, InvalidOutputError } from '../../errors';
 import { JobNotAuthorizedError } from '../../errors/job.errors';
 import { WorkflowJobTimeoutError } from '../../errors/workflow.errors';
 import { JobPermissionGuard } from '../../job/job-permission.guard';
@@ -81,6 +81,8 @@ export class WorkflowStepExecutor {
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
         this.logger.warn(`Step "${step.id}" attempt ${attempt}/${maxAttempts} failed: ${lastError.message}`);
+        // The job ran to completion, so running it again would repeat its side effects
+        if (lastError instanceof InvalidOutputError) break;
 
         if (attempt < maxAttempts) {
           const delay = Math.min(backoffMs * Math.pow(backoffMultiplier, attempt - 1), maxBackoffMs);

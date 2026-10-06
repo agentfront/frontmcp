@@ -42,6 +42,21 @@ class WrongShapeJob extends JobContext {
   }
 }
 
+let chargeRuns = 0;
+
+@Job({
+  name: 'charge_card',
+  inputSchema: {},
+  outputSchema: { receipt: z.string() },
+  retry: { maxAttempts: 3, backoffMs: 1 },
+})
+class ChargeCardJob extends JobContext {
+  async execute() {
+    chargeRuns++;
+    return { receipt: 42 } as unknown as { receipt: string };
+  }
+}
+
 @Job({ name: 'early_answer', inputSchema: {}, outputSchema: { answer: z.string() } })
 class EarlyAnswerJob extends JobContext {
   async execute(): Promise<{ answer: string }> {
@@ -53,7 +68,7 @@ class EarlyAnswerJob extends JobContext {
   id: 'desk',
   name: 'Desk',
   providers: [TicketStore],
-  jobs: [CountTicketsJob, FlakySyncJob, WrongShapeJob, EarlyAnswerJob],
+  jobs: [CountTicketsJob, FlakySyncJob, WrongShapeJob, ChargeCardJob, EarlyAnswerJob],
 })
 class DeskApp {}
 
@@ -94,6 +109,12 @@ describe('job execution', () => {
 
     await expect(run).rejects.toBeInstanceOf(InvalidOutputError);
     await expect(run).rejects.toThrow('output does not match outputSchema at count');
+  });
+
+  it('does not run a job again when its result fails outputSchema, so its side effects happen once', async () => {
+    await expect(runJob('charge_card')).rejects.toBeInstanceOf(InvalidOutputError);
+
+    expect(chargeRuns).toBe(1);
   });
 
   it('takes the value of this.respond() as the job result', async () => {
