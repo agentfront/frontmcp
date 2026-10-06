@@ -18,7 +18,7 @@ import { App, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 @Tool({ name: 'whoami', inputSchema: {} })
 class WhoAmITool extends ToolContext {
   async execute() {
-    return { sub: this.auth.user.sub, isAnonymous: this.auth.isAnonymous };
+    return { sub: this.auth.user.sub, isAnonymous: this.auth.isAnonymous, scopes: this.auth.scopes };
   }
 }
 
@@ -108,6 +108,34 @@ describe('token claims and challenges', () => {
     expect(granted.status).toBe(200);
     expect(grantedAsString.status).toBe(200);
     expect(refused.status).toBe(403);
+  });
+
+  it('gives this.auth.scopes the scopes of an scp claim', async () => {
+    const server = await serverWith(transparentAuth());
+    const token = await idpToken({ sub: 'nour', scp: ['tickets:read', 'tickets:write'] });
+
+    const init = await mcpPost(server, initialize, token);
+    const sessionId = init.headers.get('mcp-session-id') ?? '';
+    const call = await server.handler(
+      new Request(`${ORIGIN}/`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: `Bearer ${token}`,
+          'mcp-session-id': sessionId,
+          'mcp-protocol-version': '2025-06-18',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'tools/call',
+          params: { name: 'whoami', arguments: {} },
+        }),
+      }),
+    );
+
+    expect(await call.text()).toContain('\\"scopes\\":[\\"tickets:read\\",\\"tickets:write\\"]');
   });
 
   it('names a token with no sub by its client_id instead of reading it as anonymous', async () => {

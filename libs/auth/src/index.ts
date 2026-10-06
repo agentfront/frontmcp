@@ -539,6 +539,7 @@ export {
   DEFAULT_ALLOWED_SCOPES,
   grantScopes,
   resourceScopesFor,
+  scopesFromClaims,
   // Redirect URIs
   isLoopbackRedirectUri,
 } from './utils';
