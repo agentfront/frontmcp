@@ -41,6 +41,8 @@ Checklist for deploying FrontMCP as a long-running local MCP server managed by t
 
 ## Graceful Shutdown
 
+On a Unix socket (`runUnixSocket()`, or `bootstrap()` under `FRONTMCP_DAEMON_SOCKET`) `SIGTERM`/`SIGINT` run the same graceful shutdown as the TCP server: stop accepting connections, give requests in flight 5s, shut down and dispose every scope, remove the socket file, exit `0` (`1` if a step fails or it takes over 10s). `handle.close()` runs the same steps without exiting. Up to 1.9.2 a signal removed the socket and exited at once, so a call in flight got an empty reply.
+
 - [ ] SIGTERM handler completes in-flight requests
 - [ ] Database connections are closed
 - [ ] Socket file is removed

@@ -550,6 +550,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * Pass the same config object you give to `@FrontMcp()` (not the decorated
    * class — spreading a class yields no config) plus the socket path.
    *
+   * SIGTERM and SIGINT run the graceful {@link shutdown} and exit, as `bootstrap()` does for
+   * the TCP server; `close()` runs the same shutdown without exiting.
+   *
    * @example
    * ```typescript
    * import { FrontMcpInstance } from '@frontmcp/sdk';
@@ -590,32 +593,25 @@ export class FrontMcpInstance implements FrontMcpInterface {
     await frontMcp.start();
     frontMcp.log?.info(`MCP server listening on unix://${socketPath}`);
 
-    // Cleanup function to remove socket file and signal handlers
-    const cleanup = async () => {
+    // The graceful shutdown of the TCP server (#712), then the socket file if the server left it behind.
+    const shutdown = async () => {
       try {
-        if (await fileExists(socketPath)) {
-          await unlink(socketPath);
+        await frontMcp.shutdown();
+      } finally {
+        try {
+          if (await fileExists(socketPath)) {
+            await unlink(socketPath);
+          }
+        } catch {
+          // Ignore cleanup errors
         }
-      } catch {
-        // Ignore cleanup errors
       }
     };
+    const removeSignalHandlers = exitOnShutdownSignals(shutdown, { logger: frontMcp.log });
 
-    // Register signal handlers for cleanup
-    const signalHandler = async () => {
-      process.removeListener('SIGINT', signalHandler);
-      process.removeListener('SIGTERM', signalHandler);
-      await cleanup();
-      process.exit(0);
-    };
-    process.on('SIGINT', signalHandler);
-    process.on('SIGTERM', signalHandler);
-
-    // Return handle for programmatic shutdown
     const close = async () => {
-      process.removeListener('SIGINT', signalHandler);
-      process.removeListener('SIGTERM', signalHandler);
-      await cleanup();
+      removeSignalHandlers();
+      await shutdown();
     };
 
     return { close };
