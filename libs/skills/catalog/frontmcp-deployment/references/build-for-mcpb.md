@@ -83,7 +83,9 @@ dist/mcpb/
       package.json                  # minimal { type: "commonjs" } marker
       _skills/                      # when capabilities.skills
     bin/                            # when --sea or --merge-from
+      darwin/launch                 # picks darwin-arm64 or darwin-x64 by `uname -m`
       darwin-arm64/my-server
+      darwin-x64/my-server
       win32-x64/my-server.exe
     icon.png                        # when resolved
     README.md                       # when present in project root
@@ -137,12 +139,19 @@ binary-only on every platform, run the build in a CI matrix and assemble with
 ci-bins/
   darwin-arm64/my-server
   darwin-x64/my-server
+  linux-arm64/my-server
   linux-x64/my-server
   win32-x64/my-server.exe
 ```
 
-Platforms without a binary automatically fall through to the Node command +
-bundled JS, so a partial matrix is fine.
+MCPB hosts look up `platform_overrides` by OS only (`darwin`, `linux`, `win32`),
+so the generated keys are OS names. An OS with several architectures (`darwin`,
+`linux`) points at `bin/<os>/launch`, a POSIX launcher that runs
+`bin/<os>-<arch>/<name>` for the host's `uname -m`; `win32` points straight at
+its `x64` binary. An OS gets an override only when every one of its
+architectures has a binary. The build skips a partly covered OS and logs the
+missing binaries, and its hosts run the Node command and bundled JS. A partial
+matrix is still safe, but a lone `--sea` build covers only Windows.
 
 ## Common Patterns
 
@@ -189,6 +198,7 @@ bundled JS, so a partial matrix is fine.
 | `entry_point is not present in archive`                                           | Custom `--entry` flag or bundler moved the file                                       | Re-run without the override, or update the config's `entry`                                                                          |
 | Two builds produce different SHA-256                                              | `--no-deterministic` set, or inputs embed a changing timestamp                        | Restore deterministic mode; scan your sources for live date/time values                                                              |
 | `platform_overrides.{platform}.command` missing binary                            | `--merge-from` folders don't match MCPB platform keys                                 | See the expected layout below                                                                                                        |
+| `platform_overrides["darwin-arm64"] is never used`                                | Archive built before 1.9.2 keyed overrides by OS/arch, which hosts never match        | Rebuild; overrides are now keyed by OS                                                                                               |
 
 Expected `--merge-from` layout (platform dirs must match MCPB platform keys):
 

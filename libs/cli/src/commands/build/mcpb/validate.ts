@@ -22,7 +22,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Entry, ZipFile } from 'yauzl';
 import { mcpbManifestSchema, type McpbManifest, type McpbMcpConfig } from './manifest';
-import { ALLOWED_SUBSTITUTION_VARS, ARCHIVE_SIZE_ERROR, ARCHIVE_SIZE_WARN, USER_CONFIG_PREFIX } from './constants';
+import {
+  ALLOWED_SUBSTITUTION_VARS,
+  ARCHIVE_SIZE_ERROR,
+  ARCHIVE_SIZE_WARN,
+  DEFAULT_PLATFORMS,
+  USER_CONFIG_PREFIX,
+} from './constants';
 
 export interface ValidateResult {
   ok: boolean;
@@ -115,6 +121,11 @@ export async function validateMcpb(archivePath: string): Promise<ValidateResult>
   // Binary references declared via platform_overrides must exist
   const overrides = manifest.server.mcp_config.platform_overrides || {};
   for (const [platform, cfg] of Object.entries(overrides)) {
+    if (!(DEFAULT_PLATFORMS as readonly string[]).includes(platform)) {
+      result.warnings.push(
+        `platform_overrides["${platform}"] is never used: MCPB hosts look up platform_overrides by OS (${DEFAULT_PLATFORMS.join(', ')})`,
+      );
+    }
     const cmd = cfg.command;
     const entryName = stripDirname(cmd);
     if (entryName && !archive.entries.includes(entryName)) {
