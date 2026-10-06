@@ -471,7 +471,8 @@ authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectI
 1. `skipApproval: true`, or approval not required: the tool runs.
 2. A recorded **denial** for the caller (session, user, time-limited or context scope): refused
    with state `denied`. A denial outranks pre-approved contexts and any approval.
-3. The session context is one of `preApprovedContexts`: the tool runs.
+3. The session context is one of `preApprovedContexts`, and the tool does not set `alwaysPrompt`: the tool runs.
+   An `alwaysPrompt` tool needs an approval per call in a pre-approved context too.
 4. An approval for the caller that the tool's policy accepts: the tool runs. The caller's session,
    user, time-limited and context approvals all count (a context approval only when the session
    carries that context); its scope must be in `allowedScopes`, and it must be younger than
