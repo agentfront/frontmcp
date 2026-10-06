@@ -6,6 +6,7 @@
 
 import { isProxyTrusted } from '../common/utils/path.utils';
 import type { RequestMetadata } from './frontmcp-context';
+import { parseTraceContext, type TraceContext } from './trace-context';
 
 /** Where the client IP may legitimately come from, beyond the headers. */
 export interface ClientIpOptions {
@@ -162,6 +163,36 @@ export function extractMetadata(headers: Record<string, unknown>, options?: Clie
     accept: typeof headers['accept'] === 'string' ? headers['accept'] : undefined,
     clientIp: extractClientIp(headers, options),
     customHeaders,
+  };
+}
+
+/** Metadata a caller hands an in-process call (`DirectCallOptions.metadata`). */
+export interface InProcessRequestMetadata {
+  userAgent?: string;
+  clientIp?: string;
+  customHeaders?: Record<string, string>;
+}
+
+/**
+ * The request metadata and trace context for an in-process call (#709), read the way HTTP
+ * headers are: only `x-frontmcp-*` custom headers are kept, the client IP must be an IP address,
+ * and an `x-frontmcp-trace-id` header continues that trace.
+ *
+ * @param input - The metadata the caller passed with the call
+ * @returns Metadata and trace context for the call's request context
+ */
+export function inProcessRequestContext(input: InProcessRequestMetadata): {
+  metadata: RequestMetadata;
+  traceContext: TraceContext;
+} {
+  const headers: Record<string, unknown> = { 'user-agent': input.userAgent };
+  for (const [key, value] of Object.entries(input.customHeaders ?? {})) {
+    const lowerKey = key.toLowerCase();
+    if (lowerKey.startsWith('x-frontmcp-')) headers[lowerKey] = value;
+  }
+  return {
+    metadata: extractMetadata(headers, { peerAddress: input.clientIp, trustProxy: false }),
+    traceContext: parseTraceContext(headers),
   };
 }
 

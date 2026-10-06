@@ -41,6 +41,7 @@ import {
 } from '../../common';
 import { toLegacyProtocolFlags } from '../../common/types/options/transport/schema';
 import { SessionOwnerUnreachableError, SessionVerificationFailedError } from '../../errors';
+import { applyMachineIdHeader } from '../../ha/ha-headers';
 import { isProtocol20260728Request } from '../../transport/mcp-20260728';
 import { type PersistentSessionOwnerStore } from '../../transport/persistent-session-owner';
 import { type Scope } from '../scope.instance';
@@ -83,6 +84,7 @@ const plan = {
     'handleStreamableHttp',
     'handleStatefulHttp',
     'handleStatelessHttp',
+    'applyDeleteNodeHeaders',
     'handleDeleteSession',
   ],
   finalize: [
@@ -959,6 +961,18 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     }
   }
 
+  /** A relayed DELETE runs on the session's owner, so the owner names itself, as the transport flows do (#714). */
+  @Stage('applyDeleteNodeHeaders', {
+    filter: ({
+      state: {
+        required: { intent },
+      },
+    }) => intent === 'delete-session',
+  })
+  async applyDeleteNodeHeaders() {
+    applyMachineIdHeader(this.rawInput.response);
+  }
+
   @Stage('handleDeleteSession', {
     filter: ({
       state: {
@@ -987,19 +1001,18 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       // for a session that has a live transport. We always proceed with transport cleanup.
       this.scope.notifications.terminateSession(sessionId);
 
-      // Destroy the transport to free resources and clean up Redis.
+      // Destroy the transport and the stored session. Public and anonymous sessions carry an empty token (#713).
       const authorization = request[ServerRequestTokens.auth] as Authorization | undefined;
-      if (authorization?.token) {
-        const transportService = this.scope.transportService;
-        if (transportService) {
-          for (const protocol of ['streamable-http', 'sse'] as const) {
-            try {
-              await transportService.destroyTransporter(protocol, authorization.token, sessionId);
-            } catch {
-              // Transport may already be evicted or not found — non-critical
-            }
+      const transportService = this.scope.transportService;
+      if (authorization && transportService) {
+        for (const protocol of ['streamable-http', 'sse'] as const) {
+          try {
+            await transportService.destroyTransporter(protocol, authorization.token ?? '', sessionId);
+          } catch {
+            // Transport may already be evicted or not found — non-critical
           }
         }
+        await transportService.deleteStoredSession(sessionId);
       }
 
       this.logger.info(`[${this.requestId}] Session terminated: ${sessionId}`);

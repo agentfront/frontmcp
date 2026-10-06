@@ -99,6 +99,13 @@ const server = await create({
 const result = await server.callTool('calculate', { a: 2, b: 2, operation: 'add' });
 // Name the caller of one call: user claims, token, sessionId, extra, and the OAuth scopes it holds
 await server.callTool('calculate', { a: 1, b: 1, operation: 'add' }, { authContext: { scopes: ['math:use'] } });
+// Request metadata reaches this.context.metadata: userAgent, clientIp (an IP address) and
+// x-frontmcp-* customHeaders (other keys are dropped); x-frontmcp-trace-id continues a trace
+await server.callTool(
+  'calculate',
+  { a: 1, b: 1, operation: 'add' },
+  { metadata: { customHeaders: { 'x-frontmcp-disable-cache': 'true' } } },
+);
 
 // List available tools: every page is read, so this is the whole list (no `nextCursor`).
 // To page yourself: `listTools({ paginate: true })`, then `listTools({ cursor: page.nextCursor })`.

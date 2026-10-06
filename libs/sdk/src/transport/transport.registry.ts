@@ -943,6 +943,25 @@ export class TransportService {
   }
 
   /**
+   * Delete a session's stored record, as when its client ends it with DELETE (#713). Without
+   * this a record whose transport is not live here (after a restart or a takeover) would bring
+   * the deleted session back. A store failure is logged and rethrown, so the DELETE fails
+   * instead of confirming a termination that did not persist.
+   */
+  async deleteStoredSession(sessionId: string): Promise<void> {
+    if (!this.sessionStore) return;
+    try {
+      await this.sessionStore.delete(sessionId);
+    } catch (err) {
+      this.scope.logger.warn(`[TransportService] Failed to delete session from ${this.sessionStoreLabel()}`, {
+        sessionId: sessionId.slice(0, 20),
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
+  }
+
+  /**
    * Update the stored session in Redis with client capabilities from the initialize handshake.
    * This ensures capabilities survive session recreation (e.g., after server restart or transport eviction).
    *
