@@ -22,6 +22,7 @@ import { type ElicitOptions, type ElicitResult } from '../elicitation';
 import { InvalidInputError } from '../errors/mcp.error';
 import type { AIPlatformType, ClientInfo } from '../notification';
 import { STATELESS_SESSION_ID } from '../transport/transport.types';
+import { getRunningFlow } from './running-flow';
 import { generateTraceContext, type TraceContext } from './trace-context';
 
 /** Symbol key for storing pre-resolved elicit result in context store */
@@ -478,10 +479,10 @@ export class FrontMcpContext {
   }
 
   /**
-   * Get current flow reference.
+   * The innermost flow running for this request in the calling async call chain.
    */
   get flow(): FlowBaseRef | undefined {
-    return this._flow;
+    return getRunningFlow(this)?.flow ?? this._flow;
   }
 
   /**
@@ -493,10 +494,10 @@ export class FrontMcpContext {
   }
 
   /**
-   * Get scope reference.
+   * The scope of the innermost flow running for this request in the calling async call chain.
    */
   get scope(): ScopeRef | undefined {
-    return this._scope;
+    return getRunningFlow(this)?.scope ?? this._scope;
   }
 
   /**
@@ -737,7 +738,7 @@ export class FrontMcpContext {
       // Hash sessionId to prevent logging user-identifying information
       sessionIdHash: sha256Hex(this.sessionId).slice(0, 12),
       scopeId: this.scopeId,
-      flowName: this._flow?.name,
+      flowName: this.flow?.name,
       elapsed: this.elapsed(),
     };
   }

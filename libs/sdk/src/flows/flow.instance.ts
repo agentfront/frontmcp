@@ -22,6 +22,7 @@ import {
   type Type,
 } from '../common';
 import { FRONTMCP_CONTEXT, FrontMcpContextStorage, type FrontMcpContext } from '../context';
+import { runAsFlow } from '../context/running-flow';
 import { InternalMcpError, PublicMcpError, RequestContextNotAvailableError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
 import type HookRegistry from '../hooks/hook.registry';
@@ -281,17 +282,10 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       );
     }
 
-    // `this.context.flow` and `this.context.scope` name the innermost flow running, until it returns
-    const outerFlow = currentContext.flow;
-    const outerScope = currentContext.scope;
-    currentContext.setFlow(this);
-    currentContext.setScope(scope);
-    try {
-      return await this.runStages(input, deps, scope, currentContext, sessionKey);
-    } finally {
-      currentContext.setFlow(outerFlow);
-      currentContext.setScope(outerScope);
-    }
+    // `this.context.flow` and `this.context.scope` name the innermost flow running in this async call chain
+    return runAsFlow({ context: currentContext, flow: this, scope }, () =>
+      this.runStages(input, deps, scope, currentContext, sessionKey),
+    );
   }
 
   private async runStages(

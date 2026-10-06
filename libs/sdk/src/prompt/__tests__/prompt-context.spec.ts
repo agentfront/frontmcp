@@ -30,7 +30,30 @@ class WhereAmITool extends ToolContext {
   }
 }
 
-@App({ id: 'desk', name: 'Desk', prompts: [WhoAmIPrompt], tools: [WhereAmITool] })
+@Tool({ name: 'slow', inputSchema: {} })
+class SlowTool extends ToolContext {
+  async execute() {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return { done: true };
+  }
+}
+
+@Tool({ name: 'parallel_flows', inputSchema: {} })
+class ParallelFlowsTool extends ToolContext {
+  async execute() {
+    const seen: Array<string | undefined> = [];
+    const listPrompts = this.scope
+      .runFlowForOutput('prompts:list-prompts', {
+        request: { method: 'prompts/list', params: {} },
+        ctx: { authInfo: this.authInfo },
+      } as never)
+      .then(() => seen.push(this.context.flow?.name));
+    await Promise.all([listPrompts, this.callTool('slow', {})]);
+    return { flow: this.context.flow?.name, afterListPrompts: seen[0] };
+  }
+}
+
+@App({ id: 'desk', name: 'Desk', prompts: [WhoAmIPrompt], tools: [WhereAmITool, SlowTool, ParallelFlowsTool] })
 class DeskApp {}
 
 describe('prompt context', () => {
@@ -69,5 +92,11 @@ describe('prompt context', () => {
     const result = await server.callTool('where_am_i', {});
 
     expect(result.structuredContent).toEqual({ flow: 'tools:call-tool', scope: true });
+  });
+
+  it('keeps this.context.flow on the flow running in each async call chain when flows run in parallel', async () => {
+    const result = await server.callTool('parallel_flows', {});
+
+    expect(result.structuredContent).toEqual({ flow: 'tools:call-tool', afterListPrompts: 'tools:call-tool' });
   });
 });
