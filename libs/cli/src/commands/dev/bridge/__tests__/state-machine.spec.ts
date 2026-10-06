@@ -206,6 +206,20 @@ describe('bridge state machine (issue #399)', () => {
     expect(flushed?.error?.data).toMatchObject({ reason: 'deadline', deadlineMs: 1000 });
   });
 
+  it('adds the detail it is given to every flushed error', async () => {
+    const { fsm, rec } = makeFsm({ reloadDeadlineMs: 1000 });
+    fsm.onBootStart();
+    await fsm.enqueue({ jsonrpc: '2.0', id: 6, method: 'initialize' });
+
+    fsm.onReloadDeadline({ error: 'the server listens on a Unix socket' });
+    await new Promise((r) => setImmediate(r));
+
+    expect(rec.responses.find((r) => r.id === 6)?.error?.data).toMatchObject({
+      reason: 'deadline',
+      error: 'the server listens on a Unix socket',
+    });
+  });
+
   // Lock the contract: when forward() throws during the buffered-drain pass
   // on `onChildReady`, the request must still get a synthesized error
   // response — silently dropping it would leave the client hanging.

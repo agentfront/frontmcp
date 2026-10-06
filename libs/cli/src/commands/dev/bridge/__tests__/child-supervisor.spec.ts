@@ -49,6 +49,14 @@ describe('parseReadySentinel', () => {
     expect(parseReadySentinel(`${READY_SENTINEL} {"path":""}`)).toEqual({ path: '/' });
   });
 
+  // #728 — `@FrontMcp({ http: { socketPath } })` reports the socket instead of a port
+  it('reads the Unix socket a server reports instead of a port', () => {
+    expect(parseReadySentinel(`${READY_SENTINEL} {"socketPath":"/tmp/mcp.sock","path":"/mcp"}`)).toEqual({
+      socketPath: '/tmp/mcp.sock',
+      path: '/mcp',
+    });
+  });
+
   it('drops malformed payloads and values', () => {
     expect(parseReadySentinel(`${READY_SENTINEL} {nope`)).toEqual({});
     expect(parseReadySentinel(`${READY_SENTINEL} {"port":-1,"path":7}`)).toEqual({});

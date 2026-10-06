@@ -49,7 +49,8 @@ export interface BridgeStateMachine {
   /** Watcher fired. Buffer inbound, start reload timer. */
   onWatcherEvent(trigger: string): void;
   /** Reload deadline elapsed without a ready signal. */
-  onReloadDeadline(): void;
+  /** `detail` (e.g. why the first boot failed) is added to every buffered request's error data. */
+  onReloadDeadline(detail?: Record<string, unknown>): void;
   /** Inbound JSON-RPC frame from stdin. Routes to `forward` or buffers. */
   enqueue(frame: JsonRpcFrame): Promise<void>;
   /** Outbound JSON-RPC frame from upstream — relay to client. */
@@ -186,13 +187,13 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
       scheduleReloadDeadline();
     },
 
-    onReloadDeadline() {
+    onReloadDeadline(detail) {
       log.error('reload-deadline-elapsed', { bufferDepth: buffer.length });
       transition('Degraded', { reason: 'reload_deadline' });
       // Deadline path → DEV_RELOAD_DEADLINE (not DEV_SERVER_UNREACHABLE).
       // The two map to distinct public error codes so clients can
       // distinguish "watcher reload took too long" from "child crashed".
-      void flushBufferAsResponses(DEV_RELOAD_DEADLINE, 'deadline', { deadlineMs: reloadDeadlineMs });
+      void flushBufferAsResponses(DEV_RELOAD_DEADLINE, 'deadline', { deadlineMs: reloadDeadlineMs, ...detail });
     },
 
     async enqueue(frame: JsonRpcFrame) {

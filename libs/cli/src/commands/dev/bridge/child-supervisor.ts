@@ -37,6 +37,8 @@ export type SupervisorMode = 'http' | 'pipe';
 /** Where the child says it serves MCP (HTTP mode). */
 export interface ChildReadyInfo {
   port?: number;
+  /** Unix socket the server listens on (`@FrontMcp({ http: { socketPath } })`) instead of a port. */
+  socketPath?: string;
   /** MCP endpoint path, `/` for the root. */
   path?: string;
 }
@@ -77,7 +79,7 @@ const SENTINEL_GRACE_MS = 1500;
 /**
  * Parse a stderr line carrying the bootstrap sentinel. Returns `undefined` when
  * the line has no sentinel, `{}` for a bare sentinel (older SDKs) and the
- * reported port/path otherwise.
+ * reported port (or Unix socket) and path otherwise.
  */
 export function parseReadySentinel(line: string): ChildReadyInfo | undefined {
   const at = line.indexOf(READY_SENTINEL);
@@ -90,6 +92,7 @@ export function parseReadySentinel(line: string): ChildReadyInfo | undefined {
     if (typeof parsed['port'] === 'number' && Number.isInteger(parsed['port']) && parsed['port'] > 0) {
       info.port = parsed['port'];
     }
+    if (typeof parsed['socketPath'] === 'string' && parsed['socketPath']) info.socketPath = parsed['socketPath'];
     if (typeof parsed['path'] === 'string') info.path = parsed['path'] || '/';
     return info;
   } catch {
