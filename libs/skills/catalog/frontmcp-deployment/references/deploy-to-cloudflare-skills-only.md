@@ -96,6 +96,9 @@ export default createEdgeMcp({
 `createEdgeMcp` returns `{ fetch, scheduled }`: `fetch` serves MCP; `scheduled`
 is the **Cron Trigger** entrypoint that pulls a fresh bundle and hot-swaps it.
 Managed mode requires the optional peer `@frontmcp/plugin-skilled-openapi`.
+Its `outbound.egressProxy` option needs Node.js (undici's `ProxyAgent`); on a
+Worker a configured proxy makes every operation call fail with
+`egress proxy unavailable`, so leave it unset there.
 
 The pull sends `authToken` as a bearer token and never follows a redirect, so
 `endpoint` must serve the bundle directly; a 3xx (or a status-0

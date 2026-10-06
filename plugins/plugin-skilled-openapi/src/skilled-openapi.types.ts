@@ -31,7 +31,11 @@ export const outboundOptionsSchema = z
      * where the customer's REST API legitimately lives on a private network.
      */
     allowPrivateNetworks: z.boolean().default(false),
-    /** Optional egress proxy URL (honors HTTPS_PROXY env if not set). */
+    /**
+     * Proxy URL every outbound REST call goes through (undici's `ProxyAgent`: Node.js, with the
+     * `undici` package installed). Without it, Node's `fetch` uses `HTTPS_PROXY` only when started
+     * with `NODE_USE_ENV_PROXY=1`.
+     */
     egressProxy: z.string().url().optional(),
     /** Per-host concurrent request cap. */
     maxConcurrencyPerHost: z.number().int().positive().default(10),
