@@ -64,7 +64,7 @@ The widget file is read when the tool is called, from where the **compiled** too
 </Info>
 
 <Info>
-**`ui.csp` is now emitted on the widget resource (#455).** FrontMCP attaches `ui.csp` to the `resources/read` content item's `_meta.ui.csp` (and `_meta['ui/csp']`) so MCP Apps hosts — particularly Claude — actually honor it. Previously the CSP only appeared on the tool listing, where Claude ignored it.
+**`ui.csp` is now emitted on the widget resource (#455).** FrontMCP attaches `ui.csp` to the `resources/read` content item's `_meta.ui.csp` (and `_meta['ui/csp']`) so MCP Apps hosts — particularly Claude — actually honor it. Previously the CSP only appeared on the tool listing, where Claude ignored it. The keys are the MCP Apps `connectDomains` / `resourceDomains`; up to 1.9.2 only the snake_case `connect_domains` / `resource_domains` were sent there, and they stay alongside for hosts that adapted to them.
 </Info>
 
 <Info>
@@ -452,7 +452,7 @@ A string that contains both `<` and `>` is treated as **HTML** and used as writt
 | `prefersBorder`     | The widget resource's `_meta.ui.prefersBorder` (MCP Apps) and `_meta['openai/widgetPrefersBorder']`                  |
 | `sandboxDomain`     | The widget resource's `_meta.ui.domain` (MCP Apps) and `_meta['openai/widgetDomain']`                                |
 | `displayMode`       | The page asks for it once its bridge connects: `ui/request-display-mode`, or `window.openai.requestDisplayMode()`    |
-| `csp`               | Also as `_meta['openai/widgetCSP']` on the widget resource, in snake case like `_meta.ui.csp`                        |
+| `csp`               | Also as `_meta['openai/widgetCSP']` on the widget resource, with snake_case keys (`connect_domains`)                 |
 
 Up to 1.9.2 the first five were accepted and ignored.
 

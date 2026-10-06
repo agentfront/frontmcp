@@ -42,21 +42,19 @@ describe('handleUIResourceRead — resource-level _meta (#455)', () => {
     const meta = content['_meta'] as Record<string, unknown>;
     expect(meta).toBeDefined();
 
+    const expectedCsp = {
+      connectDomains: ['https://api.weather.example'],
+      resourceDomains: ['https://cdn.example'],
+      connect_domains: ['https://api.weather.example'],
+      resource_domains: ['https://cdn.example'],
+    };
     // Nested form (MCP Apps spec uses _meta.ui.csp in its docs).
-    const ui = meta['ui'] as Record<string, unknown>;
-    expect(ui['csp']).toEqual({
-      connect_domains: ['https://api.weather.example'],
-      resource_domains: ['https://cdn.example'],
-    });
-
+    expect((meta['ui'] as Record<string, unknown>)['csp']).toEqual(expectedCsp);
     // Slash form (FrontMCP's broader convention for ui/* meta keys).
-    expect(meta['ui/csp']).toEqual({
-      connect_domains: ['https://api.weather.example'],
-      resource_domains: ['https://cdn.example'],
-    });
+    expect(meta['ui/csp']).toEqual(expectedCsp);
   });
 
-  it('preserves unknown / future CSP keys verbatim (normalizeCspForResource passthrough)', () => {
+  it('preserves unknown / future CSP keys verbatim', () => {
     const registry = new ToolUIRegistry();
     (registry as unknown as { widgets: Map<string, string> }).widgets.set('future_tool', '<html>f</html>');
     (registry as unknown as { resourceMeta: Map<string, unknown> }).resourceMeta.set('future_tool', {
@@ -74,13 +72,19 @@ describe('handleUIResourceRead — resource-level _meta (#455)', () => {
     const csp = (meta['ui'] as Record<string, unknown>)['csp'] as Record<string, unknown>;
 
     expect(csp).toEqual({
+      connectDomains: ['https://api.example'],
+      connect_domains: ['https://api.example'],
+      frame_ancestors: ["'none'"],
+      sandboxFlags: ['allow-scripts'],
+    });
+    expect(meta['openai/widgetCSP']).toEqual({
       connect_domains: ['https://api.example'],
       frame_ancestors: ["'none'"],
       sandboxFlags: ['allow-scripts'],
     });
   });
 
-  it('emits csp keys in snake_case so MCP Apps hosts parse them', () => {
+  it('emits the MCP Apps camelCase csp keys that spec hosts read, with the earlier snake_case keys alongside', () => {
     const registry = new ToolUIRegistry();
     (registry as unknown as { widgets: Map<string, string> }).widgets.set('q', '<html>q</html>');
     (registry as unknown as { resourceMeta: Map<string, unknown> }).resourceMeta.set('q', {
@@ -90,10 +94,27 @@ describe('handleUIResourceRead — resource-level _meta (#455)', () => {
     const result = handleUIResourceRead('ui://widget/q.html', registry);
     const meta = (result.result?.contents?.[0] as Record<string, unknown>)['_meta'] as Record<string, unknown>;
     const csp = (meta['ui'] as Record<string, unknown>)['csp'] as Record<string, unknown>;
-    expect(csp).toHaveProperty('connect_domains');
-    // Don't emit empty resource_domains (or any other field that wasn't passed).
+    expect(csp['connectDomains']).toEqual(['https://a.example']);
+    expect(csp['connect_domains']).toEqual(['https://a.example']);
+    expect(meta['ui/csp']).toEqual(csp);
+    // Don't emit empty resource domains (or any other field that wasn't passed).
+    expect(csp).not.toHaveProperty('resourceDomains');
     expect(csp).not.toHaveProperty('resource_domains');
-    expect(csp).not.toHaveProperty('connectDomains');
+  });
+
+  it('emits `openai/widgetCSP` in the OpenAI Apps SDK snake_case only', () => {
+    const registry = new ToolUIRegistry();
+    (registry as unknown as { widgets: Map<string, string> }).widgets.set('o', '<html>o</html>');
+    (registry as unknown as { resourceMeta: Map<string, unknown> }).resourceMeta.set('o', {
+      csp: { connectDomains: ['https://api.example'], resourceDomains: ['https://cdn.example'] },
+    });
+
+    const result = handleUIResourceRead('ui://widget/o.html', registry);
+    const meta = (result.result?.contents?.[0] as Record<string, unknown>)['_meta'] as Record<string, unknown>;
+    expect(meta['openai/widgetCSP']).toEqual({
+      connect_domains: ['https://api.example'],
+      resource_domains: ['https://cdn.example'],
+    });
   });
 
   it('attaches permissions when configured (even with no csp)', () => {
@@ -121,6 +142,7 @@ describe('handleUIResourceRead — resource-level _meta (#455)', () => {
     expect(content).toHaveProperty('_meta');
     const meta = content['_meta'] as Record<string, unknown>;
     expect((meta['ui'] as Record<string, unknown>)['csp']).toEqual({
+      connectDomains: ['https://api.example'],
       connect_domains: ['https://api.example'],
     });
   });

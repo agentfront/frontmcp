@@ -59,12 +59,16 @@ describe('ui options sent to the host', () => {
     const contents = message.result?.['contents'] as Array<{ _meta?: Record<string, unknown> }>;
 
     expect(contents[0]?._meta).toMatchObject({
-      ui: { prefersBorder: true, domain: 'https://dashboard.example' },
+      ui: {
+        prefersBorder: true,
+        domain: 'https://dashboard.example',
+        csp: { connectDomains: ['https://api.example'] },
+      },
       'openai/widgetDescription': 'The team dashboard, with open tickets by priority',
       'openai/widgetPrefersBorder': true,
       'openai/widgetDomain': 'https://dashboard.example',
-      'openai/widgetCSP': { connect_domains: ['https://api.example'] },
     });
+    expect(contents[0]?._meta?.['openai/widgetCSP']).toEqual({ connect_domains: ['https://api.example'] });
   });
 
   it('has the page ask the host for the display mode', async () => {

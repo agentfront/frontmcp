@@ -44,8 +44,10 @@ export interface FileBundleOptions {
  * **Where this is emitted (issue #455 fix):** FrontMCP attaches this
  * configuration to the **resource** content item returned by
  * `resources/read` for `ui://widget/{toolName}.html`, as both
- * `_meta.ui.csp` (nested) and `_meta['ui/csp']` (slash) with snake_case
- * `connect_domains` / `resource_domains` fields. MCP Apps hosts (notably
+ * `_meta.ui.csp` (nested) and `_meta['ui/csp']` (slash) with the MCP Apps
+ * `connectDomains` / `resourceDomains` keys (the snake_case keys sent up to
+ * 1.9.2 stay alongside), and as `_meta['openai/widgetCSP']` with the OpenAI
+ * Apps SDK's `connect_domains` / `resource_domains`. MCP Apps hosts (notably
  * Claude) only honor CSP declared on the resource — declarations on the
  * tool's `_meta.ui.csp` are ignored.
  */

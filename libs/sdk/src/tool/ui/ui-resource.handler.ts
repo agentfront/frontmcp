@@ -88,13 +88,15 @@ function generatePlaceholderWidget(toolName: string): string {
  * on the UI resource (i.e. the `resources/read` content item's `_meta`), not
  * on the tool's `_meta.ui.csp`. Emitting CSP here is what makes
  * `ui.csp.connectDomains` / `ui.csp.resourceDomains` actually take effect.
+ * `_meta.ui.csp` uses the MCP Apps `McpUiResourceCsp` keys (camelCase), and
+ * `_meta['openai/widgetCSP']` the OpenAI Apps SDK's snake_case keys.
  */
 function buildResourceMetaForWidget(registry: ToolUIRegistry, toolName: string): Record<string, unknown> | undefined {
   const meta = registry.getResourceMeta(toolName);
   if (!meta) return undefined;
   const ui: Record<string, unknown> = {};
   if (meta.csp) {
-    ui['csp'] = normalizeCspForResource(meta.csp);
+    ui['csp'] = toMcpAppsCsp(meta.csp);
   }
   if (meta.permissions !== undefined) {
     ui['permissions'] = meta.permissions;
@@ -105,9 +107,9 @@ function buildResourceMetaForWidget(registry: ToolUIRegistry, toolName: string):
   // and the slash form (`_meta['ui/csp']` — what the broader FrontMCP `_meta`
   // convention uses) so hosts on either side resolve it. They're cheap.
   const out: Record<string, unknown> = Object.keys(ui).length > 0 ? { ui } : {};
-  if (ui['csp'] !== undefined) {
+  if (meta.csp) {
     out['ui/csp'] = ui['csp'];
-    out['openai/widgetCSP'] = ui['csp'];
+    out['openai/widgetCSP'] = toOpenAiWidgetCsp(meta.csp);
   }
   if (ui['permissions'] !== undefined) out['ui/permissions'] = ui['permissions'];
   if (meta.prefersBorder !== undefined) out['openai/widgetPrefersBorder'] = meta.prefersBorder;
@@ -117,19 +119,25 @@ function buildResourceMetaForWidget(registry: ToolUIRegistry, toolName: string):
 }
 
 /**
- * Convert the user-facing camelCase CSP shape (`connectDomains` /
- * `resourceDomains`) into the snake_case form MCP Apps hosts read
- * (`connect_domains` / `resource_domains`). Preserves any extra keys
- * the caller passed through so unknown / future-spec CSP fields are
- * not silently dropped.
+ * The OpenAI Apps SDK `openai/widgetCSP` shape: `connect_domains` / `resource_domains` in place
+ * of the user-facing camelCase keys. Any other key the caller passed goes through unchanged.
  */
-function normalizeCspForResource(csp: NonNullable<UIResourceMeta['csp']>): Record<string, unknown> {
-  const { connectDomains, resourceDomains, ...rest } = csp as NonNullable<UIResourceMeta['csp']> &
+function toOpenAiWidgetCsp(csp: NonNullable<UIResourceMeta['csp']>): Record<string, unknown> {
+  const { connectDomains, resourceDomains, ...otherKeys } = csp as NonNullable<UIResourceMeta['csp']> &
     Record<string, unknown>;
-  const out: Record<string, unknown> = { ...rest };
-  if (connectDomains !== undefined) out['connect_domains'] = connectDomains;
-  if (resourceDomains !== undefined) out['resource_domains'] = resourceDomains;
-  return out;
+  const openAiCsp: Record<string, unknown> = { ...otherKeys };
+  if (connectDomains !== undefined) openAiCsp['connect_domains'] = connectDomains;
+  if (resourceDomains !== undefined) openAiCsp['resource_domains'] = resourceDomains;
+  return openAiCsp;
+}
+
+/**
+ * The MCP Apps `McpUiResourceCsp` shape (`connectDomains` / `resourceDomains`, as spec hosts read
+ * it), plus the snake_case keys FrontMCP sent there from 1.4 (#455), so a host that adapted to those
+ * keeps working; spec hosts ignore keys they do not know.
+ */
+function toMcpAppsCsp(csp: NonNullable<UIResourceMeta['csp']>): Record<string, unknown> {
+  return { ...toOpenAiWidgetCsp(csp), ...csp };
 }
 
 /**
