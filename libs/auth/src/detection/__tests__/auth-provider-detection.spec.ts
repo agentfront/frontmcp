@@ -304,6 +304,30 @@ describe('auth-provider-detection', () => {
   // ------------------------------------------
   // appRequiresOrchestration
   // ------------------------------------------
+  describe("remoteAuth: { mode: 'forward' }", () => {
+    const forwardingApp = { id: 'upstream', name: 'Upstream', remoteAuthMode: 'forward' };
+
+    it.each([
+      ['public', publicAuth()],
+      ['local', localAuth()],
+      ['remote', remoteAuth('https://auth.example.com')],
+      ['static', { mode: 'static', token: 'secret' } as unknown as AuthOptions],
+      ['unset', undefined],
+    ])('refuses to forward a caller token a %s server minted or holds itself (#766)', (_mode, parent) => {
+      const errors = detectAuthProviders(parent, [forwardingApp]).validationErrors;
+
+      expect(errors).toEqual([expect.stringContaining("remoteAuth: { mode: 'forward' }")]);
+      expect(errors[0]).toContain('upstream');
+      expect(errors[0]).toContain("mode: 'static'");
+    });
+
+    it("accepts forwarding under a transparent server, whose callers' tokens come from the identity provider", () => {
+      const parent = transparentAuth('https://idp.example.com');
+
+      expect(detectAuthProviders(parent, [forwardingApp]).validationErrors).toEqual([]);
+    });
+  });
+
   describe('appRequiresOrchestration', () => {
     it('should return false when app has no auth', () => {
       expect(appRequiresOrchestration(undefined, publicAuth())).toBe(false);

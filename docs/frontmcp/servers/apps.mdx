@@ -208,7 +208,10 @@ remoteAuth: { mode: 'oauth' }
 
 With `forward`, the gateway sends `Bearer <token>` in `headerName` (default `Authorization`); with
 `tokenClaim`, the token is the value of that claim of the caller's JWT instead of the whole token. A call
-with no caller token is sent without one. Discovery (`tools/list` and the other lists) runs at startup and
+with no caller token is sent without one. `forward` needs a server (or a standalone app) in `transparent`
+mode, whose callers' tokens come from the identity provider: under `public`, `static`, `local` or `remote`
+mode the caller's token is one the server minted or holds itself, so startup refuses `forward` there; use
+`static` credentials or `transportOptions.headers` instead. Discovery (`tools/list` and the other lists) runs at startup and
 on refresh, outside any user's request, so it carries only `transportOptions.headers`: a remote that
 requires auth to list its entries needs `static` credentials or a header in `transportOptions.headers`.
 A request that carries credentials or `transportOptions.headers` does not follow a redirect: a 3xx from the remote
