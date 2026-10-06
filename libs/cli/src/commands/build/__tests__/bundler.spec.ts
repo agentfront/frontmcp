@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import { ensureDir, mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
 
+import { OPTIONAL_RUNTIME_PEERS } from '../../package/runtime-packages';
 import { bundleForServerless, externalizeOptionalPackages } from '../bundler';
 
 function run(
@@ -95,6 +96,20 @@ module.exports = { env: () => process.env.NODE_ENV, optional, kv, obs, sqlite };
       expect(mod.env()).toBe('development');
     } finally {
       process.env.NODE_ENV = prev;
+    }
+  }, 60000);
+
+  it('bundles a project that has none of the optional peers the SDK and utils import() lazily', async () => {
+    const entry = path.join(dir, 'index.js');
+    const loaders = OPTIONAL_RUNTIME_PEERS.map((name) => `() => import(${JSON.stringify(name)})`);
+    await writeFile(entry, `module.exports = [${loaders.join(', ')}];\n`);
+
+    await bundleForServerless(entry, dir, 'handler.cjs');
+
+    const bundle = await readFile(path.join(dir, 'handler.cjs'));
+    expect(OPTIONAL_RUNTIME_PEERS).toContain('@upstash/redis');
+    for (const name of OPTIONAL_RUNTIME_PEERS) {
+      expect(bundle).toContain(`require("${name}")`);
     }
   }, 60000);
 });
