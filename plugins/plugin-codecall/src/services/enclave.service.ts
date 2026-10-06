@@ -302,9 +302,20 @@ export default class EnclaveService {
 
     // Handle error cases
     const reportedError = result.error ?? { name: 'Error', message: 'Script execution failed' };
-    const error = reportedError.message?.startsWith(ITERATION_LIMIT_PREFIX)
-      ? { ...reportedError, ...ITERATION_LIMIT_ERROR }
-      : reportedError;
+
+    // A script a failing tool ended, the tool's error uncaught (or rethrown): the sandbox hands back
+    // only the error's name and message, so it is matched to the failure the tool handler threw by
+    // both. A script that caught the failure and threw its own error with the same message is not
+    // matched: its error has the sandbox's own name, not the tool's.
+    const toolFailure = [...toolFailures]
+      .reverse()
+      .find((failure) => failure.message === reportedError.message && failure.name === reportedError.name);
+
+    // The sandbox's own iteration-limit error, not a tool's whose message starts the same way.
+    const error =
+      !toolFailure && reportedError.message?.startsWith(ITERATION_LIMIT_PREFIX)
+        ? { ...reportedError, ...ITERATION_LIMIT_ERROR }
+        : reportedError;
 
     // A script that doesn't parse: the sandbox reports it as a generic error of its own.
     if (error.code === 'ENCLAVE_ERROR' && error.message?.startsWith(PARSE_FAILURE_PREFIX)) {
@@ -318,13 +329,6 @@ export default class EnclaveService {
       };
     }
 
-    // A script a failing tool ended, the tool's error uncaught (or rethrown): the sandbox hands back
-    // only the error's name and message, so it is matched to the failure the tool handler threw by
-    // both. A script that caught the failure and threw its own error with the same message is not
-    // matched: its error has the sandbox's own name, not the tool's.
-    const toolFailure = [...toolFailures]
-      .reverse()
-      .find((failure) => failure.message === error.message && failure.name === error.name);
     if (toolFailure) {
       return {
         success: false,
