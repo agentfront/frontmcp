@@ -1,6 +1,4 @@
-import { extractToolNames } from '../../common/metadata/skill.metadata';
-import { PublicMcpError } from '../../errors';
-import { filterDiscoverableSkillResults } from '../../skill/skill-filter.helper';
+import { toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import { withMcpSurface } from './mcp-surface';
 import {
@@ -11,7 +9,7 @@ import {
 } from './skills-mcp.types';
 
 /**
- * MCP handler for skills/search custom method.
+ * MCP handler for skills/search custom method: runs the `skills:search` flow.
  *
  * Allows MCP clients to search for skills by query.
  */
@@ -24,72 +22,12 @@ export default function skillsSearchRequestHandler({
     requestSchema: SkillsSearchRequestSchema,
     responseSchema: SkillsSearchResultSchema,
     handler: async (request: SkillsSearchRequest, ctx) => {
-      const { query, tags, tools, limit, requireAllTools } = request.params;
-      logger.verbose(`skills/search: "${query}"`);
-
-      const skillRegistry = scope.skills;
-      if (!skillRegistry) {
-        throw new PublicMcpError('Skills capability not available', 'CAPABILITY_NOT_AVAILABLE', 501);
+      logger.verbose(`skills/search: "${request.params.query}"`);
+      try {
+        return await scope.runFlowForOutput('skills:search', { request, ctx: withMcpSurface(scope, ctx) });
+      } catch (error) {
+        throw toSdkMcpError(error);
       }
-
-      // Search skills using the registry
-      const results = await skillRegistry.search(query, {
-        topK: limit ?? 10,
-        tags,
-        tools,
-        requireAllTools,
-      });
-
-      // Filter by MCP visibility (only 'mcp' or 'both' should be visible via MCP)
-      const mcpVisibleResults = results.filter((r) => {
-        const visibility = r.metadata.visibility ?? 'both';
-        return visibility === 'mcp' || visibility === 'both';
-      });
-
-      // Hide skills the caller can't discover: entry-level authorities (mirrors
-      // `filterByAuthorities` for tools/resources; evaluated without request
-      // input, so role/permission/claims-based only), then `skills:filter`.
-      const authInfo = (ctx?.authInfo ?? {}) as Record<string, unknown>;
-      const servableResults = await filterDiscoverableSkillResults(scope, skillRegistry, mcpVisibleResults, {
-        authInfo,
-        ctx: withMcpSurface(scope, ctx),
-      });
-
-      // Transform results to response format
-      const skills = servableResults.map((r) => {
-        const toolNames = extractToolNames(r.metadata);
-        return {
-          id: r.metadata.id ?? r.metadata.name,
-          name: r.metadata.name,
-          description: r.metadata.description ?? '',
-          score: r.score,
-          tags: r.metadata.tags,
-          tools: toolNames.map((name) => ({
-            name,
-            available: r.availableTools.includes(name),
-          })),
-          source: r.source,
-        };
-      });
-
-      const total = skills.length;
-      // hasMore is true if pre-filtered results hit the limit (more may exist beyond visibility filtering)
-      const hasMore = results.length >= (limit ?? 10);
-
-      const guidance =
-        total > 0
-          ? `Found ${total} matching skill(s). Use skills/load with skill IDs to load full content.`
-          : 'No matching skills found. Try different search terms or list all skills with skills/list.';
-
-      const result = {
-        skills,
-        total,
-        hasMore,
-        guidance,
-      };
-
-      // Validate result against schema
-      return SkillsSearchResultSchema.parse(result);
     },
   };
 }

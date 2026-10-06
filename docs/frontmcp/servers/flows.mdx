@@ -61,15 +61,21 @@ graph LR
 
 FrontMCP provides built-in flows for all MCP protocol operations:
 
-| Flow Name                  | Trigger                       | Description                             |
-| -------------------------- | ----------------------------- | --------------------------------------- |
-| `tools:call-tool`          | `tools/call` request          | Execute a tool with validated arguments |
-| `tools:list-tools`         | `tools/list` request          | List all available tools                |
-| `resources:read-resource`  | `resources/read` request      | Read a resource by URI                  |
-| `resources:list-resources` | `resources/list` request      | List all available resources            |
-| `resources:subscribe`      | `resources/subscribe` request | Subscribe to resource changes           |
-| `prompts:get-prompt`       | `prompts/get` request         | Generate a prompt with arguments        |
-| `prompts:list-prompts`     | `prompts/list` request        | List all available prompts              |
+| Flow Name                  | Trigger                         | Description                             |
+| -------------------------- | ------------------------------- | --------------------------------------- |
+| `tools:call-tool`          | `tools/call` request            | Execute a tool with validated arguments |
+| `tools:list-tools`         | `tools/list` request            | List all available tools                |
+| `resources:read-resource`  | `resources/read` request        | Read a resource by URI                  |
+| `resources:list-resources` | `resources/list` request        | List all available resources            |
+| `resources:subscribe`      | `resources/subscribe` request   | Subscribe to resource changes           |
+| `resources:unsubscribe`    | `resources/unsubscribe` request | Unsubscribe from resource changes       |
+| `prompts:get-prompt`       | `prompts/get` request           | Generate a prompt with arguments        |
+| `prompts:list-prompts`     | `prompts/list` request          | List all available prompts              |
+| `logging:set-level`        | `logging/setLevel` request      | Set the session's log level             |
+| `skills:search`            | `skills/search` request         | Search the skills                       |
+| `skills:load`              | `skills/load` request           | Load skills with their tools            |
+
+Every built-in flow's name is in the global `ExtendFlows` interface, so `FlowHooksOf('<name>')` typechecks for it, including `session:verify`, `handle:mcp-202607280728`, `handle:streamable-http`, `elicitation:request`, `elicitation:result`, `well-known.jwks` and `http:ip-filter`. Up to 1.9.2 those were missing from the published types, and `logging/setLevel`, `resources/subscribe`, `resources/unsubscribe`, `skills/search` and `skills/load` were answered without their flows, so hooks on them never ran.
 
 ---
 

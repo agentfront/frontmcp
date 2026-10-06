@@ -4,7 +4,8 @@ import { z } from '@frontmcp/lazy-zod';
 import { EmptyResultSchema, LoggingLevelSchema, SetLevelRequestSchema } from '@frontmcp/protocol';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
-import { GenericServerError, InvalidInputError, InvalidMethodError } from '../../errors';
+import { InvalidInputError, InvalidMethodError } from '../../errors';
+import { mcpRequestSessionId } from '../../transport/mcp-handlers/mcp-surface';
 
 const inputSchema = z.object({
   request: SetLevelRequestSchema,
@@ -17,7 +18,7 @@ const stateSchema = z.object({
   input: z.object({
     level: LoggingLevelSchema,
   }),
-  sessionId: z.string(),
+  sessionId: z.string().optional(),
   output: outputSchema,
 });
 
@@ -73,13 +74,8 @@ export default class SetLevelFlow extends FlowBase<typeof name> {
       throw new InvalidMethodError(method, 'logging/setLevel');
     }
 
-    // Get session ID from context - required for logging level tracking
-    const sessionId = (ctx as Record<string, unknown> | undefined)?.['sessionId'];
-    if (!sessionId || typeof sessionId !== 'string') {
-      this.logger.warn('parseInput: sessionId not found in context');
-      throw new InvalidInputError('Session ID is required for setting log level');
-    }
-
+    // The session whose level is set: a request without one is answered without setting it
+    const sessionId = mcpRequestSessionId(ctx);
     this.state.set({ input: params, sessionId });
     this.logger.verbose('parseInput:done');
   }
@@ -88,17 +84,17 @@ export default class SetLevelFlow extends FlowBase<typeof name> {
   async setLevel() {
     this.logger.verbose('setLevel:start');
     const { level } = this.state.required.input;
-    const { sessionId } = this.state.required;
+    const { sessionId } = this.state;
+    if (!sessionId) {
+      this.logger.warn('setLevel: no session ID in the request context');
+      return;
+    }
 
-    // Set the log level for this session via NotificationService
-    const success = this.scope.notifications.setLogLevel(sessionId, level);
-
-    if (success) {
-      this.logger.info(`setLevel: session log level set to "${level}"`);
+    // A session the notification service doesn't know is answered like a known one: the level has nothing to apply to
+    if (this.scope.notifications.setLogLevel(sessionId, level)) {
+      this.logger.verbose(`setLevel: session log level set to "${level}"`);
     } else {
-      // Per MCP spec, return Internal error (-32603) when operation fails
-      this.logger.warn(`setLevel: failed to set log level for session (session not registered?)`);
-      throw new GenericServerError('Failed to set log level: session not registered');
+      this.logger.warn('setLevel: the session is not registered with the notification service');
     }
 
     this.logger.verbose('setLevel:done');
