@@ -123,6 +123,7 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
           id: appMeta.id || appMeta.name,
           name: appMeta.name,
           auth: appMeta.auth,
+          remoteAuthMode: appMeta.remoteAuthMode,
         });
       }
     }
@@ -133,14 +134,17 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
   /**
    * Get app metadata from AppType (handles both class and value types)
    */
-  private getAppMetadata(app: AppType): { id?: string; name: string; auth?: AuthOptions } | undefined {
+  private getAppMetadata(
+    app: AppType,
+  ): { id?: string; name: string; auth?: AuthOptions; remoteAuthMode?: string } | undefined {
     // Value type: has metadata directly
     if (typeof app === 'object' && 'name' in app) {
-      const appValue = app as { id?: string; name: string; auth?: AuthOptions };
+      const appValue = app as { id?: string; name: string; auth?: AuthOptions; remoteAuth?: { mode?: string } };
       return {
         id: appValue.id,
         name: appValue.name,
         auth: appValue.auth,
+        remoteAuthMode: appValue.remoteAuth?.mode,
       };
     }
 

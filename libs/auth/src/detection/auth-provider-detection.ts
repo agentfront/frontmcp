@@ -49,6 +49,8 @@ export interface AppAuthInfo {
   id: string;
   name: string;
   auth?: AuthOptions;
+  /** A remote app's `remoteAuth.mode`. */
+  remoteAuthMode?: string;
 }
 
 // ============================================
@@ -171,6 +173,22 @@ export function detectAuthProviders(
         `Serve the app on its own endpoint with standalone: true or splitByApp: true, or run the server in local or ` +
         `remote mode with incrementalAuth enabled, which checks each tool call against the apps the caller has ` +
         `authorized (without incrementalAuth, local and remote mode do not check app grants per tool call).`,
+    );
+  }
+
+  const tokenMintingAppIds = apps
+    .filter((app) => app.remoteAuthMode === 'forward')
+    .filter((app) => {
+      const effectiveAuth = app.auth ?? parentAuth;
+      return !effectiveAuth || !isTransparentMode(effectiveAuth);
+    })
+    .map((app) => app.id);
+  if (tokenMintingAppIds.length > 0) {
+    validationErrors.push(
+      `remoteAuth: { mode: 'forward' } on ${tokenMintingAppIds.join(', ')} would send the remote a token this ` +
+        `server minted or holds itself: only a server in transparent mode receives its callers' tokens from the ` +
+        `identity provider. Use remoteAuth: { mode: 'static', credentials } (or transportOptions.headers) for the ` +
+        `remote, or run the server in transparent mode.`,
     );
   }
 

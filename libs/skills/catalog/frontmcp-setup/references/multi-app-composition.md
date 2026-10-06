@@ -134,17 +134,17 @@ export default class Server {}
 
 `app.remote(url, options?)` accepts a URL and optional `RemoteUrlAppOptions`:
 
-| Option             | Type                           | Description                                                                                               |
-| ------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `name`             | `string`                       | Override the auto-derived app name (defaults to hostname)                                                 |
-| `namespace`        | `string`                       | Namespace prefix for tools, resources, and prompts                                                        |
-| `description`      | `string`                       | Human-readable description                                                                                |
-| `standalone`       | `boolean \| 'includeInParent'` | Scope isolation mode (default: `false`)                                                                   |
-| `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback, MCP revision                                                     |
-| `remoteAuth`       | `RemoteAuthConfig`             | Auth config: `'static'`, `'forward'`, or `'oauth'`; requests carrying credentials do not follow redirects |
-| `refreshInterval`  | `number`                       | Interval (ms) to refresh capabilities from remote                                                         |
-| `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities (default: 60000)                                                         |
-| `filter`           | `AppFilterConfig`              | Include/exclude filter for primitives                                                                     |
+| Option             | Type                           | Description                                                                                                                          |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`             | `string`                       | Override the auto-derived app name (defaults to hostname)                                                                            |
+| `namespace`        | `string`                       | Namespace prefix for tools, resources, and prompts                                                                                   |
+| `description`      | `string`                       | Human-readable description                                                                                                           |
+| `standalone`       | `boolean \| 'includeInParent'` | Scope isolation mode (default: `false`)                                                                                              |
+| `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback, MCP revision                                                                                |
+| `remoteAuth`       | `RemoteAuthConfig`             | Auth config: `'static'`, `'forward'` (transparent servers only), or `'oauth'`; requests carrying credentials do not follow redirects |
+| `refreshInterval`  | `number`                       | Interval (ms) to refresh capabilities from remote                                                                                    |
+| `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities (default: 60000)                                                                                    |
+| `filter`           | `AppFilterConfig`              | Include/exclude filter for primitives                                                                                                |
 
 `RemoteTransportOptions` fields:
 

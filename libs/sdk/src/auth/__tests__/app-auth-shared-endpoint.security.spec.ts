@@ -38,3 +38,14 @@ describe('@App({ auth }) on the shared endpoint', () => {
     await server.dispose();
   });
 });
+
+describe("App.remote({ remoteAuth: { mode: 'forward' } })", () => {
+  it('refuses to start a server that would forward a token it minted itself (#766)', async () => {
+    await expect(
+      FrontMcpInstance.createDirect({
+        info: { name: 'gw', version: '1.0.0' },
+        apps: [App.remote('http://127.0.0.1:9/mcp', { name: 'upstream', remoteAuth: { mode: 'forward' } })],
+      }),
+    ).rejects.toThrow("remoteAuth: { mode: 'forward' } on upstream would send the remote a token");
+  });
+});
