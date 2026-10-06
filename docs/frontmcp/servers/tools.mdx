@@ -985,7 +985,7 @@ Markdown strings are converted on the server (headings, paragraphs, fenced code,
 **Sanitization.** Markup you author (template literals, HTML strings, `.tsx` files) is trusted and not sanitized. Values interpolated into `` html`…` `` are escaped; plain string results are escaped unless `escapeStringResults: false`; Markdown strings are always escaped.
 
 <Warning>
-**Build template markup with `ctx.helpers.html`.** A plain string a template function returns is rendered as markup when it looks like HTML, so returning unescaped tool output injects tags. The `html` tagged template escapes interpolated values; `ctx.helpers.trustedHtml(markup)` marks markup you already made safe. Set `ui.escapeStringResults: true` (or `@FrontMcp({ ui: { escapeStringResults: true } })`) to escape plain string results now — FrontMCP 1.9 does so by default. See [Trusted markup](/frontmcp/guides/building-tool-ui#trusted-markup).
+**Build template markup with `ctx.helpers.html`.** Since FrontMCP 1.9 a plain string a template function returns is HTML-escaped and shown as text, so a template that returns markup as a plain string displays its tags. The `html` tagged template escapes interpolated values and renders as markup; `ctx.helpers.trustedHtml(markup)` marks markup you already made safe. `ui.escapeStringResults: false` (or `@FrontMcp({ ui: { escapeStringResults: false } })`) restores the 1.8 behaviour of rendering strings that look like HTML as markup, which lets unescaped tool output inject tags. See [Trusted markup](/frontmcp/guides/building-tool-ui#trusted-markup).
 </Warning>
 
 <Info>
