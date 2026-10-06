@@ -35,6 +35,7 @@ import {
   extractBearerToken,
   isJwt,
   JwksService,
+  scopesFromClaims,
   validateAudience,
   type ProviderVerifyRef,
   type VerifyResult,
@@ -707,10 +708,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
         | string[]
         | undefined;
       if (requiredScopes && requiredScopes.length > 0) {
-        // `scope` (RFC 9068) or `scp` (Entra ID, Okta), as a space-separated string or an array
-        const tokenScopes = [result.payload?.['scope'], result.payload?.['scp']].flatMap((claim) =>
-          typeof claim === 'string' ? claim.split(/\s+/).filter(Boolean) : Array.isArray(claim) ? claim : [],
-        );
+        const tokenScopes = scopesFromClaims(result.payload);
         const hasAll = requiredScopes.every((s: string) => tokenScopes.includes(s));
         if (!hasAll) {
           this.logger.warn('verifyIfJwt: insufficient scopes', {
