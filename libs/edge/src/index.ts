@@ -166,7 +166,7 @@ type BaseConfig = Parameters<typeof FrontMcpInstance.createForGraph>[0];
 export type EdgeMcpConfig = BaseConfig & {
   /**
    * Managed mode — pull an auto-updating skilled-openapi bundle from a SaaS
-   * endpoint. Requires the optional peer `@frontmcp/plugin-skilled-openapi`.
+   * endpoint, through `@frontmcp/plugin-skilled-openapi` (a dependency of this package).
    */
   managed?: ManagedEdgeOptions;
   /**
@@ -306,7 +306,7 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
       controller = new EdgeRefreshController(resolveCache(managed.cache, env));
       // Wire the skilled-openapi plugin (SaaS source) so the bundle is pulled
       // on boot and auto-refreshed. Lazy-imported so non-managed edges never
-      // pay for it. The literal specifier stays bundlable by wrangler.
+      // evaluate it; it is a dependency, so wrangler always resolves the literal specifier (#769).
       const mod = await import('@frontmcp/plugin-skilled-openapi');
       // The packed (CJS) and workspace (ESM) builds expose the default export
       // through different namespace shapes, so go through `unknown` to keep the
