@@ -38,6 +38,19 @@ export function findModuleSpecifiers(source: string): ModuleSpecifierRange[] {
   let regexAllowed = true;
   let previousCodeChar = '';
   let index = 0;
+  let previousToken = '';
+  let tokenBeforePrevious = '';
+
+  const pushToken = (token: string): void => {
+    tokenBeforePrevious = previousToken;
+    previousToken = token;
+  };
+
+  // `from` names a module only after an import/export clause: `}`, `*`, or a binding after `import`/`as`
+  const fromEndsImportClause = (): boolean =>
+    previousToken === '}' ||
+    previousToken === '*' ||
+    (WORD_START.test(previousToken.charAt(0)) && (tokenBeforePrevious === 'import' || tokenBeforePrevious === 'as'));
 
   const skipQuoted = (from: number): number => {
     const quote = source[from];
@@ -130,30 +143,35 @@ export function findModuleSpecifiers(source: string): ModuleSpecifierRange[] {
       index = skipQuoted(index);
       regexAllowed = false;
       previousCodeChar = char;
+      pushToken(char);
       continue;
     }
     if (char === '`') {
       index = continueTemplate(index + 1);
       previousCodeChar = char;
+      pushToken(char);
       continue;
     }
     if (char === '}' && templateBraceDepths[templateBraceDepths.length - 1] === braceDepth) {
       templateBraceDepths.pop();
       index = continueTemplate(index + 1);
       previousCodeChar = '`';
+      pushToken('`');
       continue;
     }
     if (char === '/' && regexAllowed) {
       index = skipRegex(index);
       regexAllowed = false;
       previousCodeChar = '/';
+      pushToken('/');
       continue;
     }
     if (WORD_START.test(char)) {
       let wordEnd = index + 1;
       while (wordEnd < source.length && WORD_PART.test(source[wordEnd])) wordEnd += 1;
       const word = source.slice(index, wordEnd);
-      if ((word === 'from' || word === 'import') && previousCodeChar !== '.') {
+      const namesModule = word === 'import' || (word === 'from' && fromEndsImportClause());
+      if (namesModule && previousCodeChar !== '.') {
         let specifierStart = skipWhitespaceAndComments(wordEnd);
         if (word === 'import' && source[specifierStart] === '(') {
           specifierStart = skipWhitespaceAndComments(specifierStart + 1);
@@ -162,6 +180,7 @@ export function findModuleSpecifiers(source: string): ModuleSpecifierRange[] {
       }
       regexAllowed = KEYWORDS_BEFORE_REGEX.has(word);
       previousCodeChar = 'a';
+      pushToken(word);
       index = wordEnd;
       continue;
     }
@@ -170,6 +189,7 @@ export function findModuleSpecifiers(source: string): ModuleSpecifierRange[] {
     else if (char === '}') braceDepth -= 1;
     regexAllowed = char !== ')' && char !== ']' && !/[0-9]/.test(char);
     previousCodeChar = char;
+    pushToken(char);
     index += 1;
   }
 
