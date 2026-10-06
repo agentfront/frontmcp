@@ -171,3 +171,44 @@ describe('publicAccess.rateLimit and a task-augmented call', () => {
     expect(JSON.stringify(redispatched).toLowerCase()).not.toContain('rate limit');
   });
 });
+
+@Tool({ name: 'search', inputSchema: {} })
+class BillingSearchTool extends ToolContext {
+  async execute() {
+    return 'billing results';
+  }
+}
+
+@Prompt({ name: 'summarize', arguments: [] })
+class BillingSummarizePrompt extends PromptContext {
+  async execute() {
+    return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'billing summary' } }] };
+  }
+}
+
+@App({ id: 'billing', name: 'Billing', tools: [BillingSearchTool], prompts: [BillingSummarizePrompt] })
+class BillingApp {}
+
+describe('publicAccess with names two apps share', () => {
+  it("lists the public app's entries by their qualified names, so the listed names are callable", async () => {
+    const server = await createTestFetchServer({
+      info: { name: 'desk', version: '1.0.0' },
+      apps: [DeskApp, BillingApp],
+      auth: { mode: 'public', publicAccess: { tools: ['billing:search'], prompts: ['billing:summarize'] } },
+    });
+    servers.push(server);
+    const send = await session(server);
+
+    const toolNames = ((await send('tools/list')).result?.['tools'] as Array<{ name: string }>).map(({ name }) => name);
+    const promptNames = ((await send('prompts/list')).result?.['prompts'] as Array<{ name: string }>).map(
+      ({ name }) => name,
+    );
+    const toolCall = await send('tools/call', { name: toolNames[0], arguments: {} });
+    const promptGet = await send('prompts/get', { name: promptNames[0] });
+
+    expect(toolNames).toEqual(['billing:search']);
+    expect(promptNames).toEqual(['billing:summarize']);
+    expect(JSON.stringify(toolCall)).toContain('billing results');
+    expect(JSON.stringify(promptGet)).toContain('billing summary');
+  });
+});
