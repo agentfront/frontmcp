@@ -181,7 +181,7 @@ Projects created with `frontmcp create --target lambda` include a SAM template a
 ```bash
 npm run deploy  # Runs: cd ci && sam build && sam deploy
 ```
-The template runs the function with `NODE_ENV=production` and takes `MCP_SESSION_SECRET` as the `NoEcho` parameter `McpSessionSecret` (`sam deploy --parameter-overrides McpSessionSecret=$(openssl rand -hex 32)`).
+The template runs the function with `NODE_ENV=production` and takes `MCP_SESSION_SECRET` as the `NoEcho` parameter `McpSessionSecret`. Generate it once (`openssl rand -hex 32`) and pass the same value on every deploy (`sam deploy --parameter-overrides McpSessionSecret=<secret>`, or `parameter_overrides` in `samconfig.toml`): a new value ends every open session.
 </Tip>
 
 1. Build your project:
@@ -210,7 +210,7 @@ Parameters:
   McpSessionSecret:
     Type: String
     NoEcho: true
-    Description: MCP_SESSION_SECRET for session-ID encryption, required in production (openssl rand -hex 32)
+    Description: MCP_SESSION_SECRET for session-ID encryption, required in production. Generate it once (openssl rand -hex 32) and pass the same value on every deploy; a new value ends every open session
 
 Resources:
   FrontMcpFunction:
