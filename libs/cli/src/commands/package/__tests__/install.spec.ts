@@ -356,14 +356,9 @@ describe('runInstall', () => {
       expect(installCall).toBeDefined();
       const specs: string[] = installCall[1];
       expect(specs).toEqual(
-        expect.arrayContaining([
-          expect.stringMatching(/^@frontmcp\/sdk@/),
-          'reflect-metadata@^0.2.2',
-          // #679 — loaded by the SDK's skill registry at start-up (and its undeclared tslib)
-          expect.stringMatching(/^vectoriadb@/),
-          expect.stringMatching(/^tslib@/),
-        ]),
+        expect.arrayContaining([expect.stringMatching(/^@frontmcp\/sdk@/), 'reflect-metadata@^0.2.2']),
       );
+      expect(specs.some((spec) => /^(vectoriadb|tslib)@/.test(spec))).toBe(false);
       expect(installCall[2]).toEqual({ cwd: installDir });
     });
 

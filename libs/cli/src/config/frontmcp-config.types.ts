@@ -176,7 +176,7 @@ export interface CliTargetConfig {
 export interface WranglerConfig {
   /** Worker name. */
   name?: string;
-  /** Compatibility date. Defaults to `2024-09-23`, the first date on which `nodejs_compat` turns on `nodejs_compat_v2`. */
+  /** Compatibility date. Defaults to `2024-11-11`: `nodejs_compat` turns on `nodejs_compat_v2` from `2024-09-23`, and Vercel KV / Upstash need `2024-11-11`. */
   compatibilityDate?: string;
   /**
    * Extra Cloudflare compatibility flags. `nodejs_compat` is always emitted

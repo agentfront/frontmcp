@@ -8,11 +8,10 @@
  *   - search_skill returns matches scored against the registry
  *   - load_skill returns instructions + the actions[] schemas
  *   - run_workflow runs an enclave-sandboxed AgentScript whose callTool(actionId,…)
- *     invokes the upstream with the configured bearer credential (execution-path
- *     tests below are skipped pending the @enclave-vm/core node_modules update)
- *   - ABAC denial path returns ok:false with a structured reason
- *   - input-validation paths (missing path param, unknown action) return
- *     structured errors instead of throwing
+ *     invokes the upstream with the configured bearer credential and a JSON body
+ *     (the mock answers 415 to a body sent without `application/json`)
+ *   - ABAC denial, unknown actions and input-validation failures come back as
+ *     `{ success: false, error }` instead of throwing
  */
 
 import { expect, test } from '@frontmcp/testing';
@@ -40,11 +39,9 @@ interface LoadSkillResponse {
   warning?: string;
 }
 
-interface ExecuteActionResponse {
-  ok: boolean;
-  status: number;
-  data?: unknown;
-  contentType?: string;
+interface RunWorkflowResponse {
+  success: boolean;
+  value?: unknown;
   error?: string;
 }
 
@@ -119,87 +116,50 @@ test.describe('SkilledOpenApi Plugin E2E', () => {
     });
   });
 
-  // TODO(skilled-openapi): `execute_action` was removed in favor of `run_workflow`
-  // (enclave-sandboxed AgentScript calling actions via `callTool(actionId, input)`).
-  // These execution tests are SKIPPED until the installed `@enclave-vm/core` exposes
-  // `InterpreterAdapter` + the `/worker` subpath (present in the source repo, not yet
-  // in node_modules) so `run_workflow` can execute on Node. Then rewrite each
-  // `execute_action({ skillId, actionId, input })` → `run_workflow({ script })` where
-  // the script does `return await callTool(actionId, input)` and assert the
-  // `{ success, value }` envelope instead of `{ ok, status, data }`.
-  test.describe.skip('execute_action — happy path', () => {
-    test('createInvoice → getInvoice → refundInvoice round-trip', async ({ mcp }) => {
-      // 1) Create
-      const created = await mcp.tools.call('execute_action', {
-        skillId: 'invoices',
-        actionId: 'createInvoice',
-        input: { customerId: 'cus_e2e', amount: 1234 },
+  test.describe('run_workflow — happy path', () => {
+    test('createInvoice → getInvoice → refundInvoice round-trip in one script', async ({ mcp }) => {
+      const result = await mcp.tools.call('run_workflow', {
+        script: [
+          "const created = await callTool('createInvoice', { customerId: 'cus_e2e', amount: 1234 });",
+          "const fetched = await callTool('getInvoice', { id: created.id });",
+          "const refund = await callTool('refundInvoice', { id: created.id, amount: 1234 });",
+          'return { created: created, fetched: fetched, refund: refund };',
+        ].join('\n'),
       });
-      expect(created).toBeSuccessful();
-      const createdJson = created.json<ExecuteActionResponse>();
-      expect(createdJson.ok).toBe(true);
-      expect(createdJson.status).toBe(201);
-      const data = createdJson.data as { id: string; status: string };
-      expect(data.status).toBe('open');
-      const invoiceId = data.id;
-
-      // 2) Get
-      const fetched = await mcp.tools.call('execute_action', {
-        skillId: 'invoices',
-        actionId: 'getInvoice',
-        input: { id: invoiceId },
-      });
-      const fetchedJson = fetched.json<ExecuteActionResponse>();
-      expect(fetchedJson.ok).toBe(true);
-      expect((fetchedJson.data as { id: string }).id).toBe(invoiceId);
-
-      // 3) Refund
-      const refunded = await mcp.tools.call('execute_action', {
-        skillId: 'invoices',
-        actionId: 'refundInvoice',
-        input: { id: invoiceId, amount: 1234 },
-      });
-      const refundedJson = refunded.json<ExecuteActionResponse>();
-      expect(refundedJson.ok).toBe(true);
-      expect(refundedJson.status).toBe(201);
-      expect((refundedJson.data as { invoiceId: string }).invoiceId).toBe(invoiceId);
+      expect(result).toBeSuccessful();
+      const json = result.json<RunWorkflowResponse>();
+      expect(json.error).toBeUndefined();
+      expect(json.success).toBe(true);
+      const value = json.value as {
+        created: { id: string; status: string };
+        fetched: { id: string; status: string; amount: number };
+        refund: { invoiceId: string };
+      };
+      expect(value.created.status).toBe('open');
+      expect(value.fetched).toEqual({ id: value.created.id, status: 'open', amount: 1234 });
+      expect(value.refund.invoiceId).toBe(value.created.id);
     });
   });
 
-  // SKIPPED — see the note above the happy-path block (pending @enclave-vm/core update).
-  test.describe.skip('execute_action — error paths', () => {
-    test('unknown action returns ok:false with structured error', async ({ mcp }) => {
-      const result = await mcp.tools.call('execute_action', {
-        skillId: 'invoices',
-        actionId: 'doesNotExist',
-        input: {},
-      });
-      const json = result.json<ExecuteActionResponse>();
-      expect(json.ok).toBe(false);
+  test.describe('run_workflow — error paths', () => {
+    test('unknown action comes back as success:false with the reason', async ({ mcp }) => {
+      const result = await mcp.tools.call('run_workflow', { script: "return await callTool('doesNotExist', {});" });
+      const json = result.json<RunWorkflowResponse>();
+      expect(json.success).toBe(false);
       expect(json.error).toMatch(/unknown action/);
     });
 
-    test('missing required path param surfaces as ok:false (caught by input schema gate)', async ({ mcp }) => {
-      const result = await mcp.tools.call('execute_action', {
-        skillId: 'invoices',
-        actionId: 'getInvoice',
-        input: {},
-      });
-      const json = result.json<ExecuteActionResponse>();
-      expect(json.ok).toBe(false);
-      // The op's inputSchema gate runs before the executor's mapper-level
-      // path-param check, so the error wraps the zod issue for `id`.
+    test('missing required path param is caught by the input schema gate', async ({ mcp }) => {
+      const result = await mcp.tools.call('run_workflow', { script: "return await callTool('getInvoice', {});" });
+      const json = result.json<RunWorkflowResponse>();
+      expect(json.success).toBe(false);
       expect(json.error).toMatch(/input validation failed.*id/i);
     });
 
     test('ABAC denial — adminPing requires admin role; public sessions are denied', async ({ mcp }) => {
-      const result = await mcp.tools.call('execute_action', {
-        skillId: 'guarded',
-        actionId: 'adminPing',
-        input: {},
-      });
-      const json = result.json<ExecuteActionResponse>();
-      expect(json.ok).toBe(false);
+      const result = await mcp.tools.call('run_workflow', { script: "return await callTool('adminPing', {});" });
+      const json = result.json<RunWorkflowResponse>();
+      expect(json.success).toBe(false);
       expect(json.error).toMatch(/authority denied/);
     });
   });

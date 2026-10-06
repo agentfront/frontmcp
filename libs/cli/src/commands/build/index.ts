@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
-import { ensureDir, fileExists, writeJSON } from '@frontmcp/utils';
+import { ensureDir, fileExists, readFile, writeJSON } from '@frontmcp/utils';
 import { fsp, resolveEntry } from '../../shared/fs';
 import { runTsc } from '../../shared/tsc';
 import { cleanOutDir } from '../../shared/clean-out-dir';
@@ -364,10 +364,16 @@ async function runAdapterBuild(
   const entryInfo = await loadEntryDecoratorInfo(entry);
   if (template.validate) {
     const { readEntryDecoratorStringLiteral } = await import('./decorator-source-scan.js');
-    template.validate(entryInfo.decoratorConfig, {
+    const configPath = template.configFileName ? path.join(cwd, template.configFileName) : undefined;
+    const warnings = template.validate(entryInfo.decoratorConfig, {
       keysSeenInSource: entryInfo.keysSeenInSource,
       redisProviderInSource: await readEntryDecoratorStringLiteral(entry, ['redis', 'provider']),
+      deployment,
+      existingConfig: configPath && (await fileExists(configPath)) ? await readFile(configPath) : undefined,
     });
+    for (const warning of warnings ?? []) {
+      console.log(c('yellow', `  ${warning}`));
+    }
   }
 
   // #539 — `transport.http.path` drives the CLI, `@FrontMcp({ http: { entryPath } })`

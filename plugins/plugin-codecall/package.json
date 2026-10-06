@@ -54,7 +54,7 @@
     "@frontmcp/protocol": "1.9.1",
     "@frontmcp/sdk": "1.9.1",
     "acorn": "^8.15.0",
-    "vectoriadb": "^2.3.2"
+    "vectoriadb": "^2.3.3"
   },
   "peerDependencies": {
     "@frontmcp/lazy-zod": "1.9.1",

@@ -209,9 +209,10 @@ describe('Build Adapters', () => {
       expect(config).not.toContain('"nodejs_compat_populate_process_env"');
     });
 
-    it('defaults compatibility_date to the first date on which nodejs_compat turns on nodejs_compat_v2', () => {
+    // #710 — 2024-09-23 turns on nodejs_compat_v2, but Vercel KV / Upstash need 2024-11-11
+    it('defaults compatibility_date to the first date Vercel KV and Upstash run on', () => {
       const config = cloudflareAdapter.getConfig?.('/test');
-      expect(config).toContain('compatibility_date = "2024-09-23"');
+      expect(config).toContain('compatibility_date = "2024-11-11"');
     });
 
     it('merges user compatibilityFlags while always keeping nodejs_compat first', () => {
@@ -383,6 +384,33 @@ describe('Build Adapters', () => {
       ).toThrow(/ioredis-style/);
     });
 
+    // #710 — a Worker on an earlier date builds cleanly, then fails its first storage call
+    describe('vercel-kv compatibility date', () => {
+      const vercelKv = { redis: { provider: 'vercel-kv' } };
+      const pinned = (date: string) => `name = "w"\nmain = "dist/cloudflare/index.js"\ncompatibility_date = "${date}"\n`;
+
+      it('warns when wrangler.toml pins a date earlier than 2024-11-11', () => {
+        expect(
+          cloudflareAdapter.validate?.(vercelKv, { keysSeenInSource: ['redis'], existingConfig: pinned('2024-09-23') }),
+        ).toEqual([expect.stringContaining('needs compatibility_date 2024-11-11 or later on Workers')]);
+      });
+
+      it('reads the date frontmcp.config sets when wrangler.toml has none', () => {
+        const deployment = { target: 'cloudflare' as const, wrangler: { compatibilityDate: '2024-10-01' } };
+        expect(cloudflareAdapter.validate?.(vercelKv, { keysSeenInSource: ['redis'], deployment })).toHaveLength(1);
+      });
+
+      it('stays quiet on the default date, a later pinned date, or without vercel-kv', () => {
+        expect(cloudflareAdapter.validate?.(vercelKv, { keysSeenInSource: ['redis'] })).toEqual([]);
+        expect(
+          cloudflareAdapter.validate?.(vercelKv, { keysSeenInSource: ['redis'], existingConfig: pinned('2025-03-01') }),
+        ).toEqual([]);
+        expect(cloudflareAdapter.validate?.({}, { keysSeenInSource: [], existingConfig: pinned('2024-09-23') })).toEqual(
+          [],
+        );
+      });
+    });
+
     it('points at the vercel-kv provider in the redis error (#642)', () => {
       expect(() => cloudflareAdapter.validate?.({ redis: { host: 'localhost' } })).toThrow(/provider: 'vercel-kv'/);
     });
@@ -478,13 +506,13 @@ describe('Build Adapters', () => {
       };
       const config = cloudflareAdapter.getConfig?.('/tmp', deployment);
       expect(config).toContain('name = "just-a-name"');
-      expect(config).toContain('compatibility_date = "2024-09-23"');
+      expect(config).toContain('compatibility_date = "2024-11-11"');
     });
 
     it('round-2: falls back to defaults when no deployment is supplied', () => {
       const config = cloudflareAdapter.getConfig?.('/tmp');
       expect(config).toContain('name = "frontmcp-worker"');
-      expect(config).toContain('compatibility_date = "2024-09-23"');
+      expect(config).toContain('compatibility_date = "2024-11-11"');
     });
   });
 

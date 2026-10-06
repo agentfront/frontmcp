@@ -126,6 +126,28 @@ describe('runDevBridge lifecycle (dev --stdio must not return while the child is
     expect(supervisorStop).toHaveBeenCalledTimes(1);
   });
 
+  // #728 — the HTTP loopback forwarded to a port nothing listened on
+  it('refuses a child that listens on a Unix socket and points to --serve', async () => {
+    const stderrWrite = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const run = runDevBridge({ _: [], stdio: true } as never);
+      await new Promise((r) => setTimeout(r, 10));
+      const { onReady } = supervisorOptions;
+      if (!onReady) throw new Error('bridge did not wire the supervisor');
+
+      await expect(onReady({} as ChildProcess, { socketPath: '/tmp/mcp.sock', path: '/' })).rejects.toThrow(
+        'the server listens on the Unix socket /tmp/mcp.sock (http.socketPath), which the HTTP loopback cannot reach; run `frontmcp dev --stdio --serve`',
+      );
+      expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('frontmcp dev --stdio --serve'));
+      expect(fsmOnChildReady).not.toHaveBeenCalled();
+
+      framerOptions.onClose?.();
+      await run;
+    } finally {
+      stderrWrite.mockRestore();
+    }
+  });
+
   describe('a restarted child', () => {
     const child = {} as ChildProcess;
     const initialize: JsonRpcFrame = { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} };
