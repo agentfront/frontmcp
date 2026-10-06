@@ -95,8 +95,8 @@ export type {
 
 // Registry (multi-server singleton + dynamic registry)
 export { ServerRegistry, serverRegistry } from './registry';
-export { DynamicRegistry } from './registry';
-export type { ServerEntry } from './registry';
+export { DynamicRegistry, bindDynamicTools } from './registry';
+export type { ServerEntry, BindDynamicToolsOptions } from './registry';
 
 // Provider
 export { FrontMcpContext, FrontMcpProvider } from './provider';
