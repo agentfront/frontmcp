@@ -131,6 +131,34 @@ export function isFrontMcpCredentials(creds: unknown): creds is FrontMcpCredenti
 // Middleware
 // ---------------------------------------------------------------------------
 
+/** What applies `credentials: { provider }` to an outgoing request. */
+export interface FetchCredentialApplier {
+  applyCredentials(url: string, init: FrontMcpFetchInit): Promise<CredentialApplyResult>;
+}
+
+/**
+ * Applies the headers a provider's credential resolves to (what `this.authProviders.headers(provider)`
+ * returns), so each provider decides how its credential is sent. A provider without a credential adds
+ * none. The `credentials` object itself is never passed on to `fetch`.
+ */
+export function providerHeadersCredentials(
+  resolveHeaders: (providerName: string) => Promise<Record<string, string>>,
+): FetchCredentialApplier {
+  return {
+    async applyCredentials(_url: string, init: FrontMcpFetchInit): Promise<CredentialApplyResult> {
+      const { credentials, ...cleanInit } = init;
+      if (!isFrontMcpCredentials(credentials)) {
+        return { init: typeof credentials === 'string' ? (init as RequestInit) : cleanInit };
+      }
+      const headers = new Headers(cleanInit.headers);
+      for (const [name, value] of Object.entries(await resolveHeaders(credentials.provider))) {
+        headers.set(name, value);
+      }
+      return { init: { ...cleanInit, headers } };
+    },
+  };
+}
+
 /**
  * Middleware that resolves upstream provider tokens and delegates to
  * the provider's CredentialApplier to inject them into outgoing requests.
@@ -147,7 +175,7 @@ export function isFrontMcpCredentials(creds: unknown): creds is FrontMcpCredenti
  * });
  * ```
  */
-export class FetchCredentialMiddleware {
+export class FetchCredentialMiddleware implements FetchCredentialApplier {
   private readonly appliers: Map<string, CredentialApplier>;
 
   constructor(

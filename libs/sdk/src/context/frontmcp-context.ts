@@ -11,7 +11,7 @@
  * ```
  */
 
-import { isFrontMcpCredentials, type FetchCredentialMiddleware, type FrontMcpFetchInit } from '@frontmcp/auth';
+import { isFrontMcpCredentials, type FetchCredentialApplier, type FrontMcpFetchInit } from '@frontmcp/auth';
 import { type ZodType } from '@frontmcp/lazy-zod';
 import { type AuthInfo, type LoggingLevel } from '@frontmcp/protocol';
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
@@ -281,7 +281,7 @@ export class FrontMcpContext {
   private _clientInfo?: ClientInfo;
   private _platformType?: AIPlatformType;
   private _sessionMetadata?: SessionIdPayload;
-  private _credentialMiddleware?: FetchCredentialMiddleware;
+  private _credentialMiddleware?: FetchCredentialApplier;
 
   // =====================
   // References (pointers)
@@ -425,11 +425,16 @@ export class FrontMcpContext {
   }
 
   /**
-   * Set the credential middleware for `this.fetch()` provider-based credential injection.
-   * @internal Called by scope initialization when auth providers are configured.
+   * Set what applies `credentials: { provider }` in `fetch()`.
+   * @internal Set by an execution context's `fetch()` from the request's auth providers.
    */
-  setCredentialMiddleware(middleware: FetchCredentialMiddleware): void {
+  setCredentialMiddleware(middleware: FetchCredentialApplier): void {
     this._credentialMiddleware = middleware;
+  }
+
+  /** What applies `credentials: { provider }` in `fetch()`, once set. */
+  get credentialMiddleware(): FetchCredentialApplier | undefined {
+    return this._credentialMiddleware;
   }
 
   // =====================
@@ -804,7 +809,7 @@ export class FrontMcpContext {
     const forwardsCallerToken =
       targetOrigin !== undefined &&
       this.config.forwardCallerTokenTo.includes(targetOrigin) &&
-      this._authInfo.token !== undefined &&
+      Boolean(this._authInfo.token) &&
       !providerCredentialsUsed &&
       !headers.has('Authorization');
     if (forwardsCallerToken) {

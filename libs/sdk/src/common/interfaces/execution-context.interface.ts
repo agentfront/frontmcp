@@ -1,6 +1,14 @@
 // file: libs/sdk/src/common/interfaces/execution-context.interface.ts
 
-import { buildAuthContext, type FrontMcpAuthContext, type FrontMcpFetchInit } from '@frontmcp/auth';
+import {
+  AUTH_PROVIDERS_ACCESSOR,
+  buildAuthContext,
+  isFrontMcpCredentials,
+  providerHeadersCredentials,
+  type AuthProvidersAccessor,
+  type FrontMcpAuthContext,
+  type FrontMcpFetchInit,
+} from '@frontmcp/auth';
 import { type Token } from '@frontmcp/di';
 import { type AuthInfo, type CallToolResult } from '@frontmcp/protocol';
 import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/utils';
@@ -329,12 +337,38 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * Falls back to standard fetch if context is not available.
    */
   fetch(input: RequestInfo | URL, init?: FrontMcpFetchInit | RequestInit): Promise<Response> {
-    const ctx = this.tryGetContext();
+    const ctx = this.fetchContext(init);
     if (ctx) {
       return ctx.fetch(input, init);
     }
     // Fallback: no context available — use standard fetch (no credential injection)
     return fetch(input, init as RequestInit);
+  }
+
+  /**
+   * The request context `fetch()` runs through. For a request with `credentials: { provider }`, it
+   * applies the headers this context's auth providers (`this.authProviders`) resolve for that provider.
+   */
+  protected fetchContext(init?: FrontMcpFetchInit | RequestInit): FrontMcpContext | undefined {
+    const ctx = this.tryGetContext();
+    if (
+      !ctx ||
+      ctx.credentialMiddleware ||
+      !isFrontMcpCredentials((init as FrontMcpFetchInit | undefined)?.credentials)
+    ) {
+      return ctx;
+    }
+    let accessor: AuthProvidersAccessor | undefined;
+    try {
+      accessor = this.providers.get(AUTH_PROVIDERS_ACCESSOR);
+    } catch {
+      this.logger.warn(
+        'fetch(): credentials.provider was given, but no auth providers are configured; sent without them',
+      );
+      return ctx;
+    }
+    ctx.setCredentialMiddleware(providerHeadersCredentials((providerName) => accessor.headers(providerName)));
+    return ctx;
   }
 
   /**
