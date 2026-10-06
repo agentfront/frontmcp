@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/tools/describe.tool.ts
 import { toJSONSchema, z, ZodType, type JSONSchema } from '@frontmcp/lazy-zod';
-import { getCallSurface, Tool, ToolContext, type ToolEntry } from '@frontmcp/sdk';
+import { getCallSurface, InvalidInputError, Tool, ToolContext, type ToolEntry } from '@frontmcp/sdk';
 
 import CodeCallConfig from '../providers/code-call.config';
 import { checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
@@ -43,9 +43,10 @@ export default class DescribeTool extends ToolContext {
     const executionId = audit ? audit.generateExecutionId() : '';
     const startedAt = Date.now();
 
+    const config = this.get(CodeCallConfig);
+    const maxDefinitions = config.get('maxDefinitions');
     const tools: DescribeToolOutput['tools'] = [];
     const notFound: string[] = [];
-    const config = this.get(CodeCallConfig);
     // Describe what the caller of this tool could reach, for that call's surface.
     const surface = getCallSurface();
 
@@ -66,6 +67,11 @@ export default class DescribeTool extends ToolContext {
         continue;
       }
       const tool = access.entry;
+      if (tools.length >= maxDefinitions) {
+        throw new InvalidInputError(
+          `codecall:describe describes at most ${maxDefinitions} tools per call; describe the rest in another call`,
+        );
+      }
 
       // Extract app ID from tool owner or metadata
       const appId = this.extractAppId(tool);

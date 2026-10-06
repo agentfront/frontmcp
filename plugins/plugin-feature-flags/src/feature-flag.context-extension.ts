@@ -8,8 +8,8 @@
  * This file only provides TypeScript type augmentation.
  */
 
-import type { FeatureFlagAccessor } from './providers/feature-flag-accessor.provider';
 import { FeatureFlagAccessorToken } from './feature-flag.symbols';
+import type { FeatureFlagAccessor } from './providers/feature-flag-accessor.provider';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Module Augmentation (TypeScript types for plugin developers)

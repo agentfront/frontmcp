@@ -12,6 +12,14 @@ interface ProviderEntry {
   useFactory?: (...args: unknown[]) => unknown;
 }
 
+const fakeScope = { onDispose: jest.fn() };
+
+async function buildAdapter(providers: ProviderEntry[]): Promise<unknown> {
+  const adapterProvider = providers.find((p) => p.provide === FeatureFlagAdapterToken);
+  if (!adapterProvider?.useFactory) throw new Error('no adapter factory');
+  return adapterProvider.useFactory(fakeScope);
+}
+
 describe('FeatureFlagPlugin', () => {
   describe('constructor', () => {
     it('should store options', () => {
@@ -24,16 +32,14 @@ describe('FeatureFlagPlugin', () => {
   });
 
   describe('dynamicProviders', () => {
-    it('should create static adapter provider', () => {
+    it('should create static adapter provider', async () => {
       const providers = FeatureFlagPlugin.dynamicProviders({
         adapter: 'static',
         flags: { 'flag-a': true, 'flag-b': false },
       });
 
       expect(providers.length).toBe(3); // adapter + config + accessor
-      const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
-      expect(adapterProvider).toBeDefined();
-      expect(adapterProvider!.useValue).toBeInstanceOf(StaticFeatureFlagAdapter);
+      expect(await buildAdapter(providers)).toBeInstanceOf(StaticFeatureFlagAdapter);
     });
 
     it('should create config provider', () => {
@@ -94,7 +100,7 @@ describe('FeatureFlagPlugin', () => {
       expect(adapterProvider!.name).toBe('feature-flags:adapter:unleash');
     });
 
-    it('should use custom adapter instance directly', () => {
+    it('should initialize the custom adapter instance and destroy it on dispose', async () => {
       const customAdapter: FeatureFlagAdapter = {
         initialize: jest.fn(),
         isEnabled: jest.fn(),
@@ -108,9 +114,14 @@ describe('FeatureFlagPlugin', () => {
         adapterInstance: customAdapter,
       });
 
+      const scope = { onDispose: jest.fn() };
       const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
-      expect(adapterProvider).toBeDefined();
-      expect(adapterProvider!.useValue).toBe(customAdapter);
+      expect(await adapterProvider?.useFactory?.(scope)).toBe(customAdapter);
+      expect(customAdapter.initialize).toHaveBeenCalledTimes(1);
+
+      const [destroyOnDispose] = scope.onDispose.mock.calls[0] as [() => Promise<void>];
+      await destroyOnDispose();
+      expect(customAdapter.destroy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -371,7 +382,7 @@ describe('FeatureFlagPlugin', () => {
         config: { apiKey: 'test' },
       });
       const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
-      const adapter = await adapterProvider!.useFactory!();
+      const adapter = await adapterProvider!.useFactory!(fakeScope);
       expect(adapter).toBeDefined();
     });
 
@@ -394,7 +405,7 @@ describe('FeatureFlagPlugin', () => {
         config: { sdkKey: 'test' },
       });
       const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
-      const adapter = await adapterProvider!.useFactory!();
+      const adapter = await adapterProvider!.useFactory!(fakeScope);
       expect(adapter).toBeDefined();
     });
 
@@ -417,7 +428,7 @@ describe('FeatureFlagPlugin', () => {
         config: { url: 'https://test.com', appName: 'test' },
       });
       const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
-      const adapter = await adapterProvider!.useFactory!();
+      const adapter = await adapterProvider!.useFactory!(fakeScope);
       expect(adapter).toBeDefined();
     });
   });

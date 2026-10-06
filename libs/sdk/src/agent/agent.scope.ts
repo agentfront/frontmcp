@@ -285,6 +285,11 @@ export class AgentScope {
     return this.parentScope.notifications;
   }
 
+  /** An agent lives as long as the server, so its teardown runs when the server's scope is disposed. */
+  onDispose(callback: () => void | Promise<void>): () => void {
+    return this.parentScope.onDispose(callback);
+  }
+
   get toolUI() {
     return this.parentScope.toolUI;
   }
@@ -467,6 +472,10 @@ class AgentScopeEntry {
 
   get ready() {
     return this.agentScope.ready;
+  }
+
+  onDispose(callback: () => void | Promise<void>): () => void {
+    return this.agentScope.onDispose(callback);
   }
 
   registryFlows(...flows: FlowType[]): Promise<void> {

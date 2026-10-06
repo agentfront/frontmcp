@@ -45,7 +45,7 @@ class CoreApp {}
       vm: {
         preset: 'secure',
         timeoutMs: 5000,
-        allowLoops: false,
+        allowLoops: false, // only for-of loops
       },
       embedding: {
         strategy: 'tfidf',

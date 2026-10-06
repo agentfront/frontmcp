@@ -21,7 +21,7 @@ Search for tools by natural language query using semantic embeddings.
   "tool": "codecall:search",
   "input": {
     "queries": ["string (required) - Natural language search queries"],
-    "topK": "number (optional, default: 10) - Maximum results per query",
+    "topK": "number (optional, default: the plugin's topK, 8 unless configured) - Maximum results per query",
     "appIds": ["string (optional) - Limit to specific apps"],
     "excludeToolNames": ["string (optional) - Tool names to exclude"],
     "minRelevanceScore": "number (optional) - Minimum relevance score threshold"
@@ -506,20 +506,16 @@ For error handling patterns including retry, fallback, and partial success strat
 
 ## Debugging Guide
 
-### Using console.log
+### Logging with mcpLog
+
+Scripts have no `console` (a script that uses it is refused before it runs); log with `mcpLog`:
 
 ```ts
-// Enable in config
-CodeCallPlugin.init({
-  vm: { allowConsole: true }
-});
-
-// In script
 const users = await callTool('users:list', { limit: 10 });
-console.log('Fetched users:', users.length);
+mcpLog('info', `Fetched ${users.length} users`);
 
 for (const user of users) {
-  console.log('Processing:', user.id, user.email);
+  mcpLog('debug', `Processing ${user.id}`);
 }
 
 // Logs appear in response.logs array
@@ -599,7 +595,6 @@ For easier debugging during development:
 CodeCallPlugin.init({
   vm: {
     preset: 'experimental',  // Longer timeouts, more iterations
-    allowConsole: true,
   },
 });
 ```

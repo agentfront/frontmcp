@@ -56,7 +56,11 @@ class MyServer {}
 // Generated tools: petstore:addPet, petstore:getPetById, petstore:deletePet, etc.
 ```
 
-Each OpenAPI operation becomes a tool named `<adapter-name>:<operationId>`.
+Each OpenAPI operation becomes a tool named `<adapter-name>:<operationId>`. A call is checked against the
+operation's schema before any request goes out: a value outside an `enum` or a missing required field fails with
+`Invalid arguments for tool '<name>': <field>: <problem>` (up to 1.9.1 such arguments were sent as given).
+`format` is not enforced (an annotation in JSON Schema 2020-12), a `oneOf` passes when any branch matches, and a
+credential argument (`securitySchemesInInput`) may be left out when the server supplies the credential.
 
 ## Authentication
 
@@ -247,7 +251,7 @@ OpenapiAdapter.init({
   generateOptions: { readOnlyOnly: true },
 });
 
-// Filter by HTTP method (lower-case names)
+// Filter by HTTP method (any case; a name that is not an HTTP method stops the adapter)
 OpenapiAdapter.init({
   name: 'billing-api',
   url: 'https://api.example.com/openapi.json',
@@ -268,7 +272,7 @@ OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   generateOptions: {
-    includeOperations: ['getUser', 'createUser', 'updateUser'],
+    includeOperations: ['getUser', 'createUser', 'updateUser'], // operations without an operationId are left out
   },
 });
 
@@ -463,9 +467,13 @@ OpenapiAdapter.init({
     timeout: 10000,
     validate: true,
     dereference: true,
+    overlays: curationOverlay, // OpenAPI Overlay 1.0 document(s), applied before validation
+    secureDefaults: true, // no redirects, no external $refs (FrontMCP's defaults already are)
   },
 });
 ```
+
+Every `mcp-from-openapi` load option reaches the loader; up to 1.9.1 `overlays` and `secureDefaults` were dropped.
 
 ## Common Patterns
 

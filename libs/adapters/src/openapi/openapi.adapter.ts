@@ -1,4 +1,9 @@
-import { normalizeSsrfOptions, OpenAPIToolGenerator, type McpOpenAPITool } from 'mcp-from-openapi';
+import {
+  normalizeSsrfOptions,
+  OpenAPIToolGenerator,
+  type GenerateOptions,
+  type McpOpenAPITool,
+} from 'mcp-from-openapi';
 
 import { Adapter, DynamicAdapter, type FrontMcpAdapterResponse, type FrontMcpLogger } from '@frontmcp/sdk';
 
@@ -26,6 +31,27 @@ import {
 /** Reserved keys that cannot be used as inputKey (prototype pollution protection) */
 const RESERVED_KEYS = ['__proto__', 'constructor', 'prototype'];
 
+const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'] as const;
+type HttpMethod = (typeof HTTP_METHODS)[number];
+
+/** `includeMethods` / `excludeMethods` in lower case, as the generator compares them; an unknown method is refused. */
+function normalizeMethods(
+  adapterName: string,
+  optionName: 'includeMethods' | 'excludeMethods',
+  methods: readonly string[] | undefined,
+): HttpMethod[] | undefined {
+  return methods?.map((method) => {
+    const lowerMethod = method.toLowerCase();
+    if (!(HTTP_METHODS as readonly string[]).includes(lowerMethod)) {
+      throw new Error(
+        `[OpenAPI Adapter: ${adapterName}] generateOptions.${optionName} lists "${method}", which is not an HTTP ` +
+          `method; use one of ${HTTP_METHODS.join(', ')}.`,
+      );
+    }
+    return lowerMethod as HttpMethod;
+  });
+}
+
 /**
  * Creates a simple console-based logger for use outside the SDK context.
  */
@@ -52,10 +78,15 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
   private poller: OpenApiSpecPoller | null = null;
   private updateCallbacks = new Set<(response: FrontMcpAdapterResponse) => void>();
   private rebuildChain: Promise<void> = Promise.resolve();
+  private readonly methodFilters: { includeMethods?: HttpMethod[]; excludeMethods?: HttpMethod[] };
 
   constructor(options: OpenApiAdapterOptions) {
     super();
     this.options = options;
+    this.methodFilters = {
+      includeMethods: normalizeMethods(options.name, 'includeMethods', options.generateOptions?.includeMethods),
+      excludeMethods: normalizeMethods(options.name, 'excludeMethods', options.generateOptions?.excludeMethods),
+    };
     // Use provided logger or create console fallback
     this.logger = options.logger ?? createConsoleLogger(`openapi:${options.name}`);
 
@@ -94,6 +125,8 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     const generateOptions = this.options.generateOptions;
     let openapiTools = await this.generator.generateTools({
       ...generateOptions,
+      ...this.methodFilters,
+      filterFn: this.operationFilter(),
       preferredStatusCodes: generateOptions?.preferredStatusCodes ?? [200, 201, 202, 204],
       includeDeprecated: generateOptions?.includeDeprecated ?? false,
       includeAllResponses: generateOptions?.includeAllResponses ?? true,
@@ -209,29 +242,37 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     return this.options.loadOptions?.refResolution ?? { allowedProtocols: [] };
   }
 
+  /**
+   * `generateOptions.filterFn`, and with `includeOperations` set, only the operations it names: the
+   * generator lets an operation with no `operationId` through that list.
+   */
+  private operationFilter(): GenerateOptions['filterFn'] {
+    const { includeOperations, filterFn } = this.options.generateOptions ?? {};
+    if (!includeOperations) return filterFn;
+    return (operation) =>
+      operation.operationId !== undefined &&
+      includeOperations.includes(operation.operationId) &&
+      (filterFn?.(operation) ?? true);
+  }
+
   private async initializeGenerator(): Promise<OpenAPIToolGenerator> {
-    const refResolution = this.resolveRefResolution();
+    // Every load option reaches the generator (overlays, secureDefaults, …); only the defaults below differ.
+    const loadOptions = {
+      ...this.options.loadOptions,
+      baseUrl: this.options.baseUrl,
+      validate: this.options.loadOptions?.validate ?? true,
+      dereference: this.options.loadOptions?.dereference ?? true,
+      // SECURITY: do not follow spec-URL redirects by default — a 3xx to an
+      // internal target would otherwise be fetched. With mcp-from-openapi
+      // ≥ 2.5.0 each hop is re-validated; opt in with loadOptions.followRedirects.
+      followRedirects: this.options.loadOptions?.followRedirects ?? false,
+      refResolution: this.resolveRefResolution(),
+    };
 
     if ('url' in this.options) {
-      return await OpenAPIToolGenerator.fromURL(this.options.url, {
-        baseUrl: this.options.baseUrl,
-        validate: this.options.loadOptions?.validate ?? true,
-        dereference: this.options.loadOptions?.dereference ?? true,
-        headers: this.options.loadOptions?.headers,
-        timeout: this.options.loadOptions?.timeout,
-        // SECURITY: do not follow spec-URL redirects by default — a 3xx to an
-        // internal target would otherwise be fetched. With mcp-from-openapi
-        // ≥ 2.5.0 each hop is re-validated; opt in with loadOptions.followRedirects.
-        followRedirects: this.options.loadOptions?.followRedirects ?? false,
-        refResolution,
-      });
+      return await OpenAPIToolGenerator.fromURL(this.options.url, loadOptions);
     } else if ('spec' in this.options) {
-      return await OpenAPIToolGenerator.fromJSON(this.options.spec, {
-        baseUrl: this.options.baseUrl,
-        validate: this.options.loadOptions?.validate ?? true,
-        dereference: this.options.loadOptions?.dereference ?? true,
-        refResolution,
-      });
+      return await OpenAPIToolGenerator.fromJSON(this.options.spec, loadOptions);
     } else {
       throw new Error('Either url or spec must be provided in OpenApiAdapterOptions');
     }
