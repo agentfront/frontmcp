@@ -4,7 +4,7 @@
  * Tests for renderToolTemplate().
  */
 
-import { renderToolTemplate } from '../template-renderer';
+import { renderToolTemplate, warnIfComponentReference } from '../template-renderer';
 
 // Mock fs and esbuild for FileSource tests.
 jest.mock('fs', () => ({
@@ -408,6 +408,34 @@ describe('renderToolTemplate — function templates (#645)', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toContain('react_tool');
     expect(warn.mock.calls[0][0]).toContain('{ file:');
+  });
+
+  it('warns at startup through warnIfComponentReference, and not again on the first render (#769)', () => {
+    const warn = jest.fn();
+    function StartupWidget() {
+      throw new Error('Invalid hook call');
+    }
+
+    expect(warnIfComponentReference('startup_tool', StartupWidget, { warn })).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('startup_tool');
+
+    renderToolTemplate({ toolName: 'startup_tool', input: {}, output: {}, template: StartupWidget, logger: { warn } });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  function CardBuilder(ctx: { output: unknown }): string {
+    return `<p>${String(ctx.output)}</p>`;
+  }
+
+  it.each([
+    ['a capitalized HTML builder', CardBuilder],
+    ['a file source', { file: './widget.tsx' }],
+    ['an HTML string', '<div>static</div>'],
+  ])('does not warn at startup for %s', (_label, template) => {
+    const warn = jest.fn();
+    expect(warnIfComponentReference('builder_tool', template, { warn })).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it('warns for a class component and a memo component too', () => {

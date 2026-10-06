@@ -147,7 +147,7 @@ function renderUnwrappedResult(rawResult: unknown, options: RenderToolTemplateOp
   return escapeHtml(rawResult);
 }
 
-/** The tools already warned about, per component, so the warning is given once (at startup). */
+/** The tools already warned about, per component, so the warning is given once. */
 const warnedComponentReferences = new WeakMap<object, Set<string>>();
 
 function warnComponentReference(template: object, toolName: string, logger: { warn: (message: string) => void }): void {
@@ -160,6 +160,37 @@ function warnComponentReference(template: object, toolName: string, logger: { wa
       `(there is no source file to compile), so the widget would render an empty page. ` +
       `Use \`template: { file: './widget.tsx' }\` instead.`,
   );
+}
+
+/**
+ * Whether a capitalized template function is a React component rather than an HTML builder: a
+ * class, memo / forwardRef, or a function that throws or returns an element when called outside React.
+ */
+function isComponentReference(template: unknown): boolean {
+  if (typeof template !== 'function' || detectUIType(template) !== 'react') return false;
+  if (isDefinitelyReactComponent(template)) return true;
+  try {
+    const result = (template as (ctx: unknown) => unknown)({ input: {}, output: {}, helpers: createTemplateHelpers() });
+    return isReactElement(result);
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Warn, once per tool, that `template` is a React component reference the widget cannot bundle.
+ * The server calls this while it registers UI tools, so the warning appears at startup (#769).
+ *
+ * @returns Whether the template is a component reference
+ */
+export function warnIfComponentReference(
+  toolName: string,
+  template: unknown,
+  logger: { warn: (message: string) => void } = console,
+): boolean {
+  if (!isComponentReference(template)) return false;
+  warnComponentReference(template as object, toolName, logger);
+  return true;
 }
 
 function isReactElement(value: unknown): boolean {
@@ -244,7 +275,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     }
 
     if (!isHtmlBuilder) {
-      // The server compiles each widget at startup, so this warns then, not on every call
+      // Warned once per tool; the server already does so at startup through warnIfComponentReference
       warnComponentReference(template, toolName, options.logger ?? console);
       const shellResult = buildShell('<div id="root"></div>', shellConfig);
       html = shellResult.html;

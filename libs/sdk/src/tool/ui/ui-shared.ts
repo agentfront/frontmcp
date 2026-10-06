@@ -8,6 +8,7 @@ import {
   MCP_APPS_MIME_TYPE,
   renderToolTemplate,
   detectUIType as uipackDetectUIType,
+  warnIfComponentReference,
   type RenderToolTemplateOptions,
 } from '@frontmcp/uipack/adapters';
 import { type ImportResolver } from '@frontmcp/uipack/resolver';
@@ -130,6 +131,11 @@ export class ToolUIRegistry {
   registerTool(toolName: string, resourceUri?: string): void {
     this.uiTools.add(toolName);
     if (resourceUri) this.customUris.set(resourceUri, toolName);
+  }
+
+  /** Warn at startup when a tool's `ui.template` is a React component reference it cannot bundle. */
+  checkTemplate(toolName: string, template: unknown): void {
+    warnIfComponentReference(toolName, template, this.options.logger ?? console);
   }
 
   /** The tool that advertised `uri` as its custom `ui.resourceUri`. */
