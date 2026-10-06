@@ -357,7 +357,16 @@ A class that isn't a `@Tool` stops the server from starting with `Invalid tool c
 | `'strict'`         | The server refuses to start: `SkillValidationError: Skill 'x' failed tool validation: missing tools [no_such_tool]` |
 | `'ignore'`         | Checks nothing                                                                                                      |
 
-Up to 1.8.7 `'strict'` started the server anyway, and said nothing.
+To start anyway, set `skillsConfig.failOnInvalidSkills: false`: a `'strict'` skill with a missing tool is then logged as an error (`Skill "x" (toolValidation: 'strict') references missing tools: no_such_tool`) instead of stopping the server.
+
+```ts
+@FrontMcp({
+  skillsConfig: { enabled: true, failOnInvalidSkills: false },
+  // ...
+})
+```
+
+Up to 1.8.7 `'strict'` started the server anyway, and said nothing. Up to 1.9.1 `failOnInvalidSkills` could not be set from `@FrontMcp`, so a `'strict'` skill with a missing tool always stopped startup.
 
 ---
 

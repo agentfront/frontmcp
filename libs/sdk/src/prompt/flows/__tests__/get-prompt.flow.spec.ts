@@ -120,6 +120,7 @@ describe('GetPromptFlow', () => {
           messages: [{ role: 'user', content: { type: 'text', text: 'Hello World!' } }],
         }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       addPromptToMock(promptRegistry, 'greeting', promptEntry);
@@ -155,6 +156,7 @@ describe('GetPromptFlow', () => {
           messages: [{ role: 'user', content: { type: 'text', text: 'Response' } }],
         }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       addPromptToMock(promptRegistry, 'my-prompt', promptEntry);
@@ -189,6 +191,7 @@ describe('GetPromptFlow', () => {
           messages: [{ role: 'assistant', content: { type: 'text', text: 'Hello!' } }],
         }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       addPromptToMock(promptRegistry, 'no-args', promptEntry);
@@ -225,6 +228,7 @@ describe('GetPromptFlow', () => {
           messages: [{ role: 'user', content: { type: 'text', text: 'Result' } }],
         }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       addPromptToMock(promptRegistry, 'optional-args', promptEntry);
@@ -261,6 +265,7 @@ describe('GetPromptFlow', () => {
             messages: [{ role: 'user', content: { type: 'text', text: 'Auth test' } }],
           }),
           mark: jest.fn(),
+          loadAuthContext: jest.fn(),
         };
       });
 
@@ -296,6 +301,7 @@ describe('GetPromptFlow', () => {
         output: undefined,
         execute: jest.fn().mockResolvedValue('Simple string response'),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       // Update safeParseOutput to handle string
@@ -342,6 +348,7 @@ describe('GetPromptFlow', () => {
         output: undefined,
         execute: jest.fn().mockResolvedValue({ messages }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
@@ -489,6 +496,7 @@ describe('GetPromptFlow', () => {
         output: undefined,
         execute: jest.fn().mockRejectedValue(new Error('Execution failed')),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       addPromptToMock(promptRegistry, 'error-prompt', promptEntry);
@@ -521,6 +529,7 @@ describe('GetPromptFlow', () => {
         output: undefined,
         execute: jest.fn().mockResolvedValue({ invalid: 'format' }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       // Mock safeParseOutput to return failure
@@ -564,6 +573,7 @@ describe('GetPromptFlow', () => {
           };
         }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
@@ -604,6 +614,7 @@ describe('GetPromptFlow', () => {
           messages: [{ role: 'user', content: { type: 'text', text: 'Special' } }],
         }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
@@ -644,6 +655,7 @@ describe('GetPromptFlow', () => {
           messages: [{ role: 'user', content: { type: 'text', text: 'Namespaced' } }],
         }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
@@ -683,6 +695,7 @@ describe('GetPromptFlow', () => {
           messages: [{ role: 'user', content: { type: 'text', text: 'Empty' } }],
         }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
@@ -719,6 +732,7 @@ describe('GetPromptFlow', () => {
         output: undefined,
         execute: jest.fn().mockResolvedValue(null),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
@@ -757,6 +771,7 @@ describe('GetPromptFlow', () => {
         output: undefined,
         execute: jest.fn().mockResolvedValue(undefined),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       // Flow expects rawOutput to be defined, so this should fail at finalize
@@ -794,6 +809,7 @@ describe('GetPromptFlow', () => {
           messages: [{ role: 'user', content: { type: 'text', text: 'Logged' } }],
         }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
@@ -852,6 +868,7 @@ describe('GetPromptFlow', () => {
           messages: [{ role: 'user', content: { type: 'text', text: 'First' } }],
         }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
       prompt1.safeParseOutput.mockImplementation((o: any) => ({ success: true, data: o }));
 
@@ -868,6 +885,7 @@ describe('GetPromptFlow', () => {
           messages: [{ role: 'user', content: { type: 'text', text: 'Second' } }],
         }),
         mark: jest.fn(),
+        loadAuthContext: jest.fn(),
       });
       prompt2.safeParseOutput.mockImplementation((o: any) => ({ success: true, data: o }));
 
@@ -917,6 +935,7 @@ describe('GetPromptFlow', () => {
             messages: [{ role: 'user', content: { type: 'text', text: `Call ${callCount}` } }],
           }),
           mark: jest.fn(),
+          loadAuthContext: jest.fn(),
         };
       });
 

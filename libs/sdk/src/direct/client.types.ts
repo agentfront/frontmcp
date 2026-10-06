@@ -427,6 +427,11 @@ export interface ConnectOptions {
   authToken?: string;
   /** Optional client capabilities override */
   capabilities?: Partial<ClientCapabilities>;
+  /**
+   * Answers the tools' `this.elicit()` questions. Passing it declares the `elicitation` capability; without it (or
+   * `capabilities.elicitation`) the server takes the fallback flow and `submitElicitationResult()` answers instead.
+   */
+  onElicitation?: ElicitationHandler;
 }
 
 /**
@@ -447,6 +452,11 @@ export interface LLMConnectOptions {
   authToken?: string;
   /** Optional client capabilities override */
   capabilities?: Partial<ClientCapabilities>;
+  /**
+   * Answers the tools' `this.elicit()` questions. Passing it declares the `elicitation` capability; without it (or
+   * `capabilities.elicitation`) the server takes the fallback flow and `submitElicitationResult()` answers instead.
+   */
+  onElicitation?: ElicitationHandler;
 }
 
 /**

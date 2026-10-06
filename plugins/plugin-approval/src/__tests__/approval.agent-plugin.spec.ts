@@ -113,3 +113,54 @@ describe('ApprovalPlugin installed on an @Agent', () => {
     expect(JSON.stringify(result)).toContain('o-1');
   });
 });
+
+describe('ApprovalPlugin installed on the app of an @Agent that inherits plugins', () => {
+  let server: DirectMcpServer;
+
+  beforeAll(async () => {
+    const storage = createMemoryStorage();
+    await storage.connect();
+
+    @Agent({
+      name: 'inheriting_refunds',
+      inputSchema: {},
+      llm: { adapter: callsOnce('refund_order') },
+      tools: [RefundOrderTool, LookupOrderTool],
+      execution: { inheritPlugins: true },
+    })
+    class InheritingRefundsAgent extends AgentContext {}
+
+    @App({
+      id: 'desk',
+      name: 'Desk',
+      agents: [InheritingRefundsAgent],
+      plugins: [ApprovalPlugin.init({ storageInstance: storage })],
+    })
+    class DeskApp {}
+
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'approval-agent-inherits', version: '1.0.0' },
+      apps: [DeskApp],
+      logging: { level: LogLevel.Off },
+    });
+  });
+
+  afterAll(async () => {
+    await server.dispose();
+  });
+
+  beforeEach(() => {
+    executed.length = 0;
+  });
+
+  it("starts, and asks for approval before the agent's tool that requires it", async () => {
+    const result = await server.callTool(
+      'invoke_inheriting_refunds',
+      {},
+      { authContext: { sessionId: 'session-alice' } },
+    );
+
+    expect(executed).toEqual([]);
+    expect(JSON.stringify(result)).toContain('requires approval');
+  });
+});

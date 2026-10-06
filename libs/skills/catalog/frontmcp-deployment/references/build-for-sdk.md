@@ -97,6 +97,8 @@ const server = await create({
 
 // Call tools directly
 const result = await server.callTool('calculate', { a: 2, b: 2, operation: 'add' });
+// Name the caller of one call: user claims, token, sessionId, extra, and the OAuth scopes it holds
+await server.callTool('calculate', { a: 1, b: 1, operation: 'add' }, { authContext: { scopes: ['math:use'] } });
 
 // List available tools: every page is read, so this is the whole list (no `nextCursor`).
 // To page yourself: `listTools({ paginate: true })`, then `listTools({ cursor: page.nextCursor })`.
@@ -136,6 +138,8 @@ create({
   transport?: TransportOptionsInput,
   logging?: LoggingOptionsInput,
   elicitation?: ElicitationOptionsInput,
+  output?: OutputPolicy,  // as @FrontMcp({ output })
+  throttle?: GuardConfig, // as @FrontMcp({ throttle })
 
   // create()-specific
   appName?: string,       // defaults to info.name
@@ -209,15 +213,17 @@ const client = await connectOpenAI(config, {
 
 All `connect*()` functions return a `DirectClient` with these methods:
 
-| Method                  | Description                             |
-| ----------------------- | --------------------------------------- |
-| `listTools()`           | List tools in platform-specific format  |
-| `callTool(name, args)`  | Execute a tool                          |
-| `listResources()`       | List all resources (follows every page) |
-| `readResource(uri)`     | Read a resource                         |
-| `listPrompts()`         | List all prompts (follows every page)   |
-| `getPrompt(name, args)` | Get a prompt                            |
-| `close()`               | Clean up connection                     |
+| Method                   | Description                                                                                                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listTools()`            | List tools in platform-specific format                                                                                                                                          |
+| `callTool(name, args)`   | Execute a tool; with an LLM platform format (OpenAI, Claude, LangChain, Vercel AI) a failed call (`isError`) rejects with `ToolCallError` (`message`, raw `result`)             |
+| `listResources()`        | List all resources (follows every page)                                                                                                                                         |
+| `readResource(uri)`      | Read a resource                                                                                                                                                                 |
+| `listPrompts()`          | List all prompts (follows every page)                                                                                                                                           |
+| `getPrompt(name, args)`  | Get a prompt                                                                                                                                                                    |
+| `onElicitation(handler)` | Answer the tools' `this.elicit()` questions. Pass `onElicitation` to `connect()` to declare elicitation; without it the tool gets the fallback flow (`submitElicitationResult`) |
+| `setLogLevel(level)`     | Set the `notifications/message` level                                                                                                                                           |
+| `close()`                | Clean up connection; clients of the same config share one server, disposed when the last of them closes                                                                         |
 
 ## SDK vs Node Target
 

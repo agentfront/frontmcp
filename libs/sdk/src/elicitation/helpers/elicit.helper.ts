@@ -90,6 +90,13 @@ export async function performElicit<S extends ZodType>(
     throw new ElicitationDisabledError();
   }
 
+  // A URL-mode question names the page that answers it, and the id that correlates its completion
+  if (options?.mode === 'url' && (!options.url || !options.elicitationId)) {
+    throw new InvalidInputError(
+      options.url ? 'elicitationId is required when mode is "url"' : 'url is required when mode is "url"',
+    );
+  }
+
   const ctx = tryGetContext();
 
   // 1. Multi Round-Trip Requests (protocol 2026-07-28).
@@ -119,6 +126,8 @@ export async function performElicit<S extends ZodType>(
       message,
       requestedSchema: toJSONSchema(zodSchema) as Record<string, unknown>,
       ...(options?.mode ? { mode: options.mode } : {}),
+      ...(options?.url ? { url: options.url } : {}),
+      ...(options?.elicitationId ? { elicitationId: options.elicitationId } : {}),
     });
     if (answer.status !== 'accept') {
       return answer as ElicitResult<S extends ZodType<infer O> ? O : unknown>;

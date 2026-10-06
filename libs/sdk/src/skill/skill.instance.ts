@@ -4,6 +4,7 @@ import { dirname, fileExists, getCwd, pathJoin, pathResolve, readJSON } from '@f
 
 import {
   normalizeToolRef,
+  SkillContext,
   SkillEntry,
   SkillKind,
   type EntryOwnerRef,
@@ -50,6 +51,10 @@ export class SkillInstance extends SkillEntry {
   /** Cached skill content (built lazily) */
   private cachedContent?: CachedSkillContent;
 
+  /** The loads in progress, shared by concurrent callers and cleared when they settle */
+  private instructionsLoading?: Promise<string>;
+  private contentLoading?: Promise<CachedSkillContent>;
+
   /** Tags for search indexing */
   private readonly tags: string[];
 
@@ -61,6 +66,9 @@ export class SkillInstance extends SkillEntry {
 
   /** Visibility mode for skill discovery */
   private readonly skillVisibility: SkillVisibility;
+
+  /** The `@Skill` class instance, created on first use when it overrides `loadInstructions()` or `build()` */
+  private skillContext?: SkillContext;
 
   constructor(record: SkillRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
@@ -106,7 +114,20 @@ export class SkillInstance extends SkillEntry {
     if (this.cachedInstructions !== undefined) {
       return this.cachedInstructions;
     }
+    this.instructionsLoading ??= this.resolveInstructions().finally(() => {
+      this.instructionsLoading = undefined;
+    });
+    return this.instructionsLoading;
+  }
 
+  private async resolveInstructions(): Promise<string> {
+    const context = this.overridingContext('loadInstructions');
+    this.cachedInstructions = context ? await context.loadInstructions() : await this.readInstructions();
+    return this.cachedInstructions;
+  }
+
+  /** The instructions the decorator metadata names: inline, a file, or a URL. */
+  private async readInstructions(): Promise<string> {
     // Determine base path for file resolution
     let basePath: string | undefined;
     if (this.record.kind === SkillKind.FILE) {
@@ -126,7 +147,7 @@ export class SkillInstance extends SkillEntry {
 
     // Load instructions from source
     try {
-      this.cachedInstructions = await loadInstructions(this.metadata.instructions, basePath);
+      return await loadInstructions(this.metadata.instructions, basePath);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         // In bundled/CLI environments, callerDir may resolve incorrectly.
@@ -134,15 +155,31 @@ export class SkillInstance extends SkillEntry {
         // names to their copied content files relative to the bundle directory.
         const resolved = await resolveFromSkillManifest(this.metadata.name);
         if (resolved) {
-          this.cachedInstructions = await loadInstructions({ file: resolved }, undefined);
-        } else {
-          throw err;
+          return loadInstructions({ file: resolved }, undefined);
         }
-      } else {
-        throw err;
       }
+      throw err;
     }
-    return this.cachedInstructions;
+  }
+
+  /**
+   * The `@Skill` class instance when it overrides `method`. Its `super.loadInstructions()` and
+   * `super.build()` run this instance's own loading.
+   */
+  private overridingContext(method: 'loadInstructions' | 'build'): SkillContext | undefined {
+    if (this.record.kind !== SkillKind.CLASS_TOKEN) return undefined;
+    const prototype = this.record.provide.prototype as Partial<SkillContext>;
+    if (typeof prototype[method] !== 'function' || prototype[method] === SkillContext.prototype[method]) {
+      return undefined;
+    }
+    this.skillContext ??= new this.record.provide({
+      metadata: this.metadata,
+      providers: this.providersRef,
+      logger: this.scope.logger,
+      authInfo: {},
+      defaults: { loadInstructions: () => this.readInstructions(), build: () => this.buildContent() },
+    });
+    return this.skillContext;
   }
 
   /**
@@ -166,7 +203,30 @@ export class SkillInstance extends SkillEntry {
     if (this.cachedContent !== undefined) {
       return this.cachedContent;
     }
+    this.contentLoading ??= this.resolveContent().finally(() => {
+      this.contentLoading = undefined;
+    });
+    return this.contentLoading;
+  }
 
+  private async resolveContent(): Promise<CachedSkillContent> {
+    const context = this.overridingContext('build');
+    const baseContent = context ? await context.build() : await this.buildContent();
+
+    // Add additional metadata that's useful for search but not in base SkillContent
+    this.cachedContent = {
+      ...baseContent,
+      tags: this.tags,
+      priority: this.priority,
+      hideFromDiscovery: this.hidden,
+      visibility: this.skillVisibility,
+    };
+
+    return this.cachedContent;
+  }
+
+  /** The content the decorator metadata describes, with the instructions `loadInstructions()` resolves. */
+  private async buildContent(): Promise<SkillContent> {
     const instructions = await this.loadInstructions();
     const baseDir = this.getBaseDir();
 
@@ -186,18 +246,7 @@ export class SkillInstance extends SkillEntry {
       resolveExamples,
     );
 
-    const baseContent = buildSkillContent(this.metadata, instructions, resolvedRefs, resolvedExs);
-
-    // Add additional metadata that's useful for search but not in base SkillContent
-    this.cachedContent = {
-      ...baseContent,
-      tags: this.tags,
-      priority: this.priority,
-      hideFromDiscovery: this.hidden,
-      visibility: this.skillVisibility,
-    };
-
-    return this.cachedContent;
+    return buildSkillContent(this.metadata, instructions, resolvedRefs, resolvedExs);
   }
 
   /**
@@ -264,8 +313,12 @@ export class SkillInstance extends SkillEntry {
       return this.cachedContent;
     }
 
-    // Only works with inline instructions
-    if (typeof this.metadata.instructions === 'string') {
+    // Only works with inline instructions that no override of the @Skill class replaces
+    if (
+      typeof this.metadata.instructions === 'string' &&
+      !this.overridingContext('loadInstructions') &&
+      !this.overridingContext('build')
+    ) {
       return buildSkillContent(this.metadata, this.metadata.instructions);
     }
 

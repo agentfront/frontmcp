@@ -1,14 +1,11 @@
 // file: libs/sdk/src/common/interfaces/prompt.interface.ts
 
-import { type FuncType, type Token, type Type } from '@frontmcp/di';
+import { type FuncType, type Type } from '@frontmcp/di';
 import { type AuthInfo, type GetPromptResult } from '@frontmcp/protocol';
-import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/utils';
 
-import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../context';
-import { workerEnvOf } from '../../context/frontmcp-context-storage';
-import { type ScopeEntry } from '../entries';
 import { type PromptMetadata } from '../metadata';
 import { type PromptEsmTargetRecord, type PromptRemoteRecord } from '../records/prompt.record';
+import { ExecutionContextBase } from './execution-context.interface';
 import { FlowControl } from './flow.interface';
 import { type ProviderRegistryInterface } from './internal';
 import { type FrontMcpLogger } from './logger.interface';
@@ -56,61 +53,36 @@ export type PromptCtorArgs = {
   authInfo: AuthInfo;
 };
 
-export abstract class PromptContext {
-  private providers: ProviderRegistryInterface;
-  readonly authInfo: AuthInfo;
-
-  protected readonly runId: string;
+export abstract class PromptContext extends ExecutionContextBase<PromptExecuteResult> {
   protected readonly promptId: string;
   protected readonly promptName: string;
   readonly metadata: PromptMetadata;
-  protected readonly logger: FrontMcpLogger;
 
   /** The arguments passed to the prompt */
   readonly args: Record<string, string>;
 
-  protected activeStage = 'init';
-
   // ---- OUTPUT storages (backing fields)
   private _output?: PromptExecuteResult;
-
-  private _error?: Error;
 
   // ---- histories
   private readonly _outputHistory: HistoryEntry<PromptExecuteResult>[] = [];
 
   constructor(ctorArgs: PromptCtorArgs) {
     const { metadata, args, providers, logger, authInfo } = ctorArgs;
-    this.runId = randomUUID();
-    this.promptName = metadata.name;
     // promptId uses the metadata name as the stable identifier for the prompt type
     // (runId is the unique instance identifier for this specific execution)
+    super({ providers, logger: logger.child(`prompt:${metadata.name}`), authInfo });
+    this.promptName = metadata.name;
     this.promptId = metadata.name;
     this.metadata = metadata;
     this.args = args;
-    this.providers = providers;
-    this.logger = logger.child(`prompt:${this.promptId}`);
-    this.authInfo = authInfo;
   }
 
   abstract execute(args: Record<string, string>): Promise<PromptExecuteResult>;
 
-  get<T>(token: Token<T>): T {
-    return this.providers.get(token);
-  }
-
-  get scope(): ScopeEntry {
-    return this.providers.getScope();
-  }
-
-  tryGet<T>(token: Token<T>): T | undefined {
-    try {
-      return this.providers.get(token);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      this.logger.warn(`Failed to get provider ${String(token)}: ${msg}`);
-      return undefined;
-    }
+  /** @deprecated Use `this.auth` or `this.context.authInfo` instead. */
+  override get authInfo(): AuthInfo {
+    return super.authInfo as AuthInfo;
   }
 
   public get output(): PromptExecuteResult | undefined {
@@ -133,67 +105,7 @@ export abstract class PromptContext {
   }
 
   /** Get the error that caused the prompt to fail, if any. */
-  public get error(): Error | undefined {
-    return this._error;
-  }
-
-  /** Fail the run (invoker will run error/finalize). */
-  protected fail(err: Error): never {
-    this._error = err;
-    FlowControl.fail(err);
-  }
-
-  mark(stage: string): void {
-    this.activeStage = stage;
-  }
-
-  // ---- Platform bindings ----
-
-  /**
-   * The hosting platform's bindings for the current request — on a Cloudflare Worker, the `env`
-   * object holding KV namespaces, D1 databases, R2 buckets, Durable Object namespaces, `[vars]`
-   * and secrets. `undefined` where the request carries no such object: Node/Express, stdio, and
-   * `create()`/`connect()` direct servers. The same contract as a tool's `this.workerEnv`.
-   *
-   * @example
-   * ```typescript
-   * const kv = this.workerEnv?.['MY_KV'] as KVNamespace | undefined;
-   * ```
-   */
-  get workerEnv(): Readonly<Record<string, unknown>> | undefined {
-    let context: FrontMcpContext | undefined;
-    try {
-      context = this.providers.get(FRONTMCP_CONTEXT as Token<FrontMcpContext>);
-    } catch {
-      context = undefined;
-    }
-    return workerEnvOf(context);
-  }
-
-  // ---- Runtime context helpers ----
-
-  /** Get the current runtime context (platform, runtime, deployment, env). */
-  get runtimeContext(): RuntimeContext {
-    return getRuntimeContext();
-  }
-
-  /** Check if running on a specific OS platform. */
-  isPlatform(platform: RuntimeContext['platform']): boolean {
-    return this.runtimeContext.platform === platform;
-  }
-
-  /** Check if running in a specific JavaScript runtime. */
-  isRuntime(runtime: RuntimeContext['runtime']): boolean {
-    return this.runtimeContext.runtime === runtime;
-  }
-
-  /** Check if running in a specific deployment mode. */
-  isDeployment(deployment: RuntimeContext['deployment']): boolean {
-    return this.runtimeContext.deployment === deployment;
-  }
-
-  /** Check if running in a specific environment. */
-  isEnv(env: RuntimeContext['env']): boolean {
-    return this.runtimeContext.env === env;
+  public override get error(): Error | undefined {
+    return super.error;
   }
 }

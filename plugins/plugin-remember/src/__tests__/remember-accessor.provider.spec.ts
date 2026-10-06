@@ -145,10 +145,10 @@ describe('RememberAccessor', () => {
       expect(keys.length).toBe(1);
     });
 
-    it('stores with tool scope', async () => {
+    it('keys tool memory outside a running tool as unknown, whatever flow the context names', async () => {
       await accessor.set('key', 'value', { scope: 'tool' });
 
-      const keys = await store.keys('remember:v2:tool:test-tool:test-session-123:*');
+      const keys = await store.keys('remember:v2:tool:unknown:test-session-123:*');
       expect(keys.length).toBe(1);
     });
 

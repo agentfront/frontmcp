@@ -221,7 +221,15 @@ export interface SkillContent {
  */
 export type SkillCtorArgs = ExecutionContextBaseArgs & {
   metadata: SkillMetadata;
+  /** What the framework serves when a method is not overridden; `super.loadInstructions()` and `super.build()` run them. */
+  defaults?: SkillContentDefaults;
 };
+
+/** The framework's own loading of a `@Skill`'s content from its decorator metadata. */
+export interface SkillContentDefaults {
+  loadInstructions(): Promise<string>;
+  build(): Promise<SkillContent>;
+}
 
 /**
  * Lightweight context class for skills.
@@ -230,15 +238,17 @@ export type SkillCtorArgs = ExecutionContextBaseArgs & {
  * skills don't execute directly - they provide knowledge/instructions that
  * guide LLMs in performing multi-step tasks.
  *
- * This context is primarily used for hooks and lifecycle management.
+ * A `@Skill` class that overrides `loadInstructions()` or `build()` is instantiated
+ * once, when the skill is first loaded, and its content comes from those methods.
  */
 export abstract class SkillContext extends ExecutionContextBase<SkillContent> {
   protected readonly skillId: string;
   protected readonly skillName: string;
   readonly metadata: SkillMetadata;
+  private readonly defaults?: SkillContentDefaults;
 
   constructor(args: SkillCtorArgs) {
-    const { metadata, providers, logger } = args;
+    const { metadata, providers, logger, defaults } = args;
     super({
       providers,
       logger: logger.child(`skill:${metadata.id ?? metadata.name}`),
@@ -247,35 +257,32 @@ export abstract class SkillContext extends ExecutionContextBase<SkillContent> {
     this.skillName = metadata.name;
     this.skillId = metadata.id ?? metadata.name;
     this.metadata = metadata;
+    this.defaults = defaults;
   }
 
   /**
    * Load the skill's detailed instructions.
    *
-   * The framework provides a default implementation that throws — when a
-   * class is decorated with `@Skill`, the runtime uses `SkillInstance` to
-   * load instructions from the decorator metadata, so this method is never
-   * called on the user class.
-   *
-   * Override this only when you construct a `SkillContext` subclass manually
-   * (outside the `@Skill` decorator pipeline) and need bespoke loading logic.
+   * Under `@Skill` the default resolves the decorator's `instructions` (inline, file or URL);
+   * override it to produce them another way. Its result is cached once the skill is loaded.
+   * A `SkillContext` constructed without the framework's defaults throws `SkillContextNotImplementedError`.
    */
   async loadInstructions(): Promise<string> {
-    throw new SkillContextNotImplementedError(this.skillName, 'loadInstructions');
+    if (!this.defaults) throw new SkillContextNotImplementedError(this.skillName, 'loadInstructions');
+    return this.defaults.loadInstructions();
   }
 
   /**
    * Build the full SkillContent for this skill.
    *
-   * The framework provides a default implementation that throws — when a
-   * class is decorated with `@Skill`, the runtime uses `SkillInstance.load()`
-   * to assemble the content, so this method is never called on the user class.
-   *
-   * Override this only when you construct a `SkillContext` subclass manually
-   * (outside the `@Skill` decorator pipeline) and need bespoke assembly logic.
+   * Under `@Skill` the default assembles it from the decorator metadata and `loadInstructions()`;
+   * override it to change the content, starting from `super.build()` if you like. Its result is cached
+   * once the skill is loaded. A `SkillContext` constructed without the framework's defaults throws
+   * `SkillContextNotImplementedError`.
    */
   async build(): Promise<SkillContent> {
-    throw new SkillContextNotImplementedError(this.skillName, 'build');
+    if (!this.defaults) throw new SkillContextNotImplementedError(this.skillName, 'build');
+    return this.defaults.build();
   }
 
   /**

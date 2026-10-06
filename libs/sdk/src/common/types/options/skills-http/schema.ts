@@ -90,6 +90,7 @@ export const skillsConfigOptionsSchema = z.object({
   audit: skillsConfigAuditOptionsSchema.optional(),
   injectInstructions: z.enum(['off', 'append', 'prepend', 'replace']).optional().default('append'),
   scoring: z.enum(['cosine', 'bm25']).optional(),
+  failOnInvalidSkills: z.boolean().optional(),
 } satisfies RawZodShape<SkillsConfigOptionsInterface>);
 
 /**

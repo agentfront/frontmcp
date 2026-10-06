@@ -1,12 +1,23 @@
+import { type Token } from '@frontmcp/di';
 import { z } from '@frontmcp/lazy-zod';
 
-import { type EntryOwnerRef, type ScopeEntry, type ToolInputType, type ToolOutputType } from '../common';
+import {
+  type EntryOwnerRef,
+  type ProviderEntry,
+  type ProviderRegistryInterface,
+  type ProviderViews,
+  type RegistryKind,
+  type RegistryType,
+  type ScopeEntry,
+  type ToolInputType,
+  type ToolOutputType,
+} from '../common';
 import { type ToolInputOf, type ToolOutputOf } from '../common/decorators';
 import { JobEntry } from '../common/entries/job.entry';
 import { JobContext, type JobCtorArgs } from '../common/interfaces/job.interface';
 import { JobKind, type JobFunctionTokenRecord, type JobRecord } from '../common/records/job.record';
-import { DynamicJobDirectExecutionError, InvalidRegistryKindError } from '../errors';
-import { InvalidHookFlowError } from '../errors/mcp.error';
+import { DynamicJobDirectExecutionError, InvalidRegistryKindError, ProviderNotAvailableError } from '../errors';
+import { InvalidHookFlowError, InvalidOutputError } from '../errors/mcp.error';
 import type HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
@@ -71,10 +82,12 @@ export class JobInstance<
 
   override create(
     input: In,
-    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown },
+    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown; attempt?: number },
   ): JobContext<InSchema, OutSchema, In, Out> {
     const metadata = this.metadata;
-    const providers = (extra.contextProviders ?? this._providers) as ProviderRegistry;
+    const providers = extra.contextProviders
+      ? new RequestOverAppProviders(extra.contextProviders as ProviderRegistryInterface, this._providers)
+      : this._providers;
     const scope = this._providers.getActiveScope();
     const logger = scope.logger;
     const authInfo = extra.authInfo;
@@ -85,7 +98,7 @@ export class JobInstance<
       providers,
       logger,
       authInfo,
-      attempt: 1,
+      attempt: extra.attempt ?? 1,
     };
 
     switch (this.record.kind) {
@@ -105,17 +118,24 @@ export class JobInstance<
     return inputSchema.parse(input) as In;
   }
 
+  /** The result as the job's `outputSchema` accepts it; an empty raw shape checks nothing. */
   override parseOutput(raw: Out | Partial<Out>): unknown {
-    if (this.outputSchema) {
-      const outSchema = this.outputSchema as any;
-      if (outSchema instanceof z.ZodType) {
-        return outSchema.parse(raw);
-      }
-      if (typeof outSchema === 'object' && outSchema !== null) {
-        return z.object(outSchema).parse(raw);
-      }
+    const outSchema = this.outputSchema as unknown;
+    let schema: z.ZodType | undefined;
+    if (outSchema instanceof z.ZodType) {
+      schema = outSchema;
+    } else if (outSchema && typeof outSchema === 'object' && Object.keys(outSchema).length > 0) {
+      schema = z.object(outSchema as z.ZodRawShape);
     }
-    return raw;
+    if (!schema) return raw;
+
+    const parsed = schema.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    const firstIssue = parsed.error.issues[0];
+    throw new InvalidOutputError({
+      reason: 'output does not match outputSchema',
+      path: firstIssue?.path.length ? firstIssue.path.join('.') : undefined,
+    });
   }
 
   override safeParseOutput(
@@ -126,6 +146,43 @@ export class JobInstance<
     } catch (error: any) {
       return { success: false, error };
     }
+  }
+}
+
+/** Request providers first, then the job's app registry for what the request providers don't know. */
+class RequestOverAppProviders implements ProviderRegistryInterface {
+  constructor(
+    private readonly requestProviders: ProviderRegistryInterface,
+    private readonly appProviders: ProviderRegistryInterface,
+  ) {}
+
+  get<T>(token: Token<T>): T {
+    try {
+      return this.requestProviders.get(token);
+    } catch (error) {
+      if (error instanceof ProviderNotAvailableError) return this.appProviders.get(token);
+      throw error;
+    }
+  }
+
+  getScope(): ScopeEntry {
+    return this.requestProviders.getScope();
+  }
+
+  getProviders(): ProviderEntry[] {
+    return this.requestProviders.getProviders();
+  }
+
+  getRegistries<T extends RegistryKind>(type: T): RegistryType[T][] {
+    return this.requestProviders.getRegistries(type);
+  }
+
+  buildViews(
+    sessionKey: string,
+    contextProviders?: Map<Token, unknown>,
+    contextSource?: ProviderRegistryInterface,
+  ): Promise<ProviderViews> {
+    return this.requestProviders.buildViews(sessionKey, contextProviders, contextSource);
   }
 }
 

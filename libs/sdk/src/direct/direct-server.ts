@@ -55,7 +55,7 @@ function buildAuthInfo(authContext?: DirectAuthContext, defaultSessionId?: strin
   const authInfo: Partial<AuthInfo> = {
     sessionId,
     user,
-    scopes: [],
+    scopes: authContext?.scopes ?? [],
     clientId,
     extra: authContext?.extra,
   };

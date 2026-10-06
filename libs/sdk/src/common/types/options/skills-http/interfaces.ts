@@ -395,6 +395,15 @@ export interface SkillsConfigOptions {
    * @default 'cosine'
    */
   scoring?: 'cosine' | 'bm25';
+
+  /**
+   * Whether a skill with `toolValidation: 'strict'` that names a tool no one serves stops the server
+   * from starting (`SkillValidationError`). Set `false` to start anyway: such a skill is logged as an
+   * error and reported with status `'failed'` in the validation report.
+   *
+   * @default true
+   */
+  failOnInvalidSkills?: boolean;
 }
 
 /**

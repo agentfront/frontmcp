@@ -11,7 +11,7 @@
  * ```
  */
 
-import { isFrontMcpCredentials, type FetchCredentialMiddleware, type FrontMcpFetchInit } from '@frontmcp/auth';
+import { isFrontMcpCredentials, type FetchCredentialApplier, type FrontMcpFetchInit } from '@frontmcp/auth';
 import { type ZodType } from '@frontmcp/lazy-zod';
 import { type AuthInfo, type LoggingLevel } from '@frontmcp/protocol';
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
@@ -22,6 +22,7 @@ import { type ElicitOptions, type ElicitResult } from '../elicitation';
 import { InvalidInputError } from '../errors/mcp.error';
 import type { AIPlatformType, ClientInfo } from '../notification';
 import { STATELESS_SESSION_ID } from '../transport/transport.types';
+import { getRunningFlow } from './running-flow';
 import { generateTraceContext, type TraceContext } from './trace-context';
 
 /** Symbol key for storing pre-resolved elicit result in context store */
@@ -281,7 +282,7 @@ export class FrontMcpContext {
   private _clientInfo?: ClientInfo;
   private _platformType?: AIPlatformType;
   private _sessionMetadata?: SessionIdPayload;
-  private _credentialMiddleware?: FetchCredentialMiddleware;
+  private _credentialMiddleware?: FetchCredentialApplier;
 
   // =====================
   // References (pointers)
@@ -425,11 +426,16 @@ export class FrontMcpContext {
   }
 
   /**
-   * Set the credential middleware for `this.fetch()` provider-based credential injection.
-   * @internal Called by scope initialization when auth providers are configured.
+   * Set what applies `credentials: { provider }` in `fetch()`.
+   * @internal Set by an execution context's `fetch()` from the request's auth providers.
    */
-  setCredentialMiddleware(middleware: FetchCredentialMiddleware): void {
+  setCredentialMiddleware(middleware: FetchCredentialApplier): void {
     this._credentialMiddleware = middleware;
+  }
+
+  /** What applies `credentials: { provider }` in `fetch()`, once set. */
+  get credentialMiddleware(): FetchCredentialApplier | undefined {
+    return this._credentialMiddleware;
   }
 
   // =====================
@@ -473,32 +479,32 @@ export class FrontMcpContext {
   }
 
   /**
-   * Get current flow reference.
+   * The innermost flow running for this request in the calling async call chain.
    */
   get flow(): FlowBaseRef | undefined {
-    return this._flow;
+    return getRunningFlow(this)?.flow ?? this._flow;
   }
 
   /**
    * Set flow reference (internal use).
    * @internal
    */
-  setFlow(flow: FlowBaseRef): void {
+  setFlow(flow: FlowBaseRef | undefined): void {
     this._flow = flow;
   }
 
   /**
-   * Get scope reference.
+   * The scope of the innermost flow running for this request in the calling async call chain.
    */
   get scope(): ScopeRef | undefined {
-    return this._scope;
+    return getRunningFlow(this)?.scope ?? this._scope;
   }
 
   /**
    * Set scope reference (internal use).
    * @internal
    */
-  setScope(scope: ScopeRef): void {
+  setScope(scope: ScopeRef | undefined): void {
     this._scope = scope;
   }
 
@@ -732,7 +738,7 @@ export class FrontMcpContext {
       // Hash sessionId to prevent logging user-identifying information
       sessionIdHash: sha256Hex(this.sessionId).slice(0, 12),
       scopeId: this.scopeId,
-      flowName: this._flow?.name,
+      flowName: this.flow?.name,
       elapsed: this.elapsed(),
     };
   }
@@ -804,7 +810,7 @@ export class FrontMcpContext {
     const forwardsCallerToken =
       targetOrigin !== undefined &&
       this.config.forwardCallerTokenTo.includes(targetOrigin) &&
-      this._authInfo.token !== undefined &&
+      Boolean(this._authInfo.token) &&
       !providerCredentialsUsed &&
       !headers.has('Authorization');
     if (forwardsCallerToken) {
@@ -828,7 +834,7 @@ export class FrontMcpContext {
     for (const [key, value] of forwardedCustomHeaders) {
       headers.set(key, value);
     }
-    const forwardsCallerHeaders = forwardsCallerToken || forwardedCustomHeaders.length > 0;
+    const forwardsCredentials = providerCredentialsUsed || forwardsCallerToken || forwardedCustomHeaders.length > 0;
 
     // Use a manual AbortController + setTimeout instead of AbortSignal.timeout()
     // to avoid listener leaks under high concurrency (AbortSignal.timeout() creates
@@ -854,8 +860,8 @@ export class FrontMcpContext {
         ...effectiveInit,
         headers,
         signal,
-        // A redirect could carry forwarded caller headers to an origin nobody allow-listed.
-        redirect: forwardsCallerHeaders && requestedRedirect !== 'error' ? 'manual' : requestedRedirect,
+        // A redirect could carry provider credentials or forwarded caller headers to an origin nobody allow-listed.
+        redirect: forwardsCredentials && requestedRedirect !== 'error' ? 'manual' : requestedRedirect,
       });
     } finally {
       if (timeoutId !== undefined) clearTimeout(timeoutId);

@@ -66,7 +66,7 @@ class ProcessDataJob extends JobContext {
 
 #### respond(value)
 
-Set output and end execution immediately.
+End the run immediately with `value` as its result, which must match the job's `outputSchema` like a returned one. Up to 1.9.1 it replaced the whole `execute_job` response instead.
 
 ```typescript
 respond(value: Out): never
