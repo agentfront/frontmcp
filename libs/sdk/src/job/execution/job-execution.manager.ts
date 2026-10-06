@@ -237,8 +237,10 @@ export class JobExecutionManager {
     const maxBackoffMs = retryConfig.maxBackoffMs ?? 60000;
 
     let lastError: Error | undefined;
+    let failedAttempt = 1;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      failedAttempt = attempt;
       try {
         const parsedInput = job.parseInput(input);
         const ctx = job.create(parsedInput, {
@@ -281,6 +283,7 @@ export class JobExecutionManager {
       state: 'failed',
       error: { message: error.message, name: error.name, stack: error.stack },
       completedAt: Date.now(),
+      attempt: failedAttempt,
     });
     await this.notify({ type: 'job:status', runId, state: 'failed', jobName: job.name });
 

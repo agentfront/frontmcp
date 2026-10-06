@@ -1,11 +1,22 @@
+import { type Token } from '@frontmcp/di';
 import { z } from '@frontmcp/lazy-zod';
 
-import { type EntryOwnerRef, type ScopeEntry, type ToolInputType, type ToolOutputType } from '../common';
+import {
+  type EntryOwnerRef,
+  type ProviderEntry,
+  type ProviderRegistryInterface,
+  type ProviderViews,
+  type RegistryKind,
+  type RegistryType,
+  type ScopeEntry,
+  type ToolInputType,
+  type ToolOutputType,
+} from '../common';
 import { type ToolInputOf, type ToolOutputOf } from '../common/decorators';
 import { JobEntry } from '../common/entries/job.entry';
 import { JobContext, type JobCtorArgs } from '../common/interfaces/job.interface';
 import { JobKind, type JobFunctionTokenRecord, type JobRecord } from '../common/records/job.record';
-import { DynamicJobDirectExecutionError, InvalidRegistryKindError } from '../errors';
+import { DynamicJobDirectExecutionError, InvalidRegistryKindError, ProviderNotAvailableError } from '../errors';
 import { InvalidHookFlowError, InvalidOutputError } from '../errors/mcp.error';
 import type HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
@@ -74,7 +85,9 @@ export class JobInstance<
     extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown; attempt?: number },
   ): JobContext<InSchema, OutSchema, In, Out> {
     const metadata = this.metadata;
-    const providers = (extra.contextProviders ?? this._providers) as ProviderRegistry;
+    const providers = extra.contextProviders
+      ? new RequestOverAppProviders(extra.contextProviders as ProviderRegistryInterface, this._providers)
+      : this._providers;
     const scope = this._providers.getActiveScope();
     const logger = scope.logger;
     const authInfo = extra.authInfo;
@@ -133,6 +146,43 @@ export class JobInstance<
     } catch (error: any) {
       return { success: false, error };
     }
+  }
+}
+
+/** Request providers first, then the job's app registry for what the request providers don't know. */
+class RequestOverAppProviders implements ProviderRegistryInterface {
+  constructor(
+    private readonly requestProviders: ProviderRegistryInterface,
+    private readonly appProviders: ProviderRegistryInterface,
+  ) {}
+
+  get<T>(token: Token<T>): T {
+    try {
+      return this.requestProviders.get(token);
+    } catch (error) {
+      if (error instanceof ProviderNotAvailableError) return this.appProviders.get(token);
+      throw error;
+    }
+  }
+
+  getScope(): ScopeEntry {
+    return this.requestProviders.getScope();
+  }
+
+  getProviders(): ProviderEntry[] {
+    return this.requestProviders.getProviders();
+  }
+
+  getRegistries<T extends RegistryKind>(type: T): RegistryType[T][] {
+    return this.requestProviders.getRegistries(type);
+  }
+
+  buildViews(
+    sessionKey: string,
+    contextProviders?: Map<Token, unknown>,
+    contextSource?: ProviderRegistryInterface,
+  ): Promise<ProviderViews> {
+    return this.requestProviders.buildViews(sessionKey, contextProviders, contextSource);
   }
 }
 
