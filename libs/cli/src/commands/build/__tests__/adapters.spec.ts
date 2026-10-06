@@ -209,7 +209,7 @@ describe('Build Adapters', () => {
       expect(config).not.toContain('"nodejs_compat_populate_process_env"');
     });
 
-    it('defaults compatibility_date to one that enables full nodejs_compat (>= 2024-09-23)', () => {
+    it('defaults compatibility_date to the first date on which nodejs_compat turns on nodejs_compat_v2', () => {
       const config = cloudflareAdapter.getConfig?.('/test');
       expect(config).toContain('compatibility_date = "2024-09-23"');
     });
