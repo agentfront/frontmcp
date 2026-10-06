@@ -40,35 +40,54 @@ let instanceCache = new Map<string, Promise<DirectMcpServer>>();
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Convert a flat `CreateConfig` into a `FrontMcpConfigInput` with a synthetic app.
+ * Convert a flat `CreateConfig` into a `FrontMcpConfigInput` with a synthetic app. The app-level fields go to the
+ * app; every other `@FrontMcp` option is passed on to the server as it is.
  * @internal Exported for testing.
  */
 export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
-  const appName = config.appName ?? config.info.name;
+  const {
+    appName,
+    machineId: _machineId,
+    cacheKey: _cacheKey,
+    tools,
+    resources,
+    prompts,
+    adapters,
+    plugins,
+    providers,
+    authProviders,
+    agents,
+    skills,
+    auth,
+    jobDefinitions,
+    workflowDefinitions,
+    ...serverOptions
+  } = config;
+  const name = appName ?? config.info.name;
 
   // Synthetic app class that carries the app-level entries.
   // Replicates what @App() decorator does: sets per-property metadata tokens.
   const syntheticApp = class SyntheticApp {};
-  Object.defineProperty(syntheticApp, 'name', { value: appName });
+  Object.defineProperty(syntheticApp, 'name', { value: name });
 
   // Mark as a valid app (required by annotatedFrontMcpAppSchema)
   Reflect.defineMetadata(FrontMcpLocalAppTokens.type, true, syntheticApp);
 
   // Set individual metadata tokens (same as @App() decorator)
   const appMeta: Record<string, unknown> = {
-    name: appName,
-    tools: config.tools,
-    resources: config.resources,
-    prompts: config.prompts,
-    adapters: config.adapters,
-    plugins: config.plugins,
-    providers: config.providers,
-    authProviders: config.authProviders,
-    agents: config.agents,
-    skills: config.skills,
-    auth: config.auth,
-    jobs: config.jobDefinitions,
-    workflows: config.workflowDefinitions,
+    name,
+    tools,
+    resources,
+    prompts,
+    adapters,
+    plugins,
+    providers,
+    authProviders,
+    agents,
+    skills,
+    auth,
+    jobs: jobDefinitions,
+    workflows: workflowDefinitions,
   };
 
   for (const key of Object.keys(appMeta)) {
@@ -78,22 +97,7 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
     }
   }
 
-  return {
-    info: config.info,
-    apps: [syntheticApp],
-    serve: false,
-    redis: config.redis,
-    pubsub: config.pubsub,
-    transport: config.transport,
-    logging: config.logging,
-    pagination: config.pagination,
-    elicitation: config.elicitation,
-    skillsConfig: config.skillsConfig,
-    extApps: config.extApps,
-    jobs: config.jobs,
-    output: config.output,
-    throttle: config.throttle,
-  };
+  return { ...serverOptions, apps: [syntheticApp], serve: false };
 }
 
 /** `@frontmcp/utils`, loaded lazily (see `importWithRequireFallback`). */

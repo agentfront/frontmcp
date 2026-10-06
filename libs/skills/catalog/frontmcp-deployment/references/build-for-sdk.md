@@ -140,13 +140,14 @@ create({
   adapters?: AdapterType[],
   auth?: AuthOptionsInput,
 
-  // Server-level
+  // Server-level: every other @FrontMcp option, passed on as it is (except http and splitByApp)
   redis?: RedisOptionsInput,
   transport?: TransportOptionsInput,
   logging?: LoggingOptionsInput,
   elicitation?: ElicitationOptionsInput,
   output?: OutputPolicy,  // as @FrontMcp({ output })
   throttle?: GuardConfig, // as @FrontMcp({ throttle })
+  fetch?, ui?, authorities?, instructions?, channels?, tasks?, health?, metrics?, observability?, // ...
 
   // create()-specific
   appName?: string,       // defaults to info.name

@@ -117,7 +117,7 @@ Each call can name its caller with `{ authContext }`: `user` (its claims, `sub` 
 await server.callTool('list_tickets', {}, { authContext: { user: { sub: 'nour' }, scopes: ['tickets:read'] } });
 ```
 
-Up to 1.9.1 an in-process call had no scopes. `create()` takes the server-level `output` and `throttle` options like `@FrontMcp()` (up to 1.9.1 it dropped them).
+Up to 1.9.1 an in-process call had no scopes. `create()` takes every server-level `@FrontMcp()` option except `http` and `splitByApp`, and passes it on as `@FrontMcp()` would: `fetch`, `ui`, `authorities`, `instructions` and the rest. Up to 1.9.1 it dropped `output` and `throttle`, and up to 1.9.2 it dropped the others too.
 
 A call can also carry request metadata, which reaches `this.context.metadata` as an HTTP request's headers would: `userAgent`, `clientIp` (kept only if it is an IP address) and `customHeaders`, of which only `x-frontmcp-*` keys are kept. An `x-frontmcp-trace-id` header continues that trace, and header-driven features such as the cache plugin's `x-frontmcp-disable-cache` work in process. Up to 1.9.1 the metadata was dropped:
 
