@@ -24,7 +24,7 @@ export interface ExtAppsCallServerToolParams {
 }
 
 /**
- * Parameters for ui/updateModelContext request.
+ * Parameters for the earlier ui/updateModelContext request, still accepted.
  * Widget updates the model context with new state.
  */
 export interface ExtAppsUpdateModelContextParams {
@@ -35,7 +35,18 @@ export interface ExtAppsUpdateModelContextParams {
 }
 
 /**
- * Parameters for ui/openLink request.
+ * Parameters for the MCP Apps ui/update-model-context request.
+ * Each update replaces the previous one; the host sends the latest to the model with the next turn.
+ */
+export interface ExtAppsSpecUpdateModelContextParams {
+  /** Context as MCP content blocks (text, image, ...) */
+  content?: unknown[];
+  /** Machine-readable context */
+  structuredContent?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for ui/open-link (and the earlier ui/openLink) request.
  * Widget requests the host to open a URL.
  */
 export interface ExtAppsOpenLinkParams {
@@ -53,7 +64,7 @@ export interface ExtAppsOpenLinkParams {
 export type ExtAppsDisplayMode = 'inline' | 'fullscreen' | 'pip';
 
 /**
- * Parameters for ui/setDisplayMode request.
+ * Parameters for ui/request-display-mode (and the earlier ui/setDisplayMode) request.
  * Widget requests a display mode change.
  */
 export interface ExtAppsSetDisplayModeParams {
@@ -80,7 +91,7 @@ export interface ExtAppsCloseParams {
 export type ExtAppsLogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 /**
- * Parameters for ui/log request.
+ * Parameters for the earlier ui/log request, still accepted.
  * Widget sends a log message to the host.
  */
 export interface ExtAppsLogParams {
@@ -89,6 +100,23 @@ export interface ExtAppsLogParams {
   /** Log message */
   message: string;
   /** Optional additional data */
+  data?: unknown;
+}
+
+/**
+ * MCP logging levels (RFC 5424), as `notifications/message` carries them.
+ */
+export type ExtAppsMcpLogLevel = 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency';
+
+/**
+ * Parameters for the standard MCP notifications/message a widget logs with.
+ */
+export interface ExtAppsLogMessageParams {
+  /** Log level */
+  level: ExtAppsMcpLogLevel;
+  /** Name of the logger that issued the message */
+  logger?: string;
+  /** The data to log: a message string or any JSON value */
   data?: unknown;
 }
 

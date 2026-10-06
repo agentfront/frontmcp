@@ -11,7 +11,7 @@ import {
   ExtAppsNotSupportedError,
   type ExtAppsHandlerContext,
 } from '../ext-apps.handler';
-import { EXT_APPS_ERROR_CODES, type ExtAppsJsonRpcRequest } from '../ext-apps.types';
+import { EXT_APPS_ERROR_CODES, type ExtAppsJsonRpcNotification, type ExtAppsJsonRpcRequest } from '../ext-apps.types';
 
 describe('ExtAppsMessageHandler', () => {
   // Mock logger with all FrontMcpLogger methods
@@ -613,6 +613,141 @@ describe('ExtAppsMessageHandler', () => {
       });
     });
 
+    describe('MCP Apps spec method names', () => {
+      it('ui/update-model-context replaces the context with its content and structuredContent', async () => {
+        const updateModelContext = jest.fn().mockResolvedValue(undefined);
+        const handler = new ExtAppsMessageHandler({
+          context: createMockContext({ updateModelContext }),
+          hostCapabilities: { modelContextUpdate: true },
+        });
+        const content = [{ type: 'text', text: '{"city":"Oslo"}' }];
+
+        const response = await handler.handleRequest(
+          createRequest('ui/update-model-context', { content, structuredContent: { city: 'Oslo' } }),
+        );
+
+        expect(response).toEqual({ jsonrpc: '2.0', id: 1, result: {} });
+        expect(updateModelContext).toHaveBeenCalledWith({ content, structuredContent: { city: 'Oslo' } }, false);
+      });
+
+      it('ui/update-model-context passes only the fields the widget sent', async () => {
+        const updateModelContext = jest.fn().mockResolvedValue(undefined);
+        const handler = new ExtAppsMessageHandler({
+          context: createMockContext({ updateModelContext }),
+          hostCapabilities: { modelContextUpdate: true },
+        });
+
+        await handler.handleRequest(createRequest('ui/update-model-context', { structuredContent: { unit: 'C' } }));
+
+        expect(updateModelContext).toHaveBeenCalledWith({ structuredContent: { unit: 'C' } }, false);
+      });
+
+      it('ui/update-model-context rejects content that is not an array and structuredContent that is not an object', async () => {
+        const handler = new ExtAppsMessageHandler({
+          context: createMockContext({ updateModelContext: jest.fn() }),
+          hostCapabilities: { modelContextUpdate: true },
+        });
+
+        const badContent = await handler.handleRequest(createRequest('ui/update-model-context', { content: 'hi' }));
+        const badStructured = await handler.handleRequest(
+          createRequest('ui/update-model-context', { structuredContent: ['a'] }),
+        );
+
+        expect(badContent.error?.code).toBe(EXT_APPS_ERROR_CODES.INVALID_PARAMS);
+        expect(badStructured.error?.code).toBe(EXT_APPS_ERROR_CODES.INVALID_PARAMS);
+      });
+
+      it('ui/update-model-context is not supported when the host does not advertise it', async () => {
+        const handler = new ExtAppsMessageHandler({ context: createMockContext({ updateModelContext: jest.fn() }) });
+
+        const response = await handler.handleRequest(createRequest('ui/update-model-context', { content: [] }));
+
+        expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.NOT_SUPPORTED);
+      });
+
+      it('ui/open-link opens the link', async () => {
+        const openLink = jest.fn().mockResolvedValue(undefined);
+        const handler = new ExtAppsMessageHandler({
+          context: createMockContext({ openLink }),
+          hostCapabilities: { openLink: true },
+        });
+
+        const response = await handler.handleRequest(createRequest('ui/open-link', { url: 'https://example.com' }));
+
+        expect(response.error).toBeUndefined();
+        expect(openLink).toHaveBeenCalledWith('https://example.com');
+      });
+
+      it('ui/request-display-mode sets the mode and answers with it', async () => {
+        const setDisplayMode = jest.fn().mockResolvedValue(undefined);
+        const handler = new ExtAppsMessageHandler({ context: createMockContext({ setDisplayMode }) });
+
+        const response = await handler.handleRequest(createRequest('ui/request-display-mode', { mode: 'pip' }));
+
+        expect(response).toEqual({ jsonrpc: '2.0', id: 1, result: { mode: 'pip' } });
+        expect(setDisplayMode).toHaveBeenCalledWith('pip');
+      });
+
+      it.each([
+        ['debug', 'verbose'],
+        ['info', 'info'],
+        ['notice', 'info'],
+        ['warning', 'warn'],
+        ['error', 'error'],
+        ['critical', 'error'],
+        ['alert', 'error'],
+        ['emergency', 'error'],
+      ] as const)('notifications/message at level %s logs with %s', async (level, method) => {
+        const handler = new ExtAppsMessageHandler({
+          context: createMockContext(),
+          hostCapabilities: { logging: true },
+        });
+
+        const response = await handler.handleRequest(
+          createRequest('notifications/message', { level, data: 'Quota low' }),
+        );
+
+        expect(response.error).toBeUndefined();
+        expect(mockLogger[method]).toHaveBeenCalledWith('Quota low', undefined);
+      });
+
+      it('notifications/message logs non-string data under the logger name', async () => {
+        const handler = new ExtAppsMessageHandler({
+          context: createMockContext(),
+          hostCapabilities: { logging: true },
+        });
+
+        await handler.handleRequest(
+          createRequest('notifications/message', { level: 'info', logger: 'chart', data: { points: 3 } }),
+        );
+
+        expect(mockLogger.info).toHaveBeenCalledWith('chart', { points: 3 });
+      });
+
+      it('notifications/message rejects a level MCP does not define', async () => {
+        const handler = new ExtAppsMessageHandler({
+          context: createMockContext(),
+          hostCapabilities: { logging: true },
+        });
+
+        const response = await handler.handleRequest(
+          createRequest('notifications/message', { level: 'warn', data: 'x' }),
+        );
+
+        expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.INVALID_PARAMS);
+      });
+
+      it('notifications/message is not supported when the host does not log', async () => {
+        const handler = new ExtAppsMessageHandler({ context: createMockContext() });
+
+        const response = await handler.handleRequest(
+          createRequest('notifications/message', { level: 'info', data: 'x' }),
+        );
+
+        expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.NOT_SUPPORTED);
+      });
+    });
+
     describe('unknown method', () => {
       it('should return method not found error', async () => {
         const context = createMockContext();
@@ -692,6 +827,42 @@ describe('ExtAppsMessageHandler', () => {
         expect(response.error).toBeUndefined();
         expect(close).toHaveBeenCalledWith('test');
       });
+    });
+  });
+
+  describe('handleNotification', () => {
+    const createNotification = (method: string, params?: unknown): ExtAppsJsonRpcNotification => ({
+      jsonrpc: '2.0',
+      method,
+      params,
+    });
+
+    it('logs a notifications/message', async () => {
+      const handler = new ExtAppsMessageHandler({ context: createMockContext(), hostCapabilities: { logging: true } });
+
+      await handler.handleNotification(createNotification('notifications/message', { level: 'warning', data: 'Low' }));
+
+      expect(mockLogger.warn).toHaveBeenCalledWith('Low', undefined);
+    });
+
+    it('ignores a notification it does not handle', async () => {
+      const handler = new ExtAppsMessageHandler({ context: createMockContext(), hostCapabilities: { logging: true } });
+
+      await expect(
+        handler.handleNotification(createNotification('ui/notifications/size-changed', { height: 200 })),
+      ).resolves.toBeUndefined();
+
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('only logs a failure, as a notification gets no answer', async () => {
+      const handler = new ExtAppsMessageHandler({ context: createMockContext() });
+
+      await expect(
+        handler.handleNotification(createNotification('notifications/message', { level: 'info', data: 'x' })),
+      ).resolves.toBeUndefined();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Logging not supported by host'));
     });
   });
 

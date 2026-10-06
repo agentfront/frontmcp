@@ -97,6 +97,14 @@ describe('HandleStreamableHttpFlow - router stage', () => {
       expect(result).toEqual({ requestType: 'extApps' });
     });
 
+    it('should route a widget notifications/message as extApps', () => {
+      const result = classifyStreamableHttpRequest({
+        method: 'POST',
+        body: { jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: 'hi' } },
+      });
+      expect(result).toEqual({ requestType: 'extApps' });
+    });
+
     it('should route valid elicitation results as elicitResult', () => {
       const result = classifyStreamableHttpRequest({
         method: 'POST',

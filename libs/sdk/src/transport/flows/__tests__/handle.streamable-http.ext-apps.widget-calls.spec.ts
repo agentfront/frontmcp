@@ -5,6 +5,8 @@
  *    regular `tools/call` of the same tool still gets.
  *  - A `ui/*` method that returns nothing (`ui/log`) answers with `result: {}`: a JSON-RPC success
  *    response without `result` is not a valid response.
+ *  - The MCP Apps names reach the same handlers as the earlier ones, and a widget's
+ *    `notifications/message` is a notification: 202 with no body.
  */
 import 'reflect-metadata';
 
@@ -14,6 +16,7 @@ import type { AddressInfo } from 'node:net';
 import { z } from '@frontmcp/lazy-zod';
 
 import { App, LogLevel, Tool, ToolContext } from '../../../common';
+import { EXT_APPS_ERROR_CODES } from '../../../ext-apps';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
 
 @Tool({
@@ -106,6 +109,30 @@ describe('widget calls over a session', () => {
     expect(JSON.stringify(result)).toContain('"temperature":21');
     expect((result['_meta'] as Record<string, unknown> | undefined)?.['ui/html']).toBeUndefined();
   });
+
+  it('a notifications/message from a widget is accepted with 202 and no body', async () => {
+    const response = await post(
+      { method: 'notifications/message', id: undefined, params: { level: 'info', data: 'widget says hi' } },
+      { 'mcp-session-id': sessionId },
+    );
+
+    expect(response.status).toBe(202);
+    expect(await response.text()).toBe('');
+  });
+
+  it.each(['ui/open-link', 'ui/request-display-mode', 'ui/update-model-context'])(
+    '%s reaches its handler, which says this host does not support it',
+    async (method) => {
+      const answer = await answerOf(
+        await post(
+          { method, params: { url: 'https://example.com', mode: 'fullscreen', content: [] } },
+          { 'mcp-session-id': sessionId },
+        ),
+      );
+
+      expect(answer.error).toMatchObject({ code: EXT_APPS_ERROR_CODES.NOT_SUPPORTED });
+    },
+  );
 
   it('ui/log answers with an empty result', async () => {
     const answer = await answerOf(

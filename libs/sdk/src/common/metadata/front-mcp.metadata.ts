@@ -201,9 +201,13 @@ export interface FrontMcpBaseMetadata {
    * MCP Apps (ext-apps) configuration.
    * Controls handling of ext-apps widget-to-host communication over HTTP transport.
    *
-   * When enabled, the HTTP transport will route `ui/*` JSON-RPC methods
-   * (ui/initialize, ui/callServerTool, etc.) through session validation
-   * and the ExtAppsMessageHandler.
+   * When enabled, the HTTP transport will route the `ui/*` JSON-RPC methods
+   * a widget sends (ui/initialize, ui/open-link, etc.) and its
+   * `notifications/message` through session validation and the
+   * ExtAppsMessageHandler. A widget calls a tool with the standard
+   * `tools/call`, which runs as any MCP request. The earlier names
+   * ui/callServerTool, ui/openLink, ui/setDisplayMode, ui/updateModelContext
+   * and ui/log are still accepted.
    *
    * ## Host Capabilities
    *
@@ -211,12 +215,12 @@ export interface FrontMcpBaseMetadata {
    *
    * | Capability           | Description                                      | Default |
    * |---------------------|--------------------------------------------------|---------|
-   * | `serverToolProxy`   | Allow widgets to call MCP tools via ui/callServerTool | `true`  |
-   * | `logging`           | Allow widgets to send logs via ui/log            | `true`  |
-   * | `openLink`          | Allow widgets to request URL opening via ui/openLink | `false` |
-   * | `modelContextUpdate`| Allow widgets to update model context via ui/updateModelContext | `false` |
+   * | `serverToolProxy`   | Allow widgets to call MCP tools via the earlier ui/callServerTool | `true`  |
+   * | `logging`           | Allow widgets to send logs via notifications/message (or ui/log) | `true`  |
+   * | `openLink`          | Allow widgets to request URL opening via ui/open-link (or ui/openLink) | `false` |
+   * | `modelContextUpdate`| Allow widgets to update model context via ui/update-model-context (or ui/updateModelContext) | `false` |
    * | `widgetTools`       | Allow widgets to register/unregister tools dynamically | `false` |
-   * | `displayModes`      | Supported display modes: 'inline', 'fullscreen', 'pip' | `undefined` |
+   * | `displayModes`      | Display modes ui/request-display-mode may ask for: 'inline', 'fullscreen', 'pip' | `undefined` |
    *
    * @default { enabled: true, hostCapabilities: { serverToolProxy: true, logging: true } }
    *

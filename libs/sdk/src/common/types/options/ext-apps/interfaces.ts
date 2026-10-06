@@ -11,19 +11,20 @@ export type { ExtAppsHostCapabilities } from '../../../../ext-apps';
  */
 export interface ExtAppsHostCapabilitiesInterface {
   /**
-   * Host supports proxying tool calls to the MCP server via ui/callServerTool.
+   * Host supports proxying tool calls to the MCP server via the earlier ui/callServerTool
+   * (a widget's standard tools/call runs as any MCP request).
    * @default true (when extApps.enabled is true)
    */
   serverToolProxy?: boolean;
 
   /**
-   * Host supports opening links via ui/openLink.
+   * Host supports opening links via ui/open-link (or the earlier ui/openLink).
    * @default false
    */
   openLink?: boolean;
 
   /**
-   * Host supports model context updates via ui/updateModelContext.
+   * Host supports model context updates via ui/update-model-context (or the earlier ui/updateModelContext).
    * @default false
    */
   modelContextUpdate?: boolean;
@@ -43,7 +44,7 @@ export interface ExtAppsHostCapabilitiesInterface {
   displayModes?: ('inline' | 'fullscreen' | 'pip')[];
 
   /**
-   * Host supports widget logging via ui/log.
+   * Host supports widget logging via notifications/message (or the earlier ui/log).
    * @default true (when extApps.enabled is true)
    */
   logging?: boolean;

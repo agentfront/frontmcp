@@ -15,10 +15,10 @@ import type { ExtAppsHostCapabilitiesInterface, ExtAppsOptionsInterface } from '
  * @example
  * ```typescript
  * const capabilities: ExtAppsHostCapabilities = {
- *   serverToolProxy: true,    // Allow ui/callServerTool
- *   logging: true,            // Allow ui/log
- *   openLink: true,           // Allow ui/openLink
- *   modelContextUpdate: true, // Allow ui/updateModelContext
+ *   serverToolProxy: true,    // Allow the earlier ui/callServerTool
+ *   logging: true,            // Allow notifications/message (or ui/log)
+ *   openLink: true,           // Allow ui/open-link (or ui/openLink)
+ *   modelContextUpdate: true, // Allow ui/update-model-context (or ui/updateModelContext)
  *   widgetTools: true,        // Allow ui/registerTool and ui/unregisterTool
  *   displayModes: ['inline', 'fullscreen', 'pip'],
  * };
@@ -26,21 +26,22 @@ import type { ExtAppsHostCapabilitiesInterface, ExtAppsOptionsInterface } from '
  */
 export const extAppsHostCapabilitiesSchema = z.object({
   /**
-   * Host supports proxying tool calls to the MCP server via ui/callServerTool.
+   * Host supports proxying tool calls to the MCP server via the earlier ui/callServerTool
+   * (a widget's standard tools/call runs as any MCP request).
    * When enabled, widgets can invoke any MCP tool through the host.
    * @default true (when extApps.enabled is true)
    */
   serverToolProxy: z.boolean().optional(),
 
   /**
-   * Host supports opening links via ui/openLink.
+   * Host supports opening links via ui/open-link (or the earlier ui/openLink).
    * When enabled, widgets can request the host to open URLs (only http/https allowed).
    * @default false
    */
   openLink: z.boolean().optional(),
 
   /**
-   * Host supports model context updates via ui/updateModelContext.
+   * Host supports model context updates via ui/update-model-context (or the earlier ui/updateModelContext).
    * When enabled, widgets can update the AI model's context with widget state.
    * @default false
    */
@@ -55,7 +56,7 @@ export const extAppsHostCapabilitiesSchema = z.object({
 
   /**
    * Supported display modes that the host can render.
-   * Widgets can request mode changes via ui/setDisplayMode.
+   * Widgets can request mode changes via ui/request-display-mode (or the earlier ui/setDisplayMode).
    * - 'inline': Widget embedded in conversation flow
    * - 'fullscreen': Widget takes full screen
    * - 'pip': Picture-in-picture mode
@@ -63,7 +64,7 @@ export const extAppsHostCapabilitiesSchema = z.object({
   displayModes: z.array(z.enum(['inline', 'fullscreen', 'pip'])).optional(),
 
   /**
-   * Host supports widget logging via ui/log.
+   * Host supports widget logging via notifications/message (or the earlier ui/log).
    * When enabled, widgets can send structured log messages to the host.
    * @default true (when extApps.enabled is true)
    */
