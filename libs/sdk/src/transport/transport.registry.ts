@@ -945,7 +945,8 @@ export class TransportService {
   /**
    * Delete a session's stored record, as when its client ends it with DELETE (#713). Without
    * this a record whose transport is not live here (after a restart or a takeover) would bring
-   * the deleted session back. Best-effort: failures are logged but do not throw.
+   * the deleted session back. A store failure is logged and rethrown, so the DELETE fails
+   * instead of confirming a termination that did not persist.
    */
   async deleteStoredSession(sessionId: string): Promise<void> {
     if (!this.sessionStore) return;
@@ -956,6 +957,7 @@ export class TransportService {
         sessionId: sessionId.slice(0, 20),
         error: err instanceof Error ? err.message : String(err),
       });
+      throw err;
     }
   }
 

@@ -86,6 +86,8 @@ describe('Distributed cross-node sessions (#680)', () => {
   skipIf(SKIP)('relays DELETE to the owner, which ends the session for every node', async () => {
     const [owner, other] = nodes;
     const sessionId = await initializeSession(owner.info.baseUrl);
+    // The record exists before the DELETE, so the check below does not pass on a wrong key.
+    expect(await storedOwner(sessionId)).toBe('node-0');
 
     const deleted = await fetch(`${other.info.baseUrl}/`, {
       method: 'DELETE',

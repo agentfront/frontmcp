@@ -26,6 +26,8 @@ function createStage(authorization: { token: string } | undefined, transportServ
     metadata: { outputSchema: httpOutputSchema },
     logger: { verbose: jest.fn(), warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() },
     requestId: 'req-1',
+    requestStartTime: Date.now(),
+    state: new Map<string, unknown>(),
     rawInput: { request, response },
   });
   return { stage, response };
@@ -69,6 +71,14 @@ describe('http:request handleDeleteSession', () => {
     await runStage(stage, 'handleDeleteSession');
 
     expect(transportService.deleteStoredSession).toHaveBeenCalledWith('sess-1');
+  });
+
+  it('does not answer 204 when the stored session could not be deleted', async () => {
+    const transportService = transportServiceStub();
+    transportService.deleteStoredSession.mockRejectedValue(new Error('Redis down'));
+    const { stage } = createStage({ token: '' }, transportService);
+
+    await expect(runStage(stage, 'handleDeleteSession')).rejects.toThrow('Redis down');
   });
 
   it('touches no transport when the request carries no verified authorization', async () => {

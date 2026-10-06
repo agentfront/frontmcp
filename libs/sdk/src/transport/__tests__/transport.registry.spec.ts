@@ -851,12 +851,12 @@ describe('TransportService', () => {
       expect(mockRedisSessionStore.delete).not.toHaveBeenCalled();
     });
 
-    it('logs and swallows a store failure', async () => {
+    it('rejects when the store fails, so a DELETE does not confirm a record that stays', async () => {
       service = new TransportService(mockScope as never, { enabled: true, redis: { host: 'localhost' } });
       await service.ready;
       mockRedisSessionStore.delete.mockRejectedValueOnce(new Error('Redis down'));
 
-      await expect(service.deleteStoredSession('failing-session')).resolves.toBeUndefined();
+      await expect(service.deleteStoredSession('failing-session')).rejects.toThrow('Redis down');
     });
   });
 

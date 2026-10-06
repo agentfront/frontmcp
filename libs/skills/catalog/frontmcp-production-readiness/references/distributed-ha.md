@@ -132,7 +132,7 @@ A pod whose heartbeat lapsed (Redis unreachable for `heartbeatTtlMs`) may have l
 
 Takeover needs `transport.persistence` (Streamable HTTP only — an SSE stream cannot move to another pod).
 
-A session its client ended with `DELETE` is removed from `transport.persistence` too, public and anonymous sessions included, so no restart or takeover brings it back (up to 1.9.1 a public session's record stayed).
+A session its client ended with `DELETE` is removed from `transport.persistence` too, public and anonymous sessions included, so no restart or takeover brings it back (up to 1.9.1 a public session's record stayed). If the store cannot delete the record, the `DELETE` fails rather than answering `204`, so the client can retry.
 
 ### Notification Relay
 
