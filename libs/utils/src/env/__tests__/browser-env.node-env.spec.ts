@@ -63,6 +63,7 @@ describe('browser NODE_ENV (#770)', () => {
 
     expect(getNodeEnv()).toBeUndefined();
     expect(isProduction()).toBe(false);
+    expect(isDevelopment()).toBe(false);
     expect(getRuntimeContext().env).toBe('development');
   });
 

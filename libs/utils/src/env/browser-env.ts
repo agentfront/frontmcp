@@ -33,7 +33,8 @@ export function getCwd(): string {
 /**
  * The NODE_ENV the page runs with: a `process` shim's live value first, then the value a
  * bundler inlined for `process.env.NODE_ENV`, else none. `isProduction()`, `isDevelopment()`
- * and the runtime context's `env` all read it, so they always agree (#770).
+ * and the runtime context's `env` all read it (#770). As on Node, with no NODE_ENV the
+ * runtime context reports `development` while `isDevelopment()` stays false.
  */
 export function getNodeEnv(): string | undefined {
   const shim = (globalThis as { process?: ProcessShim }).process;

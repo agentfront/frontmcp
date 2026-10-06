@@ -62,7 +62,8 @@ Not all FrontMCP features are available in browser environments:
 
 `runtimeContext.env`, `isProduction()` / `isDevelopment()` and error formatting all read one value:
 a `process` shim's `NODE_ENV` (`globalThis.process.env.NODE_ENV`) first, then the value the bundler
-inlines for `process.env.NODE_ENV`. With neither, `env` is `development`, as on Node, and errors keep
+inlines for `process.env.NODE_ENV`. With neither, `env` is `development` while `isDevelopment()` stays
+`false`, as on Node, and errors keep
 their message. Set `NODE_ENV=production` for production errors (an error ID, no stack) and to hide
 `/readyz` probe details. Up to 1.9.1 the browser build reported `env: 'production'` while formatting
 errors for development.
