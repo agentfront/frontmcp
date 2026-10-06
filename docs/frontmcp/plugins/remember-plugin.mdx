@@ -365,9 +365,9 @@ key, not even one written concurrently by another instance.
 
 <Note>
   The Redis and Vercel KV stores keep each key under `keyPrefix` once (`remember:v2:user:<id>:<key>`). Releases up to
-  1.9.1 added the prefix twice there (`remember:remember:v2:user:<id>:<key>`); such an entry is still listed and read,
-  and moves to the single-prefix key, with its TTL, the first time it is read. Writing or forgetting a key removes its
-  doubled copy.
+  1.9.1 added the prefix twice there (`remember:remember:v2:user:<id>:<key>`); such an entry is still listed and read
+  from where it is, keeping its TTL. Reading never copies it, so a release rolled back to 1.9.1 still finds it and a
+  concurrent `forget()` stays forgotten. Writing or forgetting the key removes the doubled copy.
 </Note>
 
 ### When the purge runs

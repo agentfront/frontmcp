@@ -9,10 +9,9 @@ import type { RememberStoreInterface } from './remember-store.interface';
  */
 interface VercelKvClient {
   /** Resolves to `'OK'` on write, or `null` when `nx` was set and the key already existed. */
-  set(key: string, value: string, options?: { ex?: number; px?: number; nx?: boolean }): Promise<string | null>;
+  set(key: string, value: string, options?: { ex?: number; nx?: boolean }): Promise<string | null>;
   get(key: string): Promise<string | null>;
   del(key: string): Promise<void>;
-  pttl(key: string): Promise<number>;
   exists(key: string): Promise<number>;
   keys(pattern: string): Promise<string[]>;
   scan(cursor: string | number, options?: { match?: string; count?: number }): Promise<[string | number, string[]]>;
@@ -128,7 +127,7 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
    * Retrieve a value by key.
    */
   async getValue<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined> {
-    const raw = (await this.kv.get(this.prefixKey(key))) ?? (await this.takeDoubledPrefixValue(key));
+    const raw = (await this.kv.get(this.prefixKey(key))) ?? (await this.readDoubledPrefixValue(key));
 
     if (raw === null) return defaultValue;
 
@@ -194,18 +193,14 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
     return found;
   }
 
-  /** Moves an entry from the key releases up to 1.9.1 wrote it under, keeping its TTL; its stored text, or null. */
-  private async takeDoubledPrefixValue(key: string): Promise<string | null> {
+  /**
+   * The stored text of an entry a release up to 1.9.1 wrote under the doubled key, or null. It is read
+   * in place, not copied: the entry keeps its TTL, a rolled-back release still finds it, and a
+   * concurrent `delete()` cannot be undone by a copy. The next write or delete of the key removes it.
+   */
+  private async readDoubledPrefixValue(key: string): Promise<string | null> {
     const doubledKey = doubledPrefixKey(this.keyPrefix, key);
-    if (!doubledKey) return null;
-    const raw = await this.kv.get(doubledKey);
-    if (raw === null) return null;
-
-    const fullKey = this.prefixKey(key);
-    const ttlMs = await this.kv.pttl(doubledKey);
-    await this.kv.set(fullKey, raw, ttlMs > 0 ? { px: ttlMs, nx: true } : { nx: true });
-    await this.kv.del(doubledKey);
-    return (await this.kv.get(fullKey)) ?? raw;
+    return doubledKey ? this.kv.get(doubledKey) : null;
   }
 
   /** Drops what releases up to 1.9.1 left under the doubled key, so it cannot come back once this key is gone. */
