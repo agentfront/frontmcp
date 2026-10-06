@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/__tests__/codecall-options.spec.ts
 
-import { codeCallPluginOptionsSchema, CodeCallPluginOptions } from '../codecall.types';
+import { CodeCallPluginOptions, codeCallPluginOptionsSchema } from '../codecall.types';
 
 describe('CodeCallPluginOptions Zod Schema', () => {
   describe('default values', () => {
@@ -15,6 +15,11 @@ describe('CodeCallPluginOptions Zod Schema', () => {
       expect(parsed.embedding.modelName).toBe('Xenova/all-MiniLM-L6-v2');
       expect(parsed.embedding.cacheDir).toBe('./.cache/transformers');
       expect(parsed.embedding.useHNSW).toBe(false);
+    });
+
+    it('refuses a fractional or non-positive maxDefinitions', () => {
+      expect(codeCallPluginOptionsSchema.safeParse({ maxDefinitions: 2.5 }).success).toBe(false);
+      expect(codeCallPluginOptionsSchema.safeParse({ maxDefinitions: 0 }).success).toBe(false);
     });
 
     it('should preserve user-provided values and apply remaining defaults', () => {
