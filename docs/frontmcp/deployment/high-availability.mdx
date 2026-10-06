@@ -82,7 +82,7 @@ A pod cut off from Redis for longer than the heartbeat TTL may lose its sessions
 
 Only Streamable HTTP sessions can be taken over: the transport is recreated from `transport.persistence`, so takeover needs a persistence backend. Without one, a session whose pod stopped is unknown to the others and the client re-initializes.
 
-A session its client ended with `DELETE` is removed from `transport.persistence` as well, public and anonymous sessions included, so neither a restart nor a takeover brings it back. If the store cannot delete the record, the `DELETE` fails instead of answering `204`, so the client can retry. Up to 1.9.1 a public session's transport and stored record stayed in place.
+A session its client ended with `DELETE` is removed from `transport.persistence` as well, public and anonymous sessions included, so neither a restart nor a takeover brings it back. If the store cannot delete the record, the `DELETE` fails instead of answering `204`, so the client can retry. Up to 1.9.1 a public session's transport and stored record stayed in place. Outside distributed mode several instances can hold one session in memory: before serving it from memory, an instance checks that the session's stored record is still there, and drops its transport when it is gone, so a session deleted (or expired) through one instance answers `404` on the others too. Up to 1.9.2 they kept serving it.
 
 ### Notification Relay
 
