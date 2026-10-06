@@ -296,7 +296,7 @@ const retry = async (toolName, args, maxAttempts = 3) => {
     if (attempt === maxAttempts) {
       return { error: `Failed after ${maxAttempts} attempts: ${result.error.message}` };
     }
-    console.warn(`${toolName} attempt ${attempt} failed, retrying...`);
+    mcpLog('warn', `${toolName} attempt ${attempt} failed, retrying...`);
   }
 };
 
@@ -325,7 +325,7 @@ for (const channel of channels) {
   if (result.success) {
     notifications.push(...result.data.items.map(n => ({ ...n, channel })));
   } else {
-    console.warn(`Failed to fetch ${channel} notifications: ${result.error.message}`);
+    mcpLog('warn', `Failed to fetch ${channel} notifications: ${result.error.message}`);
   }
 }
 
