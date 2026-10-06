@@ -12,6 +12,8 @@ export const FrontMcpToolTokens = {
   outputSchema: tokenFactory.meta('outputSchema'),
   tags: tokenFactory.meta('tags'),
   annotations: tokenFactory.meta('annotations'),
+  icons: tokenFactory.meta('icons'),
+  _meta: tokenFactory.meta('_meta'),
   visibility: tokenFactory.meta('visibility'),
   hideFromDiscovery: tokenFactory.meta('hideFromDiscovery'),
   examples: tokenFactory.meta('examples'),
