@@ -538,9 +538,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('checkPublicAccess')
   async checkPublicAccess() {
     const { tool, authInfo } = this.state;
-    const callerCtx = this.input.ctx as { internalCall?: boolean; agentPrivateCall?: boolean } | undefined;
+    const callerCtx = this.input.ctx as
+      | { internalCall?: boolean; agentPrivateCall?: boolean; taskId?: string }
+      | undefined;
     const publicAccess = publicAccessFor(this.scope.auth?.options, authInfo);
     if (!tool || !publicAccess || callerCtx?.internalCall || callerCtx?.agentPrivateCall) return;
+    // The task runner's re-dispatch of a task-augmented call: the call that created the task was checked and counted.
+    if (callerCtx?.taskId) return;
     await enforcePublicAccess(
       publicAccess,
       { kind: 'tool', names: [tool.fullName || tool.name, tool.name] },
