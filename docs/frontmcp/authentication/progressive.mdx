@@ -74,6 +74,9 @@ historical allow‑all behavior is preserved).
 export class Server {}
 ```
 
+`allowSkip` and `showAllAppsAtOnce` are accepted but not read yet: the provider picker always lets the user leave
+providers unlinked (`federatedAuth.requiredProviders` makes them mandatory), and there is no step-by-step page.
+
 <Note>
   `incrementalAuth` and `consent` are **independent** features. `consent` gates which
   **tools** a token may call (the `consent` claim); `incrementalAuth` gates which **apps**
