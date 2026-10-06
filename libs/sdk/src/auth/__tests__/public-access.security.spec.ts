@@ -8,6 +8,7 @@ import 'reflect-metadata';
 import { createTestFetchServer, type TestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { disposeServers } from '../../__test-utils__/helpers/oauth-flow.helpers';
 import { App, Prompt, PromptContext, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
+import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 
 @Tool({ name: 'search', inputSchema: {} })
 class SearchTool extends ToolContext {
@@ -131,5 +132,26 @@ describe('publicAccess on a public server', () => {
     const result = await send('tools/call', { name: 'search', arguments: {} });
 
     expect(JSON.stringify(result.result)).toContain('tickets:read');
+  });
+});
+
+describe('publicAccess.rateLimit and a task-augmented call', () => {
+  it('counts the call once, not again when the task runner re-dispatches it (#766)', async () => {
+    const instance = await FrontMcpInstance.createForGraph({
+      info: { name: 'desk', version: '1.0.0' },
+      apps: [DeskApp],
+      auth: { mode: 'public', publicAccess: { rateLimit: 1 } },
+    });
+    const scope = instance.getScopes()[0];
+    if (!scope) throw new Error('the server config produced no scope');
+    const request = { method: 'tools/call' as const, params: { name: 'search', arguments: {} } };
+
+    await scope.runFlowForOutput('tools:call-tool', { request, ctx: { authInfo: {} } });
+    const redispatched = await scope.runFlowForOutput('tools:call-tool', {
+      request,
+      ctx: { authInfo: {}, taskId: 'task-1' },
+    });
+
+    expect(JSON.stringify(redispatched).toLowerCase()).not.toContain('rate limit');
   });
 });
