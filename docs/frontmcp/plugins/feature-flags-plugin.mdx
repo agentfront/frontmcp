@@ -258,11 +258,11 @@ The `FeatureFlagAdapter` interface:
 
 ```ts
 interface FeatureFlagAdapter {
-  initialize(): Promise<void>;
+  initialize?(): Promise<void>;
   isEnabled(flagKey: string, context: FeatureFlagContext): Promise<boolean>;
   getVariant(flagKey: string, context: FeatureFlagContext): Promise<FeatureFlagVariant>;
   evaluateFlags(flagKeys: string[], context: FeatureFlagContext): Promise<Map<string, boolean>>;
-  destroy(): Promise<void>;
+  destroy?(): Promise<void>;
 }
 ```
 

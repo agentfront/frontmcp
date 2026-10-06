@@ -17,11 +17,11 @@ class CheckFlagTool extends ToolContext {
   }
 }
 
-async function buildServer(adapterInstance: Partial<FeatureFlagAdapter>): Promise<DirectMcpServer> {
+async function buildServer(adapterInstance: FeatureFlagAdapter): Promise<DirectMcpServer> {
   @App({
     id: 'flags',
     name: 'Flags',
-    plugins: [FeatureFlagPlugin.init({ adapter: 'custom', adapterInstance: adapterInstance as FeatureFlagAdapter })],
+    plugins: [FeatureFlagPlugin.init({ adapter: 'custom', adapterInstance })],
     tools: [CheckFlagTool],
   })
   class FlagsApp {}
