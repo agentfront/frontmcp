@@ -3,14 +3,15 @@
  *
  * - once the provider's `expires_in` passes (or comes within `refresh.skewSeconds`), FrontMCP renews
  *   it with the provider's refresh token, unless `refresh.enabled` is false;
- * - when the client refreshes FrontMCP's own token, the provider tokens move to the new token.
+ * - when the client refreshes FrontMCP's own token, the provider tokens move to the new token, and stay
+ *   with the old refresh token until it is rotated.
  *
  * Driven as the client, the browser and the provider reach FrontMCP: DCR, `/oauth/authorize`, the
  * provider's redirect to `/oauth/provider/:id/callback`, then `/oauth/token`.
  */
 import 'reflect-metadata';
 
-import { InMemoryOrchestratedTokenStore } from '@frontmcp/auth';
+import { InMemoryAuthorizationStore, InMemoryOrchestratedTokenStore } from '@frontmcp/auth';
 
 import { createTestFetchServer, type TestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import {
@@ -25,6 +26,7 @@ import {
 } from '../../__test-utils__/helpers/oauth-flow.helpers';
 import { App, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { type Scope } from '../../scope/scope.instance';
+import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 @Tool({ name: 'provider_token', inputSchema: {} })
 class ProviderTokenTool extends ToolContext {
@@ -130,6 +132,15 @@ async function signIn(
   };
 }
 
+function refreshWith(server: TestFetchServer, refreshToken: string, clientId: string): Promise<Response> {
+  return postForm(
+    server.handler,
+    '/oauth/token',
+    { grant_type: 'refresh_token', refresh_token: refreshToken, client_id: clientId },
+    HOST,
+  );
+}
+
 async function providerToken(server: TestFetchServer, accessToken: string): Promise<unknown> {
   const call = await callToolWithToken(server.handler, 'provider_token', accessToken, HOST);
   expect(call.status).toBe(200);
@@ -212,11 +223,11 @@ describe('remote mode keeps the provider token available', () => {
     expect(await providerToken(server, accessToken)).toBeNull();
   });
 
-  it('moves the provider tokens on the next client refresh when a move fails', async () => {
+  it('gives the provider tokens to the next client refresh when copying them fails', async () => {
     const server = await remoteServer();
     const { clientId, refreshToken } = await signIn(server);
     jest
-      .spyOn(InMemoryOrchestratedTokenStore.prototype, 'migrateTokens')
+      .spyOn(InMemoryOrchestratedTokenStore.prototype, 'copyTokens')
       .mockRejectedValueOnce(new Error('store unavailable'));
 
     const failedMove = await postForm(
@@ -235,5 +246,109 @@ describe('remote mode keeps the provider token available', () => {
     const latest = String(((await retriedMove.json()) as Record<string, unknown>)['access_token']);
 
     expect(await providerToken(server, latest)).toBe('provider-access-1');
+  });
+
+  it('keeps the provider tokens with the refresh token when rotating it fails', async () => {
+    const server = await remoteServer();
+    const { clientId, refreshToken } = await signIn(server);
+    jest
+      .spyOn(InMemoryAuthorizationStore.prototype, 'rotateRefreshToken')
+      .mockRejectedValueOnce(new Error('store unavailable'));
+
+    const failed = await refreshWith(server, refreshToken, clientId);
+    const retried = await refreshWith(server, refreshToken, clientId);
+    const latest = String(((await retried.json()) as Record<string, unknown>)['access_token']);
+
+    expect(failed.status).toBe(500);
+    expect(await providerToken(server, latest)).toBe('provider-access-1');
+  });
+
+  it('gives the provider tokens to every refresh that succeeds when one refresh token is redeemed twice at once', async () => {
+    const server = await remoteServer();
+    const { clientId, refreshToken } = await signIn(server);
+
+    const responses = await Promise.all([
+      refreshWith(server, refreshToken, clientId),
+      refreshWith(server, refreshToken, clientId),
+    ]);
+    const issued = await Promise.all(
+      responses.filter((response) => response.status === 200).map((response) => response.json()),
+    );
+
+    expect(issued.length).toBeGreaterThan(0);
+    for (const body of issued as Record<string, unknown>[]) {
+      expect(await providerToken(server, String(body['access_token']))).toBe('provider-access-1');
+    }
+  });
+
+  it('refuses a redemption that copies the provider tokens after a concurrent one rotated the refresh token', async () => {
+    const server = await remoteServer();
+    const { clientId, refreshToken } = await signIn(server);
+    const auth = (server.instance.getScopes()[0] as Scope).auth as LocalPrimaryAuth;
+    const copyTokens = InMemoryOrchestratedTokenStore.prototype.copyTokens;
+    let copyStarted = (): void => undefined;
+    let releaseCopy = (): void => undefined;
+    const started = new Promise<void>((resolve) => (copyStarted = resolve));
+    const released = new Promise<void>((resolve) => (releaseCopy = resolve));
+    jest.spyOn(InMemoryOrchestratedTokenStore.prototype, 'copyTokens').mockImplementationOnce(async function (
+      this: InMemoryOrchestratedTokenStore,
+      fromAuthId,
+      toAuthId,
+    ) {
+      copyStarted();
+      await released;
+      return copyTokens.call(this, fromAuthId, toAuthId);
+    });
+
+    const slow = auth.refreshAccessToken(refreshToken, clientId);
+    await started;
+    const fast = await refreshWith(server, refreshToken, clientId);
+    releaseCopy();
+    const latest = String(((await fast.json()) as Record<string, unknown>)['access_token']);
+
+    expect(await slow).toMatchObject({ error: 'invalid_grant' });
+    expect(await providerToken(server, latest)).toBe('provider-access-1');
+  });
+
+  describe('with a token store that cannot copy tokens', () => {
+    async function signInWithoutCopy(server: TestFetchServer) {
+      const signedIn = await signIn(server);
+      const auth = (server.instance.getScopes()[0] as Scope).auth as LocalPrimaryAuth;
+      Object.assign(auth.orchestratedTokenStore, { copyTokens: undefined });
+      return signedIn;
+    }
+
+    it('moves the provider tokens once the refresh token is rotated, so a failed rotation can be retried', async () => {
+      const server = await remoteServer();
+      const { clientId, refreshToken } = await signInWithoutCopy(server);
+      jest
+        .spyOn(InMemoryAuthorizationStore.prototype, 'rotateRefreshToken')
+        .mockRejectedValueOnce(new Error('store unavailable'));
+
+      const failed = await refreshWith(server, refreshToken, clientId);
+      const retried = (await (await refreshWith(server, refreshToken, clientId)).json()) as Record<string, unknown>;
+      const retriedToken = await providerToken(server, String(retried['access_token']));
+      const next = await refreshWith(server, String(retried['refresh_token']), clientId);
+      const latest = String(((await next.json()) as Record<string, unknown>)['access_token']);
+
+      expect(failed.status).toBe(500);
+      expect(retriedToken).toBe('provider-access-1');
+      expect(await providerToken(server, latest)).toBe('provider-access-1');
+    });
+
+    it('keeps the source on the rotated record when the move fails, so the next refresh moves them', async () => {
+      const server = await remoteServer();
+      const { clientId, refreshToken } = await signInWithoutCopy(server);
+      jest
+        .spyOn(InMemoryOrchestratedTokenStore.prototype, 'migrateTokens')
+        .mockRejectedValueOnce(new Error('store unavailable'));
+
+      const failedMove = await refreshWith(server, refreshToken, clientId);
+      const afterFailure = (await failedMove.json()) as Record<string, unknown>;
+      const retriedMove = await refreshWith(server, String(afterFailure['refresh_token']), clientId);
+      const latest = String(((await retriedMove.json()) as Record<string, unknown>)['access_token']);
+
+      expect(await providerToken(server, latest)).toBe('provider-access-1');
+    });
   });
 });

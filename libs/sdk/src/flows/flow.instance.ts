@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import {
   FlowControl,
   FlowEntry,
+  withHttpHeaders,
   type FlowBase,
   type FlowCtxOf,
   type FlowInputOf,
@@ -15,6 +16,7 @@ import {
   type FrontMcpLogger,
   type HookEntry,
   type HookMetadata,
+  type HttpOutput,
   type Reference,
   type ScopeEntry,
   type ServerRequest,
@@ -29,6 +31,7 @@ import type HookRegistry from '../hooks/hook.registry';
 import { bindContextHookTargets } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
 import { writeHttpResponse } from '../server/server.validation';
+import { flowErrorToHttpOutput } from '../transport/flow-error-output';
 import { matchMountedPath } from './flow.http-path';
 import {
   cloneStageMap,
@@ -301,9 +304,35 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     }
 
     // `this.context.flow` and `this.context.scope` name the innermost flow running in this async call chain
-    return runAsFlow({ context: currentContext, flow: this, scope }, () =>
-      this.runStages(input, deps, scope, currentContext, sessionKey),
-    );
+    const runStages = () =>
+      runAsFlow({ context: currentContext, flow: this, scope }, () =>
+        this.runStages(input, deps, scope, currentContext, sessionKey),
+      );
+    const responseHeaders = this.metadata.middleware?.responseHeaders;
+    return responseHeaders ? this.respondWithHeaders(runStages, responseHeaders) : runStages();
+  }
+
+  /**
+   * Run the stages of a route whose every response carries `headers`, whichever stage, hook or guard
+   * responded. A failure is answered here, with the headers, rather than by the adapter.
+   */
+  private async respondWithHeaders(
+    runStages: () => Promise<FlowOutputOf<Name> | undefined>,
+    headers: Readonly<Record<string, string>>,
+  ): Promise<FlowOutputOf<Name> | undefined> {
+    let output: HttpOutput | undefined;
+    try {
+      output = (await runStages()) as HttpOutput | undefined;
+    } catch (error) {
+      output = flowErrorToHttpOutput(error);
+      if (!output) throw error;
+      this.logger.error('Flow failed', {
+        flow: this.name,
+        name: error instanceof Error ? error.name : 'UnknownError',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return output && (withHttpHeaders(output, headers) as FlowOutputOf<Name>);
   }
 
   private async runStages(

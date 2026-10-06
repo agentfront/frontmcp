@@ -77,7 +77,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
     }
     ```
 
-    In **remote** mode, token TTLs are controlled by the upstream identity provider — FrontMCP does not mint its own access/refresh tokens. In **local** mode, FrontMCP acts as the authorization server and mints its own tokens (HS256-signed with `JWT_SECRET`).
+    In both **local** and **remote** mode FrontMCP is the authorization server for its clients: it mints its own access tokens (HS256-signed with `JWT_SECRET`, valid for an hour) and refresh tokens (30 days, rotated on each use). In **remote** mode the upstream identity provider controls only the lifetime of its own tokens, the provider tokens tools read through `this.orchestration`, which `refresh` renews.
 
   </Step>
 
