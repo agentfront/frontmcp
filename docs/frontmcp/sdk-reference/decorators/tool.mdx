@@ -227,7 +227,7 @@ import { fileURLToPath } from 'node:url';
 })
 ```
 
-The function form uses the `html` tagged template, which escapes interpolated values (plain string results render as markup unless `escapeStringResults: true`):
+The function form uses the `html` tagged template, which escapes interpolated values (plain string results are escaped unless `escapeStringResults: false`):
 
 ```typescript
 ui: {

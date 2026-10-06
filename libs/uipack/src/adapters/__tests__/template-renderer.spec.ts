@@ -215,6 +215,7 @@ describe('renderToolTemplate', () => {
         input: { query: 'test' },
         output: { result: 42 },
         template,
+        escapeStringResults: false,
       });
 
       expect(template).toHaveBeenCalled();
@@ -378,7 +379,13 @@ describe('renderToolTemplate — function templates (#645)', () => {
   it('renders a capitalized HTML builder function instead of an empty shell', () => {
     const Card = (ctx: { output: { name: string } }) => `<section id="card">${ctx.output.name}</section>`;
 
-    const result = renderToolTemplate({ toolName: 'card_tool', input: {}, output: { name: 'Ada' }, template: Card });
+    const result = renderToolTemplate({
+      toolName: 'card_tool',
+      input: {},
+      output: { name: 'Ada' },
+      template: Card,
+      escapeStringResults: false,
+    });
 
     expect(result.html).toContain('<section id="card">Ada</section>');
   });

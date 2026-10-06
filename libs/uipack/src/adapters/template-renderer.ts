@@ -56,8 +56,9 @@ export interface RenderToolTemplateOptions {
   csp?: { connectDomains?: string[]; resourceDomains?: string[] };
   /**
    * HTML-escape a plain string returned by a template function; results built with
-   * `html` / `trustedHtml` stay markup. When unset, strings that look like HTML render as
-   * markup and a one-time notice per tool is logged; `false` keeps that without the notice.
+   * `html` / `trustedHtml` stay markup. Unset is the 1.9 default: strings are escaped, and a
+   * one-time notice per tool is logged when one looked like markup. `true` escapes without the
+   * notice; `false` renders strings that look like HTML as markup.
    */
   escapeStringResults?: boolean;
   /** Receives the one-time string-result notice. Defaults to `console`. */
@@ -114,10 +115,10 @@ function noticeStringResult(toolName: string, logger: { warn: (message: string) 
   if (noticedStringResultTools.has(toolName)) return;
   noticedStringResultTools.add(toolName);
   logger.warn(
-    `[frontmcp] The UI template of tool "${toolName}" returned a plain string containing markup, which is rendered as HTML. ` +
-      'FrontMCP 1.9 will HTML-escape plain string results by default. Build the markup with ctx.helpers.html`…` ' +
-      '(interpolated values are escaped) or wrap safe markup with ctx.helpers.trustedHtml(), then set ' +
-      'ui.escapeStringResults: true (or escapeStringResults: false to keep the current behaviour without this notice). ' +
+    `[frontmcp] The UI template of tool "${toolName}" returned a plain string containing markup. ` +
+      'FrontMCP 1.9 HTML-escapes plain string results by default, so it is shown as text. Build the markup with ' +
+      'ctx.helpers.html`…` (interpolated values are escaped) or wrap safe markup with ctx.helpers.trustedHtml(). ' +
+      'Set ui.escapeStringResults: false to render plain strings as markup, or true to silence this notice. ' +
       `See ${STRING_RESULT_DOCS}`,
   );
 }
@@ -125,9 +126,9 @@ function noticeStringResult(toolName: string, logger: { warn: (message: string) 
 /**
  * Body markup for a template result no content renderer claimed.
  *
- * `TrustedHtml` is the template's own markup. A plain string detected as HTML is markup unless
- * `escapeStringResults` is on. Text and serialized values carry tool data, so they are escaped
- * (GHSA-rhr9-vhpf-jqp7).
+ * `TrustedHtml` is the template's own markup. A plain string is escaped unless
+ * `escapeStringResults: false` lets one detected as HTML through as markup. Text and serialized
+ * values carry tool data, so they are escaped (GHSA-rhr9-vhpf-jqp7).
  */
 function renderUnwrappedResult(rawResult: unknown, options: RenderToolTemplateOptions): string {
   if (isTrustedHtml(rawResult)) {
@@ -136,13 +137,14 @@ function renderUnwrappedResult(rawResult: unknown, options: RenderToolTemplateOp
   if (typeof rawResult !== 'string') {
     return `<pre>${escapeHtml(JSON.stringify(rawResult, null, 2))}</pre>`;
   }
-  if (detectContentType(rawResult) !== 'html' || options.escapeStringResults === true) {
-    return escapeHtml(rawResult);
+  const looksLikeMarkup = detectContentType(rawResult) === 'html';
+  if (looksLikeMarkup && options.escapeStringResults === false) {
+    return rawResult;
   }
-  if (options.escapeStringResults === undefined) {
+  if (looksLikeMarkup && options.escapeStringResults === undefined) {
     noticeStringResult(options.toolName, options.logger ?? console);
   }
-  return rawResult;
+  return escapeHtml(rawResult);
 }
 
 /** The tools already warned about, per component, so the warning is given once (at startup). */

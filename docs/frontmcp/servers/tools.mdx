@@ -966,13 +966,13 @@ Markdown strings are converted on the server (headings, paragraphs, fenced code,
 
 ### UI Configuration Options
 
-| Option                | Description                                                                                                                      |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `template`            | `{ file }` FileSource, HTML function, or HTML / Markdown string (a bare React component reference cannot be bundled — see below) |
-| `csp`                 | Content Security Policy (allowed origins: `https://` / `wss://`, `http://` / `ws://` on localhost)                               |
-| `servingMode`         | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`                                                    |
-| `resourceMode`        | `'cdn'` or `'inline'` bundling for `.tsx` widgets (host-detected when unset)                                                     |
-| `escapeStringResults` | Escape plain string results; `html` / `trustedHtml` stay markup (default in 1.9)                                                 |
+| Option                | Description                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `template`            | `{ file }` FileSource, HTML function, or HTML / Markdown string (a bare React component reference cannot be bundled — see below)           |
+| `csp`                 | Content Security Policy (allowed origins: `https://` / `wss://`, `http://` / `ws://` on localhost)                                         |
+| `servingMode`         | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`                                                              |
+| `resourceMode`        | `'cdn'` or `'inline'` bundling for `.tsx` widgets (host-detected when unset)                                                               |
+| `escapeStringResults` | Escape plain string results (unset is the 1.9 default and escapes too); `false` renders them as markup; `html` / `trustedHtml` stay markup |
 
 **Options with no effect yet.** These pass validation but nothing reads them, so setting one changes nothing; startup logs a warning per tool that lists them: `widgetDescription`, `widgetAccessible`, `displayMode`, `prefersBorder`, `sandboxDomain`, `contentSecurity`, `hydrate`, `runtimeOptions`, `mdxComponents`, `bundlingMode`, `uiType` and `htmlResponsePrefix`. There is no dual HTML payload for Claude, so `htmlResponsePrefix` does nothing.
 
@@ -982,7 +982,7 @@ Markdown strings are converted on the server (headings, paragraphs, fenced code,
 
 **A React component reference is not a template.** `template: MyWidget` (a component, not a `{ file }`) cannot be bundled — there is no source file to compile — so the page renders an empty root. Startup logs one warning per tool when it compiles the widget; use `template: { file: './my-widget.tsx' }` instead.
 
-**Sanitization.** Markup you author (template literals, HTML strings, `.tsx` files) is trusted and not sanitized. Values interpolated into `` html`…` `` are escaped; plain string results are escaped only with `escapeStringResults: true`; Markdown strings are always escaped.
+**Sanitization.** Markup you author (template literals, HTML strings, `.tsx` files) is trusted and not sanitized. Values interpolated into `` html`…` `` are escaped; plain string results are escaped unless `escapeStringResults: false`; Markdown strings are always escaped.
 
 <Warning>
 **Build template markup with `ctx.helpers.html`.** A plain string a template function returns is rendered as markup when it looks like HTML, so returning unescaped tool output injects tags. The `html` tagged template escapes interpolated values; `ctx.helpers.trustedHtml(markup)` marks markup you already made safe. Set `ui.escapeStringResults: true` (or `@FrontMcp({ ui: { escapeStringResults: true } })`) to escape plain string results now — FrontMCP 1.9 does so by default. See [Trusted markup](/frontmcp/guides/building-tool-ui#trusted-markup).
