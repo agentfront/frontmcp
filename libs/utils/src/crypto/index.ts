@@ -5,12 +5,9 @@
  * Uses native crypto in Node.js and @noble/hashes + @noble/ciphers in browsers.
  */
 
-import { cryptoProvider } from '#crypto-provider';
+// Static and conditional: a browser bundle resolves it to `./browser` and never sees `node:crypto`.
+import * as platformCrypto from '#crypto-provider';
 
-// Type-only re-export so callers can import the structural shape without
-// triggering the Node-only runtime path. The underlying value lives in
-// `./node` and is loaded lazily via `require()` in the wrapper functions
-// below.
 import type { RsaJwk as RsaJwkNode, RsaKeyPair as RsaKeyPairNode } from './node';
 import { isNode } from './runtime';
 import type { CryptoProvider, EncBlob } from './types';
@@ -25,7 +22,7 @@ export { isRsaPssAlg, jwtAlgToNodeAlg, jwtAlgToWebCryptoAlg } from './jwt-alg';
  * Resolved at build time via the `#crypto-provider` conditional import.
  */
 export function getCrypto(): CryptoProvider {
-  return cryptoProvider;
+  return platformCrypto.cryptoProvider;
 }
 
 /**
@@ -47,7 +44,7 @@ export function rsaVerify(
   signature: Buffer | Uint8Array,
 ): Promise<boolean> {
   if (isNode()) {
-    return Promise.resolve(require('./node').rsaVerify(jwtAlg, data, publicJwk, signature) as boolean);
+    return Promise.resolve(platformCrypto.rsaVerify(jwtAlg, data, publicJwk, signature));
   }
   // Browser: use WebCrypto async API
 
@@ -72,7 +69,7 @@ export function rsaSignBase64Url(jwtAlg: string, data: Buffer | Uint8Array, priv
   if (!isNode()) {
     throw new Error('rsaSignBase64Url is only available in Node.js runtimes');
   }
-  return require('./node').rsaSignBase64Url(jwtAlg, data, privateJwk) as string;
+  return platformCrypto.rsaSignBase64Url(jwtAlg, data, privateJwk);
 }
 
 /**
@@ -97,7 +94,7 @@ export function rsaVerifySync(
   if (!isNode()) {
     throw new Error('rsaVerifySync is only available in Node.js runtimes; use the async rsaVerify in browsers');
   }
-  return require('./node').rsaVerifySync(jwtAlg, data, publicJwk, signature) as boolean;
+  return platformCrypto.rsaVerifySync(jwtAlg, data, publicJwk, signature);
 }
 
 /**
@@ -111,7 +108,7 @@ export function pemToPublicJwk(pem: string): JsonWebKey {
   if (!isNode()) {
     throw new Error('pemToPublicJwk is only available in Node.js runtimes');
   }
-  return require('./node').pemToPublicJwk(pem) as JsonWebKey;
+  return platformCrypto.pemToPublicJwk(pem);
 }
 
 /**
@@ -125,7 +122,7 @@ export function generateRsaKeyPair(modulusLength?: number, alg?: string): RsaKey
   if (!isNode()) {
     throw new Error('generateRsaKeyPair is only available in Node.js runtimes');
   }
-  return require('./node').generateRsaKeyPair(modulusLength, alg) as RsaKeyPair;
+  return platformCrypto.generateRsaKeyPair(modulusLength, alg);
 }
 
 // Convenience function exports - delegate to provider

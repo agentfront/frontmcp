@@ -218,16 +218,17 @@ ls dist/browser/
 
 ## Troubleshooting
 
-| Problem                           | Cause                                          | Solution                                                         |
-| --------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------- |
-| `Module not found: fs`            | Node.js module imported in browser bundle      | Use a separate browser entry point that avoids Node-only imports |
-| `crypto is not defined`           | Using `node:crypto` instead of WebCrypto       | Switch to `@frontmcp/utils` crypto functions                     |
-| CORS errors on tool calls         | MCP server missing CORS headers                | Configure CORS middleware on the MCP server                      |
-| Bundle too large                  | All server-side code included                  | Use `--target browser` and a dedicated client entry file         |
-| `@frontmcp/utils` fs throws       | File system ops called in browser              | Remove fs calls; use API endpoints or in-memory alternatives     |
-| `AsyncContextOverlapError`        | Concurrent tool calls inside one request       | Await the calls one after another (no `AsyncContext` in browser) |
-| A call never returns              | A tool calls its own server via a client       | Call other tools through `this.scope` flows                      |
-| `create()` never settles (Vite 7) | Top-level `await create()` in the entry module | Call `create()` from a function or `.then()`                     |
+| Problem                                                             | Cause                                          | Solution                                                                                                  |
+| ------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `Module not found: fs`                                              | Node.js module imported in browser bundle      | Use a separate browser entry point that avoids Node-only imports                                          |
+| `crypto is not defined`                                             | Using `node:crypto` instead of WebCrypto       | Switch to `@frontmcp/utils` crypto functions                                                              |
+| `node:crypto` or `@upstash/redis` unresolved from `@frontmcp/utils` | `@frontmcp/utils` 1.9.2                        | Upgrade: its browser build no longer imports `node:crypto`, and Vite stubs its uninstalled optional peers |
+| CORS errors on tool calls                                           | MCP server missing CORS headers                | Configure CORS middleware on the MCP server                                                               |
+| Bundle too large                                                    | All server-side code included                  | Use `--target browser` and a dedicated client entry file                                                  |
+| `@frontmcp/utils` fs throws                                         | File system ops called in browser              | Remove fs calls; use API endpoints or in-memory alternatives                                              |
+| `AsyncContextOverlapError`                                          | Concurrent tool calls inside one request       | Await the calls one after another (no `AsyncContext` in browser)                                          |
+| A call never returns                                                | A tool calls its own server via a client       | Call other tools through `this.scope` flows                                                               |
+| `create()` never settles (Vite 7)                                   | Top-level `await create()` in the entry module | Call `create()` from a function or `.then()`                                                              |
 
 ## Examples
 
