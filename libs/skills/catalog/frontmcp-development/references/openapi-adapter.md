@@ -60,7 +60,9 @@ Each OpenAPI operation becomes a tool named `<adapter-name>:<operationId>`. A ca
 operation's schema before any request goes out: a value outside an `enum` or a missing required field fails with
 `Invalid arguments for tool '<name>': <field>: <problem>` (up to 1.9.1 such arguments were sent as given).
 `format` is not enforced (an annotation in JSON Schema 2020-12), a `oneOf` passes when any branch matches, and a
-credential argument (`securitySchemesInInput`) may be left out when the server supplies the credential.
+credential argument (`securitySchemesInInput`) may be left out when the server supplies the credential. A required
+parameter with a spec `default` that the model leaves out is sent with that default (up to 1.9.2 the call failed with
+`Required query parameter '<name>' … is missing`).
 
 ## Authentication
 
@@ -255,7 +257,7 @@ OpenapiAdapter.init({
 OpenapiAdapter.init({
   name: 'billing-api',
   url: 'https://api.example.com/openapi.json',
-  generateOptions: { excludeMethods: ['delete', 'put'] }, // or includeMethods: ['get']
+  generateOptions: { excludeMethods: ['delete', 'PUT'] }, // or includeMethods: ['get']
 });
 
 // Custom filter (runs after every other filter)
@@ -300,20 +302,23 @@ OpenapiAdapter.init({
   inputTransforms: {
     global: [
       // Hide tenant header from AI, inject from user context
-      { inputKey: 'X-Tenant-Id', inject: (ctx) => ctx.authInfo.user?.tenantId },
+      { inputKey: 'X-Tenant-Id', inject: ({ ctx }) => ctx.authInfo.user?.tenantId },
       // Add correlation ID to all requests
       { inputKey: 'X-Correlation-Id', inject: () => crypto.randomUUID() },
     ],
     perTool: {
-      createAuditLog: [{ inputKey: 'userId', inject: (ctx) => ctx.authInfo.user?.id }],
+      createAuditLog: [{ inputKey: 'userId', inject: ({ ctx }) => ctx.authInfo.user?.id }],
     },
   },
 });
 ```
 
+When the model sends a value for an injected input anyway, that value is dropped before the arguments are checked and
+the injected one is sent (in 1.9.2 such a call was refused with `Unrecognized key`).
+
 ## Generated Tool Metadata
 
-Each tool starts from what `mcp-from-openapi` derives for its operation, and `tools/list` lists it: `annotations` inferred from the HTTP method (`GET` → `readOnlyHint`, `DELETE` → `destructiveHint`; turn off with `generateOptions: { inferAnnotations: false }`), the `title` from the operation summary, `icons` from `x-frontmcp.icons` / `x-mcp.icons` (or `info['x-logo']` with `generateOptions: { inheritDocumentIcons: true }`), and `_meta` with `dev.agentfront.openapi/operation` when `generateOptions: { emitMeta: true }`. `x-frontmcp` annotations merge over the derived ones and `toolTransforms` over both. Up to 1.9.1 the adapter dropped all four.
+Each tool starts from what `mcp-from-openapi` derives for its operation, and `tools/list` lists it: `annotations` inferred from the HTTP method (`GET` → `readOnlyHint`, `DELETE` → `destructiveHint`; turn off with `generateOptions: { inferAnnotations: false }`), the `title` from the operation summary, `icons` from `x-frontmcp.icons` / `x-mcp.icons` (or `info['x-logo']` with `generateOptions: { inheritDocumentIcons: true }`), and `_meta` with `dev.agentfront.openapi/operation` when `generateOptions: { emitMeta: true }`. `x-frontmcp` annotations merge over the derived ones and `toolTransforms` over both. Up to 1.9.1 the adapter dropped all four. `x-frontmcp` takes `annotations`, `cache`, `codecall`, `tags`, `hideFromDiscovery`, `examples`, `icons` and `meta`; any other field is ignored with an `Unknown field` warning (up to 1.9.2 `icons` and `meta` were warned about too, though they worked).
 
 ## Format Resolution
 
