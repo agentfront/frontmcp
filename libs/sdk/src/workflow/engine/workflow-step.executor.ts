@@ -106,8 +106,6 @@ export class WorkflowStepExecutor {
   ): Promise<unknown> {
     const parsedInput = job.parseInput(input);
     const { context, ...extra } = this.extra;
-    const contextProviders = context ? await jobContextProviders(job, context) : extra.contextProviders;
-    const ctx = job.create(parsedInput, { ...extra, contextProviders, attempt });
 
     // Race a timer against the job promise. Note: this does NOT cancel the
     // underlying job execution — it only rejects the caller early on timeout.
@@ -118,11 +116,13 @@ export class WorkflowStepExecutor {
         reject(new WorkflowJobTimeoutError(job.name, timeout));
       }, timeout);
 
-      // Async `authorities.pipes` load `this.auth` within the timed attempt, so a hung pipe times out like a hung job.
-      ctx
-        .loadAuthContext()
-        .then(() => {
-          // An attempt that timed out while its auth loaded is abandoned, so its job never starts.
+      // CONTEXT providers and async `authorities.pipes` are built within the timed attempt, so a hung one times out like a hung job.
+      Promise.resolve(context ? jobContextProviders(job, context) : extra.contextProviders)
+        .then(async (contextProviders) => {
+          if (timedOut) return undefined;
+          const ctx = job.create(parsedInput, { ...extra, contextProviders, attempt });
+          await ctx.loadAuthContext();
+          // An attempt that timed out while its providers or auth loaded is abandoned, so its job never starts.
           if (timedOut) return undefined;
           return runJobAttempt(job, ctx, parsedInput);
         })
