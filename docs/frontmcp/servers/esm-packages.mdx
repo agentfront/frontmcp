@@ -120,7 +120,7 @@ App.esm(specifier: string, options?: EsmAppOptions): RemoteAppMetadata
 </ParamField>
 
 <ParamField path="importMap" type="Record<string, string>">
-  Rewrites the package's imports, with import-map semantics: a key matches that exact specifier, and a key ending in `/` matches every specifier under it. The bundle is fetched with the mapped packages left out (esm.sh `external`), so their imports stay bare and are rewritten to the targets, for example `{ zod: 'https://esm.sh/zod@3.23.8' }` in a browser, or a `file://` URL or an installed package name under Node (which cannot import `https://` URLs). A bundle built with an import map is cached apart from one built without it.
+  Rewrites the package's imports, with import-map semantics: a key matches that exact specifier, and a key ending in `/` matches every specifier under it (the longest matching key wins). Only import and re-export specifiers are rewritten, never matching text in strings or comments. The bundle is fetched with the mapped packages left out (esm.sh `external`), so their imports stay bare and are rewritten to the targets, for example `{ zod: 'https://esm.sh/zod@3.23.8' }` in a browser, or a `file://` URL or an installed package name under Node (which cannot import `https://` URLs). A bundle built with an import map is cached apart from one built without it.
 </ParamField>
 
 <ParamField path="filter" type="AppFilterConfig">

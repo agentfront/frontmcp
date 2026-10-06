@@ -7,7 +7,7 @@
  */
 import 'reflect-metadata';
 
-import { App, Prompt, PromptContext, Resource, ResourceContext } from '../../common';
+import { App, Prompt, PromptContext, Resource, ResourceContext, ResourceTemplate } from '../../common';
 import type { DirectMcpServer } from '../../direct/direct.types';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 
@@ -31,10 +31,30 @@ function configResource(text: string) {
   return ConfigResource;
 }
 
-@App({ id: 'desk', name: 'Desk', prompts: [summarizePrompt('desk')], resources: [configResource('desk')] })
+function ticketTemplate(text: string) {
+  @ResourceTemplate({ name: 'ticket', uriTemplate: 'ticket://{id}' })
+  class TicketTemplate extends ResourceContext<{ id: string }> {
+    async execute(uri: string) {
+      return { contents: [{ uri, text }] };
+    }
+  }
+  return TicketTemplate;
+}
+
+@App({
+  id: 'desk',
+  name: 'Desk',
+  prompts: [summarizePrompt('desk')],
+  resources: [configResource('desk'), ticketTemplate('desk')],
+})
 class DeskApp {}
 
-@App({ id: 'billing', name: 'Billing', prompts: [summarizePrompt('billing')], resources: [configResource('billing')] })
+@App({
+  id: 'billing',
+  name: 'Billing',
+  prompts: [summarizePrompt('billing')],
+  resources: [configResource('billing'), ticketTemplate('billing')],
+})
 class BillingApp {}
 
 describe('entries of several apps', () => {
@@ -70,5 +90,13 @@ describe('entries of several apps', () => {
     expect(resources.filter((resource) => resource.uri === 'config://shared')).toHaveLength(1);
     expect(JSON.stringify(read.contents)).toContain('desk');
     expect(JSON.stringify(warn.mock.calls)).toContain('Resource URI \\"config://shared\\" is registered by both');
+  });
+
+  it('lists and matches a shared URI template from the first app only', async () => {
+    const { resourceTemplates } = await server.listResourceTemplates();
+    const read = await server.readResource('ticket://42');
+
+    expect(resourceTemplates.filter((template) => template.uriTemplate === 'ticket://{id}')).toHaveLength(1);
+    expect(JSON.stringify(read.contents)).toContain('desk');
   });
 });

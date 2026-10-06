@@ -35,6 +35,16 @@ const stateSchema = z.object({
       prompt: z.any(),
     }),
   ),
+  /** Every prompt `findPrompts` collected, before any filter: names that collide here stay qualified. */
+  foundPrompts: z
+    .array(
+      z.object({
+        ownerName: z.string(),
+        // z.any() used because PromptEntry is a complex abstract class type
+        prompt: z.any(),
+      }),
+    )
+    .optional(),
   resolvedPrompts: z.array(
     z.object({
       ownerName: z.string(),
@@ -188,6 +198,7 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
       }
 
       this.state.set('prompts', prompts);
+      this.state.set('foundPrompts', prompts);
       this.logger.verbose('findPrompts:done');
     } catch (error) {
       this.logger.error('findPrompts: failed to collect prompts', error);
@@ -252,7 +263,7 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
       const found = this.state.required.prompts;
 
       const counts = new Map<string, number>();
-      for (const { prompt } of found) {
+      for (const { prompt } of this.state.foundPrompts ?? found) {
         const baseName = prompt.metadata.name;
         counts.set(baseName, (counts.get(baseName) ?? 0) + 1);
       }

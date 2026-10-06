@@ -382,7 +382,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     const toStageResult = (e: unknown): StageResult => {
       if (e instanceof FlowControl) {
-        if (e.type === 'respond') responded = e.output as FlowOutputOf<Name>;
+        if (e.type === 'respond') {
+          responded = e.output as FlowOutputOf<Name>;
+          const status = (e.output as { status?: unknown } | undefined)?.status;
+          // Finalize stages and their hooks read the HTTP status a flow responded with from `state.statusCode`
+          if (typeof status === 'number') context.state.set('statusCode' as never, status as never);
+        }
         return { outcome: e.type, control: e };
       }
       return { outcome: 'unknown_error', control: e as Error };
@@ -486,9 +491,13 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       return { outcome: 'ok' };
     };
 
-    // The error and finalize stages, and their hooks, read why the flow failed from `state.flowError`
+    // The error and finalize stages read why the flow failed from `state.flowError`, always an Error
     const recordFailure = (control: unknown) => {
-      context.state.set('flowError' as never, control as never);
+      const flowError =
+        control instanceof Error
+          ? control
+          : new InternalMcpError(`Flow failed with a non-Error value: ${String(control)}`);
+      context.state.set('flowError' as never, flowError as never);
     };
 
     const runErrorStage = async () => {

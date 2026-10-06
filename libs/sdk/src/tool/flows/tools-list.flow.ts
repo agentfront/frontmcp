@@ -47,6 +47,15 @@ const stateSchema = z.object({
       tool: z.instanceof(ToolEntry),
     }),
   ),
+  /** Every tool `findTools` collected, before any filter: names that collide here stay qualified. */
+  foundTools: z
+    .array(
+      z.object({
+        appName: z.string(),
+        tool: z.instanceof(ToolEntry),
+      }),
+    )
+    .optional(),
   resolvedTools: z.array(
     z.object({
       appName: z.string(),
@@ -313,6 +322,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       }
 
       this.state.set('tools', tools);
+      this.state.set('foundTools', tools);
       this.logger.verbose('findTools:done');
     } catch (error) {
       this.logger.error('findTools: failed to collect tools', error);
@@ -377,7 +387,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       const found = this.state.required.tools;
 
       const counts = new Map<string, number>();
-      for (const { tool } of found) {
+      for (const { tool } of this.state.foundTools ?? found) {
         const baseName = tool.metadata.id ?? tool.metadata.name;
         counts.set(baseName, (counts.get(baseName) ?? 0) + 1);
       }

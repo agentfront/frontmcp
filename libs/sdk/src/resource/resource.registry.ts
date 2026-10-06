@@ -251,13 +251,7 @@ export default class ResourceRegistry extends RegistryAbstract<
     // Helper to adopt/re-adopt resources from the remote app
     const adoptRemoteResources = () => {
       try {
-        // Remove any previously adopted resources from this remote app
-        const appPrefix = `resource:${app.id}:`;
-        this.localRows = this.localRows.filter((row) => {
-          const tokenDesc = typeof row.token === 'symbol' ? row.token.description : undefined;
-          return !tokenDesc?.startsWith(appPrefix);
-        });
-
+        const rows: IndexedResource[] = [];
         const remoteResources = app.resources.getResources();
         const remoteTemplates = app.resources.getResourceTemplates();
         const allRemoteResources = [...remoteResources, ...remoteTemplates];
@@ -270,10 +264,11 @@ export default class ResourceRegistry extends RegistryAbstract<
             }
             // Use Symbol.for() for stable, deterministic tokens across registry operations
             const stableToken = Symbol.for(`resource:${app.id}:${remoteResource.name}`);
-            const row = this.makeRow(stableToken, remoteResource, prepend, this);
-            this.localRows.push(row);
+            rows.push(this.makeRow(stableToken, remoteResource, prepend, this));
           }
         }
+        // Keyed by the remote registry from startup on, in app order: a refresh keeps the app's place
+        this.adopted.set(remoteRegistry, rows);
         this.reindex();
         this.bump('reset');
       } catch (error) {
@@ -352,12 +347,19 @@ export default class ResourceRegistry extends RegistryAbstract<
   }
 
   /**
+   * Find the resource template that serves a URI template: the first one registered for it
+   */
+  findByUriTemplate(uriTemplate: string): ResourceEntry | undefined {
+    return this.byUriTemplate.get(uriTemplate)?.instance;
+  }
+
+  /**
    * Match a URI against template resources and extract parameters
    */
   matchTemplateByUri(uri: string): { instance: ResourceEntry; params: Record<string, string> } | undefined {
-    // Try each template resource
+    // Try each template resource; one another app registered first is never served
     for (const row of this.listAllIndexed()) {
-      if (!row.isTemplate) continue;
+      if (!row.isTemplate || (row.uriTemplate && this.findByUriTemplate(row.uriTemplate) !== row.instance)) continue;
 
       const match = row.instance.matchUri(uri);
       if (match.matches) {

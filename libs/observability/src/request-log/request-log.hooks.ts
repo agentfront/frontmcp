@@ -16,7 +16,7 @@ interface RequestContextStore {
 
 interface RequestLogFlowContext {
   get?(token: unknown): unknown;
-  rawInput?: { request?: { method?: string; path?: string; body?: unknown } };
+  rawInput?: { request?: { method?: string; path?: string; body?: unknown }; response?: { statusCode?: unknown } };
   state?: Record<string | symbol, unknown>;
 }
 
@@ -67,11 +67,14 @@ export function recordRequestLogFailure(flowCtx: RequestLogFlowContext): void {
   });
 }
 
-/** Closes the request's log with its HTTP status, which fires `requestLogs.onRequestComplete`. */
+/**
+ * Closes the request's log with its HTTP status, which fires `requestLogs.onRequestComplete`: the status the
+ * flow responded with (`state.statusCode`), else the one a transport wrote to the response itself.
+ */
 export async function completeRequestLog(flowCtx: RequestLogFlowContext): Promise<void> {
   const collector = currentRequestLog(flowCtx);
   if (!collector || collector.isFinalized()) return;
-  const statusCode = flowCtx.state?.['statusCode'];
+  const statusCode = flowCtx.state?.['statusCode'] ?? flowCtx.rawInput?.response?.statusCode;
   if (typeof statusCode === 'number' && statusCode >= 400) collector.setStatus('error', statusCode);
   await collector.finalize();
 }

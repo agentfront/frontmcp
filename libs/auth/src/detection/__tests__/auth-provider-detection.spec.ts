@@ -247,6 +247,40 @@ describe('auth-provider-detection', () => {
       expect(detectAuthProviders(undefined, apps).validationErrors).toHaveLength(1);
     });
 
+    it('refuses a static app under a static server whose tokens it does not share, though both derive the same provider id', () => {
+      const staticParent = { mode: 'static', tokens: ['parent-token'] } as AuthOptions;
+      const apps = [
+        { id: 'billing', name: 'Billing', auth: { mode: 'static', tokens: ['billing-token'] } as AuthOptions },
+      ];
+
+      expect(deriveProviderId(staticParent)).toBe(deriveProviderId(apps[0].auth));
+      expect(detectAuthProviders(staticParent, apps).validationErrors).toEqual([
+        expect.stringContaining('App-level auth is not enforced on the shared endpoint of a server in static mode'),
+      ]);
+    });
+
+    it('accepts a static app whose tokens include every token the static server checks', () => {
+      const staticParent = { mode: 'static', tokens: ['shared-token'] } as AuthOptions;
+      const apps = [
+        { id: 'billing', name: 'Billing', auth: { mode: 'static', tokens: ['shared-token', 'extra'] } as AuthOptions },
+      ];
+
+      expect(detectAuthProviders(staticParent, apps).validationErrors).toEqual([]);
+    });
+
+    it('refuses a static app that shares the tokens but expects them in another header', () => {
+      const staticParent = { mode: 'static', tokens: ['shared-token'] } as AuthOptions;
+      const apps = [
+        {
+          id: 'billing',
+          name: 'Billing',
+          auth: { mode: 'static', tokens: ['shared-token'], header: 'x-api-key', scheme: '' } as AuthOptions,
+        },
+      ];
+
+      expect(detectAuthProviders(staticParent, apps).validationErrors).toHaveLength(1);
+    });
+
     it('lets a public app sit under a public server, and a protected app under a local server', () => {
       const publicApps = [{ id: 'app1', name: 'App1', auth: publicAuth() }];
       expect(detectAuthProviders(publicAuth(), publicApps).validationErrors).toEqual([]);
@@ -325,6 +359,20 @@ describe('auth-provider-detection', () => {
       const parent = transparentAuth('https://idp.example.com');
 
       expect(detectAuthProviders(parent, [forwardingApp]).validationErrors).toEqual([]);
+    });
+
+    it("refuses a forwarding app whose own auth is transparent when the shared endpoint authenticates with the server's local policy", () => {
+      const app = { ...forwardingApp, auth: transparentAuth('https://idp.example.com') };
+
+      const errors = detectAuthProviders(localAuth(), [app]).validationErrors;
+
+      expect(errors).toEqual(expect.arrayContaining([expect.stringContaining("remoteAuth: { mode: 'forward' }")]));
+    });
+
+    it('accepts a forwarding app on its own endpoint, whose scope auth is its transparent auth', () => {
+      const appAuth = transparentAuth('https://idp.example.com');
+
+      expect(detectAuthProviders(appAuth, [{ ...forwardingApp, auth: appAuth }]).validationErrors).toEqual([]);
     });
   });
 

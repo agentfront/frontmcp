@@ -1,6 +1,7 @@
 import 'reflect-metadata';
-import ResourceRegistry from '../resource.registry';
+
 import { Resource, ResourceTemplate } from '../../common/decorators/resource.decorator';
+import ResourceRegistry from '../resource.registry';
 
 // Mock the complex dependencies
 const createMockHookRegistry = () => ({
@@ -496,5 +497,43 @@ describe('ResourceRegistry', () => {
       expect(inline).toHaveLength(1);
       expect(inline[0].name).toBe('inline');
     });
+  });
+});
+
+describe('a resource URI two remote apps share (#766)', () => {
+  function remoteApp(id: string) {
+    const listeners: Array<() => void> = [];
+    const entry = {
+      name: 'config',
+      uri: 'config://shared',
+      isTemplate: false,
+      metadata: {},
+      owner: { kind: 'app', id },
+    };
+    const resources = {
+      getResources: () => [entry],
+      getResourceTemplates: () => [],
+      subscribe: (_options: unknown, listener: () => void) => listeners.push(listener),
+    };
+    return {
+      app: { id, isRemote: true, resources },
+      entry,
+      refresh: () => listeners.forEach((listener) => listener()),
+    };
+  }
+
+  it('keeps the first configured app serving it after that app refreshes its capabilities', async () => {
+    const desk = remoteApp('desk');
+    const billing = remoteApp('billing');
+    const providers = createMockProviderRegistry();
+    providers.getRegistries.mockImplementation((kind: string) =>
+      kind === 'AppRegistry' ? [{ getApps: () => [desk.app, billing.app] }] : [],
+    );
+    const registry = new ResourceRegistry(providers, [], createMockOwner());
+    await registry.ready;
+
+    expect(registry.findByUri('config://shared')).toBe(desk.entry);
+    desk.refresh();
+    expect(registry.findByUri('config://shared')).toBe(desk.entry);
   });
 });

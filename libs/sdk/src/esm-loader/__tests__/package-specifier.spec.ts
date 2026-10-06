@@ -160,4 +160,40 @@ describe('import maps (#766)', () => {
   it('leaves a bundle alone without an import map', () => {
     expect(applyImportMap('import{z}from"zod";', {})).toBe('import{z}from"zod";');
   });
+
+  it('picks the longest matching prefix key, whatever order the map lists them in', () => {
+    const rewritten = applyImportMap('import map from "lodash/fp/map";', {
+      'lodash/': 'file:///general/',
+      'lodash/fp/': 'file:///fp/',
+    });
+
+    expect(rewritten).toBe('import map from "file:///fp/map";');
+  });
+
+  it('rewrites nothing inside strings, comments, template literals and regex literals', () => {
+    const bundle = [
+      'export const help = \'import "zod"\';',
+      '// import x from "zod"',
+      '/* const y = import("zod") */',
+      'const docs = `from "zod" ${"import(\\"zod\\")"} and import("zod")`;',
+      'const pattern = /from "zod"/g;',
+      'const ratio = a / b; import"zod";',
+    ].join('\n');
+
+    const rewritten = applyImportMap(bundle, { zod: 'https://cdn.example.com/zod.mjs' });
+
+    expect(rewritten).toBe(bundle.replace('import"zod";', 'import"https://cdn.example.com/zod.mjs";'));
+  });
+
+  it('rewrites an import inside a template interpolation, which is code', () => {
+    const rewritten = applyImportMap('const m = `${await import("zod")}`;', { zod: 'https://cdn.example.com/zod.mjs' });
+
+    expect(rewritten).toBe('const m = `${await import("https://cdn.example.com/zod.mjs")}`;');
+  });
+
+  it('leaves a method named import or from alone', () => {
+    const bundle = 'loader.import("zod"); Array.from("zod");';
+
+    expect(applyImportMap(bundle, { zod: 'https://cdn.example.com/zod.mjs' })).toBe(bundle);
+  });
 });
