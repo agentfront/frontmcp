@@ -219,8 +219,9 @@ Without `providerConfig.jwks` or `jwksUri`, the keys are fetched from `<provider
 `jwks_uri` of the provider's OAuth metadata or `/.well-known/openid-configuration`.
 
 A verified token's subject is its `sub`. A token without one (some IdPs issue client-credentials tokens that way)
-takes its subject from `client_id`, else `azp`, as RFC 9068 §2.2 names the client the subject of such a token; a token
-with none of the three has no subject and reads as anonymous (`this.auth.isAnonymous`).
+takes its subject from `client_id`, else `azp`, as RFC 9068 §2.2 names the client the subject of such a token. A token
+with none of the three is refused with `401` and `error="invalid_token"`, whose description names the missing claims:
+a verified token is never served as an anonymous caller.
 
 ### Claim validation
 
