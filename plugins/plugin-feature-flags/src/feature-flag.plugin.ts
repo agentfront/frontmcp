@@ -71,6 +71,42 @@ function assertCustomAdapter(adapterInstance: unknown): asserts adapterInstance 
 type AdapterWithOptionalLifecycle = Omit<FeatureFlagAdapter, 'initialize' | 'destroy'> &
   Partial<Pick<FeatureFlagAdapter, 'initialize' | 'destroy'>>;
 
+interface AdapterLifecycle {
+  ready: Promise<void>;
+  registrations: number;
+}
+
+/** One lifecycle per adapter instance and scope: one plugin record in several apps shares its adapter. */
+const adapterLifecycles = new WeakMap<AdapterWithOptionalLifecycle, WeakMap<ScopeEntry, AdapterLifecycle>>();
+
+/**
+ * Initialize `adapter` once for `scope`, and destroy it once, when the scope's last registration
+ * of it is disposed.
+ */
+async function startAdapter(adapter: AdapterWithOptionalLifecycle, scope: ScopeEntry): Promise<void> {
+  let lifecyclesByScope = adapterLifecycles.get(adapter);
+  if (!lifecyclesByScope) {
+    lifecyclesByScope = new WeakMap();
+    adapterLifecycles.set(adapter, lifecyclesByScope);
+  }
+  let lifecycle = lifecyclesByScope.get(scope);
+  if (!lifecycle) {
+    lifecycle = { ready: (async () => adapter.initialize?.())(), registrations: 0 };
+    lifecyclesByScope.set(scope, lifecycle);
+  }
+  lifecycle.registrations++;
+
+  const registeredLifecycle = lifecycle;
+  const registeredScopes = lifecyclesByScope;
+  scope.onDispose(async () => {
+    registeredLifecycle.registrations--;
+    if (registeredLifecycle.registrations > 0) return;
+    registeredScopes.delete(scope);
+    await adapter.destroy?.();
+  });
+  await registeredLifecycle.ready;
+}
+
 /**
  * The adapter for one server: initialized before the server serves, destroyed when the server is
  * disposed (`dispose()` on what `create()` returns, or `Scope.dispose()`).
@@ -82,10 +118,7 @@ function adapterProvider(kind: string, createAdapter: () => AdapterWithOptionalL
     inject: () => [ScopeEntry] as const,
     useFactory: async (scope: ScopeEntry) => {
       const adapter = createAdapter();
-      await adapter.initialize?.();
-      scope.onDispose(async () => {
-        await adapter.destroy?.();
-      });
+      await startAdapter(adapter, scope);
       return adapter;
     },
   };
