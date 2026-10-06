@@ -2,11 +2,12 @@ import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
 
-import { App, LogLevel, Plugin, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
+import { App, LogLevel, Plugin, Tool, ToolContext, type FlowCtxOf, type FrontMcpConfigInput } from '../../common';
 import { connect } from '../../direct/connect';
 import { ElicitationRequestHook, ElicitationResultHook } from '../../elicitation/hooks/elicitation.hooks';
 
 const ranStages: string[] = [];
+const builtResults: unknown[] = [];
 
 @Plugin({ name: 'elicitation-audit' })
 class ElicitationAuditPlugin {
@@ -16,8 +17,9 @@ class ElicitationAuditPlugin {
   }
 
   @ElicitationResultHook.Did('buildResult')
-  async afterResult() {
+  async afterResult(ctx: FlowCtxOf<'elicitation:result'>) {
     ranStages.push('elicitation:result');
+    builtResults.push(ctx.state.elicitResult);
   }
 }
 
@@ -36,7 +38,7 @@ class ConnectBillingTool extends ToolContext {
       mode: 'url',
       url: 'https://billing.example/connect',
     });
-    return { action: answer.status };
+    return { action: answer.status, content: answer.content };
   }
 }
 
@@ -55,6 +57,7 @@ function config(): FrontMcpConfigInput {
 describe('elicitation through the in-memory transport', () => {
   beforeEach(() => {
     ranStages.length = 0;
+    builtResults.length = 0;
   });
 
   it('runs the elicitation:request and elicitation:result flows, so their hooks fire', async () => {
@@ -89,6 +92,18 @@ describe('elicitation through the in-memory transport', () => {
         elicitationId: expect.stringMatching(/^elicit-/),
       }),
     ]);
+  });
+
+  it('gives an accepted URL-mode answer no content, even when the client sends some', async () => {
+    const client = await connect(config(), {
+      onElicitation: async () => ({ action: 'accept', content: { token: 'from-client' } }),
+    });
+
+    const result = (await client.callTool('connect_billing', {})) as { structuredContent?: unknown };
+    await client.close();
+
+    expect(result.structuredContent).toStrictEqual({ action: 'accept' });
+    expect(builtResults).toStrictEqual([{ status: 'accept' }]);
   });
 
   it('fails an unanswered question with ElicitationTimeoutError', async () => {

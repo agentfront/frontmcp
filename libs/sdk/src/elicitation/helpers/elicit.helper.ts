@@ -156,7 +156,7 @@ export async function performElicit<S extends ZodType>(
   if (preResolved) {
     // Clear the pre-resolved result to prevent reuse
     ctx?.clearPreResolvedElicitResult?.();
-    return preResolved as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
+    return withoutUrlModeContent(preResolved, elicitOptions) as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
   }
 
   // 4. Check client capabilities
@@ -186,7 +186,13 @@ export async function performElicit<S extends ZodType>(
 
   // 6. Send elicit request (timeout throws ElicitationTimeoutError)
   // The client may call the server before it answers; in a browser build that means stepping aside.
-  return awaitOutsideRequest(transport.elicit(message, requestedSchema, elicitOptions));
+  const answer = await awaitOutsideRequest(transport.elicit(message, requestedSchema, elicitOptions));
+  return withoutUrlModeContent(answer, elicitOptions);
+}
+
+/** A URL-mode answer carries no content, even when the session transports or sendElicitationResult pass some on. */
+function withoutUrlModeContent<T>(answer: ElicitResult<T>, options?: ElicitOptions): ElicitResult<T> {
+  return options?.mode === 'url' ? { status: answer.status } : answer;
 }
 
 /**
