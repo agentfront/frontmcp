@@ -833,7 +833,7 @@ export class FrontMcpContext {
     for (const [key, value] of forwardedCustomHeaders) {
       headers.set(key, value);
     }
-    const forwardsCallerHeaders = forwardsCallerToken || forwardedCustomHeaders.length > 0;
+    const forwardsCredentials = providerCredentialsUsed || forwardsCallerToken || forwardedCustomHeaders.length > 0;
 
     // Use a manual AbortController + setTimeout instead of AbortSignal.timeout()
     // to avoid listener leaks under high concurrency (AbortSignal.timeout() creates
@@ -859,8 +859,8 @@ export class FrontMcpContext {
         ...effectiveInit,
         headers,
         signal,
-        // A redirect could carry forwarded caller headers to an origin nobody allow-listed.
-        redirect: forwardsCallerHeaders && requestedRedirect !== 'error' ? 'manual' : requestedRedirect,
+        // A redirect could carry provider credentials or forwarded caller headers to an origin nobody allow-listed.
+        redirect: forwardsCredentials && requestedRedirect !== 'error' ? 'manual' : requestedRedirect,
       });
     } finally {
       if (timeoutId !== undefined) clearTimeout(timeoutId);

@@ -30,12 +30,17 @@ class DeskApp {}
 
 describe('this.fetch() with credentials: { provider }', () => {
   const originalFetch = globalThis.fetch;
-  const sent: Array<{ url: string; headers: Headers; credentials?: unknown }> = [];
+  const sent: Array<{ url: string; headers: Headers; credentials?: unknown; redirect?: RequestRedirect }> = [];
   let server: DirectMcpServer;
 
   beforeAll(async () => {
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      sent.push({ url: String(input), headers: new Headers(init?.headers), credentials: init?.credentials });
+      sent.push({
+        url: String(input),
+        headers: new Headers(init?.headers),
+        credentials: init?.credentials,
+        redirect: init?.redirect,
+      });
       return new Response('{}');
     }) as typeof fetch;
     server = await FrontMcpInstance.createDirect({
@@ -60,5 +65,12 @@ describe('this.fetch() with credentials: { provider }', () => {
       ['https://unknown.example.com/', null, null],
     ]);
     expect(sent.every(({ credentials }) => credentials === undefined)).toBe(true);
+  });
+
+  it('does not follow a redirect with provider credentials, so a 3xx cannot carry them to another origin', async () => {
+    sent.length = 0;
+    await server.callTool('call_upstream', {});
+
+    expect(sent.map(({ redirect }) => redirect)).toEqual(['manual', 'manual', 'manual']);
   });
 });
