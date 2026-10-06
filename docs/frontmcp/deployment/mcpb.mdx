@@ -229,8 +229,10 @@ An OS gets an override only when every one of its architectures has a binary.
 Otherwise a host on the missing architecture would be sent to a binary it can't
 run, so the build skips that OS and logs which binaries are missing. Hosts on
 an OS without an override run the Node command, and the bundled JS runs on any
-machine with Node installed. A single `--sea` build on one machine therefore
-covers only Windows; ship macOS and Linux binaries with `--merge-from`.
+machine with Node installed. A single `--sea` build produces a binary for its
+build host only, so only a build on a Windows x64 host supplies an override on
+its own (for `win32`); a single macOS or Linux build supplies none. Ship every
+architecture of macOS and Linux with `--merge-from`.
 
 The binary is self-contained, like `server/index.js`: the FrontMCP runtime and
 `reflect-metadata` are bundled into it. A single-executable binary resolves a bare

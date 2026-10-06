@@ -151,7 +151,9 @@ so the generated keys are OS names. An OS with several architectures (`darwin`,
 its `x64` binary. An OS gets an override only when every one of its
 architectures has a binary. The build skips a partly covered OS and logs the
 missing binaries, and its hosts run the Node command and bundled JS. A partial
-matrix is still safe, but a lone `--sea` build covers only Windows.
+matrix is still safe. A lone `--sea` build produces a binary for its build
+host only, so only a Windows x64 host build supplies an override on its own; a
+lone macOS or Linux build supplies none.
 
 ## Common Patterns
 
