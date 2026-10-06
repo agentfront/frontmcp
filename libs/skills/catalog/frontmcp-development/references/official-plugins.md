@@ -412,7 +412,8 @@ anonymous caller cannot use `user`, nor `session` or `tool` without a session. N
 
 ## 3. Approval Plugin (`@frontmcp/plugin-approval`)
 
-Tool authorization workflow with PKCE webhook security. Require explicit user or system approval before sensitive tools execute.
+Tool authorization workflow. Require explicit user or system approval before sensitive tools execute; your code records
+the approvals (`this.approval`, the store).
 
 ### Installation
 
@@ -436,7 +437,7 @@ class BasicServer {}
 })
 class AuditedServer {}
 
-// Webhook mode -- PKCE-secured external approval flow
+// Webhook mode -- also registers the PKCE ChallengeService (the webhook options are reserved, see Modes)
 @FrontMcp({
   plugins: [
     ApprovalPlugin.init({
@@ -462,7 +463,11 @@ tools marked `approval` ran unapproved.
 ### Modes
 
 - `recheck` -- Re-evaluates approval status on every tool call. Approval can be granted programmatically via `this.approval.grantSessionApproval()`. Good for interactive approval flows where the user confirms in-band.
-- `webhook` -- Sends a PKCE-secured webhook to an external approval service. The external service calls back to confirm or deny. Suitable for compliance workflows requiring out-of-band approval.
+- `webhook` -- Also registers the `ChallengeService` (`ChallengeServiceToken`), PKCE challenges for an external approval flow you build yourself.
+
+Neither mode contacts an external system in 1.9: `recheck.url`/`auth`/`interval`/`maxAttempts` poll nothing, and
+`webhook.url`/`includeJwt`/`callbackPath` send no request and serve no route. Ask with `this.elicit()` (or your own
+UI) and record the answer with `this.approval.grantSessionApproval()`.
 
 ### Pre-approved contexts come from the session
 
