@@ -215,7 +215,8 @@ export async function registerChannelCapabilities(
             ? await loadExternalToolRecords(providers.getActiveScope(), toolRecord)
             : [toolRecord];
           for (const record of toolRecords) {
-            const toolInstance = new ToolInstance(record, providers, {
+            // The channel's own providers: its app's when an app declares it, as its hooks get
+            const toolInstance = new ToolInstance(record, instance.providers, {
               kind: 'scope',
               id: `_channel:${instance.name}`,
               ref: toolDef as any,

@@ -229,7 +229,7 @@ export default class GreetingServer {}
 
 ## Skill catalog injection
 
-The optional `skillsConfig.injectInstructions` field controls how the server's auto-built skill catalog summary is merged into the `instructions` field on the MCP `initialize` response.
+The optional `skillsConfig.injectInstructions` field controls how the server's auto-built skill catalog summary is merged into the `instructions` field on the MCP `initialize` response, and on the `server/discover` result for MCP 2026-07-28 clients (up to 1.9.2 `server/discover` sent the server's `instructions` alone, without the channel hint or the catalog).
 
 | Mode      | Behavior                                                                                                                                                 |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |

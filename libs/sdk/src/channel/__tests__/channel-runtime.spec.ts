@@ -1,13 +1,24 @@
 import 'reflect-metadata';
 
+import { z } from '@frontmcp/lazy-zod';
 import { MCP_20260728_META, PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
 
 import {
   createTestFetchServer,
+  rpc20260728,
   TEST_CLIENT_INFO,
   type TestFetchServer,
 } from '../../__test-utils__/helpers/mcp-20260728.helpers';
-import { App, Channel, ChannelContext, LogLevel, Provider, type ChannelNotification } from '../../common';
+import {
+  App,
+  Channel,
+  ChannelContext,
+  LogLevel,
+  Provider,
+  Tool,
+  ToolContext,
+  type ChannelNotification,
+} from '../../common';
 import { type DirectMcpServer } from '../../direct/direct.types';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import type { Scope } from '../../scope/scope.instance';
@@ -19,7 +30,14 @@ class Formatter {
   }
 }
 
-@Channel({ name: 'alerts', source: { type: 'app-event', event: 'alert' } })
+@Tool({ name: 'format_alert', inputSchema: { text: z.string() } })
+class FormatAlertTool extends ToolContext {
+  async execute({ text }: { text: string }) {
+    return { formatted: this.get(Formatter).format(text) };
+  }
+}
+
+@Channel({ name: 'alerts', source: { type: 'app-event', event: 'alert' }, tools: [FormatAlertTool] })
 class AlertsChannel extends ChannelContext {
   async onEvent(payload: unknown): Promise<ChannelNotification> {
     return { content: this.get(Formatter).format(String((payload as { text: string }).text)) };
@@ -66,6 +84,12 @@ describe('channels at run time', () => {
     const notification = await scopeOf(server).channels?.findByName('alerts')?.handleEvent({ text: 'disk full' });
 
     expect(notification).toEqual({ content: '[desk] disk full' });
+  });
+
+  it("gives a channel's own tools the providers of the channel's app", async () => {
+    const result = await server.callTool('format_alert', { text: 'disk full' });
+
+    expect(result.structuredContent).toEqual({ formatted: '[desk] disk full' });
   });
 
   it('leaves out a channel whose availableWhen this runtime does not meet', () => {
@@ -127,6 +151,14 @@ describe('channels for MCP 2026-07-28 clients', () => {
       .join('');
     return JSON.parse(data) as Record<string, unknown>;
   }
+
+  it('advertises the channels in server/discover, as initialize does', async () => {
+    const { message } = await rpc20260728(fetchServer.handler, 'server/discover');
+    const capabilities = message.result?.['capabilities'] as { experimental?: Record<string, unknown> };
+
+    expect(capabilities.experimental).toEqual(expect.objectContaining({ 'claude/channel': {} }));
+    expect(message.result?.['instructions']).toBe('Events arrive as <channel> tags.');
+  });
 
   it('carries the channel notifications on a subscriptions/listen stream with the claude/channel capability', async () => {
     const controller = new AbortController();
