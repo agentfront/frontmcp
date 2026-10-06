@@ -328,6 +328,33 @@ describe('ExtAppsAdapter', () => {
         );
         expect(sent('ui/log')).toEqual([]);
       });
+
+      it('asks the host to tear the widget down with a ui/notifications/request-teardown notification', async () => {
+        connectTo({});
+
+        await adapterWithConfig.requestClose();
+
+        expect(postMessage).toHaveBeenCalledWith(
+          { jsonrpc: '2.0', method: 'ui/notifications/request-teardown', params: {} },
+          HOST_ORIGIN,
+        );
+        expect(sent('ui/close')).toEqual([]);
+      });
+
+      it.each(['ui/notifications/tool-cancelled', 'ui/notifications/cancelled'])(
+        'reports a %s notification as a tool:cancelled event with its reason',
+        (method) => {
+          const reasons: unknown[] = [];
+          const listener = (event: Event) => reasons.push((event as CustomEvent).detail);
+          window.addEventListener('tool:cancelled', listener);
+
+          // @ts-expect-error - accessing private method for testing
+          adapterWithConfig._handleNotification({ jsonrpc: '2.0', method, params: { reason: 'user action' } });
+          window.removeEventListener('tool:cancelled', listener);
+
+          expect(reasons).toEqual([{ reason: 'user action' }]);
+        },
+      );
     });
 
     describe('updateModelContext', () => {

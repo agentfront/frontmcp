@@ -1,7 +1,8 @@
 /**
  * The ext-apps adapter in `@frontmcp/ui`'s own bridge IIFE sends the MCP Apps spec methods, as the
- * `@frontmcp/uipack` bridge does: `tools/call` (marked as the widget's own call), `ui/open-link`
- * and `ui/request-display-mode`.
+ * `@frontmcp/uipack` bridge does: `tools/call` (marked as the widget's own call), `ui/open-link`,
+ * `ui/request-display-mode` and `ui/notifications/request-teardown`; and it hears
+ * `ui/notifications/tool-cancelled`.
  */
 import { generateBridgeIIFE } from '../runtime/iife-generator';
 
@@ -21,9 +22,20 @@ describe('@frontmcp/ui bridge IIFE ext-apps methods', () => {
     expect(script).toContain('this.hostCapabilities.openLinks');
   });
 
+  it('asks for teardown with ui/notifications/request-teardown', () => {
+    expect(script).toContain("this.sendNotification('ui/notifications/request-teardown', {})");
+  });
+
+  it('reports ui/notifications/tool-cancelled, and the earlier cancelled, as tool:cancelled', () => {
+    expect(script).toContain("case 'ui/notifications/tool-cancelled':");
+    expect(script).toContain("case 'ui/notifications/cancelled':");
+    expect(script).toContain("new CustomEvent('tool:cancelled', { detail: { reason: params.reason } })");
+  });
+
   it('sends none of the earlier method names', () => {
     expect(script).not.toContain('ui/callServerTool');
     expect(script).not.toContain('ui/openLink');
     expect(script).not.toContain('ui/setDisplayMode');
+    expect(script).not.toContain('ui/close');
   });
 });

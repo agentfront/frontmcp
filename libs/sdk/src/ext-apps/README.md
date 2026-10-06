@@ -91,13 +91,16 @@ widgets built before the bridges sent the spec names keep sending.
 
 ### Host → Widget Notifications
 
-| Method                                  | Purpose                     |
-| --------------------------------------- | --------------------------- |
-| `ui/notifications/tool-input`           | Tool arguments available    |
-| `ui/notifications/tool-input-partial`   | Streaming tool input update |
-| `ui/notifications/tool-result`          | Tool execution result       |
-| `ui/notifications/host-context-changed` | Theme, display mode changed |
-| `ui/notifications/cancelled`            | Operation was cancelled     |
+| Method                                  | Purpose                      |
+| --------------------------------------- | ---------------------------- |
+| `ui/notifications/tool-input`           | Tool arguments available     |
+| `ui/notifications/tool-input-partial`   | Streaming tool input update  |
+| `ui/notifications/tool-result`          | Tool execution result        |
+| `ui/notifications/host-context-changed` | Theme, display mode changed  |
+| `ui/notifications/tool-cancelled`       | Tool execution was cancelled |
+
+The bridges report `ui/notifications/tool-cancelled` (`{ reason? }`) as a `tool:cancelled` event, and
+still accept the earlier `ui/notifications/cancelled`.
 
 ## Files in this folder
 

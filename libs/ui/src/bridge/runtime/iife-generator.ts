@@ -511,6 +511,10 @@ var ExtAppsAdapter = {
         Object.assign(context.hostContext, params);
         context.notifyContextChange(params);
         break;
+      case 'ui/notifications/tool-cancelled':
+      case 'ui/notifications/cancelled':
+        window.dispatchEvent(new CustomEvent('tool:cancelled', { detail: { reason: params.reason } }));
+        break;
     }
   },
   isOriginTrusted: function(origin) {
@@ -607,7 +611,8 @@ var ExtAppsAdapter = {
     return this.sendNotification('ui/notifications/size-changed', params);
   },
   requestClose: function(context) {
-    return this.sendRequest('ui/close', {});
+    // The host decides whether to tear the view down; it answers with ui/resource-teardown if it does.
+    return this.sendNotification('ui/notifications/request-teardown', {});
   }
 };
 `.trim();

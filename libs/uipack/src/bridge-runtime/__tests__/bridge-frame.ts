@@ -35,6 +35,7 @@ export interface BridgeGlobal {
   openLink(url: string): Promise<unknown>;
   updateModelContext(context: unknown, merge?: boolean): Promise<unknown>;
   log(level: string, message: string, data?: unknown): Promise<unknown>;
+  requestClose(): Promise<unknown>;
 }
 
 /** Box returned by the stubbed `getBoundingClientRect` for one element. */

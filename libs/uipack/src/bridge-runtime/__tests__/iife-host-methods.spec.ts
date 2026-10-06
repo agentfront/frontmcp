@@ -3,7 +3,8 @@
  */
 /**
  * The requests a widget sends an MCP Apps host use the spec's method names and params:
- * `ui/open-link`, `ui/update-model-context` and the standard MCP `notifications/message`.
+ * `ui/open-link`, `ui/update-model-context`, `ui/notifications/request-teardown` and the standard
+ * MCP `notifications/message`; and the bridge hears the host's `ui/notifications/tool-cancelled`.
  */
 import { createBridgeFrame, type BridgeFrame } from './bridge-frame';
 
@@ -84,6 +85,28 @@ describe('bridge requests to an MCP Apps host', () => {
       { level: 'info', data: 'Loaded' },
     ]);
   });
+
+  it('asks the host to tear the widget down with a ui/notifications/request-teardown notification', async () => {
+    frame = await connect({});
+
+    await frame.bridge.requestClose();
+
+    expect(frame.notifications('ui/notifications/request-teardown').map((message) => message.params)).toEqual([{}]);
+    expect(frame.requests('ui/close')).toEqual([]);
+  });
+
+  it.each(['ui/notifications/tool-cancelled', 'ui/notifications/cancelled'])(
+    'reports a %s notification as a tool:cancelled event with its reason',
+    async (method) => {
+      frame = await connect({});
+      const reasons: unknown[] = [];
+      frame.win.addEventListener('tool:cancelled', (event) => reasons.push((event as CustomEvent).detail));
+
+      await frame.notify(method, { reason: 'user action' });
+
+      expect(reasons).toEqual([{ reason: 'user action' }]);
+    },
+  );
 
   it('sends none of the earlier method names', async () => {
     frame = await connect({ openLinks: {}, updateModelContext: { text: {} }, logging: {} });

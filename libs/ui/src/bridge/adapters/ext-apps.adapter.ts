@@ -242,8 +242,12 @@ export class ExtAppsAdapter extends BaseAdapter {
     this._sendNotification('ui/notifications/size-changed', params);
   }
 
+  /**
+   * Ask the host to tear the widget down with `ui/notifications/request-teardown`. The host
+   * decides; if it agrees, it sends `ui/resource-teardown`.
+   */
   override async requestClose(): Promise<void> {
-    await this._sendRequest('ui/close', {});
+    this._sendNotification('ui/notifications/request-teardown', {});
   }
 
   // ============================================
@@ -423,6 +427,7 @@ export class ExtAppsAdapter extends BaseAdapter {
         // Host confirms initialization complete
         break;
 
+      case 'ui/notifications/tool-cancelled':
       case 'ui/notifications/cancelled':
         this._handleCancelled(notification.params);
         break;

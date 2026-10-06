@@ -280,7 +280,7 @@ export interface ExtAppsHostContextChangedNotification {
 }
 
 /**
- * Parameters for ui/notifications/cancelled notification.
+ * Parameters for ui/notifications/tool-cancelled (and the earlier ui/notifications/cancelled) notification.
  */
 export interface ExtAppsCancelledNotification {
   /** Cancellation reason */
