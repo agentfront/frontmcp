@@ -1,6 +1,7 @@
 // file: libs/cli/src/commands/build/adapters/__tests__/wrangler-toml.spec.ts
 
-import { mergeWranglerToml, parseTomlStringArray, renderWranglerToml, type ManagedWranglerFields } from '../wrangler-toml';
+import {
+  readWranglerCompatibilityDate, mergeWranglerToml, parseTomlStringArray, renderWranglerToml, type ManagedWranglerFields } from '../wrangler-toml';
 
 const MANAGED: ManagedWranglerFields = {
   name: 'frontmcp-worker',
@@ -220,5 +221,12 @@ crontabs = ["*/5 * * * *"]
     const second = mergeWranglerToml(first, MANAGED).content;
 
     expect(second).toBe(first);
+  });
+});
+
+describe('readWranglerCompatibilityDate', () => {
+  it('reads the top-level date and ignores one inside a table', () => {
+    expect(readWranglerCompatibilityDate('name = "w"\ncompatibility_date = "2024-09-23"\n')).toBe('2024-09-23');
+    expect(readWranglerCompatibilityDate('name = "w"\n[env.prod]\ncompatibility_date = "2025-01-01"\n')).toBeUndefined();
   });
 });

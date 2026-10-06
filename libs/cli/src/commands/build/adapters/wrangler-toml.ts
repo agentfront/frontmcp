@@ -76,6 +76,12 @@ function countUnclosedBrackets(line: string): number {
   return depth;
 }
 
+/** The top-level `compatibility_date` a wrangler.toml declares, if any. */
+export function readWranglerCompatibilityDate(content: string): string | undefined {
+  const span = findManagedKeySpans(content.split(/\r?\n/)).spans.get('compatibility_date');
+  return span ? parseTomlString(span.rawValue) : undefined;
+}
+
 /** Extract every double- or single-quoted string in a TOML fragment, in order. */
 export function parseTomlStringArray(rawValue: string): string[] {
   const matches = rawValue.match(/"(?:\\.|[^"\\])*"|'[^']*'/g);

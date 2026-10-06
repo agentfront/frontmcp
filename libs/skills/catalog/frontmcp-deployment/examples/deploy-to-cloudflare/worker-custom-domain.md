@@ -62,7 +62,7 @@ export default TranslateServer;
 # builtins or it won't boot.
 name = "translate-worker"
 main = "dist/cloudflare/index.js"
-compatibility_date = "2024-09-23"
+compatibility_date = "2024-11-11"
 compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]

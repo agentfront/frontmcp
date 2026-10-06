@@ -28,7 +28,7 @@ export default createEdgeMcp({
 # wrangler.toml
 name = "my-worker"
 main = "worker.ts"
-compatibility_date = "2024-09-23"
+compatibility_date = "2024-11-11"
 compatibility_flags = ["nodejs_compat"]
 ```
 
