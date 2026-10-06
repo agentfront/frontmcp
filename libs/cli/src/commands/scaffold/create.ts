@@ -545,7 +545,7 @@ USER node
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \\
-  CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 
 CMD ["node", "dist/node/${appName}.bundle.js"]
 `;
@@ -662,7 +662,7 @@ Parameters:
   McpSessionSecret:
     Type: String
     NoEcho: true
-    Description: MCP_SESSION_SECRET for session-ID encryption, required in production (openssl rand -hex 32)
+    Description: MCP_SESSION_SECRET for session-ID encryption, required in production. Generate it once (openssl rand -hex 32) and pass the same value on every deploy; a new value ends every open session
 
 Globals:
   Function:
