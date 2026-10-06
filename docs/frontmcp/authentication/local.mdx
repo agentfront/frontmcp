@@ -86,6 +86,8 @@ Local mode exposes standard OAuth 2.1 endpoints:
 | `/.well-known/oauth-protected-resource`   | GET      | Protected-resource metadata (PRM)                                                                                   |
 | `/.well-known/jwks.json`                  | GET      | Public signing keys (discovery key; not used to verify HS256 access tokens)                                         |
 
+Every `/oauth/token` response, errors included, and every `/oauth/register` response carry `Cache-Control: no-store` and `Pragma: no-cache` (RFC 6749 §5.1), so no proxy or browser cache keeps a token or a client secret.
+
 ### Sign-in cookie
 
 `/oauth/authorize` gives the browser a cookie named `frontmcp_signin_<id>` (one per sign-in, so several can run at once): a random value, `HttpOnly`, `SameSite=Lax`, for 30 minutes. Over https it is `__Host-frontmcp_signin_<id>`, `Secure`, `Path=/` and without `Domain`: browsers accept that prefix only on such a cookie, so a sibling subdomain (`evil.example.com` next to your server) cannot plant one with `Domain=example.com`, and only that name counts over https. Over plain http (local development) it is `Path=/oauth` (`/` when the issuer has a path). `/oauth/callback` and `/oauth/provider/{id}/callback` accept a sign-in only from the browser that holds it, and the cookie is removed when the sign-in completes. Without it, someone could start a sign-in for their own client and have your browser finish it at an upstream provider where you are signed in, so their client would get a code backed by your provider account (RFC 9700 §4.7).

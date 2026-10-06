@@ -43,7 +43,9 @@ import {
   httpInputSchema,
   HttpJsonSchema,
   httpRespond,
+  NO_STORE_HEADERS,
   StageHookOf,
+  type FlowOutputOf,
   type FlowPlan,
   type FlowRunOptions,
 } from '../../common';
@@ -131,6 +133,11 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
   /** The local AS primary auth, which owns the DCR client registry (#462). */
   private get localAuth(): LocalPrimaryAuth {
     return this.scope.auth as LocalPrimaryAuth;
+  }
+
+  /** Registration responses carry the client's credentials (`client_secret`), so they are never cached. */
+  override respond(output: FlowOutputOf<typeof name>): void {
+    super.respond({ ...output, headers: { ...output.headers, ...NO_STORE_HEADERS } });
   }
 
   @Stage('checkIpFilter')

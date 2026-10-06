@@ -291,6 +291,9 @@ export function challengeHeaders(challenge: string | undefined): Record<string, 
   return challenge ? { 'WWW-Authenticate': challenge } : undefined;
 }
 
+/** The headers of a response that carries tokens or credentials, which must never be cached (RFC 6749 §5.1). */
+export const NO_STORE_HEADERS: Readonly<Record<string, string>> = { 'Cache-Control': 'no-store', Pragma: 'no-cache' };
+
 /**
  * Convenience factories
  */
