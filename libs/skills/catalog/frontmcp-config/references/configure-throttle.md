@@ -43,6 +43,7 @@ Protect your FrontMCP server with rate limiting, concurrency control, execution 
       maxRequests: 1000,
       windowMs: 60000, // 1 minute window
       partitionBy: 'global', // shared across all clients
+      // also counts /oauth/*, /.well-known/* and the skills HTTP endpoints (ip/global partitions)
     },
 
     // Global concurrency limit (a tool called with this.callTool(), or by an agent during its run, runs inside its caller's slot)
@@ -68,8 +69,8 @@ Protect your FrontMCP server with rate limiting, concurrency control, execution 
       allowList: ['10.0.0.0/8', '172.16.0.0/12'], // CIDR ranges
       denyList: ['192.168.1.100'],
       defaultAction: 'allow', // 'allow' | 'deny'
-      // NOTE: trustProxy / trustedProxyDepth are NOT read here -- use the
-      // FRONTMCP_TRUST_PROXY and FRONTMCP_TRUSTED_PROXY_DEPTH environment variables.
+      // trustProxy: true reads the client IP from X-Forwarded-For (trustedProxyDepth hops),
+      // like FRONTMCP_TRUST_PROXY; false leaves it to that environment variable.
     },
   },
 })
@@ -216,13 +217,13 @@ is what takes callers out of it.
 
 ### IpFilterConfig
 
-| Field               | Type                | Default   | Description                                                        |
-| ------------------- | ------------------- | --------- | ------------------------------------------------------------------ |
-| `allowList`         | `string[]`          | —         | Allowed IPs or CIDR ranges                                         |
-| `denyList`          | `string[]`          | —         | Blocked IPs or CIDR ranges                                         |
-| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list, or no client IP is known      |
-| `trustProxy`        | `boolean`           | `false`   | **Not read** (startup warning). Use `FRONTMCP_TRUST_PROXY`         |
-| `trustedProxyDepth` | `number`            | `1`       | **Not read** (startup warning). Use `FRONTMCP_TRUSTED_PROXY_DEPTH` |
+| Field               | Type                | Default   | Description                                                                      |
+| ------------------- | ------------------- | --------- | -------------------------------------------------------------------------------- |
+| `allowList`         | `string[]`          | —         | Allowed IPs or CIDR ranges                                                       |
+| `denyList`          | `string[]`          | —         | Blocked IPs or CIDR ranges                                                       |
+| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list, or no client IP is known                    |
+| `trustProxy`        | `boolean`           | `false`   | `true` reads `X-Forwarded-For` like `FRONTMCP_TRUST_PROXY`; `false` defers to it |
+| `trustedProxyDepth` | `number`            | `1`       | Proxies appending to `X-Forwarded-For`; read with `trustProxy: true`             |
 
 ## Partition Strategies
 
@@ -315,15 +316,15 @@ done
 
 ## Troubleshooting
 
-| Problem                                           | Cause                                                                                                                                                                                                     | Solution                                                                                                                                     |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rate limits not enforced across instances         | In-memory storage used with multiple server replicas                                                                                                                                                      | Configure `storage: { type: 'redis' }` in the throttle block to share counters                                                               |
-| Startup fails with `GuardStorageUnavailableError` | The `throttle.storage` backend is unreachable; rate limits fail closed                                                                                                                                    | Bring the store up, or set `throttle.storage.fallback: 'memory'` to start with per-instance counters                                         |
-| Redis-backed limits still per-instance            | `storage` written in the top-level `redis` shape (`{ provider: 'redis', host }`) with no `type`, so it was auto-detected as memory                                                                        | Use `{ type: 'redis', redis: { config: { host, port } } }`                                                                                   |
-| All requests rejected with 403                    | `ipFilter.defaultAction` set to `'deny'` without any `allowList` entries, or the runtime reports no client IP (a custom fetch wrapper that drops the second handler argument on Deno/Bun)                 | Add the allowed IP ranges to `allowList`, pass the platform's second argument through to the handler, or change `defaultAction` to `'allow'` |
-| Tools timing out unexpectedly                     | `defaultTimeout.executeMs` too low for the tool's normal execution time                                                                                                                                   | Increase the global default or set a per-tool `timeout.executeMs` override                                                                   |
-| `X-Forwarded-For` header ignored                  | No trusted proxy declared. `ipFilter.trustProxy` / `trustedProxyDepth` are accepted by the schema but NOT read -- client-IP extraction happens in the SDK context layer, before guard config is reachable | Set the `FRONTMCP_TRUST_PROXY=true` and `FRONTMCP_TRUSTED_PROXY_DEPTH` environment variables instead                                         |
-| Rate limit resets not aligned with expectations   | `windowMs` misunderstood as a sliding window when it is a fixed window                                                                                                                                    | The window is fixed; all counters reset at the end of each `windowMs` interval                                                               |
+| Problem                                           | Cause                                                                                                                                                                                     | Solution                                                                                                                                                                   |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rate limits not enforced across instances         | In-memory storage used with multiple server replicas                                                                                                                                      | Configure `storage: { type: 'redis' }` in the throttle block to share counters                                                                                             |
+| Startup fails with `GuardStorageUnavailableError` | The `throttle.storage` backend is unreachable; rate limits fail closed                                                                                                                    | Bring the store up, or set `throttle.storage.fallback: 'memory'` to start with per-instance counters                                                                       |
+| Redis-backed limits still per-instance            | `storage` written in the top-level `redis` shape (`{ provider: 'redis', host }`) with no `type`, so it was auto-detected as memory                                                        | Use `{ type: 'redis', redis: { config: { host, port } } }`                                                                                                                 |
+| All requests rejected with 403                    | `ipFilter.defaultAction` set to `'deny'` without any `allowList` entries, or the runtime reports no client IP (a custom fetch wrapper that drops the second handler argument on Deno/Bun) | Add the allowed IP ranges to `allowList`, pass the platform's second argument through to the handler, or change `defaultAction` to `'allow'`                               |
+| Tools timing out unexpectedly                     | `defaultTimeout.executeMs` too low for the tool's normal execution time                                                                                                                   | Increase the global default or set a per-tool `timeout.executeMs` override                                                                                                 |
+| `X-Forwarded-For` header ignored                  | No trusted proxy declared                                                                                                                                                                 | Set `ipFilter.trustProxy: true` (and `trustedProxyDepth` for more than one hop), or the `FRONTMCP_TRUST_PROXY=true` / `FRONTMCP_TRUSTED_PROXY_DEPTH` environment variables |
+| Rate limit resets not aligned with expectations   | `windowMs` misunderstood as a sliding window when it is a fixed window                                                                                                                    | The window is fixed; all counters reset at the end of each `windowMs` interval                                                                                             |
 
 ## Examples
 

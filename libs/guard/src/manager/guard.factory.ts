@@ -57,14 +57,6 @@ export async function createGuardManager(args: CreateGuardManagerArgs): Promise<
   // `mcp:guard::<entity>:…`.
   const namespacedStorage = storage.namespace(withoutTrailingColons(keyPrefix));
 
-  if (config.ipFilter?.trustProxy === true || (config.ipFilter?.trustedProxyDepth ?? 1) !== 1) {
-    logger?.warn(
-      'GuardManager: throttle.ipFilter.trustProxy and trustedProxyDepth are not read. The client IP is the socket ' +
-        'peer; to use X-Forwarded-For behind a trusted proxy, set FRONTMCP_TRUST_PROXY=true and ' +
-        'FRONTMCP_TRUSTED_PROXY_DEPTH=<hops> instead.',
-    );
-  }
-
   logger?.info('GuardManager initialized', {
     keyPrefix,
     hasGlobalRateLimit: !!config.global,

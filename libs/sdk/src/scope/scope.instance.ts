@@ -1390,7 +1390,7 @@ export class Scope extends ScopeEntry {
         scope: ProviderScope.GLOBAL,
         name: 'FrontMcpContextStorage',
         provide: FrontMcpContextStorage,
-        useValue: new FrontMcpContextStorage().configure(this.metadata.fetch),
+        useValue: new FrontMcpContextStorage().configure(this.metadata.fetch, proxyTrustOf(this.metadata.throttle)),
       },
       // FrontMcpContextProvider is a factory that retrieves from AsyncLocalStorage
       FrontMcpContextProvider,
@@ -1947,4 +1947,13 @@ export class Scope extends ScopeEntry {
       await this.notificationService.destroy();
     }
   }
+}
+
+/**
+ * `throttle.ipFilter.trustProxy: true` reads the client address from `X-Forwarded-For`, counting back
+ * `trustedProxyDepth` hops, as `FRONTMCP_TRUST_PROXY` does; without it the environment decides.
+ */
+function proxyTrustOf(throttle: { ipFilter?: { trustProxy?: boolean; trustedProxyDepth?: number } } | undefined) {
+  const ipFilter = throttle?.ipFilter;
+  return ipFilter?.trustProxy === true ? { trustProxy: true, trustedProxyDepth: ipFilter.trustedProxyDepth } : {};
 }

@@ -70,12 +70,12 @@ export interface IpFilterConfigInput {
    */
   defaultAction?: 'allow' | 'deny';
   /**
-   * Not read; setting it logs a startup warning. Set the FRONTMCP_TRUST_PROXY environment variable to trust X-Forwarded-For.
+   * Read the client IP from X-Forwarded-For, behind trustedProxyDepth trusted proxies, as FRONTMCP_TRUST_PROXY does. false leaves the decision to FRONTMCP_TRUST_PROXY.
    * @default false
    */
   trustProxy?: boolean;
   /**
-   * Not read; setting it logs a startup warning. Set the FRONTMCP_TRUSTED_PROXY_DEPTH environment variable instead.
+   * How many proxies in front of the server append to X-Forwarded-For; read when trustProxy is true (else FRONTMCP_TRUSTED_PROXY_DEPTH).
    * @default 1
    */
   trustedProxyDepth?: number;

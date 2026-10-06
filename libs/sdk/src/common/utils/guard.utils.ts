@@ -85,6 +85,30 @@ export function partitionsByIdentity(partitionBy: PartitionKey | undefined): boo
 }
 
 /**
+ * `throttle.global` for the HTTP flows that serve no MCP request (OAuth, discovery, skills), from the
+ * `acquireQuota` stage each starts with. They run before any caller is verified, so a limit keyed
+ * on the caller's identity does not count them; any other limit does, and answers 429 once reached.
+ */
+export async function enforceGlobalRateLimit(
+  scope: Pick<ScopeEntry, 'rateLimitManager'>,
+  context: (PartitionSource & { set(key: symbol, value: boolean): void }) | undefined,
+): Promise<void> {
+  const manager = scope.rateLimitManager;
+  const globalConfig = manager?.config?.global;
+  if (!manager || !globalConfig || partitionsByIdentity(globalConfig.partitionBy)) return;
+  const result = await manager.checkGlobalRateLimit(buildPartitionContext(context));
+  context?.set(GLOBAL_RATE_LIMIT_CHECKED, true);
+  if (result.allowed) return;
+  const retryAfter = Math.ceil((result.retryAfterMs ?? 60_000) / 1000);
+  FlowControl.respond(
+    httpRespond.json(
+      { error: 'rate_limited', message: `Rate limit exceeded. Retry after ${retryAfter} seconds` },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+    ),
+  );
+}
+
+/**
  * Take a slot from `throttle.globalConcurrency` and from the entity's own limit (its
  * `concurrency`, else `throttle.defaultConcurrency`). A nested call (`skipGlobal`) runs inside
  * its caller's global slot, so it takes only its own.
