@@ -138,6 +138,56 @@ describe('token claims and challenges', () => {
     expect(await call.text()).toContain('\\"scopes\\":[\\"tickets:read\\",\\"tickets:write\\"]');
   });
 
+  it('leaves a caller with a verified token unrestricted by publicAccess', async () => {
+    const server = await serverWith(transparentAuth({ allowAnonymous: true, publicAccess: { tools: [] } }));
+    const token = await idpToken({ sub: 'nour' });
+
+    const init = await mcpPost(server, initialize, token);
+    const sessionId = init.headers.get('mcp-session-id') ?? '';
+    const call = await server.handler(
+      new Request(`${ORIGIN}/`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: `Bearer ${token}`,
+          'mcp-session-id': sessionId,
+          'mcp-protocol-version': '2025-06-18',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'tools/call',
+          params: { name: 'whoami', arguments: {} },
+        }),
+      }),
+    );
+
+    const anonymousInit = await mcpPost(server, initialize);
+    const anonymousCall = await server.handler(
+      new Request(`${ORIGIN}/`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          'mcp-session-id': anonymousInit.headers.get('mcp-session-id') ?? '',
+          'mcp-protocol-version': '2025-06-18',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 3,
+          method: 'tools/call',
+          params: { name: 'whoami', arguments: {} },
+        }),
+      }),
+    );
+
+    const text = await call.text();
+    expect(text).not.toContain('not available to anonymous callers');
+    expect(text).toContain('\\"sub\\":\\"nour\\"');
+    expect(await anonymousCall.text()).toContain('not available to anonymous callers');
+  });
+
   it('names a token with no sub by its client_id instead of reading it as anonymous', async () => {
     const server = await serverWith(transparentAuth());
     const token = await idpToken({ client_id: 'billing-service' });

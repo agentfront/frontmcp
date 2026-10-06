@@ -4,6 +4,7 @@
  * (unless `FRONTMCP_TRUST_PROXY` says otherwise).
  */
 import { FrontMcpContextStorage } from '../frontmcp-context-storage';
+import { proxyTrustOf } from '../metadata.utils';
 
 const headers = { 'x-forwarded-for': '198.51.100.9, 203.0.113.7' };
 
@@ -36,5 +37,27 @@ describe('FrontMcpContextStorage proxy trust', () => {
     expect(clientIpWith(new FrontMcpContextStorage().configure({}, { trustProxy: true, trustedProxyDepth: 2 }))).toBe(
       '198.51.100.9',
     );
+  });
+
+  describe('from throttle.ipFilter', () => {
+    const storageFor = (ipFilter: { trustProxy?: boolean; trustedProxyDepth?: number } | undefined) =>
+      new FrontMcpContextStorage().configure({}, proxyTrustOf(ipFilter ? { ipFilter } : undefined));
+
+    it('reads X-Forwarded-For, trustedProxyDepth hops back, for trustProxy: true', () => {
+      expect(clientIpWith(storageFor({ trustProxy: true }))).toBe('203.0.113.7');
+      expect(clientIpWith(storageFor({ trustProxy: true, trustedProxyDepth: 2 }))).toBe('198.51.100.9');
+    });
+
+    it('uses the socket peer for trustProxy: false, or no ipFilter, when the environment trusts no proxy', () => {
+      expect(clientIpWith(storageFor({ trustProxy: false, trustedProxyDepth: 2 }))).toBe('10.0.0.1');
+      expect(clientIpWith(storageFor(undefined))).toBe('10.0.0.1');
+    });
+
+    it('leaves FRONTMCP_TRUST_PROXY=true in charge for trustProxy: false', () => {
+      process.env['FRONTMCP_TRUST_PROXY'] = 'true';
+
+      expect(proxyTrustOf({ ipFilter: { trustProxy: false } })).toEqual({});
+      expect(clientIpWith(storageFor({ trustProxy: false }))).toBe('203.0.113.7');
+    });
   });
 });
