@@ -865,7 +865,7 @@ class CustomFlagServer {}
 - `splitio` -- Split.io integration. Requires `@splitsoftware/splitio` package.
 - `launchdarkly` -- LaunchDarkly integration. Requires `launchdarkly-node-server-sdk` package.
 - `unleash` -- Unleash integration. Requires `unleash-client` package.
-- `custom` -- Provide your own adapter instance (`adapterInstance`, required) implementing the `FeatureFlagAdapter` interface.
+- `custom` -- Provide your own adapter instance (`adapterInstance`, required) implementing the `FeatureFlagAdapter` interface. Its optional `initialize()` runs before the server serves and `destroy()` when the server is disposed, as for the built-in adapters (up to 1.9.1 neither was called).
 
 ### Using `this.featureFlags` in Tools
 
