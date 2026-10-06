@@ -61,6 +61,36 @@ async function loadVercelKv(): Promise<VercelKvModule> {
   }
 }
 
+/** Where a Vercel KV client connects; both default to the `KV_REST_API_URL` / `KV_REST_API_TOKEN` variables. */
+export interface VercelKvConnection {
+  url?: string;
+  token?: string;
+}
+
+/**
+ * Build a `@vercel/kv` REST client, the one loader every FrontMCP Vercel KV store shares (#711).
+ *
+ * `@vercel/kv` sets `cache: 'default'` on every request, which Cloudflare Workers reject ("The
+ * 'cache' field on 'RequestInitializerDict' is not implemented" / "Unsupported cache mode:
+ * default"), and the module's `kv` singleton cannot take another value. So each store gets a client
+ * of its own with the fetch cache mode unset (the value `@vercel/kv` itself calls equivalent), and
+ * values are read back exactly as stored instead of being JSON-parsed.
+ *
+ * @param connection - URL and token; each falls back to its environment variable
+ * @returns The client, typed as the subset of it the caller uses
+ */
+export async function createVercelKvClient<TClient = VercelKvClient>(
+  connection: VercelKvConnection = {},
+): Promise<TClient> {
+  const url = connection.url ?? process.env['KV_REST_API_URL'];
+  const token = connection.token ?? process.env['KV_REST_API_TOKEN'];
+  if (!url || !token) {
+    throw new StorageConfigError('vercel-kv', 'Pass url and token, or set KV_REST_API_URL and KV_REST_API_TOKEN.');
+  }
+  const { createClient } = await loadVercelKv();
+  return createClient({ url, token, cache: undefined, automaticDeserialization: false }) as unknown as TClient;
+}
+
 /**
  * Vercel KV storage adapter.
  *
@@ -119,20 +149,7 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
     if (this.connected) return;
 
     try {
-      const { createClient } = await loadVercelKv();
-      const url = this.options.url;
-      const token = this.options.token;
-      if (!url || !token) {
-        throw new StorageConfigError('vercel-kv', 'URL and token are required');
-      }
-      // `@vercel/kv` sets `cache: 'default'` on every request, which Cloudflare
-      // Workers reject ("The 'cache' field on 'RequestInitializerDict' is not
-      // implemented" / "Unsupported cache mode: default"). Leave the fetch cache
-      // mode unset instead — the value `@vercel/kv` itself calls equivalent.
-      // The module's `kv` singleton cannot take this option, so even an
-      // env-configured adapter builds its own client from the same URL and token.
-      // Read values back exactly as stored; @upstash/redis would otherwise JSON-parse them.
-      this.client = createClient({ url, token, cache: undefined, automaticDeserialization: false });
+      this.client = await createVercelKvClient({ url: this.options.url, token: this.options.token });
 
       // Test connection with a simple operation
       await this.client.exists('__healthcheck__');

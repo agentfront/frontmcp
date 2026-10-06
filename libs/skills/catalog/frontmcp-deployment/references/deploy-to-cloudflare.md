@@ -127,6 +127,8 @@ Cloudflare storage: `redis: { provider: 'vercel-kv' }` (the HTTP-based Upstash/V
 
 To use it for sessions, install `@vercel/kv` in the project (the build bundles it into the worker), set `KV_REST_API_URL` / `KV_REST_API_TOKEN` as `[vars]` or secrets, and set `compatibility_date` to `2024-11-11` or later: the Upstash client sends `cache: 'no-store'` on every request, which Workers reject before that date (`The 'cache' field on 'RequestInitializerDict' is not implemented`). The build accepts the provider when it can read it, either from the evaluated config or written literally as `redis: { provider: 'vercel-kv' }` in `@FrontMcp({...})`; a `redis` whose provider it can read neither way is refused, and the error says so.
 
+The other Vercel KV / Upstash stores load on a Worker too: the skills HTTP cache (`skillsConfig.cache.redis: { provider: 'vercel-kv' }`, which also takes `url` and `token` instead of the `KV_REST_API_*` variables), the `CachePlugin` and `RememberPlugin` Vercel KV stores, and `type: 'upstash'` / auto-detected Upstash storage. Each loads `@vercel/kv` or `@upstash/redis` with a dynamic `import()` the build can bundle, and the Vercel KV ones build their own client with the fetch `cache` mode unset. Up to 1.9.1 they loaded the package with `require()`, which wrangler cannot bundle, so they failed on Workers while sessions worked.
+
 ## Step 4: Configure the Server
 
 ```typescript

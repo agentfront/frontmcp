@@ -47,6 +47,8 @@ export const skillsConfigCacheOptionsSchema = z.object({
       port: z.number().int().positive().optional(),
       password: z.string().optional(),
       db: z.number().int().nonnegative().optional(),
+      url: z.string().optional(),
+      token: z.string().optional(),
     })
     .optional(),
   ttlMs: z.number().int().positive().optional().default(60000),

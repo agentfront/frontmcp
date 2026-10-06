@@ -31,14 +31,27 @@ type UpstashRedis = {
   rpop: (key: string) => Promise<string | null>;
 };
 
-/**
- * Lazy-load @upstash/redis to avoid bundling when not used.
- */
-function getUpstashRedis(): {
+/** The part of `@upstash/redis` the adapter uses. */
+interface UpstashRedisModule {
   Redis: new (config: { url: string; token: string; automaticDeserialization: boolean }) => UpstashRedis;
-} {
+}
+
+/**
+ * Load `@upstash/redis` when the adapter connects, so a server that never uses it does not need it
+ * installed. A literal dynamic `import()`, not `require()`: in this package's ESM build a lazy
+ * `require()` is a `createRequire` call that wrangler cannot bundle, so the module was missing on
+ * Cloudflare Workers even when installed (#711). Wrangler resolves the import to the package's
+ * `workerd` build.
+ */
+async function loadUpstashRedis(): Promise<UpstashRedisModule> {
   try {
-    return require('@upstash/redis');
+    const mod = (await import('@upstash/redis')) as unknown as Partial<UpstashRedisModule> & {
+      default?: UpstashRedisModule;
+    };
+    // Node's ESM view of the CommonJS build exposes the exports on `default` too.
+    const resolved = typeof mod.Redis === 'function' ? mod : mod.default;
+    if (!resolved || typeof resolved.Redis !== 'function') throw new Error('Redis missing');
+    return resolved as UpstashRedisModule;
   } catch {
     throw new Error(
       '@upstash/redis is required for Upstash storage adapter. Install it with: npm install @upstash/redis',
@@ -117,7 +130,7 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
     if (this.connected) return;
 
     try {
-      const { Redis } = getUpstashRedis();
+      const { Redis } = await loadUpstashRedis();
       const url = this.options.url;
       const token = this.options.token;
       if (!url || !token) {
