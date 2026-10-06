@@ -56,6 +56,27 @@ function recordingAdapter(events: string[]): FeatureFlagAdapter {
 }
 
 describe('FeatureFlagPlugin custom adapter lifecycle', () => {
+  it('initializes and destroys one adapter once when one plugin record serves two apps', async () => {
+    const events: string[] = [];
+    const flagsPlugin = FeatureFlagPlugin.init({ adapter: 'custom', adapterInstance: recordingAdapter(events) });
+
+    @App({ id: 'billing', name: 'Billing', plugins: [flagsPlugin], tools: [CheckFlagTool] })
+    class BillingApp {}
+
+    @App({ id: 'support', name: 'Support', plugins: [flagsPlugin], tools: [CheckFlagTool] })
+    class SupportApp {}
+
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'feature-flag-adapter-shared', version: '1.0.0' },
+      apps: [BillingApp, SupportApp],
+      logging: { level: LogLevel.Off },
+    });
+    expect(events).toEqual(['initialize']);
+
+    await server.dispose();
+    expect(events).toEqual(['initialize', 'destroy']);
+  });
+
   it('initializes the adapter before the first call and destroys it on dispose', async () => {
     const events: string[] = [];
     const server = await buildServer(recordingAdapter(events));
