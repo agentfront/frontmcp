@@ -201,7 +201,7 @@ ui: {
 <ParamField path="ui.servingMode" type="'auto' | 'inline' | 'static' | 'hybrid' | 'direct-url' | 'custom-url'">
   How the HTML is delivered to the client (default: `auto`):
   - `auto` - Auto-select per host (OpenAI / Claude / unknown)
-  - `inline` - Embedded in tool response `_meta['ui/html']` on every call (a call the widget makes back through `ui/callServerTool` gets the data only)
+  - `inline` - Embedded in tool response `_meta['ui/html']` on every call (a call the widget makes back through `ui/callServerTool`, or a `tools/call` the bridge marks with `_meta['frontmcp/widgetCall']`, gets the data only)
   - `static` - Pre-compiled at startup; client fetches `ui://widget/{toolName}.html` via `resources/read`
   - `hybrid` - Shell pre-compiled at startup; each call carries only a **reference** in `_meta['ui/component']` (`{ type, hash, toolName }`) — no component code and no data. The widget is still rendered from its `ui://` resource
   - `direct-url` / `custom-url` - **Not implemented.** Accepted by the schema, but the widget is served inline, as with `inline`; startup logs a warning

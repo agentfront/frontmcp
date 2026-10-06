@@ -8,6 +8,12 @@
  */
 
 /**
+ * The `_meta` key the bridge sets on a widget's own `tools/call`, so the server answers with the
+ * data and does not render the tool's page again into a widget that is already on screen.
+ */
+export const WIDGET_CALL_META_KEY = 'frontmcp/widgetCall';
+
+/**
  * Options for generating the bridge IIFE.
  */
 export interface IIFEGeneratorOptions {
@@ -767,7 +773,7 @@ var ExtAppsAdapter = {
       return Promise.reject(new Error('Server tool proxy not supported'));
     }
     // Per ext-apps spec: use standard MCP method 'tools/call' (not 'ui/callServerTool')
-    return this.sendRequest('tools/call', { name: name, arguments: args || {} });
+    return this.sendRequest('tools/call', { name: name, arguments: args || {}, _meta: { '${WIDGET_CALL_META_KEY}': true } });
   },
   sendMessage: function(context, content) {
     return this.sendRequest('ui/message', { content: content });
