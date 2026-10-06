@@ -1,4 +1,5 @@
 import { AuthoritiesContextBuilder, isAnonymousSubject, resolveAuthUser, resolveDotPath } from '../authorities.context';
+import { evaluateAbac } from '../authorities.evaluator';
 import type { RelationshipResolver } from '../authorities.types';
 
 describe('resolveDotPath', () => {
@@ -76,6 +77,19 @@ describe('AuthoritiesContextBuilder', () => {
       const ctx = builder.build({}, { siteId: 'site-1' }, { NODE_ENV: 'test' });
       expect(ctx.input).toEqual({ siteId: 'site-1' });
       expect(ctx.env).toEqual({ NODE_ENV: 'test' });
+    });
+
+    it("fills env.* from the runtime's environment variables when the caller passes none (#766)", () => {
+      process.env['AUTHORITIES_SPEC_REGION'] = 'eu';
+      try {
+        const ctx = new AuthoritiesContextBuilder().build({ user: { sub: 'u1' } });
+
+        expect(ctx.env['AUTHORITIES_SPEC_REGION']).toBe('eu');
+        expect(evaluateAbac({ match: { 'env.AUTHORITIES_SPEC_REGION': 'eu' } }, ctx).granted).toBe(true);
+        expect(evaluateAbac({ match: { 'env.AUTHORITIES_SPEC_REGION': 'us' } }, ctx).granted).toBe(false);
+      } finally {
+        delete process.env['AUTHORITIES_SPEC_REGION'];
+      }
     });
   });
 

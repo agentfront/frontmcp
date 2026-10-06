@@ -6,6 +6,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { isProduction } from '@frontmcp/utils';
 
 import {
+  enforceGlobalRateLimit,
   enforceIpFilter,
   Flow,
   FlowBase,
@@ -98,7 +99,7 @@ export const wellKnownAsStateSchema = z.object({
 });
 
 const wellKnownAsPlan = {
-  pre: ['checkIpFilter', 'parseInput'],
+  pre: ['checkIpFilter', 'acquireQuota', 'parseInput'],
   execute: ['collectData'],
 } as const satisfies FlowPlan<string>;
 
@@ -138,6 +139,11 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
   @Stage('checkIpFilter')
   async checkIpFilter() {
     enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
+
+  @Stage('acquireQuota')
+  async acquireQuota() {
+    await enforceGlobalRateLimit(this.scope, this.tryGetContext());
   }
 
   @Stage('parseInput')

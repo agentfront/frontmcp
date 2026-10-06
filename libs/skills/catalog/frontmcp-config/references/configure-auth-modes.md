@@ -20,6 +20,8 @@ auth: {
 
 **Use when:** Development, internal tools, public APIs.
 
+Anonymous callers hold `anonymousScopes`. With `publicAccess`, they list, call and complete (`completion/complete`) only the named tools/prompts (a name two apps share stays app-qualified, e.g. `billing:search`) (others answer `PUBLIC_ACCESS_DENIED`, -32003/403), within `rateLimit` (default 60) calls a minute per IP; callers with a verified token are not restricted.
+
 A JWT bearer is still verified against this instance's own HS256 secret. A bearer that is **not** a JWT is ignored and the request is served anonymously — public mode has no issuer or JWKS to verify it against, and a credentialed request must never fare worse than an anonymous one. For a first-class shared secret, use static mode below.
 
 ## Static Mode
@@ -62,7 +64,7 @@ auth: {
 
 **Use when:** Behind an API gateway or reverse proxy that handles auth.
 
-> Transparent also accepts `allowAnonymous` (default `false`) + `anonymousScopes` (default `['anonymous']`) to admit tokenless requests as anonymous, and `requiredScopes` to reject tokens missing a scope. `expectedAudience` is shared across transparent/local/remote, not transparent-only.
+> Transparent also accepts `allowAnonymous` (default `false`) + `anonymousScopes` (default `['anonymous']`) to admit tokenless requests as anonymous, and `requiredScopes` to reject tokens missing a scope (read from the `scope` and `scp` claims, which `this.auth.scopes` also merges). Without `providerConfig.jwks`/`jwksUri`, keys come from `<provider>/.well-known/jwks.json`, else the discovered `jwks_uri`. A token without `sub` takes its subject from `client_id`, else `azp`. `expectedAudience` is shared across transparent/local/remote, not transparent-only.
 
 > **Claim validation (transparent):** a valid JWKS signature alone does not bind a token to this server — every service behind the same IdP shares the signing keys. FrontMCP therefore validates the token `iss` against `provider` (plus any `providerConfig.additionalIssuers`, each matched with/without a trailing slash) **by default**, and validates `aud` against `expectedAudience` when the token carries one. This blocks replay of a token minted by the same IdP for a different issuer or audience. Set `providerConfig.additionalIssuers: ['https://gateway.example']` to trust a known extra issuer. `providerConfig.verifyIssuer: false` **disables the issuer check entirely** (accepts any issuer signed by the JWKS) — only for a trusted gateway whose re-minted issuer you cannot enumerate, and always paired with a strict `expectedAudience`.
 

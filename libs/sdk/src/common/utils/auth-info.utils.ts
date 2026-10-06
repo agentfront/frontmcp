@@ -1,3 +1,5 @@
+import { scopesFromClaims } from '@frontmcp/auth';
+
 import type { Authorization } from '../types/auth/session.types';
 
 /**
@@ -68,7 +70,7 @@ export function authInfoFromAuthorization(
   return {
     token,
     clientId: user?.sub,
-    scopes: parseUserScopes(user as { scope?: unknown } | undefined),
+    scopes: scopesFromClaims(user as { scope?: unknown; scp?: unknown } | undefined),
     // JWT exp is in seconds; the SDK uses milliseconds throughout
     expiresAt: user?.exp ? user.exp * 1000 : undefined,
     user,
@@ -78,12 +80,4 @@ export function authInfoFromAuthorization(
       sessionPayload: verifiedSession?.payload,
     },
   };
-}
-
-/**
- * Parse a verified user claim's space-delimited `scope` (RFC 6749 §3.3) into a scopes array.
- */
-function parseUserScopes(user: { scope?: unknown } | undefined): string[] {
-  const scope = user?.scope;
-  return typeof scope === 'string' ? scope.split(/\s+/).filter(Boolean) : [];
 }

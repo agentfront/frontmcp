@@ -82,6 +82,13 @@ describe('auth-token.utils', () => {
   // deriveTypedUser
   // ------------------------------------------
   describe('deriveTypedUser', () => {
+    it('takes the subject of a token without sub from client_id, then azp (RFC 9068 §2.2, #766)', () => {
+      expect(deriveTypedUser({ client_id: 'billing-service', azp: 'other' }).sub).toBe('billing-service');
+      expect(deriveTypedUser({ azp: 'billing-service' }).sub).toBe('billing-service');
+      expect(deriveTypedUser({ sub: 'user-1', client_id: 'billing-service' }).sub).toBe('user-1');
+      expect(deriveTypedUser({}).sub).toBe('');
+    });
+
     it('should extract standard JWT claims', () => {
       const claims = {
         iss: 'https://issuer.example.com',

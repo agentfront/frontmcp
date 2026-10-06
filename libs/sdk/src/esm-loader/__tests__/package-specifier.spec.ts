@@ -1,4 +1,12 @@
-import { parsePackageSpecifier, buildEsmShUrl, isPackageSpecifier, ESM_SH_BASE_URL } from '../package-specifier';
+import { EsmInvalidSpecifierError } from '../../errors/esm.errors';
+import {
+  applyImportMap,
+  buildEsmShUrl,
+  ESM_SH_BASE_URL,
+  importMapPackages,
+  isPackageSpecifier,
+  parsePackageSpecifier,
+} from '../package-specifier';
 
 describe('parsePackageSpecifier', () => {
   it('should parse a scoped package with version range', () => {
@@ -72,6 +80,7 @@ describe('parsePackageSpecifier', () => {
 
   it('should throw for invalid specifiers', () => {
     expect(() => parsePackageSpecifier('INVALID/BAD NAME')).toThrow('Invalid package specifier');
+    expect(() => parsePackageSpecifier('INVALID/BAD NAME')).toThrow(EsmInvalidSpecifierError);
   });
 });
 
@@ -111,5 +120,107 @@ describe('buildEsmShUrl', () => {
     const spec = parsePackageSpecifier('pkg@1.0.0');
     const url = buildEsmShUrl(spec, '1.0.0', { bundle: false });
     expect(url).toBe(`${ESM_SH_BASE_URL}/pkg@1.0.0`);
+  });
+});
+
+describe('import maps (#766)', () => {
+  it('marks the remapped packages external in the esm.sh URL', () => {
+    const url = buildEsmShUrl(parsePackageSpecifier('@acme/tools@1.0.0'), '1.0.0', {
+      external: importMapPackages({ zod: 'https://cdn.example.com/zod.mjs', 'lodash/': 'file:///vendor/lodash/' }),
+    });
+
+    expect(url).toBe('https://esm.sh/@acme/tools@1.0.0?bundle&external=lodash,zod');
+  });
+
+  it('rewrites exact and prefix specifiers of static and dynamic imports', () => {
+    const bundle = [
+      'import{z}from"zod";',
+      "import chunk from 'lodash/chunk';",
+      'export*from"zod/v4";',
+      'const lazy=import("zod");',
+      'import"left-alone";',
+    ].join('\n');
+
+    const rewritten = applyImportMap(bundle, {
+      zod: 'https://cdn.example.com/zod.mjs',
+      'lodash/': 'file:///vendor/lodash/',
+    });
+
+    expect(rewritten).toBe(
+      [
+        'import{z}from"https://cdn.example.com/zod.mjs";',
+        "import chunk from 'file:///vendor/lodash/chunk';",
+        'export*from"zod/v4";',
+        'const lazy=import("https://cdn.example.com/zod.mjs");',
+        'import"left-alone";',
+      ].join('\n'),
+    );
+  });
+
+  it('leaves a bundle alone without an import map', () => {
+    expect(applyImportMap('import{z}from"zod";', {})).toBe('import{z}from"zod";');
+  });
+
+  it('picks the longest matching prefix key, whatever order the map lists them in', () => {
+    const rewritten = applyImportMap('import map from "lodash/fp/map";', {
+      'lodash/': 'file:///general/',
+      'lodash/fp/': 'file:///fp/',
+    });
+
+    expect(rewritten).toBe('import map from "file:///fp/map";');
+  });
+
+  it('rewrites nothing inside strings, comments, template literals and regex literals', () => {
+    const bundle = [
+      'export const help = \'import "zod"\';',
+      '// import x from "zod"',
+      '/* const y = import("zod") */',
+      'const docs = `from "zod" ${"import(\\"zod\\")"} and import("zod")`;',
+      'const pattern = /from "zod"/g;',
+      'const ratio = a / b; import"zod";',
+    ].join('\n');
+
+    const rewritten = applyImportMap(bundle, { zod: 'https://cdn.example.com/zod.mjs' });
+
+    expect(rewritten).toBe(bundle.replace('import"zod";', 'import"https://cdn.example.com/zod.mjs";'));
+  });
+
+  it('rewrites an import inside a template interpolation, which is code', () => {
+    const rewritten = applyImportMap('const m = `${await import("zod")}`;', { zod: 'https://cdn.example.com/zod.mjs' });
+
+    expect(rewritten).toBe('const m = `${await import("https://cdn.example.com/zod.mjs")}`;');
+  });
+
+  it('leaves a method named import or from alone', () => {
+    const bundle = 'loader.import("zod"); Array.from("zod");';
+
+    expect(applyImportMap(bundle, { zod: 'https://cdn.example.com/zod.mjs' })).toBe(bundle);
+  });
+
+  it('leaves a variable or property named from alone', () => {
+    const bundle = [
+      'const from = "zod";',
+      'const options = {from:"zod"};',
+      'let from\n"zod"',
+      'run(); from\n"zod"',
+    ].join('\n');
+
+    expect(applyImportMap(bundle, { zod: 'https://cdn.example.com/zod.mjs' })).toBe(bundle);
+  });
+
+  it('rewrites every import and export clause form that ends in from', () => {
+    const bundle = [
+      'export * from "zod";',
+      'export * as ns from "zod";',
+      'export { a as b } from "zod";',
+      'import x from "zod";',
+      'import x, { y } from "zod";',
+      'import x, * as all from "zod";',
+      'import from from "zod";',
+    ].join('\n');
+
+    const rewritten = applyImportMap(bundle, { zod: 'https://cdn.example.com/zod.mjs' });
+
+    expect(rewritten).toBe(bundle.replaceAll('"zod"', '"https://cdn.example.com/zod.mjs"'));
   });
 });

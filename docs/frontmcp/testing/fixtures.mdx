@@ -120,7 +120,9 @@ test.use({ server: './src/gateway.ts', env });
 every response and notification from that stream. The server must serve the legacy transport —
 `@FrontMcp({ transport: { protocol: { legacy: true } } })` (or `sse: true`); otherwise the connection
 fails with the HTTP status it got. `server.createClient({ transport: 'sse' })` opens one more such
-client.
+client. Against a default (public) server the client connects with the server's anonymous token, as the
+Streamable HTTP client does, so `publicMode: true` is not needed; up to 1.9.1 the stream opened but every
+`POST` answered 404 unless `publicMode` was set.
 
 ### Hooks with fixtures
 

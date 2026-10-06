@@ -91,8 +91,10 @@ export default class Server {}
 | `standalone`  | `boolean \| 'includeInParent'`              | Scope isolation mode (default: `false`)            |
 | `loader`      | `PackageLoader`                             | Custom registry/bundle URLs and auth token         |
 | `autoUpdate`  | `{ enabled: boolean; intervalMs?: number }` | Background version polling                         |
-| `importMap`   | `Record<string, string>`                    | Import map overrides for ESM resolution            |
-| `filter`      | `AppFilterConfig`                           | Include/exclude filter for primitives              |
+| `importMap`   | `Record<string, string>`                    | Rewrites the package's imports (import-map rules)  |
+| `filter`      | `AppFilterConfig`                           | Include/exclude primitives by their package names  |
+
+`importMap` keys match an exact specifier, or every specifier under a key ending in `/` (the longest matching key wins); only real import and re-export specifiers are rewritten, never text in strings or comments. The bundle is fetched with those packages external (esm.sh `external`) and their imports are rewritten to the targets; Node cannot import `https://` URLs, so map to a `file://` URL or an installed package name there.
 
 Example with custom loader and auto-update:
 
@@ -132,25 +134,25 @@ export default class Server {}
 
 `app.remote(url, options?)` accepts a URL and optional `RemoteUrlAppOptions`:
 
-| Option             | Type                           | Description                                               |
-| ------------------ | ------------------------------ | --------------------------------------------------------- |
-| `name`             | `string`                       | Override the auto-derived app name (defaults to hostname) |
-| `namespace`        | `string`                       | Namespace prefix for tools, resources, and prompts        |
-| `description`      | `string`                       | Human-readable description                                |
-| `standalone`       | `boolean \| 'includeInParent'` | Scope isolation mode (default: `false`)                   |
-| `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback, MCP revision     |
-| `remoteAuth`       | `RemoteAuthConfig`             | Auth config: `'static'`, `'forward'`, or `'oauth'`        |
-| `refreshInterval`  | `number`                       | Interval (ms) to refresh capabilities from remote         |
-| `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities (default: 60000)         |
-| `filter`           | `AppFilterConfig`              | Include/exclude filter for primitives                     |
+| Option             | Type                           | Description                                                                                                                          |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`             | `string`                       | Override the auto-derived app name (defaults to hostname)                                                                            |
+| `namespace`        | `string`                       | Namespace prefix for tools, resources, and prompts                                                                                   |
+| `description`      | `string`                       | Human-readable description                                                                                                           |
+| `standalone`       | `boolean \| 'includeInParent'` | Scope isolation mode (default: `false`)                                                                                              |
+| `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback, MCP revision                                                                                |
+| `remoteAuth`       | `RemoteAuthConfig`             | Auth config: `'static'`, `'forward'` (transparent servers only), or `'oauth'`; requests carrying credentials do not follow redirects |
+| `refreshInterval`  | `number`                       | Interval (ms) to refresh capabilities from remote                                                                                    |
+| `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities (default: 60000)                                                                                    |
+| `filter`           | `AppFilterConfig`              | Include/exclude filter for primitives                                                                                                |
 
 `RemoteTransportOptions` fields:
 
 | Field             | Type                                 | Default    | Description                                                                                                                |
 | ----------------- | ------------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `timeout`         | `number`                             | `30000`    | Request timeout in ms                                                                                                      |
-| `retryAttempts`   | `number`                             | `3`        | Retry attempts for failed requests                                                                                         |
-| `retryDelayMs`    | `number`                             | `1000`     | Delay between retries in ms                                                                                                |
+| `retryAttempts`   | `number`                             | `2`        | Retries of a tool call that failed with a transient error (`0` turns retries off)                                          |
+| `retryDelayMs`    | `number`                             | `1000`     | Delay before the first retry in ms; each later retry waits twice as long                                                   |
 | `fallbackToSSE`   | `boolean`                            | `true`     | Fallback to SSE if Streamable HTTP fails                                                                                   |
 | `headers`         | `Record<string, string>`             | -          | Additional headers for all requests                                                                                        |
 | `protocolVersion` | `'legacy' \| '2026-07-28' \| 'auto'` | `'legacy'` | MCP revision: session + `initialize`, the stateless 2026-07-28 client (URL remotes only), or probe `server/discover` first |
@@ -159,9 +161,11 @@ Each remote tool, resource, resource template and prompt is listed once; when `c
 
 `RemoteAuthConfig` modes:
 
-- `{ mode: 'static', credentials: { type: 'bearer' | 'basic' | 'apiKey', value: string } }` -- static credentials for trusted internal services
-- `{ mode: 'forward', tokenClaim?: string, headerName?: string }` -- forward the gateway user's token to the remote server
+- `{ mode: 'static', credentials: { type: 'bearer' | 'basic' | 'apiKey', value: string } }` -- static credentials for trusted internal services, sent on every request (discovery included)
+- `{ mode: 'forward', tokenClaim?: string, headerName?: string }` -- forward the calling user's token (or one claim of it with `tokenClaim`) as `Bearer <token>` in `headerName` (default `Authorization`) on that user's calls; discovery runs outside any request and carries only `transportOptions.headers`
 - `{ mode: 'oauth' }` -- let the remote server handle its own OAuth flow
+
+`filter` matches the remote's entry names before the namespace prefix; resource templates match under `resources`.
 
 ## Scope Isolation
 

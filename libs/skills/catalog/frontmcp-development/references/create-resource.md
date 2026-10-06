@@ -431,6 +431,7 @@ All resource URIs are validated per RFC 3986 at metadata level:
 - Scheme-less URIs like `my-resource` will be rejected at registration time.
 - Template URIs must also have a valid scheme: `users://{id}` is valid, `{id}/profile` is not.
 - URI validation happens at decorator parse time, so errors surface immediately during server startup.
+- A URI names one resource per server: when two apps register the same URI (or template), the first app listed serves it, the other is neither listed nor read, and a warning names both. Prefix URIs per app (`desk://config`).
 
 ## Nx Generator
 

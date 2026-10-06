@@ -1,3 +1,4 @@
+import { EsmRegistryAuthError, EsmVersionResolutionError } from '../../errors/esm.errors';
 import { VersionResolver } from '../version-resolver';
 
 // We mock global fetch
@@ -91,6 +92,7 @@ describe('VersionResolver', () => {
       await expect(resolver.resolve(makeSpecifier('latest'))).rejects.toThrow(
         'Package "@acme/tools" not found in registry',
       );
+      await expect(resolver.resolve(makeSpecifier('latest'))).rejects.toThrow(EsmVersionResolutionError);
     });
 
     it('throws on non-ok response (e.g., 401)', async () => {
@@ -102,6 +104,7 @@ describe('VersionResolver', () => {
 
       const resolver = new VersionResolver();
       await expect(resolver.resolve(makeSpecifier('latest'))).rejects.toThrow('Registry returned 401');
+      await expect(resolver.resolve(makeSpecifier('latest'))).rejects.toThrow(EsmRegistryAuthError);
     });
 
     it('throws on fetch timeout (AbortError)', async () => {

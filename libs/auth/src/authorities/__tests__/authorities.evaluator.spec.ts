@@ -317,6 +317,21 @@ describe('ABAC Evaluator', () => {
       );
     });
 
+    it('keeps an env value out of a denial (#766)', () => {
+      const ctx = createCtx({ env: { DEPLOY_SECRET: 's3cr3t-value' } });
+      const matchDenial = evaluateAbac({ match: { 'env.DEPLOY_SECRET': 'other' } }, ctx);
+      const conditionDenial = evaluateAbac(
+        { conditions: [{ path: 'env.DEPLOY_SECRET', op: 'eq', value: 'other' }] },
+        ctx,
+      );
+
+      for (const result of [matchDenial, conditionDenial]) {
+        expect(result.granted).toBe(false);
+        expect(JSON.stringify(result)).not.toContain('s3cr3t-value');
+      }
+      expect(matchDenial.deniedBy).toContain("'env.DEPLOY_SECRET' expected 'other'");
+    });
+
     it('should deny when condition fails', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { level: 2 } },

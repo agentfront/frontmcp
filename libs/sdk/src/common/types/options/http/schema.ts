@@ -94,16 +94,16 @@ const securityHeadersSchema = z.object({
     .optional(),
 });
 
+/** The port the HTTP server listens on when `http.port` is not set: `PORT`, else 3000. */
+export const defaultHttpPort = (): number => Number(getEnv('PORT')) || 3000;
+
 /**
  * HTTP options Zod schema.
  */
 export const httpOptionsSchema = z.object({
   // Read when the options are parsed, through `getEnv`, not when this module loads: a browser
   // bundle has no `process`, and reading it at load stopped the page (#681)
-  port: z
-    .number()
-    .optional()
-    .default(() => Number(getEnv('PORT')) || 3000),
+  port: z.number().optional().default(defaultHttpPort),
   // `FRONTMCP_HTTP_ENTRY_PATH` lets `frontmcp dev` propagate the configured
   // `transport.http.path` to the spawned server so the MCP endpoint is mounted
   // where the generated client URL points (#446) — mirrors how `port` reads

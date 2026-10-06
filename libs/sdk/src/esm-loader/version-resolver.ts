@@ -3,10 +3,10 @@
  * @description Resolves semver ranges to concrete versions using the npm registry API.
  */
 
-import type { EsmRegistryAuth } from './esm-auth.types';
-import { resolveRegistryToken, getRegistryUrl } from './esm-auth.types';
-import { maxSatisfying, isValidVersion } from './semver.utils';
-import type { ParsedPackageSpecifier } from './package-specifier';
+import { EsmRegistryAuthError, EsmVersionResolutionError } from '../errors/esm.errors';
+import { getRegistryUrl, resolveRegistryToken, type EsmRegistryAuth } from './esm-auth.types';
+import { type ParsedPackageSpecifier } from './package-specifier';
+import { isValidVersion, maxSatisfying } from './semver.utils';
 
 /**
  * Result of a version resolution.
@@ -47,9 +47,19 @@ export class VersionResolver {
    *
    * @param specifier - Parsed package specifier with range
    * @returns Resolution result with concrete version
-   * @throws Error if the package is not found or no version matches the range
+   * @throws EsmRegistryAuthError when the registry refuses the credentials
+   * @throws EsmVersionResolutionError when the package is not found or no version matches the range
    */
   async resolve(specifier: ParsedPackageSpecifier): Promise<VersionResolutionResult> {
+    try {
+      return await this.fetchAndResolve(specifier);
+    } catch (error) {
+      if (error instanceof EsmRegistryAuthError) throw error;
+      throw new EsmVersionResolutionError(specifier.fullName, specifier.range, error as Error);
+    }
+  }
+
+  private async fetchAndResolve(specifier: ParsedPackageSpecifier): Promise<VersionResolutionResult> {
     const registryUrl = getRegistryUrl(this.registryAuth);
     const packageUrl = `${registryUrl}/${encodePackageName(specifier.fullName)}`;
 
@@ -73,11 +83,19 @@ export class VersionResolver {
       });
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
-        throw new Error(`Timeout resolving version for "${specifier.fullName}" after ${this.timeout}ms`);
+        throw new Error(`Timeout resolving version for "${specifier.fullName}" after ${this.timeout}ms`, {
+          cause: error,
+        });
       }
-      throw new Error(`Failed to fetch package info for "${specifier.fullName}": ${(error as Error).message}`);
+      throw new Error(`Failed to fetch package info for "${specifier.fullName}": ${(error as Error).message}`, {
+        cause: error,
+      });
     } finally {
       clearTimeout(timeoutId);
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new EsmRegistryAuthError(registryUrl, `Registry returned ${response.status} for "${specifier.fullName}"`);
     }
 
     if (response.status === 404) {

@@ -24,6 +24,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import {
+  enforceGlobalRateLimit,
   enforceIpFilter,
   Flow,
   FlowBase,
@@ -51,7 +52,7 @@ const extraStateSchema = z.object({
 const extraOutputSchema = HttpJsonSchema;
 
 const extraPlan = {
-  pre: ['checkIpFilter', 'parseInput'],
+  pre: ['checkIpFilter', 'acquireQuota', 'parseInput'],
   execute: ['handleExtra'],
 } as const satisfies FlowPlan<string>;
 
@@ -87,6 +88,11 @@ export default class OauthAuthUiExtraFlow extends FlowBase<typeof extraName> {
   @ExtraStage('checkIpFilter')
   async checkIpFilter() {
     enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
+
+  @ExtraStage('acquireQuota')
+  async acquireQuota() {
+    await enforceGlobalRateLimit(this.scope, this.tryGetContext());
   }
 
   @ExtraStage('parseInput')

@@ -80,6 +80,16 @@ describe('JwksService — OpenID discovery', () => {
     expect(requestedUrls()).not.toContain(`${ISSUER}/.well-known/openid-configuration`);
   });
 
+  it('fetches the key set at <issuer>/.well-known/jwks.json, before any discovery document (#766)', async () => {
+    documents = { [`${ISSUER}/.well-known/jwks.json`]: { keys: [jwk] } };
+    const service = new JwksService();
+
+    const jwks = await service.getJwksForProvider({ id: 'idp', issuerUrl: ISSUER });
+
+    expect(jwks?.keys).toEqual([jwk]);
+    expect(requestedUrls()).toEqual([`${ISSUER}/.well-known/jwks.json`]);
+  });
+
   it('finds nothing when neither discovery document names a key set', async () => {
     delete documents[`${ISSUER}/.well-known/openid-configuration`];
     const service = new JwksService();

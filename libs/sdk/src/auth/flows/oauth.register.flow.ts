@@ -36,6 +36,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { base64urlEncode, randomBytes, randomUUID } from '@frontmcp/utils';
 
 import {
+  enforceGlobalRateLimit,
   enforceIpFilter,
   Flow,
   FlowBase,
@@ -85,7 +86,7 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['checkIpFilter', 'parseInput', 'validateInput'],
+  pre: ['checkIpFilter', 'acquireQuota', 'parseInput', 'validateInput'],
   execute: ['registerClient', 'respondRegistration'],
   post: ['validateOutput'],
 } as const satisfies FlowPlan<string>;
@@ -135,6 +136,11 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
   @Stage('checkIpFilter')
   async checkIpFilter() {
     enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
+
+  @Stage('acquireQuota')
+  async acquireQuota() {
+    await enforceGlobalRateLimit(this.scope, this.tryGetContext());
   }
 
   @Stage('parseInput')

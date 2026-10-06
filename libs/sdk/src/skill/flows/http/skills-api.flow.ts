@@ -8,6 +8,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import {
+  enforceGlobalRateLimit,
   enforceIpFilter,
   Flow,
   FlowBase,
@@ -57,7 +58,7 @@ const stateSchema = z.object({
 const outputSchema = HttpJsonSchema;
 
 const plan = {
-  pre: ['checkIpFilter', 'checkEnabled', 'parseRequest'],
+  pre: ['checkIpFilter', 'acquireQuota', 'checkEnabled', 'parseRequest'],
   execute: ['handleRequest'],
 } as const satisfies FlowPlan<string>;
 
@@ -126,6 +127,11 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
   @Stage('checkIpFilter')
   async checkIpFilter() {
     enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
+
+  @Stage('acquireQuota')
+  async acquireQuota() {
+    await enforceGlobalRateLimit(this.scope, this.tryGetContext());
   }
 
   @Stage('checkEnabled')

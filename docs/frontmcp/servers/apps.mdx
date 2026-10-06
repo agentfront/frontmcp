@@ -63,7 +63,7 @@ export default class Server {}
   tools?: ToolType[],
   resources?: ResourceType[],
   prompts?: PromptType[],
-  auth?: AuthOptions,                 // app‑default auth (overrides server auth)
+  auth?: AuthOptions,                 // app auth (see Scoping & auth)
   standalone?: 'includeInParent' | boolean, // isolate scope / expose separately
 })
 ```
@@ -82,12 +82,13 @@ export default class Server {}
 | `tools`         | Tool classes registered to this app                     |
 | `resources`     | Resource classes registered to this app                 |
 | `prompts`       | Prompt classes registered to this app                   |
-| `auth`          | App-level auth config (overrides server auth)           |
+| `auth`          | App-level auth config (see _Scoping & auth_ below)      |
 | `standalone`    | Isolation mode: `true`, `false`, or `'includeInParent'` |
 
 **Scoping & auth**
 
 - If the server uses **`splitByApp: true`**, each app is isolated and **must** configure its own auth (server-level `auth` is disallowed).
+- On the shared endpoint (the default), a server in `local` or `remote` mode federates the app's provider, and checks each tool call against the apps the caller has authorized only when `incrementalAuth` is enabled; without it, app grants are not checked per tool call. A server in `public` or `static` mode refuses to start with a protected app on its shared endpoint, since it would serve that app's tools without the app's auth. The one exception is a `static` app under a `static` server that checks the same header and scheme and accepts every token the server accepts: the server's check then enforces it. To enforce an app's own auth regardless of the server's mode, mark the app `standalone: true` (or use `splitByApp: true`) to give it an endpoint of its own.
 - `standalone: true` makes the app expose its own scope/entry; `'includeInParent'` lists it under the parent while keeping isolation.
 
 **Dependency resolution**
@@ -166,8 +167,8 @@ export default class GatewayServer {}
 ```ts
 transportOptions: {
   timeout: 60000,              // Request timeout in milliseconds
-  retryAttempts: 3,            // Number of retry attempts on failure
-  retryDelayMs: 1000,          // Delay between retries
+  retryAttempts: 2,            // Retries of a tool call that failed with a transient error (default 2, 0 = off)
+  retryDelayMs: 1000,          // Delay before the first retry; each later retry waits twice as long
   fallbackToSSE: true,         // Fall back to legacy SSE when Streamable HTTP fails
   headers: { 'x-team': 'a' },  // Sent with every request
   protocolVersion: 'auto',     // 'legacy' (default) | '2026-07-28' | 'auto'
@@ -187,6 +188,47 @@ See [Protocol versions](/frontmcp/fundamentals/protocol-versions#proxying-a-2026
 Each remote tool, resource, resource template and prompt is listed once. The gateway re-reads the
 remote's lists when `cacheTTL` expires (or the remote reports a change), and replaces what it proxied
 before: entries the remote dropped disappear, and nothing is listed twice.
+
+### Remote Auth
+
+`remoteAuth` sets the credentials the gateway sends to the remote:
+
+```ts
+// The same credentials on every request, discovery included
+remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: process.env['UPSTREAM_TOKEN']! } }
+// credentials.type: 'bearer' | 'basic' (Authorization header) | 'apiKey' (headerName, default 'X-API-Key')
+
+// The calling user's token, on that user's tool calls, resource reads and prompt requests
+remoteAuth: { mode: 'forward' }
+remoteAuth: { mode: 'forward', tokenClaim: 'upstream_token', headerName: 'X-Upstream-Auth' }
+
+// No gateway credentials: the remote runs its own OAuth
+remoteAuth: { mode: 'oauth' }
+```
+
+With `forward`, the gateway sends `Bearer <token>` in `headerName` (default `Authorization`); with
+`tokenClaim`, the token is the value of that claim of the caller's JWT instead of the whole token. A call
+with no caller token is sent without one. `forward` needs a server (or a standalone app) in `transparent`
+mode, whose callers' tokens come from the identity provider: under `public`, `static`, `local` or `remote`
+mode the caller's token is one the server minted or holds itself, so startup refuses `forward` there; use
+`static` credentials or `transportOptions.headers` instead. Discovery (`tools/list` and the other lists) runs at startup and
+on refresh, outside any user's request, so it carries only `transportOptions.headers`: a remote that
+requires auth to list its entries needs `static` credentials or a header in `transportOptions.headers`.
+A request that carries credentials or `transportOptions.headers` does not follow a redirect: a 3xx from the remote
+fails the request rather than sending the credentials on to the origin it names.
+
+### Filtering Remote Entries
+
+`filter` picks which of the remote's entries the gateway proxies, by their names on the remote (before
+the namespace prefix). Resource templates are matched under `resources`:
+
+```ts
+App.remote('https://api.example.com/mcp', {
+  namespace: 'api',
+  filter: { exclude: { tools: ['delete_*'] } },                 // everything except these
+  // filter: { default: 'exclude', include: { tools: ['search'] } }, // nothing except these
+})
+```
 
 ### Caching Remote Tools
 

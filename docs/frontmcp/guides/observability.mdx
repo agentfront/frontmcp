@@ -314,6 +314,18 @@ observability: {
 }
 ```
 
+A request's log opens when its HTTP request starts and closes when the HTTP response is finalized, which calls
+`onRequestComplete` once with the HTTP method and path, the JSON-RPC method, the tool, resource or prompt it served,
+the entries logged while it ran, its status (`error` for an HTTP status of 400 or more, or when the tool, resource or
+prompt failed, with the failure in `error`; `status_code` is the status the server actually answered with, a 401 from
+authentication or a 429 from the throttle included) and its duration. The callback runs off the response path: the
+response is sent without waiting for it. Up to 1.9.1 the callback never fired.
+
+A tool, resource or prompt that fails ends its spans with an error status, the execution span included; up to 1.9.1 a
+failed tool's span was left open and never exported. The "tracing enabled but no TracerProvider configured" warning
+appears only when no provider is registered; up to 1.9.1 it appeared even after `setupOTel()` or another SDK
+registered one.
+
 ---
 
 ## Step 7: Testing with Telemetry

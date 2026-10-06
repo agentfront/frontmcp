@@ -89,6 +89,27 @@ describe('App.remote()', () => {
     });
   });
 
+  describe('filter (#766)', () => {
+    it('proxies only the entries the filter lets through, matched by their remote names', async () => {
+      const srv = await createGateway({
+        filter: { exclude: { tools: ['ech*'], prompts: ['greeting'], resources: ['item'] } },
+      });
+
+      expect((await srv.listTools()).tools).toEqual([]);
+      expect((await srv.listPrompts()).prompts).toEqual([]);
+      expect((await srv.listResourceTemplates()).resourceTemplates).toEqual([]);
+      expect((await srv.listResources()).resources.map((r) => r.uri)).toEqual(['test://status']);
+    });
+
+    it("with default: 'exclude', proxies only what include names", async () => {
+      const srv = await createGateway({ filter: { default: 'exclude', include: { tools: ['echo'] } } });
+
+      expect((await srv.listTools()).tools.map((t) => t.name)).toEqual(['up:echo']);
+      expect((await srv.listResources()).resources).toEqual([]);
+      expect((await srv.listPrompts()).prompts).toEqual([]);
+    });
+  });
+
   describe('listing', () => {
     it('lists each remote resource template once', async () => {
       const srv = await createGateway();
@@ -122,10 +143,12 @@ describe('App.remote()', () => {
       const prompts = (await server.listPrompts()).prompts.map((p) => p.name).sort();
       const resources = (await server.listResources()).resources.map((r) => r.name).sort();
 
-      expect(templates).toEqual(['a:item', 'b:item', 'c:item']);
+      // The three remotes share the URI test://status and the URI template test://items/{id}: each names one
+      // resource, the first remote's (#766)
+      expect(templates).toEqual(['a:item']);
       expect(tools).toEqual(['a:echo', 'b:echo', 'c:echo']);
       expect(prompts).toEqual(['a:greeting', 'b:greeting', 'c:greeting']);
-      expect(resources).toEqual(['a:status', 'b:status', 'c:status']);
+      expect(resources).toEqual(['a:status']);
     });
 
     it('does not pile up copies when the capability cache expires and the remote is re-discovered', async () => {

@@ -282,10 +282,9 @@ these flows.
   one hop) or every request will appear to come from the balancer and your lists will match
   the wrong address.
 
-Note that `ipFilter.trustProxy` and `ipFilter.trustedProxyDepth` are accepted by the schema
-but are **not** read: client-IP extraction happens in the SDK context layer, before guard
-configuration is reachable, and setting either one logs a startup warning. Use the
-environment variables.
+`ipFilter.trustProxy: true` does the same as `FRONTMCP_TRUST_PROXY=true`, with
+`ipFilter.trustedProxyDepth` as the number of hops; `false` (the default) leaves the decision to
+the environment variables. Up to 1.9.1 both options were ignored.
 
 </Warning>
 
@@ -357,10 +356,8 @@ request was always let through.)
     used instead.
 
     <Note>
-      `ipFilter.trustProxy` and `ipFilter.trustedProxyDepth` exist in the schema but are not
-      read — client-IP extraction happens in the SDK context layer, before guard
-      configuration is reachable — and setting either logs a startup warning. Use the
-      environment variables above.
+      `ipFilter.trustProxy: true` (with `ipFilter.trustedProxyDepth`) does the same as the
+      environment variables above; `false` leaves the decision to them.
     </Note>
 
     <Warning>

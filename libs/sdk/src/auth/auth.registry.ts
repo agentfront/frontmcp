@@ -4,6 +4,7 @@ import 'reflect-metadata';
 import { detectAuthProviders, type AppAuthInfo, type AuthProviderDetectionResult } from '@frontmcp/auth';
 import { tokenName, type Token } from '@frontmcp/di';
 
+import { collectAppMetadata } from '../app/app.utils';
 import {
   AuthProviderKind,
   FrontMcpAuth,
@@ -122,6 +123,7 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
           id: appMeta.id || appMeta.name,
           name: appMeta.name,
           auth: appMeta.auth,
+          remoteAuthMode: appMeta.remoteAuthMode,
         });
       }
     }
@@ -132,26 +134,25 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
   /**
    * Get app metadata from AppType (handles both class and value types)
    */
-  private getAppMetadata(app: AppType): { id?: string; name: string; auth?: AuthOptions } | undefined {
+  private getAppMetadata(
+    app: AppType,
+  ): { id?: string; name: string; auth?: AuthOptions; remoteAuthMode?: string } | undefined {
     // Value type: has metadata directly
     if (typeof app === 'object' && 'name' in app) {
-      const appValue = app as { id?: string; name: string; auth?: AuthOptions };
+      const appValue = app as { id?: string; name: string; auth?: AuthOptions; remoteAuth?: { mode?: string } };
       return {
         id: appValue.id,
         name: appValue.name,
         auth: appValue.auth,
+        remoteAuthMode: appValue.remoteAuth?.mode,
       };
     }
 
-    // Class type: check for metadata decorator
+    // Class type: the @App decorator stores each field under its own metadata token
     if (typeof app === 'function') {
-      const metadata = Reflect.getMetadata('frontmcp:app', app);
-      if (metadata) {
-        return {
-          id: metadata.id,
-          name: metadata.name,
-          auth: metadata.auth,
-        };
+      const metadata = collectAppMetadata(app);
+      if (metadata.name) {
+        return { id: metadata.id, name: metadata.name, auth: metadata.auth as AuthOptions | undefined };
       }
     }
 
@@ -193,14 +194,35 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
       // Throw with first error (most important)
       throw new AuthConfigurationError(`Invalid auth configuration: ${validationErrors[0]}`, {
         errors: validationErrors,
-        suggestion:
-          `1. Change your parent auth mode from 'transparent' to 'local' or 'remote'\n` +
-          `2. Example:\n` +
-          `   auth: {\n` +
-          `     mode: 'local', // or 'remote' with your provider config\n` +
-          `   }`,
+        suggestion: this.suggestionFor(validationErrors[0]),
       });
     }
+  }
+
+  /**
+   * The fix for a detection error: each one has its own way out.
+   */
+  private suggestionFor(error: string): string {
+    if (error.includes("remoteAuth: { mode: 'forward' }")) {
+      return (
+        `Give the remote its own credentials, or run the server in transparent mode:\n` +
+        `   App.remote(url, { remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: '...' } } })`
+      );
+    }
+    if (error.startsWith('App-level auth is not enforced')) {
+      return (
+        `1. Serve the app on its own endpoint: @App({ standalone: true }) or @FrontMcp({ splitByApp: true })\n` +
+        `2. Or run the server in local or remote mode with incrementalAuth, which checks app grants per tool call`
+      );
+    }
+    const parentMode = isTransparentMode(this.parsedOptions) ? 'transparent' : this.parsedOptions.mode;
+    return (
+      `1. Change your parent auth mode from '${parentMode}' to 'local' or 'remote'\n` +
+      `2. Example:\n` +
+      `   auth: {\n` +
+      `     mode: 'local', // or 'remote' with your provider config\n` +
+      `   }`
+    );
   }
 
   /**
