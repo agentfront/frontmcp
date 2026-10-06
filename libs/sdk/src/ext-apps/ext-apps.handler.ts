@@ -91,9 +91,9 @@ export interface ExtAppsMessageHandlerOptions {
  * - notifications/message (ui/log) - Forward logs to server logger
  * - ui/callServerTool - Proxy tool calls to the MCP server (a spec widget sends a standard
  *   `tools/call`, which the server handles as any MCP request)
- * - ui/close - Close the widget
- * - ui/registerTool - Register a widget-defined tool
- * - ui/unregisterTool - Unregister a widget-defined tool
+ * - ui/notifications/request-teardown (ui/close) - Close the widget
+ * - ui/registerTool - Register a widget-defined tool (FrontMCP extension, not in the spec)
+ * - ui/unregisterTool - Unregister a widget-defined tool (FrontMCP extension, not in the spec)
  *
  * @example
  * ```typescript
@@ -177,15 +177,16 @@ export class ExtAppsMessageHandler {
   }
 
   /**
-   * Handle a JSON-RPC notification from a widget (`notifications/message`). A notification gets
-   * no answer, so a failure is only logged, and a notification this handler does not know is ignored.
+   * Handle a JSON-RPC notification from a widget (`notifications/message`,
+   * `ui/notifications/request-teardown`). A notification gets no answer, so a failure is only
+   * logged, and a notification this handler does not know is ignored.
    *
    * @param notification - The JSON-RPC notification
    */
   async handleNotification(notification: ExtAppsJsonRpcNotification): Promise<void> {
     const { method, params } = notification;
 
-    if (method !== 'notifications/message') {
+    if (method !== 'notifications/message' && method !== 'ui/notifications/request-teardown') {
       this.logger.verbose(`handleNotification: ignoring method=${method}`);
       return;
     }
@@ -234,6 +235,7 @@ export class ExtAppsMessageHandler {
       case 'ui/setDisplayMode':
         return this.handleSetDisplayMode(normalizedParams as ExtAppsSetDisplayModeParams);
 
+      case 'ui/notifications/request-teardown':
       case 'ui/close':
         return this.handleClose(normalizedParams as ExtAppsCloseParams);
 
@@ -400,7 +402,8 @@ export class ExtAppsMessageHandler {
   }
 
   /**
-   * Handle ui/close - Close the widget.
+   * Handle ui/notifications/request-teardown and ui/close - Close the widget. The spec
+   * notification has no params, so `reason` comes only with ui/close.
    */
   private async handleClose(params: ExtAppsCloseParams): Promise<void> {
     if (!this.context.close) {

@@ -678,6 +678,16 @@ describe('ExtAppsMessageHandler', () => {
         expect(openLink).toHaveBeenCalledWith('https://example.com');
       });
 
+      it('ui/notifications/request-teardown sent with an id still closes the widget', async () => {
+        const close = jest.fn().mockResolvedValue(undefined);
+        const handler = new ExtAppsMessageHandler({ context: createMockContext({ close }) });
+
+        const response = await handler.handleRequest(createRequest('ui/notifications/request-teardown', {}));
+
+        expect(response).toEqual({ jsonrpc: '2.0', id: 1, result: {} });
+        expect(close).toHaveBeenCalledWith(undefined);
+      });
+
       it('ui/request-display-mode sets the mode and answers with it', async () => {
         const setDisplayMode = jest.fn().mockResolvedValue(undefined);
         const handler = new ExtAppsMessageHandler({ context: createMockContext({ setDisplayMode }) });
@@ -843,6 +853,25 @@ describe('ExtAppsMessageHandler', () => {
       await handler.handleNotification(createNotification('notifications/message', { level: 'warning', data: 'Low' }));
 
       expect(mockLogger.warn).toHaveBeenCalledWith('Low', undefined);
+    });
+
+    it('closes the widget on a ui/notifications/request-teardown', async () => {
+      const close = jest.fn().mockResolvedValue(undefined);
+      const handler = new ExtAppsMessageHandler({ context: createMockContext({ close }) });
+
+      await handler.handleNotification(createNotification('ui/notifications/request-teardown', {}));
+      await handler.handleNotification(createNotification('ui/notifications/request-teardown'));
+
+      expect(close).toHaveBeenNthCalledWith(1, undefined);
+      expect(close).toHaveBeenCalledTimes(2);
+    });
+
+    it('logs that a ui/notifications/request-teardown is not supported without a close callback', async () => {
+      const handler = new ExtAppsMessageHandler({ context: createMockContext() });
+
+      await handler.handleNotification(createNotification('ui/notifications/request-teardown', {}));
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Widget close not supported by host'));
     });
 
     it('ignores a notification it does not handle', async () => {

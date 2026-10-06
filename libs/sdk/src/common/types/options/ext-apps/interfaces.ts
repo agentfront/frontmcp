@@ -30,7 +30,8 @@ export interface ExtAppsHostCapabilitiesInterface {
   modelContextUpdate?: boolean;
 
   /**
-   * Host supports widget-defined tools via ui/registerTool and ui/unregisterTool.
+   * Host supports widget-defined tools via ui/registerTool and ui/unregisterTool
+   * (FrontMCP extensions; the MCP Apps spec has no widget-defined tools).
    * @default false
    */
   widgetTools?: boolean;

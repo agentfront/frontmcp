@@ -73,7 +73,8 @@ export interface ExtAppsSetDisplayModeParams {
 }
 
 /**
- * Parameters for ui/close request.
+ * Parameters for the earlier ui/close request (the MCP Apps ui/notifications/request-teardown
+ * notification has none).
  * Widget requests to be closed.
  */
 export interface ExtAppsCloseParams {
@@ -125,7 +126,7 @@ export interface ExtAppsLogMessageParams {
 // ============================================
 
 /**
- * Parameters for ui/registerTool request.
+ * Parameters for ui/registerTool request, a FrontMCP extension with no MCP Apps equivalent.
  * Widget registers a tool it provides.
  */
 export interface ExtAppsRegisterToolParams {
@@ -138,7 +139,7 @@ export interface ExtAppsRegisterToolParams {
 }
 
 /**
- * Parameters for ui/unregisterTool request.
+ * Parameters for ui/unregisterTool request, a FrontMCP extension with no MCP Apps equivalent.
  * Widget unregisters a tool it previously registered.
  */
 export interface ExtAppsUnregisterToolParams {

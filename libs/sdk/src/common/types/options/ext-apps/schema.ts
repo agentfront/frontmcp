@@ -19,7 +19,7 @@ import type { ExtAppsHostCapabilitiesInterface, ExtAppsOptionsInterface } from '
  *   logging: true,            // Allow notifications/message (or ui/log)
  *   openLink: true,           // Allow ui/open-link (or ui/openLink)
  *   modelContextUpdate: true, // Allow ui/update-model-context (or ui/updateModelContext)
- *   widgetTools: true,        // Allow ui/registerTool and ui/unregisterTool
+ *   widgetTools: true,        // Allow ui/registerTool and ui/unregisterTool (FrontMCP extensions)
  *   displayModes: ['inline', 'fullscreen', 'pip'],
  * };
  * ```
@@ -48,7 +48,8 @@ export const extAppsHostCapabilitiesSchema = z.object({
   modelContextUpdate: z.boolean().optional(),
 
   /**
-   * Host supports widget-defined tools via ui/registerTool and ui/unregisterTool.
+   * Host supports widget-defined tools via ui/registerTool and ui/unregisterTool
+   * (FrontMCP extensions; the MCP Apps spec has no widget-defined tools).
    * When enabled, widgets can dynamically register and unregister tools.
    * @default false
    */

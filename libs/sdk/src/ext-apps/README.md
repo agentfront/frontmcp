@@ -73,10 +73,10 @@ widgets built before the bridges sent the spec names keep sending.
 | `ui/update-model-context` (`ui/updateModelContext`) | Update model context with state | `modelContextUpdate`                    |
 | `ui/open-link` (`ui/openLink`)                      | Request to open a URL           | `openLink`                              |
 | `ui/request-display-mode` (`ui/setDisplayMode`)     | Change display mode             | Handler context must provide callback   |
-| `ui/close`                                          | Close the widget                | Handler context must provide callback   |
+| `ui/notifications/request-teardown` (`ui/close`)    | Close the widget                | Handler context must provide callback   |
 | `notifications/message` (`ui/log`)                  | Send log message to host        | `logging`                               |
-| `ui/registerTool`                                   | Register widget-defined tool    | `widgetTools`                           |
-| `ui/unregisterTool`                                 | Unregister widget-defined tool  | `widgetTools`                           |
+| `ui/registerTool` (FrontMCP extension)              | Register widget-defined tool    | `widgetTools`                           |
+| `ui/unregisterTool` (FrontMCP extension)            | Unregister widget-defined tool  | `widgetTools`                           |
 
 - `tools/call` is the standard MCP request, so it runs the `tools:call-tool` flow like any other
   client's call; the bridge marks it with `_meta['frontmcp/widgetCall']: true`, so the result
@@ -85,6 +85,10 @@ widgets built before the bridges sent the spec names keep sending.
   previous one: the context callback gets those fields and `merge: false`. `ui/updateModelContext`
   takes `{ context, merge? }`.
 - `ui/request-display-mode` answers with `{ mode }`.
+- `ui/notifications/request-teardown` is a notification with no params (`ui/close` took
+  `{ reason? }`); the host decides whether to tear the widget down.
+- `ui/registerTool` and `ui/unregisterTool` are FrontMCP extensions: the MCP Apps spec has no
+  widget-defined tools, so a spec host does not answer them.
 - `notifications/message` is a JSON-RPC notification with the MCP logging params
   `{ level, logger?, data }` (levels `debug` to `emergency`). Over HTTP it is answered with 202 and
   no body, as is any other notification a widget sends.

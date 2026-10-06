@@ -206,8 +206,8 @@ export interface FrontMcpBaseMetadata {
    * `notifications/message` through session validation and the
    * ExtAppsMessageHandler. A widget calls a tool with the standard
    * `tools/call`, which runs as any MCP request. The earlier names
-   * ui/callServerTool, ui/openLink, ui/setDisplayMode, ui/updateModelContext
-   * and ui/log are still accepted.
+   * ui/callServerTool, ui/openLink, ui/setDisplayMode, ui/updateModelContext,
+   * ui/log and ui/close are still accepted.
    *
    * ## Host Capabilities
    *
@@ -219,7 +219,7 @@ export interface FrontMcpBaseMetadata {
    * | `logging`           | Allow widgets to send logs via notifications/message (or ui/log) | `true`  |
    * | `openLink`          | Allow widgets to request URL opening via ui/open-link (or ui/openLink) | `false` |
    * | `modelContextUpdate`| Allow widgets to update model context via ui/update-model-context (or ui/updateModelContext) | `false` |
-   * | `widgetTools`       | Allow widgets to register/unregister tools dynamically | `false` |
+   * | `widgetTools`       | Allow widgets to register/unregister tools dynamically (ui/registerTool, ui/unregisterTool: FrontMCP extensions) | `false` |
    * | `displayModes`      | Display modes ui/request-display-mode may ask for: 'inline', 'fullscreen', 'pip' | `undefined` |
    *
    * @default { enabled: true, hostCapabilities: { serverToolProxy: true, logging: true } }
