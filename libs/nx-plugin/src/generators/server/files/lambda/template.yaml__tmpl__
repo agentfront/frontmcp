@@ -2,18 +2,28 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: '<%= className %> FrontMCP Server'
 
+Parameters:
+  McpSessionSecret:
+    Type: String
+    NoEcho: true
+    Description: MCP_SESSION_SECRET for session-ID encryption, required in production (openssl rand -hex 32)
+
 Globals:
   Function:
     Timeout: 30
     Runtime: nodejs24.x
     MemorySize: 256
+    Environment:
+      Variables:
+        NODE_ENV: production
+        MCP_SESSION_SECRET: !Ref McpSessionSecret
 
 Resources:
   McpFunction:
     Type: AWS::Serverless::Function
     Properties:
       # `nx build <%= projectName %>` (target lambda) writes dist/lambda/handler.cjs, which exports `handler`.
-      # The bundle requires @codegenie/serverless-express at runtime without bundling it: add a Lambda layer that provides it.
+      # It bundles @codegenie/serverless-express, so the function needs no layer.
       CodeUri: dist/lambda/
       Handler: handler.handler
       Events:

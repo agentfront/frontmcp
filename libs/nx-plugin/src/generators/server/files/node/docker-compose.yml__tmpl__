@@ -8,6 +8,8 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=${PORT:-3000}
+      # Required in production (session-ID encryption). Compose stops here when it is unset.
+      - MCP_SESSION_SECRET=${MCP_SESSION_SECRET:?set MCP_SESSION_SECRET (openssl rand -hex 32)}
 <% if (redis === 'docker') { %>
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -17,8 +19,10 @@ services:
 
   redis:
     image: redis:7-alpine
+    # Loopback only: the app reaches Redis over the compose network, and a
+    # Redis without a password must not listen on the host's public interfaces.
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379'
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
@@ -32,6 +36,8 @@ volumes:
   redis-data:
 <% } %>
 
+# Run with MCP_SESSION_SECRET set in your shell or in a .env file next to this file:
+#   MCP_SESSION_SECRET=$(openssl rand -hex 32) docker compose up --build
 # Selective rebuild:
 #   docker compose up --build app   # rebuild only the app
 #   docker compose up --build       # rebuild everything

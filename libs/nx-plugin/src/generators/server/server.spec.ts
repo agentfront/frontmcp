@@ -1,9 +1,14 @@
-import { readJson, type Tree } from '@nx/devkit';
+import { installPackagesTask, readJson, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
 
 import { getLambdaDependencies } from '../../utils/versions';
 import { appGenerator } from '../app/app';
 import { serverGenerator } from './server';
+
+jest.mock('@nx/devkit', () => ({
+  ...jest.requireActual('@nx/devkit'),
+  installPackagesTask: jest.fn(),
+}));
 
 describe('server generator', () => {
   let tree: Tree;
@@ -42,6 +47,23 @@ describe('server generator', () => {
       expect(dockerfile).toContain('CMD ["node", "dist/node/server-prod.bundle.js"]');
       expect(dockerfile).not.toContain('dist/main.js');
       expect(dockerfile).toContain('ENV FRONTMCP_BIND_ADDRESS=all');
+      expect(dockerfile).toMatch(
+        /HEALTHCHECK [^\n]+\\\n\s+CMD node -e "fetch\('http:\/\/127\.0\.0\.1:' [^\n]+'\/healthz'\)/,
+      );
+    });
+
+    it('makes docker compose require MCP_SESSION_SECRET and keeps Redis on loopback', async () => {
+      await serverGenerator(tree, {
+        name: 'prod',
+        apps: 'demo',
+        deploymentTarget: 'node',
+        redis: 'docker',
+        skipFormat: true,
+      });
+
+      const compose = tree.read('servers/prod/docker-compose.yml', 'utf-8') ?? '';
+      expect(compose).toContain('- MCP_SESSION_SECRET=${MCP_SESSION_SECRET:?');
+      expect(compose).toContain("- '127.0.0.1:6379:6379'");
     });
 
     // #726 — `npm ci` failed in yarn and pnpm workspaces, which have no package-lock.json
@@ -189,15 +211,30 @@ describe('server generator', () => {
     });
 
     it('adds no dependencies for the other targets', async () => {
-      const task = await serverGenerator(tree, {
-        name: 'prod',
-        apps: 'demo',
-        deploymentTarget: 'node',
-        skipFormat: true,
-      });
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
 
-      expect(task).toBeUndefined();
       expect(readJson(tree, 'package.json').dependencies?.['@codegenie/serverless-express']).toBeUndefined();
+    });
+
+    it.each(['node', 'vercel', 'lambda', 'cloudflare'] as const)(
+      'installs after generating a %s shell, so the lock file lists its package.json',
+      async (deploymentTarget) => {
+        const task = await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget, skipFormat: true });
+
+        expect(typeof task).toBe('function');
+        (task as () => void)();
+        expect(installPackagesTask).toHaveBeenCalledWith(tree, true);
+      },
+    );
+
+    it('sets NODE_ENV and MCP_SESSION_SECRET in the SAM template and asks for no layer', async () => {
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'lambda', skipFormat: true });
+
+      const template = tree.read('servers/prod/template.yaml', 'utf-8') ?? '';
+      expect(template).toContain('NODE_ENV: production');
+      expect(template).toContain('MCP_SESSION_SECRET: !Ref McpSessionSecret');
+      expect(template).toContain('NoEcho: true');
+      expect(template).not.toMatch(/add a Lambda layer/i);
     });
 
     it('points SAM at the handler the lambda build writes (dist/lambda/handler.cjs)', async () => {
