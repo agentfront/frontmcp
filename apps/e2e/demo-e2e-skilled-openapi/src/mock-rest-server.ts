@@ -9,6 +9,8 @@ interface MockInvoice {
   customerId: string;
 }
 
+const JSON_MEDIA_TYPE = /^\s*application\/json\s*(;|$)/i;
+
 const invoices = new Map<string, MockInvoice>();
 let invoiceSeq = 1;
 let refundSeq = 1;
@@ -38,7 +40,7 @@ export async function startMockBillingServer(port = 9876): Promise<http.Server> 
       }
       // A JSON body sent as text/plain (the #690 regression) must fail, not parse anyway.
       const contentType = req.headers['content-type'] ?? '';
-      if (req.method === 'POST' && !contentType.startsWith('application/json')) {
+      if (req.method === 'POST' && !JSON_MEDIA_TYPE.test(contentType)) {
         return reply(res, 415, { error: 'expected an application/json body', contentType });
       }
 
