@@ -1,6 +1,14 @@
 // file: libs/sdk/src/common/interfaces/execution-context.interface.ts
 
-import { buildAuthContext, type FrontMcpAuthContext, type FrontMcpFetchInit } from '@frontmcp/auth';
+import {
+  AUTH_PROVIDERS_ACCESSOR,
+  buildAuthContext,
+  isFrontMcpCredentials,
+  providerHeadersCredentials,
+  type AuthProvidersAccessor,
+  type FrontMcpAuthContext,
+  type FrontMcpFetchInit,
+} from '@frontmcp/auth';
 import { type Token } from '@frontmcp/di';
 import { type AuthInfo, type CallToolResult } from '@frontmcp/protocol';
 import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/utils';
@@ -11,6 +19,7 @@ import { workerEnvOf } from '../../context/frontmcp-context-storage';
 import { RequestContextNotAvailableError } from '../../errors/mcp.error';
 import { type CallSurface } from '../availability';
 import { type ScopeEntry } from '../entries';
+import { callableToolName, type ToolLookupScope } from '../utils/tool-lookup.utils';
 import { FlowControl } from './flow.interface';
 import { type ProviderRegistryInterface } from './internal';
 import { type FrontMcpLogger } from './logger.interface';
@@ -82,7 +91,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
    *
    * Custom fields from `ExtendFrontMcpAuthContext` are available if pipes
    * are configured in `@FrontMcp({ authorities: { pipes } })`: tools, resources,
-   * agents and jobs run them before any hook or `execute()` reads `this.auth`.
+   * prompts, agents and jobs run them before any hook or `execute()` reads `this.auth`.
    *
    * @example
    * ```typescript
@@ -242,7 +251,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * `'job'`, an agent's `'agent'`, and an HTTP trigger's `'http-trigger'`, so a tool whose `surface`
    * leaves that caller out answers as an unknown tool.
    *
-   * @param name Tool name (or fully-qualified `owner.name`).
+   * @param name Tool name, or one qualified with its app's id: `owner:name` or `owner.name`.
    * @param args Tool arguments — validated by the tool's input schema.
    * @param opts Optional progress token / abort signal forwarded into `_meta`.
    * @returns The tool's `CallToolResult`.
@@ -252,7 +261,8 @@ export abstract class ExecutionContextBase<Out = unknown> {
     args?: Record<string, unknown>,
     opts?: { progressToken?: string | number; signal?: AbortSignal },
   ): Promise<CallToolResult> {
-    const scope = this.scope as unknown as {
+    const callScope = this.callToolScope(name);
+    const scope = callScope as unknown as {
       runFlow: (
         flowName: 'tools:call-tool',
         input: { request: unknown; ctx: unknown },
@@ -263,7 +273,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
     const request = {
       method: 'tools/call' as const,
       params: {
-        name,
+        name: callableToolName(callScope, name),
         arguments: args ?? {},
         ...(Object.keys(requestMeta).length > 0 && { _meta: requestMeta }),
       },
@@ -293,6 +303,14 @@ export abstract class ExecutionContextBase<Out = unknown> {
   }
 
   /**
+   * The scope whose `tools:call-tool` flow a {@link callTool} of `name` runs in: this context's scope,
+   * unless a context with tools of its own (an agent) holds that tool.
+   */
+  protected callToolScope(_name: string): Pick<ScopeEntry, 'runFlow'> & Partial<ToolLookupScope> {
+    return this.scope;
+  }
+
+  /**
    * Fail the execution and trigger error handling.
    */
   protected fail(err: Error): never {
@@ -319,12 +337,38 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * Falls back to standard fetch if context is not available.
    */
   fetch(input: RequestInfo | URL, init?: FrontMcpFetchInit | RequestInit): Promise<Response> {
-    const ctx = this.tryGetContext();
+    const ctx = this.fetchContext(init);
     if (ctx) {
       return ctx.fetch(input, init);
     }
     // Fallback: no context available — use standard fetch (no credential injection)
     return fetch(input, init as RequestInit);
+  }
+
+  /**
+   * The request context `fetch()` runs through. For a request with `credentials: { provider }`, it
+   * applies the headers this context's auth providers (`this.authProviders`) resolve for that provider.
+   */
+  protected fetchContext(init?: FrontMcpFetchInit | RequestInit): FrontMcpContext | undefined {
+    const ctx = this.tryGetContext();
+    if (
+      !ctx ||
+      ctx.credentialMiddleware ||
+      !isFrontMcpCredentials((init as FrontMcpFetchInit | undefined)?.credentials)
+    ) {
+      return ctx;
+    }
+    let accessor: AuthProvidersAccessor | undefined;
+    try {
+      accessor = this.providers.get(AUTH_PROVIDERS_ACCESSOR);
+    } catch {
+      this.logger.warn(
+        'fetch(): credentials.provider was given, but no auth providers are configured; sent without them',
+      );
+      return ctx;
+    }
+    ctx.setCredentialMiddleware(providerHeadersCredentials((providerName) => accessor.headers(providerName)));
+    return ctx;
   }
 
   /**

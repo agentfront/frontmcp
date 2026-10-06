@@ -51,9 +51,18 @@ export default class JobRegistry
   private emitter = new JobEmitter();
   private logger?: FrontMcpLogger;
 
-  constructor(providers: ProviderRegistry, list: JobType[], owner: EntryOwnerRef) {
+  /** The provider registry of each job declared on an app (its app's); other jobs use the registry's. */
+  private readonly entryProviders: ReadonlyMap<Token, ProviderRegistry>;
+
+  constructor(
+    providers: ProviderRegistry,
+    list: JobType[],
+    owner: EntryOwnerRef,
+    entryProviders: ReadonlyMap<Token, ProviderRegistry> = new Map(),
+  ) {
     super('JobRegistry', providers, list, false);
     this.owner = owner;
+    this.entryProviders = entryProviders;
     try {
       this.logger = providers.get(FrontMcpLogger);
     } catch {
@@ -85,7 +94,7 @@ export default class JobRegistry
       }
       const deps = jobDiscoveryDeps(rec);
       for (const d of deps) {
-        this.providers.get(d);
+        this.providersOf(token).get(d);
         const edges = this.graph.get(token);
         if (!edges) {
           throw new RegistryGraphEntryNotFoundError('JobRegistry', tokenName(token));
@@ -101,7 +110,7 @@ export default class JobRegistry
       if (!rec) {
         throw new RegistryDefinitionNotFoundError('JobRegistry', tokenName(token));
       }
-      const ji = new JobInstance(rec, this.providers, this.owner);
+      const ji = new JobInstance(rec, this.providersOf(token), this.owner);
       this.instances.set(token as Token<JobInstance>, ji);
 
       const lineage: EntryLineage = this.owner ? [this.owner] : [];
@@ -113,6 +122,10 @@ export default class JobRegistry
 
     this.reindex();
     this.bump('reset');
+  }
+
+  private providersOf(token: Token): ProviderRegistry {
+    return this.entryProviders.get(token) ?? this.providers;
   }
 
   // ---- Public API ----

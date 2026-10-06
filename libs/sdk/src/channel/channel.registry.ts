@@ -2,6 +2,7 @@
 
 import { type Token } from '@frontmcp/di';
 import type { ServerCapabilities } from '@frontmcp/protocol';
+import { getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
 
 import { FrontMcpLogger, type ChannelEntry, type ChannelRecord, type ChannelType, type EntryOwnerRef } from '../common';
 import type ProviderRegistry from '../provider/provider.registry';
@@ -38,9 +39,18 @@ export default class ChannelRegistry
   /** Logger */
   private logger: FrontMcpLogger;
 
-  constructor(providers: ProviderRegistry, list: ChannelType[], owner: EntryOwnerRef) {
+  /** The provider registry of each channel declared on an app (its app's); other channels use the registry's. */
+  private readonly entryProviders: ReadonlyMap<Token, ProviderRegistry>;
+
+  constructor(
+    providers: ProviderRegistry,
+    list: ChannelType[],
+    owner: EntryOwnerRef,
+    entryProviders: ReadonlyMap<Token, ProviderRegistry> = new Map(),
+  ) {
     super('ChannelRegistry', providers, list, false);
     this.owner = owner;
+    this.entryProviders = entryProviders;
     this.logger = providers.get(FrontMcpLogger).child('ChannelRegistry');
 
     this.buildGraph();
@@ -70,11 +80,17 @@ export default class ChannelRegistry
   /* -------------------- Initialize -------------------- */
 
   protected override async initialize(): Promise<void> {
+    const runtimeContext = getRuntimeContext();
     for (const token of this.tokens) {
       const rec = this.defs.get(token);
       if (!rec) continue;
+      // `availableWhen` is process-wide: a channel unavailable here is neither listed nor wired to its source
+      if (!isEntryAvailable(rec.metadata.availableWhen, runtimeContext)) {
+        this.logger.verbose(`Channel "${rec.metadata.name}" is not available in this runtime; skipped`);
+        continue;
+      }
 
-      const instance = new ChannelInstance(rec, this.providers, this.owner);
+      const instance = new ChannelInstance(rec, this.entryProviders.get(token) ?? this.providers, this.owner);
       await instance.ready;
 
       // Fail fast on duplicate channel names

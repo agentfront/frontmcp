@@ -3,14 +3,7 @@ import 'reflect-metadata';
 // A static import, not a lazy `require()`: a lazy require of this hard dependency becomes an
 // opaque `__require("@frontmcp/auth")` in the ESM build that a worker bundler cannot follow, so
 // the authorities engine failed to load on Cloudflare Workers (#680).
-import {
-  AuthoritiesContextBuilder,
-  AuthoritiesEngine,
-  AuthoritiesEvaluatorRegistry,
-  AuthoritiesProfileRegistry,
-  type AuthoritiesEvaluator,
-  type AuthoritiesPolicyMetadata,
-} from '@frontmcp/auth';
+import { AuthoritiesContextBuilder } from '@frontmcp/auth';
 import { createGuardManager, type GuardConfig, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
 import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
@@ -24,6 +17,7 @@ import { AuthRegistry } from '../auth/auth.registry';
 import { type ChannelNotificationService } from '../channel/channel-notification.service';
 import { registerChannelCapabilities } from '../channel/channel-scope.helper';
 import type ChannelRegistry from '../channel/channel.registry';
+import { normalizeChannel } from '../channel/channel.utils';
 import { type ChannelEventBus } from '../channel/sources/app-event.source';
 import {
   FrontMcpLogger,
@@ -56,6 +50,7 @@ import { SendElicitationResultTool } from '../elicitation/send-elicitation-resul
 import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors';
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
+import { assertAuthoritiesRules, createAuthoritiesEngine } from '../front-mcp/authorities-rules.check';
 import { HaManager, resolveHaConfigFromEnv } from '../ha';
 import { HealthService } from '../health';
 import HookRegistry from '../hooks/hook.registry';
@@ -63,6 +58,7 @@ import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils
 import { type JobExecutionManager } from '../job/execution/job-execution.manager';
 import { registerJobCapabilities, type JobsConfig } from '../job/job-scope.helper';
 import type JobRegistry from '../job/job.registry';
+import { normalizeJob } from '../job/job.utils';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
@@ -776,8 +772,10 @@ export class Scope extends ScopeEntry {
     this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
     this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
     this.scopeAgents = new AgentRegistry(this.scopeProviders, [], scopeRef);
+    const skillsConfig = this.metadata.skillsConfig;
     this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef, {
-      ...(this.metadata.skillsConfig?.scoring ? { scoring: this.metadata.skillsConfig.scoring } : {}),
+      ...(skillsConfig?.scoring ? { scoring: skillsConfig.scoring } : {}),
+      ...(skillsConfig?.failOnInvalidSkills !== undefined && { failOnInvalidSkills: skillsConfig.failOnInvalidSkills }),
     });
 
     await Promise.all([
@@ -932,11 +930,10 @@ export class Scope extends ScopeEntry {
 
     // Collect jobs/workflows from apps regardless of gate so we can detect
     // implicit enablement (and so the disabled-but-declared warning fires).
-    const appJobs: JobType[] = [];
+    const { items: appJobs, providers: jobProviders } = this.appEntryProviders<JobType>('jobs', normalizeJob);
     const appWorkflows: WorkflowType[] = [];
     for (const app of this.scopeApps.getApps()) {
       const appMeta = app.metadata as unknown as Record<string, unknown>;
-      if (Array.isArray(appMeta['jobs'])) appJobs.push(...(appMeta['jobs'] as JobType[]));
       if (Array.isArray(appMeta['workflows'])) appWorkflows.push(...(appMeta['workflows'] as WorkflowType[]));
     }
 
@@ -974,6 +971,7 @@ export class Scope extends ScopeEntry {
         providers: this.scopeProviders,
         owner: scopeRef,
         jobsList: allJobs,
+        jobProviders,
         workflowsList: allWorkflows,
         jobsConfig: effectiveConfig,
         logger: this.logger,
@@ -1073,11 +1071,10 @@ export class Scope extends ScopeEntry {
     const channelsConfig = this.metadata.channels as ChannelsConfigOptions | undefined;
     if (channelsConfig?.enabled) {
       // Collect channel definitions from apps
-      const appChannels: ChannelType[] = [];
-      for (const app of this.scopeApps.getApps()) {
-        const appMeta = app.metadata as unknown as Record<string, unknown>;
-        if (Array.isArray(appMeta['channels'])) appChannels.push(...(appMeta['channels'] as ChannelType[]));
-      }
+      const { items: appChannels, providers: channelProviders } = this.appEntryProviders<ChannelType>(
+        'channels',
+        normalizeChannel,
+      );
 
       // agent-completion and job-completion sources subscribe to this scope's completion events
       // (published by agents:call-agent and the job execution manager); webhook sources get an
@@ -1086,6 +1083,7 @@ export class Scope extends ScopeEntry {
         providers: this.scopeProviders,
         owner: scopeRef,
         channelsList: appChannels,
+        channelProviders,
         channelsConfig,
         notificationService: this.notificationService,
         flowRegistry: this.scopeFlows,
@@ -1659,19 +1657,8 @@ export class Scope extends ScopeEntry {
     if (!config) return;
 
     try {
-      // The metadata schema validated these fields' shapes; this narrows them to the engine's types.
-      const profileRegistry = new AuthoritiesProfileRegistry();
-      if (config['profiles']) {
-        profileRegistry.registerAll(config['profiles'] as Record<string, AuthoritiesPolicyMetadata>);
-      }
-
-      const evaluatorRegistry = new AuthoritiesEvaluatorRegistry();
-      if (config['evaluators']) {
-        evaluatorRegistry.registerAll(config['evaluators'] as Record<string, AuthoritiesEvaluator>);
-      }
-
       type BuilderOptions = NonNullable<ConstructorParameters<typeof AuthoritiesContextBuilder>[0]>;
-      this._authoritiesEngine = new AuthoritiesEngine(profileRegistry, evaluatorRegistry);
+      this._authoritiesEngine = createAuthoritiesEngine(config);
       this._authoritiesContextBuilder = new AuthoritiesContextBuilder({
         claimsMapping: config['claimsMapping'] as BuilderOptions['claimsMapping'],
         claimsResolver: config['claimsResolver'] as BuilderOptions['claimsResolver'],
@@ -1687,6 +1674,28 @@ export class Scope extends ScopeEntry {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Scope: authorities init failed — ${msg}`);
     }
+  }
+
+  /**
+   * The entries the apps declare under `key` (`jobs`, `channels`), and the provider registry of the
+   * app that declares each one, by its token. They are served by one scope-level registry, and each
+   * runs with its app's providers, as the app's tools do.
+   */
+  private appEntryProviders<T>(
+    key: 'jobs' | 'channels',
+    normalize: (item: T) => { provide: Token },
+  ): { items: T[]; providers: Map<Token, ProviderRegistry> } {
+    const items: T[] = [];
+    const providers = new Map<Token, ProviderRegistry>();
+    for (const app of this.scopeApps.getApps()) {
+      const declared = (app.metadata as unknown as Record<string, unknown>)[key];
+      if (!Array.isArray(declared)) continue;
+      for (const item of declared as T[]) {
+        items.push(item);
+        providers.set(normalize(item).provide, app.providers as ProviderRegistry);
+      }
+    }
+    return { items, providers };
   }
 
   /**
@@ -1794,23 +1803,7 @@ export class Scope extends ScopeEntry {
       );
     }
 
-    const problems = [
-      ...engine.findProfileProblems(),
-      ...entries.flatMap(({ label, authorities }) =>
-        engine
-          .findRuleProblems(authorities)
-          .map((problem) => `${label}: authorities${problem.startsWith('.') ? '' : ' '}${problem}`),
-      ),
-    ];
-    if (problems.length > 0) {
-      const suffix = problems.length > 5 ? `; and ${problems.length - 5} more` : '';
-      throw new AuthConfigurationError(`Invalid authorities rule: ${problems.slice(0, 5).join('; ')}${suffix}`, {
-        errors: problems,
-        suggestion:
-          'Every rule must check something (roles, permissions, attributes, relationships, custom, guards, ' +
-          'allOf, anyOf or not) with known fields and no empty lists. To leave an entry open, remove its authorities.',
-      });
-    }
+    assertAuthoritiesRules(engine, entries);
   }
 
   /**

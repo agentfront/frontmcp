@@ -40,6 +40,7 @@ import {
 } from '../../common';
 import { callSurfaceOf, entryUnavailableError, isOfferedOnSurface } from '../../common/availability';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
+import { lookupTool, toolNameCandidates } from '../../common/utils/tool-lookup.utils';
 import { runOnSurface } from '../../context/call-surface';
 import { runAsTool } from '../../context/running-tool';
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
@@ -1596,35 +1597,6 @@ function declaredOutput(
 /**
  * An AbortController that also aborts when the given signal does.
  */
-/**
- * Hyphen ↔ underscore name fallback (issue #408). Job-management tools were renamed from
- * `execute-job` to `execute_job`, so a caller using the old spelling still finds the tool.
- * The alias only applies after the exact name misses, so it never masks a real typo.
- */
-function toolNameCandidates(name: string): string[] {
-  if (!/[-_]/.test(name)) return [name];
-  return [name, name.includes('_') ? name.replace(/_/g, '-') : name.replace(/-/g, '_')];
-}
-
-/** Finds a tool by name or alias in the scope, then in remote apps whose tools have not reached the scope yet. */
-function lookupTool(scope: ScopeEntry, name: string): ToolEntry | undefined {
-  const candidateNames = toolNameCandidates(name);
-  const matchesCandidate = (entry: { fullName: string; name: string }) =>
-    candidateNames.includes(entry.fullName) || candidateNames.includes(entry.name);
-
-  const scopeTool = scope.tools.getTools(true).find(matchesCandidate);
-  if (scopeTool) return scopeTool;
-
-  for (const appRegistry of scope.providers.getRegistries('AppRegistry')) {
-    for (const app of appRegistry.getApps()) {
-      if (!app.isRemote) continue;
-      const remoteTool = app.tools.getTools(true).find(matchesCandidate);
-      if (remoteTool) return remoteTool;
-    }
-  }
-  return undefined;
-}
-
 function linkedAbortController(signal: AbortSignal | undefined): AbortController {
   const controller = new AbortController();
   if (signal?.aborted) controller.abort(signal.reason);

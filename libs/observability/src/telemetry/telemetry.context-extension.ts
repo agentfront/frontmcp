@@ -1,12 +1,12 @@
 /**
  * Module augmentation for TypeScript — adds `this.telemetry` to every
  * execution context: ExecutionContextBase (ToolContext, ResourceContext,
- * AgentContext, JobContext, SkillContext, ...) and PromptContext.
+ * AgentContext, JobContext, SkillContext, PromptContext, ...).
  *
  * This file provides type information only. The runtime getter is
  * installed by the SDK's context extension mechanism when the
- * ObservabilityPlugin registers its `contextExtensions`, on the same two
- * prototypes: ExecutionContextBase and PromptContext.
+ * ObservabilityPlugin registers its `contextExtensions`, on
+ * ExecutionContextBase.prototype, which PromptContext inherits.
  */
 
 import type { TelemetryAccessor } from './telemetry.accessor';

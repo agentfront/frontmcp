@@ -100,6 +100,10 @@ Everything else is optional with sensible defaults.
 
     // Distributed mode
     distributedMode?: boolean | 'auto',  // default: false
+
+    // Keep CONTEXT-scoped provider instances per verified session (default: true, false in distributed mode).
+    // Applies to the server's, every app's, plugin's and agent's providers; up to 1.9.1 it reached only the server's.
+    providerCaching?: boolean,
   },
 
   /** Shared Redis config (NEW in v0.6) */

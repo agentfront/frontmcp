@@ -318,6 +318,8 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       const promptViews = await prompt.providers.buildViews(sessionKey, new Map(this.deps), this.scope.providers);
       const contextProviders = new FlowContextProviders(prompt.providers, promptViews.context);
       const context = prompt.create(parsedArgs, { ...ctx, contextProviders });
+      // `authorities.pipes` may be async: run them before any hook or execute() reads `this.auth`.
+      await context.loadAuthContext();
       this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(prompt.record.provide), context));
       context.mark('createPromptContext');
       this.state.set('promptContext', context);

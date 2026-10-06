@@ -355,7 +355,7 @@ export class RememberAccessor {
    * `'unknown'`.
    */
   private get toolName(): string {
-    return getRunningTool()?.fullName ?? this.ctx.flow?.name ?? 'unknown';
+    return getRunningTool()?.fullName ?? 'unknown';
   }
 
   /**

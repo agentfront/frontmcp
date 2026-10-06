@@ -662,10 +662,17 @@ export * from './authorities';
 // ============================================
 export {
   FetchCredentialMiddleware,
+  providerHeadersCredentials,
   isFrontMcpCredentials,
   bearerApplier,
   basicApplier,
   headerApplier,
   queryApplier,
 } from './fetch';
-export type { TokenAccessor, CredentialApplier, FrontMcpCredentials, FrontMcpFetchInit } from './fetch';
+export type {
+  FetchCredentialApplier,
+  TokenAccessor,
+  CredentialApplier,
+  FrontMcpCredentials,
+  FrontMcpFetchInit,
+} from './fetch';

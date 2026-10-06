@@ -64,6 +64,19 @@ interface ElicitResult<T> {
 
 Always check `result.status === 'accept'` before reading `result.content` — `content` only exists on `accept`.
 
+## URL mode
+
+For an out-of-band step (OAuth, payment), pass `{ mode: 'url', url, elicitationId }`: `url` is the page the client opens and `elicitationId` an opaque id you generate to correlate its completion. Both are required (a URL-mode `elicit()` without either fails with `INVALID_INPUT`) and are sent on every transport, MCP 2026-07-28 included.
+
+```typescript
+const elicitationId = randomUUID();
+const result = await this.elicit('Authorize GitHub access', z.object({}), {
+  mode: 'url',
+  url: `https://auth.example.com/github/authorize?state=${elicitationId}`,
+  elicitationId,
+});
+```
+
 ## Multiple fields, optional fields, defaults
 
 ```typescript

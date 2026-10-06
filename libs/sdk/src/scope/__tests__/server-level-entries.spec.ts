@@ -317,6 +317,28 @@ describe('server-level tools at startup', () => {
     ).rejects.toBeInstanceOf(SkillValidationError);
   });
 
+  it('starts with such a skill under skillsConfig.failOnInvalidSkills: false', async () => {
+    @Skill({
+      name: 'phantom',
+      description: 'Phantom',
+      instructions: 'Call phantom.',
+      tools: ['phantom'],
+      toolValidation: 'strict',
+    })
+    class PhantomSkill {}
+
+    const startup = FrontMcpInstance.createDirect(
+      serverConfig({
+        apps: [app('desk')],
+        skills: [PhantomSkill],
+        skillsConfig: { enabled: true, failOnInvalidSkills: false },
+      }),
+    );
+
+    await expect(startup).resolves.toBeDefined();
+    await (await startup).dispose();
+  });
+
   it('fails startup on a server-level tool class hook that could never run', async () => {
     @Tool({ name: 'early', inputSchema: {} })
     class EarlyTool extends ToolContext {

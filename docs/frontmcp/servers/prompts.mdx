@@ -265,8 +265,10 @@ class ContextExamplePrompt extends PromptContext {
     this.args;              // { topic: 'value', ... }
     this.metadata;          // Prompt metadata (name, description, etc.)
 
-    // Authentication
-    this.authInfo;           // AuthInfo from MCP session
+    // The caller and the request
+    this.auth;               // The caller: this.auth.user.sub, roles, scopes, claims
+    this.context;            // The request: requestId, sessionId, flow, scope
+    await this.fetch(url);   // Outbound fetch with the server's `fetch` options
 
     // Dependency injection
     this.get(ConfigService); // Resolve a provider
@@ -284,6 +286,8 @@ class ContextExamplePrompt extends PromptContext {
   }
 }
 ```
+
+A prompt's context extends `ExecutionContextBase` like a tool's, so `this.callTool()`, `this.config` and the plugins' context extensions work there too. Up to 1.9.1 prompts had no `this.auth`, `this.context` or `this.fetch()`.
 
 ### Using Providers
 

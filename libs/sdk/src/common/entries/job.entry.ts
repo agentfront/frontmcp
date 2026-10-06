@@ -55,7 +55,8 @@ export abstract class JobEntry<
   }
 
   /**
-   * Get the job's output schema as JSON Schema.
+   * Get the job's output schema as JSON Schema, or null when there is none to advertise
+   * (no schema, or an empty raw shape, which `parseOutput` does not check).
    */
   getOutputJsonSchema(): Record<string, unknown> | null {
     const outSchema = this.outputSchema as unknown;
@@ -65,6 +66,7 @@ export abstract class JobEntry<
         return toJSONSchema(outSchema) as Record<string, unknown>;
       }
       if (outSchema && typeof outSchema === 'object') {
+        if (Object.keys(outSchema).length === 0) return null;
         return toJSONSchema(z.object(outSchema as z.ZodRawShape)) as Record<string, unknown>;
       }
     } catch {
@@ -75,7 +77,7 @@ export abstract class JobEntry<
 
   abstract create(
     input: In,
-    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown },
+    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown; attempt?: number },
   ): JobContext<InSchema, OutSchema, In, Out>;
 
   abstract parseInput(input: unknown): In;

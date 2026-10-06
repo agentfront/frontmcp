@@ -167,6 +167,8 @@ class JobDoneChannel extends ChannelContext { /* ... */ }
 - A job completion is published when a job or workflow run completes or fails: `{ jobName, jobId, status: 'success' | 'error', durationMs?, output?, error?, attempt, sessionId }`. For a workflow, `jobName` is the workflow's name.
 - Both go only to the session that ran the agent or job. A run with no session (started in-process, or by a 2026-07-28 caller) is delivered to no one.
 
+A channel declared on an `@App` runs with that app's providers (`this.get(...)` in `onEvent()`, `onConnect()` and `onReply()`), as the app's tools do. A channel whose `availableWhen` the runtime doesn't meet is left out at startup: it is not listed, its source is not wired, and a service channel is not connected. Up to 1.9.1 channels saw only the server's providers, and `availableWhen` was ignored.
+
 ### Service Connector
 
 Service connectors maintain **persistent connections** to external messaging services. Claude sends messages via channel-contributed tools, and incoming responses arrive as channel notifications.
@@ -467,6 +469,10 @@ Channel notifications use the experimental `notifications/claude/channel` JSON-R
 ```
 
 The server advertises `experimental: { 'claude/channel': {} }` in its capabilities. Only sessions whose client capabilities include this extension receive channel notifications.
+
+### MCP 2026-07-28 clients
+
+A 2026-07-28 client has no session: it receives channel notifications on a `subscriptions/listen` stream whose request carries `experimental: { 'claude/channel': {} }` in its client capabilities (`_meta["io.modelcontextprotocol/clientCapabilities"]`). The stream carries the global notifications of the channels the `channels:list` flow returns, each with the stream's `subscriptionId` in `_meta`, like its other notifications; the acknowledgement lists only the standard notification types. Session-targeted notifications (agent and job completions) never reach it. Up to 1.9.1 a 2026-07-28 client received no channel notifications.
 
 ---
 

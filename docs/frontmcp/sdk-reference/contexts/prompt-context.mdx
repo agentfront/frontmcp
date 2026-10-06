@@ -6,13 +6,13 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 ---
 
 <Note>
-`PromptContext` does not extend `ExecutionContextBase` but provides a similar interface for consistency.
+`PromptContext` extends [`ExecutionContextBase`](/frontmcp/sdk-reference/contexts/execution-context-base), so a prompt has `this.auth`, `this.context`, `this.fetch()`, `this.callTool()`, `this.config` and the plugin context extensions, like a tool. Up to 1.9.1 it did not extend it, and had none of these.
 </Note>
 
 ## Class Definition
 
 ```typescript
-export abstract class PromptContext {
+export abstract class PromptContext extends ExecutionContextBase<PromptExecuteResult> {
   readonly metadata: PromptMetadata;
   readonly args: Record<string, string>;
   readonly authInfo: AuthInfo;
@@ -30,7 +30,9 @@ export abstract class PromptContext {
 | `metadata`   | `PromptMetadata`                   | Prompt metadata (name, description, etc.)   |
 | `args`       | `Record<string, string>`           | Arguments passed to the prompt              |
 | `output`     | `PromptExecuteResult \| undefined` | What `execute()` returned (after execution) |
-| `authInfo`   | `AuthInfo`                         | Authentication information                  |
+| `auth`       | `FrontMcpAuthContext`              | The caller: `user`, roles, scopes, claims   |
+| `context`    | `FrontMcpContext`                  | The request: id, session, flow, fetch       |
+| `authInfo`   | `AuthInfo`                         | Authentication information (deprecated)     |
 | `promptName` | `string`                           | Prompt name (protected)                     |
 | `promptId`   | `string`                           | Prompt ID, the metadata name (protected)    |
 | `runId`      | `string`                           | Unique execution identifier (protected)     |
@@ -99,6 +101,19 @@ Set output and end execution immediately.
 
 ```typescript
 respond(value: GetPromptResult): never
+```
+
+### Request Access
+
+#### auth, context and fetch()
+
+`this.auth` is the caller (with the server's `authorities.pipes` applied before `execute()` runs), `this.context` the request, and `this.fetch()` an outbound `fetch` that applies the server's `fetch` options (see [Context-Aware Fetch](/frontmcp/extensibility/request-context#context-aware-fetch)).
+
+```typescript
+async execute() {
+  const profile = await this.fetch(`https://api.example.com/users/${this.auth.user.sub}`);
+  return `Greet ${(await profile.json()).name}.`;
+}
 ```
 
 ### Scope Access

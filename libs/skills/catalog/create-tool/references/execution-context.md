@@ -9,21 +9,22 @@ description: What ToolContext provides at runtime — this.get, this.fetch, this
 
 ## Methods
 
-| Method                                                           | Purpose                                                                                                        |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `execute(input: In): Promise<Out>`                               | The method you implement                                                                                       |
-| `this.get(token)`                                                | Resolve a DI dependency. Throws `ProviderNotAvailableError` if not registered.                                 |
-| `this.tryGet(token)`                                             | Resolve a DI dependency. Returns `undefined` if not registered.                                                |
-| `this.fail(err)`                                                 | Abort execution, trigger the error flow. **Never returns.** Use for business-logic errors.                     |
-| `this.respond(value)`                                            | Early-return with a value. Validates against `outputSchema`. **Never returns** (throws `FlowControl.respond`). |
-| `this.mark(stage)`                                               | Set the active execution stage for debugging / tracing                                                         |
-| `this.fetch(input, init?)`                                       | HTTP fetch with context propagation (trace headers, etc.)                                                      |
-| `this.notify(message, level?)`                                   | Send a log-level notification to the client                                                                    |
-| `this.progress(progress, total?, message?)`                      | Send a progress notification. Returns `Promise<boolean>` (false when no progress token in request)             |
-| `this.notifyResourceUpdated(uri)`                                | Tell subscribed clients a resource's contents changed (`notifications/resources/updated`)                      |
-| `this.notifyResourceListChanged()`                               | Tell clients the resource list changed (`notifications/resources/list_changed`)                                |
-| `this.elicit(message, schema)`                                   | Request interactive input from the user mid-execution. See [`elicitation.md`](./elicitation.md)                |
-| `this.isPlatform(os)` / `this.isRuntime(rt)` / `this.isEnv(env)` | Imperative platform checks (declarative form is `availableWhen` — see [`availability.md`](./availability.md))  |
+| Method                                                           | Purpose                                                                                                                                           |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execute(input: In): Promise<Out>`                               | The method you implement                                                                                                                          |
+| `this.get(token)`                                                | Resolve a DI dependency. Throws `ProviderNotAvailableError` if not registered.                                                                    |
+| `this.tryGet(token)`                                             | Resolve a DI dependency. Returns `undefined` if not registered.                                                                                   |
+| `this.fail(err)`                                                 | Abort execution, trigger the error flow. **Never returns.** Use for business-logic errors.                                                        |
+| `this.respond(value)`                                            | Early-return with a value. Validates against `outputSchema`. **Never returns** (throws `FlowControl.respond`).                                    |
+| `this.mark(stage)`                                               | Set the active execution stage for debugging / tracing                                                                                            |
+| `this.fetch(input, init?)`                                       | HTTP fetch with context propagation (trace headers, etc.)                                                                                         |
+| `this.callTool(name, args?)`                                     | Call another tool through its `tools:call-tool` flow. `name` is its name, or `app:name` / `app.name` (remote apps and the `-`/`_` alias included) |
+| `this.notify(message, level?)`                                   | Send a log-level notification to the client                                                                                                       |
+| `this.progress(progress, total?, message?)`                      | Send a progress notification. Returns `Promise<boolean>` (false when no progress token in request)                                                |
+| `this.notifyResourceUpdated(uri)`                                | Tell subscribed clients a resource's contents changed (`notifications/resources/updated`)                                                         |
+| `this.notifyResourceListChanged()`                               | Tell clients the resource list changed (`notifications/resources/list_changed`)                                                                   |
+| `this.elicit(message, schema)`                                   | Request interactive input from the user mid-execution. See [`elicitation.md`](./elicitation.md)                                                   |
+| `this.isPlatform(os)` / `this.isRuntime(rt)` / `this.isEnv(env)` | Imperative platform checks (declarative form is `availableWhen` — see [`availability.md`](./availability.md))                                     |
 
 ## Properties
 
@@ -80,7 +81,7 @@ Use `this.get` (throws) when the tool genuinely requires the dependency. Use `th
 
 `this.fetch` is a thin wrapper around the standard `fetch` that propagates the request's `traceContext` so downstream services can stitch the call into the same trace.
 
-It does **not** send the caller's MCP access token or the request's `x-frontmcp-*` headers anywhere unless the target origin is allow-listed in `@FrontMcp({ fetch: { forwardCallerTokenTo, forwardCustomHeadersTo } })` (both default to `[]`). The MCP spec forbids passing the client's token to upstream APIs; call third-party services with `credentials: { provider }` instead. The old `autoInjectAuthHeaders` context option, which sent the token everywhere, is gone. The allow-list only controls what the SDK sends. Listing an origin does not make passing the caller's token through compliant. Only list endpoints that belong to this same MCP server and validate the token as issued for it. For every upstream API, use `credentials: { provider }` or a token issued for that API, for example through token exchange. A request that does carry forwarded caller headers is sent with `redirect: 'manual'`, so a 3xx comes back to the tool instead of following to another origin; with an explicit `redirect: 'error'`, the redirect rejects the `fetch` instead.
+It does **not** send the caller's MCP access token or the request's `x-frontmcp-*` headers anywhere unless the target origin is allow-listed in `@FrontMcp({ fetch: { forwardCallerTokenTo, forwardCustomHeadersTo } })` (both default to `[]`). The MCP spec forbids passing the client's token to upstream APIs; call third-party services with `credentials: { provider }` instead: it sends the headers that auth provider's credential resolves to (what `this.authProviders.headers(provider)` returns) and never the caller's token. An anonymous caller (empty token) sends no `Authorization` header even to an allow-listed origin. The old `autoInjectAuthHeaders` context option, which sent the token everywhere, is gone. The allow-list only controls what the SDK sends. Listing an origin does not make passing the caller's token through compliant. Only list endpoints that belong to this same MCP server and validate the token as issued for it. For every upstream API, use `credentials: { provider }` or a token issued for that API, for example through token exchange. A request that carries provider credentials or forwarded caller headers is sent with `redirect: 'manual'`, so a 3xx comes back to the tool instead of following to another origin; with an explicit `redirect: 'error'`, the redirect rejects the `fetch` instead.
 
 ```typescript
 async execute(input: { url: string }) {

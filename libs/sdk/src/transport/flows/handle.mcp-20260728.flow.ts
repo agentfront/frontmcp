@@ -31,7 +31,7 @@ import {
   type FlowRunOptions,
 } from '../../common';
 import { FrontMcpContextStorage } from '../../context';
-import { resolvePlatformType, type ClientCapabilities, type ClientInfo } from '../../notification';
+import { resolvePlatformType, supportsChannels, type ClientCapabilities, type ClientInfo } from '../../notification';
 import { type Scope } from '../../scope';
 import {
   createSubscriptionStream,
@@ -395,6 +395,7 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       scope: this.scope as unknown as Scope,
       subscriptionId: subscriptionId.data,
       requested,
+      channels: await this.listenedChannels((body['params'] as { _meta?: Record<string, unknown> } | undefined)?._meta),
       signal: controller.signal,
     });
 
@@ -416,6 +417,18 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
         Connection: 'keep-alive',
       },
     });
+  }
+
+  /**
+   * The channels a `subscriptions/listen` stream carries: none unless the request's client capabilities
+   * include `experimental['claude/channel']`, then those the hookable `channels:list` flow returns, as a
+   * session that initializes with that capability is subscribed to.
+   */
+  private async listenedChannels(meta: Record<string, unknown> | undefined): Promise<string[]> {
+    const capabilities = meta?.[MCP_20260728_META.clientCapabilities] as ClientCapabilities | undefined;
+    if (!supportsChannels(capabilities) || !this.scope.channels) return [];
+    const listed = await this.scope.runFlowForOutput('channels:list', {});
+    return listed.channels.map((channel) => channel.name);
   }
 
   @Stage('handleMessage', {

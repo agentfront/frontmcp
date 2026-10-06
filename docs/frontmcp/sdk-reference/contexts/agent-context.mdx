@@ -140,7 +140,7 @@ protected parseAgentResponse(content) {
 
 #### completion(prompt, tools?, options?)
 
-Generate LLM completion.
+Generate LLM completion. Every completion of the default loop goes through it, so an override sees them all, with `options` set to `completionOptions()`.
 
 ```typescript
 protected completion(
@@ -155,6 +155,20 @@ const response = await this.completion({
   systemPrompt: 'You are a helpful assistant.',
   messages: [{ role: 'user', content: 'Hello!' }],
 });
+```
+
+#### completionOptions()
+
+The options the default loop passes to every `completion()`: `llm.temperature` and `llm.maxTokens` when the agent's `llm` sets them, else an empty object. Override it to send others.
+
+```typescript
+protected completionOptions(): AgentCompletionOptions
+```
+
+```typescript
+protected override completionOptions() {
+  return { temperature: 0.2 };
+}
 ```
 
 #### streamCompletion(prompt, tools?)
@@ -216,11 +230,19 @@ protected invokeAgent(
 const result = await this.invokeAgent('sub-agent', { task: 'subtask' });
 ```
 
+#### callTool(name, args?, options?)
+
+Call a tool from the agent's own code, through its `tools:call-tool` flow. The agent's own tools and its nested agents' `invoke_<agent>` tools are found in the agent's scope; any other name is looked up among the server's tools. Returns the tool's `CallToolResult`.
+
+```typescript
+const tickets = await this.callTool('list_tickets', {});
+```
+
 ### Notifications
 
 #### notify(message, level?)
 
-Send log message notification.
+Send log message notification: on the request's own response stream under MCP 2026-07-28, else to the session (once the client has set a log level). Returns `false` when it was not sent.
 
 ```typescript
 protected notify(
@@ -231,7 +253,7 @@ protected notify(
 
 #### progress(progress, total?, message?)
 
-Send progress notification.
+Send progress notification for the request's `progressToken`: on the request's own response stream under MCP 2026-07-28, else to the session. Returns `false` when it was not sent.
 
 ```typescript
 protected progress(

@@ -44,6 +44,7 @@ export interface PendingElicitation {
   requestedSchema: Record<string, unknown>;
   mode?: 'form' | 'url';
   url?: string;
+  elicitationId?: string;
 }
 
 /** Parameters for a `sampling/createMessage` input request. */
@@ -209,6 +210,7 @@ export class MrtrExchange {
         requestedSchema: pending.requestedSchema,
         ...(pending.mode ? { mode: pending.mode } : {}),
         ...(pending.url ? { url: pending.url } : {}),
+        ...(pending.elicitationId ? { elicitationId: pending.elicitationId } : {}),
       },
       toElicitResult,
       { supported: this.supportsElicitation(mode), required: { elicitation: { [mode]: {} } } },

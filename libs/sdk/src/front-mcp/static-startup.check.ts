@@ -13,6 +13,8 @@
  *
  * They refuse only what the full checks certainly refuse too:
  * - an entry declares `authorities` and the server has no `authorities` option;
+ * - an `authorities` profile, or an entry's rule, is malformed, checks nothing, or names a profile the
+ *   `authorities` option does not define;
  * - an entry declares a field only a plugin enforces (`approval`, `featureFlag`, ...) and no plugin
  *   that reaches it enforces it. Outside an agent, a plugin enforces the fields it declares only
  *   through its hooks, so one without hooks enforces none. The server's plugins reach every entry.
@@ -50,6 +52,7 @@ import { normalizePrompt } from '../prompt/prompt.utils';
 import { isResourceTemplate, normalizeResource, normalizeResourceTemplate } from '../resource/resource.utils';
 import { normalizeSkill } from '../skill/skill.utils';
 import { normalizeTool } from '../tool/tool.utils';
+import { assertAuthoritiesRules, createAuthoritiesEngine } from './authorities-rules.check';
 
 /** An entry the config names, labelled as the full checks label it. */
 interface StaticEntry {
@@ -64,7 +67,11 @@ interface StaticEntry {
  * app's (and those that reach every app) for its entries, only those that reach every app for a
  * tool no app owns, every plugin's for the rest.
  */
-type EntryReach = { agentKeys: ReadonlySet<string> } | { app: object } | 'every-app' | 'every-plugin';
+type EntryReach =
+  | { agentKeys: ReadonlySet<string>; inherits?: EntryReach }
+  | { app: object }
+  | 'every-app'
+  | 'every-plugin';
 
 /** The entry lists of a server, an app or a plugin. */
 interface EntryLists {
@@ -191,14 +198,17 @@ function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType):
       if (!record) continue;
       const agentName = record.metadata.id ?? record.metadata.name;
       if (!add(`Agent "${agentName}"`, record.metadata, reach)) continue;
-      // The agent's own tools run in its private scope, which holds only its plugins' hooks.
-      const agentKeys =
-        record.metadata.execution?.useToolFlow === false
-          ? new Set<string>()
-          : keysEnforcedByPlugins(record.metadata.plugins);
+      // The agent's own tools run in its private scope, which holds its plugins' hooks, and with
+      // `execution.inheritPlugins` those that reach the agent's app.
+      const usesToolFlow = record.metadata.execution?.useToolFlow !== false;
+      const agentKeys = usesToolFlow ? keysEnforcedByPlugins(record.metadata.plugins) : new Set<string>();
+      const toolReachInAgent: EntryReach =
+        usesToolFlow && record.metadata.execution?.inheritPlugins === true
+          ? { agentKeys, inherits: toolReach }
+          : { agentKeys };
       for (const toolItem of record.metadata.tools ?? []) {
         const toolRecord = tryNormalize(() => normalizeTool(toolItem));
-        if (toolRecord) add(`Tool "${agentName}:${toolRecord.metadata.name}"`, toolRecord.metadata, { agentKeys });
+        if (toolRecord) add(`Tool "${agentName}:${toolRecord.metadata.name}"`, toolRecord.metadata, toolReachInAgent);
       }
     }
     // `skills:filter` runs every hook for every skill.
@@ -224,7 +234,9 @@ function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType):
   const keysReaching = (reach: EntryReach): ReadonlySet<string> => {
     if (reach === 'every-plugin') return everyPluginKeys;
     if (reach === 'every-app') return everyAppKeys;
-    if ('agentKeys' in reach) return reach.agentKeys;
+    if ('agentKeys' in reach) {
+      return reach.inherits ? new Set([...reach.agentKeys, ...keysReaching(reach.inherits)]) : reach.agentKeys;
+    }
     return new Set([...everyAppKeys, ...(ownAppKeys.get(reach.app) ?? [])]);
   };
   return found.map(({ label, metadata, reach }) => ({ label, metadata, enforcedBy: keysReaching(reach) }));
@@ -257,6 +269,14 @@ export function assertStaticStartupConfig(config: FrontMcpConfigInput | FrontMcp
         { suggestion: 'Add authorities config to @FrontMcp() or remove authorities from entry metadata' },
       );
     }
+  }
+
+  const authoritiesConfig = (config as { authorities?: Record<string, unknown> }).authorities;
+  if (authoritiesConfig) {
+    const declared = entries
+      .filter(({ metadata }) => isEnforcementRequested(metadata['authorities']))
+      .map(({ label, metadata }) => ({ label, authorities: metadata['authorities'] }));
+    assertAuthoritiesRules(createAuthoritiesEngine(authoritiesConfig), declared);
   }
 
   const problems = entries.flatMap(({ label, metadata, enforcedBy }) =>
