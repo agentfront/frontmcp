@@ -30,6 +30,7 @@ import {
   type FlowPlan,
   type FlowRunOptions,
 } from '../../common';
+import { lookupTool } from '../../common/utils/tool-lookup.utils';
 import { FrontMcpContextStorage } from '../../context';
 import { resolvePlatformType, supportsChannels, type ClientCapabilities, type ClientInfo } from '../../notification';
 import { type Scope } from '../../scope';
@@ -288,15 +289,6 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
   }
 
   /**
-   * Resolve a tool's input JSON Schema so `x-mcp-header` annotations can be
-   * validated against the call arguments.
-   *
-   * Uses the SAME resolution `tools:call-tool` uses (`getTools(true)` matched on
-   * `fullName` or `name`, including hidden tools). Anything looser would let a
-   * header-validated call and the call that actually executes disagree about
-   * which tool they mean.
-   */
-  /**
    * Re-enter this request's `FrontMcpContext` for work deferred past the flow.
    *
    * A streamed response is drained by the renderer after the flow has unwound,
@@ -320,11 +312,12 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     };
   }
 
+  /**
+   * Resolve a tool's input JSON Schema so `x-mcp-header` annotations can be validated against the call arguments,
+   * with the lookup `tools:call-tool` uses, so the validated call and the executed one mean the same tool.
+   */
   private findToolSchema(scope: Scope, toolName: string): Record<string, unknown> | null {
-    const match = scope.tools
-      .getTools(true)
-      .find((entry) => entry.fullName === toolName || entry.metadata.name === toolName);
-    return match?.getInputJsonSchema() ?? null;
+    return lookupTool(scope, toolName)?.getInputJsonSchema() ?? null;
   }
 
   @Stage('router')

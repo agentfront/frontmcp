@@ -10,7 +10,7 @@ import { type CallSurface } from '../availability';
 import { type AgentInputOf, type AgentOutputOf } from '../decorators';
 import { type ScopeEntry } from '../entries';
 import type { AgentMetadata, AgentType, ToolInputType, ToolOutputType } from '../metadata';
-import { callableToolName, lookupTool, type ToolLookupScope } from '../utils/tool-lookup.utils';
+import { lookupTool, type ToolLookupScope } from '../utils/tool-lookup.utils';
 import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
 import { FlowControl } from './flow.interface';
 import { type ProviderRegistryInterface } from './internal';
@@ -514,7 +514,7 @@ export class AgentContext<
   /** The agent's own tools and its nested agents' `invoke_<agent>` tools run in its private scope. */
   protected override callToolScope(name: string): Pick<ScopeEntry, 'runFlow'> & Partial<ToolLookupScope> {
     const privateScope = this.privateScope;
-    const isPrivateTool = privateScope && lookupTool(privateScope, callableToolName(privateScope, name));
+    const isPrivateTool = privateScope && lookupTool(privateScope, name);
     return isPrivateTool ? privateScope : super.callToolScope(name);
   }
 
