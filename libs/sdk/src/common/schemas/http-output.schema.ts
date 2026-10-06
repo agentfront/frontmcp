@@ -294,6 +294,12 @@ export function challengeHeaders(challenge: string | undefined): Record<string, 
 /** The headers of a response that carries tokens or credentials, which must never be cached (RFC 6749 §5.1). */
 export const NO_STORE_HEADERS: Readonly<Record<string, string>> = { 'Cache-Control': 'no-store', Pragma: 'no-cache' };
 
+/** `output` with `headers` added; a hand-off (`next`, `consumed`) or a pre-built Web `Response` is returned as is. */
+export function withHttpHeaders(output: HttpOutput, headers: Readonly<Record<string, string>>): HttpOutput {
+  if (output.kind === 'next' || output.kind === 'consumed' || output.kind === 'web-response') return output;
+  return { ...output, headers: { ...output.headers, ...headers } };
+}
+
 /**
  * Convenience factories
  */

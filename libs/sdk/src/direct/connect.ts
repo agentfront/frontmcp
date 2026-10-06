@@ -147,7 +147,8 @@ export async function connect(
     const scope = await endpointScope(await instancePromise, options?.app);
     return await DirectClientImpl.create(scope, options, release);
   } catch (error) {
-    leave();
+    // Best-effort like a client's close(), which runs the same release: the caller needs this error
+    await release().catch(() => undefined);
     throw error;
   }
 }

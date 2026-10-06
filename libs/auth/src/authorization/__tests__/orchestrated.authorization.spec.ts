@@ -47,6 +47,7 @@ function createMockTokenStore(overrides: Partial<TokenStore> = {}): TokenStore {
     hasTokens: jest.fn().mockResolvedValue(false),
     getProviderIds: jest.fn().mockResolvedValue([]),
     migrateTokens: jest.fn().mockResolvedValue(undefined),
+    copyTokens: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }

@@ -302,3 +302,17 @@ describe('LocalPrimaryAuth — exchangeProviderCode upstream validation', () => 
     expect((result as { access_token: string }).access_token).toBe('gho_abc');
   });
 });
+
+describe('LocalPrimaryAuth — provider token renewals in flight', () => {
+  it('does not share a renewal between providers whose id and refresh token read alike joined by a colon', async () => {
+    const auth = await makeAuth({ mode: 'local' });
+    jest
+      .spyOn(auth, 'refreshProviderToken')
+      .mockImplementation(async (providerId) => ({ access_token: `renewed-for-${providerId}`, token_type: 'Bearer' }));
+    const refresher = auth.providerTokenRefresher();
+
+    const renewals = await Promise.all([refresher?.('a:b', 'c'), refresher?.('a', 'b:c')]);
+
+    expect(renewals.map((renewal) => renewal?.accessToken)).toEqual(['renewed-for-a:b', 'renewed-for-a']);
+  });
+});
