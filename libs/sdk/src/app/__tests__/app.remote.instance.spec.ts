@@ -146,7 +146,8 @@ describe('App.remote()', () => {
       expect(templates).toEqual(['a:item', 'b:item', 'c:item']);
       expect(tools).toEqual(['a:echo', 'b:echo', 'c:echo']);
       expect(prompts).toEqual(['a:greeting', 'b:greeting', 'c:greeting']);
-      expect(resources).toEqual(['a:status', 'b:status', 'c:status']);
+      // The three remotes' resources share the URI test://status, which names one resource: the first remote's (#766)
+      expect(resources).toEqual(['a:status']);
     });
 
     it('does not pile up copies when the capability cache expires and the remote is re-discovered', async () => {
