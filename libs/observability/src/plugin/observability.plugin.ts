@@ -269,9 +269,10 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   }
 
   @HttpHook.Did('finalize', { priority: 1000 })
-  async _httpDidFinalize(ctx: unknown): Promise<void> {
+  _httpDidFinalize(ctx: unknown): void {
     if (this.tracingEnabled) onHttpDidFinalize(ctx);
-    if (this.requestLogsEnabled) await completeRequestLog(ctx as never);
+    // Delivered off the response path: a slow onRequestComplete must not hold the response
+    if (this.requestLogsEnabled) void completeRequestLog(ctx as never);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

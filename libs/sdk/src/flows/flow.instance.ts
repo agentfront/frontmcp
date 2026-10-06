@@ -382,7 +382,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     const toStageResult = (e: unknown): StageResult => {
       if (e instanceof FlowControl) {
-        if (e.type === 'respond') responded = e.output as FlowOutputOf<Name>;
+        if (e.type === 'respond') {
+          responded = e.output as FlowOutputOf<Name>;
+          const status = (e.output as { status?: unknown } | undefined)?.status;
+          // Finalize stages and their hooks read the HTTP status a flow responded with from `state.statusCode`
+          if (typeof status === 'number') context.state.set('statusCode' as never, status as never);
+        }
         return { outcome: e.type, control: e };
       }
       return { outcome: 'unknown_error', control: e as Error };
