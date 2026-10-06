@@ -64,7 +64,7 @@ const SearchTool = tool({
 
 </CodeGroup>
 
-A tool's own `rateLimit` and `concurrency` are enforced without a `throttle` option, as are those of an agent, of the tools declared inside an `@Agent` and of its nested agents. Set `throttle.enabled: false` to turn every guard off, including these.
+A tool's own `rateLimit` and `concurrency` are enforced without a `throttle` option, as are those of an agent, of the tools declared inside an `@Agent` and of its nested agents. Set `throttle.enabled: false` to turn every guard off, including these. The auth option `publicAccess.rateLimit` is the one limit it leaves on: anonymous calls are still counted, on `throttle.storage`.
 
 ---
 

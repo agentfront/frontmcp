@@ -547,7 +547,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     await enforcePublicAccess(
       publicAccess,
       { kind: 'tool', names: [tool.fullName || tool.name, tool.name] },
-      this.scope.rateLimitManager,
+      this.scope.publicAccessGuard,
       buildPartitionContext(this.tryGetContext()),
     );
   }

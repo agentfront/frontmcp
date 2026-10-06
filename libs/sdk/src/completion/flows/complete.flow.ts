@@ -221,7 +221,7 @@ export default class CompleteFlow extends FlowBase<typeof name> {
     await enforcePublicAccess(
       publicAccess,
       { kind: 'prompt', names: [prompt.fullName || prompt.name, prompt.name] },
-      this.scope.rateLimitManager,
+      this.scope.publicAccessGuard,
       buildPartitionContext(this.tryGetContext()),
     );
   }

@@ -322,6 +322,11 @@ export class AgentScope {
     return this.parentScope.rateLimitManager;
   }
 
+  /** See {@link ScopeEntry.publicAccessGuard}. */
+  get publicAccessGuard(): GuardManager | undefined {
+    return this.parentScope.publicAccessGuard;
+  }
+
   // ============================================================================
   // Flow Execution
   // ============================================================================
@@ -426,6 +431,11 @@ class AgentScopeEntry {
   /** See {@link AgentScope.rateLimitManager}. */
   get rateLimitManager(): GuardManager | undefined {
     return this.agentScope.rateLimitManager;
+  }
+
+  /** See {@link ScopeEntry.publicAccessGuard}. */
+  get publicAccessGuard(): GuardManager | undefined {
+    return this.agentScope.publicAccessGuard;
   }
 
   get elicitationStore(): undefined {
