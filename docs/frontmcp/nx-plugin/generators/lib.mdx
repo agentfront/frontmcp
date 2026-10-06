@@ -16,14 +16,16 @@ nx g @frontmcp/nx:lib my-lib
 
 ## Options
 
-| Option        | Type                                                  | Default            | Description                                          |
-| ------------- | ----------------------------------------------------- | ------------------ | ---------------------------------------------------- |
-| `name`        | `string`                                              | —                  | **Required.** The name of the library                |
-| `directory`   | `string`                                              | `libs/<name>`      | The directory of the library                         |
-| `libType`     | `generic` \| `plugin` \| `adapter` \| `tool-register` | `generic`          | The type of library to generate                      |
-| `publishable` | `boolean`                                             | `false`            | Generate a publishable library with package.json     |
-| `importPath`  | `string`                                              | `@frontmcp/<name>` | The npm scope/import path (required for publishable) |
-| `tags`        | `string`                                              | —                  | Comma-separated tags for the project                 |
+| Option        | Type                                                  | Default          | Description                                                                                                                                                                                  |
+| ------------- | ----------------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | `string`                                              | —                | **Required.** The name of the library                                                                                                                                                        |
+| `directory`   | `string`                                              | `libs/<name>`    | The directory of the library                                                                                                                                                                 |
+| `libType`     | `generic` \| `plugin` \| `adapter` \| `tool-register` | `generic`        | The type of library to generate                                                                                                                                                              |
+| `publishable` | `boolean`                                             | `false`          | Generate a publishable library with package.json                                                                                                                                             |
+| `importPath`  | `string`                                              | `<scope>/<name>` | The npm scope/import path. Defaults to the workspace's npm scope (from the root `package.json` name, e.g. `@acme/source` → `@acme/<name>`), or the bare name when the workspace has no scope |
+| `tags`        | `string`                                              | —                | Comma-separated tags for the project                                                                                                                                                         |
+
+The generator refuses an import path that `tsconfig.base.json` already maps, or one that names a package the workspace depends on (such as `@frontmcp/sdk`), so a new library never shadows existing code. Pass `--importPath` with another name.
 
 ## Library Types
 
@@ -87,10 +89,10 @@ libs/github-tools/src/
 └── index.ts
 ```
 
-Usage in an app (uses the default `@frontmcp/<name>` import path, or pass `--importPath` to override):
+Usage in an app, in a workspace whose root `package.json` is named `@acme/source` (the default import path is `@acme/<name>`; pass `--importPath` to override):
 
 ```ts
-import { GithubToolsTools } from '@frontmcp/github-tools';
+import { GithubToolsTools } from '@acme/github-tools';
 
 @App({
   id: 'my-app',

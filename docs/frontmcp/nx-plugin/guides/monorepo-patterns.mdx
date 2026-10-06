@@ -84,8 +84,8 @@ nx g @frontmcp/nx:lib github-tools --libType tool-register
 ```
 
 ```ts
-// In any app (default import path is @frontmcp/<name>; pass --importPath to override):
-import { GithubToolsTools } from '@frontmcp/github-tools';
+// In any app (the default import path is <workspace scope>/<name>, here @acme/<name>; pass --importPath to override):
+import { GithubToolsTools } from '@acme/github-tools';
 
 @App({ id: 'crm', tools: [...GithubToolsTools, CreateLeadTool] })
 class CrmApp {}
