@@ -147,8 +147,9 @@ export class ProcessStatsCollector {
       });
     }
 
+    // A runtime without a process (Cloudflare's unenv `process`) reports 0 for memory and uptime.
     const mem = probeSafely(() => this.memoryUsage());
-    if (mem) {
+    if (mem && mem.rss > 0) {
       entries.push({
         name: 'frontmcp_process_resident_memory_bytes',
         value: mem.rss,
@@ -172,7 +173,7 @@ export class ProcessStatsCollector {
     }
 
     const uptime = probeSafely(() => this.uptime());
-    if (uptime !== undefined) {
+    if (uptime !== undefined && uptime > 0) {
       entries.push({
         name: 'frontmcp_process_uptime_seconds',
         value: uptime,
