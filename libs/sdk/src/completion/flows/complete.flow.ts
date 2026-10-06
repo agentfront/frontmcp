@@ -1,10 +1,13 @@
 // file: libs/sdk/src/completion/flows/complete.flow.ts
 
+import { AuthorityDeniedError, resolveRequiredScopes, type AuthoritiesMetadata } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
-import { CompleteRequestSchema, CompleteResultSchema } from '@frontmcp/protocol';
+import { CompleteRequestSchema, CompleteResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
+import { enforcePublicAccess, publicAccessFor } from '../../auth/public-access.utils';
 import {
+  buildPartitionContext,
   Flow,
   FlowBase,
   FlowHooksOf,
@@ -58,7 +61,7 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'findReference', 'findWidgetTools'],
+  pre: ['parseInput', 'findReference', 'checkPublicAccess', 'checkEntryAuthorities', 'findWidgetTools'],
   execute: ['complete'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
@@ -202,6 +205,54 @@ export default class CompleteFlow extends FlowBase<typeof name> {
       resource: isAvailable(resource) ? resource : undefined,
     });
     this.logger.verbose('findReference:done');
+  }
+
+  /** The caller's auth info, as the MCP handler passed it in the call context. */
+  private get authInfo(): AuthInfo | undefined {
+    return (this.input.ctx as { authInfo?: AuthInfo } | undefined)?.authInfo;
+  }
+
+  /** An anonymous caller may complete only the prompts `publicAccess` lists, within its rate limit, as `prompts/get`. */
+  @Stage('checkPublicAccess')
+  async checkPublicAccess() {
+    const { prompt } = this.state;
+    const publicAccess = publicAccessFor(this.scope.auth?.options, this.authInfo);
+    if (!prompt || !publicAccess) return;
+    await enforcePublicAccess(
+      publicAccess,
+      { kind: 'prompt', names: [prompt.fullName || prompt.name, prompt.name] },
+      this.scope.publicAccessGuard,
+      buildPartitionContext(this.tryGetContext()),
+    );
+  }
+
+  /** The referenced prompt's or resource's `authorities`, checked as `prompts/get` and `resources/read` check them. */
+  @Stage('checkEntryAuthorities')
+  async checkEntryAuthorities() {
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    const { prompt, resource } = this.state;
+    const entry = prompt ?? resource;
+    if (!engine || !ctxBuilder || !entry) return;
+
+    const authorities = (entry.metadata as unknown as Record<string, unknown>)['authorities'] as
+      | AuthoritiesMetadata
+      | undefined;
+    if (!authorities) return;
+
+    const evaluationContext = ctxBuilder.build((this.authInfo ?? {}) as Record<string, unknown>);
+    const result = await engine.evaluate(authorities, evaluationContext);
+    if (result.granted) return;
+
+    const scopeMapping = this.scope.authoritiesScopeMapping;
+    throw new AuthorityDeniedError({
+      entryType: prompt ? 'Prompt' : 'Resource',
+      entryName: prompt ? prompt.fullName || prompt.name : resource ? resource.fullName || resource.name : '',
+      deniedBy: result.deniedBy ?? 'policy denied',
+      denial: result.denial,
+      requiredScopes:
+        scopeMapping && result.denial ? resolveRequiredScopes(result.denial, scopeMapping, authorities) : undefined,
+    });
   }
 
   /** For a `ui://widget/` `toolName` completion, the UI tools the caller's `tools:list-tools` flow lists. */

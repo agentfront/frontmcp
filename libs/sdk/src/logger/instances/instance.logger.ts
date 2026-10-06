@@ -22,13 +22,19 @@ export class LoggerInstance extends FrontMcpLogger {
   private readonly transports: LogTransportInterface[];
   private readonly consoleTransport?: ConsoleLogTransportInstance;
 
+  /**
+   * @param config - Logging options; `config.prefix` (`logging.prefix`) tags every logger's records
+   * @param getTransports - The transports records fan out to
+   * @param scopePrefix - What a child logger is named (`logger.child(name)`), after `logging.prefix`
+   */
   constructor(
     private readonly config: LoggingConfigType,
     private getTransports: GetTransports,
+    scopePrefix?: string,
   ) {
     super();
     this.level = config.level;
-    this.prefix = config.prefix ?? '';
+    this.prefix = [config.prefix, scopePrefix].filter(Boolean).join(':');
 
     const { transports, consoleTransport } = getTransports();
     this.transports = transports;
@@ -36,7 +42,7 @@ export class LoggerInstance extends FrontMcpLogger {
   }
 
   child(prefix: string): FrontMcpLogger {
-    return new LoggerInstance({ ...this.config, prefix }, this.getTransports);
+    return new LoggerInstance(this.config, this.getTransports, prefix);
   }
 
   /** Internal: fan out to transports if level passes a threshold. */

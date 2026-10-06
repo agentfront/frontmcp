@@ -5,10 +5,10 @@
  * directly constructing `FrontMcpAuthContextImpl`.
  */
 
-import type { AuthoritiesClaimsMapping } from '../authorities/authorities.profiles';
-import type { FrontMcpAuthContext, AuthContextPipe } from './frontmcp-auth-context';
-import { FrontMcpAuthContextImpl } from './frontmcp-auth-context.impl';
-import type { AuthContextSourceInfo } from './frontmcp-auth-context.impl';
+import { type ClaimsResolverFn } from '../authorities/authorities.context';
+import { type AuthoritiesClaimsMapping } from '../authorities/authorities.profiles';
+import { type AuthContextPipe, type FrontMcpAuthContext } from './frontmcp-auth-context';
+import { FrontMcpAuthContextImpl, type AuthContextSourceInfo } from './frontmcp-auth-context.impl';
 
 /**
  * Build a {@link FrontMcpAuthContext} from raw auth information.
@@ -20,6 +20,7 @@ import type { AuthContextSourceInfo } from './frontmcp-auth-context.impl';
  * @param authInfo - Raw auth info (e.g., from MCP SDK AuthInfo, JWT payload, etc.)
  * @param claimsMapping - Optional IdP-specific claims mapping (Keycloak, Auth0, Okta, etc.)
  * @param pipes - Optional pipe functions that extract custom fields from claims
+ * @param claimsResolver - Optional resolver that decides the roles, permissions and claims (it wins over claimsMapping)
  * @returns A frozen, immutable FrontMcpAuthContext instance (with custom extensions if pipes provided)
  *
  * @example
@@ -40,18 +41,22 @@ import type { AuthContextSourceInfo } from './frontmcp-auth-context.impl';
 export function buildAuthContext(
   authInfo: AuthContextSourceInfo,
   claimsMapping?: AuthoritiesClaimsMapping,
+  pipes?: undefined,
+  claimsResolver?: ClaimsResolverFn,
 ): FrontMcpAuthContext;
 export function buildAuthContext(
   authInfo: AuthContextSourceInfo,
   claimsMapping: AuthoritiesClaimsMapping | undefined,
   pipes: AuthContextPipe[],
+  claimsResolver?: ClaimsResolverFn,
 ): Promise<FrontMcpAuthContext>;
 export function buildAuthContext(
   authInfo: AuthContextSourceInfo,
   claimsMapping?: AuthoritiesClaimsMapping,
   pipes?: AuthContextPipe[],
+  claimsResolver?: ClaimsResolverFn,
 ): FrontMcpAuthContext | Promise<FrontMcpAuthContext> {
-  const base = new FrontMcpAuthContextImpl(authInfo, claimsMapping);
+  const base = new FrontMcpAuthContextImpl(authInfo, claimsMapping, claimsResolver);
 
   if (!pipes || pipes.length === 0) {
     return base;
@@ -61,10 +66,7 @@ export function buildAuthContext(
   return runPipes(base, pipes);
 }
 
-async function runPipes(
-  base: FrontMcpAuthContextImpl,
-  pipes: AuthContextPipe[],
-): Promise<FrontMcpAuthContext> {
+async function runPipes(base: FrontMcpAuthContextImpl, pipes: AuthContextPipe[]): Promise<FrontMcpAuthContext> {
   const extensions: Record<string, unknown> = {};
 
   for (const pipe of pipes) {

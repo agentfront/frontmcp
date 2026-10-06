@@ -10,7 +10,9 @@
  * with disk persistence as a second level in Node.js environments.
  */
 
-import { sha256Hex, isValidMcpUri } from '@frontmcp/utils';
+import { isValidMcpUri, sha256Hex } from '@frontmcp/utils';
+
+import { EsmCacheError } from '../errors/esm.errors';
 
 /**
  * Detect if we're running in a browser environment.
@@ -252,7 +254,11 @@ export class EsmCacheManager {
     etag?: string,
   ): Promise<EsmCacheEntry> {
     if (!isValidMcpUri(packageUrl)) {
-      throw new Error('URI must have a valid scheme (e.g., file://, https://, custom://)');
+      throw new EsmCacheError(
+        'put',
+        packageName,
+        new Error('URI must have a valid scheme (e.g., file://, https://, custom://)'),
+      );
     }
 
     const memKey = `${packageName}@${version}`;

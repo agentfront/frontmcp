@@ -22,6 +22,7 @@ import {
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { getAuthorizedAppIds } from '../../auth/authorized-apps.utils';
 import { getConsentedToolIds, isToolConsented } from '../../auth/consent.utils';
+import { enforcePublicAccess, publicAccessFor } from '../../auth/public-access.utils';
 import {
   acquireConcurrencySlots,
   buildPartitionContext,
@@ -170,6 +171,7 @@ const plan = {
     'parseInput',
     'ensureRemoteCapabilities',
     'findTool',
+    'checkPublicAccess',
     // Auth checks run BEFORE task creation so unauthorized callers cannot
     // materialize a task record (which would leak tool existence + hand back a
     // valid taskId). Quota/semaphore are NOT acquired here; the background
@@ -532,6 +534,25 @@ export default class CallToolFlow extends FlowBase<typeof name> {
    * For progressive authorization, tools from unauthorized apps
    * return an AuthorizationRequiredError with an auth_url.
    */
+  /** An anonymous caller may call only the tools `publicAccess` lists, within its rate limit. */
+  @Stage('checkPublicAccess')
+  async checkPublicAccess() {
+    const { tool, authInfo } = this.state;
+    const callerCtx = this.input.ctx as
+      | { internalCall?: boolean; agentPrivateCall?: boolean; taskId?: string }
+      | undefined;
+    const publicAccess = publicAccessFor(this.scope.auth?.options, authInfo);
+    if (!tool || !publicAccess || callerCtx?.internalCall || callerCtx?.agentPrivateCall) return;
+    // The task runner's re-dispatch of a task-augmented call: the call that created the task was checked and counted.
+    if (callerCtx?.taskId) return;
+    await enforcePublicAccess(
+      publicAccess,
+      { kind: 'tool', names: [tool.fullName || tool.name, tool.name] },
+      this.scope.publicAccessGuard,
+      buildPartitionContext(this.tryGetContext()),
+    );
+  }
+
   @Stage('checkToolAuthorization')
   async checkToolAuthorization() {
     this.logger.verbose('checkToolAuthorization:start');

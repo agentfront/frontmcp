@@ -68,13 +68,13 @@ Configuration for execution timeout.
 
 Configuration for IP-based access control.
 
-| Field               | Type                | Default   | Description                                                        |
-| ------------------- | ------------------- | --------- | ------------------------------------------------------------------ |
-| `allowList`         | `string[]`          | `[]`      | IPs or CIDR ranges to always allow                                 |
-| `denyList`          | `string[]`          | `[]`      | IPs or CIDR ranges to always block                                 |
-| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list, or no client IP is known      |
-| `trustProxy`        | `boolean`           | `false`   | **Not read** (startup warning); set `FRONTMCP_TRUST_PROXY`         |
-| `trustedProxyDepth` | `number`            | `1`       | **Not read** (startup warning); set `FRONTMCP_TRUSTED_PROXY_DEPTH` |
+| Field               | Type                | Default   | Description                                                                                                           |
+| ------------------- | ------------------- | --------- | --------------------------------------------------------------------------------------------------------------------- |
+| `allowList`         | `string[]`          | `[]`      | IPs or CIDR ranges to always allow                                                                                    |
+| `denyList`          | `string[]`          | `[]`      | IPs or CIDR ranges to always block                                                                                    |
+| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list, or no client IP is known                                                         |
+| `trustProxy`        | `boolean`           | `false`   | `true` reads the client IP from `X-Forwarded-For`, as `FRONTMCP_TRUST_PROXY` does; `false` leaves it to that variable |
+| `trustedProxyDepth` | `number`            | `1`       | Proxies that append to `X-Forwarded-For`; read with `trustProxy: true` (else `FRONTMCP_TRUSTED_PROXY_DEPTH`)          |
 
 ### `PartitionKey`
 

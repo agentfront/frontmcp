@@ -656,6 +656,21 @@ describe('buildAuthContext', () => {
     expect(ctx.roles).toEqual(['admin']);
   });
 
+  it('takes roles, permissions and claims from a claimsResolver, which wins over claimsMapping (#766)', () => {
+    const ctx = buildAuthContext(
+      { user: { sub: 'u1', roles: ['ignored'], realm_access: { roles: ['mapped'] } } },
+      { roles: 'realm_access.roles' },
+      undefined,
+      (authInfo) => ({ roles: ['resolved'], permissions: ['tickets:write'], claims: { tenant: authInfo.user?.sub } }),
+    );
+
+    expect(ctx.user.sub).toBe('u1');
+    expect(ctx.roles).toEqual(['resolved']);
+    expect(ctx.permissions).toEqual(['tickets:write']);
+    expect(ctx.claims).toEqual({ tenant: 'u1' });
+    expect(ctx.hasRole('resolved')).toBe(true);
+  });
+
   it('should work with an empty source', () => {
     const ctx = buildAuthContext({});
 

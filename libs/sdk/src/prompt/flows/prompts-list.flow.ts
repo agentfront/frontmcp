@@ -15,6 +15,7 @@ import 'reflect-metadata';
 import { z } from '@frontmcp/lazy-zod';
 import { ListPromptsRequestSchema, ListPromptsResultSchema, type Prompt } from '@frontmcp/protocol';
 
+import { isPubliclyListed, publicAccessFor } from '../../auth/public-access.utils';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 
@@ -34,6 +35,16 @@ const stateSchema = z.object({
       prompt: z.any(),
     }),
   ),
+  /** Every prompt `findPrompts` collected, before any filter: names that collide here stay qualified. */
+  foundPrompts: z
+    .array(
+      z.object({
+        ownerName: z.string(),
+        // z.any() used because PromptEntry is a complex abstract class type
+        prompt: z.any(),
+      }),
+    )
+    .optional(),
   resolvedPrompts: z.array(
     z.object({
       ownerName: z.string(),
@@ -48,7 +59,7 @@ type ResponsePromptItem = Prompt;
 
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findPrompts', 'filterByAuthorities', 'resolveConflicts'],
+  execute: ['findPrompts', 'filterByAuthorities', 'filterByPublicAccess', 'resolveConflicts'],
   post: ['parsePrompts'],
 } as const satisfies FlowPlan<string>;
 
@@ -187,6 +198,7 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
       }
 
       this.state.set('prompts', prompts);
+      this.state.set('foundPrompts', prompts);
       this.logger.verbose('findPrompts:done');
     } catch (error) {
       this.logger.error('findPrompts: failed to collect prompts', error);
@@ -229,6 +241,20 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
     this.logger.verbose('filterByAuthorities:done');
   }
 
+  /** An anonymous caller sees only the prompts `publicAccess` lists. */
+  @Stage('filterByPublicAccess')
+  async filterByPublicAccess() {
+    const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
+    const publicAccess = publicAccessFor(this.scope.auth?.options, ctx?.['authInfo']);
+    if (!publicAccess) return;
+    this.state.set(
+      'prompts',
+      this.state.required.prompts.filter(({ prompt }) =>
+        isPubliclyListed(publicAccess, 'prompts', [prompt.fullName, prompt.name]),
+      ),
+    );
+  }
+
   @Stage('resolveConflicts')
   async resolveConflicts() {
     this.logger.verbose('resolveConflicts:start');
@@ -237,7 +263,7 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
       const found = this.state.required.prompts;
 
       const counts = new Map<string, number>();
-      for (const { prompt } of found) {
+      for (const { prompt } of this.state.foundPrompts ?? found) {
         const baseName = prompt.metadata.name;
         counts.set(baseName, (counts.get(baseName) ?? 0) + 1);
       }

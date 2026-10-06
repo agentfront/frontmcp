@@ -58,7 +58,7 @@ export const ipFilterConfigSchema = z.object({
     .optional()
     .default(false)
     .describe(
-      'Not read; setting it logs a startup warning. Set the FRONTMCP_TRUST_PROXY environment variable to trust X-Forwarded-For.',
+      'Read the client IP from X-Forwarded-For, behind trustedProxyDepth trusted proxies, as FRONTMCP_TRUST_PROXY does. false leaves the decision to FRONTMCP_TRUST_PROXY.',
     ),
   trustedProxyDepth: z
     .number()
@@ -67,7 +67,7 @@ export const ipFilterConfigSchema = z.object({
     .optional()
     .default(1)
     .describe(
-      'Not read; setting it logs a startup warning. Set the FRONTMCP_TRUSTED_PROXY_DEPTH environment variable instead.',
+      'How many proxies in front of the server append to X-Forwarded-For; read when trustProxy is true (else FRONTMCP_TRUSTED_PROXY_DEPTH).',
     ),
 });
 

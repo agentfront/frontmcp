@@ -386,7 +386,8 @@ export class JwksService {
    *   1) inline jwks (if provided) → cache & return
    *   2) cached & fresh (TTL)      → return
    *   3) explicit jwksUri          → fetch, cache, return
-   *   4) discover jwks_uri         → the issuer's OAuth authorization server
+   *   4) `<issuer>/.well-known/jwks.json` → fetch, cache, return
+   *   5) discover jwks_uri         → the issuer's OAuth authorization server
    *      metadata (RFC 8414), else its OpenID configuration (OpenID Connect
    *      Discovery 1.0 §4, where Google, Okta, Auth0 and Entra publish it),
    *      then fetch jwks_uri, cache, return
@@ -410,9 +411,11 @@ export class JwksService {
       if (fromUri?.keys?.length) return fromUri;
     }
 
-    // Discover via the issuer's .well-known documents. Every URL goes through
-    // the same scheme and SSRF checks (`fetchJson`), `jwks_uri` included.
+    // The conventional location, then discovery via the issuer's .well-known documents. Every URL goes
+    // through the same scheme and SSRF checks (`fetchJson`), `jwks_uri` included.
     const issuer = trimSlash(ref.issuerUrl);
+    const fromWellKnown = await this.tryFetchJwks(ref.id, `${issuer}/.well-known/jwks.json`);
+    if (fromWellKnown?.keys?.length) return fromWellKnown;
     for (const document of ['oauth-authorization-server', 'openid-configuration']) {
       const meta = await this.tryFetchAsMeta(`${issuer}/.well-known/${document}`);
       const uri = meta && typeof meta === 'object' && meta['jwks_uri'] ? String(meta['jwks_uri']) : undefined;

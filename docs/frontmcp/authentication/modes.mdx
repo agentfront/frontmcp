@@ -72,6 +72,15 @@ sequenceDiagram
 | `publicAccess.prompts`   | `string[] \| 'all'` | `'all'`         | Prompts accessible without auth       |
 | `publicAccess.rateLimit` | `number`            | `60`            | Rate limit per IP per minute          |
 
+With `publicAccess` set, an anonymous caller lists only the tools and prompts it names (by name or app-qualified
+name; a name two apps share stays app-qualified in the list, so the listed name is the one it may call), a call to any other answers `PUBLIC_ACCESS_DENIED` (JSON-RPC -32003, HTTP 403), and its tool calls,
+prompt requests and prompt completions (`completion/complete`) are limited to `rateLimit` a minute per IP. A
+completion is refused for the prompts it may not get, and for a prompt or resource whose `authorities` refuse the
+caller. `rateLimit` applies even with `throttle.enabled: false`. A caller with a verified token is not restricted. The
+same applies to the anonymous callers of a transparent server with `allowAnonymous`. Anonymous callers hold
+`anonymousScopes` (`this.auth.scopes`). Up to 1.9.1, `publicAccess` was accepted but not enforced, and public-mode
+sessions held `['public']` whatever `anonymousScopes` said.
+
 ### Use Cases
 
 <CardGroup cols={2}>
@@ -146,6 +155,9 @@ const auth: AuthOptionsInput = {
 };
 ```
 
+A bare-token header has no HTTP auth scheme, so a request without the key gets a 401 with no `WWW-Authenticate`
+header (up to 1.9.1 the header was sent empty). With a scheme, the challenge names it and the `realm`.
+
 <Warning>
   A shared secret identifies a **caller**, not a user. There is no per-user identity, no revocation short of rotating the token and redeploying, and no progressive auth. Use `local` or `remote` when you need any of those. Rotate by deploying with both the old and new token in `tokens`, then removing the old one.
 </Warning>
@@ -192,16 +204,23 @@ sequenceDiagram
 
 ### Configuration Options
 
-| Option                             | Type                 | Default         | Description                                                                                                                             |
-| ---------------------------------- | -------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `provider`                         | `string`             | Required        | Base URL of the IdP                                                                                                                     |
-| `providerConfig.jwksUri`           | `string`             | Auto-discovered | Custom JWKS endpoint                                                                                                                    |
-| `providerConfig.jwks`              | `JSONWebKeySet`      | -               | Inline JWKS for offline verification                                                                                                    |
-| `providerConfig.additionalIssuers` | `string[]`           | -               | Extra `iss` values to trust beyond `provider` (e.g. a gateway that re-mints tokens). Trusted verbatim — set only to issuers you control |
-| `providerConfig.verifyIssuer`      | `boolean`            | `true`          | Validate the token `iss` claim. Setting `false` **disables issuer checking entirely** — see the security note below                     |
-| `expectedAudience`                 | `string \| string[]` | Resource URL    | Required audience claim value(s) — typically the protected resource URL. Defaults to the derived resource URL when omitted              |
-| `requiredScopes`                   | `string[]`           | `[]`            | Scopes that must be present                                                                                                             |
-| `allowAnonymous`                   | `boolean`            | `false`         | Allow requests without tokens                                                                                                           |
+| Option                             | Type                 | Default         | Description                                                                                                                                                 |
+| ---------------------------------- | -------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`                         | `string`             | Required        | Base URL of the IdP                                                                                                                                         |
+| `providerConfig.jwksUri`           | `string`             | Auto-discovered | Custom JWKS endpoint                                                                                                                                        |
+| `providerConfig.jwks`              | `JSONWebKeySet`      | -               | Inline JWKS for offline verification                                                                                                                        |
+| `providerConfig.additionalIssuers` | `string[]`           | -               | Extra `iss` values to trust beyond `provider` (e.g. a gateway that re-mints tokens). Trusted verbatim — set only to issuers you control                     |
+| `providerConfig.verifyIssuer`      | `boolean`            | `true`          | Validate the token `iss` claim. Setting `false` **disables issuer checking entirely** — see the security note below                                         |
+| `expectedAudience`                 | `string \| string[]` | Resource URL    | Required audience claim value(s) — typically the protected resource URL. Defaults to the derived resource URL when omitted                                  |
+| `requiredScopes`                   | `string[]`           | `[]`            | Scopes that must be present, read from the token's `scope` and `scp` claims (a space-separated string or an array), as `this.auth.scopes` is; otherwise 403 |
+| `allowAnonymous`                   | `boolean`            | `false`         | Allow requests without tokens                                                                                                                               |
+
+Without `providerConfig.jwks` or `jwksUri`, the keys are fetched from `<provider>/.well-known/jwks.json`, else from the
+`jwks_uri` of the provider's OAuth metadata or `/.well-known/openid-configuration`.
+
+A verified token's subject is its `sub`. A token without one (some IdPs issue client-credentials tokens that way)
+takes its subject from `client_id`, else `azp`, as RFC 9068 §2.2 names the client the subject of such a token; a token
+with none of the three has no subject and reads as anonymous (`this.auth.isAnonymous`).
 
 ### Claim validation
 

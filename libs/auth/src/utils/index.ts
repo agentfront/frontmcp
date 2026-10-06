@@ -31,3 +31,4 @@ export {
   type ResourceScopeOptions,
 } from './scope-grant.utils';
 export { isLoopbackRedirectUri } from './redirect-uri.utils';
+export { scopesFromClaims } from './token-scopes.utils';
