@@ -9,7 +9,7 @@
  *       index.js          (esbuild bundle, renamed from {name}.bundle.js)
  *       package.json      (minimal CJS manifest so Node resolves index.js)
  *       _skills/          (optional — when the server ships skills)
- *     bin/                (optional — when SEA is enabled)
+ *     bin/                (optional — when SEA is enabled; bin/{os}/launch picks the architecture)
  *       {platform}/{name}[.exe]
  *     icon.png            (optional)
  *     README.md           (optional)
@@ -17,7 +17,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { BinaryEntry } from './binary';
+import { LAUNCHER_FILE_NAME, launcherFiles, type BinaryEntry } from './binary';
 import type { ExtractedSchema } from '../exec/cli-runtime/schema-extractor';
 import { copySkillAssets } from '../exec/skill-assets';
 
@@ -108,6 +108,12 @@ export function stageMcpbDirectory(input: StageInput): StageResult {
       // Windows or a filesystem that rejects chmod — safe to ignore.
     }
     written.push(`bin/${bin.platform}/${bin.fileName}`);
+  }
+  for (const { os, content } of launcherFiles(binaries, name)) {
+    const launcherPath = path.join(stageDir, 'bin', os, LAUNCHER_FILE_NAME);
+    fs.mkdirSync(path.dirname(launcherPath), { recursive: true });
+    fs.writeFileSync(launcherPath, content, { mode: 0o755 });
+    written.push(`bin/${os}/${LAUNCHER_FILE_NAME}`);
   }
 
   // 4. icon.png

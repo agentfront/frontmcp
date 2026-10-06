@@ -4,6 +4,7 @@ import { join } from 'path';
 import { formatFiles, generateFiles, names as nxNames, type GeneratorCallback, type Tree } from '@nx/devkit';
 
 import { addFrontmcpDependencies } from '../../utils/add-dependencies.js';
+import { ensureYarnBerryPinned } from '../../utils/package-manager.js';
 import { getLambdaDependencies } from '../../utils/versions.js';
 import { normalizeOptions } from './lib/index.js';
 import type { ServerGeneratorSchema } from './schema.js';
@@ -28,6 +29,9 @@ async function serverGeneratorInternal(tree: Tree, schema: ServerGeneratorSchema
   // Generate target-specific files
   const targetDir = join(__dirname, 'files', options.deploymentTarget);
   generateFiles(tree, targetDir, options.projectRoot, templateVars);
+  if (options.deploymentTarget === 'node') {
+    ensureYarnBerryPinned(tree);
+  }
 
   // Copy skills from catalog
   const bundle = schema.skills ?? 'recommended';

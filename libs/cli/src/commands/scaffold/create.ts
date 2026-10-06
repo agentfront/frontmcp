@@ -698,14 +698,14 @@ Outputs:
 // build output, but since #535 it rewrites only `main` outright and merges
 // `compatibility_flags`; `name`, `compatibility_date`, `[vars]`, bindings and
 // comments below are preserved. The values here match the adapter's defaults:
-// an ES Module Worker at dist/cloudflare/index.js, `nodejs_compat` with date
-// >= 2024-09-23 (without the flag the Worker fails to load), and
+// an ES Module Worker at dist/cloudflare/index.js, `nodejs_compat` (without the
+// flag the Worker fails to load) with a date Vercel KV / Upstash run on (#710), and
 // `nodejs_compat_populate_process_env` so `[vars]` and secrets are readable as
 // `process.env.*` (#536).
 const TEMPLATE_WRANGLER_TOML = (projectName: string) => `
 name = "${projectName}"
 main = "dist/cloudflare/index.js"
-compatibility_date = "2024-09-23"
+compatibility_date = "2024-11-11"
 compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]
 
 [vars]

@@ -123,6 +123,11 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
   let upstream: UpstreamClient | undefined;
 
   function buildUpstreamForChild(child: ChildProcess, info: ChildReadyInfo): UpstreamClient {
+    if (runtime.mode === 'http' && info.socketPath) {
+      const message = `the server listens on the Unix socket ${info.socketPath} (http.socketPath), which the HTTP loopback cannot reach; run \`frontmcp dev --stdio --serve\` to talk to it over a stdio pipe instead`;
+      process.stderr.write(`[frontmcp dev] ${message}\n`);
+      throw new Error(message);
+    }
     if (runtime.mode === 'http') {
       // The child reports where it serves (a decorator may hard-code the port
       // or path); fall back to what we told it.
@@ -239,7 +244,7 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
     await supervisor.start();
   } catch (err) {
     log.error('initial-boot-failed', { error: (err as Error).message });
-    fsm.onReloadDeadline();
+    fsm.onReloadDeadline({ error: (err as Error).message });
     // Stay running so the watcher can retry once the user fixes the source.
   }
 

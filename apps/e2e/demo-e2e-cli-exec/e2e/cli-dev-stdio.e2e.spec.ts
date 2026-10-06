@@ -11,6 +11,7 @@
  * Each case drives the compiled CLI over stdin/stdout like an MCP client.
  */
 
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { readFile, rm, writeFile } from '@frontmcp/utils';
@@ -94,6 +95,41 @@ describe('frontmcp dev --stdio (#679)', () => {
       const call = await client.request('tools/call', { name: 'hello', arguments: { name: 'decorated' } });
       expect(call.error).toBeUndefined();
       expect(toolText(call)).toContain('Hello, decorated!');
+    },
+    TEST_TIMEOUT,
+  );
+
+  // #728 — the loopback forwarded to a port nothing listened on, with no hint at the socket
+  it(
+    'HTTP loopback: answers a server on http.socketPath with an error that points to --serve',
+    async () => {
+      const socketPath = path.join(os.tmpdir(), `frontmcp-dev-${process.pid}-a.sock`);
+      projectDir = await createScratchProject(
+        'dev-stdio-socket',
+        helloServerFiles({ http: `{ socketPath: ${JSON.stringify(socketPath)} }` }),
+      );
+      client = new StdioBridgeClient(projectDir, []);
+
+      const init = await client.initialize();
+      expect(JSON.stringify(init.error)).toContain('frontmcp dev --stdio --serve');
+      expect(client.stderr).toContain(`the server listens on the Unix socket ${socketPath}`);
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    '--serve: serves a server that sets http.socketPath',
+    async () => {
+      const socketPath = path.join(os.tmpdir(), `frontmcp-dev-${process.pid}-b.sock`);
+      projectDir = await createScratchProject(
+        'dev-stdio-socket-serve',
+        helloServerFiles({ http: `{ socketPath: ${JSON.stringify(socketPath)} }` }),
+      );
+      client = new StdioBridgeClient(projectDir, ['--serve']);
+
+      expect((await client.initialize()).error).toBeUndefined();
+      const call = await client.request('tools/call', { name: 'hello', arguments: { name: 'socket' } });
+      expect(toolText(call)).toContain('Hello, socket!');
     },
     TEST_TIMEOUT,
   );

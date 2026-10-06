@@ -121,7 +121,7 @@ ignored on edge — Workers have no background timers; the Cron drives refresh):
 ```toml
 name = "my-worker"
 main = "worker.ts"
-compatibility_date = "2024-09-23"
+compatibility_date = "2024-11-11"
 compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]

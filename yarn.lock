@@ -2561,7 +2561,7 @@ __metadata:
     "@frontmcp/sdk": "npm:1.9.1"
     acorn: "npm:^8.15.0"
     reflect-metadata: "npm:^0.2.2"
-    vectoriadb: "npm:^2.3.2"
+    vectoriadb: "npm:^2.3.3"
   peerDependencies:
     "@frontmcp/lazy-zod": 1.9.1
     "@frontmcp/plugin-cache": 1.9.1
@@ -13036,7 +13036,7 @@ __metadata:
     tslib: "npm:^2.3.0"
     tsx: "npm:^4.20.6"
     typescript: "npm:^5.5.3"
-    vectoriadb: "npm:^2.3.2"
+    vectoriadb: "npm:^2.3.3"
     yauzl: "npm:^3.2.0"
     yazl: "npm:^3.3.1"
   bin:
@@ -22726,18 +22726,6 @@ __metadata:
   version: 1.1.2
   resolution: "vary@npm:1.1.2"
   checksum: 10c0/f15d588d79f3675135ba783c91a4083dcd290a2a5be9fcb6514220a1634e23df116847b1cc51f66bfb0644cf9353b2abb7815ae499bab06e46dd33c1a6bf1f4f
-  languageName: node
-  linkType: hard
-
-"vectoriadb@npm:^2.3.2":
-  version: 2.3.2
-  resolution: "vectoriadb@npm:2.3.2"
-  peerDependencies:
-    "@huggingface/transformers": ^3.2.2
-  peerDependenciesMeta:
-    "@huggingface/transformers":
-      optional: true
-  checksum: 10c0/96e7ee55616f86f7236607c8ce92deb279f1a6ef1120764bd1b40d3d6719dd48379cdf6d5a87d69d047ce68790558e51f0d7a4c8eef05d9d695ba0e4cf9cf2d2
   languageName: node
   linkType: hard
 
