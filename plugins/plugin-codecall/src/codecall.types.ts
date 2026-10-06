@@ -337,7 +337,7 @@ const codeCallPluginOptionsObjectSchema = z.object({
    * Most tool definitions one `codecall:describe` call returns; a call that would describe more is refused
    * @default 8
    */
-  maxDefinitions: z.number().positive().default(8),
+  maxDefinitions: z.number().int().positive().default(8),
 
   /**
    * Optional filter function for including tools.

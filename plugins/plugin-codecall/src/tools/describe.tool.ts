@@ -67,7 +67,7 @@ export default class DescribeTool extends ToolContext {
         continue;
       }
       const tool = access.entry;
-      if (tools.length === maxDefinitions) {
+      if (tools.length >= maxDefinitions) {
         throw new InvalidInputError(
           `codecall:describe describes at most ${maxDefinitions} tools per call; describe the rest in another call`,
         );
