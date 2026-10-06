@@ -580,7 +580,6 @@ export class McpClientService {
           // Don't retry non-transient errors
           if (error instanceof RemoteToolNotFoundError) return false;
           if (error instanceof CircuitOpenError) return false;
-          if (error instanceof RemoteTimeoutError) return false;
           return isTransientError(error);
         },
         onRetry: (attempt, error, delayMs) => {
