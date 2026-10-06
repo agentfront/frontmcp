@@ -17,7 +17,24 @@ class RequestMetadataTool extends ToolContext {
   }
 }
 
-@App({ id: 'desk', name: 'Desk', tools: [RequestMetadataTool] })
+let nestedServer: DirectMcpServer | undefined;
+
+@Tool({ name: 'nested_request_metadata', inputSchema: {} })
+class NestedRequestMetadataTool extends ToolContext {
+  async execute() {
+    if (!nestedServer) throw new Error('direct server is not ready');
+    const nested = await nestedServer.callTool(
+      'request_metadata',
+      {},
+      {
+        metadata: { userAgent: 'nested-job/1.0', customHeaders: { 'x-frontmcp-tenant': 'inner' } },
+      },
+    );
+    return nested.structuredContent ?? {};
+  }
+}
+
+@App({ id: 'desk', name: 'Desk', tools: [RequestMetadataTool, NestedRequestMetadataTool] })
 class DeskApp {}
 
 interface RequestMetadataResult {
@@ -41,6 +58,7 @@ describe('DirectCallOptions.metadata reaches the request context (#709)', () => 
       apps: [DeskApp],
       logging: { level: LogLevel.Off },
     });
+    nestedServer = server;
   });
 
   afterAll(async () => {
@@ -79,6 +97,18 @@ describe('DirectCallOptions.metadata reaches the request context (#709)', () => 
     const result = await metadataOf({ metadata: { customHeaders: { 'x-frontmcp-trace-id': traceId } } });
 
     expect(result.traceId).toBe(traceId);
+  });
+
+  it("gives a direct call made inside another request its own metadata, not the outer call's", async () => {
+    const response = await server.callTool(
+      'nested_request_metadata',
+      {},
+      { metadata: { userAgent: 'outer-batch/1.0', customHeaders: { 'x-frontmcp-tenant': 'outer' } } },
+    );
+    const result = response.structuredContent as unknown as RequestMetadataResult;
+
+    expect(result.userAgent).toBe('nested-job/1.0');
+    expect(result.customHeaders).toEqual({ 'x-frontmcp-tenant': 'inner' });
   });
 
   it('leaves the metadata empty when the call carries none', async () => {

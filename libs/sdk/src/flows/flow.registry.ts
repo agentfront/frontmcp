@@ -106,9 +106,16 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
       return flow.run(input, deps ?? new Map()) as Promise<FlowOutputOf<Name> | undefined>;
     }
 
+    // Extract session info from MCP handler context (input.ctx.authInfo)
+    // MCP handlers pass { request, ctx } where ctx has authInfo
+    const mcpCtx = (input as any)?.ctx;
+
+    // Direct calls carry their headers as `ctx.metadata` (#709); such a call is its own request
+    const inProcessMetadata: InProcessRequestMetadata | undefined = mcpCtx?.metadata;
+
     // Check if we're already in a context (e.g., HTTP middleware flow)
     const existingContext = contextStorage.getStore();
-    if (existingContext) {
+    if (existingContext && !inProcessMetadata) {
       // Already in context, run directly
       return flow.run(input, deps ?? new Map()) as Promise<FlowOutputOf<Name> | undefined>;
     }
@@ -126,9 +133,6 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
       );
     }
 
-    // Extract session info from MCP handler context (input.ctx.authInfo)
-    // MCP handlers pass { request, ctx } where ctx has authInfo
-    const mcpCtx = (input as any)?.ctx;
     const authInfo = mcpCtx?.authInfo;
 
     // Get session ID from authInfo (set by ensureAuthInfo in transport adapter)
@@ -136,9 +140,6 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
     const rawSessionId = authInfo?.sessionId;
     const sessionId =
       typeof rawSessionId === 'string' && rawSessionId.trim().length > 0 ? rawSessionId.trim() : `anon:${randomUUID()}`;
-
-    // Direct calls carry their headers as `ctx.metadata` (#709)
-    const inProcessMetadata: InProcessRequestMetadata | undefined = mcpCtx?.metadata;
 
     // Wrap flow execution in FrontMcpContext
     return Promise.resolve(
