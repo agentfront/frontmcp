@@ -101,16 +101,6 @@ export async function bundleForServerless(
       'react-dom': 'react-dom',
       'react-dom/server': 'react-dom/server',
       'react/jsx-runtime': 'react/jsx-runtime',
-      // #368 round-3 — `@frontmcp/sdk/esm` contains lazy `await import('openai')`
-      // and `await import('@anthropic-ai/sdk')` calls inside agent adapters.
-      // These are intentionally optional peers (only resolved when the user
-      // actually instantiates an OpenAI/Anthropic agent), but rspack treats
-      // them as hard imports during static analysis and the vercel/lambda
-      // build fails because neither is installed. Externalizing tells rspack
-      // to leave the `require()` in place — the dynamic-import branch only
-      // executes if the user wires up the corresponding agent.
-      openai: 'openai',
-      '@anthropic-ai/sdk': '@anthropic-ai/sdk',
       },
     ],
     resolve: {

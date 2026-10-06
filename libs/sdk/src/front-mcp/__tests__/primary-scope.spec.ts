@@ -13,6 +13,7 @@ import { MCP_20260728_META, PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
 
 import { App, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { clearScopeCache, connect } from '../../direct/connect';
+import { Scope } from '../../scope/scope.instance';
 import { FrontMcpInstance } from '../front-mcp';
 
 @Tool({ name: 'list_orders', inputSchema: {} })
@@ -167,5 +168,50 @@ describe('reaching an app with an endpoint of its own in-process', () => {
     await expect(FrontMcpInstance.createDirect(config([OrdersApp, OpsApp]), { app: 'orders' })).rejects.toThrow(
       'No endpoint serves app "orders" on its own. Apps with an endpoint of their own (splitByApp or standalone): "ops"',
     );
+  });
+});
+
+describe('tearing down a server reached in-process', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    clearScopeCache();
+  });
+
+  function disposedScopeIds(): () => string[] {
+    const dispose = jest.spyOn(Scope.prototype, 'dispose');
+    return () => (dispose.mock.contexts as Scope[]).map((scope) => scope.id).sort();
+  }
+
+  it('dispose() on a createDirect({ app }) server disposes every endpoint of the server', async () => {
+    const disposed = disposedScopeIds();
+    const server = await FrontMcpInstance.createDirect(splitConfig, { app: 'orders' });
+
+    await server.dispose();
+
+    expect(disposed()).toEqual(['ops', 'orders']);
+  });
+
+  it('createDirect() disposes the server it built when the app has no endpoint of its own', async () => {
+    const disposed = disposedScopeIds();
+
+    await expect(FrontMcpInstance.createDirect(config([OrdersApp, OpsApp]), { app: 'orders' })).rejects.toThrow(
+      'No endpoint serves app "orders" on its own',
+    );
+
+    expect(disposed()).toHaveLength(2);
+    expect(disposed()).toContain('ops');
+  });
+
+  it('connect() disposes and forgets the server when the app has no endpoint of its own', async () => {
+    const disposed = disposedScopeIds();
+    const createForGraph = jest.spyOn(FrontMcpInstance, 'createForGraph');
+    const shared = config([OrdersApp, OpsApp]);
+
+    await expect(connect(shared, { app: 'orders' })).rejects.toThrow('No endpoint serves app "orders" on its own');
+    expect(disposed()).toHaveLength(2);
+
+    const client = await connect(shared);
+    await client.close();
+    expect(createForGraph).toHaveBeenCalledTimes(2);
   });
 });

@@ -278,6 +278,22 @@ describe('StorageOrchestratedTokenStore', () => {
     });
   });
 
+  describe('copyTokens', () => {
+    it.each([
+      ['plaintext', undefined],
+      ['encrypted', encKey()],
+    ])('copies %s tokens to another authorization id and keeps them under the source', async (_mode, encryptionKey) => {
+      const store = new StorageOrchestratedTokenStore(adapter, { encryptionKey });
+      await store.storeTokens('auth-old', 'github', { accessToken: 'secret', refreshToken: 'refresh' });
+
+      await store.copyTokens('auth-old', 'auth-new');
+
+      expect(await store.getAccessToken('auth-old', 'github')).toBe('secret');
+      expect(await store.getAccessToken('auth-new', 'github')).toBe('secret');
+      expect(await store.getRefreshToken('auth-new', 'github')).toBe('refresh');
+    });
+  });
+
   // -------------------------------------------------------------------------
   // Encryption-key guard
   // -------------------------------------------------------------------------

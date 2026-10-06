@@ -197,7 +197,9 @@ user signs in again.
 
 When the client refreshes **FrontMCP's own** token (`grant_type=refresh_token` at `/oauth/token`),
 the upstream tokens move to the new token, so `this.orchestration` keeps finding them; the old
-access token no longer reaches them.
+access token no longer reaches them. They leave the old token only once the refresh token has been
+rotated, so a refresh that fails can be retried with the same refresh token. When the same refresh
+token is redeemed twice at once, one of the two may get `invalid_grant`.
 
 Up to 1.9.2 neither happened: the upstream token was gone once its `expires_in` passed, and after
 any client refresh.

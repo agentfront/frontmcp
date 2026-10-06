@@ -580,6 +580,27 @@ describe('InMemoryOrchestratedTokenStore', () => {
   });
 
   // -----------------------------------------------------------------------
+  // copyTokens
+  // -----------------------------------------------------------------------
+  describe('copyTokens', () => {
+    it.each([
+      ['plaintext', undefined],
+      ['encrypted', makeEncryptionKey()],
+    ])('copies %s tokens to another authorization id and keeps them under the source', async (_mode, encryptionKey) => {
+      const store = createStore({ encryptionKey });
+      await store.storeTokens('auth-old', 'github', { accessToken: 'secret', refreshToken: 'refresh' });
+
+      await store.copyTokens('auth-old', 'auth-new');
+
+      expect(await store.getAccessToken('auth-old', 'github')).toBe('secret');
+      expect(await store.getAccessToken('auth-new', 'github')).toBe('secret');
+      expect(await store.getRefreshToken('auth-new', 'github')).toBe('refresh');
+
+      store.dispose();
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // migrateTokens (encrypted)
   // -----------------------------------------------------------------------
   describe('migrateTokens (encrypted)', () => {

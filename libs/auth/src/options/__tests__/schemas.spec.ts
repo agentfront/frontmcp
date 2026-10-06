@@ -395,6 +395,11 @@ describe('tokenRefreshConfigSchema', () => {
     const result = tokenRefreshConfigSchema.safeParse({ skewSeconds: 'fast' });
     expect(result.success).toBe(false);
   });
+
+  it('rejects a negative skewSeconds, and accepts 0', () => {
+    expect(tokenRefreshConfigSchema.safeParse({ skewSeconds: -30 }).success).toBe(false);
+    expect(tokenRefreshConfigSchema.safeParse({ skewSeconds: 0 }).success).toBe(true);
+  });
 });
 
 // ============================================
@@ -786,6 +791,10 @@ describe('publicAuthOptionsSchema', () => {
   it('should reject wrong mode literal', () => {
     const result = publicAuthOptionsSchema.safeParse({ mode: 'transparent' });
     expect(result.success).toBe(false);
+  });
+
+  it.each([0, -60, 1.5])('rejects a sessionTtl of %p', (sessionTtl) => {
+    expect(publicAuthOptionsSchema.safeParse({ mode: 'public', sessionTtl }).success).toBe(false);
   });
 });
 
