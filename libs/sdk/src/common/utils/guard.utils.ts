@@ -1,6 +1,7 @@
 import { isAnonymousSubject } from '@frontmcp/auth';
 import {
   ConcurrencyLimitError,
+  GuardStorageUnavailableError,
   type ConcurrencyConfig,
   type GuardManager,
   type PartitionKey,
@@ -96,7 +97,23 @@ export async function enforceGlobalRateLimit(
   const manager = scope.rateLimitManager;
   const globalConfig = manager?.config?.global;
   if (!manager || !globalConfig || partitionsByIdentity(globalConfig.partitionBy)) return;
-  const result = await manager.checkGlobalRateLimit(buildPartitionContext(context));
+  let result: Awaited<ReturnType<typeof manager.checkGlobalRateLimit>>;
+  try {
+    result = await manager.checkGlobalRateLimit(buildPartitionContext(context));
+  } catch (error) {
+    // Rate limits fail closed: an unreachable store refuses with the guard's 503, as `http:request` does.
+    if (!(error instanceof GuardStorageUnavailableError)) throw error;
+    FlowControl.respond(
+      httpRespond.json(
+        {
+          error: 'service_unavailable',
+          message: 'Service temporarily unavailable: the rate-limit store cannot be reached',
+          code: error.code,
+        },
+        { status: error.statusCode, headers: { 'Retry-After': '1' } },
+      ),
+    );
+  }
   context?.set(GLOBAL_RATE_LIMIT_CHECKED, true);
   if (result.allowed) return;
   const retryAfter = Math.ceil((result.retryAfterMs ?? 60_000) / 1000);
