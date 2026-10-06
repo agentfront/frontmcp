@@ -2,7 +2,7 @@ import 'reflect-metadata';
 
 import { MCP_20260728_META, PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
 
-import { TEST_CLIENT_INFO } from '../../__test-utils__/helpers/mcp-20260728.helpers';
+import { createTestJwtIssuer, TEST_CLIENT_INFO } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { App, LogLevel, Tool, ToolContext } from '../../common';
 import { FrontMcpInstance } from '../front-mcp';
 
@@ -75,5 +75,33 @@ describe('createFetchHandler() with several scopes', () => {
 
     await expect(toolNamesAt(handler, '/')).resolves.toEqual(['charge']);
     await expect(toolNamesAt(handler, '/console')).resolves.toEqual(['inspect']);
+  });
+
+  it.each(['billing', 'support'])('serves the protected resource metadata %s names in its challenge', async (appId) => {
+    const issuer = await createTestJwtIssuer();
+    const handler = await FrontMcpInstance.createFetchHandler({
+      info: { name: 'split-fetch-auth', version: '1.0.0' },
+      apps: [BillingApp, SupportApp],
+      splitByApp: true,
+      auth: { mode: 'transparent', provider: issuer.issuer, providerConfig: { jwks: issuer.jwks } },
+      logging: { level: LogLevel.Off },
+    });
+
+    const challenge = await handler(
+      new Request(`http://localhost/${appId}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+      }),
+    );
+    const header = challenge.headers.get('www-authenticate') ?? '';
+    const metadataUrl = /resource_metadata="([^"]+)"/.exec(header)?.[1];
+    expect(challenge.status).toBe(401);
+    expect(metadataUrl).toBeDefined();
+
+    const metadata = await handler(new Request(metadataUrl as string));
+    expect(metadata.status).toBe(200);
+    const body = (await metadata.json()) as { resource?: string };
+    expect(body.resource).toBe(`http://localhost/${appId}`);
   });
 });

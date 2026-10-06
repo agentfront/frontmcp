@@ -429,13 +429,23 @@ export function createServerFetchHandler(
   const primaryRoute = routes.find((route) => route.scope === primary) ?? routes[routes.length - 1];
 
   return (request, ctx, env) => {
-    const path = new URL(request.url).pathname;
+    const path = scopePathOf(new URL(request.url).pathname);
     const route =
       routes.find(({ basePath }) => basePath !== '' && (path === basePath || path.startsWith(`${basePath}/`))) ??
       routes.find(({ basePath }) => basePath === '') ??
       primaryRoute;
     return route.handler(request, ctx, env);
   };
+}
+
+const WELL_KNOWN_SEGMENT = /\/\.well-known\/[^/]+/;
+
+/**
+ * The path a request routes on among scopes. A discovery document names its scope after, inside or before
+ * `/.well-known/<name>` (`makeWellKnownPaths`), so that segment is dropped and the rest picks the scope.
+ */
+function scopePathOf(pathname: string): string {
+  return pathname.replace(WELL_KNOWN_SEGMENT, '') || '/';
 }
 
 const DEFAULT_BODY_LIMIT_BYTES = 4 * 1024 * 1024;
