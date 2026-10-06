@@ -283,15 +283,15 @@ CIMD is **enabled by default** when using orchestrated auth mode. The framework 
 
 ### Cache Settings
 
-| Option         | Default               | Description                                                                                    |
-| -------------- | --------------------- | ---------------------------------------------------------------------------------------------- |
-| `type`         | `'memory'`            | Cache backend: `'memory'` (dev/single-instance) or `'redis'` (distributed)                     |
-| `redis`        | `undefined`           | Redis connection: `{ url }` or `{ host, port, password?, db?, tls? }`, and `keyPrefix` (default `'cimd:'`). **Required** when `type: 'redis'` |
-| `defaultTtlMs` | `3600000` (1 hour)    | Default cache TTL when no headers present                                                      |
-| `maxTtlMs`     | `86400000` (24 hours) | Maximum TTL even if server suggests longer                                                     |
-| `minTtlMs`     | `60000` (1 minute)    | Minimum TTL even if server suggests shorter                                                    |
+| Option         | Default               | Description                                                                |
+| -------------- | --------------------- | -------------------------------------------------------------------------- |
+| `type`         | `'memory'`            | Cache backend: `'memory'` (dev/single-instance) or `'redis'` (distributed) |
+| `redis`        | `undefined`           | Redis connection (see below). **Required** when `type: 'redis'`            |
+| `defaultTtlMs` | `3600000` (1 hour)    | Default cache TTL when no headers present                                  |
+| `maxTtlMs`     | `86400000` (24 hours) | Maximum TTL even if server suggests longer                                 |
+| `minTtlMs`     | `60000` (1 minute)    | Minimum TTL even if server suggests shorter                                |
 
-With `type: 'redis'` the documents are cached in Redis, shared by every instance; the server connects to it at startup, and fails to start when `redis` is missing or unreachable. Up to 1.9.2 the cache was in memory whatever `type` said.
+`redis` is `{ url }` or `{ host, port, password?, db?, tls? }`, plus `keyPrefix` (default `'cimd:'`). With `type: 'redis'` the documents are cached in Redis, shared by every instance; the server connects to it at startup, and fails to start when `redis` is missing or unreachable. Up to 1.9.2 the cache was in memory whatever `type` said.
 
 ### Network Settings
 
@@ -483,7 +483,9 @@ finalTtl = Math.max(minTtlMs, Math.min(maxTtlMs, serverSuggestedTtl))
 | `CimdSecurityError`         | 403         | URL blocked by security policy                       |
 | `RedirectUriMismatchError`  | 400         | `redirect_uri` not registered for client             |
 | `CimdResponseTooLargeError` | 502         | Response exceeds size limit                          |
-| `CimdDisabledError`         | 400         | CIMD disabled but CIMD client_id used: with `enabled: false`, a client id that is a CIMD URL and not a registered client is refused with this error's message (`CIMD (Client ID Metadata Documents) is disabled on this server`), whatever `requireRegisteredClients` says |
+| `CimdDisabledError`         | 400         | CIMD disabled but CIMD client_id used                |
+
+With `enabled: false`, a client id that is a CIMD URL and not a registered client is refused at `/oauth/authorize` with `CimdDisabledError`'s message (`CIMD (Client ID Metadata Documents) is disabled on this server`), whatever `requireRegisteredClients` says.
 
 ### Understanding Error Responses
 

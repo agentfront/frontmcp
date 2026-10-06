@@ -66,11 +66,14 @@ sequenceDiagram
 
 | Option                   | Type                | Default         | Description                           |
 | ------------------------ | ------------------- | --------------- | ------------------------------------- |
-| `sessionTtl`             | `number`            | `3600`          | Lifetime in seconds of the anonymous tokens `/oauth/token` issues (`expires_in` and `exp`). Session ids don't expire. Up to 1.9.2 it was never read and those tokens lasted a day |
+| `sessionTtl`             | `number`            | `3600`          | Anonymous token lifetime in seconds   |
 | `anonymousScopes`        | `string[]`          | `['anonymous']` | Scopes assigned to anonymous sessions |
 | `publicAccess.tools`     | `string[] \| 'all'` | `'all'`         | Tools accessible without auth         |
 | `publicAccess.prompts`   | `string[] \| 'all'` | `'all'`         | Prompts accessible without auth       |
 | `publicAccess.rateLimit` | `number`            | `60`            | Rate limit per IP per minute          |
+
+`sessionTtl` is the lifetime (`expires_in` and `exp`) of the anonymous tokens `/oauth/token` issues; session ids don't
+expire. Up to 1.9.2 it was never read and those tokens lasted a day.
 
 With `publicAccess` set, an anonymous caller lists only the tools and prompts it names (by name or app-qualified
 name; a name two apps share stays app-qualified in the list, so the listed name is the one it may call), a call to any other answers `PUBLIC_ACCESS_DENIED` (JSON-RPC -32003, HTTP 403), and its tool calls,
