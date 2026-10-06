@@ -117,6 +117,12 @@ await server.callTool('list_tickets', {}, { authContext: { user: { sub: 'nour' }
 
 Up to 1.9.1 an in-process call had no scopes. `create()` takes the server-level `output` and `throttle` options like `@FrontMcp()` (up to 1.9.1 it dropped them).
 
+A call can also carry request metadata, which reaches `this.context.metadata` as an HTTP request's headers would: `userAgent`, `clientIp` (kept only if it is an IP address) and `customHeaders`, of which only `x-frontmcp-*` keys are kept. An `x-frontmcp-trace-id` header continues that trace, and header-driven features such as the cache plugin's `x-frontmcp-disable-cache` work in process. Up to 1.9.1 the metadata was dropped:
+
+```typescript
+await server.callTool('list_tickets', {}, { metadata: { clientIp: '10.0.0.7', customHeaders: { 'x-frontmcp-disable-cache': 'true' } } });
+```
+
 The list methods (`listTools`, `listResources`, `listResourceTemplates`, `listPrompts`) of this server, and of the one `create()` returns, return the whole list: they read every page (a FrontMCP server pages `tools/list` 40 tools at a time by default), so the result carries no `nextCursor`, as with `DirectClient`. To page yourself, as an MCP client does, ask for one page with `paginate` and follow `nextCursor` with `cursor`:
 
 ```typescript

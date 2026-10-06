@@ -11,6 +11,7 @@ import {
   type ServerRequest,
 } from '../common';
 import { FrontMcpContextStorage } from '../context';
+import { inProcessRequestContext, type InProcessRequestMetadata } from '../context/metadata.utils';
 import { FlowNotRegisteredError, RegistryDependencyNotRegisteredError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
@@ -136,6 +137,9 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
     const sessionId =
       typeof rawSessionId === 'string' && rawSessionId.trim().length > 0 ? rawSessionId.trim() : `anon:${randomUUID()}`;
 
+    // Direct calls carry their headers as `ctx.metadata` (#709)
+    const inProcessMetadata: InProcessRequestMetadata | undefined = mcpCtx?.metadata;
+
     // Wrap flow execution in FrontMcpContext
     return Promise.resolve(
       contextStorage.run(
@@ -143,6 +147,7 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
           sessionId,
           scopeId: scope.id,
           authInfo,
+          ...(inProcessMetadata ? inProcessRequestContext(inProcessMetadata) : {}),
         },
         async () => {
           return flow.run(input, deps ?? new Map()) as Promise<FlowOutputOf<Name> | undefined>;
