@@ -5,7 +5,9 @@ import { z } from '@frontmcp/lazy-zod';
 import { GetPromptRequestSchema, GetPromptResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
+import { enforcePublicAccess, publicAccessFor } from '../../auth/public-access.utils';
 import {
+  buildPartitionContext,
   Flow,
   FlowBase,
   FlowControl,
@@ -61,7 +63,14 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'ensureRemoteCapabilities', 'findPrompt', 'checkEntryAuthorities', 'createPromptContext'],
+  pre: [
+    'parseInput',
+    'ensureRemoteCapabilities',
+    'findPrompt',
+    'checkPublicAccess',
+    'checkEntryAuthorities',
+    'createPromptContext',
+  ],
   execute: ['execute', 'validateOutput'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
@@ -231,6 +240,20 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
    * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in prompt metadata.
    * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
    */
+  /** An anonymous caller may get only the prompts `publicAccess` lists, within its rate limit. */
+  @Stage('checkPublicAccess')
+  async checkPublicAccess() {
+    const { prompt, authInfo } = this.state;
+    const publicAccess = publicAccessFor(this.scope.auth?.options, authInfo);
+    if (!prompt || !publicAccess) return;
+    await enforcePublicAccess(
+      publicAccess,
+      { kind: 'prompt', names: [prompt.fullName || prompt.name, prompt.name] },
+      this.scope.rateLimitManager,
+      buildPartitionContext(this.tryGetContext()),
+    );
+  }
+
   @Stage('checkEntryAuthorities')
   async checkEntryAuthorities() {
     this.logger.verbose('checkEntryAuthorities:start');

@@ -21,6 +21,7 @@ import { buildCDNInfoForUIType, type AdapterPlatformType as AIPlatformType } fro
 import { isUIType, type UIType } from '@frontmcp/uipack/types';
 import { base64Decode, base64Encode } from '@frontmcp/utils';
 
+import { isPubliclyListed, publicAccessFor } from '../../auth/public-access.utils';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { DEFAULT_TOOL_PAGINATION, type ToolPaginationOptions } from '../../common/types/options/pagination';
 import { InternalMcpError, InvalidInputError, InvalidMethodError } from '../../errors';
@@ -73,7 +74,7 @@ type ResponseToolItem = BaseResponseToolItem & {
 // TODO: add support for session based tools
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findTools', 'filterByAuthorities', 'resolveConflicts'],
+  execute: ['findTools', 'filterByAuthorities', 'filterByPublicAccess', 'resolveConflicts'],
   post: ['parseTools'],
 } as const satisfies FlowPlan<string>;
 
@@ -353,6 +354,19 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     this.logger.verbose(`filterByAuthorities: ${tools.length} → ${authorized.length} tools`);
     this.state.set('tools', authorized);
     this.logger.verbose('filterByAuthorities:done');
+  }
+
+  /** An anonymous caller sees only the tools `publicAccess` lists. */
+  @Stage('filterByPublicAccess')
+  async filterByPublicAccess() {
+    const publicAccess = publicAccessFor(this.scope.auth?.options, this.state.authInfo);
+    if (!publicAccess) return;
+    this.state.set(
+      'tools',
+      this.state.required.tools.filter(({ tool }) =>
+        isPubliclyListed(publicAccess, 'tools', [tool.fullName, tool.name]),
+      ),
+    );
   }
 
   @Stage('resolveConflicts')

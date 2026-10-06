@@ -15,6 +15,7 @@ import 'reflect-metadata';
 import { z } from '@frontmcp/lazy-zod';
 import { ListPromptsRequestSchema, ListPromptsResultSchema, type Prompt } from '@frontmcp/protocol';
 
+import { isPubliclyListed, publicAccessFor } from '../../auth/public-access.utils';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 
@@ -48,7 +49,7 @@ type ResponsePromptItem = Prompt;
 
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findPrompts', 'filterByAuthorities', 'resolveConflicts'],
+  execute: ['findPrompts', 'filterByAuthorities', 'filterByPublicAccess', 'resolveConflicts'],
   post: ['parsePrompts'],
 } as const satisfies FlowPlan<string>;
 
@@ -227,6 +228,20 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
       filtered.filter((item): item is (typeof prompts)[number] => item !== null),
     );
     this.logger.verbose('filterByAuthorities:done');
+  }
+
+  /** An anonymous caller sees only the prompts `publicAccess` lists. */
+  @Stage('filterByPublicAccess')
+  async filterByPublicAccess() {
+    const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
+    const publicAccess = publicAccessFor(this.scope.auth?.options, ctx?.['authInfo']);
+    if (!publicAccess) return;
+    this.state.set(
+      'prompts',
+      this.state.required.prompts.filter(({ prompt }) =>
+        isPubliclyListed(publicAccess, 'prompts', [prompt.fullName, prompt.name]),
+      ),
+    );
   }
 
   @Stage('resolveConflicts')

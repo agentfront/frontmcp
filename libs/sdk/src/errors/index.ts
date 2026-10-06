@@ -24,6 +24,7 @@ export {
   QuotaExceededError,
   // Auth errors
   UnauthorizedError,
+  PublicAccessDeniedError,
   // Session & client errors
   SessionMissingError,
   UnsupportedClientVersionError,

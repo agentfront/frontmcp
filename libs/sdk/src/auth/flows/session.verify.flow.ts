@@ -505,7 +505,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     this.createAnonymousSession({
       authMode: 'public',
       issuer: 'public',
-      scopes: ['public'],
+      scopes: authOptions.anonymousScopes ?? ['anonymous'],
       sessionIdHeader: this.state.sessionIdHeader,
     });
   }
