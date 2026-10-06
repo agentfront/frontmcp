@@ -1,10 +1,11 @@
 # Build from the workspace root: docker build -f <%= projectRoot %>/Dockerfile .
 FROM node:24-slim AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --ignore-scripts
-COPY . .
-RUN npx nx build <%= projectName %>
+<% if (packageManager.docker.setup) { %>RUN <%= packageManager.docker.setup %>
+<% } %>COPY . .
+RUN <%= packageManager.docker.installFrozen %>
+RUN <%= packageManager.exec %> nx build <%= projectName %>
+RUN <%= packageManager.docker.pruneProduction %>
 
 FROM node:24-slim AS runner
 WORKDIR /app
@@ -13,9 +14,9 @@ ENV NODE_ENV=production
 # The server binds 127.0.0.1 by default, which a published port cannot reach.
 ENV FRONTMCP_BIND_ADDRESS=all
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/<%= projectRoot %>/dist ./dist
-COPY --from=builder /app/package.json /app/package-lock.json* ./
-RUN npm ci --omit=dev --ignore-scripts
 USER appuser
 EXPOSE 3000
 # `nx build <%= projectName %>` (target node) writes dist/node/<%= projectName %>.bundle.js

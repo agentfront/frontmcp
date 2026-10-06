@@ -44,6 +44,28 @@ describe('server generator', () => {
       expect(dockerfile).toContain('ENV FRONTMCP_BIND_ADDRESS=all');
     });
 
+    // #726 — `npm ci` failed in yarn and pnpm workspaces, which have no package-lock.json
+    it("installs and prunes with the workspace's package manager", async () => {
+      tree.write('pnpm-lock.yaml', '');
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
+
+      const dockerfile = tree.read('servers/prod/Dockerfile', 'utf-8') ?? '';
+      expect(dockerfile).toContain(
+        'RUN corepack enable\nCOPY . .\nRUN pnpm install --frozen-lockfile --ignore-scripts',
+      );
+      expect(dockerfile).toContain('RUN pnpm exec nx build server-prod\nRUN pnpm prune --prod --ignore-scripts');
+      expect(dockerfile).toContain('COPY --from=builder /app/node_modules ./node_modules');
+      expect(dockerfile).not.toContain('npm ci');
+    });
+
+    it('needs no setup step for npm', async () => {
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
+
+      const dockerfile = tree.read('servers/prod/Dockerfile', 'utf-8') ?? '';
+      expect(dockerfile).toContain('WORKDIR /app\nCOPY . .\nRUN npm ci --ignore-scripts');
+      expect(dockerfile).toContain('RUN npm prune --omit=dev');
+    });
+
     it('points docker compose at the workspace root from any depth', async () => {
       await serverGenerator(tree, {
         name: 'prod',

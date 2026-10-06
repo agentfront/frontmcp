@@ -51,6 +51,46 @@ describe('getPackageManagerCommands', () => {
   ])('gives the %s commands', (packageManager, expected) => {
     const tree = createTreeWithEmptyWorkspace();
     updateJson(tree, 'nx.json', (json) => ({ ...json, cli: { packageManager } }));
-    expect(getPackageManagerCommands(tree)).toEqual(expected);
+    expect(getPackageManagerCommands(tree)).toMatchObject(expected);
+  });
+
+  // #726 — the generated Dockerfile ran `npm ci`, which fails without a package-lock.json
+  it.each([
+    ['npm', { installFrozen: 'npm ci --ignore-scripts', pruneProduction: 'npm prune --omit=dev' }],
+    [
+      'pnpm',
+      {
+        setup: 'corepack enable',
+        installFrozen: 'pnpm install --frozen-lockfile --ignore-scripts',
+        pruneProduction: 'pnpm prune --prod --ignore-scripts',
+      },
+    ],
+    [
+      'bun',
+      {
+        setup: 'npm install -g bun',
+        installFrozen: 'bun install --frozen-lockfile --ignore-scripts',
+        pruneProduction: 'bun install --frozen-lockfile --production --ignore-scripts',
+      },
+    ],
+  ])('gives the %s Docker commands', (packageManager, expected) => {
+    const tree = createTreeWithEmptyWorkspace();
+    updateJson(tree, 'nx.json', (json) => ({ ...json, cli: { packageManager } }));
+    expect(getPackageManagerCommands(tree).docker).toEqual(expected);
+  });
+
+  it('tells Yarn Berry from Yarn 1 by .yarnrc.yml', () => {
+    const tree = createTreeWithEmptyWorkspace();
+    tree.write('yarn.lock', '');
+    expect(getPackageManagerCommands(tree).docker.installFrozen).toBe(
+      'yarn install --frozen-lockfile --ignore-scripts',
+    );
+
+    tree.write('.yarnrc.yml', 'nodeLinker: node-modules\n');
+    expect(getPackageManagerCommands(tree).docker).toEqual({
+      setup: 'corepack enable',
+      installFrozen: 'yarn install --immutable --mode=skip-build',
+      pruneProduction: 'yarn workspaces focus --all --production',
+    });
   });
 });

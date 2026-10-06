@@ -122,7 +122,7 @@ The project is named `server-<name>`.
 
 <AccordionGroup>
   <Accordion title="Node.js (Docker)">
-    The Docker build context is the workspace root, so build the image from there; Docker reads the ignore rules from `Dockerfile.dockerignore` next to the Dockerfile. The image sets `FRONTMCP_BIND_ADDRESS=all`, because the server binds `127.0.0.1` by default and a published port could not reach it. It runs with `NODE_ENV=production`, so pass `MCP_SESSION_SECRET` when you start it.
+    The Docker build context is the workspace root, so build the image from there; Docker reads the ignore rules from `Dockerfile.dockerignore` next to the Dockerfile. The Dockerfile uses your workspace's package manager: it installs from the lockfile (`npm ci`, `yarn install --immutable` or `--frozen-lockfile` for Yarn 1, `pnpm install --frozen-lockfile`, `bun install --frozen-lockfile`, after `corepack enable` or installing bun), runs `nx build`, prunes dev dependencies and copies the pruned `node_modules` into the runtime image. The image sets `FRONTMCP_BIND_ADDRESS=all`, because the server binds `127.0.0.1` by default and a published port could not reach it. It runs with `NODE_ENV=production`, so pass `MCP_SESSION_SECRET` when you start it.
 
     ```bash
     docker build -f servers/production/Dockerfile -t production .
@@ -133,7 +133,7 @@ The project is named `server-<name>`.
 
   </Accordion>
   <Accordion title="Vercel">
-    Set the Vercel project's **Root Directory** to `servers/<name>`. `vercel.json` installs and builds from the workspace root with your package manager (`cd ../../ && npm install`, `cd ../../ && npx nx build server-<name>`), and the build writes `.vercel/output` into the server folder, where Vercel picks it up. The `build` target lists `.vercel/output` in its outputs, so an Nx cache hit restores it too.
+    `nx deploy server-<name>` builds, then runs `vercel deploy --prebuilt --prod` in the server folder, so Vercel deploys the `.vercel/output` tree the build wrote instead of building again. Link the folder to a Vercel project once with `vercel link` (or `vercel pull`). For Git-triggered builds on Vercel, set the project's **Root Directory** to `servers/<name>`: `vercel.json` installs and builds from the workspace root with your package manager (`cd ../../ && npm install`, `cd ../../ && npx nx build server-<name>`). The `build` target lists `.vercel/output` in its outputs, so an Nx cache hit restores it too.
   </Accordion>
   <Accordion title="AWS Lambda">
     The generator adds `@codegenie/serverless-express` to the workspace: the generated handler wraps the server with it and `frontmcp build --target lambda` refuses to run without it. The bundle loads it at runtime without bundling it, so provide it to the function with a Lambda layer.
