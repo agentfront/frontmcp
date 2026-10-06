@@ -163,7 +163,7 @@ describe('RedisStorageAdapter', () => {
 
   describe('url beside config fields (#768)', () => {
     it('passes the fields the URL leaves out to ioredis', async () => {
-      const adapter = new RedisStorageAdapter({ url: 'redis://cache:6379', config: { host: 'cache', password: 'p' } });
+      const adapter = new RedisStorageAdapter({ url: 'redis://cache:6379', config: { password: 'p' } });
       await adapter.connect();
       expect(MockRedisClass).toHaveBeenCalledWith(
         'redis://cache:6379',

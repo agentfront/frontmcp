@@ -410,6 +410,14 @@ export interface RedisUrlConnectionConfig extends Partial<Omit<RedisHostConnecti
 }
 
 /**
+ * Fields beside a top-level `url` (`{ url, config: { password } }`) that fill in what the URL
+ * leaves out. Without a `url` the adapter needs a `host` and rejects this shape.
+ */
+export interface RedisUrlFillInConfig extends Partial<Omit<RedisHostConnectionConfig, 'url'>> {
+  url?: undefined;
+}
+
+/**
  * Options for Redis storage adapter.
  */
 export interface RedisAdapterOptions {
@@ -425,7 +433,7 @@ export interface RedisAdapterOptions {
    * leaves out; a contradicting field is rejected.
    * Mutually exclusive with `client`.
    */
-  config?: RedisHostConnectionConfig | RedisUrlConnectionConfig;
+  config?: RedisHostConnectionConfig | RedisUrlConnectionConfig | RedisUrlFillInConfig;
 
   /**
    * Redis connection URI.

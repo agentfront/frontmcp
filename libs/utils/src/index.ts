@@ -327,6 +327,7 @@ export type {
   RedisAdapterOptions,
   RedisHostConnectionConfig,
   RedisUrlConnectionConfig,
+  RedisUrlFillInConfig,
   VercelKvAdapterOptions,
   UpstashAdapterOptions,
   StorageType,
