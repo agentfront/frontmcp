@@ -89,8 +89,16 @@ describe('getPackageManagerCommands', () => {
     tree.write('.yarnrc.yml', 'nodeLinker: node-modules\n');
     expect(getPackageManagerCommands(tree).docker).toEqual({
       setup: 'corepack enable',
+      env: 'YARN_NODE_LINKER=node-modules',
       installFrozen: 'yarn install --immutable --mode=skip-build',
       pruneProduction: 'yarn workspaces focus --all --production',
     });
+  });
+
+  it("installs a Yarn Plug'n'Play workspace into node_modules for the image", () => {
+    const tree = createTreeWithEmptyWorkspace();
+    tree.write('yarn.lock', '');
+    tree.write('.yarnrc.yml', 'yarnPath: .yarn/releases/yarn-4.14.1.cjs\n');
+    expect(getPackageManagerCommands(tree).docker.env).toBe('YARN_NODE_LINKER=node-modules');
   });
 });

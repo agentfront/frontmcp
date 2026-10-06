@@ -58,6 +58,18 @@ describe('server generator', () => {
       expect(dockerfile).not.toContain('npm ci');
     });
 
+    it('makes Yarn Berry install into node_modules, which the runtime image copies', async () => {
+      tree.write('yarn.lock', '');
+      tree.write('.yarnrc.yml', 'yarnPath: .yarn/releases/yarn-4.14.1.cjs\n');
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
+
+      const dockerfile = tree.read('servers/prod/Dockerfile', 'utf-8') ?? '';
+      expect(dockerfile).toContain(
+        'RUN corepack enable\nENV YARN_NODE_LINKER=node-modules\nCOPY . .\nRUN yarn install --immutable --mode=skip-build',
+      );
+      expect(dockerfile).toContain('COPY --from=builder /app/node_modules ./node_modules');
+    });
+
     it('needs no setup step for npm', async () => {
       await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
 

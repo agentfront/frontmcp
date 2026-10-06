@@ -2,6 +2,7 @@
 FROM node:24-slim AS builder
 WORKDIR /app
 <% if (packageManager.docker.setup) { %>RUN <%= packageManager.docker.setup %>
+<% } %><% if (packageManager.docker.env) { %>ENV <%= packageManager.docker.env %>
 <% } %>COPY . .
 RUN <%= packageManager.docker.installFrozen %>
 RUN <%= packageManager.exec %> nx build <%= projectName %>

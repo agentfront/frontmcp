@@ -6,6 +6,8 @@ export type WorkspacePackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 export interface DockerPackageManagerCommands {
   /** Makes the package manager available on the `node` image, when npm isn't it. */
   setup?: string;
+  /** `NAME=value` the builder stage sets before installing, so the install lays out `node_modules`. */
+  env?: string;
   /** Installs exactly what the lockfile records, without lifecycle scripts. */
   installFrozen: string;
   /** Removes dev dependencies from the installed `node_modules`. */
@@ -31,6 +33,7 @@ const COMMANDS: Record<WorkspacePackageManager, PackageManagerCommands> = {
     exec: 'yarn',
     docker: {
       setup: 'corepack enable',
+      env: 'YARN_NODE_LINKER=node-modules',
       installFrozen: 'yarn install --immutable --mode=skip-build',
       pruneProduction: 'yarn workspaces focus --all --production',
     },
