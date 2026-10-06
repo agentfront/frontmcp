@@ -87,13 +87,15 @@ The client IP comes from Deno's `info.remoteAddr`, Bun's `server.requestIP(reque
 
 The handler is stateless: session-based (2025-06-18) clients get no `Mcp-Session-Id` and every request stands alone. See [Cloudflare Worker](/frontmcp/deployment/cloudflare-worker) for stateful sessions with Durable Objects.
 
-### createDirect(options)
+### createDirect(options, endpoint?)
 
 Create a DirectMcpServer for programmatic access.
 
 ```typescript
-static async createDirect(options: FrontMcpConfigInput): Promise<DirectMcpServer>
+static async createDirect(options: FrontMcpConfigInput, endpoint?: { app?: string }): Promise<DirectMcpServer>
 ```
+
+It serves the server's main endpoint ([`getPrimaryScope()`](#getprimaryscope)). `{ app }` serves the endpoint an app has of its own instead: each app's with `splitByApp`, a `standalone` app's otherwise ([`getAppScope()`](#getappscopeapp)). `connect(config, { app })` takes the same option. Up to 1.9.2 a `splitByApp` server's other apps couldn't be reached in-process.
 
 Best for: Testing, embedding, CLI tools, agent backends.
 
@@ -220,8 +222,8 @@ scopes.forEach(scope => {
 
 ### getPrimaryScope()
 
-Get the scope that holds the server's own apps. `createDirect`, `createFetchHandler`, `runStdio` and `connect()` serve
-this scope.
+Get the scope that holds the server's own apps. `createDirect`, `runStdio` and `connect()` serve this scope unless
+they're given an `app`.
 
 ```typescript
 getPrimaryScope(): ScopeEntry | undefined
@@ -236,11 +238,23 @@ this is the first scope.
   tools instead of the server's.
 </Note>
 
-`createFetchHandler()` serves every scope, as the Express host does: a `splitByApp` app or a `standalone` app at its
-own path (`<entryPath>/<appId>`, for example `/billing`), the server's apps at the entry path. A request goes to the
-scope whose path is the longest prefix of its own; the primary scope also answers the entry path when no scope with
-apps is mounted there. Up to 1.9.1 it served only the primary scope, so a `splitByApp` server answered for its first
-app alone and a standalone app was not served at all.
+`createFetchHandler()` serves every scope exactly where the Express host does: a `splitByApp` app or a `standalone` app
+at its own path (`<entryPath>/<appId>`, for example `/billing`), the server's scope at the entry path. A request goes to
+the scope whose path is the longest prefix of its own. With `splitByApp` nothing is served at the entry path itself,
+and a request there, or to any other path no scope serves, gets a 404 whose `entryPaths` lists every scope's path. Up
+to 1.9.1 it served only the primary scope, so a `splitByApp` server answered for its first app alone and a standalone
+app was not served at all; up to 1.9.2 it also served the first app at the entry path when no other scope was there,
+and a 404 listed only one scope's paths.
+
+### getAppScope(app)
+
+Get the endpoint an app has of its own: each app's with `splitByApp`, a `standalone` app's otherwise, the one the Node
+server serves at `<entryPath>/<app>`. It throws `ScopeConfigurationError` when no endpoint serves that app on its own,
+naming the apps that have one.
+
+```typescript
+getAppScope(app: string): ScopeEntry
+```
 
 ### start()
 

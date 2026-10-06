@@ -13,7 +13,7 @@ import {
 } from '../common';
 import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 import { DirectMcpServerImpl, type DirectMcpServer } from '../direct';
-import { describeConfigIssues, InternalMcpError, ServerNotFoundError } from '../errors';
+import { describeConfigIssues, InternalMcpError, ScopeConfigurationError, ServerNotFoundError } from '../errors';
 import { HealthService } from '../health';
 import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import LoggerRegistry from '../logger/logger.registry';
@@ -205,6 +205,22 @@ export class FrontMcpInstance implements FrontMcpInterface {
    */
   getPrimaryScope(): ScopeEntry | undefined {
     return this.scopes.getPrimaryScope();
+  }
+
+  /**
+   * The endpoint an app has of its own, the one the Node server serves at `<entryPath>/<app>`: each app's with
+   * `splitByApp`, a `standalone` app's otherwise. `createDirect()` and `connect()` serve it when given `{ app }`.
+   *
+   * @throws ScopeConfigurationError when no endpoint serves that app on its own
+   */
+  getAppScope(app: string): ScopeEntry {
+    const appScopes = this.getScopes().filter((scope) => scope.routeBase !== '');
+    const scope = appScopes.find((candidate) => candidate.id === app);
+    if (scope) return scope;
+    const known = appScopes.map((candidate) => `"${candidate.id}"`).join(', ') || 'none';
+    throw new ScopeConfigurationError(
+      `No endpoint serves app "${app}" on its own. Apps with an endpoint of their own (splitByApp or standalone): ${known}`,
+    );
   }
 
   /**
@@ -500,6 +516,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * - CLI tools that need direct access
    * - Agent backends with custom invocation
    *
+   * It serves the server's main endpoint. `endpoint.app` names an app with an endpoint of its own (each app's with
+   * `splitByApp`, a `standalone` app's otherwise) to serve that one instead; see {@link getAppScope}.
+   *
    * @example
    * ```typescript
    * import { FrontMcpInstance } from '@frontmcp/sdk';
@@ -519,7 +538,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * await server.dispose();
    * ```
    */
-  public static async createDirect(options: FrontMcpConfigInput): Promise<DirectMcpServer> {
+  public static async createDirect(
+    options: FrontMcpConfigInput,
+    endpoint?: { app?: string },
+  ): Promise<DirectMcpServer> {
     // Parse config through Zod to apply defaults, then disable HTTP server
     const parsedConfig = frontMcpMetadataSchema.parse({
       ...options,
@@ -530,8 +552,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
-    // The scope holding the server's own apps, not a standalone app's
-    const scope = frontMcp.getPrimaryScope();
+    // The scope holding the server's own apps (not a standalone app's), or the one `endpoint.app` names
+    const scope = endpoint?.app === undefined ? frontMcp.getPrimaryScope() : frontMcp.getAppScope(endpoint.app);
     if (!scope) {
       throw new InternalMcpError('No scopes initialized. Ensure at least one app is configured.');
     }

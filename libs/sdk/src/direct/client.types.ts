@@ -461,6 +461,11 @@ export interface ConnectOptions {
 export interface LLMConnectOptions {
   /** Session configuration */
   session?: SessionOptions;
+  /**
+   * Connect to the endpoint this app has of its own (each app's with `splitByApp`, a `standalone` app's otherwise),
+   * served at `<entryPath>/<app>` over HTTP, instead of the server's main endpoint.
+   */
+  app?: string;
   /** Direct auth token injection (e.g., JWT) */
   authToken?: string;
   /** Optional client capabilities override */

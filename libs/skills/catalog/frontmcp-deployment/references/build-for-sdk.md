@@ -215,6 +215,10 @@ const client = await connectOpenAI(config, {
   authToken: 'jwt-token-here',
   capabilities: { roots: { listChanged: true } },
 });
+
+// One app of a splitByApp server (or a standalone app's own endpoint): its tools only
+const billing = await connect(config, { app: 'billing' });
+const billingServer = await FrontMcpInstance.createDirect(config, { app: 'billing' });
 ```
 
 ## DirectClient API

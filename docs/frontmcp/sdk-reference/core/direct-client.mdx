@@ -103,6 +103,8 @@ const tools = await client.listTools();
 ## Connection Options
 
 ```typescript
+// connect(config, options?: ConnectOptions & { app?: string })
+// `app` connects to the endpoint that app has of its own (splitByApp, or a standalone app)
 interface ConnectOptions {
   clientInfo?: ClientInfo;
   session?: SessionOptions;
