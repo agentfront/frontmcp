@@ -1,6 +1,6 @@
 import { getCwd } from '@frontmcp/utils';
 
-import { DynamicPlugin, Plugin, ProviderScope, type ProviderType } from '../../common';
+import { DynamicPlugin, FrontMcpLogger, Plugin, ProviderScope, type ProviderType } from '../../common';
 import { ConfigPluginConfigToken } from './config.symbols';
 import type { ConfigPluginOptions, ConfigPluginOptionsInput } from './config.types';
 import { loadConfig } from './providers/config-loader';
@@ -122,8 +122,8 @@ export default class ConfigPlugin<TConfig extends object = Record<string, string
       name: 'config:service',
       provide: ConfigService,
       scope: ProviderScope.GLOBAL,
-      inject: () => [ConfigPluginConfigToken] as const,
-      useFactory: async (pluginConfig: ConfigPluginOptions<T>): Promise<ConfigService<T>> => {
+      inject: () => [ConfigPluginConfigToken, FrontMcpLogger] as const,
+      useFactory: async (pluginConfig: ConfigPluginOptions<T>, logger: FrontMcpLogger): Promise<ConfigService<T>> => {
         // If schema provided, use the new loader with nested path support
         if (pluginConfig.schema) {
           const loadedConfig = await loadConfig(pluginConfig.schema, {
@@ -134,6 +134,9 @@ export default class ConfigPlugin<TConfig extends object = Record<string, string
             loadEnv: pluginConfig.loadEnv,
             loadYaml: pluginConfig.loadYaml,
             populateProcessEnv: pluginConfig.populateProcessEnv,
+            strict: pluginConfig.strict,
+            onInvalid: (error) =>
+              logger.warn(`[config] ${error.message}; strict is false, so the settings are used as read`),
           });
           return new ConfigService<T>(loadedConfig);
         }

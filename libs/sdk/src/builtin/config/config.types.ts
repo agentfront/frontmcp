@@ -52,7 +52,8 @@ export interface ConfigPluginOptions<TConfig extends object = Record<string, str
   populateProcessEnv?: boolean;
 
   /**
-   * Whether to throw on validation errors.
+   * Whether settings that don't match the schema stop the server (`ConfigValidationError`).
+   * With `false`, the plugin logs a warning and serves the settings as read, without the schema's defaults.
    * @default true
    */
   strict?: boolean;
