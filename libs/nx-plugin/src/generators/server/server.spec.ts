@@ -70,6 +70,21 @@ describe('server generator', () => {
       expect(dockerfile).toContain('COPY --from=builder /app/node_modules ./node_modules');
     });
 
+    it('pins the running Yarn Berry version, so corepack does not install the image with Yarn 1', async () => {
+      const userAgent = process.env['npm_config_user_agent'];
+      process.env['npm_config_user_agent'] = 'yarn/4.14.1 npm/? node/v24.1.0 linux x64';
+      try {
+        tree.write('yarn.lock', '__metadata:\n  version: 8\n');
+        await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
+      } finally {
+        if (userAgent === undefined) delete process.env['npm_config_user_agent'];
+        else process.env['npm_config_user_agent'] = userAgent;
+      }
+
+      expect(readJson(tree, 'package.json').packageManager).toBe('yarn@4.14.1');
+      expect(tree.read('servers/prod/Dockerfile', 'utf-8')).toContain('RUN yarn install --immutable --mode=skip-build');
+    });
+
     it('needs no setup step for npm', async () => {
       await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
 
