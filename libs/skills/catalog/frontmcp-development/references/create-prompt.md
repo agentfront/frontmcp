@@ -121,6 +121,7 @@ The result is checked against this shape. A message with another `role`, such as
 - `this.get(token)` -- resolve a dependency from DI (throws if not found)
 - `this.tryGet(token)` -- resolve a dependency from DI (returns `undefined` if not found)
 - `this.fail(err)` -- abort execution, triggers error flow (never returns)
+- `this.respond(value)` -- end `execute()` with `value` as its result, normalized like a returned one (up to 1.9.2 it failed with "Prompt output not found")
 - `this.mark(stage)` -- set active execution stage for debugging/tracking
 - `this.fetch(input, init?)` -- HTTP fetch with context propagation
 

@@ -351,6 +351,8 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       );
       this.logger.verbose('execute:done');
     } catch (error) {
+      // `this.respond(value)` set the output and ends the prompt, which validateOutput and finalize treat as returned
+      if (error instanceof FlowControl && error.type === 'respond') return;
       if (error instanceof FlowControl || isClientFacingError(error)) throw error;
       throw new PromptExecutionError(input.name, error instanceof Error ? error : undefined);
     }
