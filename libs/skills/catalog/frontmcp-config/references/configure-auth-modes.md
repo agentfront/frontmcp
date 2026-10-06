@@ -24,6 +24,8 @@ Anonymous callers hold `anonymousScopes`. With `publicAccess`, they list, call a
 
 A JWT bearer is still verified against this instance's own HS256 secret. A bearer that is **not** a JWT is ignored and the request is served anonymously — public mode has no issuer or JWKS to verify it against, and a credentialed request must never fare worse than an anonymous one. For a first-class shared secret, use static mode below.
 
+Public and static mode have no authorization server: `/.well-known/oauth-authorization-server` answers 404 and the protected resource metadata omits `authorization_servers` (local/remote serve their own metadata; transparent redirects to the provider's).
+
 ## Static Mode
 
 A fixed shared secret on every request — the shape non-OAuth MCP hosts expect (ChatGPT's custom-app connector calls it "Access token / API key"). No OAuth, no JWT, no JWKS.

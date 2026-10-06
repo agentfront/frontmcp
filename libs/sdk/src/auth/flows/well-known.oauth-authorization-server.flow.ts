@@ -1,7 +1,7 @@
 // auth/flows/well-known.oauth-authorization-server.flow.ts
 import 'reflect-metadata';
 
-import { advertisedScopes } from '@frontmcp/auth';
+import { advertisedScopes, trimSlash } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { isProduction } from '@frontmcp/utils';
 
@@ -17,6 +17,7 @@ import {
   HttpTextSchema,
   isLocalMode,
   isOrchestratedMode,
+  isTransparentMode,
   makeWellKnownPaths,
   StageHookOf,
   type FlowPlan,
@@ -239,7 +240,13 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
       });
       return;
     }
-    const primary = this.scope.auth;
-    this.respond(httpRespond.redirect(`${primary.issuer}/.well-known/oauth-authorization-server`));
+    // Only a transparent server has an authorization server, its provider's. A public or static server
+    // has none to describe or point at.
+    const authOptions = this.scope.auth?.options;
+    if (!authOptions || !isTransparentMode(authOptions)) {
+      this.respond(httpRespond.notFound());
+      return;
+    }
+    this.respond(httpRespond.redirect(`${trimSlash(this.scope.auth.issuer)}/.well-known/oauth-authorization-server`));
   }
 }

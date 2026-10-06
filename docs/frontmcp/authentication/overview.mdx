@@ -141,6 +141,8 @@ FrontMCP exposes standard OAuth discovery endpoints:
 | `/.well-known/jwks.json`                  | JSON Web Key Set for token verification (RFC 7517) |
 | `/.well-known/oauth-protected-resource`   | Protected Resource Metadata                        |
 
+The authorization server metadata is served in `local` and `remote` mode, redirects to the provider's in `transparent` mode, and answers `404` in `public` and `static` mode, which have no authorization server. See [Discovery and Sessions by Mode](/frontmcp/authentication/modes#discovery-and-sessions-by-mode).
+
 ## Next Steps
 
 <CardGroup cols={2}>
