@@ -196,4 +196,31 @@ describe('import maps (#766)', () => {
 
     expect(applyImportMap(bundle, { zod: 'https://cdn.example.com/zod.mjs' })).toBe(bundle);
   });
+
+  it('leaves a variable or property named from alone', () => {
+    const bundle = [
+      'const from = "zod";',
+      'const options = {from:"zod"};',
+      'let from\n"zod"',
+      'run(); from\n"zod"',
+    ].join('\n');
+
+    expect(applyImportMap(bundle, { zod: 'https://cdn.example.com/zod.mjs' })).toBe(bundle);
+  });
+
+  it('rewrites every import and export clause form that ends in from', () => {
+    const bundle = [
+      'export * from "zod";',
+      'export * as ns from "zod";',
+      'export { a as b } from "zod";',
+      'import x from "zod";',
+      'import x, { y } from "zod";',
+      'import x, * as all from "zod";',
+      'import from from "zod";',
+    ].join('\n');
+
+    const rewritten = applyImportMap(bundle, { zod: 'https://cdn.example.com/zod.mjs' });
+
+    expect(rewritten).toBe(bundle.replaceAll('"zod"', '"https://cdn.example.com/zod.mjs"'));
+  });
 });
