@@ -21,8 +21,17 @@ import { RememberAccessorToken, RememberConfigToken, RememberStoreToken } from '
 import type { RememberPluginOptions, RememberPluginOptionsInput } from './remember.types';
 import { createRememberTools } from './tools/remember-tools.factory';
 
-/** The options with `defaultTTL` checked: a whole number of seconds, where 0 means no default expiry. */
-function withCheckedDefaultTTL(options: RememberPluginOptionsInput): RememberPluginOptionsInput {
+/**
+ * The options with `defaultTTL` checked (a whole number of seconds, where 0 means no default expiry) and
+ * an empty `encryption.customKey` refused rather than silently replaced by the server secret.
+ */
+function withCheckedOptions(options: RememberPluginOptionsInput): RememberPluginOptionsInput {
+  const customKey = options.encryption?.customKey;
+  if (customKey !== undefined && customKey.trim() === '') {
+    throw new RememberConfigurationError(
+      'RememberPlugin encryption.customKey must not be empty; omit it to derive keys from the server secret',
+    );
+  }
   const { defaultTTL } = options;
   if (defaultTTL === undefined) return options;
   if (defaultTTL === 0) return { ...options, defaultTTL: undefined };
@@ -99,7 +108,7 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
     super();
     this.options = {
       ...RememberPlugin.defaultOptions,
-      ...withCheckedDefaultTTL(options),
+      ...withCheckedOptions(options),
     } as RememberPluginOptions;
   }
 
@@ -117,7 +126,7 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
     const providers: ProviderType[] = [];
     const config: RememberPluginOptions = {
       ...RememberPlugin.defaultOptions,
-      ...withCheckedDefaultTTL(options),
+      ...withCheckedOptions(options),
     } as RememberPluginOptions;
 
     // ─────────────────────────────────────────────────────────────────────────

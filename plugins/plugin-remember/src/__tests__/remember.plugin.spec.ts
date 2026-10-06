@@ -88,6 +88,13 @@ describe('RememberPlugin', () => {
       expect(() => RememberPlugin.dynamicProviders({ type: 'memory', defaultTTL })).toThrow(RememberConfigurationError);
     });
 
+    it.each(['', '   '])('refuses an empty encryption.customKey (%p) at startup', (customKey) => {
+      const options = { type: 'memory' as const, encryption: { customKey } };
+
+      expect(() => RememberPlugin.dynamicProviders(options)).toThrow(RememberConfigurationError);
+      expect(() => new RememberPlugin(options)).toThrow(RememberConfigurationError);
+    });
+
     it('accepts a whole number of seconds for defaultTTL', () => {
       expect(() => RememberPlugin.dynamicProviders({ type: 'memory', defaultTTL: 3600 })).not.toThrow();
     });
