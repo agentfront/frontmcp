@@ -552,7 +552,7 @@ describe('OpenAPI adapter - a credential for the operation’s own scheme (regre
         /control characters/,
       );
       await expect(tool('weeklyReport')({}, callerContext)).rejects.toThrow(
-        /Authentication required for tool 'weeklyReport'/,
+        /Invalid arguments for tool 'weeklyReport': ReportsKey:/,
       );
       expect(received).toHaveLength(0);
     });

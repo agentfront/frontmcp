@@ -19,6 +19,9 @@ The OpenAPI Adapter automatically converts OpenAPI 3.x specifications into fully
 - **Type-safe** — Automatic Zod schema generation from OpenAPI specs
 - **Multi-auth support** — Built-in support for multiple authentication providers
 - **Production-ready** — Comprehensive security validation and error handling
+- **Arguments checked against the spec** — a call whose arguments the operation's schema refuses (a value outside an
+  `enum`, a missing required field) fails with `Invalid arguments for tool '<name>': <field>: <problem>` before any
+  request is sent; up to 1.9.1 such arguments were sent as given
 - **Flexible** — Filter operations, customize schemas, and inject custom logic
 
 ## Installation
