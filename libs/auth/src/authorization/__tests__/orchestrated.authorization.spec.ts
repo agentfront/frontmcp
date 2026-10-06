@@ -6,7 +6,14 @@
  * no tokens, success, refresh), provider management, progressive auth, and error cases.
  */
 
-import { NoProviderIdError, TokenStoreRequiredError, TokenNotAvailableError } from '../../errors/auth-internal.errors';
+import { NoProviderIdError, TokenNotAvailableError, TokenStoreRequiredError } from '../../errors/auth-internal.errors';
+import { deriveAuthorizationId } from '../../utils/authorization-id.utils';
+import {
+  OrchestratedAuthorization,
+  type OrchestratedAuthorizationCreateCtx,
+  type TokenRefreshCallback,
+  type TokenStore,
+} from '../orchestrated.authorization';
 
 // ---- Mocks ----
 
@@ -28,14 +35,6 @@ jest.mock('../../session/utils/session-crypto.utils', () => ({
 jest.mock('../../machine-id', () => ({
   getMachineId: jest.fn(() => 'machine-id-xyz'),
 }));
-
-import { OrchestratedAuthorization } from '../orchestrated.authorization';
-import type {
-  OrchestratedAuthorizationCreateCtx,
-  TokenStore,
-  TokenRefreshCallback,
-} from '../orchestrated.authorization';
-import { deriveAuthorizationId } from '../../utils/authorization-id.utils';
 
 // ---- Mock Token Store ----
 
@@ -302,6 +301,25 @@ describe('OrchestratedAuthorization', () => {
           accessToken: 'new-at',
           refreshToken: 'new-rt',
         }),
+      );
+    });
+
+    it('keeps the current refresh token when the provider does not rotate it', async () => {
+      const onRefresh: TokenRefreshCallback = jest.fn().mockResolvedValue({ accessToken: 'new-at', expiresIn: 7200 });
+      const store = createMockTokenStore({
+        hasTokens: jest.fn().mockResolvedValue(true),
+        getAccessToken: jest.fn().mockResolvedValue(null),
+        getRefreshToken: jest.fn().mockResolvedValue('old-rt'),
+      });
+      const auth = OrchestratedAuthorization.create(
+        createDefaultCtx({ primaryProviderId: 'github', tokenStore: store, onTokenRefresh: onRefresh }),
+      );
+
+      expect(await auth.getToken()).toBe('new-at');
+      expect(store.storeTokens).toHaveBeenCalledWith(
+        MOCK_AUTH_ID,
+        'github',
+        expect.objectContaining({ accessToken: 'new-at', refreshToken: 'old-rt' }),
       );
     });
 

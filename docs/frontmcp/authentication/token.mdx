@@ -205,14 +205,14 @@ FrontMCP uses default token lifetimes:
 auth: {
   mode: 'local',
   refresh: {
-    enabled: true,      // Proactively refresh upstream/downstream provider creds
-    skewSeconds: 60,    // …this many seconds before THOSE provider tokens expire
+    enabled: true,      // Renew upstream provider tokens with their refresh token (default true)
+    skewSeconds: 60,    // …this many seconds before THOSE provider tokens expire (default 60)
   },
 }
 ```
 
 <Info>
-  The `refresh` block governs proactive refresh of **upstream/downstream provider credentials** (the tokens read via `this.authProviders` / `this.orchestration.getToken`), not the server's own session token. There is no background refresher for FrontMCP's own access token: the **client** refreshes its session token explicitly by calling `POST /oauth/token` with `grant_type=refresh_token` (see [Token Refresh Flow](#token-refresh-flow)). Server-issued token lifetimes are fixed at the server level, and refresh tokens are rotated on each use per OAuth 2.1 best practices.
+  The `refresh` block governs refresh of the **upstream provider tokens** read via `this.orchestration.getToken`, not the server's own session token: an upstream token that has expired, or is within `skewSeconds` of expiry, is renewed with the provider's refresh token, and `enabled: false` turns that off. When the client refreshes its session token, the upstream tokens move to the new one. There is no background refresher for FrontMCP's own access token: the **client** refreshes its session token explicitly by calling `POST /oauth/token` with `grant_type=refresh_token` (see [Token Refresh Flow](#token-refresh-flow)). Server-issued token lifetimes are fixed at the server level, and refresh tokens are rotated on each use per OAuth 2.1 best practices.
 </Info>
 
 ---

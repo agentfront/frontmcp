@@ -4,6 +4,7 @@ import {
   createSecureStore,
   createTokenStorageAdapter,
   DcrClientRegistry,
+  deriveAuthorizationId,
   InMemoryAuthorizationStore,
   InMemoryConsentStore,
   InMemoryFederatedAuthSessionStore,
@@ -17,6 +18,7 @@ import {
   StorageConsentStore,
   StorageFederatedAuthSessionStore,
   StorageOrchestratedTokenStore,
+  TokenNotAvailableError,
   verifyPkce,
   type AuthorizationStore,
   type ConsentStore,
@@ -25,6 +27,7 @@ import {
   type JSONWebKeySet,
   type SecureStoreBackend,
   type SecureStoreConfig,
+  type TokenRefreshCallback,
   type TokenStorageConfig,
   type OrchestratedTokenStore as TokenStore,
   type VerifyResult,
@@ -35,7 +38,6 @@ import {
   MemoryStorageAdapter,
   randomBytes,
   randomUUID,
-  sha256Hex,
   StorageNotSupportedError,
   type StorageAdapter,
 } from '@frontmcp/utils';
@@ -449,6 +451,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
   /** Provider configurations (indexed by provider ID) */
   private readonly providerConfigs = new Map<string, UpstreamProviderConfig>();
+  /** Provider token renewals in flight, by provider and refresh token (see {@link providerTokenRefresher}). */
+  private readonly providerRenewals = new Map<string, ReturnType<TokenRefreshCallback>>();
 
   /**
    * Remote-mode single upstream provider id (set by {@link registerRemoteProvider}).
@@ -539,6 +543,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     this.federatedSessionStoreImpl = new InMemoryFederatedAuthSessionStore();
     this.orchestratedTokenStoreImpl = new InMemoryOrchestratedTokenStore({
       encryptionKey: this.secret, // Reuse JWT secret for token encryption
+      refreshSkewMs: this.providerRefreshSkewMs(),
     });
     this.consentStoreImpl = new InMemoryConsentStore();
 
@@ -677,6 +682,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.federatedSessionStoreImpl = new StorageFederatedAuthSessionStore(adapter);
       this.orchestratedTokenStoreImpl = new StorageOrchestratedTokenStore(adapter, {
         encryptionKey: this.secret,
+        refreshSkewMs: this.providerRefreshSkewMs(),
       });
       this.consentStoreImpl = new StorageConsentStore(adapter);
 
@@ -1195,20 +1201,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     const accessToken = await this.signAccessToken(user, codeRecord.scopes, resource, consentMetadata, issuer);
 
     // Migrate tokens from pending to real authorization ID (for federated auth)
+    let providerTokensId: string | undefined;
     if (codeRecord.pendingAuthId && codeRecord.federatedLoginUsed) {
-      try {
-        const pendingAuthId = `pending:${codeRecord.pendingAuthId}`;
-        // Compute the new authorization ID from the JWT signature (same as OrchestratedAuthorization.generateAuthorizationId)
-        const parts = accessToken.split('.');
-        const signature = parts[2] || accessToken;
-        const newAuthId = sha256Hex(signature).substring(0, 16);
-
-        await this.orchestratedTokenStore.migrateTokens(pendingAuthId, newAuthId);
-        this.logger.info(`Migrated tokens from ${pendingAuthId} to ${newAuthId}`);
-      } catch (err) {
-        // Log but don't fail the token exchange
-        this.logger.warn(`Failed to migrate tokens: ${err}`);
-      }
+      providerTokensId = await this.moveProviderTokens(`pending:${codeRecord.pendingAuthId}`, accessToken);
     }
 
     // Create refresh token — carry the grant's consent / progressive-auth /
@@ -1229,6 +1224,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       federatedLoginUsed: codeRecord.federatedLoginUsed,
       selectedProviderIds: codeRecord.selectedProviderIds,
       skippedProviderIds: codeRecord.skippedProviderIds,
+      providerTokensId,
     });
     await this.authorizationStore.storeRefreshToken(refreshTokenRecord);
     // Bind the issued refresh token to the (already used-marked) code so a later
@@ -1244,6 +1240,23 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       refresh_token: refreshTokenRecord.token,
       scope: codeRecord.scopes.join(' '),
     };
+  }
+
+  /**
+   * Move the upstream provider tokens stored under `fromAuthorizationId` to the authorization id of
+   * `accessToken`, where `this.orchestration` looks for them. Returns that id, or undefined when the
+   * move failed (the token is still issued; its tools then find no provider token).
+   */
+  private async moveProviderTokens(fromAuthorizationId: string, accessToken: string): Promise<string | undefined> {
+    const toAuthorizationId = deriveAuthorizationId(accessToken);
+    try {
+      await this.orchestratedTokenStore.migrateTokens(fromAuthorizationId, toAuthorizationId);
+      this.logger.info(`Migrated tokens from ${fromAuthorizationId} to ${toAuthorizationId}`);
+      return toAuthorizationId;
+    } catch (err) {
+      this.logger.warn(`Failed to migrate tokens: ${err}`);
+      return undefined;
+    }
   }
 
   /**
@@ -1310,6 +1323,10 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // A refresh token issued before tokens named their resource gets one now (#269).
     const resource = tokenRecord.resource ?? defaultAudience;
     const accessToken = await this.signAccessToken(user, tokenRecord.scopes, resource, consentMetadata, issuer);
+    // The provider tokens of the grant follow it to the new access token.
+    const providerTokensId = tokenRecord.providerTokensId
+      ? await this.moveProviderTokens(tokenRecord.providerTokensId, accessToken)
+      : undefined;
 
     // Rotate refresh token — forward the same grant metadata to the new record.
     const newRefreshRecord = this.authorizationStore.createRefreshTokenRecord({
@@ -1326,6 +1343,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       federatedLoginUsed: tokenRecord.federatedLoginUsed,
       selectedProviderIds: tokenRecord.selectedProviderIds,
       skippedProviderIds: tokenRecord.skippedProviderIds,
+      providerTokensId,
     });
     await this.authorizationStore.rotateRefreshToken(refreshToken, newRefreshRecord);
 
@@ -1966,5 +1984,43 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
         error_description: `Failed to refresh token with provider: ${err}`,
       };
     }
+  }
+
+  /**
+   * What renews an upstream provider's access token with its refresh token when `this.orchestration`
+   * finds it expired, or none with `refresh.enabled: false`. Renewals with the same refresh token
+   * share one request: a provider that rotates refresh tokens accepts each only once.
+   */
+  providerTokenRefresher(): TokenRefreshCallback | undefined {
+    if (!isOrchestratedMode(this.options) || this.options.refresh?.enabled === false) return undefined;
+    return (providerId, refreshToken) => {
+      const key = `${providerId}:${refreshToken}`;
+      const inFlight = this.providerRenewals.get(key);
+      if (inFlight) return inFlight;
+      const renewal = this.renewProviderToken(providerId, refreshToken).finally(() =>
+        this.providerRenewals.delete(key),
+      );
+      this.providerRenewals.set(key, renewal);
+      return renewal;
+    };
+  }
+
+  private async renewProviderToken(providerId: string, refreshToken: string): ReturnType<TokenRefreshCallback> {
+    const result = await this.refreshProviderToken(providerId, refreshToken);
+    if ('error' in result || typeof result.access_token !== 'string' || !result.access_token) {
+      this.logger.warn(
+        `Provider ${providerId} did not refresh its token: ${'error' in result ? result.error : 'no access_token'}`,
+      );
+      throw new TokenNotAvailableError(
+        `Provider "${providerId}" did not refresh its token; the user has to sign in again`,
+      );
+    }
+    return { accessToken: result.access_token, refreshToken: result.refresh_token, expiresIn: result.expires_in };
+  }
+
+  /** How long before its expiry a provider token is renewed: `refresh.skewSeconds` (default 60), none with `refresh` off. */
+  private providerRefreshSkewMs(): number {
+    if (!isOrchestratedMode(this.options) || this.options.refresh?.enabled === false) return 0;
+    return (this.options.refresh?.skewSeconds ?? 60) * 1000;
   }
 }

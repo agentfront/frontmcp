@@ -11,9 +11,11 @@
  * - Returns decrypted strings directly (encryption is handled internally)
  */
 
+import { decryptAesGcm, encryptAesGcm, hkdfSha256, randomBytes } from '@frontmcp/utils';
+
 import type { TokenStore } from '../authorization/orchestrated.authorization';
-import { encryptAesGcm, decryptAesGcm, randomBytes, hkdfSha256 } from '@frontmcp/utils';
 import { EncryptionKeyNotConfiguredError } from '../errors/auth-internal.errors';
+import { hasLiveAccessToken, recordDropAt } from './orchestrated-token.crypto';
 
 /**
  * Internal token record structure
@@ -48,6 +50,13 @@ export interface InMemoryOrchestratedTokenStoreOptions {
    * @default 60000 (1 minute)
    */
   cleanupIntervalMs?: number;
+
+  /**
+   * How long before its expiry an access token that can be refreshed stops being returned, so the
+   * caller renews it before it lapses (`refresh.skewSeconds`).
+   * @default 0
+   */
+  refreshSkewMs?: number;
 }
 
 /**
@@ -96,9 +105,13 @@ export class InMemoryOrchestratedTokenStore implements TokenStore {
   /** Default TTL for records */
   private readonly defaultTtlMs?: number;
 
+  /** How long before its expiry a refreshable access token stops being returned */
+  private readonly refreshSkewMs: number;
+
   constructor(options: InMemoryOrchestratedTokenStoreOptions = {}) {
     this.encryptionKey = options.encryptionKey;
     this.defaultTtlMs = options.defaultTtlMs;
+    this.refreshSkewMs = options.refreshSkewMs ?? 0;
 
     // Start cleanup timer
     const cleanupIntervalMs = options.cleanupIntervalMs ?? 60000;
@@ -208,8 +221,8 @@ export class InMemoryOrchestratedTokenStore implements TokenStore {
       record = stored as ProviderTokenRecord;
     }
 
-    // Check expiration
-    if (record.expiresAt && record.expiresAt < Date.now()) {
+    const dropAt = recordDropAt(record);
+    if (dropAt && dropAt < Date.now()) {
       this.tokens.delete(key);
       return null;
     }
@@ -218,11 +231,12 @@ export class InMemoryOrchestratedTokenStore implements TokenStore {
   }
 
   /**
-   * Retrieve decrypted access token for a provider
+   * Retrieve decrypted access token for a provider, or null once it has expired (a record with a
+   * refresh token keeps that, to renew it)
    */
   async getAccessToken(authorizationId: string, providerId: string): Promise<string | null> {
     const record = await this.getRecord(authorizationId, providerId);
-    return record?.accessToken ?? null;
+    return record && hasLiveAccessToken(record, this.refreshSkewMs) ? record.accessToken : null;
   }
 
   /**
@@ -341,7 +355,8 @@ export class InMemoryOrchestratedTokenStore implements TokenStore {
         record = stored as ProviderTokenRecord;
       }
 
-      if (record?.expiresAt && record.expiresAt < now) {
+      const dropAt = record ? recordDropAt(record) : undefined;
+      if (dropAt && dropAt < now) {
         keysToDelete.push(key);
       }
     }

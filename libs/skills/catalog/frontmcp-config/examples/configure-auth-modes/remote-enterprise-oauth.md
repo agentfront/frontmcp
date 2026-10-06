@@ -40,8 +40,8 @@ class QueryDataTool extends ToolContext {
     // 'enterprise-idp' is providerConfig.id below (defaults to the provider host).
     const token = await this.orchestration.tryGetToken('enterprise-idp');
     if (!token) {
-      // Once the upstream token expires the user must re-authenticate
-      // (upstream auto-refresh is not yet wired).
+      // An expired upstream token is renewed with its refresh token; null means
+      // the provider refused, so the user has to sign in again.
       throw new Error('Upstream token unavailable — please re-authenticate');
     }
     // A real tool would call the warehouse API with `token`.
@@ -79,12 +79,11 @@ class Server {}
 - Configuring Redis-backed token storage for production persistence
 - `GET /oauth/authorize` redirects straight to the upstream IdP (no in-tree login page)
 - Session identity (sub/email/name) is derived from the upstream user
-- Tools read the upstream token via `this.orchestration.getToken(providerId)`
+- Tools read the upstream token via `this.orchestration.getToken(providerId)`; an expired one is renewed with the provider's refresh token (`refresh`), and the tokens follow FrontMCP's own token when the client refreshes it
 
 ## Not Yet Wired
 
 - **Dynamic Client Registration** (`providerConfig.dcrEnabled`): a pre-registered `clientId` is required.
-- **Upstream token auto-refresh**: when the upstream access token expires the user must re-authenticate (FrontMCP's own session token still refreshes via the `refresh_token` grant).
 
 ## Related
 

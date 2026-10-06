@@ -5,6 +5,7 @@ import {
   OrchestratedAuthorization,
   type OrchestratedProviderState,
   type OrchestratedTokenStore,
+  type TokenRefreshCallback,
 } from '@frontmcp/auth';
 import { GuardStorageUnavailableError, type GuardManager } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
@@ -366,7 +367,11 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     user: { sub?: string; name?: string; email?: string; picture?: string; exp?: number },
   ): Promise<void> {
     const auth = this.scope.auth as
-      | { orchestratedTokenStore?: OrchestratedTokenStore; options?: { mode?: string } }
+      | {
+          orchestratedTokenStore?: OrchestratedTokenStore;
+          options?: { mode?: string };
+          providerTokenRefresher?: () => TokenRefreshCallback | undefined;
+        }
       | undefined;
     // Only local/remote (orchestrated) modes carry an upstream token store.
     const mode = auth?.options?.mode;
@@ -393,6 +398,8 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       user: { sub: user.sub ?? 'unknown', name: user.name, email: user.email, picture: user.picture },
       expiresAt: user.exp ? user.exp * 1000 : undefined,
       tokenStore,
+      // An expired provider token is renewed with its refresh token (`refresh`).
+      onTokenRefresh: auth.providerTokenRefresher?.(),
       providers,
     });
 

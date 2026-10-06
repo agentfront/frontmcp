@@ -149,11 +149,13 @@ non-standard IdPs, override them with
 
 > **MCP client registration (upgrade note):** `requireRegisteredClients` defaults to `true` in remote mode too (it was `false` in 1.8.2 and earlier). Remote mode has no `dcr` block (no pre-registered clients) and FrontMCP's own `/oauth/register` is off in production, so a production remote server with the defaults admits only MCP clients that use a CIMD client-id URL; an unregistered plain `client_id` gets a 400 `Unknown client_id` page. Migrate clients to CIMD, or set `requireRegisteredClients: false` for local development only (an unregistered client's `redirect_uri` can't be checked). FrontMCP grants only the scopes in `allowedScopes` (default: the OpenID scopes), unrelated to `scopes` (what it asks the IdP for).
 
+Upstream tokens are renewed with the provider's refresh token once expired (or
+within `refresh.skewSeconds`, default 60; `refresh.enabled: false` turns it off),
+and move to the new token when the client refreshes FrontMCP's own.
+
 **Deferred (not yet wired):** upstream **Dynamic Client Registration**
 (`providerConfig.dcrEnabled` / `registrationEndpoint`) — a pre-registered
-`clientId` is required; and upstream **token auto-refresh** — once the upstream
-access token expires the user must re-authenticate (FrontMCP's own session token
-still refreshes via the `refresh_token` grant).
+`clientId` is required.
 
 **Use when:** Enterprise deployments delegating user authentication to a single
 centralized IdP that may not support DCR, while keeping FrontMCP-issued sessions,
@@ -161,17 +163,17 @@ upstream-token access in tools, and an optional consent layer.
 
 ## Comparison Table
 
-| Feature                  | Public        | Static               | Transparent     | Local                           | Remote                            |
-| ------------------------ | ------------- | -------------------- | --------------- | ------------------------------- | --------------------------------- |
-| Token issuance           | Anonymous JWT | None (opaque secret) | None (upstream) | Self-signed (HS256)             | Self-signed (HS256)               |
-| Signing                  | HS256 secret  | n/a                  | Upstream JWKS   | HS256 secret (`JWT_SECRET`)     | HS256 secret (`JWT_SECRET`)       |
-| Session-token refresh    | No            | No                   | No              | Yes                             | Yes                               |
-| Upstream-token refresh   | n/a           | n/a                  | n/a             | On-demand (when wired)          | Not yet wired (re-auth on expiry) |
-| Identity source          | Anonymous     | Configured token     | Upstream token  | Login form / `authenticate()`   | Upstream IdP user                 |
-| PKCE support             | No            | No                   | No              | Yes                             | Yes                               |
-| Token persistence        | n/a           | n/a                  | n/a             | memory / sqlite / redis         | memory / sqlite / redis           |
-| Consent (tool selection) | No            | No                   | No              | Optional (screen + enforcement) | Optional (screen + enforcement)   |
-| Upstream OAuth providers | No            | No                   | No              | 0..N (declared `providers[]`)   | Exactly 1 (mandatory)             |
+| Feature                  | Public        | Static               | Transparent     | Local                           | Remote                          |
+| ------------------------ | ------------- | -------------------- | --------------- | ------------------------------- | ------------------------------- |
+| Token issuance           | Anonymous JWT | None (opaque secret) | None (upstream) | Self-signed (HS256)             | Self-signed (HS256)             |
+| Signing                  | HS256 secret  | n/a                  | Upstream JWKS   | HS256 secret (`JWT_SECRET`)     | HS256 secret (`JWT_SECRET`)     |
+| Session-token refresh    | No            | No                   | No              | Yes                             | Yes                             |
+| Upstream-token refresh   | n/a           | n/a                  | n/a             | On demand (`refresh`)           | On demand (`refresh`)           |
+| Identity source          | Anonymous     | Configured token     | Upstream token  | Login form / `authenticate()`   | Upstream IdP user               |
+| PKCE support             | No            | No                   | No              | Yes                             | Yes                             |
+| Token persistence        | n/a           | n/a                  | n/a             | memory / sqlite / redis         | memory / sqlite / redis         |
+| Consent (tool selection) | No            | No                   | No              | Optional (screen + enforcement) | Optional (screen + enforcement) |
+| Upstream OAuth providers | No            | No                   | No              | 0..N (declared `providers[]`)   | Exactly 1 (mandatory)           |
 
 > "Remote" still issues its own HS256 session token to the MCP client; it delegates **user authentication** to a single upstream IdP rather than delegating token signing. `GET /oauth/authorize` redirects straight to that IdP (no in-tree login page), and tools read the upstream token via `this.orchestration.getToken(id)`.
 

@@ -358,7 +358,7 @@ accessor:
 class Whoami extends ToolContext {
   async execute() {
     const token = await this.orchestration.tryGetToken('idp');
-    if (!token) return { error: 'Re-authenticate' }; // upstream auto-refresh not yet wired
+    if (!token) return { error: 'Re-authenticate' }; // the provider refused to renew it
     return await (
       await this.fetch('https://auth.example.com/userinfo', {
         headers: { Authorization: `Bearer ${token}` },
@@ -368,11 +368,14 @@ class Whoami extends ToolContext {
 }
 ```
 
+An expired upstream token (or one within `refresh.skewSeconds`, default 60, of
+expiry) is renewed with the provider's refresh token when a tool reads it;
+`refresh: { enabled: false }` turns that off. When the client refreshes FrontMCP's
+own token at `/oauth/token`, the upstream tokens move to the new token.
+
 **Deferred (not yet wired):** upstream **Dynamic Client Registration**
 (`providerConfig.dcrEnabled` / `registrationEndpoint`) — provide a pre-registered
-`clientId`; and upstream **token auto-refresh** — once the upstream access token
-expires the user must re-authenticate (FrontMCP's own session token still
-refreshes via the `refresh_token` grant).
+`clientId`.
 
 ## OAuth Local Dev Flow
 

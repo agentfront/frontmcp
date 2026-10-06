@@ -23,6 +23,8 @@ import {
   decryptRecord,
   deriveKeyForRecord,
   encryptRecord,
+  hasLiveAccessToken,
+  recordDropAt,
   type ProviderTokenRecord,
 } from './orchestrated-token.crypto';
 
@@ -44,12 +46,20 @@ export interface StorageOrchestratedTokenStoreOptions {
    * @default 'otok'
    */
   namespace?: string;
+
+  /**
+   * How long before its expiry an access token that can be refreshed stops being returned, so the
+   * caller renews it before it lapses (`refresh.skewSeconds`).
+   * @default 0
+   */
+  refreshSkewMs?: number;
 }
 
 export class StorageOrchestratedTokenStore implements TokenStore {
   private readonly storage: StorageAdapter | NamespacedStorage;
   private readonly encryptionKey?: Uint8Array;
   private readonly defaultTtlMs?: number;
+  private readonly refreshSkewMs: number;
   private readonly namespace: string;
   private readonly storageIsNamespaced: boolean;
 
@@ -59,6 +69,7 @@ export class StorageOrchestratedTokenStore implements TokenStore {
   constructor(storage: StorageAdapter | NamespacedStorage, options: StorageOrchestratedTokenStoreOptions = {}) {
     this.encryptionKey = options.encryptionKey;
     this.defaultTtlMs = options.defaultTtlMs;
+    this.refreshSkewMs = options.refreshSkewMs ?? 0;
     this.namespace = options.namespace ?? 'otok';
     this.storageIsNamespaced = this.isNamespacedStorage(storage);
     this.storage = this.storageIsNamespaced ? (storage as NamespacedStorage).namespace(this.namespace) : storage;
@@ -70,7 +81,7 @@ export class StorageOrchestratedTokenStore implements TokenStore {
 
   async getAccessToken(authorizationId: string, providerId: string): Promise<string | null> {
     const record = await this.getRecord(authorizationId, providerId);
-    return record?.accessToken ?? null;
+    return record && hasLiveAccessToken(record, this.refreshSkewMs) ? record.accessToken : null;
   }
 
   async getRefreshToken(authorizationId: string, providerId: string): Promise<string | null> {
@@ -95,7 +106,7 @@ export class StorageOrchestratedTokenStore implements TokenStore {
 
     const value = this.encryptionKey ? encryptRecord(this.keyFor(compositeKey), record) : JSON.stringify(record);
 
-    await this.storage.set(this.storageKey(compositeKey), value, this.ttlOptions(record.expiresAt));
+    await this.storage.set(this.storageKey(compositeKey), value, this.ttlOptions(recordDropAt(record)));
   }
 
   async deleteTokens(authorizationId: string, providerId: string): Promise<void> {
@@ -149,16 +160,16 @@ export class StorageOrchestratedTokenStore implements TokenStore {
           continue; // skip corrupted records
         }
         const value = encryptRecord(this.keyFor(newComposite), record);
-        await this.storage.set(this.storageKey(newComposite), value, this.ttlOptions(record.expiresAt));
+        await this.storage.set(this.storageKey(newComposite), value, this.ttlOptions(recordDropAt(record)));
       } else {
         // Plaintext: copy verbatim (preserve TTL where parseable).
-        let expiresAt: number | undefined;
+        let dropAt: number | undefined;
         try {
-          expiresAt = (JSON.parse(stored) as ProviderTokenRecord).expiresAt;
+          dropAt = recordDropAt(JSON.parse(stored) as ProviderTokenRecord);
         } catch {
-          expiresAt = undefined;
+          dropAt = undefined;
         }
-        await this.storage.set(this.storageKey(newComposite), stored, this.ttlOptions(expiresAt));
+        await this.storage.set(this.storageKey(newComposite), stored, this.ttlOptions(dropAt));
       }
 
       await this.storage.delete(this.storageKey(oldComposite));
@@ -209,7 +220,8 @@ export class StorageOrchestratedTokenStore implements TokenStore {
     }
 
     // Defensive expiry check (TTL backends usually handle this themselves).
-    if (record.expiresAt && record.expiresAt < Date.now()) {
+    const dropAt = recordDropAt(record);
+    if (dropAt && dropAt < Date.now()) {
       await this.storage.delete(this.storageKey(compositeKey));
       return null;
     }

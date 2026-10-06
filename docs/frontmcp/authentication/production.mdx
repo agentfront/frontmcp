@@ -63,13 +63,13 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
   </Step>
 
   <Step title="Enable Refresh Token Flow">
-    For `local` and `remote` modes, opt into automatic token refresh.
+    For `local` and `remote` modes, upstream provider tokens (`this.orchestration.getToken`) are renewed with the provider's refresh token when they expire, `skewSeconds` early. It is on by default; `enabled: false` turns it off.
 
     ```typescript
     auth: {
       refresh: {
         enabled: true,
-        skewSeconds: 60, // refresh tokens this many seconds before expiry
+        skewSeconds: 60, // renew upstream tokens this many seconds before expiry
       },
     }
     ```
