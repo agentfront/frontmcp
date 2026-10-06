@@ -43,7 +43,7 @@ Protect your FrontMCP server with rate limiting, concurrency control, execution 
       maxRequests: 1000,
       windowMs: 60000, // 1 minute window
       partitionBy: 'global', // shared across all clients
-      // also counts /oauth/*, /.well-known/* and the skills HTTP endpoints (ip/global partitions)
+      // also counts /oauth/*, /.well-known/* and the skills HTTP endpoints (every partition but session/userId)
     },
 
     // Global concurrency limit (a tool called with this.callTool(), or by an agent during its run, runs inside its caller's slot)

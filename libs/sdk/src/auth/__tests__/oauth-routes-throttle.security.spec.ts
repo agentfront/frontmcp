@@ -71,4 +71,47 @@ describe('throttle.global on OAuth and discovery routes', () => {
     expect(second.status).toBe(429);
     expect(second.headers.get('retry-after')).toBeTruthy();
   });
+
+  it('counts a function partition too, resolved with the caller IP and no verified identity', async () => {
+    const partitionInputs: Array<{ userId?: string }> = [];
+    const server = await createTestFetchServer({
+      info: { name: 'desk', version: '1.0.0' },
+      apps: [DeskApp],
+      throttle: {
+        enabled: true,
+        global: {
+          maxRequests: 1,
+          windowMs: 60_000,
+          partitionBy: (partitionContext) => {
+            partitionInputs.push({ userId: partitionContext.userId });
+            return `ip:${partitionContext.clientIp ?? 'unknown'}`;
+          },
+        },
+      },
+    });
+    servers.push(server);
+
+    const first = await server.handler(new Request(`${ORIGIN}/.well-known/oauth-protected-resource`));
+    const second = await server.handler(new Request(`${ORIGIN}/.well-known/oauth-protected-resource`));
+
+    expect(first.status).not.toBe(429);
+    expect(second.status).toBe(429);
+    expect(partitionInputs.length).toBeGreaterThan(0);
+    expect(partitionInputs.every((input) => input.userId === undefined)).toBe(true);
+  });
+
+  it('still leaves a session or user partition to the MCP endpoint, where the caller is verified', async () => {
+    const server = await createTestFetchServer({
+      info: { name: 'desk', version: '1.0.0' },
+      apps: [DeskApp],
+      throttle: { enabled: true, global: { maxRequests: 1, windowMs: 60_000, partitionBy: 'userId' } },
+    });
+    servers.push(server);
+
+    const first = await server.handler(new Request(`${ORIGIN}/.well-known/oauth-protected-resource`));
+    const second = await server.handler(new Request(`${ORIGIN}/.well-known/oauth-protected-resource`));
+
+    expect(first.status).not.toBe(429);
+    expect(second.status).not.toBe(429);
+  });
 });

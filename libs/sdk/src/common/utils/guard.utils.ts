@@ -87,8 +87,9 @@ export function partitionsByIdentity(partitionBy: PartitionKey | undefined): boo
 
 /**
  * `throttle.global` for the HTTP flows that serve no MCP request (OAuth, discovery, skills), from the
- * `acquireQuota` stage each starts with. They run before any caller is verified, so a limit keyed
- * on the caller's identity does not count them; any other limit does, and answers 429 once reached.
+ * `acquireQuota` stage each starts with. They run before any caller is verified, so a `'session'` or
+ * `'userId'` limit does not count them; any other limit does, a function partition resolved with the
+ * request's IP and no verified identity, and answers 429 once reached.
  */
 export async function enforceGlobalRateLimit(
   scope: Pick<ScopeEntry, 'rateLimitManager'>,
@@ -96,7 +97,8 @@ export async function enforceGlobalRateLimit(
 ): Promise<void> {
   const manager = scope.rateLimitManager;
   const globalConfig = manager?.config?.global;
-  if (!manager || !globalConfig || partitionsByIdentity(globalConfig.partitionBy)) return;
+  const partitionBy = globalConfig?.partitionBy;
+  if (!manager || !globalConfig || partitionBy === 'session' || partitionBy === 'userId') return;
   let result: Awaited<ReturnType<typeof manager.checkGlobalRateLimit>>;
   try {
     result = await manager.checkGlobalRateLimit(buildPartitionContext(context));

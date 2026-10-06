@@ -147,7 +147,7 @@ A `'session'` bucket is only ever a session the server verified: a `mcp-session-
 
 `throttle.global` partitioned by `'ip'` or `'global'` is checked before authentication. Partitioned by `'session'`, `'userId'` or a function, it is checked right after authentication, on the verified identity.
 
-The OAuth endpoints (`/oauth/*`), the discovery documents (`/.well-known/*`) and the skills HTTP endpoints count against `throttle.global` too, in the `acquireQuota` stage each of their flows runs after `checkIpFilter`, when it is partitioned by `'ip'` or `'global'` (they run before any caller is verified). Over the limit they answer 429 with `Retry-After`. Up to 1.9.1 they were not counted.
+The OAuth endpoints (`/oauth/*`), the discovery documents (`/.well-known/*`) and the skills HTTP endpoints count against `throttle.global` too, in the `acquireQuota` stage each of their flows runs after `checkIpFilter`, unless it is partitioned by `'session'` or `'userId'` (they run before any caller is verified, so a function partition is resolved with the request's IP and no verified identity). Over the limit they answer 429 with `Retry-After`. Up to 1.9.1 they were not counted.
 
 **Custom partition key example:**
 
