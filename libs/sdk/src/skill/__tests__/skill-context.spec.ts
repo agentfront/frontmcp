@@ -18,7 +18,11 @@ class ReleaseNotesSkill extends SkillContext {
 class TriageSkill extends SkillContext {
   override async build(): Promise<SkillContent> {
     const content = await super.build();
-    return { ...content, instructions: `${content.instructions}\n\nAdded by build().` };
+    return {
+      ...content,
+      description: 'Triage tickets by severity',
+      instructions: `${content.instructions}\n\nAdded by build().`,
+    };
   }
 }
 
@@ -60,6 +64,25 @@ describe('SkillContext overrides', () => {
 
   it('serves the decorator instructions when nothing is overridden', async () => {
     await expect(instructionsOf('plain')).resolves.toBe('Plain steps.');
+  });
+
+  it('lists the description an overridden build() returns in skill://index.json, as SKILL.md has it', async () => {
+    const index = await client.readResource('skill://index.json');
+    const document = JSON.parse((index.contents[0] as { text: string }).text) as {
+      skills: Array<{ name?: string; description: string }>;
+    };
+    const skillMd = await client.readResource('skill://triage/SKILL.md');
+
+    expect(document.skills.find((entry) => entry.name === 'triage')?.description).toBe('Triage tickets by severity');
+    expect((skillMd.contents[0] as { text: string }).text).toContain('description: Triage tickets by severity');
+  });
+
+  it('describes the SKILL.md resource with that description in resources/list', async () => {
+    const { resources } = await client.listResources();
+
+    expect(resources.find((resource) => resource.uri === 'skill://triage/SKILL.md')?.description).toBe(
+      'Triage tickets by severity',
+    );
   });
 });
 

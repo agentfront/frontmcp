@@ -74,6 +74,11 @@ build(): Promise<SkillContent>
 Default behaviour: assembles the content from the decorator metadata, with the
 instructions `loadInstructions()` returns (your override included).
 
+A `description` your override returns is the skill's description in `SKILL.md`,
+`skills/load`, `skill://index.json` and the `SKILL.md` resource of
+`resources/list`. Up to 1.9.2 `skill://index.json` and `resources/list` kept the
+decorator's.
+
 ```typescript
 @Skill({ name: 'triage', description: 'Triage incoming tickets', instructions: 'Sort tickets by severity.' })
 class TriageSkill extends SkillContext {
