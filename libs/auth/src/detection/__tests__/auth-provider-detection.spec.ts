@@ -236,6 +236,8 @@ describe('auth-provider-detection', () => {
       ]);
       expect(result.validationErrors[0]).toContain('app1');
       expect(result.validationErrors[0]).toContain('standalone: true');
+      expect(result.validationErrors[0]).toContain('incrementalAuth');
+      expect(result.validationErrors[0]).not.toContain('checks the app');
     });
 
     it('refuses a protected app under a static server too, and when the server names no auth', () => {
