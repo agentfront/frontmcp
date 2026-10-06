@@ -383,6 +383,22 @@ export class ExtAppsAdapter extends BaseAdapter {
       this._handleNotification(data as JsonRpcNotification);
       return;
     }
+
+    // Handle request from host
+    if ('method' in data && 'id' in data) {
+      this._handleHostRequest(data as JsonRpcRequest, event.origin);
+    }
+  }
+
+  /**
+   * Handle a JSON-RPC request from the host. `ui/resource-teardown` means the host is about to
+   * unmount the widget: emit `bridge:teardown` for cleanup, then answer `{}` to the origin it came from.
+   */
+  private _handleHostRequest(request: JsonRpcRequest, origin: string): void {
+    if (request.method !== 'ui/resource-teardown') return;
+
+    this._emitBridgeEvent('bridge:teardown', {});
+    this._postMessage({ jsonrpc: '2.0', id: request.id, result: {} }, origin);
   }
 
   /**

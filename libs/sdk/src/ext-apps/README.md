@@ -106,6 +106,23 @@ widgets built before the bridges sent the spec names keep sending.
 The bridges report `ui/notifications/tool-cancelled` (`{ reason? }`) as a `tool:cancelled` event, and
 still accept the earlier `ui/notifications/cancelled`.
 
+### Host → Widget Requests
+
+| Method                 | Purpose                                 |
+| ---------------------- | --------------------------------------- |
+| `ui/resource-teardown` | The host is about to unmount the widget |
+
+The bridges answer a `ui/resource-teardown` request (params `{}`) only when it comes from the
+trusted host origin: they fire a `bridge:teardown` event on `window`, then reply with the result `{}`. Clean up synchronously in a listener; the
+host may unmount the widget once the reply arrives. The host sends it after it agrees to a
+widget's `ui/notifications/request-teardown`, or on its own.
+
+```javascript
+window.addEventListener('bridge:teardown', () => {
+  clearInterval(pollTimer);
+});
+```
+
 ## Files in this folder
 
 ### Core Files

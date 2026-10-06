@@ -436,6 +436,7 @@ export type BridgeEventType =
   | 'bridge:ready'
   | 'bridge:error'
   | 'bridge:adapter-changed'
+  | 'bridge:teardown'
   | 'context:change'
   | 'tool:input'
   | 'tool:input-partial'
@@ -449,6 +450,8 @@ export interface BridgeEventPayloads {
   'bridge:ready': { adapter: string };
   'bridge:error': { error: Error; adapter?: string };
   'bridge:adapter-changed': { from?: string; to: string };
+  /** The host is about to unmount the widget (MCP Apps `ui/resource-teardown`); clean up synchronously. */
+  'bridge:teardown': Record<string, never>;
   'context:change': Partial<HostContext>;
   'tool:input': { arguments: Record<string, unknown> };
   'tool:input-partial': { arguments: Record<string, unknown> };

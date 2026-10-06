@@ -341,6 +341,41 @@ describe('ExtAppsAdapter', () => {
         expect(sent('ui/close')).toEqual([]);
       });
 
+      describe('ui/resource-teardown', () => {
+        const teardownRequest = { jsonrpc: '2.0', id: 900, method: 'ui/resource-teardown', params: {} };
+
+        function receive(origin: string): void {
+          // @ts-expect-error - accessing private method for testing
+          adapterWithConfig._handleMessage({ data: teardownRequest, origin } as MessageEvent);
+        }
+
+        it('fires bridge:teardown, then answers the host with an empty result', () => {
+          connectTo({});
+          const answeredBeforeCleanup: number[] = [];
+          const listener = () => answeredBeforeCleanup.push(postMessage.mock.calls.length);
+          window.addEventListener('bridge:teardown', listener);
+
+          receive(HOST_ORIGIN);
+          window.removeEventListener('bridge:teardown', listener);
+
+          expect(answeredBeforeCleanup).toEqual([0]);
+          expect(postMessage.mock.calls).toEqual([[{ jsonrpc: '2.0', id: 900, result: {} }, HOST_ORIGIN]]);
+        });
+
+        it('ignores a teardown request from an origin it does not trust', () => {
+          connectTo({});
+          const teardowns: Event[] = [];
+          const listener = (event: Event) => teardowns.push(event);
+          window.addEventListener('bridge:teardown', listener);
+
+          receive('https://other.example');
+          window.removeEventListener('bridge:teardown', listener);
+
+          expect(teardowns).toEqual([]);
+          expect(postMessage).not.toHaveBeenCalled();
+        });
+      });
+
       it.each(['ui/notifications/tool-cancelled', 'ui/notifications/cancelled'])(
         'reports a %s notification as a tool:cancelled event with its reason',
         (method) => {

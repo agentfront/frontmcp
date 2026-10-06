@@ -4,9 +4,10 @@
 /**
  * The requests a widget sends an MCP Apps host use the spec's method names and params:
  * `ui/open-link`, `ui/update-model-context`, `ui/notifications/request-teardown` and the standard
- * MCP `notifications/message`; and the bridge hears the host's `ui/notifications/tool-cancelled`.
+ * MCP `notifications/message`; and the bridge hears the host's `ui/notifications/tool-cancelled`
+ * and answers its `ui/resource-teardown`.
  */
-import { createBridgeFrame, type BridgeFrame } from './bridge-frame';
+import { createBridgeFrame, HOST_ORIGIN, type BridgeFrame } from './bridge-frame';
 
 describe('bridge requests to an MCP Apps host', () => {
   let frame: BridgeFrame | undefined;
@@ -107,6 +108,39 @@ describe('bridge requests to an MCP Apps host', () => {
       expect(reasons).toEqual([{ reason: 'user action' }]);
     },
   );
+
+  describe('ui/resource-teardown', () => {
+    function teardownRequest(origin: string): void {
+      const data = { jsonrpc: '2.0', id: 900, method: 'ui/resource-teardown', params: {} };
+      frame?.win.dispatchEvent(new frame.win.MessageEvent('message', { data, origin }));
+    }
+
+    function teardownAnswers(): unknown[][] {
+      return jest.mocked(window.postMessage).mock.calls.filter(([message]) => (message as { id?: number }).id === 900);
+    }
+
+    it('fires bridge:teardown, then answers the host with an empty result', async () => {
+      frame = await connect({});
+      const answeredBeforeCleanup: number[] = [];
+      frame.win.addEventListener('bridge:teardown', () => answeredBeforeCleanup.push(teardownAnswers().length));
+
+      teardownRequest(HOST_ORIGIN);
+
+      expect(answeredBeforeCleanup).toEqual([0]);
+      expect(teardownAnswers()).toEqual([[{ jsonrpc: '2.0', id: 900, result: {} }, HOST_ORIGIN]]);
+    });
+
+    it('ignores a teardown request from an origin it does not trust', async () => {
+      frame = await connect({});
+      const teardowns: Event[] = [];
+      frame.win.addEventListener('bridge:teardown', (event) => teardowns.push(event));
+
+      teardownRequest('https://other.example');
+
+      expect(teardowns).toEqual([]);
+      expect(teardownAnswers()).toEqual([]);
+    });
+  });
 
   it('sends none of the earlier method names', async () => {
     frame = await connect({ openLinks: {}, updateModelContext: { text: {} }, logging: {} });

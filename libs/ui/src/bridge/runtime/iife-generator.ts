@@ -491,7 +491,18 @@ var ExtAppsAdapter = {
 
     if ('method' in data && !('id' in data)) {
       this.handleNotification(context, data);
+      return;
     }
+
+    if ('method' in data && 'id' in data) {
+      this.handleRequest(context, data, event.origin);
+    }
+  },
+  handleRequest: function(context, request, origin) {
+    // ui/resource-teardown: the host is about to unmount the view; reply once listeners have cleaned up.
+    if (request.method !== 'ui/resource-teardown') return;
+    window.dispatchEvent(new CustomEvent('bridge:teardown', { detail: {} }));
+    window.parent.postMessage({ jsonrpc: '2.0', id: request.id, result: {} }, origin);
   },
   handleNotification: function(context, notification) {
     var params = notification.params || {};
