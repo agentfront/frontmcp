@@ -1,7 +1,7 @@
-import { readJson, type Tree } from '@nx/devkit';
+import { readJson, readNxJson, updateNxJson, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
 
-import { getEsbuildVersion, getFrontmcpVersion } from '../../utils/versions';
+import { getEsbuildVersion, getFrontmcpVersion, getNxVersion } from '../../utils/versions';
 import { uiComponentGenerator } from '../ui-component/ui-component';
 import { uiPageGenerator } from '../ui-page/ui-page';
 import { uiShellGenerator } from '../ui-shell/ui-shell';
@@ -130,6 +130,50 @@ describe('ensureUiPackage', () => {
       expect(pkg.devDependencies.esbuild).toBe(getEsbuildVersion());
       expect(pkg.devDependencies['@nx/esbuild']).toBe('22.0.0');
       expect(pkg.dependencies.react).toBe('^18.3.0');
+    });
+  });
+
+  describe('in an Nx TypeScript-solution workspace (#768)', () => {
+    it('skips the type check of build-esm, which runs it without composite (TS5069)', () => {
+      ensureUiPackage(tree, { packageRoot: 'ui/shells', projectName: 'ui-shells', kind: 'shell' });
+
+      const { targets } = readJson(tree, 'ui/shells/project.json');
+      expect(targets['build-esm'].options.skipTypeCheck).toBe(true);
+      expect(targets['build-cjs'].options.skipTypeCheck).toBeUndefined();
+    });
+
+    it('adds a test target that runs the generated jest config when no plugin infers one', () => {
+      ensureUiPackage(tree, { packageRoot: 'ui/shells', projectName: 'ui-shells', kind: 'shell' });
+
+      expect(readJson(tree, 'ui/shells/project.json').targets.test).toEqual({
+        executor: 'nx:run-commands',
+        cache: true,
+        options: { command: 'jest --config jest.config.cjs', cwd: 'ui/shells' },
+      });
+      expect(readJson(tree, 'package.json').devDependencies['@swc/jest']).toBeDefined();
+    });
+
+    it('leaves the test target to @nx/jest/plugin when the workspace registers it', () => {
+      const nxJson = readNxJson(tree) ?? {};
+      updateNxJson(tree, { ...nxJson, plugins: [{ plugin: '@nx/jest/plugin', options: { targetName: 'test' } }] });
+
+      ensureUiPackage(tree, { packageRoot: 'ui/shells', projectName: 'ui-shells', kind: 'shell' });
+
+      expect(readJson(tree, 'ui/shells/project.json').targets.test).toBeUndefined();
+    });
+
+    it("installs @nx/esbuild at the workspace's Nx version", () => {
+      tree.write('package.json', JSON.stringify({ devDependencies: { nx: '23.2.0' } }));
+
+      ensureUiPackage(tree, { packageRoot: 'ui/shells', projectName: 'ui-shells', kind: 'shell' });
+
+      expect(readJson(tree, 'package.json').devDependencies['@nx/esbuild']).toBe('23.2.0');
+    });
+
+    it('falls back to the plugin Nx version when the workspace declares none', () => {
+      ensureUiPackage(tree, { packageRoot: 'ui/shells', projectName: 'ui-shells', kind: 'shell' });
+
+      expect(readJson(tree, 'package.json').devDependencies['@nx/esbuild']).toBe(getNxVersion());
     });
   });
 

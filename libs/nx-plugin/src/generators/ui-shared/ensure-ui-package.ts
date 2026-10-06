@@ -1,8 +1,21 @@
-import { offsetFromRoot, readJson, runTasksInSerial, writeJson, type GeneratorCallback, type Tree } from '@nx/devkit';
+import {
+  offsetFromRoot,
+  readJson,
+  readNxJson,
+  runTasksInSerial,
+  writeJson,
+  type GeneratorCallback,
+  type Tree,
+} from '@nx/devkit';
 
 import { addFrontmcpDependencies } from '../../utils/add-dependencies.js';
 import { getModuleResolution } from '../../utils/project-paths.js';
-import { getFrontmcpVersion, getUiBuildDevDependencies } from '../../utils/versions.js';
+import {
+  getFrontmcpVersion,
+  getJestDevDependencies,
+  getNxVersion,
+  getUiBuildDevDependencies,
+} from '../../utils/versions.js';
 
 export interface EnsureUiPackageOptions {
   /** e.g. 'ui/components' */
@@ -29,6 +42,29 @@ const REACT_DEV_DEPENDENCIES: Record<string, string> = {
   'jest-environment-jsdom': '^30.0.2',
 };
 
+function hasJestPlugin(tree: Tree): boolean {
+  const plugins = readNxJson(tree)?.plugins ?? [];
+  return plugins.some((entry) => (typeof entry === 'string' ? entry : entry.plugin) === '@nx/jest/plugin');
+}
+
+/** The Nx version the workspace runs, so `@nx/*` packages added here match it. */
+function workspaceNxVersion(tree: Tree): string {
+  if (!tree.exists('package.json')) return getNxVersion();
+  const { dependencies, devDependencies } = readJson<{
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  }>(tree, 'package.json');
+  return devDependencies?.['nx'] ?? dependencies?.['nx'] ?? getNxVersion();
+}
+
+function testTarget(packageRoot: string): Record<string, unknown> {
+  return {
+    executor: 'nx:run-commands',
+    cache: true,
+    options: { command: 'jest --config jest.config.cjs', cwd: packageRoot },
+  };
+}
+
 function buildTargets(packageRoot: string): Record<string, unknown> {
   const common = {
     main: `${packageRoot}/src/index.ts`,
@@ -53,6 +89,8 @@ function buildTargets(packageRoot: string): Record<string, unknown> {
         outputPath: `dist/${packageRoot}/esm`,
         format: ['esm'],
         declaration: false,
+        // build-cjs type-checks the same sources; a noEmit check here fails with TS5069 in TS-solution workspaces.
+        skipTypeCheck: true,
         esbuildOptions: { outExtension: { '.js': '.mjs' } },
       },
     },
@@ -88,7 +126,11 @@ export function ensureUiPackage(tree: Tree, options: EnsureUiPackageOptions): Ge
       sourceRoot: `${packageRoot}/src`,
       projectType: 'library',
       tags: [],
-      targets: buildTargets(packageRoot),
+      targets: {
+        ...buildTargets(packageRoot),
+        // A workspace without @nx/jest/plugin (e.g. `create-nx-workspace --preset=ts`) infers no test target.
+        ...(!hasJestPlugin(tree) && { test: testTarget(packageRoot) }),
+      },
     });
     writeJson(tree, `${packageRoot}/tsconfig.json`, {
       extends: `${offset}tsconfig.base.json`,
@@ -126,7 +168,12 @@ export function ensureUiPackage(tree: Tree, options: EnsureUiPackageOptions): Ge
   }
 
   const range = `~${getFrontmcpVersion()}`;
-  const { esbuild, ...buildDevDependencies } = getUiBuildDevDependencies();
+  const { esbuild, ...uiBuildDevDependencies } = getUiBuildDevDependencies();
+  const buildDevDependencies = {
+    ...uiBuildDevDependencies,
+    '@nx/esbuild': workspaceNxVersion(tree),
+    ...getJestDevDependencies(),
+  };
   const installUiDependencies =
     kind === 'react'
       ? addFrontmcpDependencies(
