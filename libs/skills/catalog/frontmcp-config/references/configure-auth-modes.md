@@ -20,7 +20,7 @@ auth: {
 
 **Use when:** Development, internal tools, public APIs.
 
-Anonymous callers hold `anonymousScopes`. With `publicAccess`, they list and call only the named tools/prompts (others answer `PUBLIC_ACCESS_DENIED`, -32003/403), within `rateLimit` (default 60) calls a minute per IP; callers with a verified token are not restricted.
+Anonymous callers hold `anonymousScopes`. With `publicAccess`, they list, call and complete (`completion/complete`) only the named tools/prompts (others answer `PUBLIC_ACCESS_DENIED`, -32003/403), within `rateLimit` (default 60) calls a minute per IP; callers with a verified token are not restricted.
 
 A JWT bearer is still verified against this instance's own HS256 secret. A bearer that is **not** a JWT is ignored and the request is served anonymously — public mode has no issuer or JWKS to verify it against, and a credentialed request must never fare worse than an anonymous one. For a first-class shared secret, use static mode below.
 

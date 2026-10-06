@@ -104,6 +104,17 @@ describe('publicAccess on a public server', () => {
     expect(JSON.stringify(allowed.result)).not.toContain('not available');
   });
 
+  it('refuses an anonymous completion for a prompt it does not name', async () => {
+    const send = await session(await serverWith({ mode: 'public', publicAccess: { tools: ['search'], prompts: [] } }));
+
+    const refused = await send('completion/complete', {
+      ref: { type: 'ref/prompt', name: 'summarize' },
+      argument: { name: 'topic', value: 'b' },
+    });
+
+    expect(JSON.stringify(refused)).toContain('not available to anonymous callers');
+  });
+
   it('counts anonymous calls against rateLimit', async () => {
     const send = await session(await serverWith({ mode: 'public', publicAccess: { rateLimit: 2 } }));
 
