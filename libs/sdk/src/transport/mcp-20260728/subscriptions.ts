@@ -17,6 +17,7 @@
  */
 import { MCP_20260728_META, SUBSCRIPTIONS_ACKNOWLEDGED_METHOD, type SubscriptionFilter } from '@frontmcp/protocol';
 
+import { CHANNEL_NOTIFICATION_METHOD } from '../../channel/channel-notification.service';
 import { type Scope } from '../../scope';
 
 /** How often a bare SSE comment is emitted to hold the connection open. */
@@ -28,6 +29,11 @@ export interface SubscriptionStreamOptions {
   subscriptionId: string | number;
   /** Notification types the client asked for. */
   requested: SubscriptionFilter;
+  /**
+   * The channels whose `notifications/claude/channel` the stream carries: those the `channels:list`
+   * flow returns when the request's client capabilities include `experimental['claude/channel']`.
+   */
+  channels?: readonly string[];
   /** Fires when the client disconnects so the registry listeners are released. */
   signal?: AbortSignal;
 }
@@ -88,7 +94,7 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
   acknowledged: SubscriptionFilter;
   stream: AsyncIterable<Uint8Array>;
 } {
-  const { scope, subscriptionId, requested, signal } = options;
+  const { scope, subscriptionId, requested, channels, signal } = options;
   const acknowledged = resolveAcknowledgedFilter(scope, requested);
 
   const queue: QueuedNotification[] = [];
@@ -127,6 +133,14 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
           push('notifications/resources/list_changed');
         }
       }),
+    );
+  }
+
+  if (channels && channels.length > 0 && scope.channelNotifications) {
+    unsubscribes.push(
+      scope.channelNotifications.listen(channels, (content, meta) =>
+        push(CHANNEL_NOTIFICATION_METHOD, { content, meta }),
+      ),
     );
   }
 

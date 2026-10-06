@@ -152,7 +152,7 @@ describe('DirectClientImpl', () => {
       const mockScope = createMockScope();
       await DirectClientImpl.create(mockScope as Scope);
 
-      expect(MockClient).toHaveBeenCalledWith({ name: 'mcp-client', version: '1.0.0' }, undefined);
+      expect(MockClient).toHaveBeenCalledWith({ name: 'mcp-client', version: '1.0.0' }, { capabilities: {} });
     });
 
     it('should use custom clientInfo when provided', async () => {
@@ -161,7 +161,18 @@ describe('DirectClientImpl', () => {
         clientInfo: { name: 'custom-agent', version: '2.0.0' },
       });
 
-      expect(MockClient).toHaveBeenCalledWith({ name: 'custom-agent', version: '2.0.0' }, undefined);
+      expect(MockClient).toHaveBeenCalledWith({ name: 'custom-agent', version: '2.0.0' }, { capabilities: {} });
+    });
+
+    it('declares the elicitation capability when an onElicitation handler is passed', async () => {
+      const mockScope = createMockScope();
+      await DirectClientImpl.create(mockScope as Scope, {
+        onElicitation: async () => ({ action: 'decline' }),
+      });
+
+      expect(MockClient).toHaveBeenCalledWith(expect.anything(), {
+        capabilities: { elicitation: { form: {}, url: {} } },
+      });
     });
 
     it('should generate session ID when not provided', async () => {
@@ -963,7 +974,7 @@ describe('DirectClientImpl', () => {
     it('setLogLevel should call MCP client with level', async () => {
       await client.setLogLevel('debug');
 
-      expect(mockMcpClient.setLoggingLevel).toHaveBeenCalledWith({ level: 'debug' });
+      expect(mockMcpClient.setLoggingLevel).toHaveBeenCalledWith('debug');
     });
 
     it('setLogLevel should handle various log levels', async () => {
@@ -972,7 +983,7 @@ describe('DirectClientImpl', () => {
       for (const level of levels) {
         mockMcpClient.setLoggingLevel.mockClear();
         await client.setLogLevel(level);
-        expect(mockMcpClient.setLoggingLevel).toHaveBeenCalledWith({ level });
+        expect(mockMcpClient.setLoggingLevel).toHaveBeenCalledWith(level);
       }
     });
   });

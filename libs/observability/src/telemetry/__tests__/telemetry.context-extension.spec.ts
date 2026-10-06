@@ -86,9 +86,9 @@ describe('this.telemetry context extension', () => {
     expect(typeErrorsOf(__filename)).toEqual([]);
   }, 60_000);
 
-  it('installs the telemetry getter on every prototype the augmentation declares it on', () => {
+  it('installs the telemetry getter on ExecutionContextBase, which PromptContext inherits', () => {
     expect(Object.getOwnPropertyDescriptor(ExecutionContextBase.prototype, 'telemetry')?.get).toBeInstanceOf(Function);
-    expect(Object.getOwnPropertyDescriptor(PromptContext.prototype, 'telemetry')?.get).toBeInstanceOf(Function);
+    expect(PromptContext.prototype).toBeInstanceOf(ExecutionContextBase);
   });
 
   it('resolves this.telemetry to a TelemetryAccessor inside a prompt', async () => {

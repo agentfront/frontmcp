@@ -16,13 +16,20 @@ import { PLATFORM_CLIENT_INFO } from './llm-platform';
 // Using let to allow reassignment in clearScopeCache()
 let scopeCache = new WeakMap<object, Promise<Scope>>();
 
+/** How many connected clients share each cached scope. */
+const scopeClients = new WeakMap<Promise<Scope>, number>();
+
 /**
  * Get or create a scope for the given config.
  * Uses WeakMap caching to ensure singleton behavior per config object.
+ * Synchronous up to the cache lookup, so a caller can count its client before anything else runs.
  *
  * @internal
  */
-async function getScope(config: FrontMcpConfigInput, mode?: 'full' | 'cli'): Promise<Scope> {
+function getScope(
+  config: FrontMcpConfigInput,
+  mode?: 'full' | 'cli',
+): { cacheKey: object; scopePromise: Promise<Scope> } {
   // Handle @FrontMcp-decorated class (e.g., from schema-extractor loading a bundle).
   // `getDecoratorConfig` returns the parsed metadata via the SDK's stable accessor.
   let resolvedConfig = config;
@@ -66,7 +73,7 @@ async function getScope(config: FrontMcpConfigInput, mode?: 'full' | 'cli'): Pro
     scopeCache.set(cacheKey, scopePromise);
   }
 
-  return scopePromise;
+  return { cacheKey, scopePromise };
 }
 
 /**
@@ -111,8 +118,26 @@ export async function connect(
   options?: ConnectOptions & { mode?: 'full' | 'cli' },
 ): Promise<DirectClient> {
   const { DirectClientImpl } = await import('./direct-client.js');
-  const scope = await getScope(config, options?.mode);
-  return DirectClientImpl.create(scope, options);
+  // Clients of the same config share its scope, which is disposed when the last of them closes. The client is
+  // counted before any await, so another client closing meanwhile cannot dispose the scope under this one.
+  const { cacheKey, scopePromise } = getScope(config, options?.mode);
+  scopeClients.set(scopePromise, (scopeClients.get(scopePromise) ?? 0) + 1);
+  const leave = () => {
+    const remaining = (scopeClients.get(scopePromise) ?? 1) - 1;
+    scopeClients.set(scopePromise, remaining);
+    return remaining;
+  };
+  const release = async () => {
+    if (leave() > 0) return;
+    if (scopeCache.get(cacheKey) === scopePromise) scopeCache.delete(cacheKey);
+    await (await scopePromise).dispose();
+  };
+  try {
+    return await DirectClientImpl.create(await scopePromise, options, release);
+  } catch (error) {
+    leave();
+    throw error;
+  }
 }
 
 /**

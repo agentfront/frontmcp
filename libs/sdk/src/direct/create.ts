@@ -91,6 +91,8 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
     skillsConfig: config.skillsConfig,
     extApps: config.extApps,
     jobs: config.jobs,
+    output: config.output,
+    throttle: config.throttle,
   };
 }
 

@@ -8,6 +8,7 @@
 
 export {
   FetchCredentialMiddleware,
+  providerHeadersCredentials,
   isFrontMcpCredentials,
   bearerApplier,
   basicApplier,
@@ -16,6 +17,7 @@ export {
 } from './fetch-credential-middleware';
 
 export type {
+  FetchCredentialApplier,
   TokenAccessor,
   CredentialApplier,
   CredentialApplyResult,

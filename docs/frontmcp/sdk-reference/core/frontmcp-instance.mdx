@@ -69,7 +69,7 @@ Create a Web-standard `fetch` handler, `(request: Request) => Promise<Response>`
 static async createFetchHandler(options: FrontMcpConfigInput | FrontMcpConfigType): Promise<WebFetchHandler>
 ```
 
-It accepts the same config as `@FrontMcp()`. A server the startup checks refuse (an `approval` or `featureFlag` field no installed plugin enforces, `authorities` without the `authorities` option, a missing secret) rejects here, as with `createDirect()`. On an edge isolate (Cloudflare Workers, Vercel Edge, Deno) the instance is built on the first request instead, because isolates forbid timers and I/O at module evaluation: the checks the config's metadata settles still reject here, and a failed build is answered, never thrown: a configuration fault (a missing secret, a startup check, a config the schema refuses) with a `500` `{ "error": "server_misconfigured", "code", "message" }` body, anything else (a remote that refused the connection, a package that failed to load) with a `503` `{ "error": "server_unavailable", "code": "SERVER_START_FAILED" }` body and `Retry-After`. A failed build is kept until a retry delay passes (1 s, doubling up to 60 s); the first request after it builds again. Requests run through the same `http:request` flow as the Express host, with the same request context: the user agent, `x-frontmcp-*` headers, `traceparent` and the MCP 2026-07-28 `_meta` client info.
+It accepts the same config as `@FrontMcp()`. A server the startup checks refuse (an `approval` or `featureFlag` field no installed plugin enforces, `authorities` without the `authorities` option, an `authorities` rule or profile that checks nothing or names an undefined profile, a missing secret) rejects here, as with `createDirect()`. On an edge isolate (Cloudflare Workers, Vercel Edge, Deno) the instance is built on the first request instead, because isolates forbid timers and I/O at module evaluation: the checks the config's metadata settles still reject here (up to 1.9.1 an entry naming an undefined `authorities` profile was left to the first request), and a failed build is answered, never thrown: a configuration fault (a missing secret, a startup check, a config the schema refuses) with a `500` `{ "error": "server_misconfigured", "code", "message" }` body, anything else (a remote that refused the connection, a package that failed to load) with a `503` `{ "error": "server_unavailable", "code": "SERVER_START_FAILED" }` body and `Retry-After`. A failed build is kept until a retry delay passes (1 s, doubling up to 60 s); the first request after it builds again. Requests run through the same `http:request` flow as the Express host, with the same request context: the user agent, `x-frontmcp-*` headers, `traceparent` and the MCP 2026-07-28 `_meta` client info.
 
 ```typescript
 // worker entry
@@ -108,6 +108,14 @@ const result = await server.callTool('my_tool', { arg: 'value' });
 // Cleanup
 await server.dispose();
 ```
+
+Each call can name its caller with `{ authContext }`: `user` (its claims, `sub` included), `token`, `sessionId`, `extra`, and `scopes`, the OAuth scopes the caller holds, which `this.auth.scopes` and `requiredScopes` read:
+
+```typescript
+await server.callTool('list_tickets', {}, { authContext: { user: { sub: 'nour' }, scopes: ['tickets:read'] } });
+```
+
+Up to 1.9.1 an in-process call had no scopes. `create()` takes the server-level `output` and `throttle` options like `@FrontMcp()` (up to 1.9.1 it dropped them).
 
 The list methods (`listTools`, `listResources`, `listResourceTemplates`, `listPrompts`) of this server, and of the one `create()` returns, return the whole list: they read every page (a FrontMCP server pages `tools/list` 40 tools at a time by default), so the result carries no `nextCursor`, as with `DirectClient`. To page yourself, as an MCP client does, ask for one page with `paginate` and follow `nextCursor` with `cursor`:
 
@@ -219,6 +227,12 @@ this is the first scope.
   Up to 1.8.2, those entry points served the first scope: with `DashboardApp` in `apps` they served the dashboard's
   tools instead of the server's.
 </Note>
+
+`createFetchHandler()` serves every scope, as the Express host does: a `splitByApp` app or a `standalone` app at its
+own path (`<entryPath>/<appId>`, for example `/billing`), the server's apps at the entry path. A request goes to the
+scope whose path is the longest prefix of its own; the primary scope also answers the entry path when no scope with
+apps is mounted there. Up to 1.9.1 it served only the primary scope, so a `splitByApp` server answered for its first
+app alone and a standalone app was not served at all.
 
 ### start()
 

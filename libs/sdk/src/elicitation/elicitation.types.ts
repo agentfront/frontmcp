@@ -72,6 +72,12 @@ export interface ElicitOptions {
    * Required for URL mode to track completion via notifications.
    */
   elicitationId?: string;
+
+  /**
+   * The URL the client opens for a URL-mode elicitation (the page that completes the interaction).
+   * Required for URL mode.
+   */
+  url?: string;
 }
 
 /**

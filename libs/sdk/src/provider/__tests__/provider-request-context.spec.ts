@@ -209,6 +209,27 @@ describe('ProviderRegistry.buildViews request-scoped context providers', () => {
       expect(second).not.toBe(first);
       expect(uncachedRegistry.getSessionCacheStats().size).toBe(0);
     });
+
+    it("applies to the registries below it, such as an app's", async () => {
+      class AppScratchpad {}
+      const appRegistry = new ProviderRegistry(
+        [createClassProvider(AppScratchpad, { name: 'AppScratchpad', scope: ProviderScope.CONTEXT })],
+        uncachedRegistry,
+      );
+      await appRegistry.ready;
+      const scratchpadOf = async (requestId: string) => {
+        const requestContext = createRequestContext(requestId, 'alice', sharedSessionKey);
+        const views = await appRegistry.buildViews(sharedSessionKey, new Map([[FRONTMCP_CONTEXT, requestContext]]));
+        return views.context.get(AppScratchpad);
+      };
+
+      const first = await scratchpadOf('request-1');
+      const second = await scratchpadOf('request-2');
+
+      expect(appRegistry.isSessionCacheEnabled()).toBe(false);
+      expect(second).not.toBe(first);
+      appRegistry.dispose();
+    });
   });
 
   it('reuses the instances of a session verified in the auth info when the request context has its own id', async () => {

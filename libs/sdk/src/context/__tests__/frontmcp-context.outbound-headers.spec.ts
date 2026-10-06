@@ -47,3 +47,45 @@ describe('FrontMcpContext.fetch outbound headers to a third-party origin', () =>
     expect(forwardedFrontMcpHeaders).toEqual([]);
   });
 });
+
+describe('FrontMcpContext.fetch to an origin in forwardCallerTokenTo', () => {
+  const originalFetch = global.fetch;
+  const internalUrl = 'https://api.internal.example/v1/me';
+  let fetchMock: jest.Mock;
+
+  function contextWithToken(token: string | undefined): FrontMcpContext {
+    const ctx = new FrontMcpContext({
+      sessionId: 'forwarding-session',
+      scopeId: 'forwarding-scope',
+      config: { forwardCallerTokenTo: ['https://api.internal.example'] },
+    });
+    ctx.updateAuthInfo({ token });
+    return ctx;
+  }
+
+  beforeEach(() => {
+    fetchMock = jest.fn().mockResolvedValue(new Response('{}'));
+    global.fetch = fetchMock;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  function sentAuthorization(): string | null {
+    const [, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit];
+    return new Headers(init.headers).get('authorization');
+  }
+
+  it("sends the caller's token", async () => {
+    await contextWithToken('caller-token').fetch(internalUrl);
+
+    expect(sentAuthorization()).toBe('Bearer caller-token');
+  });
+
+  it('sends no Authorization header for an anonymous caller, whose token is empty', async () => {
+    await contextWithToken('').fetch(internalUrl);
+
+    expect(sentAuthorization()).toBeNull();
+  });
+});

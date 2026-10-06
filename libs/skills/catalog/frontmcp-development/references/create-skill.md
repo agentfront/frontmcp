@@ -53,7 +53,7 @@ Create a class extending `SkillContext` and decorate it with `@Skill`. The decor
 | `allowedTools`      | `string`                                        | No       | Space-delimited pre-approved tool names (Agent Skills spec)    |
 | `resources`         | `SkillResources`                                | No       | Bundled dirs: `{ scripts?, references?, assets? }`             |
 
-With `toolValidation: 'strict'`, the server refuses to start when a referenced tool isn't registered (`SkillValidationError`).
+With `toolValidation: 'strict'`, the server refuses to start when a referenced tool isn't registered (`SkillValidationError`), unless `@FrontMcp({ skillsConfig: { failOnInvalidSkills: false } })` is set, which logs such skills as errors instead.
 
 ### Basic Example
 
@@ -94,8 +94,8 @@ class TypeScriptConventionsSkill extends SkillContext {}
 
 `SkillContext` provides:
 
-- `loadInstructions(): Promise<string>` -- load and return the resolved instruction content (resolves file or URL references)
-- `build(): Promise<SkillContent>` -- build the full skill content object (instructions + metadata)
+- `loadInstructions(): Promise<string>` -- load and return the resolved instruction content (resolves file or URL references); override to produce them another way
+- `build(): Promise<SkillContent>` -- build the full skill content object (instructions + metadata); override to change it
 
 ## Instruction Sources
 
@@ -164,7 +164,7 @@ class ApiStandardsSkill extends SkillContext {}
 
 ## SkillContext: loadInstructions() and build()
 
-The `SkillContext` class resolves instructions regardless of the source type. When the framework serves a skill, it calls `build()` which internally calls `loadInstructions()`.
+The `SkillContext` class resolves instructions regardless of the source type. When the framework loads a skill, it calls `build()`, which calls `loadInstructions()`. A class that overrides either is instantiated once, the first time the skill is loaded (at server start, when it is indexed for search), and the skill serves what they return, cached like any skill's content. There is no request then, so `this.context` and the caller's auth are not available. The defaults are the framework's own loading, so an override can start from `super.build()` or `super.loadInstructions()`. Up to 1.9.1 these overrides never ran.
 
 ```typescript
 @Skill({

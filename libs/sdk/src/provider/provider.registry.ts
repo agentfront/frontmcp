@@ -55,7 +55,8 @@ export interface ProviderRegistryOptions {
   distributedMode?: DistributedEnabled;
   /**
    * Override for provider session caching.
-   * When undefined, defaults based on distributedMode setting.
+   * When undefined, defaults based on distributedMode setting; a registry with a parent and neither
+   * option follows its parent's setting.
    */
   providerCaching?: boolean;
 }
@@ -122,7 +123,12 @@ export default class ProviderRegistry
     super('ProviderRegistry', parentProviders, list, false);
 
     this.providedBy = new Map();
-    this.sessionCacheEnabled = shouldCacheProviders(options?.distributedMode, options?.providerCaching);
+    // A registry below another (an app's, a plugin's, an agent's) follows its parent unless configured itself
+    const configured = options?.distributedMode !== undefined || options?.providerCaching !== undefined;
+    this.sessionCacheEnabled =
+      !configured && parentProviders
+        ? parentProviders.sessionCacheEnabled
+        : shouldCacheProviders(options?.distributedMode, options?.providerCaching);
 
     this.buildGraph();
     this.topoSort();

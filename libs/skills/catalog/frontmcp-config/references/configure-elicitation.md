@@ -125,6 +125,7 @@ class DeleteRecordsTool extends ToolContext {
 - When `enabled: false` (default), `this.elicit()` is not available — keeps resource overhead low
 - When enabled, tool output schemas are automatically extended with elicitation fallback type
 - Use Redis storage for production/multi-instance deployments
+- The `elicitation:request` and `elicitation:result` flows (and their `ElicitationRequestHook` / `ElicitationResultHook` plugin hooks) run on every transport, including the in-process client of `connect()` / `createDirect()`; an unanswered question fails with `ElicitationTimeoutError` there too
 - Not all MCP clients support elicitation — handle gracefully when `this.elicit()` returns `undefined`
 
 ## Verification

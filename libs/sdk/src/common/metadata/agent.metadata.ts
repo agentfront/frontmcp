@@ -256,7 +256,8 @@ export interface AgentSwarmConfig {
    * How many agent-to-agent calls deep a chain this agent runs in may go (prevents infinite loops):
    * the call an agent makes from a client's call is call 1. With several agents in the chain, the
    * smallest of their `maxCallDepth` applies; a deeper call fails with `AgentCallDepthExceededError`.
-   * Applies to agents without `swarm` too.
+   * It counts calls, not agents: with the default of 3, a chain of four agents runs. Applies to agents
+   * without `swarm` too.
    * @default 3
    */
   maxCallDepth?: number;
@@ -298,7 +299,9 @@ export interface AgentExecutionConfig {
   enableNotifications?: boolean;
 
   /**
-   * Interval for progress notifications in milliseconds.
+   * The least time in milliseconds between two automatic progress notifications (`enableAutoProgress`):
+   * an update that comes sooner is skipped, except the last one, which is always sent. Calls to
+   * `this.progress()` are not affected.
    * @default 1000
    */
   notificationInterval?: number;

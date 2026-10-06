@@ -28,6 +28,8 @@ export interface DirectAuthContext {
   sessionId?: string;
   /** User/client token for authorization (e.g., JWT) */
   token?: string;
+  /** The OAuth scopes the caller holds (`this.auth.scopes`, `requiredScopes`) */
+  scopes?: string[];
   /** User claims (extracted from token) */
   user?: {
     sub?: string;

@@ -128,6 +128,7 @@ function server(extra: Record<string, unknown>): FrontMcpConfigInput {
 }
 
 const AUTHORITIES = { claimsMapping: { roles: 'roles' }, profiles: { admin: { roles: { any: ['admin'] } } } };
+const AUDITOR = { roles: { any: ['auditor'] } };
 
 /** Servers the full checks accept. */
 const ACCEPTED: Array<[string, FrontMcpConfigInput]> = [
@@ -200,6 +201,24 @@ const ACCEPTED: Array<[string, FrontMcpConfigInput]> = [
     'an approval tool inside an agent whose own plugin enforces approval',
     server({ apps: [app('desk', { agents: [refundDeskAgent({ plugins: [AnyAppApprovalPlugin] })] })] }),
   ],
+  [
+    'an approval tool inside an agent that inherits the plugins of its app, which enforces approval',
+    server({
+      apps: [
+        app('desk', {
+          plugins: [OwnAppApprovalPlugin],
+          agents: [refundDeskAgent({ execution: { inheritPlugins: true } })],
+        }),
+      ],
+    }),
+  ],
+  [
+    'an approval tool inside an agent that inherits plugins, and a server-level plugin enforces approval',
+    server({
+      apps: [app('desk', { agents: [refundDeskAgent({ execution: { inheritPlugins: true } })] })],
+      plugins: [OwnAppApprovalPlugin],
+    }),
+  ],
 ];
 
 /** Servers the full checks refuse, and the metadata alone shows why. */
@@ -232,6 +251,16 @@ const REFUSED: Array<[string, FrontMcpConfigInput, new (...args: never[]) => Err
   [
     'a server-level resource template declares authorities',
     server({ apps: [app('desk', {})], resources: [TicketTemplate] }),
+    AuthConfigurationError,
+  ],
+  [
+    'an entry names an authorities profile the authorities option does not define',
+    server({ apps: [app('desk', { agents: [RefundsAgent] })], authorities: { profiles: { auditor: AUDITOR } } }),
+    AuthConfigurationError,
+  ],
+  [
+    'an authorities profile checks nothing',
+    server({ apps: [app('desk', { agents: [RefundsAgent] })], authorities: { profiles: { admin: {} } } }),
     AuthConfigurationError,
   ],
   [
@@ -284,6 +313,28 @@ const REFUSED: Array<[string, FrontMcpConfigInput, new (...args: never[]) => Err
       apps: [
         app('desk', {
           agents: [refundDeskAgent({ plugins: [AnyAppApprovalPlugin], execution: { useToolFlow: false } })],
+        }),
+      ],
+    }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool inside an agent that inherits plugins, and only another app gates its own tools',
+    server({
+      apps: [
+        app('desk', { agents: [refundDeskAgent({ execution: { inheritPlugins: true } })] }),
+        app('ops', { plugins: [OwnAppApprovalPlugin] }),
+      ],
+    }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool inside an agent that inherits the plugins of its app, but skips the tool flow',
+    server({
+      apps: [
+        app('desk', {
+          plugins: [OwnAppApprovalPlugin],
+          agents: [refundDeskAgent({ execution: { inheritPlugins: true, useToolFlow: false } })],
         }),
       ],
     }),

@@ -130,9 +130,21 @@ class Server {}
 
 Entries are matched by origin (scheme, host and port), so `https://api.internal.example/v1` allows every path on `https://api.internal.example` but not `http://api.internal.example` or `https://other.api.internal.example`.
 
-A request that carries the caller's token or `x-frontmcp-*` headers never follows a redirect, so those headers never reach an origin you did not list. It is sent with `redirect: 'manual'`, and a 3xx comes back to your code; if you ask for `redirect: 'error'`, the redirect rejects the `fetch` instead.
+An anonymous caller, whose token is empty, sends no `Authorization` header, even to a listed origin. Up to 1.9.1 it sent an empty `Bearer`.
+
+A request that carries `credentials: { provider }`, the caller's token or `x-frontmcp-*` headers never follows a redirect, so those credentials never reach an origin you did not call. It is sent with `redirect: 'manual'`, and a 3xx comes back to your code; if you ask for `redirect: 'error'`, the redirect rejects the `fetch` instead.
 
 `requestTimeout` applies when you pass no `signal` in the options, and so does the `Request`'s own signal; a `signal` passed in the options replaces both. Inside a tool, `this.fetch()` is also aborted when the call is cancelled or its execution timeout passes.
+
+### Upstream Provider Credentials
+
+`credentials: { provider }` sends the credential of one of the server's auth providers (`this.authProviders`) instead of the caller's token: the headers that provider's credential resolves to (what `this.authProviders.headers(provider)` returns), such as `Authorization: Bearer <token>` or an API-key header. A provider without a credential for this caller adds none, and the `credentials` object itself never reaches the native `fetch`. It applies to `this.fetch()` in a tool, resource, prompt, agent or job, and the caller's token is never sent alongside it.
+
+```ts
+const response = await this.fetch('https://api.github.com/user', { credentials: { provider: 'github' } });
+```
+
+Up to 1.9.1 nothing applied it: the `credentials` object was dropped and the request went out without a credential.
 
 ### Custom Headers
 
@@ -363,8 +375,8 @@ const logContext = ctx.toLogContext();
 | `metadata`          | `RequestMetadata`                | HTTP request metadata                                                                                                                                                                                                                                    |
 | `config`            | `FrontMcpContextConfig`          | Context configuration                                                                                                                                                                                                                                    |
 | `transport`         | `TransportAccessor \| undefined` | Transport for elicit requests                                                                                                                                                                                                                            |
-| `flow`              | `FlowBaseRef \| undefined`       | Current flow reference                                                                                                                                                                                                                                   |
-| `scope`             | `ScopeRef \| undefined`          | Current scope reference                                                                                                                                                                                                                                  |
+| `flow`              | `FlowBaseRef \| undefined`       | The innermost flow running in the calling code's async call chain (`{ name }`, e.g. `tools:call-tool`); a flow it runs replaces it there until that flow returns, and flows running in parallel each see their own. Up to 1.9.1 it was never set         |
+| `scope`             | `ScopeRef \| undefined`          | The scope that flow runs in (`{ id, logger }`). Up to 1.9.1 it was never set                                                                                                                                                                             |
 | `sessionMetadata`   | `SessionIdPayload \| undefined`  | Session metadata (protocol, platform)                                                                                                                                                                                                                    |
 
 | Method                  | Signature                                                                 | Description                        |

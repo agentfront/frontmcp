@@ -204,7 +204,9 @@ once, over both stores: an approval in either one lets it run (one approval is e
 `@Agent({ approval })` gates the agent's `invoke_<agent>` tool the same way. A server where a tool or agent declares
 `approval` and no `ApprovalPlugin` reaches it refuses to start with `UnenforcedMetadataError`, naming the entries. This
 includes a server with no `ApprovalPlugin` at all, a `splitByApp` app whose own scope has none, and a tool declared
-inside an `@Agent`, which only a plugin installed on that agent gates.
+inside an `@Agent`, which only a plugin installed on that agent gates, or, when the agent sets
+`execution.inheritPlugins: true`, one installed on its app or the server. Up to 1.9.1 the startup check ignored
+`inheritPlugins`, so such an agent with `ApprovalPlugin` only on its app refused to start.
 
 <Note>
   Up to 1.8.2 such a server started, and those tools ran without approval. `@Agent({ approval })` was never gated.

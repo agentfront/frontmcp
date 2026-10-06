@@ -25,7 +25,6 @@
 import { type Token } from '@frontmcp/di';
 
 import { ExecutionContextBase } from '../common/interfaces/execution-context.interface';
-import { PromptContext } from '../common/interfaces/prompt.interface';
 import type { ContextExtension } from '../common/metadata/plugin.metadata';
 import { ContextExtensionNotAvailableError } from '../errors';
 
@@ -72,22 +71,6 @@ export function installContextExtensions(pluginName: string, extensions: Context
       configurable: true,
       enumerable: false,
     });
-
-    // Also add to PromptContext.prototype (PromptContext doesn't extend ExecutionContextBase)
-    if (!Object.prototype.hasOwnProperty.call(PromptContext.prototype, property)) {
-      Object.defineProperty(PromptContext.prototype, property, {
-        get: function (this: PromptContext): unknown {
-          try {
-            return this.get(token as Token<unknown>);
-          } catch (err) {
-            // Preserve original error as cause for debugging
-            throw new ContextExtensionNotAvailableError(defaultErrorMessage, err instanceof Error ? err : undefined);
-          }
-        },
-        configurable: true,
-        enumerable: false,
-      });
-    }
 
     installedExtensions.add(property);
   }
