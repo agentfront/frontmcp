@@ -22,6 +22,7 @@ import { FlowHooksOf } from './common';
 export { FrontMcpInstance, FrontMcpConfig } from './front-mcp';
 export type { ConfigOrServerClass } from './front-mcp';
 export { assertStaticStartupConfig } from './front-mcp/static-startup.check';
+export { registerOptionalModule } from './scope/optional-dependency.util';
 export {
   getServerlessHandler,
   getServerlessHandlerAsync,

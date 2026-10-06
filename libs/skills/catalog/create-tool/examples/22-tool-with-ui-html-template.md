@@ -1,19 +1,19 @@
 ---
 name: 22-tool-with-ui-html-template
 level: intermediate
-description: "Tool with an inline HTML function template — `ui: { template: (ctx) => '<div>…</div>' }` — for a quick widget that doesn't need a separate `.tsx` file."
+description: "Tool with an inline HTML function template — ``ui: { template: (ctx) => ctx.helpers.html`<div>…</div>` }`` — for a quick widget that doesn't need a separate `.tsx` file."
 tags: [ui, ui-widgets, html-template, html-tag, escapeStringResults, TemplateContext]
 features:
   - 'Adding a `ui:` block with a function template that returns markup built with the `ctx.helpers.html` tagged template'
   - 'Annotating `ctx` explicitly to dodge the TS7006 inference gap on the union `ui.template` type'
   - "Letting `ctx.helpers.html` escape every interpolated value so tool output can't inject markup into the widget"
-  - 'Opting in to `escapeStringResults: true` so a plain string result is escaped — the default from FrontMCP 1.9'
+  - 'Relying on the 1.9 default (`escapeStringResults` unset), which escapes any plain string result while `html` results stay markup'
   - 'Reading from `ctx.output` and `ctx.helpers` — the typed runtime context the template renderer hands you'
 ---
 
 # Tool With Ui Html Template
 
-Tool with an inline HTML function template — `ui: { template: (ctx) => '<div>…</div>' }` — for a quick widget that doesn't need a separate `.tsx` file.
+Tool with an inline HTML function template — ``ui: { template: (ctx) => ctx.helpers.html`<div>…</div>` }`` — for a quick widget that doesn't need a separate `.tsx` file.
 
 For widgets that don't need React / state / interactivity, an inline function template is the simplest form. Read `ctx.output` and return markup built with the `ctx.helpers.html` tagged template — it escapes every value you interpolate.
 
@@ -46,8 +46,6 @@ type Out = { city: string; temperatureF: number; conditions: string };
         <p style="margin:8px 0 0">${ctx.output.conditions}</p>
       </div>
     `,
-    // Escape any plain string result; `html` results stay markup (the default from FrontMCP 1.9)
-    escapeStringResults: true,
   },
 })
 export class ShowWeatherCardTool extends ToolContext {
@@ -62,12 +60,12 @@ export class ShowWeatherCardTool extends ToolContext {
 - Adding a `ui:` block with a function template that returns markup built with the `ctx.helpers.html` tagged template
 - Annotating `ctx` explicitly to dodge the TS7006 inference gap on the union `ui.template` type
 - Letting `ctx.helpers.html` escape every interpolated value so tool output can't inject markup into the widget
-- Opting in to `escapeStringResults: true` so a plain string result is escaped — the default from FrontMCP 1.9
+- Relying on the 1.9 default (`escapeStringResults` unset), which escapes any plain string result while `html` results stay markup
 - Reading from `ctx.output` and `ctx.helpers` — the typed runtime context the template renderer hands you
 
 ## Why `html` instead of a plain template literal
 
-A plain string a template returns is rendered as markup when it looks like HTML, so `` `<p>${ctx.output.note}</p>` `` lets tool output inject tags unless you remember `escapeHtml` on every field. `ctx.helpers.html` escapes each interpolated value for you (nested `html` values and `ctx.helpers.trustedHtml(markup)` pass through as markup), and its result renders as markup whether or not `escapeStringResults` is on. Don't also call `escapeHtml` inside `html` — the value would be escaped twice. See [`ui-widgets.md`](../references/ui-widgets.md#trusted-markup-and-escaping-template-results).
+Since FrontMCP 1.9 a plain string a template returns is escaped, so `` `<p>${ctx.output.note}</p>` `` shows its tags as text (and with `escapeStringResults: false` it would let tool output inject tags unless you remember `escapeHtml` on every field). `ctx.helpers.html` escapes each interpolated value for you (nested `html` values and `ctx.helpers.trustedHtml(markup)` pass through as markup), and its result renders as markup whatever `escapeStringResults` says. Don't also call `escapeHtml` inside `html` — the value would be escaped twice. See [`ui-widgets.md`](../references/ui-widgets.md#trusted-markup-and-escaping-template-results).
 
 ## Why annotate `ctx` explicitly
 

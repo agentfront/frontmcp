@@ -26,6 +26,8 @@ class CfWorkerApp {}
   // this fixture has none, so disable them. (A real worker would configure
   // tasks.redis or leave them off.)
   tasks: { enabled: false },
+  // The SDK loads @frontmcp/observability lazily; the worker entry must bundle it (#768).
+  metrics: { enabled: true },
 })
 class CfWorkerServer {}
 

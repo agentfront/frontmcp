@@ -73,7 +73,11 @@ class WebMcpOnlyTool extends ToolContext {
 @Tool({ name: 'whoami', description: 'Who is calling', inputSchema: {} })
 class WhoAmITool extends ToolContext {
   async execute() {
-    return { sub: this.context.authInfo.user?.sub ?? null, session: this.context.sessionId };
+    return {
+      sub: this.context.authInfo.user?.sub ?? null,
+      session: this.context.sessionId,
+      isAnonymous: this.auth.isAnonymous,
+    };
   }
 }
 
@@ -393,7 +397,8 @@ describe('WebMcpPlugin', () => {
       const first = (await modelContext.execute('whoami')) as { structuredContent?: unknown; content: unknown };
       const second = (await modelContext.execute('whoami')) as { structuredContent?: unknown; content: unknown };
 
-      expect(JSON.stringify(first)).toContain('"sub":"webmcp"');
+      expect(JSON.stringify(first)).toContain('"sub":"anon:webmcp"');
+      expect(JSON.stringify(first)).toContain('"isAnonymous":true');
       expect(JSON.stringify(first)).toContain('webmcp:');
       expect(JSON.stringify(second)).toEqual(JSON.stringify(first));
     });
@@ -404,6 +409,7 @@ describe('WebMcpPlugin', () => {
       const result = JSON.stringify(await modelContext.execute('whoami'));
 
       expect(result).toContain('"sub":"alice"');
+      expect(result).toContain('"isAnonymous":false');
       expect(result).toContain('page-session');
     });
 

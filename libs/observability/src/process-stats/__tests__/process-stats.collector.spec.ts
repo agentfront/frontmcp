@@ -264,6 +264,48 @@ describe('ProcessStatsCollector (issue #397)', () => {
     expect(histogram.reset).toHaveBeenCalledTimes(1);
   });
 
+  it('skips the probes a runtime does not implement instead of throwing (#768)', () => {
+    const notImplemented = (): never => {
+      throw new Error('[unenv] process.cpuUsage is not implemented yet!');
+    };
+    const collector = new ProcessStatsCollector({
+      cpuUsage: notImplemented,
+      memoryUsage: notImplemented,
+      uptime: () => 7,
+      monitorEventLoopDelay: () => ({ mean: 1, percentile: () => 1, reset: notImplemented }),
+      getActiveHandles: () => undefined,
+      getActiveRequests: () => undefined,
+      readFdCount: () => undefined,
+    });
+
+    expect(collector.collect()).toEqual([
+      { name: 'frontmcp_process_uptime_seconds', value: 7, help: 'Time since process start in seconds' },
+    ]);
+  });
+
+  it('takes the CPU baseline on a later scrape when the first cpuUsage() probe throws', () => {
+    let cpuProbeFails = true;
+    const cpuUsage = (prev?: NodeJS.CpuUsage): NodeJS.CpuUsage => {
+      if (cpuProbeFails) throw new Error('transient');
+      const total = { user: 3_000_000, system: 1_000_000 };
+      return prev ? { user: total.user - prev.user, system: total.system - prev.system } : total;
+    };
+    const collector = new ProcessStatsCollector({
+      cpuUsage,
+      memoryUsage: () => ({ rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 }),
+      uptime: () => 0,
+      getActiveHandles: () => undefined,
+      getActiveRequests: () => undefined,
+      readFdCount: () => undefined,
+      options: { eventLoopLag: false },
+    });
+    const cpuEntries = () => collector.collect().filter((e) => e.name === 'frontmcp_process_cpu_seconds_total');
+
+    expect(cpuEntries()).toEqual([]);
+    cpuProbeFails = false;
+    expect(cpuEntries().map((e) => e.value)).toEqual([0, 0]);
+  });
+
   it('close() disables the event-loop lag histogram', () => {
     const histogram = makeHistogram({ mean: 0, p99: 0 });
     const collector = new ProcessStatsCollector({

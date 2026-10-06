@@ -4,6 +4,7 @@
  */
 
 import type { MetricsCategory, MetricsOptionsInterface } from '../common';
+import { requireOptionalModule } from '../scope/optional-dependency.util';
 import { MetricsPathConflictError, MetricsTokenNotConfiguredError } from './metrics.errors';
 
 // Local mirrors of @frontmcp/observability public types. The SDK cannot
@@ -61,7 +62,9 @@ type ObservabilityRuntime = {
 let observabilityRuntime: ObservabilityRuntime | undefined;
 function loadObservability(): ObservabilityRuntime {
   if (!observabilityRuntime) {
-    observabilityRuntime = require('@frontmcp/observability') as ObservabilityRuntime;
+    observabilityRuntime = requireOptionalModule<ObservabilityRuntime>('@frontmcp/observability', () =>
+      require('@frontmcp/observability'),
+    );
   }
   return observabilityRuntime;
 }

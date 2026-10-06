@@ -219,7 +219,7 @@ The tool name in the URI is percent-encoded, as `tools/list` advertises it: a na
 </ParamField>
 
 <ParamField path="ui.escapeStringResults" type="boolean">
-  HTML-escape a plain string returned by the template function; `html` / `trustedHtml` results still render as markup. Unset (the 1.8 default) renders strings that look like HTML as markup and logs a one-time notice per tool; `false` keeps that behaviour without the notice. Overrides the server-wide `@FrontMcp({ ui: { escapeStringResults } })` default. **FrontMCP 1.9 escapes string results by default.** See [Escaping string results](#escaping-string-results).
+  HTML-escape a plain string returned by the template function; `html` / `trustedHtml` results still render as markup. Unset (the 1.9 default) escapes them too and logs a one-time notice per tool when a string looked like markup; `true` escapes without the notice; `false` renders strings that look like HTML as markup (the 1.8 behaviour). Overrides the server-wide `@FrontMcp({ ui: { escapeStringResults } })` default. See [Escaping string results](#escaping-string-results).
 </ParamField>
 
 ---
@@ -339,24 +339,24 @@ template: (ctx: TemplateContext<MyInput, MyOutput>) => {
 
 ### Escaping string results
 
-A template function that returns a plain **string** has it rendered as markup when it looks like HTML, so `template: (ctx) => ctx.output` renders any tags in the output. Opt in to escaping plain string results per tool, or for the whole server:
+A template function that returns a plain **string** has it escaped and shown as text, so `template: (ctx) => ctx.output` cannot inject tags from the output. Build markup with `html` / `trustedHtml`. To render plain markup strings as before, opt out per tool or for the whole server:
 
 ```typescript
 // Per tool
-ui: { template, escapeStringResults: true }
+ui: { template, escapeStringResults: false }
 
 // Server-wide default — a tool's own setting wins
-@FrontMcp({ info, apps, ui: { escapeStringResults: true } })
+@FrontMcp({ info, apps, ui: { escapeStringResults: false } })
 ```
 
-| `escapeStringResults` | Plain string result                                          | `html` / `trustedHtml` result |
-| --------------------- | ------------------------------------------------------------ | ----------------------------- |
-| unset (1.8 default)   | Rendered as markup; a one-time notice is logged for the tool | Rendered as markup            |
-| `true`                | Escaped and shown as text                                    | Rendered as markup            |
-| `false`               | Rendered as markup, no notice                                | Rendered as markup            |
+| `escapeStringResults` | Plain string result                                           | `html` / `trustedHtml` result |
+| --------------------- | ------------------------------------------------------------- | ----------------------------- |
+| unset (1.9 default)   | Escaped; a one-time notice is logged if it looked like markup | Rendered as markup            |
+| `true`                | Escaped and shown as text, no notice                          | Rendered as markup            |
+| `false`               | Rendered as markup when it looks like HTML (1.8 behaviour)    | Rendered as markup            |
 
 <Warning>
-**The default changes in FrontMCP 1.9: plain string results will be escaped.** To migrate, return `html` / `trustedHtml` from every template function, then set `escapeStringResults: true` to confirm none still returns a plain markup string. Until then, each tool whose template returns a plain markup string logs a notice once, naming the tool.
+**Since FrontMCP 1.9 plain string results are escaped by default** (1.8 rendered them as markup and logged a notice). A widget that now shows its markup as text returns a plain string: build it with `html` / `trustedHtml`, or set `escapeStringResults: false` while you migrate. Each tool whose template returns a plain markup string logs a notice once, naming the tool.
 </Warning>
 
 Other results are always escaped: plain text is shown as text, an object as JSON inside `<pre>`, and a chart config or base64 PDF (`JVBERi…`) is embedded as script data. A value that starts with the PDF signature but is not base64 is shown as text. A static string template (`template: '<div>…</div>'`) is your own markup and is never escaped.
@@ -438,7 +438,7 @@ A string that contains both `<` and `>` is treated as **HTML** and used as writt
 ## Sanitization
 
 - Markup you author (a template function's literal parts, an HTML string, a `.tsx` file) is trusted and is not sanitized.
-- Values interpolated into `` html`…` `` are escaped. Values returned as plain strings from a template function are escaped only with `escapeStringResults: true` (see above).
+- Values interpolated into `` html`…` `` are escaped. Values returned as plain strings from a template function are escaped unless `escapeStringResults: false` (see above).
 - Markdown strings are always escaped as described in the previous section.
 - Tool output shown by a `.tsx` widget is rendered by React, which escapes text nodes.
 

@@ -24,19 +24,21 @@ Projects created with `frontmcp create --target node` include Docker files in th
 
 ```bash
 # Start Redis
-docker compose -f ci/docker-compose.yml up redis -d
+docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up redis -d
 
 # Verify Redis is running
-docker compose -f ci/docker-compose.yml exec redis redis-cli ping
+docker compose -f ci/docker-compose.yml --env-file ci/.env.docker exec redis redis-cli ping
 
 # Start the full stack (app + Redis)
-docker compose -f ci/docker-compose.yml up
+docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up
 ```
 
 <Tip>
 When running inside Docker, use `redis` (the service name) as `REDIS_HOST`, not `localhost`.
-Projects created with `frontmcp create` include a `ci/.env.docker` file with Docker-specific values.
+Projects created with `frontmcp create` include a `ci/.env.docker` file with Docker-specific values. It is git-ignored because it holds `MCP_SESSION_SECRET`; the committed `ci/.env.docker.example` is its template, so copy it to `ci/.env.docker` after cloning.
 </Tip>
+
+The compose file publishes Redis on `127.0.0.1:6379` only, so a server running on the host can reach it while other machines cannot. The `app` service runs the production image with `NODE_ENV=production` by default, which requires `MCP_SESSION_SECRET`: set it in `ci/.env.docker` (or export it in your shell, which wins over the file; `openssl rand -hex 32`). Compose reads `ci/.env.docker` only through `--env-file ci/.env.docker`, which the `docker:*` scripts pass, and refuses to start any service, Redis included, while the secret is unset. The generated `ci/Dockerfile` runs as the unprivileged `node` user and declares a `HEALTHCHECK` against `/healthz`.
 
 ### Option 2: Local Installation
 
@@ -154,6 +156,8 @@ A managed Redis usually hands you a single connection URL. Pass it as `url` inst
 ```
 
 The URL is read into `host`, `port`, `password` and `db` when the config is parsed; `rediss://` turns `tls` on, and `?db=2` works when the path carries no database. The user part may be empty or `default` (Redis ACL users other than `default` are refused with a validation error). Percent-encode reserved characters in the password (`@` as `%40`, `%` as `%25`); a malformed escape such as `%ZZ` is a validation error that does not echo the password. `keyPrefix` and `defaultTtlMs` go next to `url` as usual.
+
+The URL is the base. `host`, `port`, `password`, `db` and `tls` written beside it only fill in what the URL leaves out — `{ url: 'redis://cache:6379', password: process.env.REDIS_PASSWORD }` connects to `cache:6379` with that password, and `tls: true` turns TLS on for a `redis://` URL. A field that contradicts the URL (`{ url: 'redis://cache:6379', host: 'other' }`, a different port, password or database, or `tls: false` with `rediss://`) is a validation error naming the field, never silently dropped. The same rule applies to `pubsub` and to `throttle.storage`'s `redis` block.
 
 ### Running more than one instance
 

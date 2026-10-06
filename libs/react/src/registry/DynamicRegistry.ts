@@ -18,7 +18,8 @@ type Listener = () => void;
 export class DynamicRegistry {
   private tools = new Map<string, DynamicToolDef>();
   private resources = new Map<string, DynamicResourceDef>();
-  private toolRefCounts = new Map<string, number>();
+  /** Every live registration of a tool name, oldest first; the newest one is the definition in use. */
+  private toolRegistrations = new Map<string, DynamicToolDef[]>();
   private resourceRefCounts = new Map<string, number>();
   private listeners = new Set<Listener>();
   private resourceListeners = new Set<(uri: string) => void>();
@@ -32,30 +33,43 @@ export class DynamicRegistry {
    * subsequent registrations replace the definition (and notify, so
    * the server registration follows the new description, schema or
    * availability) but the tool is only removed when every registrant
-   * has unregistered.
+   * has unregistered. When the registrant whose definition is in use
+   * unregisters, the newest remaining registration takes over, so a
+   * call never reaches an unmounted component's `execute`.
    */
   registerTool(def: DynamicToolDef): () => void {
-    const existing = this.toolRefCounts.get(def.name) ?? 0;
-    this.toolRefCounts.set(def.name, existing + 1);
+    const registrations = this.toolRegistrations.get(def.name) ?? [];
+    registrations.push(def);
+    this.toolRegistrations.set(def.name, registrations);
     this.tools.set(def.name, def);
     this.notify();
     let called = false;
     return () => {
       if (called) return;
       called = true;
-      this.unregisterTool(def.name);
+      this.removeToolRegistration(def);
     };
   }
 
+  /** Drop the oldest registration of `name` (registrants should call the function `registerTool` returned). */
   unregisterTool(name: string): void {
-    const count = this.toolRefCounts.get(name);
-    if (count == null) return;
-    if (count <= 1) {
-      this.toolRefCounts.delete(name);
-      this.tools.delete(name);
+    const oldest = this.toolRegistrations.get(name)?.[0];
+    if (oldest) this.removeToolRegistration(oldest);
+  }
+
+  private removeToolRegistration(def: DynamicToolDef): void {
+    const registrations = this.toolRegistrations.get(def.name);
+    const index = registrations?.lastIndexOf(def) ?? -1;
+    if (!registrations || index === -1) return;
+    registrations.splice(index, 1);
+    const newest = registrations[registrations.length - 1];
+    if (!newest) {
+      this.toolRegistrations.delete(def.name);
+      this.tools.delete(def.name);
       this.notify();
-    } else {
-      this.toolRefCounts.set(name, count - 1);
+    } else if (this.tools.get(def.name) !== newest) {
+      this.tools.set(def.name, newest);
+      this.notify();
     }
   }
 
@@ -159,7 +173,7 @@ export class DynamicRegistry {
     if (this.tools.size === 0 && this.resources.size === 0) return;
     this.tools.clear();
     this.resources.clear();
-    this.toolRefCounts.clear();
+    this.toolRegistrations.clear();
     this.resourceRefCounts.clear();
     this.notify();
   }

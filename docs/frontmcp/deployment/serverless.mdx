@@ -181,6 +181,7 @@ Projects created with `frontmcp create --target lambda` include a SAM template a
 ```bash
 npm run deploy  # Runs: cd ci && sam build && sam deploy
 ```
+The template runs the function with `NODE_ENV=production` and takes `MCP_SESSION_SECRET` as the `NoEcho` parameter `McpSessionSecret` (`sam deploy --parameter-overrides McpSessionSecret=$(openssl rand -hex 32)`).
 </Tip>
 
 1. Build your project:
@@ -205,6 +206,12 @@ npm run deploy  # Runs: cd ci && sam build && sam deploy
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 
+Parameters:
+  McpSessionSecret:
+    Type: String
+    NoEcho: true
+    Description: MCP_SESSION_SECRET for session-ID encryption, required in production (openssl rand -hex 32)
+
 Resources:
   FrontMcpFunction:
     Type: AWS::Serverless::Function
@@ -213,6 +220,10 @@ Resources:
       Runtime: nodejs24.x
       Timeout: 30
       MemorySize: 256
+      Environment:
+        Variables:
+          NODE_ENV: production
+          MCP_SESSION_SECRET: !Ref McpSessionSecret
       Events:
         Api:
           Type: Api

@@ -64,14 +64,15 @@ describe('ToolUIRegistry — escapeStringResults', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it('keeps rendering the string as markup and logs the notice once through the registry logger when unset', async () => {
+  it('escapes the string by default and logs the notice once through the registry logger when unset (#769)', async () => {
     const warn = jest.fn();
     const registry = new ToolUIRegistry(undefined, { logger: { warn } });
 
     const first = await render(registry, 'tool_unset', {});
     await render(registry, 'tool_unset', {});
 
-    expect(first).toContain(PAYLOAD);
+    expect(first).toContain(ESCAPED_PAYLOAD);
+    expect(first).not.toContain(PAYLOAD);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0]?.[0])).toContain('tool_unset');
   });

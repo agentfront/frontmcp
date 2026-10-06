@@ -7,8 +7,8 @@
  * A template that returns a plain string, such as `(ctx) => ctx.output`, has that string rendered
  * as HTML, so untrusted tool output returned unescaped injects markup. `escapeStringResults: true`
  * escapes plain strings; markup built with `ctx.helpers.html` or wrapped with
- * `ctx.helpers.trustedHtml` still renders. With the option unset the behaviour is unchanged and a
- * one-time notice per tool points at the new API.
+ * `ctx.helpers.trustedHtml` still renders. Unset is the 1.9 default: plain strings are escaped and a
+ * one-time notice per tool points at the API and the `false` opt-out (#769).
  */
 import type { TemplateHelpers } from '../../shell/data-injector';
 import { trustedHtml } from '../../shell/trusted-html';
@@ -114,11 +114,18 @@ describe('template string results — escapeStringResults: true', () => {
   });
 });
 
-describe('template string results — option unset (default, unchanged in 1.8)', () => {
-  it('still renders a plain markup string as HTML', () => {
+describe('template string results — option unset (the 1.9 default)', () => {
+  it('escapes a plain markup string (#769)', () => {
     const { doc } = render((ctx) => ctx.output);
 
-    expect(doc.querySelector('body img')).not.toBeNull();
+    expect(injectedElements(doc)).toEqual([]);
+    expect(doc.body.textContent).toContain(PAYLOAD);
+  });
+
+  it('keeps html`` and trustedHtml results as markup', () => {
+    const { doc } = render((ctx) => ctx.helpers.html`<b id="out">${ctx.output}</b>`);
+
+    expect(doc.querySelector('b#out')?.textContent).toBe(PAYLOAD);
   });
 
   it('logs the migration notice once per tool', () => {
@@ -140,8 +147,9 @@ describe('template string results — option unset (default, unchanged in 1.8)',
     const message = String(warn.mock.calls[0]?.[0]);
     expect(message).toContain(toolName);
     expect(message).toContain('html`');
-    expect(message).toContain('escapeStringResults');
-    expect(message).toContain('1.9');
+    expect(message).toContain('escapeStringResults: false');
+    expect(message).toContain('FrontMCP 1.9 HTML-escapes plain string results by default');
+    expect(message).not.toContain('will HTML-escape');
   });
 
   it('logs the notice again for a different tool', () => {

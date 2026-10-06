@@ -40,7 +40,12 @@ export { isUIRenderFailure, type UIRenderFailure } from './render-failure';
 // ============================================
 // Template Renderer
 // ============================================
-export { renderToolTemplate, type RenderToolTemplateOptions, type RenderToolTemplateResult } from './template-renderer';
+export {
+  renderToolTemplate,
+  warnIfComponentReference,
+  type RenderToolTemplateOptions,
+  type RenderToolTemplateResult,
+} from './template-renderer';
 
 // ============================================
 // Content Detection & Rendering

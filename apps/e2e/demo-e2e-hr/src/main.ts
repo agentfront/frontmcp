@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { HrApp } from './apps/hr';
 
 const port = parseInt(process.env['PORT'] ?? '3130', 10);
@@ -6,6 +7,8 @@ const port = parseInt(process.env['PORT'] ?? '3130', 10);
 @FrontMcp({
   info: { name: 'Demo E2E HR', version: '0.1.0' },
   apps: [HrApp],
+  // The fixture templates return plain markup strings and escape values themselves (1.9 escapes strings by default)
+  ui: { escapeStringResults: false },
   logging: { level: LogLevel.Verbose },
   http: { port },
   auth: {

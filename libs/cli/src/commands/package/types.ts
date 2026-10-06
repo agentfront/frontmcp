@@ -36,12 +36,14 @@ export interface FrontmcpRegistry {
 /**
  * Parse an install source string into a typed source object.
  *
- * - Starts with `./ | ../ | /`  → local
+ * - `.`, `..`, or starts with `./ | ../ | /` (or a Windows drive / backslash form)  → local
  * - Starts with `github:` or `git+` or ends with `.git`  → git
  * - Everything else  → npm
  */
+const LOCAL_PATH_PATTERN = /^(?:\.{1,2}(?:[\\/]|$)|[\\/]|[A-Za-z]:[\\/])/;
+
 export function parseInstallSource(source: string): InstallSource {
-  if (source.startsWith('./') || source.startsWith('../') || source.startsWith('/')) {
+  if (LOCAL_PATH_PATTERN.test(source)) {
     return { type: 'local', ref: source };
   }
 

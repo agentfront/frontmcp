@@ -113,6 +113,19 @@ describe('SaasPullSource — edge (worker-safe + Cron-refreshable)', () => {
     await src.stop();
   });
 
+  it('names the injected cache, not a file path, when the boot pull fails and the cache is empty (#769)', async () => {
+    const src = new EdgeFakeSource(options(), fail, { cache: memoryCache(), disablePolling: true });
+
+    const failure = await src.start().then(
+      () => undefined,
+      (error: unknown) => error as Error,
+    );
+
+    expect(failure?.message).toContain('no cached bundle is available in the injected bundle cache');
+    expect(failure?.message).not.toMatch(/\.json|frontmcp/);
+    await src.stop();
+  });
+
   it('refresh() pulls, persists to cache, and notifies (Cron path)', async () => {
     const cache = memoryCache();
     const src = new EdgeFakeSource(options(), ok, { cache, disablePolling: true });
@@ -132,7 +145,10 @@ describe('SaasPullSource — edge (worker-safe + Cron-refreshable)', () => {
       calls++;
       return { status: 200, body: JSON.stringify(baseBundle) };
     };
-    const src = new EdgeFakeSource(options({ pollIntervalMs: 20 }), stub, { cache: memoryCache(), disablePolling: true });
+    const src = new EdgeFakeSource(options({ pollIntervalMs: 20 }), stub, {
+      cache: memoryCache(),
+      disablePolling: true,
+    });
     await src.start(); // one boot pull
     await new Promise((r) => setTimeout(r, 80)); // > 3 poll intervals
     expect(calls).toBe(1); // no background poll fired

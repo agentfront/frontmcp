@@ -151,6 +151,23 @@ describe('DynamicRegistry', () => {
       expect(registry.hasTool('rc-tool')).toBe(false);
     });
 
+    it('hands the tool back to the remaining registrant when the newest one unregisters (#769)', async () => {
+      const first = createToolDef({ name: 'shared', execute: jest.fn().mockResolvedValue({ content: [] }) });
+      const second = createToolDef({ name: 'shared', execute: jest.fn().mockResolvedValue({ content: [] }) });
+      registry.registerTool(first);
+      const unregisterSecond = registry.registerTool(second);
+
+      const listener = jest.fn();
+      registry.subscribe(listener);
+      unregisterSecond();
+
+      expect(registry.findTool('shared')).toBe(first);
+      expect(listener).toHaveBeenCalledTimes(1);
+      await registry.findTool('shared')?.execute({});
+      expect(first.execute).toHaveBeenCalled();
+      expect(second.execute).not.toHaveBeenCalled();
+    });
+
     it('ref counting: does not notify on intermediate unregister', () => {
       registry.registerTool(createToolDef({ name: 'rc-tool' }));
       registry.registerTool(createToolDef({ name: 'rc-tool' }));

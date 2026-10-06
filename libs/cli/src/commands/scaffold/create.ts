@@ -326,6 +326,8 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+# Holds MCP_SESSION_SECRET; ci/.env.docker.example is the committed template
+.env.docker
 
 # FrontMCP development keys (contains private keys - never commit!)
 .frontmcp/
@@ -355,6 +357,7 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+ci/.env.docker
 .frontmcp
 e2e
 *.md
@@ -414,7 +417,7 @@ Run tests with \`${cfg.run} test\` (which runs \`frontmcp test\` under the hood)
 
 ## Docker
 
-Docker Compose config is in \`ci/docker-compose.yml\` (includes Redis). Redis-only: \`docker compose -f ci/docker-compose.yml up redis -d\`.
+Docker Compose config is in \`ci/docker-compose.yml\` (includes Redis); run it with \`--env-file ci/.env.docker\` (the \`docker:*\` scripts do), after setting \`MCP_SESSION_SECRET\` there. \`ci/.env.docker\` is git-ignored; after cloning, copy \`ci/.env.docker.example\` to it. Redis-only: \`docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up redis -d\`.
 
 ## Environment
 
@@ -530,11 +533,19 @@ ENV NODE_ENV=production
 # A container is the case where listening on every interface is the intent.
 ENV FRONTMCP_BIND_ADDRESS=all
 
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package.json ./
+# The server may write runtime files (logs, sqlite) under its working directory.
+RUN chown node:node /app
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/package.json ./
+
+# Run as the image's unprivileged user, not root.
+USER node
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \\
+  CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 
 CMD ["node", "dist/node/${appName}.bundle.js"]
 `;
@@ -545,8 +556,10 @@ function generateDockerComposeWithRedis(): string {
 services:
   redis:
     image: redis:7-alpine
+    # Loopback only: the app reaches Redis over the compose network, and a
+    # Redis without a password must not listen on the host's public interfaces.
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379'
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
@@ -563,9 +576,11 @@ services:
     ports:
       - '\${PORT:-3000}:3000'
     environment:
-      - NODE_ENV=\${NODE_ENV:-development}
+      - NODE_ENV=\${NODE_ENV:-production}
       - PORT=\${PORT:-3000}
       - FRONTMCP_BIND_ADDRESS=all
+      # Required in production (session-ID encryption). Compose stops here when it is unset.
+      - MCP_SESSION_SECRET=\${MCP_SESSION_SECRET:?set MCP_SESSION_SECRET in ci/.env.docker (openssl rand -hex 32)}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
@@ -575,9 +590,11 @@ services:
 volumes:
   redis-data:
 
+# Run with the env file, which holds MCP_SESSION_SECRET (npm run docker:up does this):
+#   docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up
 # Selective rebuild:
-#   docker compose -f ci/docker-compose.yml up --build app   # rebuild only the app
-#   docker compose -f ci/docker-compose.yml up --build       # rebuild everything
+#   docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up --build app   # rebuild only the app
+#   docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up --build       # rebuild everything
 `;
 }
 
@@ -591,12 +608,16 @@ services:
     ports:
       - '\${PORT:-3000}:3000'
     environment:
-      - NODE_ENV=\${NODE_ENV:-development}
+      - NODE_ENV=\${NODE_ENV:-production}
       - PORT=\${PORT:-3000}
       - FRONTMCP_BIND_ADDRESS=all
+      # Required in production (session-ID encryption). Compose stops here when it is unset.
+      - MCP_SESSION_SECRET=\${MCP_SESSION_SECRET:?set MCP_SESSION_SECRET in ci/.env.docker (openssl rand -hex 32)}
 
+# Run with the env file, which holds MCP_SESSION_SECRET (npm run docker:up does this):
+#   docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up
 # Selective rebuild:
-#   docker compose -f ci/docker-compose.yml up --build app   # rebuild only the app
+#   docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up --build app   # rebuild only the app
 `;
 }
 
@@ -606,9 +627,14 @@ const TEMPLATE_ENV_DOCKER_CI = `
 
 # Application
 PORT=3000
-NODE_ENV=development
+NODE_ENV=production
 # The server binds 127.0.0.1 by default; a published container port needs every interface
 FRONTMCP_BIND_ADDRESS=all
+# Required with NODE_ENV=production (session-ID encryption): openssl rand -hex 32
+# Compose refuses to start until it is set. ci/.env.docker is git-ignored; ci/.env.docker.example
+# is its committed template, so copy it to ci/.env.docker after cloning. A value exported in your
+# shell wins over this file.
+MCP_SESSION_SECRET=
 
 # Redis - use 'redis' (service name) as host inside Docker network
 REDIS_HOST=redis
@@ -632,11 +658,21 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: ${projectName} - FrontMCP Lambda Function
 
+Parameters:
+  McpSessionSecret:
+    Type: String
+    NoEcho: true
+    Description: MCP_SESSION_SECRET for session-ID encryption, required in production (openssl rand -hex 32)
+
 Globals:
   Function:
     Timeout: 30
     Runtime: nodejs24.x
     MemorySize: 256
+    Environment:
+      Variables:
+        NODE_ENV: production
+        MCP_SESSION_SECRET: !Ref McpSessionSecret
 
 Resources:
   FrontMCPFunction:
@@ -976,8 +1012,8 @@ ${cfg.run} docker:build
 Redis is included in the Docker Compose setup. For local development without Docker:
 
 \`\`\`bash
-# Start only Redis
-docker compose -f ci/docker-compose.yml up redis -d
+# Start only Redis (set MCP_SESSION_SECRET in ci/.env.docker first; compose checks it for every service)
+docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up redis -d
 \`\`\`
 `;
     }
@@ -1150,7 +1186,8 @@ No additional secrets required - uses \`GITHUB_TOKEN\` for GHCR.
 ├── ci/
 │   ├── Dockerfile         # Container build config
 │   ├── docker-compose.yml # Docker services config
-│   └── .env.docker        # Docker-specific env vars
+│   ├── .env.docker        # Docker-specific env vars (git-ignored, holds MCP_SESSION_SECRET)
+│   └── .env.docker.example # Committed template for .env.docker
 `;
   }
 
@@ -1599,6 +1636,7 @@ async function scaffoldDeploymentFiles(targetDir: string, options: CreateOptions
       const dockerCompose = redisSetup === 'docker' ? generateDockerComposeWithRedis() : generateDockerComposeNoRedis();
       await scaffoldFileIfMissing(targetDir, path.join(ciDir, 'docker-compose.yml'), dockerCompose);
       await scaffoldFileIfMissing(targetDir, path.join(ciDir, '.env.docker'), TEMPLATE_ENV_DOCKER_CI);
+      await scaffoldFileIfMissing(targetDir, path.join(ciDir, '.env.docker.example'), TEMPLATE_ENV_DOCKER_CI);
       await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.dockerignore'), TEMPLATE_DOCKERIGNORE);
       break;
     }
@@ -1887,9 +1925,9 @@ async function upsertPackageJsonWithTarget(
 
   // Add target-specific scripts
   if (deploymentTarget === 'node') {
-    baseScripts['docker:up'] = 'docker compose -f ci/docker-compose.yml up';
-    baseScripts['docker:down'] = 'docker compose -f ci/docker-compose.yml down';
-    baseScripts['docker:build'] = 'docker compose -f ci/docker-compose.yml build';
+    baseScripts['docker:up'] = 'docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up';
+    baseScripts['docker:down'] = 'docker compose -f ci/docker-compose.yml --env-file ci/.env.docker down';
+    baseScripts['docker:build'] = 'docker compose -f ci/docker-compose.yml --env-file ci/.env.docker build';
   }
 
   if (deploymentTarget === 'lambda') {
