@@ -30,6 +30,7 @@ const inputSchema = z.object({
       mode: z.enum(['form', 'url']).optional(),
       ttl: z.number().optional(),
       elicitationId: z.string().optional(),
+      url: z.string().optional(),
     })
     .optional(),
 });
@@ -57,6 +58,7 @@ const stateSchema = z.object({
   mode: z.enum(['form', 'url']).default('form'),
   ttl: z.number().default(DEFAULT_ELICIT_TTL),
   elicitationId: z.string().optional(),
+  url: z.string().optional(),
   elicitId: z.string(),
   expiresAt: z.number(),
   pendingRecord: z.any().optional() as z.ZodType<PendingElicitRecord | undefined>,
@@ -113,7 +115,7 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseInput:start');
 
     const input = inputSchema.parse(this.rawInput);
-    const { mode = 'form', ttl = DEFAULT_ELICIT_TTL, elicitationId } = input.options ?? {};
+    const { mode = 'form', ttl = DEFAULT_ELICIT_TTL, elicitationId, url } = input.options ?? {};
 
     this.state.set({
       relatedRequestId: input.relatedRequestId,
@@ -123,6 +125,7 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
       mode: mode as ElicitMode,
       ttl,
       elicitationId,
+      url,
     });
 
     this.logger.verbose('parseInput:done', { sessionId: input.sessionId, mode });
@@ -132,11 +135,14 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
   async validateRequest() {
     this.logger.verbose('validateRequest:start');
 
-    const { mode, elicitationId } = this.state;
+    const { mode, elicitationId, url } = this.state;
 
-    // URL mode requires elicitationId for out-of-band tracking
+    // URL mode requires elicitationId for out-of-band tracking, and the url the client opens
     if (mode === 'url' && !elicitationId) {
       throw new InvalidInputError('elicitationId is required when mode is "url"');
+    }
+    if (mode === 'url' && !url) {
+      throw new InvalidInputError('url is required when mode is "url"');
     }
 
     this.logger.verbose('validateRequest:done');
@@ -198,9 +204,10 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
       requestedSchema,
     };
 
-    // Add elicitationId for URL mode (required for out-of-band tracking)
+    // Add elicitationId (required for out-of-band tracking) and the url for URL mode
     if (mode === 'url' && elicitationId) {
       requestParams['elicitationId'] = elicitationId;
+      requestParams['url'] = this.state.url;
     }
 
     this.state.set('requestParams', requestParams);

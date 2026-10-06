@@ -141,6 +141,7 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     // Add elicitationId for URL mode
     if (mode === 'url' && elicitationId) {
       params['elicitationId'] = elicitationId;
+      params['url'] = options?.url;
     }
 
     this.logger.info('sendElicitRequest', { relatedRequestId, elicitId, mode, ttl });

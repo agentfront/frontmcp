@@ -172,7 +172,7 @@ const result = await this.elicit(
 
 ### URL Mode
 
-Redirects the user to an external URL for out-of-band interaction (OAuth, payments, etc.). URL mode requires an `elicitationId` — an opaque identifier you generate to correlate the out-of-band callback with the pending elicitation:
+Redirects the user to an external URL for out-of-band interaction (OAuth, payments, etc.). URL mode requires the `url` the client opens and an `elicitationId` — an opaque identifier you generate to correlate the out-of-band callback with the pending elicitation. Both are sent in the `elicitation/create` request, on every transport and under MCP 2026-07-28 in the `input_required` result; an elicitation without either fails with `INVALID_INPUT`:
 
 ```ts
 import { randomUUID } from '@frontmcp/utils';
@@ -187,10 +187,13 @@ const result = await this.elicit(
   }),
   {
     mode: 'url',
+    url: `https://auth.example.com/github/authorize?state=${elicitationId}`, // Required: the page the client opens
     elicitationId, // Required for URL mode tracking
   }
 );
 ```
+
+Up to 1.9.1 `elicit()` had no `url` option, so a URL-mode elicitation sent no URL (under MCP 2026-07-28 it sent neither the URL nor the `elicitationId`).
 
 <Warning>
 **Security:** Never put a raw session ID into the elicitation URL. Generate an opaque `elicitationId` (e.g. via `randomUUID()`) and store the mapping to the session server-side, or use a signed/encrypted payload that you can validate on callback.
@@ -1190,6 +1193,7 @@ class ConnectGitHubTool extends ToolContext {
       }),
       {
         mode: 'url',
+        url: `https://auth.example.com/github/authorize?state=${elicitationId}`,
         elicitationId,
         ttl: 300000,
       }
