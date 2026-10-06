@@ -78,6 +78,19 @@ describe('CacheVercelKvProvider', () => {
       expect(mockCreateClient).toHaveBeenCalledTimes(1);
     });
 
+    it('builds the client again after a failed attempt', async () => {
+      mockCreateClient.mockImplementationOnce(() => {
+        throw new Error('kv unavailable');
+      });
+      const provider = new CacheVercelKvProvider();
+
+      await expect(provider.setValue('key', 'value')).rejects.toThrow('kv unavailable');
+      await provider.setValue('key', 'value');
+
+      expect(mockCreateClient).toHaveBeenCalledTimes(2);
+      expect(mockKvSet).toHaveBeenCalledTimes(1);
+    });
+
     it('should throw error when only url is provided without token', () => {
       expect(() => {
         new CacheVercelKvProvider({ url: 'https://kv.example.com' });
