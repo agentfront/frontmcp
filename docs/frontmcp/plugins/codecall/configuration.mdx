@@ -296,8 +296,10 @@ CodeCallPlugin.init({
 
 `allowLoops: false` refuses every loop but `for-of` before the script runs; `allowLoops: true` adds `for`. The
 sandbox refuses `while`, `do-while` and `for-in` whatever `allowLoops` says. Scripts have no `console` in any
-preset, so `allowConsole` has no effect: a script that uses `console` is refused before it runs, and `mcpLog(level,
-message)` is the way to log. Up to 1.9.1 `allowLoops: false` let a `for` loop run.
+preset, so `allowConsole` has no effect: a script that refers to the global `console` is refused before it runs (a
+field named `console`, as in `result.platform.console`, is fine), and `mcpLog(level, message)` is the way to log. The
+`codecall:execute` description advertises `for-of` and names `for` as needing `allowLoops`, so a model's scripts run on
+every preset. Up to 1.9.1 `allowLoops: false` let a `for` loop run.
 
 ### Preset Details
 
