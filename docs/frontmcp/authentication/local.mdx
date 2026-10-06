@@ -269,7 +269,7 @@ class GitHubReposTool extends ToolContext {
 }
 ```
 
-`getToken(id)` resolves the decrypted upstream token from server-side storage (refreshing it when a refresh token is available); tokens are never placed in the JWT or exposed to the model. `tryGetToken(id)` returns `null` instead of throwing when a provider was skipped.
+`getToken(id)` resolves the decrypted upstream token from server-side storage, renewing it with the provider's refresh token once it has expired or is within `refresh.skewSeconds` of expiry (unless `refresh.enabled` is `false`); when the client refreshes its FrontMCP token, the upstream tokens move to the new one. Tokens are never placed in the JWT or exposed to the model. `tryGetToken(id)` returns `null` instead of throwing when a provider was skipped.
 
 <Note>
   No PII is stored by FrontMCP: only the upstream provider tokens (AES-256-GCM encrypted at rest) and the non-PII provider ids are persisted.
