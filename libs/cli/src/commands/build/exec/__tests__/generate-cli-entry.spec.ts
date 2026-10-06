@@ -944,6 +944,14 @@ describe('generateCliEntry', () => {
       expect(source).toContain('.pid');
     });
 
+    it('should write the name and entry that frontmcp list and status read (#768)', () => {
+      const source = generateCliEntry(makeOptions({ appName: 'my-server', selfContained: false }));
+      expect(source).toContain('name: "my-server"');
+      expect(source).toContain('entry: serverBundlePath');
+      expect(source).toContain('restartCount: 0');
+      expect(generateCliEntry(makeOptions({ selfContained: true }))).toContain('entry: process.execPath');
+    });
+
     it('should spawn node with inline script in normal mode', () => {
       const source = generateCliEntry(makeOptions({
         selfContained: false,

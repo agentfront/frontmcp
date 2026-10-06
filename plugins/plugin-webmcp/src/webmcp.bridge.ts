@@ -43,6 +43,8 @@ interface WebMcpAuthInfo {
   extra?: Record<string, unknown>;
 }
 
+const ANONYMOUS_SUBJECT = 'anon:webmcp';
+
 /** A tool registered with the ModelContext, and how to take it back. */
 interface Registration {
   mcpName: string;
@@ -338,11 +340,13 @@ export class WebMcpBridge {
     const option = this.options.authContext;
     const authContext = typeof option === 'function' ? await option() : option;
     const user = authContext?.user;
-    const sub = typeof user?.sub === 'string' ? user.sub : 'webmcp';
+    const signedIn = typeof user?.sub === 'string';
+    // `anon:` is what marks a subject anonymous (`this.auth.isAnonymous`, authorities, quotas)
+    const sub = signedIn ? (user.sub as string) : ANONYMOUS_SUBJECT;
     const iss = typeof user?.['iss'] === 'string' ? (user['iss'] as string) : 'webmcp';
     return {
       sessionId: authContext?.sessionId ?? this.sessionId,
-      user: { ...user, iss, sub },
+      user: { ...user, iss, sub, ...(!signedIn && { anonymous: true }) },
       scopes: [],
       clientId: sub,
       ...(authContext?.token !== undefined && { token: authContext.token }),

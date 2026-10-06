@@ -2443,14 +2443,11 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/edge@workspace:libs/edge"
   dependencies:
+    "@frontmcp/plugin-skilled-openapi": "npm:1.9.1"
     "@types/node": "npm:^24.0.0"
     typescript: "npm:^5.0.0"
   peerDependencies:
-    "@frontmcp/plugin-skilled-openapi": 1.9.1
     "@frontmcp/sdk": 1.9.1
-  peerDependenciesMeta:
-    "@frontmcp/plugin-skilled-openapi":
-      optional: true
   languageName: unknown
   linkType: soft
 
@@ -2619,7 +2616,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/plugin-skilled-openapi@workspace:plugins/plugin-skilled-openapi":
+"@frontmcp/plugin-skilled-openapi@npm:1.9.1, @frontmcp/plugin-skilled-openapi@workspace:plugins/plugin-skilled-openapi":
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-skilled-openapi@workspace:plugins/plugin-skilled-openapi"
   dependencies:

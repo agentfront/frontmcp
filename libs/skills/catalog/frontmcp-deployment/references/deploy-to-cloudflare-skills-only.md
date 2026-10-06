@@ -5,16 +5,16 @@ description: Deploy an auto-updating FrontMCP server to Cloudflare Workers with 
 
 # Deploy to Cloudflare Workers (Managed / Skills-Only Model)
 
-> **⚠️ Status — experimental.** `@frontmcp/edge` `createEdgeMcp` **deploys and
-> serves on real Cloudflare** (verified live), as long as you (1) keep
-> `serve: false` (now the createEdgeMcp default) and (2) stub three Node-only
-> transports your bundler statically includes but the edge never uses —
-> `express`, `raw-body`, `cross-spawn`. NOTE: **miniflare local-dev is stricter
-> than production** and rejects `node:http2`/`node:fs` that real Cloudflare's
-> `nodejs_compat` provides, so the local managed e2e is skipped even though the
-> package runs in production. Managed mode (this page) additionally needs a SaaS
-> bundle endpoint + the optional peer `@frontmcp/plugin-skilled-openapi`. The
-> worker-conditioned SDK build (roadmap) removes the manual stubs. For the
+> **⚠️ Status — experimental.** `@frontmcp/edge` `createEdgeMcp` **boots under
+> `wrangler dev` and deploys and serves on real Cloudflare**, managed mode
+> included, with no bundler stubs: since 1.9.1 wrangler resolves the SDK's
+> `browser` build, and `createEdgeMcp` sets `serve: false` itself. NOTE:
+> **miniflare local-dev is stricter than production** and rejects
+> `node:http2`/`node:fs` that real Cloudflare's `nodejs_compat` provides, so the
+> local managed e2e is skipped. Managed mode (this page) needs a SaaS bundle
+> endpoint; `@frontmcp/plugin-skilled-openapi` is a dependency of
+> `@frontmcp/edge`, installed with it. A config that fails validation answers
+> `500 CONFIG_INVALID` and the worker log names the invalid fields. For the
 > simplest production path, the decorator build in
 > [`deploy-to-cloudflare.md`](./deploy-to-cloudflare.md) needs none of this.
 > The GitHub Action / signed-resync-webhook / Durable Object stores / Frontegg
@@ -95,7 +95,7 @@ export default createEdgeMcp({
 
 `createEdgeMcp` returns `{ fetch, scheduled }`: `fetch` serves MCP; `scheduled`
 is the **Cron Trigger** entrypoint that pulls a fresh bundle and hot-swaps it.
-Managed mode requires the optional peer `@frontmcp/plugin-skilled-openapi`.
+Managed mode runs on `@frontmcp/plugin-skilled-openapi`, which `@frontmcp/edge` depends on. When the boot pull fails and the KV cache is empty, the error says no bundle is available in the injected bundle cache (no file path).
 Its `outbound.egressProxy` option needs Node.js (undici's `ProxyAgent`); on a
 Worker a configured proxy makes every operation call fail with
 `egress proxy unavailable`, so leave it unset there.

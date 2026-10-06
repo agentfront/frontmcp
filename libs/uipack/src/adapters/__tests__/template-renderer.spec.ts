@@ -4,7 +4,7 @@
  * Tests for renderToolTemplate().
  */
 
-import { renderToolTemplate } from '../template-renderer';
+import { renderToolTemplate, warnIfComponentReference } from '../template-renderer';
 
 // Mock fs and esbuild for FileSource tests.
 jest.mock('fs', () => ({
@@ -215,6 +215,7 @@ describe('renderToolTemplate', () => {
         input: { query: 'test' },
         output: { result: 42 },
         template,
+        escapeStringResults: false,
       });
 
       expect(template).toHaveBeenCalled();
@@ -378,7 +379,13 @@ describe('renderToolTemplate — function templates (#645)', () => {
   it('renders a capitalized HTML builder function instead of an empty shell', () => {
     const Card = (ctx: { output: { name: string } }) => `<section id="card">${ctx.output.name}</section>`;
 
-    const result = renderToolTemplate({ toolName: 'card_tool', input: {}, output: { name: 'Ada' }, template: Card });
+    const result = renderToolTemplate({
+      toolName: 'card_tool',
+      input: {},
+      output: { name: 'Ada' },
+      template: Card,
+      escapeStringResults: false,
+    });
 
     expect(result.html).toContain('<section id="card">Ada</section>');
   });
@@ -401,6 +408,115 @@ describe('renderToolTemplate — function templates (#645)', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toContain('react_tool');
     expect(warn.mock.calls[0][0]).toContain('{ file:');
+  });
+
+  it('warns at startup through warnIfComponentReference, and not again on the first render (#769)', () => {
+    const warn = jest.fn();
+    function StartupWidget() {
+      return React.createElement('div', null, 'widget');
+    }
+
+    expect(warnIfComponentReference('startup_tool', StartupWidget, { warn })).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('startup_tool');
+
+    renderToolTemplate({ toolName: 'startup_tool', input: {}, output: {}, template: StartupWidget, logger: { warn } });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns at startup for a component compiled by the development JSX runtime (_jsxDEV)', () => {
+    const warn = jest.fn();
+    const _jsxDEV = (type: string, props: object) => ({ $$typeof: Symbol.for('react.element'), type, props });
+    function DevWidget() {
+      return _jsxDEV('div', {});
+    }
+
+    expect(warnIfComponentReference('dev_tool', DevWidget, { warn })).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  // The objects React.memo() and React.forwardRef() return at runtime
+  const memoComponent = (type: () => null) => ({ $$typeof: Symbol.for('react.memo'), type, compare: null });
+  const forwardRefComponent = (render: () => null) => ({ $$typeof: Symbol.for('react.forward_ref'), render });
+
+  it.each([
+    ['React.memo', memoComponent(() => null)],
+    ['React.forwardRef', forwardRefComponent(() => null)],
+  ])('warns at startup for a %s component, and not again on the first render', (label, template) => {
+    const warn = jest.fn();
+    const toolName = `${label}_tool`;
+
+    expect(warnIfComponentReference(toolName, template, { warn })).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain(toolName);
+
+    renderToolTemplate({ toolName, input: {}, output: {}, template, logger: { warn } });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns at render time for a React.memo component the server did not check at startup', () => {
+    const warn = jest.fn();
+    const template = memoComponent(() => null);
+
+    renderToolTemplate({ toolName: 'render_memo_tool', input: {}, output: {}, template, logger: { warn } });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('render_memo_tool');
+  });
+
+  function CardBuilder(ctx: { output: unknown }): string {
+    return `<p>${String(ctx.output)}</p>`;
+  }
+
+  it('does not run the template at startup, and does not warn for a capitalized builder that needs call data', () => {
+    const warn = jest.fn();
+    let calls = 0;
+    function OrderCard(ctx: { output: { order: { id: string } } }): string {
+      calls++;
+      return `<b>${ctx.output.order.id}</b>`;
+    }
+
+    expect(warnIfComponentReference('order_tool', OrderCard, { warn })).toBe(false);
+    expect(calls).toBe(0);
+    expect(warn).not.toHaveBeenCalled();
+
+    const result = renderToolTemplate({
+      toolName: 'order_tool',
+      input: {},
+      output: { order: { id: 'A-1' } },
+      template: OrderCard,
+      logger: { warn },
+      escapeStringResults: false,
+    });
+    expect(result.html).toContain('<b>A-1</b>');
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('leaves a capitalized function that throws to the render-time check', () => {
+    const warn = jest.fn();
+    function ThrowingWidget(): never {
+      throw new Error('Invalid hook call');
+    }
+
+    expect(warnIfComponentReference('throwing_tool', ThrowingWidget, { warn })).toBe(false);
+    renderToolTemplate({
+      toolName: 'throwing_tool',
+      input: {},
+      output: {},
+      template: ThrowingWidget,
+      logger: { warn },
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['a capitalized HTML builder', CardBuilder],
+    ['a file source', { file: './widget.tsx' }],
+    ['an HTML string', '<div>static</div>'],
+  ])('does not warn at startup for %s', (_label, template) => {
+    const warn = jest.fn();
+    expect(warnIfComponentReference('builder_tool', template, { warn })).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it('warns for a class component and a memo component too', () => {

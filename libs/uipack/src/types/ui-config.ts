@@ -204,8 +204,8 @@ export interface TemplateHelpers {
   html: (strings: TemplateStringsArray, ...values: unknown[]) => TrustedHtml;
 
   /**
-   * Mark markup you produced or sanitized yourself as trusted, so it renders as HTML even when
-   * `escapeStringResults` is on. Never pass raw tool output or user input.
+   * Mark markup you produced or sanitized yourself as trusted, so it renders as HTML although plain
+   * string results are escaped. Never pass raw tool output or user input.
    */
   trustedHtml: (markup: string) => TrustedHtml;
 }
@@ -401,11 +401,11 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   /**
    * HTML-escape a plain string returned by a template function.
    *
-   * - `true`: plain strings are escaped and shown as text; markup built with
-   *   `ctx.helpers.html` or wrapped with `ctx.helpers.trustedHtml` still renders as HTML.
-   * - unset (1.8 default): strings that look like HTML render as markup, and a one-time
-   *   notice per tool recommends `html` because 1.9 will escape string results by default.
-   * - `false`: keep rendering strings as markup without the notice.
+   * - unset (1.9 default): plain strings are escaped and shown as text, and a one-time notice per
+   *   tool is logged when one looked like markup; markup built with `ctx.helpers.html` or wrapped
+   *   with `ctx.helpers.trustedHtml` still renders as HTML.
+   * - `true`: the same, without the notice.
+   * - `false`: strings that look like HTML render as markup (the 1.8 behaviour).
    *
    * Overrides the server-wide `@FrontMcp({ ui: { escapeStringResults } })` default.
    * Static string templates (`template: '<div>…</div>'`) are author markup and never escaped.

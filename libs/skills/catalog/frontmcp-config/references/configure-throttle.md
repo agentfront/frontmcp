@@ -247,7 +247,7 @@ throttle: {
 }
 ```
 
-`storage` is a `StorageConfig` from `@frontmcp/utils` -- `type` picks the backend, and its options go under the matching key (`redis: { config }` or `redis: { url }`, `vercelKv: { url, token }`, `upstash: { url, token }`). It is NOT the top-level `redis` shape: `{ provider: 'redis', host, port }` has no `type`, so it is auto-detected from `REDIS_URL` / `REDIS_HOST` and otherwise runs in memory.
+`storage` is a `StorageConfig` from `@frontmcp/utils` -- `type` picks the backend, and its options go under the matching key (`redis: { config }`, `redis: { url }` or `redis: { config: { url } }`, `vercelKv: { url, token }`, `upstash: { url, token }`). Beside a URL, `config` fields only fill in what the URL leaves out (port, password, db, tls); a contradicting field fails at startup. It is NOT the top-level `redis` shape: `{ provider: 'redis', host, port }` has no `type`, so it is auto-detected from `REDIS_URL` / `REDIS_HOST` and otherwise runs in memory.
 
 **Rate limits fail closed.** If the store is unreachable at startup, the server does not start: startup rejects with `GuardStorageUnavailableError` (`throttle.storage (redis) is unavailable: ...`), the default in production. If the store goes away while the server is running, a limited call is refused with the same error rather than `Internal FrontMCP error` (HTTP 503 from the `global` check; an `isError` result with `_meta.code: 'GUARD_STORAGE_UNAVAILABLE'` from a per-tool limit inside `tools/call`). To use per-instance counters instead (at startup and during a mid-run outage, going back to the store once it answers), opt in:
 

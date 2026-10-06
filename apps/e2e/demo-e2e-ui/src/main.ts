@@ -13,6 +13,8 @@ const extApps =
 @FrontMcp({
   info: { name: 'Demo E2E UI', version: '0.1.0' },
   apps: [WidgetsApp],
+  // The fixture templates return plain markup strings and escape values themselves (1.9 escapes strings by default)
+  ui: { escapeStringResults: false },
   logging: { level: LogLevel.Warn },
   http: { port },
   extApps,

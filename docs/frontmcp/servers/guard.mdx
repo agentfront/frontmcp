@@ -439,7 +439,7 @@ throttle: {
 }
 ```
 
-`storage` is a `StorageConfig` from `@frontmcp/utils`, not the top-level `redis` shape: the backend is chosen by `type`, and its connection goes under the key of that name (`redis: { config }` or `redis: { url: process.env.REDIS_URL }`). A block without `type` (such as `{ provider: 'redis', host, port }`) is auto-detected from `REDIS_URL` / `REDIS_HOST` and otherwise runs in memory.
+`storage` is a `StorageConfig` from `@frontmcp/utils`, not the top-level `redis` shape: the backend is chosen by `type`, and its connection goes under the key of that name (`redis: { config }`, `redis: { url: process.env.REDIS_URL }`, or `redis: { config: { url } }` like the top-level option). Beside a URL, the `config` fields only fill in what the URL leaves out (port, password, db, tls); a field that contradicts the URL fails at startup. A block without `type` (such as `{ provider: 'redis', host, port }`) is auto-detected from `REDIS_URL` / `REDIS_HOST` and otherwise runs in memory.
 
 Redis enables pub/sub-based semaphore notifications for more efficient concurrency slot release detection.
 

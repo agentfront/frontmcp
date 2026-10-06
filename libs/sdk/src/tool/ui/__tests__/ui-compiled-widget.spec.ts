@@ -67,6 +67,27 @@ describe('ToolUIRegistry compiled widgets (#681)', () => {
     expect(componentWarnings[0][0]).toContain('react_weather');
   });
 
+  it('warns at startup for an inline-mode tool whose lean shell never renders the template (#769)', async () => {
+    const warn = jest.fn();
+    const registry = new ToolUIRegistry(undefined, { logger: { warn } });
+    class InlineCard {
+      render(): null {
+        return null;
+      }
+    }
+    const uiConfig = { template: InlineCard };
+
+    registry.checkTemplate('inline_card', InlineCard);
+    await registry.compileLeanWidgetAsync({ toolName: 'inline_card', uiConfig });
+    const componentWarningsAtStartup = warn.mock.calls.filter(([message]) =>
+      String(message).includes('React component'),
+    );
+    expect(componentWarningsAtStartup).toHaveLength(1);
+
+    await registry.renderAndRegisterAsync({ toolName: 'inline_card', input: {}, output: {}, uiConfig });
+    expect(warn.mock.calls.filter(([message]) => String(message).includes('React component'))).toHaveLength(1);
+  });
+
   describe('ui.csp', () => {
     let consoleWarn: jest.SpyInstance;
 

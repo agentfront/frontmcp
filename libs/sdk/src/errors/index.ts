@@ -70,6 +70,7 @@ export type {
 
 // Export tool-level credential gate error (checkToolCredentials stage)
 export { ToolCredentialsRequiredError } from './tool-credentials-required.error';
+export { describeConfigIssues } from './misconfiguration';
 export { SessionIdentityRequiredError } from './session-identity-required.error';
 export type { ToolCredentialsRequiredData } from './tool-credentials-required.error';
 

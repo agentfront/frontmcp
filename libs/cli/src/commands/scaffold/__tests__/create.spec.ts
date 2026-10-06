@@ -186,6 +186,15 @@ describe('runCreate', () => {
       expect(template).not.toContain('main.handler');
     });
 
+    it('runs the SAM function in production with a NoEcho session secret (#768)', async () => {
+      await runCreate('sam-env-app', { yes: true, target: 'lambda' });
+
+      const template = readFileSync(path.join(tempDir, 'sam-env-app', 'ci', 'template.yaml'), 'utf8');
+      expect(template).toContain('NODE_ENV: production');
+      expect(template).toContain('MCP_SESSION_SECRET: !Ref McpSessionSecret');
+      expect(template).toMatch(/McpSessionSecret:\n\s+Type: String\n\s+NoEcho: true/);
+    });
+
     it('adds @codegenie/serverless-express for the lambda target only (#680)', async () => {
       await runCreate('sam-deps', { yes: true, target: 'lambda' });
       const lambdaPkg = JSON.parse(readFileSync(path.join(tempDir, 'sam-deps', 'package.json'), 'utf8'));
@@ -365,9 +374,9 @@ describe('runCreate', () => {
 
         // Runner stage
         expect(content).toContain('ENV NODE_ENV=production');
-        expect(content).toContain('COPY --from=builder /app/node_modules ./node_modules');
-        expect(content).toContain('COPY --from=builder /app/dist ./dist');
-        expect(content).toContain('COPY --from=builder /app/package.json ./');
+        expect(content).toContain('COPY --from=builder --chown=node:node /app/node_modules ./node_modules');
+        expect(content).toContain('COPY --from=builder --chown=node:node /app/dist ./dist');
+        expect(content).toContain('COPY --from=builder --chown=node:node /app/package.json ./');
 
         // Builder prunes devDeps before copy
         expect(content).toContain('npm prune --omit=dev');
@@ -387,6 +396,18 @@ describe('runCreate', () => {
 
         expect(content).toContain('ENV FRONTMCP_BIND_ADDRESS=all');
       });
+
+      it('runs as the unprivileged node user with a /healthz health check (#768)', async () => {
+        await runCreate('docker-hardened-app', { yes: true, target: 'node' });
+
+        const content = readFileSync(path.join(tempDir, 'docker-hardened-app', 'ci', 'Dockerfile'), 'utf8');
+        const runnerStage = content.slice(content.indexOf('AS runner'));
+
+        expect(runnerStage).toContain('RUN chown node:node /app');
+        expect(runnerStage).toMatch(/^USER node$/m);
+        expect(runnerStage.indexOf('USER node')).toBeLessThan(runnerStage.indexOf('CMD ["node"'));
+        expect(runnerStage).toMatch(/^HEALTHCHECK .*\\\n\s+CMD node -e .*\/healthz/m);
+      });
     });
 
     describe('ci/docker-compose.yml with redis: docker', () => {
@@ -397,7 +418,13 @@ describe('runCreate', () => {
 
         // Redis service
         expect(content).toContain('image: redis:7-alpine');
-        expect(content).toContain("'6379:6379'");
+        // Redis is published on loopback only (#768)
+        expect(content).toContain("'127.0.0.1:6379:6379'");
+        expect(content).not.toContain("- '6379:6379'");
+        expect(content).toContain('NODE_ENV=${NODE_ENV:-production}');
+        // A missing secret fails at compose time instead of every initialize answering 500
+        expect(content).toContain('MCP_SESSION_SECRET=${MCP_SESSION_SECRET:?set MCP_SESSION_SECRET in ci/.env.docker');
+        expect(content).not.toContain('MCP_SESSION_SECRET:-');
         expect(content).toContain('redis-data:/data');
         expect(content).toContain('redis-cli');
 
@@ -439,6 +466,7 @@ describe('runCreate', () => {
         expect(content).not.toContain('depends_on:');
         expect(content).not.toContain('REDIS_HOST');
         expect(content).not.toMatch(/^\s+redis:\s*$/m);
+        expect(content).toContain('NODE_ENV=${NODE_ENV:-production}');
       });
 
       it('should use no-Redis compose template when redis is existing', async () => {
@@ -464,8 +492,23 @@ describe('runCreate', () => {
 
         expect(content).toContain('REDIS_HOST=redis');
         expect(content).toContain('PORT=3000');
-        expect(content).toContain('NODE_ENV=development');
+        expect(content).toContain('NODE_ENV=production');
+        expect(content).toMatch(/^MCP_SESSION_SECRET=$/m);
         expect(content).toContain('REDIS_PORT=6379');
+      });
+
+      it('keeps the file that holds MCP_SESSION_SECRET out of git and the image, beside a committed example', async () => {
+        await runCreate('env-docker-ignored-app', { yes: true, target: 'node' });
+
+        const base = path.join(tempDir, 'env-docker-ignored-app');
+        const gitignoreLines = readFileSync(path.join(base, '.gitignore'), 'utf8').split('\n');
+        const dockerignoreLines = readFileSync(path.join(base, '.dockerignore'), 'utf8').split('\n');
+
+        expect(gitignoreLines).toContain('.env.docker');
+        expect(dockerignoreLines).toContain('ci/.env.docker');
+        expect(readFileSync(path.join(base, 'ci', '.env.docker.example'), 'utf8')).toBe(
+          readFileSync(path.join(base, 'ci', '.env.docker'), 'utf8'),
+        );
       });
     });
 
@@ -488,9 +531,16 @@ describe('runCreate', () => {
 
         const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'docker-scripts-app', 'package.json'), 'utf8'));
 
-        expect(pkgJson.scripts['docker:up']).toBe('docker compose -f ci/docker-compose.yml up');
-        expect(pkgJson.scripts['docker:down']).toBe('docker compose -f ci/docker-compose.yml down');
-        expect(pkgJson.scripts['docker:build']).toBe('docker compose -f ci/docker-compose.yml build');
+        // Compose reads only .env by itself; the secret lives in ci/.env.docker
+        expect(pkgJson.scripts['docker:up']).toBe(
+          'docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up',
+        );
+        expect(pkgJson.scripts['docker:down']).toBe(
+          'docker compose -f ci/docker-compose.yml --env-file ci/.env.docker down',
+        );
+        expect(pkgJson.scripts['docker:build']).toBe(
+          'docker compose -f ci/docker-compose.yml --env-file ci/.env.docker build',
+        );
       });
     });
 

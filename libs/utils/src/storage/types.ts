@@ -390,6 +390,34 @@ export interface MemoryAdapterOptions {
 }
 
 /**
+ * Redis connection by host.
+ */
+export interface RedisHostConnectionConfig {
+  host: string;
+  port?: number;
+  password?: string;
+  db?: number;
+  tls?: boolean;
+  /** Unset for a host config (a config built from optional settings may carry `url: undefined`). */
+  url?: undefined;
+}
+
+/**
+ * Redis connection by URL (`redis://` / `rediss://`).
+ */
+export interface RedisUrlConnectionConfig extends Partial<Omit<RedisHostConnectionConfig, 'url'>> {
+  url: string;
+}
+
+/**
+ * Fields beside a top-level `url` (`{ url, config: { password } }`) that fill in what the URL
+ * leaves out. Without a `url` the adapter needs a `host` and rejects this shape.
+ */
+export interface RedisUrlFillInConfig extends Partial<Omit<RedisHostConnectionConfig, 'url'>> {
+  url?: undefined;
+}
+
+/**
  * Options for Redis storage adapter.
  */
 export interface RedisAdapterOptions {
@@ -400,20 +428,17 @@ export interface RedisAdapterOptions {
   client?: unknown; // Redis type from ioredis
 
   /**
-   * Redis connection configuration.
+   * Redis connection configuration — `host`, or a `url` like the top-level
+   * `redis` option. Beside a URL, the other fields only fill in what the URL
+   * leaves out; a contradicting field is rejected.
    * Mutually exclusive with `client`.
    */
-  config?: {
-    host: string;
-    port?: number;
-    password?: string;
-    db?: number;
-    tls?: boolean;
-  };
+  config?: RedisHostConnectionConfig | RedisUrlConnectionConfig | RedisUrlFillInConfig;
 
   /**
    * Redis connection URI.
-   * e.g., "redis://user:pass@host:6379/0"
+   * e.g., "redis://user:pass@host:6379/0". Fields in `config` fill in what it
+   * leaves out (port, password, db, tls).
    * Mutually exclusive with `client`.
    */
   url?: string;

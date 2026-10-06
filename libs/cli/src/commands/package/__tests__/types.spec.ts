@@ -20,6 +20,18 @@ describe('install types', () => {
       expect(result.ref).toBe('/home/user/my-app');
     });
 
+    it.each(['.', '..', '.\\my-app', 'C:\\apps\\my-app', 'D:/apps/my-app'])(
+      'should detect %s as a local path (#768)',
+      (source) => {
+        expect(parseInstallSource(source)).toEqual({ type: 'local', ref: source });
+      },
+    );
+
+    it('should keep dotted npm package names as npm', () => {
+      expect(parseInstallSource('.hidden-pkg').type).toBe('npm');
+      expect(parseInstallSource('..pkg').type).toBe('npm');
+    });
+
     it('should detect github: prefix as git', () => {
       const result = parseInstallSource('github:user/repo');
       expect(result.type).toBe('git');

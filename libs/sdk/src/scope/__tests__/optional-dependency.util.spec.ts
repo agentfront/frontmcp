@@ -8,7 +8,12 @@
  * The classifier re-probes with the runtime resolver to tell the two apart.
  */
 
-import { importOptionalPeer, probeOptionalDependency } from '../optional-dependency.util';
+import {
+  importOptionalPeer,
+  probeOptionalDependency,
+  registerOptionalModule,
+  requireOptionalModule,
+} from '../optional-dependency.util';
 
 describe('probeOptionalDependency (#453)', () => {
   it('reports "not-installed" when the module cannot be resolved', () => {
@@ -106,5 +111,23 @@ describe('importOptionalPeer (#453)', () => {
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error & { cause?: unknown }).cause).toBe(original);
+  });
+});
+
+describe('registerOptionalModule / requireOptionalModule (#768)', () => {
+  it('runs the loader when nothing is registered', () => {
+    const load = jest.fn(() => ({ source: 'require' }));
+    expect(requireOptionalModule('@frontmcp/not-registered', load)).toEqual({ source: 'require' });
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a module the bundle registered without calling require()', () => {
+    const bundled = { source: 'bundle' };
+    registerOptionalModule('@frontmcp/registered-peer', bundled);
+    const load = jest.fn(() => {
+      throw new Error('No such module "@frontmcp/registered-peer".');
+    });
+    expect(requireOptionalModule('@frontmcp/registered-peer', load)).toBe(bundled);
+    expect(load).not.toHaveBeenCalled();
   });
 });
