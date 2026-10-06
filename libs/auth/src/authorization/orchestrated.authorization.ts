@@ -63,11 +63,12 @@ export interface TokenStore {
 
   /**
    * Copy tokens from one authorization ID to another, keeping them under the source ID too.
+   * Optional: without it a client refresh moves them with `migrateTokens` once the refresh token is rotated.
    *
    * @param fromAuthId - Source authorization ID
    * @param toAuthId - Target authorization ID
    */
-  copyTokens(fromAuthId: string, toAuthId: string): Promise<void>;
+  copyTokens?(fromAuthId: string, toAuthId: string): Promise<void>;
 }
 
 /**

@@ -309,4 +309,46 @@ describe('remote mode keeps the provider token available', () => {
     expect(await slow).toMatchObject({ error: 'invalid_grant' });
     expect(await providerToken(server, latest)).toBe('provider-access-1');
   });
+
+  describe('with a token store that cannot copy tokens', () => {
+    async function signInWithoutCopy(server: TestFetchServer) {
+      const signedIn = await signIn(server);
+      const auth = (server.instance.getScopes()[0] as Scope).auth as LocalPrimaryAuth;
+      Object.assign(auth.orchestratedTokenStore, { copyTokens: undefined });
+      return signedIn;
+    }
+
+    it('moves the provider tokens once the refresh token is rotated, so a failed rotation can be retried', async () => {
+      const server = await remoteServer();
+      const { clientId, refreshToken } = await signInWithoutCopy(server);
+      jest
+        .spyOn(InMemoryAuthorizationStore.prototype, 'rotateRefreshToken')
+        .mockRejectedValueOnce(new Error('store unavailable'));
+
+      const failed = await refreshWith(server, refreshToken, clientId);
+      const retried = (await (await refreshWith(server, refreshToken, clientId)).json()) as Record<string, unknown>;
+      const retriedToken = await providerToken(server, String(retried['access_token']));
+      const next = await refreshWith(server, String(retried['refresh_token']), clientId);
+      const latest = String(((await next.json()) as Record<string, unknown>)['access_token']);
+
+      expect(failed.status).toBe(500);
+      expect(retriedToken).toBe('provider-access-1');
+      expect(await providerToken(server, latest)).toBe('provider-access-1');
+    });
+
+    it('keeps the source on the rotated record when the move fails, so the next refresh moves them', async () => {
+      const server = await remoteServer();
+      const { clientId, refreshToken } = await signInWithoutCopy(server);
+      jest
+        .spyOn(InMemoryOrchestratedTokenStore.prototype, 'migrateTokens')
+        .mockRejectedValueOnce(new Error('store unavailable'));
+
+      const failedMove = await refreshWith(server, refreshToken, clientId);
+      const afterFailure = (await failedMove.json()) as Record<string, unknown>;
+      const retriedMove = await refreshWith(server, String(afterFailure['refresh_token']), clientId);
+      const latest = String(((await retriedMove.json()) as Record<string, unknown>)['access_token']);
+
+      expect(await providerToken(server, latest)).toBe('provider-access-1');
+    });
+  });
 });

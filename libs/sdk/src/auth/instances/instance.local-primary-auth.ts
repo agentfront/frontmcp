@@ -1267,13 +1267,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
   /**
    * Copy the upstream provider tokens stored under `fromAuthorizationId` to the authorization id of
-   * `accessToken`. Returns that id, or undefined when the copy failed: the token is still issued, its
-   * tools find no provider token, and the next refresh copies them from `fromAuthorizationId` again.
+   * `accessToken`. Returns that id, or undefined when the store cannot copy (the refresh then moves them)
+   * or the copy failed (the token is issued without them, and the next refresh copies them again).
    */
   private async copyProviderTokens(fromAuthorizationId: string, accessToken: string): Promise<string | undefined> {
+    const store = this.orchestratedTokenStore;
+    if (!store.copyTokens) return undefined;
     const toAuthorizationId = deriveAuthorizationId(accessToken);
     try {
-      await this.orchestratedTokenStore.copyTokens(fromAuthorizationId, toAuthorizationId);
+      await store.copyTokens(fromAuthorizationId, toAuthorizationId);
       return toAuthorizationId;
     } catch (err) {
       this.logger.warn(`Failed to copy provider tokens: ${err}`);
@@ -1391,6 +1393,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       throw err;
     }
     if (sourceId && copiedTo) await this.discardProviderTokens(sourceId);
+    // A store that cannot copy moves them now; the rotated record names their new place once the move succeeded.
+    if (sourceId && !this.orchestratedTokenStore.copyTokens) {
+      const movedTo = await this.moveProviderTokens(sourceId, accessToken);
+      if (movedTo !== sourceId) {
+        await this.authorizationStore.storeRefreshToken({ ...newRefreshRecord, providerTokensId: movedTo });
+      }
+    }
 
     this.logger.info(`Tokens refreshed for user: ${user.sub}`);
 

@@ -159,6 +159,7 @@ When using local or remote mode with federated authentication, FrontMCP stores p
 | `deleteTokens(authorizationId, providerId)`        | Delete tokens for a provider             |
 | `getProviderIds(authorizationId)`                  | Get all provider IDs with stored tokens  |
 | `migrateTokens(fromAuthId, toAuthId)`              | Migrate tokens between authorization IDs |
+| `copyTokens(fromAuthId, toAuthId)` (optional)      | Copy tokens, keeping the source          |
 
 ### Token Migration
 
@@ -185,6 +186,9 @@ const providerIds = await tokenStore.getProviderIds('user:real-auth-id');
 
 <Info>
   `migrateTokens()` is called automatically during the OAuth token exchange flow when completing federated authentication.
+  When the client refreshes its token, a store with `copyTokens()` has the tokens copied before the refresh token is
+  rotated and removed from the old ID after; a store without it has them moved with `migrateTokens()` once the refresh
+  token is rotated.
 </Info>
 
 ---
