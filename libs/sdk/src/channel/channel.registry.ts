@@ -38,9 +38,18 @@ export default class ChannelRegistry
   /** Logger */
   private logger: FrontMcpLogger;
 
-  constructor(providers: ProviderRegistry, list: ChannelType[], owner: EntryOwnerRef) {
+  /** The provider registry of each channel declared on an app (its app's); other channels use the registry's. */
+  private readonly entryProviders: ReadonlyMap<Token, ProviderRegistry>;
+
+  constructor(
+    providers: ProviderRegistry,
+    list: ChannelType[],
+    owner: EntryOwnerRef,
+    entryProviders: ReadonlyMap<Token, ProviderRegistry> = new Map(),
+  ) {
     super('ChannelRegistry', providers, list, false);
     this.owner = owner;
+    this.entryProviders = entryProviders;
     this.logger = providers.get(FrontMcpLogger).child('ChannelRegistry');
 
     this.buildGraph();
@@ -74,7 +83,7 @@ export default class ChannelRegistry
       const rec = this.defs.get(token);
       if (!rec) continue;
 
-      const instance = new ChannelInstance(rec, this.providers, this.owner);
+      const instance = new ChannelInstance(rec, this.entryProviders.get(token) ?? this.providers, this.owner);
       await instance.ready;
 
       // Fail fast on duplicate channel names

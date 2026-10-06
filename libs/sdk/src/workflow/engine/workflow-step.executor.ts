@@ -4,12 +4,12 @@ import { type JobEntry } from '../../common/entries/job.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobRetryConfig } from '../../common/metadata/job.metadata';
 import { type WorkflowStep, type WorkflowStepResult } from '../../common/metadata/workflow.metadata';
-import { runOnSurface } from '../../context/call-surface';
 import { InvalidEntityError } from '../../errors';
 import { JobNotAuthorizedError } from '../../errors/job.errors';
 import { WorkflowJobTimeoutError } from '../../errors/workflow.errors';
 import { JobPermissionGuard } from '../../job/job-permission.guard';
 import { type JobRegistryInterface } from '../../job/job.registry';
+import { runJobAttempt } from '../../job/job.utils';
 
 export interface WorkflowStepExecutorExtra {
   authInfo: Partial<Record<string, unknown>>;
@@ -73,7 +73,7 @@ export class WorkflowStepExecutor {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const result = await this.executeWithTimeout(job, input, timeout);
+        const result = await this.executeWithTimeout(job, input, timeout, attempt);
         return {
           outputs: (result ?? {}) as Record<string, unknown>,
           state: 'completed',
@@ -92,10 +92,16 @@ export class WorkflowStepExecutor {
     throw lastError ?? new Error(`Step "${step.id}" failed after ${maxAttempts} attempts`);
   }
 
-  private async executeWithTimeout(job: JobEntry, input: Record<string, unknown>, timeout: number): Promise<unknown> {
+  private async executeWithTimeout(
+    job: JobEntry,
+    input: Record<string, unknown>,
+    timeout: number,
+    attempt: number,
+  ): Promise<unknown> {
     const parsedInput = job.parseInput(input);
     const ctx = job.create(parsedInput, {
       ...this.extra,
+      attempt,
     });
 
     // Race a timer against the job promise. Note: this does NOT cancel the
@@ -113,8 +119,7 @@ export class WorkflowStepExecutor {
         .then(() => {
           // An attempt that timed out while its auth loaded is abandoned, so its job never starts.
           if (timedOut) return undefined;
-          // The step's job runs on the 'job' surface, which `getCallSurface()` reports and its tool calls carry.
-          return runOnSurface('job', async () => ctx.execute(parsedInput));
+          return runJobAttempt(job, ctx, parsedInput);
         })
         .then((result) => {
           clearTimeout(timer);

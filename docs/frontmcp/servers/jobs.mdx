@@ -191,7 +191,7 @@ Jobs require both input and output schemas using Zod:
 | `name`              | `string`                 | —        | **Required.** Unique job identifier            |
 | `description`       | `string`                 | —        | Human-readable description                     |
 | `inputSchema`       | `ZodShape`               | —        | **Required.** Zod schema for input validation  |
-| `outputSchema`      | `ZodShape`               | —        | **Required.** Zod schema for output validation |
+| `outputSchema`      | `ZodShape`               | —        | **Required.** Zod schema the result must match |
 | `id`                | `string`                 | `name`   | Stable identifier for tracking                 |
 | `timeout`           | `number`                 | `300000` | Maximum execution time in ms (5 min)           |
 | `retry`             | `JobRetryConfig`         | —        | Retry configuration (see below)                |
@@ -236,6 +236,16 @@ class FetchDataJob extends JobContext {
 | `maxBackoffMs`      | `number` | `60000` | Maximum backoff delay in ms    |
 
 The backoff schedule for defaults: 1s, 2s, 4s (capped at `maxBackoffMs`).
+
+`this.attempt` is the number of the attempt running: 1, then 2 on the first retry, and so on. Up to 1.9.1 it was always 1.
+
+### Results
+
+A run's result is what `execute()` returns, or the value it passes to `this.respond()`, which ends the run there. It must match the job's `outputSchema`, which also strips the fields it doesn't declare (an empty `outputSchema: {}` checks nothing); a result that doesn't fails the attempt with `INVALID_OUTPUT` (`output does not match outputSchema at <field>`), and a failed attempt is retried like any other. The same holds for a job a workflow step runs.
+
+A job declared on an `@App` runs with that app's providers (`this.get(TicketStore)`), as the app's tools do, and a job declared on `@FrontMcp` with the server's.
+
+Up to 1.9.1 the `outputSchema` was not checked, `this.respond()` replaced the whole `execute_job` response with its value instead of becoming the job's result, and a job on an `@App` saw only the server's providers.
 
 ---
 

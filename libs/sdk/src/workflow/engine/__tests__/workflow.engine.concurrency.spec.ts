@@ -30,6 +30,7 @@ describe('WorkflowEngine with native async context', () => {
           name,
           metadata: { name },
           parseInput: (input: unknown) => input,
+          parseOutput: (output: unknown) => output,
           create: () => ({
             loadAuthContext: async () => undefined,
             execute: async () => {

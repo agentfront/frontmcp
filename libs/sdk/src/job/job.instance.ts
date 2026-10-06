@@ -6,7 +6,7 @@ import { JobEntry } from '../common/entries/job.entry';
 import { JobContext, type JobCtorArgs } from '../common/interfaces/job.interface';
 import { JobKind, type JobFunctionTokenRecord, type JobRecord } from '../common/records/job.record';
 import { DynamicJobDirectExecutionError, InvalidRegistryKindError } from '../errors';
-import { InvalidHookFlowError } from '../errors/mcp.error';
+import { InvalidHookFlowError, InvalidOutputError } from '../errors/mcp.error';
 import type HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
@@ -71,7 +71,7 @@ export class JobInstance<
 
   override create(
     input: In,
-    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown },
+    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown; attempt?: number },
   ): JobContext<InSchema, OutSchema, In, Out> {
     const metadata = this.metadata;
     const providers = (extra.contextProviders ?? this._providers) as ProviderRegistry;
@@ -85,7 +85,7 @@ export class JobInstance<
       providers,
       logger,
       authInfo,
-      attempt: 1,
+      attempt: extra.attempt ?? 1,
     };
 
     switch (this.record.kind) {
@@ -105,17 +105,24 @@ export class JobInstance<
     return inputSchema.parse(input) as In;
   }
 
+  /** The result as the job's `outputSchema` accepts it; an empty raw shape checks nothing. */
   override parseOutput(raw: Out | Partial<Out>): unknown {
-    if (this.outputSchema) {
-      const outSchema = this.outputSchema as any;
-      if (outSchema instanceof z.ZodType) {
-        return outSchema.parse(raw);
-      }
-      if (typeof outSchema === 'object' && outSchema !== null) {
-        return z.object(outSchema).parse(raw);
-      }
+    const outSchema = this.outputSchema as unknown;
+    let schema: z.ZodType | undefined;
+    if (outSchema instanceof z.ZodType) {
+      schema = outSchema;
+    } else if (outSchema && typeof outSchema === 'object' && Object.keys(outSchema).length > 0) {
+      schema = z.object(outSchema as z.ZodRawShape);
     }
-    return raw;
+    if (!schema) return raw;
+
+    const parsed = schema.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    const firstIssue = parsed.error.issues[0];
+    throw new InvalidOutputError({
+      reason: 'output does not match outputSchema',
+      path: firstIssue?.path.length ? firstIssue.path.join('.') : undefined,
+    });
   }
 
   override safeParseOutput(

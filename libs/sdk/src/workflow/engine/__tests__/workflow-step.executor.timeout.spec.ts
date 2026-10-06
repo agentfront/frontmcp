@@ -22,6 +22,7 @@ function jobWithAuthLoads(loads: Array<() => Promise<void>>, execute: jest.Mock)
     name: 'piped',
     metadata: { name: 'piped' },
     parseInput: (input: unknown) => input,
+    parseOutput: (output: unknown) => output,
     create: () => ({ loadAuthContext: loads[attempt++], execute }),
   } as unknown as JobEntry;
 }

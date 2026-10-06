@@ -113,10 +113,10 @@ class GenerateReportJob extends JobContext {
 
 ### Methods
 
-- `execute(input: In): Promise<Out>` -- the main method you implement. Receives validated input, must return a value matching `outputSchema`.
+- `execute(input: In): Promise<Out>` -- the main method you implement. Receives validated input, must return a value matching `outputSchema`: a result that doesn't fails the attempt with `INVALID_OUTPUT` (and is retried like any failure), and fields the schema doesn't declare are stripped.
 - `this.progress(pct: number, total?: number, msg?: string)` -- report progress. `pct` is the current value, `total` is the maximum (default 100), `msg` is an optional status message.
 - `this.log(message: string)` -- append a log entry to the job's log. Persisted with the job state and retrievable after completion.
-- `this.respond(value: Out)` -- explicitly set the job output. Alternatively, return the value from `execute()`.
+- `this.respond(value: Out)` -- end the run with `value` as the job's result (checked against `outputSchema` like a returned one). Alternatively, return the value from `execute()`.
 - `this.getLogs(): string[]` -- retrieve all log entries recorded so far.
 - `this.get(token)` -- resolve a dependency from DI (throws if not found).
 - `this.tryGet(token)` -- resolve a dependency from DI (returns `undefined` if not found).
@@ -126,7 +126,8 @@ class GenerateReportJob extends JobContext {
 
 ### Properties
 
-- `this.attempt` -- the current attempt number (1-based). On the first run, `this.attempt` is `1`. On the first retry, it is `2`, and so on.
+- `this.attempt` -- the current attempt number (1-based). On the first run, `this.attempt` is `1`. On the first retry, it is `2`, and so on (up to 1.9.1 it was always `1`).
+- `this.get(token)` -- a job declared on an `@App` resolves that app's providers, as the app's tools do (up to 1.9.1 it saw only the server's).
 - `this.input` -- the validated input object.
 - `this.metadata` -- job metadata from the decorator.
 - `this.scope` -- the current scope instance.

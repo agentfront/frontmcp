@@ -24,6 +24,7 @@ import { AuthRegistry } from '../auth/auth.registry';
 import { type ChannelNotificationService } from '../channel/channel-notification.service';
 import { registerChannelCapabilities } from '../channel/channel-scope.helper';
 import type ChannelRegistry from '../channel/channel.registry';
+import { normalizeChannel } from '../channel/channel.utils';
 import { type ChannelEventBus } from '../channel/sources/app-event.source';
 import {
   FrontMcpLogger,
@@ -62,6 +63,7 @@ import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils
 import { type JobExecutionManager } from '../job/execution/job-execution.manager';
 import { registerJobCapabilities, type JobsConfig } from '../job/job-scope.helper';
 import type JobRegistry from '../job/job.registry';
+import { normalizeJob } from '../job/job.utils';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
@@ -926,11 +928,10 @@ export class Scope extends ScopeEntry {
 
     // Collect jobs/workflows from apps regardless of gate so we can detect
     // implicit enablement (and so the disabled-but-declared warning fires).
-    const appJobs: JobType[] = [];
+    const { items: appJobs, providers: jobProviders } = this.appEntryProviders<JobType>('jobs', normalizeJob);
     const appWorkflows: WorkflowType[] = [];
     for (const app of this.scopeApps.getApps()) {
       const appMeta = app.metadata as unknown as Record<string, unknown>;
-      if (Array.isArray(appMeta['jobs'])) appJobs.push(...(appMeta['jobs'] as JobType[]));
       if (Array.isArray(appMeta['workflows'])) appWorkflows.push(...(appMeta['workflows'] as WorkflowType[]));
     }
 
@@ -968,6 +969,7 @@ export class Scope extends ScopeEntry {
         providers: this.scopeProviders,
         owner: scopeRef,
         jobsList: allJobs,
+        jobProviders,
         workflowsList: allWorkflows,
         jobsConfig: effectiveConfig,
         logger: this.logger,
@@ -1067,11 +1069,10 @@ export class Scope extends ScopeEntry {
     const channelsConfig = this.metadata.channels as ChannelsConfigOptions | undefined;
     if (channelsConfig?.enabled) {
       // Collect channel definitions from apps
-      const appChannels: ChannelType[] = [];
-      for (const app of this.scopeApps.getApps()) {
-        const appMeta = app.metadata as unknown as Record<string, unknown>;
-        if (Array.isArray(appMeta['channels'])) appChannels.push(...(appMeta['channels'] as ChannelType[]));
-      }
+      const { items: appChannels, providers: channelProviders } = this.appEntryProviders<ChannelType>(
+        'channels',
+        normalizeChannel,
+      );
 
       // agent-completion and job-completion sources subscribe to this scope's completion events
       // (published by agents:call-agent and the job execution manager); webhook sources get an
@@ -1080,6 +1081,7 @@ export class Scope extends ScopeEntry {
         providers: this.scopeProviders,
         owner: scopeRef,
         channelsList: appChannels,
+        channelProviders,
         channelsConfig,
         notificationService: this.notificationService,
         flowRegistry: this.scopeFlows,
@@ -1676,6 +1678,28 @@ export class Scope extends ScopeEntry {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Scope: authorities init failed — ${msg}`);
     }
+  }
+
+  /**
+   * The entries the apps declare under `key` (`jobs`, `channels`), and the provider registry of the
+   * app that declares each one, by its token. They are served by one scope-level registry, and each
+   * runs with its app's providers, as the app's tools do.
+   */
+  private appEntryProviders<T>(
+    key: 'jobs' | 'channels',
+    normalize: (item: T) => { provide: Token },
+  ): { items: T[]; providers: Map<Token, ProviderRegistry> } {
+    const items: T[] = [];
+    const providers = new Map<Token, ProviderRegistry>();
+    for (const app of this.scopeApps.getApps()) {
+      const declared = (app.metadata as unknown as Record<string, unknown>)[key];
+      if (!Array.isArray(declared)) continue;
+      for (const item of declared as T[]) {
+        items.push(item);
+        providers.set(normalize(item).provide, app.providers as ProviderRegistry);
+      }
+    }
+    return { items, providers };
   }
 
   /**
