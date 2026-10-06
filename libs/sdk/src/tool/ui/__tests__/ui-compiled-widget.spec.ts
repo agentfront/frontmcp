@@ -70,8 +70,10 @@ describe('ToolUIRegistry compiled widgets (#681)', () => {
   it('warns at startup for an inline-mode tool whose lean shell never renders the template (#769)', async () => {
     const warn = jest.fn();
     const registry = new ToolUIRegistry(undefined, { logger: { warn } });
-    function InlineCard(): never {
-      throw new Error('Invalid hook call');
+    class InlineCard {
+      render(): null {
+        return null;
+      }
     }
     const uiConfig = { template: InlineCard };
 

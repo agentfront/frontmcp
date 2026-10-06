@@ -162,19 +162,17 @@ function warnComponentReference(template: object, toolName: string, logger: { wa
   );
 }
 
+/** Compiled JSX: the automatic runtime's `jsx` / `jsxs` / `jsxDEV` calls, or `React.createElement`. */
+const COMPILED_JSX_PATTERN = /\b(?:React\.createElement|_?jsxs?|jsxDEV)\)?\s*\(/;
+
 /**
- * Whether a capitalized template function is a React component rather than an HTML builder: a
- * class, memo / forwardRef, or a function that throws or returns an element when called outside React.
+ * Whether a capitalized template function is certainly a React component, decided without calling it:
+ * a class, memo / forwardRef, or a function whose source holds compiled JSX. Anything else (an HTML
+ * builder, a function that throws without call data) is left to the render-time check.
  */
 function isComponentReference(template: unknown): boolean {
   if (typeof template !== 'function' || detectUIType(template) !== 'react') return false;
-  if (isDefinitelyReactComponent(template)) return true;
-  try {
-    const result = (template as (ctx: unknown) => unknown)({ input: {}, output: {}, helpers: createTemplateHelpers() });
-    return isReactElement(result);
-  } catch {
-    return true;
-  }
+  return isDefinitelyReactComponent(template) || COMPILED_JSX_PATTERN.test(Function.prototype.toString.call(template));
 }
 
 /**

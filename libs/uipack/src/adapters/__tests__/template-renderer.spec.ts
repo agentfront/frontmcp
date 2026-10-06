@@ -413,7 +413,7 @@ describe('renderToolTemplate — function templates (#645)', () => {
   it('warns at startup through warnIfComponentReference, and not again on the first render (#769)', () => {
     const warn = jest.fn();
     function StartupWidget() {
-      throw new Error('Invalid hook call');
+      return React.createElement('div', null, 'widget');
     }
 
     expect(warnIfComponentReference('startup_tool', StartupWidget, { warn })).toBe(true);
@@ -427,6 +427,47 @@ describe('renderToolTemplate — function templates (#645)', () => {
   function CardBuilder(ctx: { output: unknown }): string {
     return `<p>${String(ctx.output)}</p>`;
   }
+
+  it('does not run the template at startup, and does not warn for a capitalized builder that needs call data', () => {
+    const warn = jest.fn();
+    let calls = 0;
+    function OrderCard(ctx: { output: { order: { id: string } } }): string {
+      calls++;
+      return `<b>${ctx.output.order.id}</b>`;
+    }
+
+    expect(warnIfComponentReference('order_tool', OrderCard, { warn })).toBe(false);
+    expect(calls).toBe(0);
+    expect(warn).not.toHaveBeenCalled();
+
+    const result = renderToolTemplate({
+      toolName: 'order_tool',
+      input: {},
+      output: { order: { id: 'A-1' } },
+      template: OrderCard,
+      logger: { warn },
+      escapeStringResults: false,
+    });
+    expect(result.html).toContain('<b>A-1</b>');
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('leaves a capitalized function that throws to the render-time check', () => {
+    const warn = jest.fn();
+    function ThrowingWidget(): never {
+      throw new Error('Invalid hook call');
+    }
+
+    expect(warnIfComponentReference('throwing_tool', ThrowingWidget, { warn })).toBe(false);
+    renderToolTemplate({
+      toolName: 'throwing_tool',
+      input: {},
+      output: {},
+      template: ThrowingWidget,
+      logger: { warn },
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
 
   it.each([
     ['a capitalized HTML builder', CardBuilder],
