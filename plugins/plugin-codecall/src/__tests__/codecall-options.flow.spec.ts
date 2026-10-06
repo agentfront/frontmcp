@@ -36,12 +36,14 @@ interface CodeCallServer {
   close(): Promise<void>;
 }
 
-async function startCodeCallServer(codecallOptions: CodeCallPluginOptionsInput): Promise<CodeCallServer> {
+type CodeCallPluginRecord = ReturnType<typeof CodeCallPlugin.init>;
+
+async function startCodeCallServer(codecallPlugin: CodeCallPluginRecord): Promise<CodeCallServer> {
   @App({
     id: 'desk',
     name: 'Desk',
     tools: TICKET_TOOLS.map(([name, description]) => ticketTool(name, description)),
-    plugins: [CodeCallPlugin.init(codecallOptions)],
+    plugins: [codecallPlugin],
   })
   class DeskApp {}
 
@@ -73,11 +75,14 @@ function readStructured<T>(result: CallToolResult): T {
   return JSON.parse(first.text) as T;
 }
 
-function useCodeCallServer(codecallOptions: CodeCallPluginOptionsInput): () => CodeCallServer {
+function useCodeCallServer(
+  codecallOptions: CodeCallPluginOptionsInput,
+  codecallPlugin: CodeCallPluginRecord = CodeCallPlugin.init(codecallOptions),
+): () => CodeCallServer {
   let server: CodeCallServer | undefined;
 
   beforeAll(async () => {
-    server = await startCodeCallServer(codecallOptions);
+    server = await startCodeCallServer(codecallPlugin);
   });
 
   afterAll(async () => {
@@ -211,6 +216,122 @@ describe('codecall:execute description', () => {
     expect(allowedLine).toContain('for-of');
     expect(allowedLine).not.toMatch(/\bfor,/);
     expect(blockedLine).toContain('console');
+  });
+});
+
+async function listedDescription(server: CodeCallServer, toolName: string): Promise<string> {
+  const { tools } = await server.client.listTools();
+  return tools.find((tool) => tool.name === toolName)?.description ?? '';
+}
+
+function lineStartingWith(text: string, prefix: string): string {
+  return text.split('\n').find((line) => line.startsWith(prefix)) ?? '';
+}
+
+describe('CodeCall tool descriptions follow the effective config', () => {
+  describe('by default', () => {
+    const server = useCodeCallServer({ mode: 'codecall_only' });
+
+    it('gives codecall:search the threshold its schema applies and the server topK', async () => {
+      const description = await listedDescription(server(), 'codecall:search');
+
+      expect(description).toContain('- topK?: number (default 8)');
+      expect(description).toContain('- minRelevanceScore?: number (default 0.1)');
+    });
+
+    it('gives codecall:execute the limits of the secure preset', async () => {
+      const description = await listedDescription(server(), 'codecall:execute');
+
+      expect(lineStartingWith(description, 'LIMITS:')).toBe(
+        'LIMITS: 10000 iterations per loop, 3.5s timeout, 5000 tool calls',
+      );
+    });
+  });
+
+  describe('with options of its own', () => {
+    const server = useCodeCallServer({
+      mode: 'codecall_only',
+      topK: 3,
+      vm: { timeoutMs: 1200, maxSteps: 40, allowLoops: true, disabledGlobals: ['JSON'] },
+    });
+
+    it('gives codecall:search the configured topK', async () => {
+      expect(await listedDescription(server(), 'codecall:search')).toContain('- topK?: number (default 3)');
+    });
+
+    it('gives codecall:execute the configured limits, loops and disabled globals', async () => {
+      const description = await listedDescription(server(), 'codecall:execute');
+
+      expect(lineStartingWith(description, 'LIMITS:')).toBe(
+        'LIMITS: 10000 iterations per loop, 1.2s timeout, 40 tool calls',
+      );
+      expect(lineStartingWith(description, 'ALLOWED:')).toMatch(/^ALLOWED: for, for-of,/);
+      expect(lineStartingWith(description, 'ALLOWED:')).not.toContain('JSON.*');
+      expect(lineStartingWith(description, 'BLOCKED:')).toContain('JSON');
+    });
+  });
+});
+
+describe('CodeCall configured through useFactory', () => {
+  const server = useCodeCallServer(
+    {},
+    CodeCallPlugin.init({ useFactory: () => ({ mode: 'codecall_only' as const, topK: 4 }) }),
+  );
+
+  it('lists every meta-tool, described for the options the factory returned', async () => {
+    const { tools } = await server().client.listTools();
+
+    expect(tools.map((tool) => tool.name).filter((name) => name.startsWith('codecall:'))).toEqual(
+      expect.arrayContaining(['codecall:search', 'codecall:describe', 'codecall:execute', 'codecall:invoke']),
+    );
+    expect(await listedDescription(server(), 'codecall:search')).toContain('- topK?: number (default 4)');
+  });
+});
+
+describe('CodeCall vm.disabledGlobals and vm.disabledBuiltins', () => {
+  const server = useCodeCallServer({
+    mode: 'codecall_only',
+    vm: { disabledGlobals: ['JSON'], disabledBuiltins: ['parseInt'] },
+  });
+
+  it('refuses a script that uses a disabled global', async () => {
+    const outcome = await runScript(server(), 'const text = JSON.stringify({ id: 1 });\nreturn text;');
+
+    expect(outcome.status).toBe('illegal_access');
+    expect(JSON.stringify(outcome.error)).toContain('JSON is disabled by vm.disabledGlobals');
+  });
+
+  it('refuses a script that uses a disabled builtin', async () => {
+    const outcome = await runScript(server(), 'const count = parseInt("42");\nreturn count;');
+
+    expect(outcome.status).toBe('illegal_access');
+    expect(JSON.stringify(outcome.error)).toContain('parseInt is disabled by vm.disabledBuiltins');
+  });
+
+  it('still reads a field with a disabled name', async () => {
+    const outcome = await runScript(server(), 'const formats = { JSON: "json" };\nreturn formats.JSON;');
+
+    expect(outcome.status).toBe('ok');
+  });
+});
+
+describe('CodeCall iteration limit', () => {
+  const server = useCodeCallServer({ mode: 'codecall_only', vm: { allowLoops: true } });
+  const ITERATION_LIMIT = {
+    source: 'script',
+    message: 'Maximum iteration limit exceeded (10000). This limit prevents infinite loops.',
+    name: 'Error',
+  };
+
+  it('ends a for loop with the same error as a for-of loop', async () => {
+    const forLoop = await runScript(server(), 'let n = 0;\nfor (let i = 0; i < 10001; i++) { n += 1; }\nreturn n;');
+    const forOfLoop = await runScript(
+      server(),
+      'const items = [1];\nfor (const item of items) { items.push(item); }\nreturn items.length;',
+    );
+
+    expect(forLoop).toEqual({ status: 'runtime_error', error: ITERATION_LIMIT });
+    expect(forOfLoop).toEqual({ status: 'runtime_error', error: ITERATION_LIMIT });
   });
 });
 

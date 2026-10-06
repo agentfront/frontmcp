@@ -24,7 +24,7 @@ Search for tools by natural language query using semantic embeddings.
     "topK": "number (optional, default: the plugin's topK, 8 unless configured) - Maximum results per query",
     "appIds": ["string (optional) - Limit to specific apps"],
     "excludeToolNames": ["string (optional) - Tool names to exclude"],
-    "minRelevanceScore": "number (optional) - Minimum relevance score threshold"
+    "minRelevanceScore": "number (optional, default 0.1) - Minimum relevance score threshold"
   }
 }
 ```
@@ -525,7 +525,8 @@ for (const user of users) {
 
 <AccordionGroup>
   <Accordion title="Maximum iteration limit exceeded">
-    **Cause:** Loop ran more than `maxSteps` times
+    **Message:** `Maximum iteration limit exceeded (10000). This limit prevents infinite loops.`, for every kind of loop
+    **Cause:** A loop ran more than 10,000 times (per loop; not configurable)
     **Fix:** Use pagination or filter data before looping
 
     ```ts
