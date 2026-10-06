@@ -348,7 +348,8 @@ header -- so it cannot be the key material on its own. Instances with different 
 read each other's entries. With none of `REMEMBER_SECRET`, `MCP_MEMORY_SECRET` or
 `MCP_SESSION_SECRET` set in production, the plugin falls back to a random in-memory secret and
 logs a warning once; its encrypted memory is then lost on restart. `encryption.customKey`, when
-set, replaces that secret for the plugin (each scope, session and user still gets its own key).
+set, replaces that secret for the plugin (each scope, session and user still gets its own key); an
+empty or blank value stops startup with `RememberConfigurationError`.
 
 **Upgrading past that change moves existing `session`, `tool` and `user` entries.** The key
 derivation change orphans `session` and `tool` ciphertext, and the namespace now percent-encodes

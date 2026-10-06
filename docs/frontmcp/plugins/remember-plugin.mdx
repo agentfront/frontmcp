@@ -476,7 +476,8 @@ RememberPlugin.init({
 
 `customKey` is the secret every key is derived from, in place of `REMEMBER_SECRET` (or `MCP_MEMORY_SECRET` /
 `MCP_SESSION_SECRET`); each scope, session and user still gets its own key. Entries written with another secret read as
-absent. Up to 1.9.1 the option was never read.
+absent. An empty or blank `customKey` stops startup with `RememberConfigurationError`; leave it out to use the server
+secret. Up to 1.9.1 the option was never read.
 
 ---
 
