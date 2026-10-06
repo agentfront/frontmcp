@@ -59,7 +59,7 @@ Start the container:
 docker compose up -d redis
 ```
 
-Projects from `frontmcp create --target node --redis docker` already have `ci/docker-compose.yml`: it publishes Redis on `127.0.0.1:6379` only, runs the app with `NODE_ENV=production` by default, and `ci/Dockerfile` runs as the `node` user with a `/healthz` `HEALTHCHECK`. Set `MCP_SESSION_SECRET` in `ci/.env.docker` (or export it in the shell) and run compose with `--env-file ci/.env.docker` — the generated `docker:up` / `docker:down` / `docker:build` scripts do; compose refuses to start any service while the secret is unset.
+Projects from `frontmcp create --target node --redis docker` already have `ci/docker-compose.yml`: it publishes Redis on `127.0.0.1:6379` only, runs the app with `NODE_ENV=production` by default, and `ci/Dockerfile` runs as the `node` user with a `/healthz` `HEALTHCHECK`. Set `MCP_SESSION_SECRET` in `ci/.env.docker` (git-ignored; after cloning, copy the committed `ci/.env.docker.example` to it) or export it in the shell, and run compose with `--env-file ci/.env.docker` — the generated `docker:up` / `docker:down` / `docker:build` scripts do; compose refuses to start any service while the secret is unset.
 
 Verify the connection:
 

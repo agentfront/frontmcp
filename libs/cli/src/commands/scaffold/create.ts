@@ -326,6 +326,8 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+# Holds MCP_SESSION_SECRET; ci/.env.docker.example is the committed template
+.env.docker
 
 # FrontMCP development keys (contains private keys - never commit!)
 .frontmcp/
@@ -355,6 +357,7 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+ci/.env.docker
 .frontmcp
 e2e
 *.md
@@ -414,7 +417,7 @@ Run tests with \`${cfg.run} test\` (which runs \`frontmcp test\` under the hood)
 
 ## Docker
 
-Docker Compose config is in \`ci/docker-compose.yml\` (includes Redis); run it with \`--env-file ci/.env.docker\` (the \`docker:*\` scripts do), after setting \`MCP_SESSION_SECRET\` there. Redis-only: \`docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up redis -d\`.
+Docker Compose config is in \`ci/docker-compose.yml\` (includes Redis); run it with \`--env-file ci/.env.docker\` (the \`docker:*\` scripts do), after setting \`MCP_SESSION_SECRET\` there. \`ci/.env.docker\` is git-ignored; after cloning, copy \`ci/.env.docker.example\` to it. Redis-only: \`docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up redis -d\`.
 
 ## Environment
 
@@ -628,8 +631,9 @@ NODE_ENV=production
 # The server binds 127.0.0.1 by default; a published container port needs every interface
 FRONTMCP_BIND_ADDRESS=all
 # Required with NODE_ENV=production (session-ID encryption): openssl rand -hex 32
-# Compose refuses to start until it is set. A value exported in your shell wins over this file,
-# so a real secret can stay out of version control.
+# Compose refuses to start until it is set. ci/.env.docker is git-ignored; ci/.env.docker.example
+# is its committed template, so copy it to ci/.env.docker after cloning. A value exported in your
+# shell wins over this file.
 MCP_SESSION_SECRET=
 
 # Redis - use 'redis' (service name) as host inside Docker network
@@ -1182,7 +1186,8 @@ No additional secrets required - uses \`GITHUB_TOKEN\` for GHCR.
 ├── ci/
 │   ├── Dockerfile         # Container build config
 │   ├── docker-compose.yml # Docker services config
-│   └── .env.docker        # Docker-specific env vars
+│   ├── .env.docker        # Docker-specific env vars (git-ignored, holds MCP_SESSION_SECRET)
+│   └── .env.docker.example # Committed template for .env.docker
 `;
   }
 
@@ -1631,6 +1636,7 @@ async function scaffoldDeploymentFiles(targetDir: string, options: CreateOptions
       const dockerCompose = redisSetup === 'docker' ? generateDockerComposeWithRedis() : generateDockerComposeNoRedis();
       await scaffoldFileIfMissing(targetDir, path.join(ciDir, 'docker-compose.yml'), dockerCompose);
       await scaffoldFileIfMissing(targetDir, path.join(ciDir, '.env.docker'), TEMPLATE_ENV_DOCKER_CI);
+      await scaffoldFileIfMissing(targetDir, path.join(ciDir, '.env.docker.example'), TEMPLATE_ENV_DOCKER_CI);
       await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.dockerignore'), TEMPLATE_DOCKERIGNORE);
       break;
     }

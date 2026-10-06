@@ -35,7 +35,7 @@ docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up
 
 <Tip>
 When running inside Docker, use `redis` (the service name) as `REDIS_HOST`, not `localhost`.
-Projects created with `frontmcp create` include a `ci/.env.docker` file with Docker-specific values.
+Projects created with `frontmcp create` include a `ci/.env.docker` file with Docker-specific values. It is git-ignored because it holds `MCP_SESSION_SECRET`; the committed `ci/.env.docker.example` is its template, so copy it to `ci/.env.docker` after cloning.
 </Tip>
 
 The compose file publishes Redis on `127.0.0.1:6379` only, so a server running on the host can reach it while other machines cannot. The `app` service runs the production image with `NODE_ENV=production` by default, which requires `MCP_SESSION_SECRET`: set it in `ci/.env.docker` (or export it in your shell, which wins over the file; `openssl rand -hex 32`). Compose reads `ci/.env.docker` only through `--env-file ci/.env.docker`, which the `docker:*` scripts pass, and refuses to start any service, Redis included, while the secret is unset. The generated `ci/Dockerfile` runs as the unprivileged `node` user and declares a `HEALTHCHECK` against `/healthz`.

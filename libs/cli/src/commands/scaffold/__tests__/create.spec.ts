@@ -496,6 +496,20 @@ describe('runCreate', () => {
         expect(content).toMatch(/^MCP_SESSION_SECRET=$/m);
         expect(content).toContain('REDIS_PORT=6379');
       });
+
+      it('keeps the file that holds MCP_SESSION_SECRET out of git and the image, beside a committed example', async () => {
+        await runCreate('env-docker-ignored-app', { yes: true, target: 'node' });
+
+        const base = path.join(tempDir, 'env-docker-ignored-app');
+        const gitignoreLines = readFileSync(path.join(base, '.gitignore'), 'utf8').split('\n');
+        const dockerignoreLines = readFileSync(path.join(base, '.dockerignore'), 'utf8').split('\n');
+
+        expect(gitignoreLines).toContain('.env.docker');
+        expect(dockerignoreLines).toContain('ci/.env.docker');
+        expect(readFileSync(path.join(base, 'ci', '.env.docker.example'), 'utf8')).toBe(
+          readFileSync(path.join(base, 'ci', '.env.docker'), 'utf8'),
+        );
+      });
     });
 
     describe('deploy.yml and package.json docker scripts', () => {

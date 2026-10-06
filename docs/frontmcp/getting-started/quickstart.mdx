@@ -110,7 +110,8 @@ After creating your project, you'll have:
     ├── ci/
     │   ├── Dockerfile
     │   ├── docker-compose.yml
-    │   └── .env.docker
+    │   ├── .env.docker           # git-ignored, holds MCP_SESSION_SECRET
+    │   └── .env.docker.example   # committed template
     ├── .github/workflows/    # If CI/CD enabled
     │   ├── ci.yml
     │   ├── e2e.yml
