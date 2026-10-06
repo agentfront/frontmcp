@@ -2,8 +2,8 @@
  * Trusted Markup
  *
  * Explicit markup values for UI template functions. A template result built with {@link html}
- * or wrapped with {@link trustedHtml} is rendered as HTML; with `escapeStringResults` on, a plain
- * string result is escaped instead.
+ * or wrapped with {@link trustedHtml} is rendered as HTML; a plain string result is escaped instead
+ * (unless `escapeStringResults: false`).
  *
  * @packageDocumentation
  */

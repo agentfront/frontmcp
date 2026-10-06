@@ -176,7 +176,7 @@ export interface CliTargetConfig {
 export interface WranglerConfig {
   /** Worker name. */
   name?: string;
-  /** Compatibility date. Defaults to `2024-09-23` (the date that enables full `nodejs_compat`). */
+  /** Compatibility date. Defaults to `2024-09-23`, the first date on which `nodejs_compat` turns on `nodejs_compat_v2`. */
   compatibilityDate?: string;
   /**
    * Extra Cloudflare compatibility flags. `nodejs_compat` is always emitted

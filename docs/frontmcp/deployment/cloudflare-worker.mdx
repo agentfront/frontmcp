@@ -24,10 +24,10 @@ FrontMCP runs on Cloudflare Workers via the Web-standard `fetch` handler — cli
 
 There are **two deployment paths**, and they have different maturity:
 
-| Path                | API                                                    | Status                                                                                                                                                                                                      |
-| ------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Decorator build** | `@FrontMcp` app + `frontmcp build --target cloudflare` | ✅ **Works today** — boots on real workerd (covered by `apps/e2e/demo-e2e-cloudflare`)                                                                                                                      |
-| **Managed edge**    | `@frontmcp/edge` `createEdgeMcp({ managed })`          | 🧪 **Experimental** — API + KV cache + Cron wiring are built and unit/integration-tested, but the full managed bundle does **not** yet boot on workerd (see [Current status](#current-status--limitations)) |
+| Path                | API                                                    | Status                                                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Decorator build** | `@FrontMcp` app + `frontmcp build --target cloudflare` | ✅ **Works today** — boots on real workerd (covered by `apps/e2e/demo-e2e-cloudflare`)                                                                                                          |
+| **Managed edge**    | `@frontmcp/edge` `createEdgeMcp({ managed })`          | 🧪 **Experimental** — boots under `wrangler dev` and on Cloudflare with no bundler stubs; the miniflare-based managed e2e is still skipped (see [Current status](#current-status--limitations)) |
 
 Start with the decorator path. It's the one that's verified end-to-end.
 
@@ -107,7 +107,10 @@ Cloudflare's flag only governs population at **module evaluation**, and the gene
 </Note>
 
 <Note>
-Only `main` is rewritten outright — it has to track the build output. `name` and `compatibility_date` are written only when the file does not already declare them, and `compatibility_flags` is merged rather than replaced, so a name you set by hand is never silently changed. If `wrangler.toml` and `frontmcp.config` disagree on the name, the build keeps the file's and warns.
+With `metrics: { enabled: true }` or `observability` in `@FrontMcp`, install `@frontmcp/observability`: the generated entry imports it and hands it to the SDK with `registerOptionalModule()`, since the Worker's `require()` cannot reach bundled modules (see [Metrics](/frontmcp/deployment/metrics)).
+
+Only `main` is rewritten outright — it has to track the build output, so `--out-dir build` (or `deployments[].outDir`) writes `main = "build/cloudflare/index.js"`. `name` and `compatibility_date` are written only when the file does not already declare them, and `compatibility_flags` is merged rather than replaced, so a name you set by hand is never silently changed. If `wrangler.toml` and `frontmcp.config` disagree on the name, the build keeps the file's and warns.
+
 </Note>
 </Step>
 
@@ -317,7 +320,7 @@ crontabs = ["*/5 * * * *"]
 - **No source attached → loud failure:** if the bundle source can't be constructed, `scheduled()` throws so the Cron run is reported as **failed** rather than silently succeeding with a stale bundle.
 
 <Warning>
-Managed mode requires the optional peer `@frontmcp/plugin-skilled-openapi`. And see [Current status](#current-status--limitations) — the full managed bundle does not yet boot on workerd.
+Managed mode runs on `@frontmcp/plugin-skilled-openapi`, a dependency of `@frontmcp/edge` (installed with it), so wrangler resolves it whether or not you use `managed`. When the boot pull fails and the KV cache holds no last-good bundle, the start-failure log says the bundle was not found in the injected bundle cache. See [Current status](#current-status--limitations).
 </Warning>
 
 ---
@@ -446,19 +449,19 @@ FrontMCP-on-Cloudflare is **v1.3 in progress**. What works vs what's still missi
 **Works today (verified on real Cloudflare):**
 
 - The decorator build path (`frontmcp build --target cloudflare`) boots on real workerd and serves MCP over `/mcp` with a `/healthz` liveness probe.
-- **`createEdgeMcp` also deploys + serves on real Cloudflare** — bundled with esbuild + a small set of stubs (see the next bullet). Verified end-to-end (initialize / tools/list / tools/call). The KV last-good cache + the Cron `scheduled` refresh wiring are unit/integration-tested.
+- **`createEdgeMcp` also boots under `wrangler dev` and deploys + serves on real Cloudflare**, managed mode included, bundled by wrangler with no stubs. Verified end-to-end (initialize / tools/list / tools/call). The KV last-good cache + the Cron `scheduled` refresh wiring are unit/integration-tested.
 - **The worker runs the real `http:request` flow** — the same hookable pipeline every transport runs: `session:verify` (auth), router, audit, metrics + plugin/user hooks all execute on the worker. The MCP response is produced by the SDK's web-standard Streamable HTTP transport (`WebStandardStreamableHTTPServerTransport`) — which **is** the standard transport (the Node `StreamableHTTPServerTransport` is a thin `req`/`res` wrapper over it). Configure transparent auth and the flow's `checkAuthorization` stage returns `401` + `WWW-Authenticate` on the worker, just like Node.
 - **Stateful sessions via a Durable Object** (`sessions: {}` + the bound `SessionDurableObject`): the Streamable HTTP standalone `GET` notification stream stays open across requests and requests for a session route back to the same DO — so server→client notifications work. Verified live.
 - **OAuth sign-in endpoints**, including a federated provider's redirect to `/oauth/provider/:providerId/callback` and the federated consent screen's submission: the worker matches path parameters like Express, so remote mode and local `providers` finish a sign-in on the worker.
 - `CloudflareKvStorageAdapter` (KV only, with the honest limits above).
 
-**Deploying `createEdgeMcp` today needs two things:**
+**`createEdgeMcp` needs no bundler configuration:**
 
-- It must run with `serve: false` (now the default inside `createEdgeMcp`) so the scope doesn't construct the Node Express host.
-- Three Node-only transports that are statically bundled but **never used on the edge** must be stubbed in your bundler: `express` (pulls `node:tty`), `raw-body` (pulls `safer-buffer`, which crashes at module-eval on workerd), and `cross-spawn` (pulls `node:child_process`, via the MCP stdio client). See `cloudflare-sandbox/build-edge.mjs` for a working esbuild config.
+- It runs with `serve: false` (set inside `createEdgeMcp`), so the scope doesn't construct the Node Express host.
+- Since 1.9.1, wrangler resolves the SDK's `browser` build, which leaves out the Node-only transports (`express`, `raw-body`, `cross-spawn`) earlier versions asked you to stub. A config that fails validation answers `500 CONFIG_INVALID`, and the worker log names the invalid fields.
 
 <Note>
-The miniflare-based local e2e is stricter than production — it rejects `node:http2`/`node:fs` that **real Cloudflare `nodejs_compat` actually provides**. So the edge package runs on real Cloudflare even though the local managed e2e is skipped. The **worker-conditioned SDK build** (swapping those Node-only transports for the browser variants the SDK + protocol already ship) is the roadmap item that removes the manual stubs.
+The miniflare-based local e2e is stricter than production — it rejects `node:http2`/`node:fs` that **real Cloudflare `nodejs_compat` actually provides**. So the edge package runs under `wrangler dev` and on real Cloudflare even though the local managed e2e is skipped.
 </Note>
 
 **Known gaps (roadmap):**

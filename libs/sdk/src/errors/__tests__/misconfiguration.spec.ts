@@ -1,5 +1,10 @@
 import { JwtSecretRequiredError, SessionSecretRequiredError } from '../index';
-import { findMisconfiguration, MISCONFIGURATION_REMEDIES, misconfigurationBody } from '../misconfiguration';
+import {
+  describeConfigIssues,
+  findMisconfiguration,
+  MISCONFIGURATION_REMEDIES,
+  misconfigurationBody,
+} from '../misconfiguration';
 
 describe('misconfiguration classification (#646)', () => {
   it('recognizes a missing session secret and names the setting', () => {
@@ -39,5 +44,48 @@ describe('misconfiguration classification (#646)', () => {
     expect(findMisconfiguration(new Error('secret=abc'))).toBeUndefined();
     expect(findMisconfiguration('nope')).toBeUndefined();
     expect(Object.keys(MISCONFIGURATION_REMEDIES)).toContain('SESSION_SECRET_REQUIRED');
+  });
+});
+
+describe('describeConfigIssues (#769)', () => {
+  it('names each invalid field of a ZodError in the cause chain', () => {
+    const zodError = Object.assign(new Error('[...]'), {
+      name: 'ZodError',
+      issues: [
+        { path: ['apps'], message: 'Invalid input: expected array, received undefined' },
+        { path: ['info', 'name'], message: 'Invalid input: expected string, received number' },
+        { path: [], message: 'Unrecognized key' },
+      ],
+    });
+    expect(describeConfigIssues(new Error('build failed', { cause: zodError }))).toBe(
+      'apps: Invalid input: expected array, received undefined; ' +
+        'info.name: Invalid input: expected string, received number; (root): Unrecognized key',
+    );
+  });
+
+  it('reports a failed union through its closest branch', () => {
+    const zodError = Object.assign(new Error('[...]'), {
+      name: 'ZodError',
+      issues: [
+        {
+          code: 'invalid_union',
+          path: [],
+          message: 'Invalid input',
+          errors: [
+            [{ path: ['apps'], message: 'Invalid input: expected array, received undefined' }],
+            [
+              { path: ['apps'], message: 'Invalid input: expected array, received undefined' },
+              { path: ['splitByApp'], message: 'Invalid input: expected true' },
+            ],
+          ],
+        },
+      ],
+    });
+    expect(describeConfigIssues(zodError)).toBe('apps: Invalid input: expected array, received undefined');
+  });
+
+  it('returns undefined for any other failure', () => {
+    expect(describeConfigIssues(new Error('connect ECONNREFUSED'))).toBeUndefined();
+    expect(describeConfigIssues('not an error')).toBeUndefined();
   });
 });

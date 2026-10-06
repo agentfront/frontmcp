@@ -63,10 +63,10 @@ export default createEdgeMcp({
 });
 ```
 
-Managed mode requires the optional peer **`@frontmcp/plugin-skilled-openapi`**
-(it provides the SaaS-pull source, signature verification, replay/SSRF guards,
-and last-good cache fallback). Install it alongside `@frontmcp/edge` when using
-`managed`.
+Managed mode runs on **`@frontmcp/plugin-skilled-openapi`** (the SaaS-pull
+source, signature verification, replay/SSRF guards, and last-good cache
+fallback). It is a dependency of `@frontmcp/edge`, so it is installed with it and
+wrangler bundles a worker with no stubs or aliases, managed or not.
 
 ## Notes
 

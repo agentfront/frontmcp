@@ -88,7 +88,7 @@ auto-starting entirely (use `FrontMcpInstance.bootstrap`/`runStdio` explicitly).
 })
 ```
 
-`redis` (and `pubsub`) also take a connection URL — `redis: { url: process.env.REDIS_URL }` — which is read into `host`/`port`/`password`/`db` (`rediss://` sets `tls`). See [Redis Setup](/frontmcp/deployment/redis-setup).
+`redis` (and `pubsub`) also take a connection URL — `redis: { url: process.env.REDIS_URL }` — which is read into `host`/`port`/`password`/`db` (`rediss://` sets `tls`). Fields beside the `url` only fill in what it leaves out; one that contradicts it is a validation error. See [Redis Setup](/frontmcp/deployment/redis-setup).
 
 ### Transport Configuration
 

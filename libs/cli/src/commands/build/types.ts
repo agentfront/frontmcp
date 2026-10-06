@@ -30,6 +30,13 @@ export type AdapterBuildContext = {
    * The build appends them to the adapter's setup file (#680).
    */
   runtimeEnv?: Record<string, string>;
+  /**
+   * Optional peers the entry's config turns on and the project has installed
+   * (e.g. `@frontmcp/observability` for `metrics`). An adapter whose runtime
+   * cannot `require()` bundled modules imports them in the entry and hands
+   * them to the SDK with `registerOptionalModule()` (#768).
+   */
+  optionalPeers?: string[];
 };
 
 /** Outcome of reconciling an existing platform config file with the build. */
@@ -59,7 +66,7 @@ export type AdapterTemplate = {
    *   of process-env population.
    * @returns The content for index.js, or empty string if no wrapper needed
    */
-  getEntryTemplate: (mainModulePath: string, deployment?: DeploymentTarget) => string;
+  getEntryTemplate: (mainModulePath: string, deployment?: DeploymentTarget, context?: AdapterBuildContext) => string;
 
   /**
    * Generate the serverless setup file content.
@@ -88,9 +95,10 @@ export type AdapterTemplate = {
    *   merge platform-specific fields (`wrangler.name`, `compatibilityDate`)
    *   into their generated config so values declared in `frontmcp.config.js`
    *   actually reach the platform — see #374.
+   * @param outDir - Absolute output directory of this target (e.g. `--out-dir`).
    * @returns Object (for JSON) or string (for TOML/YAML)
    */
-  getConfig?: (cwd: string, deployment?: DeploymentTarget) => object | string;
+  getConfig?: (cwd: string, deployment?: DeploymentTarget, outDir?: string) => object | string;
 
   /** Name of the config file (e.g., 'vercel.json', 'wrangler.toml') */
   configFileName?: string;
@@ -145,8 +153,14 @@ export type AdapterTemplate = {
    * @param existing - Current file contents.
    * @param cwd - Current working directory.
    * @param deployment - Resolved `frontmcp.config.deployments[]` entry, if any.
+   * @param outDir - Absolute output directory of this target.
    */
-  mergeConfig?: (existing: string, cwd: string, deployment?: DeploymentTarget) => AdapterConfigMerge;
+  mergeConfig?: (
+    existing: string,
+    cwd: string,
+    deployment?: DeploymentTarget,
+    outDir?: string,
+  ) => AdapterConfigMerge;
 
   /**
    * Whether `getConfig()` output should overwrite an existing config file

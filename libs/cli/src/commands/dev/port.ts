@@ -19,8 +19,18 @@ const MAX_AUTO_PORT_PROBES = 50;
  * immediately) and `false` when bind fails with `EADDRINUSE`. Other errors
  * (permission denied on privileged ports, invalid host, …) are rethrown so
  * callers see the real cause instead of a misleading "in use" signal.
+ *
+ * The wildcard address of the host's family is probed too: on macOS a
+ * specific-address bind succeeds next to a `0.0.0.0` / `::` listener (#768).
  */
 export async function isPortFree(port: number, host: string = DEFAULT_HOST): Promise<boolean> {
+  if (!(await canBind(port, host))) return false;
+  const wildcardHost = net.isIPv6(host) ? '::' : '0.0.0.0';
+  if (host === wildcardHost) return true;
+  return canBind(port, wildcardHost).catch(() => true);
+}
+
+function canBind(port: number, host: string): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     const onError = (err: NodeJS.ErrnoException) => {

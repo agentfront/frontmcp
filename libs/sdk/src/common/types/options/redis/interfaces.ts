@@ -54,6 +54,11 @@ export interface RedisConnectionInterface {
    * @default false
    */
   tls?: boolean;
+
+  /**
+   * Not set with `host` — a config with a `url` is a {@link RedisUrlOptionsInterface}.
+   */
+  url?: undefined;
 }
 
 /**
@@ -71,8 +76,14 @@ export interface RedisProviderOptionsInterface extends CommonStorageOptionsInter
  * or `rediss://` for TLS. The URL is read into `host` / `port` / `password` /
  * `db` / `tls` when the config is parsed, so every consumer sees the same
  * connection whichever way it was written.
+ *
+ * The URL is the base. Connection fields written beside it only fill in what
+ * the URL leaves out (`{ url: 'redis://cache:6379', password }` adds the
+ * password); a field that contradicts the URL fails validation.
  */
-export interface RedisUrlOptionsInterface extends CommonStorageOptionsInterface {
+export interface RedisUrlOptionsInterface
+  extends CommonStorageOptionsInterface,
+    Partial<Omit<RedisConnectionInterface, 'url'>> {
   /**
    * Storage provider type. Optional — a `url` already says Redis.
    */

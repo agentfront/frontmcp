@@ -72,9 +72,9 @@ If you created your project with the Docker target (`--target node`), you'll als
 ```json
 {
   "scripts": {
-    "docker:up": "docker compose -f ci/docker-compose.yml up",
-    "docker:down": "docker compose -f ci/docker-compose.yml down",
-    "docker:build": "docker compose -f ci/docker-compose.yml build"
+    "docker:up": "docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up",
+    "docker:down": "docker compose -f ci/docker-compose.yml --env-file ci/.env.docker down",
+    "docker:build": "docker compose -f ci/docker-compose.yml --env-file ci/.env.docker build"
   }
 }
 ```
@@ -90,7 +90,7 @@ npm run docker:down
 npm run docker:build
 
 # Rebuild only the app service (selective rebuild — skips Redis)
-docker compose -f ci/docker-compose.yml up --build app
+docker compose -f ci/docker-compose.yml --env-file ci/.env.docker up --build app
 ```
 
 ---

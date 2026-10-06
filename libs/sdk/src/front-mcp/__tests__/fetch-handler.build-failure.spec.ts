@@ -143,6 +143,8 @@ describe('createFetchHandler() on an edge isolate: a server that fails to build'
       error: 'server_misconfigured',
       code: 'CONFIG_INVALID',
     });
+    const startLog = consoleError.mock.calls.find(([message]) => String(message).includes('failed to start'));
+    expect(String(startLog?.[0])).toMatch(/Invalid configuration: info\.name: .+/);
   });
 });
 

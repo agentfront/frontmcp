@@ -16,6 +16,9 @@ export type {
   Unsubscribe,
   MemoryAdapterOptions,
   RedisAdapterOptions,
+  RedisHostConnectionConfig,
+  RedisUrlConnectionConfig,
+  RedisUrlFillInConfig,
   VercelKvAdapterOptions,
   UpstashAdapterOptions,
   StorageType,
@@ -28,6 +31,9 @@ export { createStorage, createMemoryStorage, getDetectedStorageType } from './fa
 // Redis client helpers
 export { attachRedisErrorListener, DEFAULT_REDIS_ERROR_LOG_INTERVAL_MS } from './redis-error-listener';
 export type { RedisErrorListenerOptions, ErrorEmitterClient } from './redis-error-listener';
+
+export { mergeRedisUrlFields, describeRedisUrlConflicts } from './redis-url';
+export type { RedisUrlMerge, RedisUrlSiblingFields } from './redis-url';
 
 // Namespace utilities
 export {

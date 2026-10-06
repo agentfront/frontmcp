@@ -13,7 +13,7 @@ import {
 } from '../common';
 import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 import { DirectMcpServerImpl, type DirectMcpServer } from '../direct';
-import { InternalMcpError, ServerNotFoundError } from '../errors';
+import { describeConfigIssues, InternalMcpError, ServerNotFoundError } from '../errors';
 import { HealthService } from '../health';
 import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import LoggerRegistry from '../logger/logger.registry';
@@ -332,7 +332,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
         // the server's own log is where its operator reads why it didn't start. A config the schema
         // refuses fails before there is a logger.
         if (deferred) {
-          const message = 'FrontMCP failed to start; requests are refused until a retry succeeds';
+          const configIssues = describeConfigIssues(err);
+          const message =
+            'FrontMCP failed to start; requests are refused until a retry succeeds' +
+            (configIssues ? `. Invalid configuration: ${configIssues}` : '');
           if (frontMcp?.log) frontMcp.log.error(message, err);
           else console.error(`[frontmcp] ${message}`, err);
         }

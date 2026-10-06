@@ -9,11 +9,11 @@ import { findNextFreePort, isPortFree, lookupPortOwner } from '../port';
 const HOST = '127.0.0.1';
 
 /** Bind an ephemeral port and return a teardown helper. */
-function holdPort(port = 0): Promise<{ port: number; release: () => Promise<void> }> {
+function holdPort(port = 0, host = HOST): Promise<{ port: number; release: () => Promise<void> }> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.once('error', reject);
-    server.listen({ port, host: HOST, exclusive: true }, () => {
+    server.listen({ port, host, exclusive: true }, () => {
       const addr = server.address();
       if (!addr || typeof addr === 'string') {
         reject(new Error('Could not determine ephemeral port'));
@@ -38,6 +38,15 @@ describe('isPortFree', () => {
     const probe = await holdPort();
     try {
       expect(await isPortFree(probe.port)).toBe(false);
+    } finally {
+      await probe.release();
+    }
+  });
+
+  it.each(['0.0.0.0', '::'])('returns false when a %s listener holds the port (#768)', async (holderHost) => {
+    const probe = await holdPort(0, holderHost);
+    try {
+      expect(await isPortFree(probe.port, HOST)).toBe(false);
     } finally {
       await probe.release();
     }

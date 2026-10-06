@@ -26,11 +26,13 @@ const runHttpRequestFlowWeb = jest.fn();
 
 jest.mock('@frontmcp/sdk', () => {
   // The deferred-build helpers are plain logic; use the real ones.
-  const { createDeferredServerBuild, startupFailureResponse } = jest.requireActual('@frontmcp/sdk');
+  const { createDeferredServerBuild, describeConfigIssues, startupFailureResponse } =
+    jest.requireActual('@frontmcp/sdk');
   return {
     buildPersistentWebStandardMcp: (...args: unknown[]) => buildPersistentWebStandardMcp(...args),
     runHttpRequestFlowWeb: (...args: unknown[]) => runHttpRequestFlowWeb(...args),
     createDeferredServerBuild,
+    describeConfigIssues,
     startupFailureResponse,
   };
 });
