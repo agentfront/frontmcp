@@ -344,7 +344,7 @@ export function onToolWillApplyUI(flowCtx: any): void {
 export function onToolDidFinalize(flowCtx: any): void {
   const rpcSpan: Span | undefined = flowCtx.state?.[SPAN_KEY];
   const toolSpan: Span | undefined = flowCtx.state?.[EXEC_SPAN_KEY];
-  const error = flowCtx.state?.error;
+  const error = flowCtx.state?.flowError;
 
   if (error) {
     if (toolSpan) endSpanError(toolSpan, error instanceof Error ? error : String(error));
@@ -413,7 +413,7 @@ export function onResourceDidExecute(flowCtx: any): void {
 export function onResourceDidFinalize(flowCtx: any): void {
   const rpcSpan: Span | undefined = flowCtx.state?.[SPAN_KEY];
   const resSpan: Span | undefined = flowCtx.state?.[EXEC_SPAN_KEY];
-  const error = flowCtx.state?.error;
+  const error = flowCtx.state?.flowError;
   if (error) {
     if (resSpan) endSpanError(resSpan, error instanceof Error ? error : String(error));
     if (rpcSpan) endSpanError(rpcSpan, error instanceof Error ? error : String(error));
@@ -484,7 +484,7 @@ export function onPromptDidExecute(flowCtx: any): void {
 export function onPromptDidFinalize(flowCtx: any): void {
   const rpcSpan: Span | undefined = flowCtx.state?.[SPAN_KEY];
   const promptSpan: Span | undefined = flowCtx.state?.[EXEC_SPAN_KEY];
-  const error = flowCtx.state?.error;
+  const error = flowCtx.state?.flowError;
   if (error) {
     if (promptSpan) endSpanError(promptSpan, error instanceof Error ? error : String(error));
     if (rpcSpan) endSpanError(rpcSpan, error instanceof Error ? error : String(error));
@@ -564,7 +564,7 @@ export function onAgentDidExecute(flowCtx: any): void {
 export function onAgentDidFinalize(flowCtx: any): void {
   const rpcSpan: Span | undefined = flowCtx.state?.[SPAN_KEY];
   const agentSpan: Span | undefined = flowCtx.state?.[EXEC_SPAN_KEY];
-  const error = flowCtx.state?.error;
+  const error = flowCtx.state?.flowError;
   if (error) {
     if (agentSpan) endSpanError(agentSpan, error instanceof Error ? error : String(error));
     if (rpcSpan) endSpanError(rpcSpan, error instanceof Error ? error : String(error));
@@ -614,7 +614,7 @@ export function onGenericFlowStage(stageName: string, flowCtx: any): void {
 export function onGenericFlowDidFinalize(flowCtx: any): void {
   const span: Span | undefined = flowCtx.state?.[SPAN_KEY];
   if (!span) return;
-  const error = flowCtx.state?.error;
+  const error = flowCtx.state?.flowError;
   if (error) {
     endSpanError(span, error instanceof Error ? error : String(error));
   } else {
@@ -665,7 +665,7 @@ export function onTransportDidFinalize(flowCtx: any): void {
   const span: Span | undefined = flowCtx.state?.[SPAN_KEY];
   if (!span) return;
   recordStageEvent(span, 'cleanup', flowCtx.state);
-  const error = flowCtx.state?.error;
+  const error = flowCtx.state?.flowError;
   if (error) {
     endSpanError(span, error instanceof Error ? error : String(error));
   } else {
@@ -712,7 +712,7 @@ export function onAuthStage(stageName: string, flowCtx: any): void {
 export function onAuthDidFinalize(flowCtx: any): void {
   const span: Span | undefined = flowCtx.state?.[SPAN_KEY];
   if (!span) return;
-  const error = flowCtx.state?.error;
+  const error = flowCtx.state?.flowError;
   if (error) {
     setAuthResult(span, 'unauthorized');
     endSpanError(span, error instanceof Error ? error : String(error));

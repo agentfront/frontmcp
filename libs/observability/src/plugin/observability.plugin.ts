@@ -22,6 +22,12 @@ import { OTEL_CONFIG, OTEL_TRACER } from '../otel/otel.tokens';
 import type { TracingOptions } from '../otel/otel.types';
 import type { StartupTelemetryData } from '../otel/spans/startup.span';
 import { RequestLogCollector } from '../request-log/request-log.collector';
+import {
+  completeRequestLog,
+  currentRequestLog,
+  recordRequestLogFailure,
+  startRequestLog,
+} from '../request-log/request-log.hooks';
 import { REQUEST_LOG_COLLECTOR } from '../request-log/request-log.tokens';
 import type { RequestLogCollectorOptions } from '../request-log/request-log.types';
 import { TelemetryAccessor } from '../telemetry/telemetry.accessor';
@@ -208,6 +214,18 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     return this.options.tracing !== false;
   }
 
+  private get requestLogsEnabled(): boolean {
+    return this.options.requestLogs !== false;
+  }
+
+  /** Names the entry a request serves on its request log, and records the entry flow's failure. */
+  private annotateRequestLog(ctx: unknown, set: (log: RequestLogCollector, input: Record<string, unknown>) => void) {
+    if (!this.requestLogsEnabled) return;
+    const flowCtx = ctx as { state?: { input?: Record<string, unknown> } };
+    const log = currentRequestLog(ctx as never);
+    if (log && flowCtx.state?.input) set(log, flowCtx.state.input);
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // HTTP Request Flow — scope:http-request
   // Every stage: traceRequest → acquireQuota → acquireSemaphore →
@@ -217,6 +235,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @HttpHook.Will('traceRequest', { priority: -1000 })
   _httpWillTrace(ctx: unknown): void {
     if (this.tracingEnabled) onHttpWillTrace(this.tracingOpts, ctx);
+    if (this.options.requestLogs !== false) startRequestLog(ctx as never, this.options.requestLogs);
   }
 
   @HttpHook.Will('acquireQuota', { priority: -1000 })
@@ -250,8 +269,9 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   }
 
   @HttpHook.Did('finalize', { priority: 1000 })
-  _httpDidFinalize(ctx: unknown): void {
+  async _httpDidFinalize(ctx: unknown): Promise<void> {
     if (this.tracingEnabled) onHttpDidFinalize(ctx);
+    if (this.requestLogsEnabled) await completeRequestLog(ctx as never);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -269,6 +289,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @ToolHook.Will('findTool', { priority: -1000 })
   _toolWillFind(ctx: unknown): void {
     if (this.tracingEnabled) onToolWillFindTool(ctx);
+    this.annotateRequestLog(ctx, (log, input) => log.setToolName(String(input['name'])));
   }
 
   @ToolHook.Will('checkToolAuthorization', { priority: -1000 })
@@ -319,6 +340,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @ToolHook.Did('finalize', { priority: 1000 })
   _toolDidFinalize(ctx: unknown): void {
     if (this.tracingEnabled) onToolDidFinalize(ctx);
+    if (this.requestLogsEnabled) recordRequestLogFailure(ctx as never);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -333,6 +355,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @ResourceHook.Will('findResource', { priority: -1000 })
   _resourceWillFind(ctx: unknown): void {
     if (this.tracingEnabled) onResourceWillFind(ctx);
+    this.annotateRequestLog(ctx, (log, input) => log.setResourceUri(String(input['uri'])));
   }
 
   @ResourceHook.Will('checkEntryAuthorities', { priority: -1000 })
@@ -358,6 +381,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @ResourceHook.Did('finalize', { priority: 1000 })
   _resourceDidFinalize(ctx: unknown): void {
     if (this.tracingEnabled) onResourceDidFinalize(ctx);
+    if (this.requestLogsEnabled) recordRequestLogFailure(ctx as never);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -372,6 +396,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @PromptHook.Will('findPrompt', { priority: -1000 })
   _promptWillFind(ctx: unknown): void {
     if (this.tracingEnabled) onPromptWillFind(ctx);
+    this.annotateRequestLog(ctx, (log, input) => log.setPromptName(String(input['name'])));
   }
 
   @PromptHook.Will('checkEntryAuthorities', { priority: -1000 })
@@ -397,6 +422,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @PromptHook.Did('finalize', { priority: 1000 })
   _promptDidFinalize(ctx: unknown): void {
     if (this.tracingEnabled) onPromptDidFinalize(ctx);
+    if (this.requestLogsEnabled) recordRequestLogFailure(ctx as never);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

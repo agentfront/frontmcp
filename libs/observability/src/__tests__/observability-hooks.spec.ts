@@ -1,58 +1,59 @@
+import { diag, DiagLogLevel, SpanStatusCode, trace } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { SpanStatusCode, diag, DiagLogLevel, trace } from '@opentelemetry/api';
+
+import type { TracingOptions } from '../otel/otel.types';
 import {
-  onToolWillParse,
-  onToolWillFindTool,
-  onToolWillCheckAuth,
-  onToolWillCreateContext,
-  onToolWillValidateInput,
-  onToolWillExecute,
-  onToolDidExecute,
-  onToolWillValidateOutput,
-  onToolWillApplyUI,
-  onToolDidFinalize,
-  onResourceWillParse,
-  onResourceWillFind,
-  onResourceWillExecute,
-  onResourceDidExecute,
-  onResourceDidFinalize,
-  onPromptWillParse,
-  onPromptWillFind,
-  onPromptWillExecute,
+  onAgentDidExecute,
+  onAgentDidExecuteEnrich,
+  onAgentDidFinalize,
+  onAgentWillExecute,
+  onAgentWillFind,
+  onAgentWillParse,
+  onAuthDidDetermineMode,
+  onAuthDidFinalize,
+  onAuthStage,
+  onAuthWillStart,
+  onGenericFlowDidFinalize,
+  onGenericFlowStage,
+  onGenericFlowWillStart,
+  onHttpDidAcquireQuota,
+  onHttpDidCheckAuth,
+  onHttpDidFinalize,
+  onHttpDidRoute,
+  onHttpWillAcquireQuota,
+  onHttpWillCheckAuth,
+  onHttpWillRoute,
+  onHttpWillTrace,
   onPromptDidExecute,
   onPromptDidFinalize,
-  onAgentWillParse,
-  onAgentWillFind,
-  onAgentWillExecute,
-  onAgentDidExecute,
-  onAgentDidFinalize,
-  onHttpWillTrace,
-  onHttpWillAcquireQuota,
-  onHttpDidAcquireQuota,
-  onHttpWillCheckAuth,
-  onHttpDidCheckAuth,
-  onHttpWillRoute,
-  onHttpDidRoute,
-  onHttpDidFinalize,
-  onGenericFlowWillStart,
-  onGenericFlowStage,
-  onGenericFlowDidFinalize,
-  onTransportWillStart,
+  onPromptWillExecute,
+  onPromptWillFind,
+  onPromptWillParse,
+  onResourceDidExecute,
+  onResourceDidFinalize,
+  onResourceWillExecute,
+  onResourceWillFind,
+  onResourceWillParse,
+  onToolDidExecute,
+  onToolDidFinalize,
+  onToolWillApplyUI,
+  onToolWillCheckAuth,
+  onToolWillCreateContext,
+  onToolWillExecute,
+  onToolWillFindTool,
+  onToolWillParse,
+  onToolWillValidateInput,
+  onToolWillValidateOutput,
+  onTransportDidFinalize,
   onTransportDidRoute,
   onTransportStage,
-  onTransportDidFinalize,
-  onAuthWillStart,
-  onAuthDidDetermineMode,
-  onAuthStage,
-  onAuthDidFinalize,
-  wrapContextFetch,
-  onAgentDidExecuteEnrich,
+  onTransportWillStart,
   reportStartup,
   sessionTracingId,
-  SPAN_KEY,
   SPAN_CTX_KEY,
+  SPAN_KEY,
+  wrapContextFetch,
 } from '../plugin/observability.hooks';
-import type { TracingOptions } from '../otel/otel.types';
 
 const DEFAULT_OPTS: TracingOptions = {
   httpSpans: true,
@@ -180,7 +181,7 @@ describe('Auto-instrumentation Hooks', () => {
       const ctx = makeFlowCtx();
       onToolWillParse(DEFAULT_OPTS, ctx);
       onToolWillExecute(DEFAULT_OPTS, ctx);
-      ctx.state.error = new Error('boom');
+      ctx.state.flowError = new Error('boom');
       onToolDidFinalize(ctx);
 
       const toolSpan = exporter.getFinishedSpans().find((s) => s.name === 'tool test_tool');
@@ -218,7 +219,7 @@ describe('Auto-instrumentation Hooks', () => {
     it('should record error', () => {
       const ctx = makeFlowCtx();
       onResourceWillParse(DEFAULT_OPTS, ctx);
-      ctx.state.error = new Error('not found');
+      ctx.state.flowError = new Error('not found');
       onResourceDidFinalize(ctx);
       expect(exporter.getFinishedSpans().find((s) => s.name === 'resources/read')!.status.code).toBe(
         SpanStatusCode.ERROR,
@@ -260,7 +261,7 @@ describe('Auto-instrumentation Hooks', () => {
       const ctx = makeFlowCtx();
       onAgentWillParse(DEFAULT_OPTS, ctx);
       onAgentWillExecute(DEFAULT_OPTS, ctx);
-      ctx.state.error = new Error('agent failed');
+      ctx.state.flowError = new Error('agent failed');
       onAgentDidFinalize(ctx);
       expect(exporter.getFinishedSpans().find((s) => s.name === 'agents/call')!.status.code).toBe(SpanStatusCode.ERROR);
     });
@@ -324,7 +325,7 @@ describe('Auto-instrumentation Hooks', () => {
     it('should record error', () => {
       const ctx = makeFlowCtx();
       onGenericFlowWillStart('test/flow', DEFAULT_OPTS, ctx);
-      ctx.state.error = new Error('fail');
+      ctx.state.flowError = new Error('fail');
       onGenericFlowDidFinalize(ctx);
       expect(exporter.getFinishedSpans()[0].status.code).toBe(SpanStatusCode.ERROR);
     });
@@ -420,7 +421,7 @@ describe('Auto-instrumentation Hooks', () => {
     it('should record unauthorized on error', () => {
       const ctx = makeFlowCtx();
       onAuthWillStart('auth:verify', DEFAULT_OPTS, ctx);
-      ctx.state.error = new Error('unauthorized');
+      ctx.state.flowError = new Error('unauthorized');
       onAuthDidFinalize(ctx);
 
       const span = exporter.getFinishedSpans()[0];
