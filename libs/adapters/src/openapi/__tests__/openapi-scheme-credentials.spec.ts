@@ -535,6 +535,23 @@ describe('OpenAPI adapter - a credential for the operation’s own scheme (regre
       expect(received.map((r) => r.reportsKey)).toEqual(serverSources.map(() => 'server-key'));
     });
 
+    it('sends the server credential when the input leaves its credential out', async () => {
+      const serverSources: Array<Partial<OpenApiAdapterOptions>> = [
+        { staticAuth: { apiKey: 'server-key' } },
+        { authProviderMapper: { ReportsKey: () => 'server-key' } },
+        { additionalHeaders: { 'X-Reports-Key': 'server-key' } },
+      ];
+      for (const options of serverSources) {
+        const { tool } = await startAdapter(
+          { securitySchemesInInput: ['ReportsKey'], ...options },
+          reportsOnlySpec(baseUrl),
+        );
+        await tool('weeklyReport')({}, callerContext);
+      }
+
+      expect(received.map((r) => r.reportsKey)).toEqual(serverSources.map(() => 'server-key'));
+    });
+
     it('uses the input credential when the server has none for this caller', async () => {
       const { tool } = await startAdapter(
         { securitySchemesInInput: ['ReportsKey'], authProviderMapper: { ReportsKey: () => undefined } },
@@ -552,7 +569,7 @@ describe('OpenAPI adapter - a credential for the operation’s own scheme (regre
         /control characters/,
       );
       await expect(tool('weeklyReport')({}, callerContext)).rejects.toThrow(
-        /Invalid arguments for tool 'weeklyReport': ReportsKey:/,
+        /Authentication required for tool 'weeklyReport'/,
       );
       expect(received).toHaveLength(0);
     });

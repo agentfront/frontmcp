@@ -22,6 +22,33 @@ const spec: OpenAPIV3.Document = {
         parameters: [{ name: 'status', in: 'query', schema: { type: 'string', enum: ['open', 'closed'] } }],
         responses: { '200': { description: 'ok' } },
       },
+      post: {
+        operationId: 'createPet',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                oneOf: [
+                  { type: 'object', properties: { name: { type: 'string' }, meows: { type: 'boolean' } } },
+                  { type: 'object', properties: { name: { type: 'string' }, barks: { type: 'boolean' } } },
+                ],
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/hosts/{hostId}': {
+      get: {
+        operationId: 'getHost',
+        parameters: [
+          { name: 'hostId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+          { name: 'hostname', in: 'query', schema: { type: 'string', format: 'hostname' } },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
     },
   },
 };
@@ -72,5 +99,23 @@ describe('OpenAPI tool arguments', () => {
 
     expect(result.isError).toBeFalsy();
     expect(requestedUrls).toEqual(['https://api.example.com/tickets?status=open']);
+  });
+
+  it('sends a body that matches more than one open oneOf branch', async () => {
+    const result = await server.callTool('createPet', { body: { name: 'rex', barks: true } });
+
+    expect(result.isError).toBeFalsy();
+    expect(requestedUrls).toEqual(['https://api.example.com/tickets']);
+  });
+
+  it.each([
+    ['a UUID with version nibble 0', '6ba7b810-9dad-01d1-80b4-00c04fd430c8'],
+    ['a UUID of repeated digits', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'],
+    ['a UUID the JSON Schema test suite counts as valid', '99c17cbb-656f-fcfb-a8b7-1df4b6c28c0b'],
+  ])('treats format as an annotation and sends %s', async (_label, hostId) => {
+    const result = await server.callTool('getHost', { hostId, hostname: 'my_host.internal' });
+
+    expect(result.isError).toBeFalsy();
+    expect(requestedUrls).toEqual([`https://api.example.com/hosts/${hostId}?hostname=my_host.internal`]);
   });
 });
