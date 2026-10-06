@@ -7,11 +7,14 @@
  */
 
 import * as http from 'node:http';
+
 import type { OpenAPIV3 } from 'openapi-types';
+
+import { FrontMcpToolTokens } from '@frontmcp/sdk';
+
 import OpenapiAdapter from '../openapi.adapter';
 import type { OpenapiAdapterConfig } from '../openapi.types';
 import { createMockLogger } from './fixtures';
-import { FrontMcpToolTokens } from '@frontmcp/sdk';
 
 // Type for route handler
 type RouteHandler = (req: http.IncomingMessage, res: http.ServerResponse, params: Record<string, string>) => void;
@@ -538,9 +541,9 @@ describe('OpenAPI Adapter - Real HTTP Server Integration', () => {
       const createUserTool = findTool(tools, 'createUser');
       expect(createUserTool).toBeDefined();
 
-      // OpenAPI client-side validation throws for missing required params before reaching server
+      // The arguments are checked against the spec before the request is built
       await expect(createUserTool.executor({ name: 'John' }, createContext())).rejects.toThrow(
-        /Required.*parameter.*'email'.*is missing/,
+        /Invalid arguments for tool 'createUser': email:/,
       );
     });
 

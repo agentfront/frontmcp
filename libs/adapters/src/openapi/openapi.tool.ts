@@ -1,7 +1,7 @@
 import { type McpOpenAPITool } from 'mcp-from-openapi';
 
 import { z, type JSONSchema } from '@frontmcp/lazy-zod';
-import { tool, type FrontMcpLogger } from '@frontmcp/sdk';
+import { InvalidInputError, tool, type FrontMcpLogger } from '@frontmcp/sdk';
 import { isRedirectResponse } from '@frontmcp/utils';
 
 import { validateFrontMcpExtension, type ValidatedFrontMcpExtension } from './openapi.frontmcp-schema';
@@ -127,6 +127,15 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
   return tool(toolMetadata as unknown as Parameters<typeof tool>[0])(async (input, toolCtx) => {
     // Get the FrontMcpContext for full context access (sessionId, traceId, authInfo, etc.)
     const ctx = toolCtx.context;
+
+    // 0. The SDK passes a raw-schema tool's arguments through, so check them against the spec here
+    if (!schemaResult.conversionFailed) {
+      const validation = schemaResult.schema.safeParse(input);
+      if (!validation.success) {
+        const problems = validation.error.issues.map((issue) => `${issue.path.join('.') || 'input'}: ${issue.message}`);
+        throw new InvalidInputError(`Invalid arguments for tool '${openapiTool.name}': ${problems.join('; ')}`);
+      }
+    }
 
     // 1. Inject transformed values (from inputTransforms)
     const transformContext: InputTransformContext = {
