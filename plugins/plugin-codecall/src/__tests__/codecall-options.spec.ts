@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/__tests__/codecall-options.spec.ts
 
-import { CodeCallPluginOptions, codeCallPluginOptionsSchema } from '../codecall.types';
+import { codeCallPluginOptionsSchema } from '../codecall.types';
 
 describe('CodeCallPluginOptions Zod Schema', () => {
   describe('default values', () => {
