@@ -92,6 +92,8 @@ describe('Distributed cross-node sessions (#680)', () => {
       headers: { 'mcp-session-id': sessionId },
     });
     expect(deleted.status).toBe(204);
+    // The owner answered, and names itself as every other relayed response does (#714).
+    expect(deleted.headers.get('x-frontmcp-machine-id')).toBe('node-0');
     // A public session's stored record is gone too, so no restart or takeover brings it back (#713).
     expect(await redis.exists(`mcp:session:${sessionId}`)).toBe(0);
 

@@ -1,8 +1,11 @@
 /**
  * `DELETE /mcp` (`handleDeleteSession`): ends the session for every caller the flow
- * authorized, public and anonymous ones included (#713).
+ * authorized, public and anonymous ones included (#713), and a relayed DELETE names the node
+ * that owns the session in `X-FrontMCP-Machine-Id` (#714).
  */
 import 'reflect-metadata';
+
+import { getMachineId, resetRuntimeContext } from '@frontmcp/utils';
 
 import { FlowControl, httpOutputSchema, ServerRequestTokens } from '../../../common';
 import HttpRequestFlow from '../http.request.flow';
@@ -17,7 +20,7 @@ function createStage(authorization: { token: string } | undefined, transportServ
     [ServerRequestTokens.sessionId]: 'sess-1',
     [ServerRequestTokens.auth]: authorization,
   };
-  const response = {};
+  const response = { setHeader: jest.fn() };
   Object.assign(stage, {
     scope: { transportService, notifications: { terminateSession: jest.fn() } },
     metadata: { outputSchema: httpOutputSchema },
@@ -25,7 +28,7 @@ function createStage(authorization: { token: string } | undefined, transportServ
     requestId: 'req-1',
     rawInput: { request, response },
   });
-  return { stage };
+  return { stage, response };
 }
 
 async function runStage(stage: HttpRequestFlow, stageName: string): Promise<FlowControl | undefined> {
@@ -76,5 +79,35 @@ describe('http:request handleDeleteSession', () => {
 
     expect(transportService.destroyTransporter).not.toHaveBeenCalled();
     expect(transportService.deleteStoredSession).not.toHaveBeenCalled();
+  });
+});
+
+describe('http:request applyDeleteNodeHeaders', () => {
+  const originalMode = process.env['FRONTMCP_DEPLOYMENT_MODE'];
+
+  afterEach(() => {
+    if (originalMode === undefined) delete process.env['FRONTMCP_DEPLOYMENT_MODE'];
+    else process.env['FRONTMCP_DEPLOYMENT_MODE'] = originalMode;
+    resetRuntimeContext();
+  });
+
+  it('names this node, the session owner, in X-FrontMCP-Machine-Id when distributed', async () => {
+    process.env['FRONTMCP_DEPLOYMENT_MODE'] = 'distributed';
+    resetRuntimeContext();
+    const { stage, response } = createStage({ token: '' }, transportServiceStub());
+
+    await runStage(stage, 'applyDeleteNodeHeaders');
+
+    expect(response.setHeader).toHaveBeenCalledWith('X-FrontMCP-Machine-Id', getMachineId());
+  });
+
+  it('sets no machine-id header outside distributed deployments', async () => {
+    delete process.env['FRONTMCP_DEPLOYMENT_MODE'];
+    resetRuntimeContext();
+    const { stage, response } = createStage({ token: '' }, transportServiceStub());
+
+    await runStage(stage, 'applyDeleteNodeHeaders');
+
+    expect(response.setHeader).not.toHaveBeenCalled();
   });
 });

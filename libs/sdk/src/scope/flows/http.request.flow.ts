@@ -41,6 +41,7 @@ import {
 } from '../../common';
 import { toLegacyProtocolFlags } from '../../common/types/options/transport/schema';
 import { SessionOwnerUnreachableError, SessionVerificationFailedError } from '../../errors';
+import { applyMachineIdHeader } from '../../ha/ha-headers';
 import { isProtocol20260728Request } from '../../transport/mcp-20260728';
 import { type PersistentSessionOwnerStore } from '../../transport/persistent-session-owner';
 import { type Scope } from '../scope.instance';
@@ -83,6 +84,7 @@ const plan = {
     'handleStreamableHttp',
     'handleStatefulHttp',
     'handleStatelessHttp',
+    'applyDeleteNodeHeaders',
     'handleDeleteSession',
   ],
   finalize: [
@@ -957,6 +959,18 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       }
       throw error;
     }
+  }
+
+  /** A relayed DELETE runs on the session's owner, so the owner names itself, as the transport flows do (#714). */
+  @Stage('applyDeleteNodeHeaders', {
+    filter: ({
+      state: {
+        required: { intent },
+      },
+    }) => intent === 'delete-session',
+  })
+  async applyDeleteNodeHeaders() {
+    applyMachineIdHeader(this.rawInput.response);
   }
 
   @Stage('handleDeleteSession', {
