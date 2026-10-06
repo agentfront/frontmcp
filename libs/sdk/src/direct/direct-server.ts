@@ -92,9 +92,15 @@ export class DirectMcpServerImpl implements DirectMcpServer {
   private _isDisposed = false;
   private readonly defaultSessionId: string;
   private errorHandler?: ErrorHandler;
+  private readonly disposeOwner?: () => Promise<void>;
 
-  constructor(scope: Scope) {
+  /**
+   * @param scope - The endpoint this server serves
+   * @param disposeOwner - Tears down what owns the scope (the whole server instance) when the server is disposed
+   */
+  constructor(scope: Scope, disposeOwner?: () => Promise<void>) {
     this.scope = scope;
+    this.disposeOwner = disposeOwner;
     this.defaultSessionId = `direct:${randomUUID()}`;
     this.ready = Promise.resolve(); // Scope is already initialized
   }
@@ -329,6 +335,8 @@ export class DirectMcpServerImpl implements DirectMcpServer {
         console.debug('DirectMcpServer cleanup warning:', err);
       }
     }
+
+    await this.disposeOwner?.();
   }
 }
 
