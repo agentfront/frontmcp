@@ -133,7 +133,7 @@ export default class RememberRedisProvider implements RememberStoreInterface {
    */
   async getValue<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined> {
     const raw =
-      (await this.client.get(prefixedStoreKey(this.keyPrefix, key))) ?? (await this.takeDoubledPrefixValue(key));
+      (await this.client.get(prefixedStoreKey(this.keyPrefix, key))) ?? (await this.readDoubledPrefixValue(key));
 
     if (raw === null) return defaultValue;
 
@@ -189,22 +189,14 @@ export default class RememberRedisProvider implements RememberStoreInterface {
     return found;
   }
 
-  /** Moves an entry from the key releases up to 1.9.1 wrote it under, keeping its TTL; its stored text, or null. */
-  private async takeDoubledPrefixValue(key: string): Promise<string | null> {
+  /**
+   * The stored text of an entry a release up to 1.9.1 wrote under the doubled key, or null. It is read
+   * in place, not copied: the entry keeps its TTL, a rolled-back release still finds it, and a
+   * concurrent `delete()` cannot be undone by a copy. The next write or delete of the key removes it.
+   */
+  private async readDoubledPrefixValue(key: string): Promise<string | null> {
     const doubledKey = doubledPrefixKey(this.keyPrefix, key);
-    if (!doubledKey) return null;
-    const raw = await this.client.get(doubledKey);
-    if (raw === null) return null;
-
-    const fullKey = prefixedStoreKey(this.keyPrefix, key);
-    const ttlMs = await this.client.pttl(doubledKey);
-    if (ttlMs > 0) {
-      await this.client.set(fullKey, raw, 'PX', ttlMs, 'NX');
-    } else {
-      await this.client.set(fullKey, raw, 'NX');
-    }
-    await this.client.del(doubledKey);
-    return (await this.client.get(fullKey)) ?? raw;
+    return doubledKey ? this.client.get(doubledKey) : null;
   }
 
   /** Drops what releases up to 1.9.1 left under the doubled key, so it cannot come back once this key is gone. */

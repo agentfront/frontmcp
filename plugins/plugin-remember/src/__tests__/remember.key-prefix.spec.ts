@@ -1,7 +1,7 @@
 /**
  * The Redis and Vercel KV stores keep Remember's entries under the plugin's `keyPrefix` once (#767).
  * Up to 1.9.1 they added the prefix to keys that already carried it (`remember:remember:v2:…`); those
- * entries are still read, and move to the single-prefix key when they are.
+ * entries are still read from there, and nothing is copied on read, so a rollback still finds them.
  */
 import 'reflect-metadata';
 
@@ -127,17 +127,37 @@ describe.each(stores)('%s keyPrefix', (_name, build) => {
     expect(await store.keys()).toEqual(['plain']);
   });
 
-  it('reads an entry a release up to 1.9.1 stored under the doubled prefix, and moves it with its TTL', async () => {
+  async function storeUnderDoubledPrefix(): Promise<string> {
     const remember = rememberOver(store);
     await remember.set('lang', 'he', { scope: 'user' });
     const [storedText] = [...server.entries.values()];
     server.entries.clear();
     await server.set('remember:remember:v2:user:nour:lang', storedText ?? '', 'PX', 60_000);
+    return 'remember:remember:v2:user:nour:lang';
+  }
+
+  it('reads an entry a release up to 1.9.1 stored under the doubled prefix, leaving it and its TTL there', async () => {
+    const doubledKey = await storeUnderDoubledPrefix();
+    const remember = rememberOver(store);
 
     expect(await remember.list({ scope: 'user' })).toEqual(['lang']);
     expect(await remember.get('lang', { scope: 'user' })).toBe('he');
-    expect([...server.entries.keys()]).toEqual(['remember:v2:user:nour:lang']);
-    expect(await server.pttl('remember:v2:user:nour:lang')).toBe(60_000);
+    expect([...server.entries.keys()]).toEqual([doubledKey]);
+    expect(await server.pttl(doubledKey)).toBe(60_000);
+  });
+
+  it('does not bring back an entry forgotten while it was being read', async () => {
+    const doubledKey = await storeUnderDoubledPrefix();
+    const readEntry = server.get.bind(server);
+    server.get = async (key: string) => {
+      const value = await readEntry(key);
+      if (key === doubledKey) await rememberOver(store).forget('lang', { scope: 'user' });
+      return value;
+    };
+
+    await rememberOver(store).get('lang', { scope: 'user' });
+
+    expect(server.entries.size).toBe(0);
   });
 
   it('forgets an entry under both keys', async () => {

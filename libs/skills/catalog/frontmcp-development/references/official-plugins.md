@@ -363,8 +363,8 @@ live `remember:v2:session:*` key. `global` is not versioned and not purged: neit
 its key derivation changed.
 
 The Redis and Vercel KV stores keep each key under `keyPrefix` once. Releases up to 1.9.1 added it
-twice there (`remember:remember:v2:…`); such an entry is still listed and read, and moves to the
-single-prefix key (TTL kept) the first time it is read.
+twice there (`remember:remember:v2:…`); such an entry is still listed and read in place (TTL kept).
+Reading never copies it, so a rollback to 1.9.1 still finds it; writing or forgetting the key removes it.
 
 **The purge runs 24 hours after the fleet first reached the `v2:` layout -- not after this
 process started -- on an unreferenced timer, never on the request path.** The first instance to
