@@ -10,6 +10,8 @@
  */
 import 'reflect-metadata';
 
+import { InMemoryOrchestratedTokenStore } from '@frontmcp/auth';
+
 import { createTestFetchServer, type TestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import {
   authorizePath,
@@ -208,5 +210,30 @@ describe('remote mode keeps the provider token available', () => {
 
     expect(await providerToken(server, latest)).toBe('provider-access-1');
     expect(await providerToken(server, accessToken)).toBeNull();
+  });
+
+  it('moves the provider tokens on the next client refresh when a move fails', async () => {
+    const server = await remoteServer();
+    const { clientId, refreshToken } = await signIn(server);
+    jest
+      .spyOn(InMemoryOrchestratedTokenStore.prototype, 'migrateTokens')
+      .mockRejectedValueOnce(new Error('store unavailable'));
+
+    const failedMove = await postForm(
+      server.handler,
+      '/oauth/token',
+      { grant_type: 'refresh_token', refresh_token: refreshToken, client_id: clientId },
+      HOST,
+    );
+    const afterFailure = (await failedMove.json()) as Record<string, unknown>;
+    const retriedMove = await postForm(
+      server.handler,
+      '/oauth/token',
+      { grant_type: 'refresh_token', refresh_token: String(afterFailure['refresh_token']), client_id: clientId },
+      HOST,
+    );
+    const latest = String(((await retriedMove.json()) as Record<string, unknown>)['access_token']);
+
+    expect(await providerToken(server, latest)).toBe('provider-access-1');
   });
 });

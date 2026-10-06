@@ -34,7 +34,9 @@ function createProviders() {
 }
 
 async function makeAuth() {
-  const auth = new LocalPrimaryAuth({ fullPath: '' } as never, createProviders(), { mode: 'local' } as never);
+  const auth = new LocalPrimaryAuth({ fullPath: '', onDispose: jest.fn() } as never, createProviders(), {
+    mode: 'local',
+  } as never);
   await auth.ready;
   return auth;
 }
