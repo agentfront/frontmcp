@@ -56,7 +56,9 @@ class MyServer {}
 // Generated tools: petstore:addPet, petstore:getPetById, petstore:deletePet, etc.
 ```
 
-Each OpenAPI operation becomes a tool named `<adapter-name>:<operationId>`.
+Each OpenAPI operation becomes a tool named `<adapter-name>:<operationId>`. A call is checked against the
+operation's schema before any request goes out: a value outside an `enum` or a missing required field fails with
+`Invalid arguments for tool '<name>': <field>: <problem>` (up to 1.9.1 such arguments were sent as given).
 
 ## Authentication
 

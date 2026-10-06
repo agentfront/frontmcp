@@ -573,7 +573,7 @@ describe('createOpenApiTool - Tool Execution', () => {
       const toolCtx = createMockToolContext();
 
       // Pass non-object input
-      await expect(executor('not an object' as any, toolCtx)).rejects.toThrow('Invalid input type: expected object');
+      await expect(executor('not an object' as any, toolCtx)).rejects.toThrow('input: Invalid input: expected object');
     });
 
     it('should reject null input', async () => {
@@ -607,7 +607,7 @@ describe('createOpenApiTool - Tool Execution', () => {
       const executor = tool();
       const toolCtx = createMockToolContext();
 
-      await expect(executor(null as any, toolCtx)).rejects.toThrow('expected object, got null');
+      await expect(executor(null as any, toolCtx)).rejects.toThrow('expected object, received null');
     });
 
     it('should handle async transform injection', async () => {
