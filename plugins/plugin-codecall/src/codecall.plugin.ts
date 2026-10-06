@@ -7,6 +7,7 @@ import {
   isEntryGatedBy,
   ListToolsHook,
   Plugin,
+  resolveToolVisibility,
   ScopeEntry,
   ToolHook,
   ToolNotFoundError,
@@ -125,6 +126,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
           return new ToolSearchService(
             {
               embeddingOptions: parsedOptions.embedding,
+              defaultTopK: parsedOptions.topK,
               mode: parsedOptions.mode,
               includeTools: parsedOptions['includeTools'],
             },
@@ -141,7 +143,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
    * Modes:
    * - codecall_only: Hide all tools from list_tools except CodeCall meta-tools.
    *                  All other tools must be discovered via codecall:search.
-   * - codecall_opt_in: Show all tools in list_tools. Tools opt-in to CodeCall via metadata.
+   * - codecall_opt_in: Show tools in list_tools unless they set visibleInListTools: false. Tools opt-in to CodeCall via metadata.
    * - metadata_driven: Use per-tool metadata.codecall to control visibility in list_tools.
    *
    * CodeCall meta-tools (codecall:search, codecall:describe, codecall:execute, codecall:invoke)
@@ -192,11 +194,30 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
   async refuseDirectCallOfHiddenTool(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const { tool } = flowCtx.state;
     if (!tool || tool.owner?.kind === 'scope') return;
-    if (this.shouldShowInListTools(tool, this.options.mode)) return;
+    if (this.isDirectlyCallable(tool)) return;
     if (isInProcessDispatch(callContextOf(flowCtx))) return;
 
     this.getLogger().verbose('refused a direct tools/call of a tool CodeCall hides', { tool: tool.fullName });
     throw new ToolNotFoundError(flowCtx.state.input?.name ?? tool.name);
+  }
+
+  /**
+   * Whether a client may call the tool directly: it is listed, and a tool the SDK keeps out of `tools/list`
+   * (`visibility: 'hidden'`) also opts in with `visibleInListTools: true`, in every mode.
+   */
+  private isDirectlyCallable(tool: ToolEntry<any, any, any, any>): boolean {
+    if (!this.managesApp(tool)) return true;
+    if (!this.shouldShowInListTools(tool, this.options.mode)) return false;
+    if (resolveToolVisibility(tool.metadata) !== 'hidden') return true;
+    return this.getCodeCallMetadata(tool)?.visibleInListTools === true;
+  }
+
+  /** Whether the tool's app is one `appIds` puts under `codecall_only`; every app is, without `appIds`. */
+  private managesApp(tool: ToolEntry<any, any, any, any>): boolean {
+    const managedAppIds = this.options.appIds;
+    if (this.options.mode !== 'codecall_only' || !managedAppIds || managedAppIds.length === 0) return true;
+    const toolOwnerAppId = tool.owner?.kind === 'app' ? tool.owner.id : undefined;
+    return toolOwnerAppId !== undefined && managedAppIds.includes(toolOwnerAppId);
   }
 
   /** Whether this instance's direct-call gate runs for the tool, so the listing hides only what that gate refuses. */
@@ -233,33 +254,14 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
     const codecallMeta = this.getCodeCallMetadata(tool);
 
     switch (mode) {
-      case 'codecall_only': {
-        // If appIds is configured, only hide tools from those specific apps
-        const managedAppIds = this.options.appIds;
-        if (managedAppIds && managedAppIds.length > 0) {
-          const toolOwnerAppId = tool.owner?.kind === 'app' ? tool.owner.id : undefined;
-          // Tools from non-managed apps remain visible
-          if (!toolOwnerAppId || !managedAppIds.includes(toolOwnerAppId)) {
-            return true;
-          }
-        }
-        // In codecall_only mode, only CodeCall meta-tools and tools with
-        // explicit visibleInListTools=true are shown
-        return codecallMeta?.visibleInListTools === true;
-      }
+      case 'codecall_only':
+        // Tools of apps outside appIds stay visible; otherwise only tools with visibleInListTools=true are shown
+        return !this.managesApp(tool) || codecallMeta?.visibleInListTools === true;
 
       case 'codecall_opt_in':
-        // In opt_in mode, all tools are shown (they opt-in to CodeCall execution via metadata)
-        return true;
-
       case 'metadata_driven':
-        // In metadata_driven mode, use per-tool metadata
-        // Default: show unless explicitly hidden
-        if (codecallMeta?.visibleInListTools === false) {
-          return false;
-        }
-        // If visibleInListTools is true or undefined, show the tool
-        return true;
+        // Shown unless the tool sets visibleInListTools: false
+        return codecallMeta?.visibleInListTools !== false;
 
       default:
         // Unknown mode - default to showing the tool (fail-open for UX)

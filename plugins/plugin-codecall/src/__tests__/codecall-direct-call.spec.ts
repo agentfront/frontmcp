@@ -102,6 +102,35 @@ describe('CodeCallPlugin.refuseDirectCallOfHiddenTool', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('refuses a tool with visibleInListTools: false in codecall_opt_in mode', async () => {
+    const unlisted = { ...hiddenTool, metadata: { codecall: { visibleInListTools: false } } };
+    await expect(
+      pluginFor('codecall_opt_in').refuseDirectCallOfHiddenTool(flowCtxFor(unlisted, {})),
+    ).rejects.toBeInstanceOf(ToolNotFoundError);
+  });
+
+  it.each(['codecall_opt_in', 'metadata_driven'] as const)(
+    "refuses a visibility: 'hidden' tool in %s mode unless it sets visibleInListTools: true",
+    async (mode) => {
+      const hidden = { ...hiddenTool, metadata: { visibility: 'hidden' } };
+      const optedIn = { ...hiddenTool, metadata: { visibility: 'hidden', codecall: { visibleInListTools: true } } };
+
+      await expect(pluginFor(mode).refuseDirectCallOfHiddenTool(flowCtxFor(hidden, {}))).rejects.toBeInstanceOf(
+        ToolNotFoundError,
+      );
+      await expect(pluginFor(mode).refuseDirectCallOfHiddenTool(flowCtxFor(optedIn, {}))).resolves.toBeUndefined();
+    },
+  );
+
+  it("lets a visibility: 'hidden' tool of an app outside appIds through", async () => {
+    const plugin = new CodeCallPlugin({ mode: 'codecall_only', appIds: ['billing'] });
+    const logger = { verbose: jest.fn(), child: () => logger };
+    jest.spyOn(plugin, 'get').mockReturnValue(logger as never);
+    const hidden = { ...hiddenTool, metadata: { visibility: 'hidden' } };
+
+    await expect(plugin.refuseDirectCallOfHiddenTool(flowCtxFor(hidden, {}))).resolves.toBeUndefined();
+  });
+
   it("never refuses the server's own system tools", async () => {
     const systemTool = {
       name: 'sendElicitationResult',
