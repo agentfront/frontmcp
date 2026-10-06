@@ -859,7 +859,7 @@ export function installHookObserver(flowCtx: FlowContextLike, observer: HookObse
   if (ctx && !ctx.get?.(HOOK_OBSERVER_KEY)) ctx.set?.(HOOK_OBSERVER_KEY, observer);
 }
 
-/** Runs one hook inside a `hook <stage>` span, a child of its flow's span. A control-flow signal other than `fail` ends it OK. */
+/** Runs one hook inside a `hook <stage>` span, a child of its flow's span. `fail` and `abort` end it as an error; other control-flow signals end it OK. */
 export async function runInHookSpan(
   flowCtx: any,
   hook: { flowName: string; stage: string; owner?: string },
