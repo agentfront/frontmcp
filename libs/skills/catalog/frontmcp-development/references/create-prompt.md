@@ -402,6 +402,8 @@ nx generate @frontmcp/nx:prompt
 
 This creates the prompt file, spec file, and updates barrel exports.
 
+When two apps have prompts with the same name, `prompts/list` names each by its app (`desk:summarize`) and `prompts/get` accepts that app-qualified name.
+
 ## Common Patterns
 
 | Pattern             | Correct                                                                  | Incorrect                                           | Why                                                                        |
