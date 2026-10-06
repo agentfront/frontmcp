@@ -13,6 +13,7 @@ import { Provider, ProviderScope } from '@frontmcp/sdk';
 import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import type { CodeCallSidecarOptions } from '../codecall.types';
 import type CodeCallConfig from '../providers/code-call.config';
+import { findScriptPolicyIssues } from '../security/script-policy';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
 import { withScriptLines } from '../utils/script-lines';
 
@@ -158,6 +159,24 @@ export default class EnclaveService {
       if (code.length > maxLength) {
         throw new ScriptTooLargeError(code.length, maxLength);
       }
+    }
+
+    const policyIssues = await findScriptPolicyIssues(code, this.vmOptions);
+    if (policyIssues.length > 0) {
+      return {
+        success: false,
+        error: {
+          message: `AgentScript validation failed:\n${policyIssues
+            .map((issue) => `${issue.code}${issue.location ? ` (line ${issue.location.line})` : ''}: ${issue.message}`)
+            .join('\n')}`,
+          name: 'ValidationError',
+          code: 'VALIDATION_ERROR',
+          blockedPatterns: [...new Set(policyIssues.map((issue) => issue.code))],
+        },
+        logs,
+        timedOut: false,
+        stats: { duration: 0, toolCallCount: 0, iterationCount: 0 },
+      };
     }
 
     // Create tool handler that bridges to CodeCallVmEnvironment. It always throws on a failing

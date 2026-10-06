@@ -241,6 +241,18 @@ describe('CodeCallPlugin', () => {
       expect(filtered).toHaveLength(3);
     });
 
+    it('should hide tools with visibleInListTools=false in codecall_opt_in mode', async () => {
+      plugin = createPluginWithLogger({ mode: 'codecall_opt_in' });
+      const flowCtx = createMockFlowCtx([
+        { tool: { name: 'hidden:tool', metadata: { codecall: { visibleInListTools: false } } } },
+        { tool: { name: 'default:tool', metadata: {} } },
+      ]);
+
+      await plugin.adjustListTools(flowCtx);
+
+      expect(flowCtx.resolvedToolsAfter.map((t: any) => t.tool.name)).toEqual(['default:tool']);
+    });
+
     it('should hide tools with visibleInListTools=false in metadata_driven mode', async () => {
       plugin = createPluginWithLogger({ mode: 'metadata_driven' });
       const flowCtx = createMockFlowCtx([

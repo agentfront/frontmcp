@@ -2629,10 +2629,13 @@ __metadata:
     "@enclave-vm/ast": "*"
     "@enclave-vm/core": "*"
     "@frontmcp/lazy-zod": 1.9.1
+    undici: ">=6"
   peerDependenciesMeta:
     "@enclave-vm/ast":
       optional: true
     "@enclave-vm/core":
+      optional: true
+    undici:
       optional: true
   languageName: unknown
   linkType: soft

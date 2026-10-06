@@ -3,6 +3,12 @@ import Redis, { type Redis as RedisClient } from 'ioredis';
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 import type { RedisClientRememberPluginOptions, RedisRememberPluginOptions } from '../remember.types';
+import {
+  callerKeyOf,
+  doubledPrefixKey,
+  prefixedStoreKey,
+  SET_IF_NEITHER_KEY_EXISTS_SCRIPT,
+} from './remember-key-prefix';
 import type { RememberStoreInterface } from './remember-store.interface';
 
 /**
@@ -22,7 +28,7 @@ export type RedisRememberOptions = RedisRememberPluginOptions | RedisClientRemem
 export default class RememberRedisProvider implements RememberStoreInterface {
   private readonly client: RedisClient;
   /**
-   * Prefix prepended to all Redis keys.
+   * Prefix prepended to Redis keys that don't already start with it.
    * Include any separator (e.g., "myapp:" or "user:123:") as part of the prefix.
    */
   private readonly keyPrefix: string;
@@ -88,7 +94,7 @@ export default class RememberRedisProvider implements RememberStoreInterface {
       }
     }
 
-    const fullKey = this.keyPrefix + key;
+    const fullKey = prefixedStoreKey(this.keyPrefix, key);
     const strValue = JSON.stringify(value);
     const ttl = ttlSeconds ?? this.defaultTTL;
 
@@ -97,6 +103,7 @@ export default class RememberRedisProvider implements RememberStoreInterface {
     } else {
       await this.client.set(fullKey, strValue);
     }
+    await this.deleteDoubledPrefixKey(key);
   }
 
   /**
@@ -104,16 +111,32 @@ export default class RememberRedisProvider implements RememberStoreInterface {
    *
    * `set` resolves to `'OK'` when it created the key and `null` when the key already existed,
    * so the whole check-and-write is one round trip and two callers racing cannot both win.
+   * A key that releases up to 1.9.1 may hold under the doubled prefix counts as present too: one
+   * script checks both keys and writes, so an entry still there is never shadowed.
    */
   async setIfAbsent(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
-    const fullKey = this.keyPrefix + key;
+    const fullKey = prefixedStoreKey(this.keyPrefix, key);
     const strValue = JSON.stringify(value);
     const ttl = ttlSeconds ?? this.defaultTTL;
+    const hasTtl = ttl !== undefined && ttl > 0;
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
 
-    const result =
-      ttl !== undefined && ttl > 0
-        ? await this.client.set(fullKey, strValue, 'EX', ttl, 'NX')
-        : await this.client.set(fullKey, strValue, 'NX');
+    if (doubledKey) {
+      const ttlArgument = hasTtl ? String(ttl) : '';
+      const created = await this.client.eval(
+        SET_IF_NEITHER_KEY_EXISTS_SCRIPT,
+        2,
+        fullKey,
+        doubledKey,
+        strValue,
+        ttlArgument,
+      );
+      return created === 1;
+    }
+
+    const result = hasTtl
+      ? await this.client.set(fullKey, strValue, 'EX', ttl, 'NX')
+      : await this.client.set(fullKey, strValue, 'NX');
 
     return result === 'OK';
   }
@@ -130,8 +153,8 @@ export default class RememberRedisProvider implements RememberStoreInterface {
    * @returns The parsed value as T, or defaultValue/undefined
    */
   async getValue<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined> {
-    const fullKey = this.keyPrefix + key;
-    const raw = await this.client.get(fullKey);
+    const raw =
+      (await this.client.get(prefixedStoreKey(this.keyPrefix, key))) ?? (await this.readDoubledPrefixValue(key));
 
     if (raw === null) return defaultValue;
 
@@ -147,38 +170,60 @@ export default class RememberRedisProvider implements RememberStoreInterface {
    * Delete a key.
    */
   async delete(key: string): Promise<void> {
-    const fullKey = this.keyPrefix + key;
-    await this.client.del(fullKey);
+    await this.client.del(prefixedStoreKey(this.keyPrefix, key));
+    await this.deleteDoubledPrefixKey(key);
   }
 
   /**
    * Check if a key exists.
    */
   async exists(key: string): Promise<boolean> {
-    const fullKey = this.keyPrefix + key;
-    return (await this.client.exists(fullKey)) === 1;
+    if ((await this.client.exists(prefixedStoreKey(this.keyPrefix, key))) === 1) return true;
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
+    return doubledKey !== undefined && (await this.client.exists(doubledKey)) === 1;
   }
 
   /**
    * List keys matching a pattern.
    * Uses Redis SCAN for efficient iteration.
    */
-  async keys(pattern?: string): Promise<string[]> {
-    const searchPattern = this.keyPrefix + (pattern ?? '*');
-    const result: string[] = [];
+  async keys(pattern = '*'): Promise<string[]> {
+    const result = new Set<string>();
+    for (const key of await this.scan(prefixedStoreKey(this.keyPrefix, pattern))) {
+      result.add(callerKeyOf(this.keyPrefix, pattern, key));
+    }
+    const doubledPattern = doubledPrefixKey(this.keyPrefix, pattern);
+    if (doubledPattern) {
+      for (const key of await this.scan(doubledPattern)) result.add(key.slice(this.keyPrefix.length));
+    }
+    return [...result];
+  }
 
+  private async scan(match: string): Promise<string[]> {
+    const found: string[] = [];
     let cursor = '0';
     do {
-      const [nextCursor, keys] = await this.client.scan(cursor, 'MATCH', searchPattern, 'COUNT', 100);
+      const [nextCursor, keys] = await this.client.scan(cursor, 'MATCH', match, 'COUNT', 100);
       cursor = nextCursor;
-
-      // Strip prefix from keys
-      for (const key of keys) {
-        result.push(key.slice(this.keyPrefix.length));
-      }
+      found.push(...keys);
     } while (cursor !== '0');
+    return found;
+  }
 
-    return result;
+  /**
+   * The stored text of an entry a release up to 1.9.1 wrote under the doubled key, or null. It is read
+   * in place, not copied: the entry keeps its TTL, a rolled-back release still finds it, and a
+   * concurrent `delete()` cannot be undone by a copy. The next write or delete of the key removes it.
+   */
+  private async readDoubledPrefixValue(key: string): Promise<string | null> {
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
+    return doubledKey ? this.client.get(doubledKey) : null;
+  }
+
+  /** Drops what releases up to 1.9.1 left under the doubled key, so it cannot come back once this key is gone. */
+  private async deleteDoubledPrefixKey(key: string): Promise<void> {
+    const doubledKey = doubledPrefixKey(this.keyPrefix, key);
+    if (doubledKey) await this.client.del(doubledKey);
   }
 
   /**

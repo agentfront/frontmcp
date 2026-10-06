@@ -12,6 +12,14 @@ import { FeatureFlagConfigurationError, FeatureFlagDisabledError } from '../feat
 import FeatureFlagPlugin from '../feature-flag.plugin';
 import { FeatureFlagAdapterToken } from '../feature-flag.symbols';
 
+async function buildAdapter(providers: unknown[]): Promise<unknown> {
+  const adapterProvider = providers.find((p) => (p as { provide?: unknown }).provide === FeatureFlagAdapterToken) as
+    | { useFactory?: (scope: unknown) => Promise<unknown> }
+    | undefined;
+  if (!adapterProvider?.useFactory) throw new Error('no adapter factory');
+  return adapterProvider.useFactory({ onDispose: jest.fn() });
+}
+
 describe('FeatureFlagPlugin startup validation', () => {
   it('rejects init() with no options and names the missing adapter', () => {
     expect(() => FeatureFlagPlugin.init()).toThrow(FeatureFlagConfigurationError);
@@ -61,22 +69,18 @@ describe('FeatureFlagPlugin startup validation', () => {
       ).rejects.toThrow(FeatureFlagConfigurationError);
     });
 
-    it('builds with an adapterInstance that implements the adapter', () => {
+    it('builds with an adapterInstance that implements the adapter', async () => {
       const adapterInstance = new StaticFeatureFlagAdapter({ a: true });
       const providers = FeatureFlagPlugin.dynamicProviders({ adapter: 'custom', adapterInstance });
 
-      expect(providers.find((p) => (p as { provide?: unknown }).provide === FeatureFlagAdapterToken)).toMatchObject({
-        useValue: adapterInstance,
-      });
+      expect(await buildAdapter(providers)).toBe(adapterInstance);
     });
   });
 
-  it('still builds with a valid adapter', () => {
+  it('still builds with a valid adapter', async () => {
     const providers = FeatureFlagPlugin.dynamicProviders({ adapter: 'static', flags: { a: true } });
 
-    expect(providers.find((p) => (p as { provide?: unknown }).provide === FeatureFlagAdapterToken)).toMatchObject({
-      useValue: expect.any(StaticFeatureFlagAdapter),
-    });
+    expect(await buildAdapter(providers)).toBeInstanceOf(StaticFeatureFlagAdapter);
   });
 });
 

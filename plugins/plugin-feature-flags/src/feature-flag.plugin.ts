@@ -67,6 +67,59 @@ function assertCustomAdapter(adapterInstance: unknown): asserts adapterInstance 
   );
 }
 
+interface AdapterLifecycle {
+  ready: Promise<void>;
+  registrations: number;
+}
+
+/** One lifecycle per adapter instance and scope: one plugin record in several apps shares its adapter. */
+const adapterLifecycles = new WeakMap<FeatureFlagAdapter, WeakMap<ScopeEntry, AdapterLifecycle>>();
+
+/**
+ * Initialize `adapter` once for `scope`, and destroy it once, when the scope's last registration
+ * of it is disposed.
+ */
+async function startAdapter(adapter: FeatureFlagAdapter, scope: ScopeEntry): Promise<void> {
+  let lifecyclesByScope = adapterLifecycles.get(adapter);
+  if (!lifecyclesByScope) {
+    lifecyclesByScope = new WeakMap();
+    adapterLifecycles.set(adapter, lifecyclesByScope);
+  }
+  let lifecycle = lifecyclesByScope.get(scope);
+  if (!lifecycle) {
+    lifecycle = { ready: (async () => adapter.initialize?.())(), registrations: 0 };
+    lifecyclesByScope.set(scope, lifecycle);
+  }
+  lifecycle.registrations++;
+
+  const registeredLifecycle = lifecycle;
+  const registeredScopes = lifecyclesByScope;
+  scope.onDispose(async () => {
+    registeredLifecycle.registrations--;
+    if (registeredLifecycle.registrations > 0) return;
+    registeredScopes.delete(scope);
+    await adapter.destroy?.();
+  });
+  await registeredLifecycle.ready;
+}
+
+/**
+ * The adapter for one server: initialized before the server serves, destroyed when the server is
+ * disposed (`dispose()` on what `create()` returns, or `Scope.dispose()`).
+ */
+function adapterProvider(kind: string, createAdapter: () => FeatureFlagAdapter): ProviderType {
+  return {
+    name: `feature-flags:adapter:${kind}`,
+    provide: FeatureFlagAdapterToken,
+    inject: () => [ScopeEntry] as const,
+    useFactory: async (scope: ScopeEntry) => {
+      const adapter = createAdapter();
+      await startAdapter(adapter, scope);
+      return adapter;
+    },
+  };
+}
+
 /**
  * FeatureFlagPlugin - Dynamic capability gating for FrontMCP.
  *
@@ -127,63 +180,42 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
 
     switch (options.adapter) {
       case 'static':
-        providers.push({
-          name: 'feature-flags:adapter:static',
-          provide: FeatureFlagAdapterToken,
-          useValue: new StaticFeatureFlagAdapter(options.flags),
-        });
+        providers.push(adapterProvider('static', () => new StaticFeatureFlagAdapter(options.flags)));
         break;
 
       case 'splitio':
-        providers.push({
-          name: 'feature-flags:adapter:splitio',
-          provide: FeatureFlagAdapterToken,
-          inject: () => [] as const,
-          useFactory: async () => {
+        providers.push(
+          adapterProvider('splitio', () => {
             const { SplitioFeatureFlagAdapter } = require('./adapters/splitio.adapter');
-            const adapter = new SplitioFeatureFlagAdapter(options.config);
-            await adapter.initialize();
-            return adapter;
-          },
-        });
+            return new SplitioFeatureFlagAdapter(options.config);
+          }),
+        );
         break;
 
       case 'launchdarkly':
-        providers.push({
-          name: 'feature-flags:adapter:launchdarkly',
-          provide: FeatureFlagAdapterToken,
-          inject: () => [] as const,
-          useFactory: async () => {
+        providers.push(
+          adapterProvider('launchdarkly', () => {
             const { LaunchDarklyFeatureFlagAdapter } = require('./adapters/launchdarkly.adapter');
-            const adapter = new LaunchDarklyFeatureFlagAdapter(options.config);
-            await adapter.initialize();
-            return adapter;
-          },
-        });
+            return new LaunchDarklyFeatureFlagAdapter(options.config);
+          }),
+        );
         break;
 
       case 'unleash':
-        providers.push({
-          name: 'feature-flags:adapter:unleash',
-          provide: FeatureFlagAdapterToken,
-          inject: () => [] as const,
-          useFactory: async () => {
+        providers.push(
+          adapterProvider('unleash', () => {
             const { UnleashFeatureFlagAdapter } = require('./adapters/unleash.adapter');
-            const adapter = new UnleashFeatureFlagAdapter(options.config);
-            await adapter.initialize();
-            return adapter;
-          },
-        });
+            return new UnleashFeatureFlagAdapter(options.config);
+          }),
+        );
         break;
 
-      case 'custom':
-        assertCustomAdapter(options.adapterInstance);
-        providers.push({
-          name: 'feature-flags:adapter:custom',
-          provide: FeatureFlagAdapterToken,
-          useValue: options.adapterInstance,
-        });
+      case 'custom': {
+        const { adapterInstance } = options;
+        assertCustomAdapter(adapterInstance);
+        providers.push(adapterProvider('custom', () => adapterInstance));
         break;
+      }
     }
 
     // ─────────────────────────────────────────────────────────────────────

@@ -23,6 +23,8 @@ import { createMemoryStorage, type RootStorage } from '@frontmcp/utils';
 import { ApprovalPlugin, ApprovalRequiredError, ApprovalScope, ApprovalState } from '../index';
 
 const DELETE_ACCOUNT_ID = 'accounts:delete_account';
+const PURGE_REPO_ID = 'accounts:purge_repo';
+const REPO_CONTEXT = { type: 'repository', identifier: 'acme/api' };
 const SESSION_ID = 'session-alice';
 
 let deletions = 0;
@@ -36,6 +38,18 @@ class DeleteAccountTool extends ToolContext {
   async execute() {
     deletions += 1;
     return { deleted: true };
+  }
+}
+
+@Tool({
+  name: 'purge_repo',
+  inputSchema: {},
+  approval: { required: true, alwaysPrompt: true, preApprovedContexts: [REPO_CONTEXT] },
+})
+class PurgeRepoTool extends ToolContext {
+  async execute() {
+    deletions += 1;
+    return { purged: true };
   }
 }
 
@@ -54,9 +68,13 @@ class GrantTool extends ToolContext {
 
 const CALLER: DirectAuthContext = { sessionId: SESSION_ID, user: { sub: 'alice' } };
 
-async function outcome(server: DirectMcpServer): Promise<'ran' | 'pending' | 'denied' | 'expired'> {
+async function outcome(
+  server: DirectMcpServer,
+  toolName = 'delete_account',
+  authContext = CALLER,
+): Promise<'ran' | 'pending' | 'denied' | 'expired'> {
   try {
-    await server.callTool('delete_account', {}, { authContext: CALLER });
+    await server.callTool(toolName, {}, { authContext });
     return 'ran';
   } catch (error) {
     if (error instanceof ApprovalRequiredError) return error.details.state as 'pending' | 'denied' | 'expired';
@@ -64,8 +82,12 @@ async function outcome(server: DirectMcpServer): Promise<'ran' | 'pending' | 'de
   }
 }
 
-async function grant(server: DirectMcpServer, scope?: 'session' | 'user' | 'time_limited'): Promise<void> {
-  const result = await server.callTool('grant', { toolId: DELETE_ACCOUNT_ID, scope }, { authContext: CALLER });
+async function grant(
+  server: DirectMcpServer,
+  scope?: 'session' | 'user' | 'time_limited',
+  toolId = DELETE_ACCOUNT_ID,
+): Promise<void> {
+  const result = await server.callTool('grant', { toolId, scope }, { authContext: CALLER });
   expect(result.isError).toBeFalsy();
 }
 
@@ -82,7 +104,7 @@ describe('ApprovalPlugin — alwaysPrompt (#678)', () => {
       id: 'accounts',
       name: 'Accounts',
       plugins: [ApprovalPlugin.init({ storageInstance: storage })],
-      tools: [DeleteAccountTool, GrantTool],
+      tools: [DeleteAccountTool, PurgeRepoTool, GrantTool],
     })
     class AccountsApp {}
 
@@ -141,6 +163,16 @@ describe('ApprovalPlugin — alwaysPrompt (#678)', () => {
     const outcomes = await Promise.all([outcome(server), outcome(server)]);
 
     expect(outcomes.sort()).toEqual(['pending', 'ran']);
+    expect(deletions).toBe(1);
+  });
+
+  it('asks for an approval per call in a pre-approved context too', async () => {
+    const inRepo: DirectAuthContext = { ...CALLER, extra: { approvalContext: REPO_CONTEXT } };
+
+    await expect(outcome(server, 'purge_repo', inRepo)).resolves.toBe('pending');
+    await grant(server, undefined, PURGE_REPO_ID);
+    await expect(outcome(server, 'purge_repo', inRepo)).resolves.toBe('ran');
+    await expect(outcome(server, 'purge_repo', inRepo)).resolves.toBe('pending');
     expect(deletions).toBe(1);
   });
 

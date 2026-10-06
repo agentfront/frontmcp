@@ -97,7 +97,8 @@ export const codeCallVmOptionsSchema = z
     timeoutMs: z.number().positive().optional(),
 
     /**
-     * Allow loop constructs (for, while, do-while)
+     * Allow `for` loops besides `for-of`; false refuses every loop but `for-of` before the script runs.
+     * The sandbox always refuses `while`, `do-while` and `for-in`.
      * Defaults vary by preset
      */
     allowLoops: z.boolean().optional(),
@@ -121,8 +122,8 @@ export const codeCallVmOptionsSchema = z
     disabledGlobals: z.array(z.string()).optional(),
 
     /**
-     * Allow console.log/warn/error
-     * Defaults vary by preset
+     * @deprecated Has no effect: scripts never get `console`, and one that uses it is refused before it runs.
+     * Scripts log with `mcpLog(level, message)`.
      */
     allowConsole: z.boolean().optional(),
 
@@ -327,16 +328,16 @@ const codeCallPluginOptionsObjectSchema = z.object({
   appIds: z.array(z.string()).optional(),
 
   /**
-   * Default number of tools to return in search results
+   * Search results per query when a `codecall:search` call names no `topK`
    * @default 8
    */
   topK: z.number().positive().default(8),
 
   /**
-   * Maximum number of tool definitions to include
+   * Most tool definitions one `codecall:describe` call returns; a call that would describe more is refused
    * @default 8
    */
-  maxDefinitions: z.number().positive().default(8),
+  maxDefinitions: z.number().int().positive().default(8),
 
   /**
    * Optional filter function for including tools.
