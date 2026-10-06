@@ -101,7 +101,7 @@ export class SkillInstance extends SkillEntry {
 
   /**
    * Get a short description of the skill: the loaded content's, which a `build()` override may change,
-   * else the decorator's.
+   * else the decorator's. Every listing of the skill reads it here.
    */
   override getDescription(): string {
     return this.cachedContent?.description ?? this.metadata.description;
