@@ -67,23 +67,19 @@ function assertCustomAdapter(adapterInstance: unknown): asserts adapterInstance 
   );
 }
 
-/** An adapter whose `initialize()` and `destroy()` may be missing: `assertCustomAdapter` never required them. */
-type AdapterWithOptionalLifecycle = Omit<FeatureFlagAdapter, 'initialize' | 'destroy'> &
-  Partial<Pick<FeatureFlagAdapter, 'initialize' | 'destroy'>>;
-
 interface AdapterLifecycle {
   ready: Promise<void>;
   registrations: number;
 }
 
 /** One lifecycle per adapter instance and scope: one plugin record in several apps shares its adapter. */
-const adapterLifecycles = new WeakMap<AdapterWithOptionalLifecycle, WeakMap<ScopeEntry, AdapterLifecycle>>();
+const adapterLifecycles = new WeakMap<FeatureFlagAdapter, WeakMap<ScopeEntry, AdapterLifecycle>>();
 
 /**
  * Initialize `adapter` once for `scope`, and destroy it once, when the scope's last registration
  * of it is disposed.
  */
-async function startAdapter(adapter: AdapterWithOptionalLifecycle, scope: ScopeEntry): Promise<void> {
+async function startAdapter(adapter: FeatureFlagAdapter, scope: ScopeEntry): Promise<void> {
   let lifecyclesByScope = adapterLifecycles.get(adapter);
   if (!lifecyclesByScope) {
     lifecyclesByScope = new WeakMap();
@@ -111,7 +107,7 @@ async function startAdapter(adapter: AdapterWithOptionalLifecycle, scope: ScopeE
  * The adapter for one server: initialized before the server serves, destroyed when the server is
  * disposed (`dispose()` on what `create()` returns, or `Scope.dispose()`).
  */
-function adapterProvider(kind: string, createAdapter: () => AdapterWithOptionalLifecycle): ProviderType {
+function adapterProvider(kind: string, createAdapter: () => FeatureFlagAdapter): ProviderType {
   return {
     name: `feature-flags:adapter:${kind}`,
     provide: FeatureFlagAdapterToken,

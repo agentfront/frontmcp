@@ -1,5 +1,5 @@
-import type { FeatureFlagAdapter } from './feature-flag-adapter.interface';
 import type { FeatureFlagContext, FeatureFlagVariant } from '../feature-flag.types';
+import type { FeatureFlagAdapter } from './feature-flag-adapter.interface';
 
 export interface UnleashAdapterConfig {
   url: string;
