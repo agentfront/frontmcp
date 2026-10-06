@@ -317,14 +317,27 @@ observability: {
 A request's log opens when its HTTP request starts and closes when the HTTP response is finalized, which calls
 `onRequestComplete` once with the HTTP method and path, the JSON-RPC method, the tool, resource or prompt it served,
 the entries logged while it ran, its status (`error` for an HTTP status of 400 or more, or when the tool, resource or
-prompt failed, with the failure in `error`; `status_code` is the status the server actually answered with, a 401 from
-authentication or a 429 from the throttle included) and its duration. The callback runs off the response path: the
-response is sent without waiting for it. Up to 1.9.1 the callback never fired.
+prompt failed, with the failure in `error`; `status_code` is the status the server actually answered with, `200`
+included, a 401 from authentication or a 429 from the throttle too) and its duration. `error` is
+`{ type, message, code, error_id }` with the message the client sees in production: after
+`this.fail(new PublicMcpError('no such ticket'))` it is `{ type: 'PublicMcpError', message: 'no such ticket', code: 'PUBLIC_ERROR' }`.
+`authenticated` is `true` for a caller with a verified, non-anonymous identity, and `auth_type` is the scheme of its
+`Authorization` header (`bearer`), or `anonymous`. `hooks_triggered` names each stage a plugin, app or entry hook ran
+at, as `<flow>:<stage>` (`tools:call-tool:willExecute`). `includeSummaries` is accepted but not read. The callback runs
+off the response path: the response is sent without waiting for it. Up to 1.9.1 the callback never fired; up to 1.9.2
+`status_code` was set only from 400, `authenticated`, `auth_type` and `hooks_triggered` were never filled, and a
+`this.fail()` was logged as `{ type: 'Error', message: '' }`.
 
-A tool, resource or prompt that fails ends its spans with an error status, the execution span included; up to 1.9.1 a
-failed tool's span was left open and never exported. The "tracing enabled but no TracerProvider configured" warning
-appears only when no provider is registered; up to 1.9.1 it appeared even after `setupOTel()` or another SDK
-registered one.
+A tool, resource or prompt that fails ends its spans with an error status, the execution span included, with the
+message the client sees in production and an `exception` event of the error's code (`PUBLIC_ERROR`), the one
+`this.fail()` was given included; up to 1.9.1 a failed tool's span was left open and never exported, and up to 1.9.2
+a `this.fail()` gave an empty message. The `tools/call`, `resources/read` and other MCP method spans are children of
+the request's `POST /` span, and `this.fetch()` sends a `traceparent` that names its `GET` client span as the parent,
+so the service called nests under it (up to 1.9.2 the method spans were siblings of `POST /`, and the caller's own
+`traceparent` was passed on unchanged). The "tracing enabled but no TracerProvider configured" warning appears only
+when no provider is registered; up to 1.9.1 it appeared even after `setupOTel()` or another SDK registered one. With
+`NODE_ENV=development` and no provider registered, FrontMCP registers one that prints each span to the console; up to
+1.9.2 that failed silently on `@opentelemetry/sdk-trace-base` 2.x.
 
 ---
 

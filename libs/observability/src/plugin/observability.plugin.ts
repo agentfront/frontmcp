@@ -25,6 +25,7 @@ import { RequestLogCollector } from '../request-log/request-log.collector';
 import {
   completeRequestLog,
   currentRequestLog,
+  recordRequestLogAuth,
   recordRequestLogFailure,
   startRequestLog,
 } from '../request-log/request-log.hooks';
@@ -34,6 +35,8 @@ import { TelemetryAccessor } from '../telemetry/telemetry.accessor';
 import { TelemetryFactory } from '../telemetry/telemetry.factory';
 import { TELEMETRY_ACCESSOR, TELEMETRY_FACTORY } from '../telemetry/telemetry.tokens';
 import {
+  // Hook observation
+  installHookObserver,
   onAgentDidExecute,
   onAgentDidExecuteEnrich,
   onAgentDidFinalize,
@@ -91,10 +94,13 @@ import {
   onTransportWillStart,
   // Startup report
   reportStartup,
+  runInHookSpan,
   // Session tracing ID
   sessionTracingId,
   // Fetch wrapping
   wrapContextFetch,
+  type FlowContextLike,
+  type HookObserver,
 } from './observability.hooks';
 import type {
   ObservabilityLoggingOptions,
@@ -218,6 +224,26 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     return this.options.requestLogs !== false;
   }
 
+  /** Whether tracing is on and its `kind` option isn't off. */
+  private traces(kind: keyof TracingOptions): boolean {
+    return this.tracingEnabled && this.tracingOpts[kind] !== false;
+  }
+
+  /** Wraps each other hook the request runs: names it on the request's log, and gives it a span with `hookSpans`. */
+  private readonly observeHook: HookObserver = async ({ flowName, stage, target, flowContext }, run) => {
+    if (target === this) return run();
+    if (this.requestLogsEnabled) currentRequestLog(flowContext as never)?.addHook(`${flowName}:${stage}`);
+    if (!this.traces('hookSpans')) return run();
+    const owner = (target as { constructor?: { name?: string } } | undefined)?.constructor?.name;
+    return runInHookSpan(flowContext, { flowName, stage, owner }, run);
+  };
+
+  /** Watches the hooks of the request `ctx` serves, from the first flow of it that this plugin sees. */
+  private watchHooks(ctx: unknown): void {
+    if (this.requestLogsEnabled || this.traces('hookSpans'))
+      installHookObserver(ctx as FlowContextLike, this.observeHook);
+  }
+
   /** Names the entry a request serves on its request log, and records the entry flow's failure. */
   private annotateRequestLog(ctx: unknown, set: (log: RequestLogCollector, input: Record<string, unknown>) => void) {
     if (!this.requestLogsEnabled) return;
@@ -236,6 +262,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   _httpWillTrace(ctx: unknown): void {
     if (this.tracingEnabled) onHttpWillTrace(this.tracingOpts, ctx);
     if (this.options.requestLogs !== false) startRequestLog(ctx as never, this.options.requestLogs);
+    this.watchHooks(ctx);
   }
 
   @HttpHook.Will('acquireQuota', { priority: -1000 })
@@ -256,6 +283,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @HttpHook.Did('checkAuthorization', { priority: 1000 })
   _httpDidAuth(ctx: unknown): void {
     if (this.tracingEnabled) onHttpDidCheckAuth(ctx);
+    if (this.requestLogsEnabled) recordRequestLogAuth(ctx as never);
   }
 
   @HttpHook.Will('router', { priority: -1000 })
@@ -284,6 +312,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @ToolHook.Will('parseInput', { priority: -1000 })
   _toolWillParse(ctx: unknown): void {
+    this.watchHooks(ctx);
     if (this.tracingEnabled) onToolWillParse(this.tracingOpts, ctx);
   }
 
@@ -350,6 +379,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @ResourceHook.Will('parseInput', { priority: -1000 })
   _resourceWillParse(ctx: unknown): void {
+    this.watchHooks(ctx);
     if (this.tracingEnabled) onResourceWillParse(this.tracingOpts, ctx);
   }
 
@@ -391,6 +421,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @PromptHook.Will('parseInput', { priority: -1000 })
   _promptWillParse(ctx: unknown): void {
+    this.watchHooks(ctx);
     if (this.tracingEnabled) onPromptWillParse(this.tracingOpts, ctx);
   }
 
@@ -432,6 +463,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @AgentCallHook.Will('parseInput', { priority: -1000 })
   _agentWillParse(ctx: unknown): void {
+    this.watchHooks(ctx);
     if (this.tracingEnabled) onAgentWillParse(this.tracingOpts, ctx);
   }
 
@@ -723,52 +755,52 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @OAuthTokenHook.Will('parseInput', { priority: -1000 })
   _oauthTokenWill(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowWillStart('oauth/token', this.tracingOpts, ctx);
+    if (this.traces('oauthSpans')) onGenericFlowWillStart('oauth/token', this.tracingOpts, ctx);
   }
 
   @OAuthTokenHook.Did('buildTokenResponse', { priority: 1000 })
   _oauthTokenDone(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+    if (this.traces('oauthSpans')) onGenericFlowDidFinalize(ctx);
   }
 
   @OAuthAuthorizeHook.Will('parseInput', { priority: -1000 })
   _oauthAuthzWill(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowWillStart('oauth/authorize', this.tracingOpts, ctx);
+    if (this.traces('oauthSpans')) onGenericFlowWillStart('oauth/authorize', this.tracingOpts, ctx);
   }
 
   @OAuthAuthorizeHook.Did('buildAuthorizeOutput', { priority: 1000 })
   _oauthAuthzDone(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+    if (this.traces('oauthSpans')) onGenericFlowDidFinalize(ctx);
   }
 
   @OAuthCallbackHook.Will('parseInput', { priority: -1000 })
   _oauthCallbackWill(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowWillStart('oauth/callback', this.tracingOpts, ctx);
+    if (this.traces('oauthSpans')) onGenericFlowWillStart('oauth/callback', this.tracingOpts, ctx);
   }
 
   @OAuthCallbackHook.Did('redirectToClient', { priority: 1000 })
   _oauthCallbackDone(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+    if (this.traces('oauthSpans')) onGenericFlowDidFinalize(ctx);
   }
 
   @OAuthProviderCallbackHook.Will('parseInput', { priority: -1000 })
   _oauthProviderWill(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowWillStart('oauth/provider-callback', this.tracingOpts, ctx);
+    if (this.traces('oauthSpans')) onGenericFlowWillStart('oauth/provider-callback', this.tracingOpts, ctx);
   }
 
   @OAuthProviderCallbackHook.Did('handleNextProviderOrComplete', { priority: 1000 })
   _oauthProviderDone(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+    if (this.traces('oauthSpans')) onGenericFlowDidFinalize(ctx);
   }
 
   @OAuthRegisterHook.Will('parseInput', { priority: -1000 })
   _oauthRegisterWill(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowWillStart('oauth/register', this.tracingOpts, ctx);
+    if (this.traces('oauthSpans')) onGenericFlowWillStart('oauth/register', this.tracingOpts, ctx);
   }
 
   @OAuthRegisterHook.Did('respondRegistration', { priority: 1000 })
   _oauthRegisterDone(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+    if (this.traces('oauthSpans')) onGenericFlowDidFinalize(ctx);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -777,22 +809,22 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @ElicitRequestHook.Will('parseInput', { priority: -1000 })
   _elicitReqWill(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowWillStart('elicitation/request', this.tracingOpts, ctx);
+    if (this.traces('elicitationSpans')) onGenericFlowWillStart('elicitation/request', this.tracingOpts, ctx);
   }
 
   @ElicitRequestHook.Did('finalize', { priority: 1000 })
   _elicitReqDone(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+    if (this.traces('elicitationSpans')) onGenericFlowDidFinalize(ctx);
   }
 
   @ElicitResultHook.Will('parseInput', { priority: -1000 })
   _elicitResWill(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowWillStart('elicitation/result', this.tracingOpts, ctx);
+    if (this.traces('elicitationSpans')) onGenericFlowWillStart('elicitation/result', this.tracingOpts, ctx);
   }
 
   @ElicitResultHook.Did('finalize', { priority: 1000 })
   _elicitResDone(ctx: unknown): void {
-    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+    if (this.traces('elicitationSpans')) onGenericFlowDidFinalize(ctx);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -924,12 +956,10 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Emit startup telemetry report.
-   * Call after scope.initialize() completes with component counts.
+   * Emit the `frontmcp.startup` span (`tracing.startupReport`). The scope calls it once it is ready.
    */
   reportStartupTelemetry(data: StartupTelemetryData): void {
-    if (this.options.tracing === false) return;
-    reportStartup(data);
+    if (this.traces('startupReport')) reportStartup(data);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

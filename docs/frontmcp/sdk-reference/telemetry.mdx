@@ -359,7 +359,7 @@ The config object for `@FrontMcp({ observability: { ... } })`:
 | ------------- | ------------------------------ | ------- | ------------------------------------------- |
 | `tracing`     | `boolean \| TracingOptions`    | `true`  | Enable/configure OTel tracing               |
 | `logging`     | `boolean \| LoggingOptions`    | `false` | Enable/configure structured logging         |
-| `requestLogs` | `boolean \| RequestLogOptions` | `false` | Enable/configure per-request log collection |
+| `requestLogs` | `boolean \| RequestLogOptions` | `false` | Enable/configure per-request log collection (`maxEntries`, `onRequestComplete`; `includeSummaries` is accepted but not read) |
 
 ### TracingOptions
 
@@ -368,13 +368,13 @@ The config object for `@FrontMcp({ observability: { ... } })`:
 | `httpSpans`        | `boolean` | `true`  | HTTP request spans                      |
 | `executionSpans`   | `boolean` | `true`  | Tool/resource/prompt/agent spans        |
 | `fetchSpans`       | `boolean` | `true`  | Outbound `ctx.fetch()` spans            |
-| `flowStageEvents`  | `boolean` | `true`  | Flow stage events on execution spans    |
-| `hookSpans`        | `boolean` | `false` | Individual hook spans (verbose)         |
+| `flowStageEvents`  | `boolean` | `true`  | `stage.*` events on the flow spans      |
+| `hookSpans`        | `boolean` | `false` | A `hook <stage>` span per plugin, app or entry hook, inside its flow's span (verbose) |
 | `transportSpans`   | `boolean` | `true`  | SSE/HTTP transport spans                |
 | `authSpans`        | `boolean` | `true`  | Auth/session verify spans               |
 | `oauthSpans`       | `boolean` | `true`  | OAuth flow spans                        |
 | `elicitationSpans` | `boolean` | `true`  | Elicitation request/result spans        |
-| `startupReport`    | `boolean` | `true`  | Emit startup telemetry on first request |
+| `startupReport`    | `boolean` | `true`  | A `frontmcp.startup` span, with the tool, resource, prompt and plugin counts and the startup time, once the server is ready |
 
 ### SinkConfig
 

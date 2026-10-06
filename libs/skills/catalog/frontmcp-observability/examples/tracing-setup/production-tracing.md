@@ -51,7 +51,8 @@ setupOTel({
     requestLogs: {
       maxEntries: 500,
       // Called once per HTTP request, off the response path, when its response is finalized (tool/resource/prompt name,
-      // entries, status, the real HTTP status_code including 401/429, error)
+      // entries, status, the real HTTP status_code including 200/401/429, error as the client sees it,
+      // authenticated, auth_type and hooks_triggered)
       onRequestComplete: async (log) => {
         if (log.status === 'error') {
           // No `this.logger` is available in this callback. Emit a structured

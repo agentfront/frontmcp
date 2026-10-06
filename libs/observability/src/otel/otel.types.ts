@@ -219,7 +219,7 @@ export interface TracingOptions {
   /** Instrument elicitation request/result flows (default: true) */
   elicitationSpans?: boolean;
 
-  /** Emit startup telemetry report on first request (default: true) */
+  /** Emit a `frontmcp.startup` span once the server is ready (default: true) */
   startupReport?: boolean;
 }
 

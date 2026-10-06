@@ -104,7 +104,8 @@ import HttpIpFilterFlow from './flows/http.ip-filter.flow';
 import HttpRequestFlow from './flows/http.request.flow';
 import { probeOptionalDependency, requireOptionalModule } from './optional-dependency.util';
 import { registerServerEntries } from './server-entries.helper';
-import { hasRegisteredTracerProvider } from './tracer-provider.utils';
+import { reportStartup } from './startup-report.helper';
+import { hasRegisteredTracerProvider, registerExportingTracerProvider } from './tracer-provider.utils';
 
 /**
  * Flows the web-fetch adapter must NOT auto-dispatch by HTTP match: `http:request`
@@ -237,6 +238,7 @@ export class Scope extends ScopeEntry {
   }
 
   protected async initialize(): Promise<void> {
+    const startedAt = Date.now();
     await this.scopeProviders.ready;
 
     const scopeRef: EntryOwnerRef = { kind: 'scope', id: this.id, ref: Scope };
@@ -702,18 +704,12 @@ export class Scope extends ScopeEntry {
               if (!hasRegisteredTracerProvider(require('@opentelemetry/api'))) {
                 const { isDevelopment: checkDev } = require('@frontmcp/utils');
                 if (checkDev()) {
-                  const { BasicTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
-                  let exporter: any;
-                  try {
-                    const { PrettySpanExporter } = require('@frontmcp/observability');
-                    exporter = new PrettySpanExporter();
-                  } catch {
-                    const { ConsoleSpanExporter } = require('@opentelemetry/sdk-trace-base');
-                    exporter = new ConsoleSpanExporter();
-                  }
-                  const devProvider = new BasicTracerProvider();
-                  devProvider.addSpanProcessor(new SimpleSpanProcessor(exporter));
-                  devProvider.register();
+                  const sdkTraceBase = require('@opentelemetry/sdk-trace-base');
+                  const { PrettySpanExporter } = ObservabilityPluginModule;
+                  const exporter = PrettySpanExporter
+                    ? new PrettySpanExporter()
+                    : new sdkTraceBase.ConsoleSpanExporter();
+                  registerExportingTracerProvider(require('@opentelemetry/api'), sdkTraceBase, exporter);
                   this.logger.info('observability: auto-configured tracing (development mode)');
                 } else {
                   this.logger.warn(
@@ -722,8 +718,10 @@ export class Scope extends ScopeEntry {
                   );
                 }
               }
-            } catch {
-              // @opentelemetry/sdk-trace-base not installed — tracing will be no-op
+            } catch (e) {
+              this.logger.warn('observability: could not set up development tracing; spans are not recorded', {
+                error: e instanceof Error ? e.message : 'Unknown error',
+              });
             }
           }
         } catch (e) {
@@ -1119,6 +1117,13 @@ export class Scope extends ScopeEntry {
 
     mark('batch3:finalization');
     this.logger.info(`Scope ready — ${this.formatScopeSummary()}`);
+    reportStartup(this.scopePlugins, {
+      toolsCount: this.scopeTools.getTools(true).length,
+      resourcesCount: this.scopeResources.getResources().length,
+      promptsCount: this.scopePrompts.getPrompts().length,
+      durationMs: Date.now() - startedAt,
+      scopeId: this.id,
+    });
   }
 
   /**

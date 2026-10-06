@@ -22,17 +22,20 @@
 import {
   context as otelContext,
   SpanKind,
+  SpanStatusCode,
   trace,
   type Context as OTelContext,
   type Span,
   type Tracer,
 } from '@opentelemetry/api';
 
+import { FlowControl, McpError } from '@frontmcp/sdk';
 import { sha256Hex } from '@frontmcp/utils';
 
 import { FrontMcpAttributes, McpAttributes, type TracingOptions } from '../otel/otel.types';
 import { setAuthMode, setAuthResult, startAuthSpan } from '../otel/spans/auth.span';
 import { setFetchResponseStatus, startFetchSpan } from '../otel/spans/fetch.span';
+import { startHookSpan } from '../otel/spans/hook.span';
 import { setHttpResponseStatus, startHttpServerSpan } from '../otel/spans/http-server.span';
 import { startPromptSpan } from '../otel/spans/prompt.span';
 import { startResourceSpan } from '../otel/spans/resource.span';
@@ -59,6 +62,10 @@ export const ACTIVE_SPAN_KEY = Symbol.for('frontmcp:otel:active-span');
 export const ACTIVE_OTEL_CTX_KEY = Symbol.for('frontmcp:otel:active-otel-ctx');
 /** Timestamp of the last recorded stage event */
 export const STAGE_TS_KEY = Symbol.for('frontmcp:otel:stage-ts');
+/** Whether the flow's spans get `stage.*` events (`tracing.flowStageEvents`) */
+const STAGE_EVENTS_KEY = Symbol.for('frontmcp:otel:stage-events');
+/** OTel context of the request's HTTP span, on the FrontMcpContext: the parent of the spans of the flows it runs */
+export const HTTP_SPAN_CTX_KEY = Symbol.for('frontmcp:otel:http-span-ctx');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utilities
@@ -79,6 +86,8 @@ function getTracer(): Tracer {
 
 /** Minimal context shape to avoid tight coupling to FrontMcpContext. */
 interface FlowRequestContext {
+  get?(key: symbol): unknown;
+  set?(key: symbol, value: unknown): void;
   requestId: string;
   sessionId: string;
   scopeId: string;
@@ -142,8 +151,72 @@ function clearActiveSpan(flowCtx: any): void {
   }
 }
 
+/** Keeps a flow's root span and its context on the flow state, and whether it records stage events. */
+function beginFlowSpan(flowCtx: any, options: TracingOptions, span: Span, spanCtx: OTelContext): void {
+  flowCtx.state[SPAN_KEY] = span;
+  flowCtx.state[SPAN_CTX_KEY] = spanCtx;
+  flowCtx.state[STAGE_TS_KEY] = Date.now();
+  flowCtx.state[STAGE_EVENTS_KEY] = options.flowStageEvents !== false;
+}
+
+/** The parent of a flow's span: the request's HTTP span, else the caller's span from `traceparent`. */
+function parentContextOf(ctx: FlowRequestContext): OTelContext {
+  return (ctx.get?.(HTTP_SPAN_CTX_KEY) as OTelContext | undefined) ?? createOTelContextFromTrace(ctx.traceContext);
+}
+
+/** Why a flow failed, as the client sees it in production. */
+export interface FlowFailure {
+  /** The error itself: what `this.fail()` was given, not the control-flow signal that carried it */
+  error: Error;
+  type: string;
+  message: string;
+  code?: string;
+  errorId?: string;
+}
+
+/** The failure behind a flow's `state.flowError`. */
+export function flowFailureOf(flowError: unknown): FlowFailure {
+  const failed = (flowError as { originalError?: unknown } | undefined)?.originalError;
+  const error =
+    flowError instanceof FlowControl
+      ? failed instanceof Error
+        ? failed
+        : new Error(`Flow ended with: ${flowError.type}`)
+      : flowError instanceof Error
+        ? flowError
+        : new Error(String(flowError));
+  const code = (error as { code?: unknown }).code;
+  return {
+    error,
+    type: error.name,
+    message: error instanceof McpError ? error.getPublicMessage() : error.message,
+    ...(typeof code === 'string' && { code }),
+    ...(error instanceof McpError && { errorId: error.errorId }),
+  };
+}
+
+/** Ends a span of a failed flow with status ERROR and an `exception` event of the failure. */
+function endFailedSpan(span: Span, flowError: unknown): void {
+  const failure = flowFailureOf(flowError);
+  span.setStatus({ code: SpanStatusCode.ERROR, message: failure.message });
+  span.recordException({
+    name: failure.type,
+    message: failure.message,
+    code: failure.code,
+    stack: failure.error.stack,
+  });
+  span.end();
+}
+
+/** The W3C `traceparent` that names `span` as the parent of the work it calls. */
+function traceparentOf(span: Span): string {
+  const { traceId, spanId, traceFlags } = span.spanContext();
+  return `00-${traceId}-${spanId}-${traceFlags.toString(16).padStart(2, '0')}`;
+}
+
 /** Record a timed stage event on a span, showing stage duration. */
 function recordStageEvent(span: Span, stageName: string, state: any): void {
+  if (state[STAGE_EVENTS_KEY] === false) return;
   const now = Date.now();
   const prev = state[STAGE_TS_KEY] as number | undefined;
   const attributes: Record<string, string | number> = {};
@@ -180,9 +253,8 @@ export function onHttpWillTrace(options: TracingOptions, flowCtx: any): void {
   span.setAttribute(McpAttributes.SESSION_ID, sessionHash);
   span.setAttribute(FrontMcpAttributes.SESSION_ID_HASH, sessionHash);
 
-  flowCtx.state[SPAN_KEY] = span;
-  flowCtx.state[SPAN_CTX_KEY] = spanCtx;
-  flowCtx.state[STAGE_TS_KEY] = Date.now();
+  ctx.set?.(HTTP_SPAN_CTX_KEY, spanCtx);
+  beginFlowSpan(flowCtx, options, span, spanCtx);
   recordStageEvent(span, 'traceRequest', flowCtx.state);
 }
 
@@ -246,7 +318,7 @@ export function onToolWillParse(options: TracingOptions, flowCtx: any): void {
   if (!ctx) return;
 
   const tracer = getTracer();
-  const parentOTelCtx = createOTelContextFromTrace(ctx.traceContext);
+  const parentOTelCtx = parentContextOf(ctx);
   const sessionHash = sessionTracingId(ctx.sessionId);
 
   const { span, context: spanCtx } = startRpcSpan(tracer, {
@@ -256,9 +328,7 @@ export function onToolWillParse(options: TracingOptions, flowCtx: any): void {
     parentContext: parentOTelCtx,
   });
 
-  flowCtx.state[SPAN_KEY] = span;
-  flowCtx.state[SPAN_CTX_KEY] = spanCtx;
-  flowCtx.state[STAGE_TS_KEY] = Date.now();
+  beginFlowSpan(flowCtx, options, span, spanCtx);
   recordStageEvent(span, 'parseInput', flowCtx.state);
 }
 
@@ -347,8 +417,8 @@ export function onToolDidFinalize(flowCtx: any): void {
   const error = flowCtx.state?.flowError;
 
   if (error) {
-    if (toolSpan) endSpanError(toolSpan, error instanceof Error ? error : String(error));
-    if (rpcSpan) endSpanError(rpcSpan, error instanceof Error ? error : String(error));
+    if (toolSpan) endFailedSpan(toolSpan, error);
+    if (rpcSpan) endFailedSpan(rpcSpan, error);
   } else if (rpcSpan) {
     recordStageEvent(rpcSpan, 'finalize', flowCtx.state);
     endSpanOk(rpcSpan);
@@ -367,7 +437,7 @@ export function onResourceWillParse(options: TracingOptions, flowCtx: any): void
   if (!ctx) return;
 
   const tracer = getTracer();
-  const parentOTelCtx = createOTelContextFromTrace(ctx.traceContext);
+  const parentOTelCtx = parentContextOf(ctx);
   const sessionHash = sessionTracingId(ctx.sessionId);
 
   const { span, context: spanCtx } = startRpcSpan(tracer, {
@@ -377,9 +447,7 @@ export function onResourceWillParse(options: TracingOptions, flowCtx: any): void
     parentContext: parentOTelCtx,
   });
 
-  flowCtx.state[SPAN_KEY] = span;
-  flowCtx.state[SPAN_CTX_KEY] = spanCtx;
-  flowCtx.state[STAGE_TS_KEY] = Date.now();
+  beginFlowSpan(flowCtx, options, span, spanCtx);
   recordStageEvent(span, 'parseInput', flowCtx.state);
 }
 
@@ -415,8 +483,8 @@ export function onResourceDidFinalize(flowCtx: any): void {
   const resSpan: Span | undefined = flowCtx.state?.[EXEC_SPAN_KEY];
   const error = flowCtx.state?.flowError;
   if (error) {
-    if (resSpan) endSpanError(resSpan, error instanceof Error ? error : String(error));
-    if (rpcSpan) endSpanError(rpcSpan, error instanceof Error ? error : String(error));
+    if (resSpan) endFailedSpan(resSpan, error);
+    if (rpcSpan) endFailedSpan(rpcSpan, error);
   } else if (rpcSpan) {
     recordStageEvent(rpcSpan, 'finalize', flowCtx.state);
     endSpanOk(rpcSpan);
@@ -435,7 +503,7 @@ export function onPromptWillParse(options: TracingOptions, flowCtx: any): void {
   if (!ctx) return;
 
   const tracer = getTracer();
-  const parentOTelCtx = createOTelContextFromTrace(ctx.traceContext);
+  const parentOTelCtx = parentContextOf(ctx);
   const sessionHash = sessionTracingId(ctx.sessionId);
 
   const { span, context: spanCtx } = startRpcSpan(tracer, {
@@ -445,9 +513,7 @@ export function onPromptWillParse(options: TracingOptions, flowCtx: any): void {
     parentContext: parentOTelCtx,
   });
 
-  flowCtx.state[SPAN_KEY] = span;
-  flowCtx.state[SPAN_CTX_KEY] = spanCtx;
-  flowCtx.state[STAGE_TS_KEY] = Date.now();
+  beginFlowSpan(flowCtx, options, span, spanCtx);
   recordStageEvent(span, 'parseInput', flowCtx.state);
 }
 
@@ -486,8 +552,8 @@ export function onPromptDidFinalize(flowCtx: any): void {
   const promptSpan: Span | undefined = flowCtx.state?.[EXEC_SPAN_KEY];
   const error = flowCtx.state?.flowError;
   if (error) {
-    if (promptSpan) endSpanError(promptSpan, error instanceof Error ? error : String(error));
-    if (rpcSpan) endSpanError(rpcSpan, error instanceof Error ? error : String(error));
+    if (promptSpan) endFailedSpan(promptSpan, error);
+    if (rpcSpan) endFailedSpan(rpcSpan, error);
   } else if (rpcSpan) {
     recordStageEvent(rpcSpan, 'finalize', flowCtx.state);
     endSpanOk(rpcSpan);
@@ -507,7 +573,7 @@ export function onAgentWillParse(options: TracingOptions, flowCtx: any): void {
   if (!ctx) return;
 
   const tracer = getTracer();
-  const parentOTelCtx = createOTelContextFromTrace(ctx.traceContext);
+  const parentOTelCtx = parentContextOf(ctx);
   const sessionHash = sessionTracingId(ctx.sessionId);
 
   const { span, context: spanCtx } = startRpcSpan(tracer, {
@@ -517,9 +583,7 @@ export function onAgentWillParse(options: TracingOptions, flowCtx: any): void {
     parentContext: parentOTelCtx,
   });
 
-  flowCtx.state[SPAN_KEY] = span;
-  flowCtx.state[SPAN_CTX_KEY] = spanCtx;
-  flowCtx.state[STAGE_TS_KEY] = Date.now();
+  beginFlowSpan(flowCtx, options, span, spanCtx);
   recordStageEvent(span, 'parseInput', flowCtx.state);
 }
 
@@ -566,8 +630,8 @@ export function onAgentDidFinalize(flowCtx: any): void {
   const agentSpan: Span | undefined = flowCtx.state?.[EXEC_SPAN_KEY];
   const error = flowCtx.state?.flowError;
   if (error) {
-    if (agentSpan) endSpanError(agentSpan, error instanceof Error ? error : String(error));
-    if (rpcSpan) endSpanError(rpcSpan, error instanceof Error ? error : String(error));
+    if (agentSpan) endFailedSpan(agentSpan, error);
+    if (rpcSpan) endFailedSpan(rpcSpan, error);
   } else if (rpcSpan) {
     recordStageEvent(rpcSpan, 'finalize', flowCtx.state);
     endSpanOk(rpcSpan);
@@ -585,7 +649,7 @@ export function onGenericFlowWillStart(flowName: string, options: TracingOptions
   if (!ctx) return;
 
   const tracer = getTracer();
-  const parentOTelCtx = createOTelContextFromTrace(ctx.traceContext);
+  const parentOTelCtx = parentContextOf(ctx);
   const sessionHash = sessionTracingId(ctx.sessionId);
 
   const { span, context: spanCtx } = startSpan(tracer, {
@@ -601,9 +665,7 @@ export function onGenericFlowWillStart(flowName: string, options: TracingOptions
     parentContext: parentOTelCtx,
   });
 
-  flowCtx.state[SPAN_KEY] = span;
-  flowCtx.state[SPAN_CTX_KEY] = spanCtx;
-  flowCtx.state[STAGE_TS_KEY] = Date.now();
+  beginFlowSpan(flowCtx, options, span, spanCtx);
 }
 
 export function onGenericFlowStage(stageName: string, flowCtx: any): void {
@@ -616,7 +678,7 @@ export function onGenericFlowDidFinalize(flowCtx: any): void {
   if (!span) return;
   const error = flowCtx.state?.flowError;
   if (error) {
-    endSpanError(span, error instanceof Error ? error : String(error));
+    endFailedSpan(span, error);
   } else {
     endSpanOk(span);
   }
@@ -632,7 +694,7 @@ export function onTransportWillStart(transportType: string, options: TracingOpti
   if (!ctx) return;
 
   const tracer = getTracer();
-  const parentOTelCtx = createOTelContextFromTrace(ctx.traceContext);
+  const parentOTelCtx = parentContextOf(ctx);
   const sessionHash = sessionTracingId(ctx.sessionId);
 
   const { span, context: spanCtx } = startTransportSpan(tracer, {
@@ -641,9 +703,7 @@ export function onTransportWillStart(transportType: string, options: TracingOpti
     parentContext: parentOTelCtx,
   });
 
-  flowCtx.state[SPAN_KEY] = span;
-  flowCtx.state[SPAN_CTX_KEY] = spanCtx;
-  flowCtx.state[STAGE_TS_KEY] = Date.now();
+  beginFlowSpan(flowCtx, options, span, spanCtx);
   recordStageEvent(span, 'parseInput', flowCtx.state);
 }
 
@@ -667,7 +727,7 @@ export function onTransportDidFinalize(flowCtx: any): void {
   recordStageEvent(span, 'cleanup', flowCtx.state);
   const error = flowCtx.state?.flowError;
   if (error) {
-    endSpanError(span, error instanceof Error ? error : String(error));
+    endFailedSpan(span, error);
   } else {
     endSpanOk(span);
   }
@@ -683,16 +743,14 @@ export function onAuthWillStart(flowName: string, options: TracingOptions, flowC
   if (!ctx) return;
 
   const tracer = getTracer();
-  const parentOTelCtx = createOTelContextFromTrace(ctx.traceContext);
+  const parentOTelCtx = parentContextOf(ctx);
 
   const { span, context: spanCtx } = startAuthSpan(tracer, {
     flowName,
     parentContext: parentOTelCtx,
   });
 
-  flowCtx.state[SPAN_KEY] = span;
-  flowCtx.state[SPAN_CTX_KEY] = spanCtx;
-  flowCtx.state[STAGE_TS_KEY] = Date.now();
+  beginFlowSpan(flowCtx, options, span, spanCtx);
   recordStageEvent(span, 'parseInput', flowCtx.state);
 }
 
@@ -715,7 +773,7 @@ export function onAuthDidFinalize(flowCtx: any): void {
   const error = flowCtx.state?.flowError;
   if (error) {
     setAuthResult(span, 'unauthorized');
-    endSpanError(span, error instanceof Error ? error : String(error));
+    endFailedSpan(span, error);
   } else {
     setAuthResult(span, 'authorized');
     endSpanOk(span);
@@ -727,8 +785,6 @@ export function onAuthDidFinalize(flowCtx: any): void {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function wrapContextFetch(options: TracingOptions, flowCtx: any): void {
-  if (options.fetchSpans === false) return;
-
   // Get the tool context from flow state
   const toolCtx = flowCtx.state?.toolContext ?? flowCtx.state?.toolCallContext;
   if (!toolCtx || typeof toolCtx.fetch !== 'function') return;
@@ -737,19 +793,28 @@ export function wrapContextFetch(options: TracingOptions, flowCtx: any): void {
   const parentOTelCtx: OTelContext | undefined = flowCtx.state?.[SPAN_CTX_KEY];
 
   toolCtx.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-    const method = init?.method ?? 'GET';
-
-    const tracer = getTracer();
-    const { span } = startFetchSpan(tracer, { method, url, parentContext: parentOTelCtx });
+    const fetchSpan =
+      options.fetchSpans === false
+        ? undefined
+        : startFetchSpan(getTracer(), {
+            method: init?.method ?? (input instanceof Request ? input.method : 'GET'),
+            url: typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url,
+            parentContext: parentOTelCtx,
+          }).span;
+    // The service called joins the trace as a child of the span that called it
+    const callingSpan: Span | undefined = fetchSpan ?? flowCtx.state?.[EXEC_SPAN_KEY] ?? flowCtx.state?.[SPAN_KEY];
+    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    if (callingSpan && !headers.has('traceparent')) headers.set('traceparent', traceparentOf(callingSpan));
 
     try {
-      const response: Response = await originalFetch(input, init);
-      setFetchResponseStatus(span, response.status);
-      endSpanOk(span);
+      const response: Response = await originalFetch(input, { ...init, headers });
+      if (fetchSpan) {
+        setFetchResponseStatus(fetchSpan, response.status);
+        endSpanOk(fetchSpan);
+      }
       return response;
     } catch (err) {
-      endSpanError(span, err instanceof Error ? err : String(err));
+      if (fetchSpan) endSpanError(fetchSpan, err instanceof Error ? err : String(err));
       throw err;
     }
   };
@@ -772,6 +837,46 @@ export function onAgentDidExecuteEnrich(flowCtx: any): void {
     if (typeof meta.durationMs === 'number') {
       agentSpan.setAttribute(FrontMcpAttributes.AGENT_EXECUTION_DURATION_MS, meta.durationMs);
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook Observation (requestLogs' hooks_triggered, tracing.hookSpans)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Where the SDK's flow runner looks for the request's hook observer, on its FrontMcpContext. */
+const HOOK_OBSERVER_KEY = Symbol.for('frontmcp:hook-observer');
+
+/** Wraps each hook a plugin, app or entry injected into a flow of the request: `run` runs the hook. */
+export type HookObserver = (
+  hook: { flowName: string; stage: string; target: unknown; flowContext: unknown },
+  run: () => Promise<void>,
+) => Promise<void>;
+
+/** Installs `observer` for the request the flow `flowCtx` serves, unless one watches it already. */
+export function installHookObserver(flowCtx: FlowContextLike, observer: HookObserver): void {
+  const ctx = extractContext(flowCtx);
+  if (ctx && !ctx.get?.(HOOK_OBSERVER_KEY)) ctx.set?.(HOOK_OBSERVER_KEY, observer);
+}
+
+/** Runs one hook inside a `hook <stage>` span, a child of its flow's span. A control-flow signal other than `fail` ends it OK. */
+export async function runInHookSpan(
+  flowCtx: any,
+  hook: { flowName: string; stage: string; owner?: string },
+  run: () => Promise<void>,
+): Promise<void> {
+  const ctx = extractContext(flowCtx);
+  const { span } = startHookSpan(getTracer(), {
+    ...hook,
+    parentContext: flowCtx.state?.[SPAN_CTX_KEY] ?? (ctx && parentContextOf(ctx)),
+  });
+  try {
+    await run();
+    endSpanOk(span);
+  } catch (error) {
+    if (error instanceof FlowControl && error.type !== 'fail' && error.type !== 'abort') endSpanOk(span);
+    else endFailedSpan(span, error);
+    throw error;
   }
 }
 

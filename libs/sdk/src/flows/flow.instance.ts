@@ -30,7 +30,25 @@ import { bindContextHookTargets } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
 import { writeHttpResponse } from '../server/server.validation';
 import { matchMountedPath } from './flow.http-path';
-import { cloneStageMap, collectFlowHookMap, mergeHookMetasIntoStageMap, type StageMap } from './flow.stages';
+import {
+  cloneStageMap,
+  collectFlowHookMap,
+  mergeHookMetasIntoStageMap,
+  type HookRunner,
+  type StageMap,
+} from './flow.stages';
+
+/**
+ * Where a request's hook observer lives on its `FrontMcpContext`: `@frontmcp/observability` installs one to
+ * record the hooks a request ran (`requestLogs`' `hooks_triggered`) and give each a span (`tracing.hookSpans`).
+ */
+const HOOK_OBSERVER_KEY = Symbol.for('frontmcp:hook-observer');
+
+/** Wraps each injected hook a request runs: `run` runs the hook. */
+type HookObserver = (
+  hook: { flowName: string; stage: string; target: unknown; flowContext: unknown },
+  run: () => Promise<void>,
+) => Promise<void>;
 
 type StageOutcome = 'ok' | 'respond' | 'next' | 'handled' | 'fail' | 'abort' | 'unknown_error';
 
@@ -334,6 +352,11 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     let contextReady = false;
 
+    const runHook: HookRunner = (hook, run) => {
+      const observe = currentContext.get<HookObserver>(HOOK_OBSERVER_KEY);
+      return observe ? observe({ ...hook, flowName: name, flowContext: context }, run) : run();
+    };
+
     const materializeAndMerge = async (
       newHooks: Array<Pick<HookEntry, 'metadata'>>,
       opts?: { orderStart?: number },
@@ -354,7 +377,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
       if (metas.length) {
         const start = opts?.orderStart ?? orderBase;
-        mergeHookMetasIntoStageMap(FlowClass, stages, metas, start);
+        mergeHookMetasIntoStageMap(FlowClass, stages, metas, start, runHook);
         if (opts?.orderStart === undefined) orderBase += metas.length;
       }
     };
