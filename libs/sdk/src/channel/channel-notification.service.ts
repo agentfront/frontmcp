@@ -7,7 +7,7 @@ import { supportsChannels, type NotificationService } from '../notification/noti
  * The MCP notification method for Claude Code channels.
  * This is an experimental extension, not part of the standard MCP spec.
  */
-const CHANNEL_NOTIFICATION_METHOD = 'notifications/claude/channel';
+export const CHANNEL_NOTIFICATION_METHOD = 'notifications/claude/channel';
 
 /**
  * Metadata accompanying a channel notification.
@@ -21,6 +21,9 @@ export interface ChannelNotificationMeta {
   source: string;
   [key: string]: string;
 }
+
+/** Receives the channel notifications a session-less stream listens to. */
+export type ChannelStreamListener = (content: string, meta: ChannelNotificationMeta) => void;
 
 /** What the `channels:send-notification` flow takes. */
 export interface ChannelSendInput {
@@ -44,6 +47,8 @@ export interface ChannelSendInput {
 export class ChannelNotificationService {
   private readonly logger: FrontMcpLogger;
   private readonly serverMeta: Readonly<Record<string, string>>;
+  /** MCP 2026-07-28 `subscriptions/listen` streams, which have no session, by the channels they listen to. */
+  private readonly streamListeners = new Set<{ channels: ReadonlySet<string>; deliver: ChannelStreamListener }>();
 
   /**
    * @param defaultMeta - The server's `channels.defaultMeta`, added under every notification's own meta.
@@ -80,6 +85,10 @@ export class ChannelNotificationService {
       return;
     }
 
+    for (const listener of this.streamListeners) {
+      if (listener.channels.has(channelName)) listener.deliver(content, meta);
+    }
+
     const subscribers = this.notificationService.getSubscribersForChannel(channelName);
     if (subscribers.length === 0) {
       this.logger.verbose(`No subscribers for channel "${channelName}", notification buffered only`);
@@ -98,6 +107,20 @@ export class ChannelNotificationService {
     }
 
     this.logger.verbose(`Sent channel "${channelName}" notification to ${subscribers.length} subscriber(s)`);
+  }
+
+  /**
+   * Deliver the global notifications of `channelNames` to a listener with no session: an MCP
+   * 2026-07-28 `subscriptions/listen` stream. Session-targeted notifications never reach it.
+   *
+   * @returns A function that stops the delivery
+   */
+  listen(channelNames: readonly string[], deliver: ChannelStreamListener): () => void {
+    const listener = { channels: new Set(channelNames), deliver };
+    this.streamListeners.add(listener);
+    return () => {
+      this.streamListeners.delete(listener);
+    };
   }
 
   /**
