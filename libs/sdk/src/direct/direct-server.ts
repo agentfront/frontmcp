@@ -304,6 +304,7 @@ export class DirectMcpServerImpl implements DirectMcpServer {
     const options: ConnectOptions | undefined =
       typeof sessionIdOrOptions === 'string' ? { session: { id: sessionIdOrOptions } } : sessionIdOrOptions;
 
+    // No release callback: the scope belongs to this server, so closing a client leaves it to the others
     const { DirectClientImpl } = await import('./direct-client.js');
     return DirectClientImpl.create(this.scope, options);
   }

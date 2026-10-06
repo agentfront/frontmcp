@@ -13,6 +13,7 @@ import type {
   ListResourcesResult,
   ListResourceTemplatesResult,
   LoggingLevel,
+  Progress,
   ReadResourceResult,
   ServerCapabilities,
 } from '@frontmcp/protocol';
@@ -331,6 +332,8 @@ export interface ElicitationRequest {
   mode: 'form' | 'url';
   /** Timestamp when the elicitation expires */
   expiresAt: number;
+  /** The page to open, in `url` mode */
+  url?: string;
 }
 
 /**
@@ -403,6 +406,16 @@ export interface SessionOptions {
     /** Additional user claims */
     [key: string]: unknown;
   };
+  /** The caller's scopes: `this.auth.scopes`, as `authContext.scopes` gives them with `create()` */
+  scopes?: string[];
+}
+
+/**
+ * Options for `DirectClient.callTool()`.
+ */
+export interface CallToolOptions {
+  /** Receives the tool's `this.progress()` updates: passing it sends a progress token with the call */
+  onProgress?: (progress: Progress) => void;
 }
 
 /**
@@ -502,8 +515,9 @@ export interface DirectClient {
    *
    * @param name - Tool name
    * @param args - Tool arguments
+   * @param options - Call options, such as `onProgress`
    */
-  callTool(name: string, args?: Record<string, unknown>): Promise<FormattedToolResult>;
+  callTool(name: string, args?: Record<string, unknown>, options?: CallToolOptions): Promise<FormattedToolResult>;
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Resource Operations (raw MCP format)
@@ -654,14 +668,14 @@ export interface DirectClient {
   onElicitation(handler: ElicitationHandler): () => void;
 
   /**
-   * Submit an elicitation result manually.
-   *
-   * Use this when handling elicitation asynchronously or through a separate channel.
+   * Answer a question from the elicitation fallback: a tool result whose `_meta.elicitationPending` names the
+   * `elicitId`. Calls the `sendElicitationResult` tool, which runs the waiting tool again with the answer.
    *
    * @param elicitId - The elicitation ID
    * @param response - The user's response
+   * @returns The waiting tool's result, formatted as `callTool()` formats it
    */
-  submitElicitationResult(elicitId: string, response: ElicitationResponse): Promise<void>;
+  submitElicitationResult(elicitId: string, response: ElicitationResponse): Promise<FormattedToolResult>;
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Completion Operations

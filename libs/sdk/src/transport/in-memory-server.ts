@@ -10,6 +10,7 @@ import { type AuthInfo, type Transport } from '@frontmcp/protocol';
 import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
 import { type ElicitOptions, type ElicitResult } from '../elicitation';
+import { ELICITATION_META_KEY } from '../elicitation/elicitation-meta';
 import { ElicitationTimeoutError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
@@ -132,7 +133,10 @@ export async function createInMemoryServer(
       try {
         // The client's capabilities were checked by `this.elicit()` (the SDK server never saw its initialize)
         answer = await mcpServer.request(
-          { method: 'elicitation/create', params: requestParams as never },
+          {
+            method: 'elicitation/create',
+            params: { ...requestParams, _meta: { [ELICITATION_META_KEY]: { elicitId, expiresAt } } } as never,
+          },
           ElicitResultSchema,
           { relatedRequestId, timeout: ttl },
         );

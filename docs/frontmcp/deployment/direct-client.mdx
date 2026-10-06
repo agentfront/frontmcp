@@ -247,10 +247,10 @@ Capabilities are fixed when the client connects. Passing `onElicitation` to `con
 
 ### Manual Submission
 
-A client that does not declare elicitation gets the fallback flow: the tool's result asks for the answer and names the `sendElicitationResult` tool and the `elicitId`. Answer it with `submitElicitationResult`:
+A client that does not declare elicitation gets the fallback flow: the tool's result asks for the answer and names the `sendElicitationResult` tool and the `elicitId` (in `_meta.elicitationPending`). Answer it with `submitElicitationResult`, which calls that tool and returns the waiting tool's result (up to 1.9.2 it failed with `Method not found`):
 
 ```typescript
-await client.submitElicitationResult('elicit-123', {
+const result = await client.submitElicitationResult('elicit-123', {
   action: 'accept',
   content: { approved: true, comment: 'Looks good!' }
 });

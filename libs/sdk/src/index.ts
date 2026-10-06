@@ -430,6 +430,7 @@ export type {
   ConnectOptions,
   LLMConnectOptions,
   SessionOptions,
+  CallToolOptions,
   ClientInfo,
   LLMPlatform,
 } from './direct';

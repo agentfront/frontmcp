@@ -369,19 +369,17 @@ describe('connect utilities', () => {
 
     it('should call tool', async () => {
       const result = await client.callTool('test-tool', { arg: 'value' });
-      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'test-tool',
-        arguments: { arg: 'value' },
-      });
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith(
+        { name: 'test-tool', arguments: { arg: 'value' } },
+        undefined,
+        undefined,
+      );
       expect(result).toBeDefined();
     });
 
     it('should call tool with empty args when not provided', async () => {
       await client.callTool('test-tool');
-      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'test-tool',
-        arguments: {},
-      });
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({ name: 'test-tool', arguments: {} }, undefined, undefined);
     });
 
     it('should list resources', async () => {
