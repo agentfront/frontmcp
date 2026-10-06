@@ -424,6 +424,46 @@ describe('renderToolTemplate — function templates (#645)', () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
+  it('warns at startup for a component compiled by the development JSX runtime (_jsxDEV)', () => {
+    const warn = jest.fn();
+    const _jsxDEV = (type: string, props: object) => ({ $$typeof: Symbol.for('react.element'), type, props });
+    function DevWidget() {
+      return _jsxDEV('div', {});
+    }
+
+    expect(warnIfComponentReference('dev_tool', DevWidget, { warn })).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  // The objects React.memo() and React.forwardRef() return at runtime
+  const memoComponent = (type: () => null) => ({ $$typeof: Symbol.for('react.memo'), type, compare: null });
+  const forwardRefComponent = (render: () => null) => ({ $$typeof: Symbol.for('react.forward_ref'), render });
+
+  it.each([
+    ['React.memo', memoComponent(() => null)],
+    ['React.forwardRef', forwardRefComponent(() => null)],
+  ])('warns at startup for a %s component, and not again on the first render', (label, template) => {
+    const warn = jest.fn();
+    const toolName = `${label}_tool`;
+
+    expect(warnIfComponentReference(toolName, template, { warn })).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain(toolName);
+
+    renderToolTemplate({ toolName, input: {}, output: {}, template, logger: { warn } });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns at render time for a React.memo component the server did not check at startup', () => {
+    const warn = jest.fn();
+    const template = memoComponent(() => null);
+
+    renderToolTemplate({ toolName: 'render_memo_tool', input: {}, output: {}, template, logger: { warn } });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('render_memo_tool');
+  });
+
   function CardBuilder(ctx: { output: unknown }): string {
     return `<p>${String(ctx.output)}</p>`;
   }

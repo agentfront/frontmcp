@@ -162,15 +162,16 @@ function warnComponentReference(template: object, toolName: string, logger: { wa
   );
 }
 
-/** Compiled JSX: the automatic runtime's `jsx` / `jsxs` / `jsxDEV` calls, or `React.createElement`. */
-const COMPILED_JSX_PATTERN = /\b(?:React\.createElement|_?jsxs?|jsxDEV)\)?\s*\(/;
+/** Compiled JSX: the automatic runtime's `jsx` / `jsxs` / `jsxDEV` calls (`_`-prefixed too), or `React.createElement`. */
+const COMPILED_JSX_PATTERN = /\b(?:React\.createElement|_?jsx(?:s|DEV)?)\)?\s*\(/;
 
 /**
- * Whether a capitalized template function is certainly a React component, decided without calling it:
- * a class, memo / forwardRef, or a function whose source holds compiled JSX. Anything else (an HTML
+ * Whether a template is certainly a React component, decided without calling it: a memo / forwardRef
+ * object, a class, or a capitalized function whose source holds compiled JSX. Anything else (an HTML
  * builder, a function that throws without call data) is left to the render-time check.
  */
 function isComponentReference(template: unknown): boolean {
+  if (isReactTypedObject(template)) return true;
   if (typeof template !== 'function' || detectUIType(template) !== 'react') return false;
   return isDefinitelyReactComponent(template) || COMPILED_JSX_PATTERN.test(Function.prototype.toString.call(template));
 }
@@ -191,7 +192,8 @@ export function warnIfComponentReference(
   return true;
 }
 
-function isReactElement(value: unknown): boolean {
+/** A React element, or the object `React.memo()` / `React.forwardRef()` return. */
+function isReactTypedObject(value: unknown): boolean {
   return typeof value === 'object' && value !== null && '$$typeof' in value;
 }
 
@@ -265,7 +267,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     if (isHtmlBuilder) {
       try {
         rawResult = (template as (ctx: unknown) => unknown)(ctx);
-        isHtmlBuilder = !isReactElement(rawResult);
+        isHtmlBuilder = !isReactTypedObject(rawResult);
       } catch (error) {
         if (uiType !== 'react') throw error;
         isHtmlBuilder = false;
@@ -299,6 +301,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     size = shellResult.size;
   } else {
     // Unknown template type — produce empty shell
+    if (isReactTypedObject(template)) warnComponentReference(template as object, toolName, options.logger ?? console);
     const shellResult = buildShell('<div id="root"></div>', shellConfig);
     html = shellResult.html;
     hash = shellResult.hash;
