@@ -186,6 +186,9 @@ surface the authorize link). The error class is
 }
 ```
 
+`required_scopes` lists the scopes the tool's `authProviders` ask for (left out when they name none; up to 1.9.2 it
+was never filled). The `_meta` type also declares `elicit_id` and `pending_auth_id`; FrontMCP doesn't fill them yet.
+
 <Note>
   In **stateless** session mode there is no `auth_url` and `supports_incremental` is
   `false` (the grant lives entirely in the JWT and cannot be extended in place — the user
