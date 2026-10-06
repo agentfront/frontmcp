@@ -81,8 +81,8 @@ JSON form. Always guard the result before reading from it:
 const meta = getTool('users:list');
 if (!meta) return { skipped: 'users:list is not available to this script' };
 
-console.log(meta.description);    // "List users with optional filtering"
-console.log(meta.inputSchema);    // { type: "object", properties: { ... } }
+mcpLog('info', meta.description); // "List users with optional filtering"
+return meta.inputSchema;          // { type: "object", properties: { ... } }
 ```
 
 ---
@@ -322,7 +322,7 @@ const retryTool = async (toolName, args, maxRetries = 3) => {
       throw new Error(`Failed after ${maxRetries} attempts: ${result.error.message}`);
     }
 
-    console.warn(`Attempt ${attempt} failed, retrying...`);
+    mcpLog('warn', `Attempt ${attempt} failed, retrying...`);
   }
 };
 

@@ -280,30 +280,31 @@ After AST validation passes, code is transformed for safe execution:
 
 ### Transformations Applied
 
-| Original           | Transformed                          | Purpose                |
-| ------------------ | ------------------------------------ | ---------------------- |
-| Top-level code     | `async function __ag_main() { ... }` | Enable top-level await |
-| `callTool(...)`    | `__safe_callTool(...)`               | Proxy through Enclave  |
-| `for (...)`        | Iteration-limited version            | Enforce maxSteps       |
-| `console.log(...)` | `__safe_console.log(...)`            | Capture for logging    |
+| Original        | Transformed                          | Purpose                |
+| --------------- | ------------------------------------ | ---------------------- |
+| Top-level code  | `async function __ag_main() { ... }` | Enable top-level await |
+| `callTool(...)` | `__safe_callTool(...)`               | Proxy through Enclave  |
+| `for (...)`     | Iteration-limited version            | Enforce maxSteps       |
 
 ### Example
 
 ```js
 // Input
 const users = await callTool('users:list', {});
+const names = [];
 for (const user of users) {
-  console.log(user.name);
+  names.push(user.name);
 }
-return users.length;
+return names;
 
 // Transformed
 async function __ag_main() {
   const users = await __safe_callTool('users:list', {});
+  const names = [];
   __safe_forOf(users, (user) => {
-    __safe_console.log(user.name);
+    names.push(user.name);
   });
-  return users.length;
+  return names;
 }
 ```
 
