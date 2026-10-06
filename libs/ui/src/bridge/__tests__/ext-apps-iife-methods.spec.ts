@@ -1,7 +1,7 @@
 /**
  * The ext-apps adapter in `@frontmcp/ui`'s own bridge IIFE sends the MCP Apps spec methods, as the
  * `@frontmcp/uipack` bridge does: `tools/call` (marked as the widget's own call), `ui/open-link`,
- * `ui/request-display-mode` and `ui/notifications/request-teardown`; it hears
+ * `ui/request-display-mode` (for a mode the host offers) and `ui/notifications/request-teardown`; it hears
  * `ui/notifications/tool-cancelled`, and answers `ui/resource-teardown`.
  */
 import { generateBridgeIIFE } from '../runtime/iife-generator';
@@ -20,6 +20,19 @@ describe('@frontmcp/ui bridge IIFE ext-apps methods', () => {
     expect(script).toContain("this.sendRequest('ui/open-link', { url: url })");
     expect(script).toContain("this.sendRequest('ui/request-display-mode', { mode: mode })");
     expect(script).toContain('this.hostCapabilities.openLinks');
+  });
+
+  it('declares its display modes, asks only for one the host offers and keeps the mode the host set', () => {
+    expect(script).toContain(
+      'appCapabilities: { tools: { listChanged: false }, availableDisplayModes: ["inline","fullscreen","pip"] }',
+    );
+    expect(script).toContain(
+      'var offered = context.hostContext.availableDisplayModes;\n    if (!Array.isArray(offered) || offered.indexOf(mode) === -1) {',
+    );
+    expect(script).toContain(
+      'var setMode = result && result.mode;\n    if (["inline","fullscreen","pip"].indexOf(setMode) !== -1) self._context.hostContext.displayMode = setMode;',
+    );
+    expect(script).not.toContain('self._context.hostContext.displayMode = mode;');
   });
 
   it('asks for teardown with ui/notifications/request-teardown', () => {

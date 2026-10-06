@@ -8,7 +8,7 @@
  * @packageDocumentation
  */
 
-import { WIDGET_CALL_META_KEY } from '@frontmcp/uipack/bridge-runtime';
+import { MCP_APPS_DISPLAY_MODES, WIDGET_CALL_META_KEY } from '@frontmcp/uipack/bridge-runtime';
 
 import type {
   AdapterConfig,
@@ -226,9 +226,19 @@ export class ExtAppsAdapter extends BaseAdapter {
     await this._sendRequest('ui/open-link', { url });
   }
 
+  /**
+   * Ask the host for a display mode it offers (`hostContext.availableDisplayModes`), and keep the
+   * mode it answers with, which differs from `mode` when the host refuses the change.
+   */
   override async requestDisplayMode(mode: DisplayMode): Promise<void> {
-    await this._sendRequest('ui/request-display-mode', { mode });
-    this._hostContext = { ...this._hostContext, displayMode: mode };
+    if (!this._hostContext.availableDisplayModes?.includes(mode)) {
+      throw new ExtAppsNotSupportedError(`Display mode "${mode}" is not available on this host`);
+    }
+    const result = (await this._sendRequest('ui/request-display-mode', { mode })) as { mode?: unknown } | undefined;
+    const setMode = MCP_APPS_DISPLAY_MODES.find((displayMode) => displayMode === result?.mode);
+    if (setMode) {
+      this._hostContext = { ...this._hostContext, displayMode: setMode };
+    }
   }
 
   /**
@@ -499,6 +509,9 @@ export class ExtAppsAdapter extends BaseAdapter {
     if (params.displayMode !== undefined) {
       changes.displayMode = params.displayMode;
     }
+    if (params.availableDisplayModes !== undefined) {
+      changes.availableDisplayModes = params.availableDisplayModes;
+    }
     if (params.viewport !== undefined) {
       changes.viewport = params.viewport;
     }
@@ -634,6 +647,7 @@ export class ExtAppsAdapter extends BaseAdapter {
         tools: {
           listChanged: false,
         },
+        availableDisplayModes: [...MCP_APPS_DISPLAY_MODES],
       },
       protocolVersion: this._config.options?.protocolVersion || '2024-11-05',
     };

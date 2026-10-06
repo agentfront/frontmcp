@@ -70,6 +70,8 @@ export interface HostContext {
   theme: 'light' | 'dark';
   /** Current display mode */
   displayMode: DisplayMode;
+  /** Display modes the host offers (MCP Apps) */
+  availableDisplayModes?: DisplayMode[];
   /** BCP 47 locale */
   locale: string;
   /** IANA timezone */
@@ -360,6 +362,8 @@ export interface ExtAppsInitializeParams {
     tools?: {
       listChanged: boolean;
     };
+    /** Display modes the widget supports */
+    availableDisplayModes?: DisplayMode[];
   };
   protocolVersion: string;
 }
@@ -420,6 +424,7 @@ export interface ExtAppsToolResultParams {
 export interface ExtAppsHostContextChangeParams {
   theme?: 'light' | 'dark';
   displayMode?: DisplayMode;
+  availableDisplayModes?: DisplayMode[];
   viewport?: ViewportInfo;
   locale?: string;
   timezone?: string;

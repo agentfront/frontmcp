@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-import { WIDGET_CALL_META_KEY } from '@frontmcp/uipack/bridge-runtime';
+import { MCP_APPS_DISPLAY_MODES, WIDGET_CALL_META_KEY } from '@frontmcp/uipack/bridge-runtime';
 
 /**
  * Options for generating the bridge IIFE.
@@ -577,7 +577,7 @@ var ExtAppsAdapter = {
     var self = this;
     var params = {
       appInfo: { name: 'FrontMCP Widget', version: '1.0.0' },
-      appCapabilities: { tools: { listChanged: false } },
+      appCapabilities: { tools: { listChanged: false }, availableDisplayModes: ${JSON.stringify(MCP_APPS_DISPLAY_MODES)} },
       protocolVersion: '2024-11-05'
     };
 
@@ -611,6 +611,11 @@ var ExtAppsAdapter = {
     return this.sendRequest('ui/open-link', { url: url });
   },
   requestDisplayMode: function(context, mode) {
+    // Ask only for a mode the host offers; it answers with the mode it actually set.
+    var offered = context.hostContext.availableDisplayModes;
+    if (!Array.isArray(offered) || offered.indexOf(mode) === -1) {
+      return Promise.reject(new Error('Display mode "' + mode + '" is not available on this host'));
+    }
     return this.sendRequest('ui/request-display-mode', { mode: mode });
   },
   setSize: function(context, size) {
@@ -1016,8 +1021,10 @@ FrontMcpBridge.prototype.openLink = function(url) {
 FrontMcpBridge.prototype.requestDisplayMode = function(mode) {
   if (!this._adapter) return Promise.reject(new Error('Not initialized'));
   var self = this;
-  return this._adapter.requestDisplayMode(this._context, mode).then(function() {
-    self._context.hostContext.displayMode = mode;
+  return this._adapter.requestDisplayMode(this._context, mode).then(function(result) {
+    // The host may set another mode than the one asked for, e.g. when it refuses the change.
+    var setMode = result && result.mode;
+    if (${JSON.stringify(MCP_APPS_DISPLAY_MODES)}.indexOf(setMode) !== -1) self._context.hostContext.displayMode = setMode;
   });
 };
 

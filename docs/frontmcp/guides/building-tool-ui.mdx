@@ -192,8 +192,10 @@ ui: {
 </ParamField>
 
 <ParamField path="ui.displayMode" type="'inline' | 'fullscreen' | 'pip'">
-  Preferred display mode, which the page asks the host for once its bridge connects (`ui/request-display-mode`, or
-  `window.openai.requestDisplayMode()`); the host may refuse:
+  Preferred display mode, which the page asks the host for once its bridge connects: `ui/request-display-mode` when an
+  MCP Apps host offers the mode in `hostContext.availableDisplayModes` (the bridge's `ui/initialize` declares `inline`,
+  `fullscreen` and `pip` in `appCapabilities.availableDisplayModes`), or `window.openai.requestDisplayMode()`. The host
+  may refuse, and the bridge keeps the mode the host answers with, not the one it asked for:
   - `inline` - Rendered inline in the conversation (default)
   - `fullscreen` - Request fullscreen display
   - `pip` - Picture-in-picture
@@ -451,7 +453,7 @@ A string that contains both `<` and `>` is treated as **HTML** and used as writt
 | `widgetAccessible`  | `tools/list` `_meta['openai/widgetAccessible']`, which the OpenAI Apps SDK requires for `window.openai.callTool()`   |
 | `prefersBorder`     | The widget resource's `_meta.ui.prefersBorder` (MCP Apps) and `_meta['openai/widgetPrefersBorder']`                  |
 | `sandboxDomain`     | The widget resource's `_meta.ui.domain` (MCP Apps) and `_meta['openai/widgetDomain']`                                |
-| `displayMode`       | The page asks for it once its bridge connects: `ui/request-display-mode`, or `window.openai.requestDisplayMode()`    |
+| `displayMode`       | Asked for when the bridge connects, if offered: `ui/request-display-mode`, or `window.openai.requestDisplayMode()`   |
 | `csp`               | Also as `_meta['openai/widgetCSP']` on the widget resource, with snake_case keys (`connect_domains`)                 |
 
 Up to 1.9.2 the first five were accepted and ignored.

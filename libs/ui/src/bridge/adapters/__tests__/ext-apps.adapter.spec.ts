@@ -7,7 +7,7 @@
  * @jest-environment jsdom
  */
 
-import { ExtAppsAdapter } from '../ext-apps.adapter';
+import { ExtAppsAdapter, ExtAppsNotSupportedError } from '../ext-apps.adapter';
 
 describe('ExtAppsAdapter', () => {
   let adapter: ExtAppsAdapter;
@@ -258,6 +258,20 @@ describe('ExtAppsAdapter', () => {
           .map((message) => message.params);
       }
 
+      function offerDisplayModes(modes: string[]): void {
+        // @ts-expect-error - accessing protected property for testing
+        adapterWithConfig._hostContext = { ...adapterWithConfig._hostContext, availableDisplayModes: modes };
+      }
+
+      function answer(method: string, result: unknown): void {
+        const request = postMessage.mock.calls
+          .map(([message]) => message as { id?: number; method?: string })
+          .find((message) => message.method === method);
+        const data = { jsonrpc: '2.0', id: request?.id, result };
+        // @ts-expect-error - accessing private method for testing
+        adapterWithConfig._handleMessage({ data, origin: HOST_ORIGIN } as MessageEvent);
+      }
+
       beforeEach(() => {
         postMessage = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => undefined);
       });
@@ -287,13 +301,64 @@ describe('ExtAppsAdapter', () => {
         expect(sent('ui/openLink')).toEqual([]);
       });
 
-      it('asks for a display mode with ui/request-display-mode', () => {
+      it('declares the display modes it supports in ui/initialize', () => {
         connectTo({});
+
+        // @ts-expect-error - accessing private method for testing
+        adapterWithConfig._performHandshake().catch(() => undefined);
+
+        expect(sent('ui/initialize')).toEqual([
+          expect.objectContaining({
+            appCapabilities: expect.objectContaining({ availableDisplayModes: ['inline', 'fullscreen', 'pip'] }),
+          }),
+        ]);
+      });
+
+      it('asks for a display mode the host offers with ui/request-display-mode', () => {
+        connectTo({});
+        offerDisplayModes(['inline', 'fullscreen']);
 
         adapterWithConfig.requestDisplayMode('fullscreen').catch(() => undefined);
 
         expect(sent('ui/request-display-mode')).toEqual([{ mode: 'fullscreen' }]);
         expect(sent('ui/setDisplayMode')).toEqual([]);
+      });
+
+      it('does not ask for a display mode the host does not offer', async () => {
+        connectTo({});
+        offerDisplayModes(['inline']);
+
+        await expect(adapterWithConfig.requestDisplayMode('fullscreen')).rejects.toThrow(ExtAppsNotSupportedError);
+
+        expect(sent('ui/request-display-mode')).toEqual([]);
+      });
+
+      it('learns the display modes the host offers from host-context-changed', async () => {
+        connectTo({});
+        offerDisplayModes(['inline']);
+        await expect(adapterWithConfig.requestDisplayMode('pip')).rejects.toThrow(ExtAppsNotSupportedError);
+
+        // @ts-expect-error - accessing private method for testing
+        adapterWithConfig._handleNotification({
+          jsonrpc: '2.0',
+          method: 'ui/notifications/host-context-changed',
+          params: { availableDisplayModes: ['inline', 'pip'] },
+        });
+
+        adapterWithConfig.requestDisplayMode('pip').catch(() => undefined);
+
+        expect(sent('ui/request-display-mode')).toEqual([{ mode: 'pip' }]);
+      });
+
+      it('keeps the display mode the host set, not the one it asked for', async () => {
+        connectTo({});
+        offerDisplayModes(['inline', 'fullscreen', 'pip']);
+
+        const request = adapterWithConfig.requestDisplayMode('fullscreen');
+        answer('ui/request-display-mode', { mode: 'pip' });
+        await request;
+
+        expect(adapterWithConfig.getHostContext().displayMode).toBe('pip');
       });
 
       it('sends model context as ui/update-model-context, merging object updates', () => {
