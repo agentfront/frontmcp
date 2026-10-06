@@ -13,6 +13,8 @@
  *
  * They refuse only what the full checks certainly refuse too:
  * - an entry declares `authorities` and the server has no `authorities` option;
+ * - an `authorities` profile, or an entry's rule, is malformed, checks nothing, or names a profile the
+ *   `authorities` option does not define;
  * - an entry declares a field only a plugin enforces (`approval`, `featureFlag`, ...) and no plugin
  *   that reaches it enforces it. Outside an agent, a plugin enforces the fields it declares only
  *   through its hooks, so one without hooks enforces none. The server's plugins reach every entry.
@@ -50,6 +52,7 @@ import { normalizePrompt } from '../prompt/prompt.utils';
 import { isResourceTemplate, normalizeResource, normalizeResourceTemplate } from '../resource/resource.utils';
 import { normalizeSkill } from '../skill/skill.utils';
 import { normalizeTool } from '../tool/tool.utils';
+import { assertAuthoritiesRules, createAuthoritiesEngine } from './authorities-rules.check';
 
 /** An entry the config names, labelled as the full checks label it. */
 interface StaticEntry {
@@ -266,6 +269,14 @@ export function assertStaticStartupConfig(config: FrontMcpConfigInput | FrontMcp
         { suggestion: 'Add authorities config to @FrontMcp() or remove authorities from entry metadata' },
       );
     }
+  }
+
+  const authoritiesConfig = (config as { authorities?: Record<string, unknown> }).authorities;
+  if (authoritiesConfig) {
+    const declared = entries
+      .filter(({ metadata }) => isEnforcementRequested(metadata['authorities']))
+      .map(({ label, metadata }) => ({ label, authorities: metadata['authorities'] }));
+    assertAuthoritiesRules(createAuthoritiesEngine(authoritiesConfig), declared);
   }
 
   const problems = entries.flatMap(({ label, metadata, enforcedBy }) =>

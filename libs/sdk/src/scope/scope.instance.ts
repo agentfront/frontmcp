@@ -3,14 +3,7 @@ import 'reflect-metadata';
 // A static import, not a lazy `require()`: a lazy require of this hard dependency becomes an
 // opaque `__require("@frontmcp/auth")` in the ESM build that a worker bundler cannot follow, so
 // the authorities engine failed to load on Cloudflare Workers (#680).
-import {
-  AuthoritiesContextBuilder,
-  AuthoritiesEngine,
-  AuthoritiesEvaluatorRegistry,
-  AuthoritiesProfileRegistry,
-  type AuthoritiesEvaluator,
-  type AuthoritiesPolicyMetadata,
-} from '@frontmcp/auth';
+import { AuthoritiesContextBuilder } from '@frontmcp/auth';
 import { createGuardManager, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
 import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
@@ -56,6 +49,7 @@ import { SendElicitationResultTool } from '../elicitation/send-elicitation-resul
 import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors';
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
+import { assertAuthoritiesRules, createAuthoritiesEngine } from '../front-mcp/authorities-rules.check';
 import { HaManager, resolveHaConfigFromEnv } from '../ha';
 import { HealthService } from '../health';
 import HookRegistry from '../hooks/hook.registry';
@@ -1650,19 +1644,8 @@ export class Scope extends ScopeEntry {
     if (!config) return;
 
     try {
-      // The metadata schema validated these fields' shapes; this narrows them to the engine's types.
-      const profileRegistry = new AuthoritiesProfileRegistry();
-      if (config['profiles']) {
-        profileRegistry.registerAll(config['profiles'] as Record<string, AuthoritiesPolicyMetadata>);
-      }
-
-      const evaluatorRegistry = new AuthoritiesEvaluatorRegistry();
-      if (config['evaluators']) {
-        evaluatorRegistry.registerAll(config['evaluators'] as Record<string, AuthoritiesEvaluator>);
-      }
-
       type BuilderOptions = NonNullable<ConstructorParameters<typeof AuthoritiesContextBuilder>[0]>;
-      this._authoritiesEngine = new AuthoritiesEngine(profileRegistry, evaluatorRegistry);
+      this._authoritiesEngine = createAuthoritiesEngine(config);
       this._authoritiesContextBuilder = new AuthoritiesContextBuilder({
         claimsMapping: config['claimsMapping'] as BuilderOptions['claimsMapping'],
         claimsResolver: config['claimsResolver'] as BuilderOptions['claimsResolver'],
@@ -1791,23 +1774,7 @@ export class Scope extends ScopeEntry {
       );
     }
 
-    const problems = [
-      ...engine.findProfileProblems(),
-      ...entries.flatMap(({ label, authorities }) =>
-        engine
-          .findRuleProblems(authorities)
-          .map((problem) => `${label}: authorities${problem.startsWith('.') ? '' : ' '}${problem}`),
-      ),
-    ];
-    if (problems.length > 0) {
-      const suffix = problems.length > 5 ? `; and ${problems.length - 5} more` : '';
-      throw new AuthConfigurationError(`Invalid authorities rule: ${problems.slice(0, 5).join('; ')}${suffix}`, {
-        errors: problems,
-        suggestion:
-          'Every rule must check something (roles, permissions, attributes, relationships, custom, guards, ' +
-          'allOf, anyOf or not) with known fields and no empty lists. To leave an entry open, remove its authorities.',
-      });
-    }
+    assertAuthoritiesRules(engine, entries);
   }
 
   /**

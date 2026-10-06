@@ -128,6 +128,7 @@ function server(extra: Record<string, unknown>): FrontMcpConfigInput {
 }
 
 const AUTHORITIES = { claimsMapping: { roles: 'roles' }, profiles: { admin: { roles: { any: ['admin'] } } } };
+const AUDITOR = { roles: { any: ['auditor'] } };
 
 /** Servers the full checks accept. */
 const ACCEPTED: Array<[string, FrontMcpConfigInput]> = [
@@ -250,6 +251,16 @@ const REFUSED: Array<[string, FrontMcpConfigInput, new (...args: never[]) => Err
   [
     'a server-level resource template declares authorities',
     server({ apps: [app('desk', {})], resources: [TicketTemplate] }),
+    AuthConfigurationError,
+  ],
+  [
+    'an entry names an authorities profile the authorities option does not define',
+    server({ apps: [app('desk', { agents: [RefundsAgent] })], authorities: { profiles: { auditor: AUDITOR } } }),
+    AuthConfigurationError,
+  ],
+  [
+    'an authorities profile checks nothing',
+    server({ apps: [app('desk', { agents: [RefundsAgent] })], authorities: { profiles: { admin: {} } } }),
     AuthConfigurationError,
   ],
   [
