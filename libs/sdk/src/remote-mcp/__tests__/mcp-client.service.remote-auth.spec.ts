@@ -67,6 +67,21 @@ describe('McpClientService — remoteAuth and retries', () => {
     jest.restoreAllMocks();
   });
 
+  it('does not follow a redirect while credentials ride along', async () => {
+    const { fetchMock } = fakeMcpServer();
+
+    await service.connect(
+      connectRequest({ auth: { mode: 'static', credentials: { type: 'bearer', value: 'static-token' } } }),
+    );
+    await service.callTool('upstream', 'echo', {});
+
+    const credentialedCalls = fetchMock.mock.calls.filter(([, init]) =>
+      new Headers(init?.headers).has('authorization'),
+    );
+    expect(credentialedCalls.length).toBeGreaterThan(0);
+    for (const [, init] of credentialedCalls) expect(init?.redirect).toBe('manual');
+  });
+
   it('sends static credentials and transportOptions.headers with every request', async () => {
     const { requests } = fakeMcpServer();
 

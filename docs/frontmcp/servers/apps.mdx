@@ -211,6 +211,8 @@ With `forward`, the gateway sends `Bearer <token>` in `headerName` (default `Aut
 with no caller token is sent without one. Discovery (`tools/list` and the other lists) runs at startup and
 on refresh, outside any user's request, so it carries only `transportOptions.headers`: a remote that
 requires auth to list its entries needs `static` credentials or a header in `transportOptions.headers`.
+A request that carries credentials or `transportOptions.headers` does not follow a redirect: a 3xx from the remote
+fails the request rather than sending the credentials on to the origin it names.
 
 ### Filtering Remote Entries
 
