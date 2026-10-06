@@ -25,7 +25,14 @@ import type { McpbDeployment } from '../../../config/frontmcp-config.types';
 import { loadExecConfig, normalizeConfig } from '../exec/config';
 import { serverBundleBanner } from '../../../config/deployment-env';
 import { bundleWithEsbuild, formatSize } from '../exec/esbuild-bundler';
-import { buildPlatformOverrides, mergeBinariesFrom, resolveHostPlatform, binaryFileName, type BinaryEntry } from './binary';
+import {
+  buildPlatformOverrides,
+  mergeBinariesFrom,
+  osBinaryCoverage,
+  resolveHostPlatform,
+  binaryFileName,
+  type BinaryEntry,
+} from './binary';
 import { generateMcpbManifest, loadPackageJsonMeta, resolveIconPath } from './manifest';
 import { setupStepsToUserConfig } from './user-config';
 import { stageMcpbDirectory, writeManifest } from './stage';
@@ -222,6 +229,12 @@ export async function buildMcpb(
 
   // 9. Manifest
   const platformOverrides = buildPlatformOverrides(binaries);
+  for (const { os, missing } of osBinaryCoverage(binaries)) {
+    if (missing.length === 0) continue;
+    console.log(
+      `${c('yellow', '[build:mcpb]')} ${os} gets no platform override: MCPB hosts match platform_overrides by OS only, so every ${os} architecture needs a binary (missing ${missing.join(', ')}; add them with --merge-from). ${os} hosts run the Node bundle.`,
+    );
+  }
   const manifest = generateMcpbManifest({
     name: execConfig.name,
     version: execConfig.version,

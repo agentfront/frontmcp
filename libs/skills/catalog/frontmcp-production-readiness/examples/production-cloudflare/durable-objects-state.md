@@ -24,7 +24,7 @@ Shows how to use Cloudflare Durable Objects for stateful coordination alongside 
 # required — the worker entry needs Node builtins or it won't boot.
 name = "stateful-mcp-worker"
 main = "dist/cloudflare/index.js"
-compatibility_date = "2024-09-23"
+compatibility_date = "2024-11-11"
 compatibility_flags = ["nodejs_compat"]
 
 # KV for cache

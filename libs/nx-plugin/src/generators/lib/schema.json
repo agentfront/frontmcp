@@ -41,7 +41,7 @@
     },
     "importPath": {
       "type": "string",
-      "description": "The npm scope/import path (e.g., @my-org/my-lib). Required for publishable libraries."
+      "description": "The npm scope/import path (e.g., @my-org/my-lib). Defaults to the workspace's npm scope (from the root package.json name) plus the library name, or the bare name when the workspace has no scope."
     },
     "tags": {
       "type": "string",

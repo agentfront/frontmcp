@@ -5,7 +5,8 @@ import type { DeployExecutorSchema } from './schema.js';
 
 const DEPLOY_COMMANDS: Record<string, string> = {
   node: 'docker compose up --build -d',
-  vercel: 'npx vercel --prod',
+  // The deploy target depends on build, which already wrote the Build Output API tree to .vercel/output
+  vercel: 'npx vercel deploy --prebuilt --prod',
   lambda: 'sam build && sam deploy',
   cloudflare: 'npx wrangler deploy',
 };

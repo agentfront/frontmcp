@@ -129,6 +129,7 @@ export type AdapterTemplate = {
    *   conditional. Adapters can use this to reject incompatible options
    *   (e.g., `sqlite: process.env.X ? {...} : undefined`) that the runtime
    *   config alone can't catch.
+   * @returns warnings the build prints without stopping.
    * @throws to abort the build with a user-facing message.
    */
   validate?: (
@@ -141,8 +142,12 @@ export type AdapterTemplate = {
        * when the entry cannot be evaluated.
        */
       redisProviderInSource?: string;
+      /** The deployment being built, from `frontmcp.config`. */
+      deployment?: DeploymentTarget;
+      /** Current contents of the adapter's `configFileName`, when the file exists. */
+      existingConfig?: string;
     },
-  ) => void;
+  ) => string[] | void;
 
   /**
    * Reconcile an existing platform config file with this build instead of

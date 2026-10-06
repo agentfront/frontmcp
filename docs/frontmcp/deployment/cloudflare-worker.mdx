@@ -94,12 +94,12 @@ This emits `dist/cloudflare/index.js` (an ES Module Worker) and **(re)writes the
 ```toml
 name = "my-worker"
 main = "dist/cloudflare/index.js"
-compatibility_date = "2024-09-23"
+compatibility_date = "2024-11-11"
 compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]
 ```
 
 <Note>
-`nodejs_compat` with `compatibility_date >= 2024-09-23` is **required** — the SDK runtime still uses some Node builtins behind that flag; without it the Worker won't load, so the build always emits it.
+`nodejs_compat` with `compatibility_date >= 2024-09-23` is **required** — the SDK runtime still uses some Node builtins behind that flag; without it the Worker won't load, so the build always emits it. The default date is `2024-11-11`, the first one `redis: { provider: 'vercel-kv' }` runs on; a `wrangler.toml` that already pins a date keeps it, and the build warns when that date is too early for Vercel KV.
 `nodejs_compat_populate_process_env` mirrors `[vars]` and secrets into `process.env` and is emitted **by default**; add `nodejs_compat_do_not_populate_process_env` to `wrangler.compatibilityFlags` to keep `process.env` empty. The opt-out always wins, so the two are never emitted together (`wrangler deploy` rejects a config carrying both).
 
 Cloudflare's flag only governs population at **module evaluation**, and the generated entry separately copies string bindings into `process.env` on the first request so `process.env.MY_API_KEY` behaves the same under `frontmcp dev` and in production. Declaring the opt-out therefore also drops that bridge from the generated entry — otherwise the build would put back exactly the values you excluded. Read bindings from the `env` argument instead; non-string bindings (KV, D1, R2, Durable Objects) are only ever reachable that way.
@@ -211,7 +211,7 @@ A failed build is kept, and requests are refused with it, until a retry delay pa
 
 Cloudflare storage: `redis: { provider: 'vercel-kv' }` (the HTTP-based Upstash/Vercel KV client) is accepted by `--target cloudflare`; only TCP `redis` and `sqlite` configs are rejected at build time, since Workers cannot open raw sockets or load native modules.
 
-To use it for sessions, install `@vercel/kv` in the project (the build bundles it into the worker), set `KV_REST_API_URL` / `KV_REST_API_TOKEN` as `[vars]` or secrets, and set `compatibility_date` to `2024-11-11` or later: the Upstash client sends `cache: 'no-store'` on every request, which Workers reject before that date (`The 'cache' field on 'RequestInitializerDict' is not implemented`). The build accepts the provider when it can read it, either from the evaluated config or written literally as `redis: { provider: 'vercel-kv' }` in `@FrontMcp({...})`; a `redis` whose provider it can read neither way is refused, and the error says so.
+To use it for sessions, install `@vercel/kv` in the project (the build bundles it into the worker), set `KV_REST_API_URL` / `KV_REST_API_TOKEN` as `[vars]` or secrets, and keep `compatibility_date` at `2024-11-11` or later (the build's default): the Upstash client sends `cache: 'no-store'` on every request, which Workers reject before that date (`The 'cache' field on 'RequestInitializerDict' is not implemented`). The build warns when the date the Worker runs with (the one `wrangler.toml` pins, else `deployments[].wrangler.compatibilityDate`) is earlier. The build accepts the provider when it can read it, either from the evaluated config or written literally as `redis: { provider: 'vercel-kv' }` in `@FrontMcp({...})`; a `redis` whose provider it can read neither way is refused, and the error says so.
 
 Background tasks need a store that outlives a single request and is shared between isolates, which an edge runtime cannot provide in-process. FrontMCP disables them automatically when no distributed store is configured, and the worker serves normally without them — no `tasks: { enabled: false }` opt-out is needed. Setting `tasks: { enabled: true }` without `tasks.redis` fails the build rather than the deployed worker.
 
@@ -296,7 +296,7 @@ The managed path is bundled by **wrangler** (not `frontmcp build`), so you own `
 ```toml
 name = "my-worker"
 main = "worker.ts"
-compatibility_date = "2024-09-23"
+compatibility_date = "2024-11-11"
 compatibility_flags = ["nodejs_compat"]
 
 # Last-good bundle cache (createEdgeMcp reads it via kvBundleCacheFromEnv).

@@ -210,12 +210,34 @@ describe('validateMcpb', () => {
     expect(result.errors.some((e) => e.includes('darwin-arm64'))).toBe(true);
   });
 
+  // #730 — hosts look up platform_overrides[process.platform], so an OS/arch key never matches
+  it('warns about a platform_overrides key that is not an OS name', async () => {
+    const manifest = baseManifest() as unknown as Record<string, unknown>;
+    (manifest.server as { mcp_config: Record<string, unknown> }).mcp_config.platform_overrides = {
+      'linux-x64': { command: '${__dirname}/bin/linux-x64/demo', args: [] },
+      win32: { command: '${__dirname}/bin/win32-x64/demo.exe', args: [] },
+    };
+    const archive = path.join(tmp, 'arch-keys.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(manifest),
+        'server/index.js': 'console.log("self-contained")',
+        'bin/linux-x64/demo': 'binary',
+        'bin/win32-x64/demo.exe': 'binary',
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.warnings).toEqual([expect.stringContaining('platform_overrides["linux-x64"] is never used')]);
+    expect(result.ok).toBe(true);
+  });
+
   // #679 — `--sea` binaries left reflect-metadata external and died with
   // "No such built-in module: reflect-metadata", yet validated as fine.
   it('fails when an SEA binary requires runtime packages it cannot load', async () => {
     const manifest = baseManifest() as unknown as Record<string, unknown>;
     (manifest.server as { mcp_config: Record<string, unknown> }).mcp_config.platform_overrides = {
-      'darwin-arm64': { command: '${__dirname}/bin/darwin-arm64/demo', args: [] },
+      darwin: { command: '${__dirname}/bin/darwin-arm64/demo', args: [] },
     };
     const archive = path.join(tmp, 'sea-externals.mcpb');
     const binary = `\u0000ELF-ish header\u0000${'x'.repeat(70_000)}require("reflect-metadata");\u0000tail`;
@@ -237,7 +259,7 @@ describe('validateMcpb', () => {
   it('accepts an SEA binary with the runtime inlined', async () => {
     const manifest = baseManifest() as unknown as Record<string, unknown>;
     (manifest.server as { mcp_config: Record<string, unknown> }).mcp_config.platform_overrides = {
-      'darwin-arm64': { command: '${__dirname}/bin/darwin-arm64/demo', args: [] },
+      darwin: { command: '${__dirname}/bin/darwin-arm64/demo', args: [] },
     };
     const archive = path.join(tmp, 'sea-ok.mcpb');
     await makeArchive(

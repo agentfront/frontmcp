@@ -29,7 +29,10 @@ export const USER_CONFIG_PREFIX = 'user_config.';
 /** Deterministic mtime applied to every archive entry for reproducible builds. */
 export const DETERMINISTIC_MTIME = new Date('2000-01-01T00:00:00Z');
 
-/** Platform keys recognized by MCPB platform_overrides. */
+/** OS keys MCPB hosts match in platform_overrides (`process.platform`). */
+export type McpbOsKey = 'darwin' | 'linux' | 'win32';
+
+/** OS/architecture folders SEA binaries are built and staged under (`bin/<key>/`). */
 export type McpbPlatformKey =
   | 'darwin-arm64'
   | 'darwin-x64'
