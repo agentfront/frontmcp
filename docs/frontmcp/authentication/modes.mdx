@@ -216,7 +216,9 @@ sequenceDiagram
 | `allowAnonymous`                   | `boolean`            | `false`         | Allow requests without tokens                                                                                                                               |
 
 Without `providerConfig.jwks` or `jwksUri`, the keys are fetched from `<provider>/.well-known/jwks.json`, else from the
-`jwks_uri` of the provider's OAuth metadata or `/.well-known/openid-configuration`.
+`jwks_uri` of the provider's OAuth metadata or `/.well-known/openid-configuration`. Fetched keys are kept for 6 hours. A token
+whose `kid` the kept keys lack makes FrontMCP fetch them again before refusing it, at most once a minute per provider,
+so a key the provider starts using is accepted right away (up to 1.9.2 it was refused until the 6 hours passed).
 
 A verified token's subject is its `sub`. A token without one (some IdPs issue client-credentials tokens that way)
 takes its subject from `client_id`, else `azp`, as RFC 9068 §2.2 names the client the subject of such a token. A token
