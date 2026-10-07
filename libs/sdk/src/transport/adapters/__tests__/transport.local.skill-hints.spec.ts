@@ -24,7 +24,11 @@ function makeScope(
   instructions?: string,
   servable: (skills: SkillEntry[]) => SkillEntry[] = (skills) => skills,
 ): InstructionsScope {
-  const skill = { metadata: { name: 'deploy', description: 'Deploy to production' }, getSkillPath: () => 'ops/deploy' };
+  const skill = {
+    metadata: { name: 'deploy', description: 'Deploy to production' },
+    getSkillPath: () => 'ops/deploy',
+    getDescription: () => 'Deploy to production',
+  };
   return {
     metadata: { skillsConfig, instructions },
     skills: { hasAny: () => true, getSkills: () => [skill], getSep2640InstructionUris: () => [] },

@@ -1,4 +1,4 @@
-import { attachRedisErrorListener } from '@frontmcp/utils';
+import { createRedisClient, StorageConfigError } from '@frontmcp/utils';
 
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobDefinitionStore } from './job-definition.interface';
@@ -30,6 +30,9 @@ export interface JobDefinitionStoreOptions {
     host?: string;
     port?: number;
     url?: string;
+    password?: string;
+    db?: number;
+    tls?: boolean;
     [key: string]: unknown;
   };
   keyPrefix?: string;
@@ -54,14 +57,17 @@ export function createJobDefinitionStore(
   if (options?.redis) {
     try {
       const { RedisJobDefinitionStore } = require('./redis-job-definition.store');
-      const Redis = require('ioredis');
-      const client = options.redis.url
-        ? new Redis(options.redis.url)
-        : new Redis({
-            host: options.redis.host ?? 'localhost',
-            port: options.redis.port ?? 6379,
-          });
-      attachRedisErrorListener(client, { label: 'JobDefinitionStore', logger: effectiveLogger });
+      const { url, host, port, password, db, tls } = options.redis;
+      const client = createRedisClient({
+        url,
+        host,
+        port,
+        password,
+        db,
+        tls,
+        label: 'JobDefinitionStore',
+        logger: effectiveLogger,
+      });
       return {
         // Factory-created client lifetime is bound to the store, so the store
         // must close it on dispose() — pass ownsClient: true.
@@ -69,6 +75,8 @@ export function createJobDefinitionStore(
         type: 'redis',
       };
     } catch (err) {
+      // A url and a field that contradict each other stop startup, as in every other redis option
+      if (err instanceof StorageConfigError) throw err;
       effectiveLogger.warn(`Failed to create Redis job definition store, falling back to memory: ${err}`);
     }
   }

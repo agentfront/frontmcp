@@ -82,6 +82,8 @@ contract.
 | Tasks         | core protocol                              | `io.modelcontextprotocol/tasks` extension            |
 | Not found     | `-32002`                                   | `-32602`                                             |
 
+`server/discover` returns the capabilities and `instructions` `initialize` would: `experimental['claude/channel']` when the server has channels, and the server's `instructions` with the channel hint and the skill catalog (`skillsConfig.injectInstructions`) for that caller. Up to 1.9.2 it sent neither the channel capability nor the hint and catalog.
+
 ## Mirrored request headers
 
 The server validates that headers agree with the body and rejects a mismatch

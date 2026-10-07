@@ -172,28 +172,23 @@ const result = await this.elicit(
 
 ### URL Mode
 
-Redirects the user to an external URL for out-of-band interaction (OAuth, payments, etc.). URL mode requires the `url` the client opens and an `elicitationId` — an opaque identifier you generate to correlate the out-of-band callback with the pending elicitation. Both are sent in the `elicitation/create` request, on every transport and under MCP 2026-07-28 in the `input_required` result; an elicitation without either fails with `INVALID_INPUT`:
+Redirects the user to an external URL for out-of-band interaction (OAuth, payments, etc.). URL mode requires the `url` the client opens; an elicitation without it fails with `INVALID_INPUT`. The `elicitationId` is an opaque identifier that correlates the out-of-band callback with the pending elicitation: pass your own (the page needs it to report back), or FrontMCP generates one, also for an empty one. Both are sent in the `elicitation/create` request, on every transport and under MCP 2026-07-28 in the `input_required` result.
+
+The answer only says whether the user accepted, declined or cancelled: as MCP specifies, an accepted URL-mode answer carries no `content`, so the schema you pass is not checked against it and `result.content` is `undefined`. What the user did on the page reaches your server through the page, under the `elicitationId` or the state it was given:
 
 ```ts
 import { randomUUID } from '@frontmcp/utils';
 
 const elicitationId = randomUUID();
 
-const result = await this.elicit(
-  'Please authorize access to your GitHub account',
-  z.object({
-    authorized: z.boolean(),
-    scope: z.array(z.string()),
-  }),
-  {
-    mode: 'url',
-    url: `https://auth.example.com/github/authorize?state=${elicitationId}`, // Required: the page the client opens
-    elicitationId, // Required for URL mode tracking
-  }
-);
+const result = await this.elicit('Please authorize access to your GitHub account', z.object({}), {
+  mode: 'url',
+  url: `https://auth.example.com/github/authorize?state=${elicitationId}`, // Required: the page the client opens
+  elicitationId, // Optional: generated when omitted
+});
 ```
 
-Up to 1.9.1 `elicit()` had no `url` option, so a URL-mode elicitation sent no URL (under MCP 2026-07-28 it sent neither the URL nor the `elicitationId`).
+Up to 1.9.1 `elicit()` had no `url` option, so a URL-mode elicitation sent no URL (under MCP 2026-07-28 it sent neither the URL nor the `elicitationId`). Up to 1.9.2 an accepted URL-mode answer was checked against the schema, so `z.object({})` failed it with `INVALID_INPUT` (`z.object({}).optional()` worked around it), and a URL-mode elicitation without an `elicitationId` failed with `INVALID_INPUT`.
 
 <Warning>
 **Security:** Never put a raw session ID into the elicitation URL. Generate an opaque `elicitationId` (e.g. via `randomUUID()`) and store the mapping to the session server-side, or use a signed/encrypted payload that you can validate on callback.
@@ -420,14 +415,14 @@ Intercepts the elicitation request flow before sending to the client.
 
 **Stages:**
 
-| Stage                | Description                                               |
-| -------------------- | --------------------------------------------------------- |
-| `parseInput`         | Parse and validate the elicitation parameters             |
-| `validateRequest`    | Validate mode requirements (URL mode needs elicitationId) |
-| `generateElicitId`   | Generate unique elicitation ID                            |
-| `storePendingRecord` | Store pending elicitation in the store                    |
-| `buildRequestParams` | Build the MCP elicitation request parameters              |
-| `finalize`           | Final processing before sending                           |
+| Stage                | Description                                       |
+| -------------------- | ------------------------------------------------- |
+| `parseInput`         | Parse and validate the elicitation parameters     |
+| `validateRequest`    | Validate mode requirements (URL mode needs a url) |
+| `generateElicitId`   | Generate unique elicitation ID                    |
+| `storePendingRecord` | Store pending elicitation in the store            |
+| `buildRequestParams` | Build the MCP elicitation request parameters      |
+| `finalize`           | Final processing before sending                   |
 
 ### ElicitationResultHook
 
@@ -805,15 +800,17 @@ The `elicit()` method accepts an options object:
 interface ElicitOptions {
   mode?: 'form' | 'url';    // Default: 'form'
   ttl?: number;              // Default: 300000 (5 minutes)
-  elicitationId?: string;    // Required for URL mode
+  elicitationId?: string;    // URL mode correlation id; generated when omitted
+  url?: string;              // Required for URL mode
 }
 ```
 
-| Option          | Description                             | Default                      |
-| --------------- | --------------------------------------- | ---------------------------- |
-| `mode`          | Elicitation mode (`'form'` or `'url'`)  | `'form'`                     |
-| `ttl`           | Timeout in milliseconds before throwing | 300000                       |
-| `elicitationId` | Unique ID for URL mode correlation      | Auto (form) / Required (url) |
+| Option          | Description                             | Default    |
+| --------------- | --------------------------------------- | ---------- |
+| `mode`          | Elicitation mode (`'form'` or `'url'`)  | `'form'`   |
+| `ttl`           | Timeout in milliseconds before throwing | 300000     |
+| `elicitationId` | Unique ID for URL mode correlation      | Generated  |
+| `url`           | The page the client opens (URL mode)    | (required) |
 
 ---
 
@@ -1186,11 +1183,7 @@ class ConnectGitHubTool extends ToolContext {
 
     const result = await this.elicit(
       'Click the link to authorize FrontMCP to access your GitHub account',
-      z.object({
-        accessToken: z.string(),
-        scope: z.array(z.string()),
-        username: z.string(),
-      }),
+      z.object({}),
       {
         mode: 'url',
         url: `https://auth.example.com/github/authorize?state=${elicitationId}`,
@@ -1203,18 +1196,15 @@ class ConnectGitHubTool extends ToolContext {
       return { connected: false, reason: `Authorization ${result.status}d` };
     }
 
-    // Store the token and return success
-    await this.get(TokenStore).save(
-      this.context.authInfo?.sessionId,
-      'github',
-      result.content!.accessToken
-    );
+    // A URL-mode answer carries no content: the OAuth callback stored the grant under the elicitationId
+    const grant = await this.get(OAuthStateStore).get(elicitationId);
+    if (!grant?.accessToken) {
+      return { connected: false, reason: 'Authorization not completed' };
+    }
 
-    return {
-      connected: true,
-      username: result.content!.username,
-      scope: result.content!.scope,
-    };
+    await this.get(TokenStore).save(this.context.authInfo?.sessionId, 'github', grant.accessToken);
+
+    return { connected: true, username: grant.username, scope: grant.scope };
   }
 }
 ```
@@ -1352,7 +1342,8 @@ interface ElicitResult<T = unknown> {
 interface ElicitOptions {
   mode?: 'form' | 'url';
   ttl?: number;
-  elicitationId?: string;
+  elicitationId?: string; // URL mode; generated when omitted
+  url?: string; // required for URL mode
 }
 
 // Default timeout constant

@@ -486,7 +486,7 @@ Control agent execution behavior:
   execution: {
     maxIterations: 10,          // Max tool call rounds (default: 10)
     timeout: 120000,            // Timeout in ms (default: 120000)
-    enableNotifications: true,  // Send progress notifications
+    enableNotifications: true,  // Send tool-call log messages and allow auto progress (default: true)
     enableAutoProgress: false,  // Auto progress during LLM calls (default: false)
     inheritParentTools: false,  // Also offer the model the app's tools (default: false)
     inheritPlugins: false,      // Also run the app's and server's plugins for the agent's tools (default: false)
@@ -650,6 +650,12 @@ Progress notifications are only sent if the client includes a `progressToken` in
 </Info>
 
 `execution.notificationInterval` (default 1000 ms) is the least time between two automatic progress updates: an update that comes sooner is skipped, except the last one (`Agent completed` or `Agent failed: ...`), which is always sent. It doesn't apply to your own `this.progress()` calls.
+
+Each iteration has an equal share of the first 80%: its LLM call the first half, its tool calls the second, so every automatic update is higher than the one before it, as MCP requires. Up to 1.9.2 the value could go down: with two tool calls, `Executing tool 2/2` reported 14 and the next `Starting LLM call (iteration 2/10)` 8.
+
+### Tool-Call Messages
+
+With `enableNotifications` (the default), the agent also sends a log message (`notifications/message`) for each tool call of its model: `Calling tool: <name>` at level `info`, and `Tool <name> failed: <message>` at level `error` when the call fails. The failure message is the one a client would read for that error in production: the public message of a `PublicMcpError`, or of the public error an `AuthorityDeniedError` or `GuardError` maps to; any other error reads as the generic internal-error message with its error id, never its internal text (the server log has it). `enableNotifications: false` turns these messages off, and automatic progress with them. The `Agent failed: ...` progress message is masked the same way. Up to 1.9.2 the failure message carried the error's internal text, such as `connect ECONNREFUSED 10.0.4.7:5432`.
 
 `this.notify()` and `this.progress()` reach the client the way a tool's do: on a session (where `notifications/message` needs the client to have set a log level with `logging/setLevel`), and under MCP 2026-07-28 on the request's own response stream. Up to 1.9.1 an agent's own `notify()` and `progress()`, and its automatic progress, returned `false` and sent nothing under 2026-07-28, and `notificationInterval` was never read.
 

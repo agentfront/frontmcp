@@ -146,6 +146,12 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
       return;
     }
 
+    // A URL-mode answer carries no content: what the user did reaches the server through the page
+    if (pendingRecord.mode === 'url') {
+      this.logger.verbose('validateContent:skip (url mode)');
+      return;
+    }
+
     // Skip if no schema stored (backward compatibility with older records)
     if (!pendingRecord.requestedSchema) {
       this.logger.verbose('validateContent:skip (no schema stored)');
@@ -174,12 +180,14 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
     this.logger.verbose('buildResult:start');
 
     const { action } = this.state.required;
-    const content = this.state.content;
+    const { content, pendingRecord } = this.state;
+    // A URL-mode answer carries no content, whatever the client sent
+    const keepsContent = action === 'accept' && content !== undefined && pendingRecord?.mode !== 'url';
 
     // Map action directly to status (same names)
     const elicitResult: ElicitResult = {
       status: action as ElicitStatus,
-      ...(action === 'accept' && content !== undefined && { content }),
+      ...(keepsContent && { content }),
     };
 
     this.state.set('elicitResult', elicitResult);

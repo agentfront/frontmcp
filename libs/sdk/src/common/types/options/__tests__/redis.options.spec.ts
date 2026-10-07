@@ -373,6 +373,14 @@ describe('redis url beside connection fields (#768)', () => {
     expect(message).not.toContain('url-secret');
   });
 
+  it('reads the password a URL states in ?password=', () => {
+    expect(redisOptionsSchema.parse({ url: 'redis://cache?password=p' })).toMatchObject({ password: 'p' });
+    expect(redisOptionsSchema.parse({ url: 'redis://cache?password=p', password: 'p' })).toMatchObject({
+      password: 'p',
+    });
+    expect(redisOptionsSchema.safeParse({ url: 'redis://cache?password=p', password: 'other' }).success).toBe(false);
+  });
+
   it('applies the same rule to pubsub', () => {
     expect(pubsubOptionsSchema.parse({ url: 'redis://cache', password: 'p' })).toMatchObject({ password: 'p' });
     expect(pubsubOptionsSchema.safeParse({ url: 'redis://cache', host: 'other' }).success).toBe(false);

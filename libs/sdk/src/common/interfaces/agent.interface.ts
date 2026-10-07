@@ -4,7 +4,7 @@ import { AgentExecutionLoop, type ToolExecutor } from '../../agent/agent-executi
 import { type FrontMcpContext } from '../../context/frontmcp-context';
 import { FrontMcpContextStorage } from '../../context/frontmcp-context-storage';
 import { performElicit, type ElicitOptions, type ElicitResult } from '../../elicitation';
-import { AgentMethodNotAvailableError } from '../../errors';
+import { AgentMethodNotAvailableError, toMcpError } from '../../errors';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
 import { type CallSurface } from '../availability';
 import { type AgentInputOf, type AgentOutputOf } from '../decorators';
@@ -240,13 +240,18 @@ export class AgentContext<
     const maxIterations = this.metadata.execution?.maxIterations ?? 10;
     const notificationInterval = this.metadata.execution?.notificationInterval ?? 1000;
 
-    // Track progress state for monotonic updates
-    let currentProgress = 0;
+    // Each iteration owns an equal share of 0-80: its model call the first half, its tool calls the second
+    const iterationShare = 80 / maxIterations;
+    let iterationStart = 0;
+    let lastSentProgress = -1;
     let lastAutoProgressAt: number | undefined;
     const autoProgress = (progress: number, message: string, isFinal = false) => {
       const now = Date.now();
+      // MCP requires every progress value to be higher than the one before it
+      if (progress <= lastSentProgress) return;
       if (!isFinal && lastAutoProgressAt !== undefined && now - lastAutoProgressAt < notificationInterval) return;
       lastAutoProgressAt = now;
+      lastSentProgress = progress;
       void this.progress(progress, 100, message);
     };
 
@@ -263,17 +268,15 @@ export class AgentContext<
       // Auto progress callbacks (only when enabled)
       onLlmStart: enableAutoProgress
         ? (iteration: number, maxIter: number) => {
-            // Each iteration gets ~8% of progress (80% total for 10 iterations)
-            currentProgress = Math.round(((iteration - 1) / maxIter) * 80);
-            autoProgress(currentProgress, `Starting LLM call (iteration ${iteration}/${maxIter})`);
+            iterationStart = (iteration - 1) * iterationShare;
+            autoProgress(Math.round(iterationStart), `Starting LLM call (iteration ${iteration}/${maxIter})`);
           }
         : undefined,
 
       onLlmComplete: enableAutoProgress
         ? (iteration: number, usage?: { promptTokens?: number; completionTokens?: number }) => {
-            currentProgress = Math.round(((iteration - 0.5) / maxIterations) * 80);
             const usageStr = usage ? ` (${usage.promptTokens ?? 0}P + ${usage.completionTokens ?? 0}C tokens)` : '';
-            autoProgress(currentProgress, `LLM response received${usageStr}`);
+            autoProgress(Math.round(iterationStart + iterationShare / 2), `LLM response received${usageStr}`);
           }
         : undefined,
 
@@ -285,14 +288,19 @@ export class AgentContext<
 
       onToolStart: enableAutoProgress
         ? (toolCall: AgentToolCall, index: number, total: number) => {
-            const toolProgress = currentProgress + Math.round(((index + 1) / total) * 10);
-            autoProgress(toolProgress, `Executing tool ${index + 1}/${total}: ${toolCall.name}`);
+            const toolsDone = (index + 1) / (total + 1);
+            const toolProgress = iterationStart + (iterationShare / 2) * (1 + toolsDone);
+            autoProgress(Math.round(toolProgress), `Executing tool ${index + 1}/${total}: ${toolCall.name}`);
           }
         : undefined,
 
       onComplete: enableAutoProgress
         ? (content: string | null, error?: Error) => {
-            autoProgress(100, error ? `Agent failed: ${error.message}` : 'Agent completed', true);
+            autoProgress(
+              100,
+              error ? `Agent failed: ${toMcpError(error).getPublicMessage()}` : 'Agent completed',
+              true,
+            );
           }
         : undefined,
 
@@ -306,10 +314,12 @@ export class AgentContext<
 
       onToolResult: (toolCall: AgentToolCall, result: unknown, error?: Error) => {
         if (error) {
+          // The client reads what it would for this error as a tool call's result in production
+          const reported = toMcpError(error);
           if (this.metadata.execution?.enableNotifications !== false) {
-            this.notify(`Tool ${toolCall.name} failed: ${error.message}`, 'error');
+            this.notify(`Tool ${toolCall.name} failed: ${reported.getPublicMessage()}`, 'error');
           }
-          this.logger.error(`Tool ${toolCall.name} failed`, error);
+          this.logger.error(`Tool ${toolCall.name} failed (${reported.errorId})`, error);
         } else {
           this.logger.debug(`Tool ${toolCall.name} completed`, { result });
         }

@@ -91,11 +91,11 @@ export async function performElicit<S extends ZodType>(
   }
 
   // A URL-mode question names the page that answers it, and the id that correlates its completion
-  if (options?.mode === 'url' && (!options.url || !options.elicitationId)) {
-    throw new InvalidInputError(
-      options.url ? 'elicitationId is required when mode is "url"' : 'url is required when mode is "url"',
-    );
+  if (options?.mode === 'url' && !options.url) {
+    throw new InvalidInputError('url is required when mode is "url"');
   }
+  const elicitOptions =
+    options?.mode === 'url' ? { ...options, elicitationId: options.elicitationId || generateElicitationId() } : options;
 
   const ctx = tryGetContext();
 
@@ -125,12 +125,16 @@ export async function performElicit<S extends ZodType>(
     const answer = mrtr.resolveElicitation({
       message,
       requestedSchema: toJSONSchema(zodSchema) as Record<string, unknown>,
-      ...(options?.mode ? { mode: options.mode } : {}),
-      ...(options?.url ? { url: options.url } : {}),
-      ...(options?.elicitationId ? { elicitationId: options.elicitationId } : {}),
+      ...(elicitOptions?.mode ? { mode: elicitOptions.mode } : {}),
+      ...(elicitOptions?.url ? { url: elicitOptions.url } : {}),
+      ...(elicitOptions?.elicitationId ? { elicitationId: elicitOptions.elicitationId } : {}),
     });
     if (answer.status !== 'accept') {
       return answer as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
+    }
+    // A URL-mode answer carries no content: what the user did reaches the server through the page
+    if (elicitOptions?.mode === 'url') {
+      return { status: 'accept' } as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
     }
     const parsedContent = await zodSchema.safeParseAsync(answer.content);
     if (!parsedContent.success) {
@@ -152,7 +156,7 @@ export async function performElicit<S extends ZodType>(
   if (preResolved) {
     // Clear the pre-resolved result to prevent reuse
     ctx?.clearPreResolvedElicitResult?.();
-    return preResolved as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
+    return withoutUrlModeContent(preResolved, elicitOptions) as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
   }
 
   // 4. Check client capabilities
@@ -162,8 +166,8 @@ export async function performElicit<S extends ZodType>(
   if (!supportsElicitation(capabilities, mode)) {
     // 5. Fallback: throw error with context for re-invocation
     // This triggers the fallback flow handled by CallToolFlow/CallAgentFlow
-    const elicitId = options?.elicitationId ?? generateElicitationId();
-    const ttl = options?.ttl ?? DEFAULT_ELICIT_TTL;
+    const elicitId = elicitOptions?.elicitationId || generateElicitationId();
+    const ttl = elicitOptions?.ttl ?? DEFAULT_ELICIT_TTL;
 
     // Convert Zod schema to JSON Schema for the fallback response
     // Wrap in z.object if it's a raw shape (plain object), otherwise use as-is
@@ -182,7 +186,13 @@ export async function performElicit<S extends ZodType>(
 
   // 6. Send elicit request (timeout throws ElicitationTimeoutError)
   // The client may call the server before it answers; in a browser build that means stepping aside.
-  return awaitOutsideRequest(transport.elicit(message, requestedSchema, options));
+  const answer = await awaitOutsideRequest(transport.elicit(message, requestedSchema, elicitOptions));
+  return withoutUrlModeContent(answer, elicitOptions);
+}
+
+/** A URL-mode answer carries no content, even when the session transports or sendElicitationResult pass some on. */
+function withoutUrlModeContent<T>(answer: ElicitResult<T>, options?: ElicitOptions): ElicitResult<T> {
+  return options?.mode === 'url' ? { status: answer.status } : answer;
 }
 
 /**

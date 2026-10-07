@@ -1,13 +1,13 @@
 // skill/__tests__/skill-http.utils.spec.ts
 
-import {
-  formatSkillsForLlmCompact,
-  formatSkillForLLMWithSchemas,
-  skillToApiResponse,
-  filterSkillsByVisibility,
-} from '../skill-http.utils';
 import type { SkillEntry } from '../../common';
 import type { SkillContent } from '../../common/interfaces';
+import {
+  filterSkillsByVisibility,
+  formatSkillForLLMWithSchemas,
+  formatSkillsForLlmCompact,
+  skillToApiResponse,
+} from '../skill-http.utils';
 
 // Mock SkillEntry for testing
 function createMockSkillEntry(
@@ -41,6 +41,7 @@ function createMockSkillEntry(
     name: merged.name,
     metadata: merged.metadata as SkillEntry['metadata'],
     getToolNames: () => merged.toolNames,
+    getDescription: () => merged.metadata.description,
     isHidden: () => merged.metadata.hideFromDiscovery ?? false,
   } as unknown as SkillEntry;
 }

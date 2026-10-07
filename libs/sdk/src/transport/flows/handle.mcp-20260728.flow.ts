@@ -34,6 +34,7 @@ import { lookupTool } from '../../common/utils/tool-lookup.utils';
 import { FrontMcpContextStorage } from '../../context';
 import { resolvePlatformType, supportsChannels, type ClientCapabilities, type ClientInfo } from '../../notification';
 import { type Scope } from '../../scope';
+import { composeCallerInstructions } from '../../skill/skill-instructions.helper';
 import {
   createSubscriptionStream,
   declaresProtocol20260728,
@@ -481,7 +482,9 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
         : undefined,
       isAnonymous: this.state.required.isAnonymous,
       clientDeclaredRevision: this.state.clientDeclaredRevision !== false,
-      composeInstructions: () => this.scope.metadata.instructions,
+      // The instructions `initialize` sends: the server's, the channel hint and the skill catalog, for this caller
+      composeInstructions: (caller?: { authInfo?: unknown }) =>
+        composeCallerInstructions(this.scope, { ctx: caller, skillUriHints: true }),
       notificationSink: sink,
       traceContext: extractTraceContext(meta),
     } satisfies Parameters<typeof dispatch20260728>[0];

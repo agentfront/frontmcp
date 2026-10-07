@@ -4,7 +4,7 @@
  * Tests the MCP elicitation feature that allows tools to request
  * interactive user input during execution.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Elicitation E2E', () => {
   test.use({
@@ -174,6 +174,30 @@ test.describe('Elicitation E2E', () => {
       expect(result).toBeSuccessful();
       expect(result.text()).toContain('Welcome Charlie');
       expect(result.text()).toContain('red');
+    });
+  });
+
+  test.describe('connect-account tool (URL mode)', () => {
+    test('should give an accepted answer no content, even when the client sends some', async ({ server }) => {
+      const urlClient = await server
+        .createClientBuilder()
+        .withCapabilities({ elicitation: { form: {}, url: {} } })
+        .withPublicMode()
+        .buildAndConnect();
+
+      try {
+        urlClient.onElicitation(async () => ({
+          action: 'accept',
+          content: { token: 'from-client' },
+        }));
+
+        const result = await urlClient.tools.call('connect-account', {});
+
+        expect(result).toBeSuccessful();
+        expect(result.json()).toEqual({ status: 'accept', contentReceived: false });
+      } finally {
+        await urlClient.disconnect();
+      }
     });
   });
 
