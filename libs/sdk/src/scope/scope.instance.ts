@@ -1117,13 +1117,17 @@ export class Scope extends ScopeEntry {
 
     mark('batch3:finalization');
     this.logger.info(`Scope ready — ${this.formatScopeSummary()}`);
-    reportStartup(this.scopePlugins, {
-      toolsCount: this.scopeTools.getTools(true).length,
-      resourcesCount: this.scopeResources.getResources().length,
-      promptsCount: this.scopePrompts.getPrompts().length,
-      durationMs: Date.now() - startedAt,
-      scopeId: this.id,
-    });
+    reportStartup(
+      this.scopePlugins,
+      {
+        toolsCount: this.scopeTools.getTools(true).length,
+        resourcesCount: this.scopeResources.getResources().length,
+        promptsCount: this.scopePrompts.getPrompts().length,
+        durationMs: Date.now() - startedAt,
+        scopeId: this.id,
+      },
+      this.logger,
+    );
   }
 
   /**
