@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import { ensureDir, mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
 
+import { OPTIONAL_RUNTIME_PEERS } from '../../package/runtime-packages';
 import { bundleForServerless, externalizeOptionalPackages } from '../bundler';
 
 function run(
@@ -97,6 +98,20 @@ module.exports = { env: () => process.env.NODE_ENV, optional, kv, obs, sqlite };
       process.env.NODE_ENV = prev;
     }
   }, 60000);
+
+  it('bundles a project that has none of the optional peers the SDK and utils import() lazily', async () => {
+    const entry = path.join(dir, 'index.js');
+    const loaders = OPTIONAL_RUNTIME_PEERS.map((name) => `() => import(${JSON.stringify(name)})`);
+    await writeFile(entry, `module.exports = [${loaders.join(', ')}];\n`);
+
+    await bundleForServerless(entry, dir, 'handler.cjs');
+
+    const bundle = await readFile(path.join(dir, 'handler.cjs'));
+    expect(OPTIONAL_RUNTIME_PEERS).toContain('@upstash/redis');
+    for (const name of OPTIONAL_RUNTIME_PEERS) {
+      expect(bundle).toContain(`require("${name}")`);
+    }
+  }, 60000);
 });
 
 describe('bundleForServerless: Lambda adapter (#680)', () => {
@@ -144,5 +159,37 @@ exports.handler = serverlessExpress({ app: {} });
     await rm(path.join(dir, 'node_modules'), { recursive: true, force: true });
     const mod = require(path.join(out, 'handler.cjs')) as { handler: () => string };
     expect(mod.handler()).toBe('adapted');
+  }, 60000);
+
+  it('inlines installed openai and @anthropic-ai/sdk, so agent adapters load without node_modules', async () => {
+    const agentProviders = ['openai', '@anthropic-ai/sdk'];
+    for (const name of agentProviders) {
+      const pkg = path.join(dir, 'node_modules', ...name.split('/'));
+      await ensureDir(pkg);
+      await writeFile(path.join(pkg, 'package.json'), JSON.stringify({ name, version: '0.0.0', main: 'index.js' }));
+      await writeFile(path.join(pkg, 'index.js'), `module.exports = ${JSON.stringify(name)};`);
+    }
+
+    const out = path.join(dir, 'dist');
+    await ensureDir(out);
+    const entry = path.join(out, 'index.js');
+    await writeFile(entry, `exports.providers = () => [require('openai'), require('@anthropic-ai/sdk')];\n`);
+
+    const cwd = process.cwd();
+    process.chdir(dir);
+    try {
+      await bundleForServerless(entry, out, 'handler.cjs');
+    } finally {
+      process.chdir(cwd);
+    }
+
+    const bundle = await readFile(path.join(out, 'handler.cjs'));
+    for (const name of agentProviders) {
+      expect(bundle).not.toContain(`require("${name}")`);
+    }
+
+    await rm(path.join(dir, 'node_modules'), { recursive: true, force: true });
+    const mod = require(path.join(out, 'handler.cjs')) as { providers: () => string[] };
+    expect(mod.providers()).toEqual(agentProviders);
   }, 60000);
 });

@@ -7,7 +7,11 @@ import 'reflect-metadata';
 
 import { EventEmitter } from 'node:events';
 import * as http from 'node:http';
-import type * as net from 'node:net';
+import * as net from 'node:net';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { fileExists, randomUUID } from '@frontmcp/utils';
 
 import { App, frontMcpMetadataSchema, LogLevel, Tool, ToolContext } from '../../common';
 import { type Scope } from '../../scope/scope.instance';
@@ -168,5 +172,72 @@ describe('FrontMcpInstance.shutdown()', () => {
     await Promise.all([instance.shutdown(), instance.shutdown()]);
 
     expect(shutdownSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('FrontMcpInstance.runUnixSocket() shutdown', () => {
+  async function until(condition: () => boolean): Promise<void> {
+    const deadline = Date.now() + 5_000;
+    while (!condition() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  it('runs the graceful shutdown on SIGTERM, then exits 0 with the socket removed', async () => {
+    const socketPath = path.join(os.tmpdir(), `fmcp-${randomUUID().slice(0, 8)}.sock`);
+    const shutdown = jest.spyOn(FrontMcpInstance.prototype, 'shutdown');
+    const exit = jest.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const listenersBefore = process.listeners('SIGTERM');
+    try {
+      const handle = await FrontMcpInstance.runUnixSocket({
+        info: { name: 'graceful-socket', version: '1.0.0' },
+        apps: [DemoApp],
+        logging: { level: LogLevel.Off },
+        socketPath,
+      });
+      const onSigterm = process.listeners('SIGTERM').find((listener) => !listenersBefore.includes(listener));
+
+      onSigterm?.('SIGTERM');
+      await until(() => exit.mock.calls.length > 0);
+
+      expect(shutdown).toHaveBeenCalledTimes(1);
+      expect(exit).toHaveBeenCalledWith(0);
+      expect(await fileExists(socketPath)).toBe(false);
+
+      await handle.close();
+      expect(process.listeners('SIGTERM')).toEqual(listenersBefore);
+    } finally {
+      shutdown.mockRestore();
+      exit.mockRestore();
+      log.mockRestore();
+    }
+  });
+
+  it('leaves the socket of a replacement that binds the same path while it shuts down', async () => {
+    const socketPath = path.join(os.tmpdir(), `fmcp-${randomUUID().slice(0, 8)}.sock`);
+    const replacement = net.createServer();
+    const realShutdown = FrontMcpInstance.prototype.shutdown;
+    const shutdown = jest.spyOn(FrontMcpInstance.prototype, 'shutdown').mockImplementation(async function (
+      this: FrontMcpInstance,
+    ) {
+      await realShutdown.call(this);
+      await new Promise<void>((resolve) => replacement.listen(socketPath, resolve));
+    });
+    const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const handle = await FrontMcpInstance.runUnixSocket({
+        info: { name: 'replaced-socket', version: '1.0.0' },
+        apps: [DemoApp],
+        logging: { level: LogLevel.Off },
+        socketPath,
+      });
+
+      await handle.close();
+
+      expect(await fileExists(socketPath)).toBe(true);
+    } finally {
+      shutdown.mockRestore();
+      log.mockRestore();
+      await new Promise<void>((resolve) => replacement.close(() => resolve()));
+    }
   });
 });

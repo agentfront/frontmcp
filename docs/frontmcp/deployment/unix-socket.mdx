@@ -213,11 +213,14 @@ If a `.sock` file already exists when the server starts (e.g., from a previous c
 
 ### Graceful Shutdown
 
-The server registers handlers for `SIGINT` and `SIGTERM`. On either signal:
+The server registers handlers for `SIGINT` and `SIGTERM`. On either signal it shuts down as the TCP server does ([Graceful Shutdown](/frontmcp/deployment/high-availability#graceful-shutdown)):
 
-1. The socket file is removed
-2. The PID file (if running via CLI) is cleaned up
-3. The process exits cleanly
+1. It stops accepting connections and gives requests in flight 5 seconds to finish
+2. Every scope shuts down (HA heartbeat, relay and Redis connections, channels) and is disposed
+3. The socket file is removed
+4. The process exits with code `0`, or `1` when a step fails or the shutdown takes more than 10 seconds
+
+`handle.close()` runs the same steps without exiting the process. Up to 1.9.2 a signal removed the socket file and exited at once, so a call in flight got an empty reply and the scopes were not shut down; `handle.close()` only removed the socket file.
 
 ```typescript
 // Programmatic shutdown

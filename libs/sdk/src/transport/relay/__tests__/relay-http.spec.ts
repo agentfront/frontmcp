@@ -116,7 +116,7 @@ describe('relay-http', () => {
       expect(request.body).toEqual({ jsonrpc: '2.0', id: 1, method: 'ping' });
       expect(request['protocol']).toBe('https');
       expect(request['secure']).toBe(true);
-      expect(request.socket).toEqual({ remoteAddress: '198.51.100.4', encrypted: true });
+      expect(request.socket).toMatchObject({ remoteAddress: '198.51.100.4', encrypted: true, destroyed: false });
       expect(Buffer.isBuffer(request['rawBody'])).toBe(true);
       expect(String(request['rawBody'])).toBe('{"jsonrpc":"2.0","id":1,"method":"ping"}');
       expect(() => (request as unknown as { destroy(): void }).destroy()).not.toThrow();
@@ -149,6 +149,35 @@ describe('relay-http', () => {
       request.on('end', listener);
       expect(request.emit('end')).toBe(true);
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('ends when read after its response, as @hono/node-server drains a finished request', async () => {
+      // @hono/node-server 1.19.17 resumes a POST after the response and, with no `end` within 500 ms,
+      // calls `socket.destroySoon()`: on a relayed request that threw and crashed the session owner.
+      const request = createRelayedServerRequest(relayed(), 'node-a') as unknown as {
+        on(event: string, listener: () => void): unknown;
+        resume(): unknown;
+        pause(): unknown;
+        destroy(): void;
+        destroyed: boolean;
+        readableEnded: boolean;
+        socket: { destroyed: boolean; destroySoon(): void; destroy(): void };
+      };
+      const ended = jest.fn();
+      request.on('end', ended);
+
+      expect(request.resume()).toBe(request);
+      expect(request.pause()).toBe(request);
+      request.resume();
+      await Promise.resolve();
+
+      expect(ended).toHaveBeenCalledTimes(1);
+      expect(request.readableEnded).toBe(true);
+      expect(request.destroyed).toBe(false);
+      request.socket.destroySoon();
+      expect(request.socket.destroyed).toBe(true);
+      request.destroy();
+      expect(request.destroyed).toBe(true);
     });
 
     it('a request received directly is not relayed', () => {

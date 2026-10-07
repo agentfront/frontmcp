@@ -949,6 +949,7 @@ describe('generateCliEntry', () => {
       expect(source).toContain('name: "my-server"');
       expect(source).toContain('entry: serverBundlePath');
       expect(source).toContain('restartCount: 0');
+      expect(source).toContain(`cliVersion: ${JSON.stringify(makeOptions().appVersion)}`);
       expect(generateCliEntry(makeOptions({ selfContained: true }))).toContain('entry: process.execPath');
     });
 

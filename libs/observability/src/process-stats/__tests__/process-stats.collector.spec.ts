@@ -283,6 +283,22 @@ describe('ProcessStatsCollector (issue #397)', () => {
     ]);
   });
 
+  it('omits the memory and uptime gauges a runtime without a process reports as 0 (Cloudflare Workers)', () => {
+    const collector = new ProcessStatsCollector({
+      cpuUsage: () => {
+        throw new Error('[unenv] process.cpuUsage is not implemented yet!');
+      },
+      memoryUsage: () => ({ rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 }),
+      uptime: () => 0,
+      monitorEventLoopDelay: () => undefined,
+      getActiveHandles: () => undefined,
+      getActiveRequests: () => undefined,
+      readFdCount: () => undefined,
+    });
+
+    expect(collector.collect()).toEqual([]);
+  });
+
   it('takes the CPU baseline on a later scrape when the first cpuUsage() probe throws', () => {
     let cpuProbeFails = true;
     const cpuUsage = (prev?: NodeJS.CpuUsage): NodeJS.CpuUsage => {
