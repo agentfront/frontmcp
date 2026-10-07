@@ -72,7 +72,7 @@ import {
   type AuthProvider,
   type AuthUiRegistry,
 } from '../auth-ui';
-import { CimdService, clientMetadataDocumentSchema } from '../cimd';
+import { CimdDisabledError, CimdService, clientMetadataDocumentSchema } from '../cimd';
 import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 import { createRequestSigninBinding, signinBindingCookie, signinCookiePath, withCookie } from './signin-binding.utils';
@@ -559,6 +559,15 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     if (redirectError) {
       this.logger.warn(`OAuth authorize: DCR allowlist rejection — ${redirectError}`);
       this.respondWithError([redirectError], undefined, rawState);
+      return;
+    }
+
+    // A CIMD client id on a server with CIMD off has no metadata document to validate it, and no
+    // registration either: refuse it (CimdDisabledError) rather than treat the URL as a plain id.
+    if (cimdService && !cimdService.enabled && cimdService.isCimdClientId(client_id) && !registry?.get?.(client_id)) {
+      const disabled = new CimdDisabledError();
+      this.logger.warn(`OAuth authorize: CIMD client_id refused, CIMD is disabled: ${client_id}`);
+      this.respondWithError([disabled.message], undefined, rawState);
       return;
     }
 

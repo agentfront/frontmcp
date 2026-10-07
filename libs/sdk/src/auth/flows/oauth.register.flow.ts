@@ -43,6 +43,7 @@ import {
   httpInputSchema,
   HttpJsonSchema,
   httpRespond,
+  NO_STORE_HEADERS,
   StageHookOf,
   type FlowPlan,
   type FlowRunOptions,
@@ -123,6 +124,8 @@ function extractBearer(headers: Record<string, string> | undefined): string | un
   middleware: {
     method: 'POST',
     path: '/oauth/register',
+    // Registrations carry the client's credentials (`client_secret`), so no response is cached
+    responseHeaders: NO_STORE_HEADERS,
   },
 })
 export default class OauthRegisterFlow extends FlowBase<typeof name> {

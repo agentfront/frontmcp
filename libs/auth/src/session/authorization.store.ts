@@ -239,6 +239,11 @@ export interface RefreshTokenRecord {
   selectedProviderIds?: string[];
   /** Skipped federated provider ids. */
   skippedProviderIds?: string[];
+  /**
+   * The authorization id the upstream provider tokens of this grant are stored under, so a refresh
+   * moves them to the new access token's id.
+   */
+  providerTokensId?: string;
 }
 
 /**
@@ -353,6 +358,7 @@ export interface CreateRefreshTokenRecordParams {
   federatedLoginUsed?: boolean;
   selectedProviderIds?: string[];
   skippedProviderIds?: string[];
+  providerTokensId?: string;
 }
 
 /** Default TTL for authorization codes (60 seconds). */
@@ -461,6 +467,7 @@ export function buildRefreshTokenRecord(params: CreateRefreshTokenRecordParams):
     federatedLoginUsed: params.federatedLoginUsed,
     selectedProviderIds: params.selectedProviderIds,
     skippedProviderIds: params.skippedProviderIds,
+    providerTokensId: params.providerTokensId,
   };
 }
 

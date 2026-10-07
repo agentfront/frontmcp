@@ -66,11 +66,15 @@ sequenceDiagram
 
 | Option                   | Type                | Default         | Description                           |
 | ------------------------ | ------------------- | --------------- | ------------------------------------- |
-| `sessionTtl`             | `number`            | `3600`          | Session lifetime in seconds           |
+| `sessionTtl`             | `number`            | `3600`          | Anonymous token lifetime in seconds   |
 | `anonymousScopes`        | `string[]`          | `['anonymous']` | Scopes assigned to anonymous sessions |
 | `publicAccess.tools`     | `string[] \| 'all'` | `'all'`         | Tools accessible without auth         |
 | `publicAccess.prompts`   | `string[] \| 'all'` | `'all'`         | Prompts accessible without auth       |
 | `publicAccess.rateLimit` | `number`            | `60`            | Rate limit per IP per minute          |
+
+`sessionTtl` is the lifetime (`expires_in` and `exp`) of the anonymous tokens `/oauth/token` issues; session ids don't
+expire. It must be a positive whole number of seconds, or the server does not start. Up to 1.9.2 it was never read and
+those tokens lasted a day.
 
 With `publicAccess` set, an anonymous caller lists only the tools and prompts it names (by name or app-qualified
 name; a name two apps share stays app-qualified in the list, so the listed name is the one it may call), a call to any other answers `PUBLIC_ACCESS_DENIED` (JSON-RPC -32003, HTTP 403), and its tool calls,
@@ -216,11 +220,14 @@ sequenceDiagram
 | `allowAnonymous`                   | `boolean`            | `false`         | Allow requests without tokens                                                                                                                               |
 
 Without `providerConfig.jwks` or `jwksUri`, the keys are fetched from `<provider>/.well-known/jwks.json`, else from the
-`jwks_uri` of the provider's OAuth metadata or `/.well-known/openid-configuration`.
+`jwks_uri` of the provider's OAuth metadata or `/.well-known/openid-configuration`. Fetched keys are kept for 6 hours. A token
+whose `kid` the kept keys lack makes FrontMCP fetch them again before refusing it, at most once a minute per provider,
+so a key the provider starts using is accepted right away (up to 1.9.2 it was refused until the 6 hours passed).
 
 A verified token's subject is its `sub`. A token without one (some IdPs issue client-credentials tokens that way)
-takes its subject from `client_id`, else `azp`, as RFC 9068 §2.2 names the client the subject of such a token; a token
-with none of the three has no subject and reads as anonymous (`this.auth.isAnonymous`).
+takes its subject from `client_id`, else `azp`, as RFC 9068 §2.2 names the client the subject of such a token. A token
+with none of the three is refused with `401` and `error="invalid_token"`, whose description names the missing claims:
+a verified token is never served as an anonymous caller.
 
 ### Claim validation
 
@@ -521,7 +528,9 @@ The protected resource metadata (`/.well-known/oauth-protected-resource`) advert
 | `static`                | `scopes`, what the static credential carries                                       |
 | `transparent`           | `requiredScopes`, then `scopes` (what the upstream provider is asked for)          |
 
-Outside local and remote mode, the scopes entries declare on their `authProviders` are listed too. A server that names no scope leaves `scopes_supported` out. The issuer named in discovery, on authorization responses and in tokens is the same for every request; see [The issuer](/frontmcp/authentication/local#the-issuer).
+Outside local and remote mode, the scopes entries declare on their `authProviders` are listed too. A server that names no scope leaves `scopes_supported` out.
+
+Only a server that has an authorization server advertises one. `local` and `remote` mode serve their own `/.well-known/oauth-authorization-server` and name themselves in `authorization_servers`; `transparent` mode names itself there too, and its `/.well-known/oauth-authorization-server` redirects (`302`) to the provider's. A `public` or `static` server has no authorization server: its `/.well-known/oauth-authorization-server` answers `404`, and its protected resource metadata leaves `authorization_servers` out (up to 1.9.2 they redirected to, and named, a leftover `http://localhost:<port>`). The issuer named in discovery, on authorization responses and in tokens is the same for every request; see [The issuer](/frontmcp/authentication/local#the-issuer).
 
 A session client (protocol revisions before 2026-07-28) resumes its session with the `mcp-session-id` header, or the `?sessionId=` query parameter on the legacy SSE `/message` endpoint. The server serves the request under that id only when `session:verify` verified it: in `public`, `static` and anonymous `transparent` mode the id must decrypt under `MCP_SESSION_SECRET` and carry the signature of the mode (in static mode, of the token that opened it); in the authenticated modes it must also belong to the caller's token. Any other id is answered with HTTP 404 (`-32000`), which tells the client to send `initialize` again; it is never used to look up a transport. An `initialize` that presents an unverified id starts a fresh session.
 

@@ -735,9 +735,26 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     });
   }
 
+  /**
+   * A verified token names its caller (RFC 9068 §2.2 requires `sub`; a client-credentials token may
+   * name the client in `client_id` or `azp`). One with none of them is refused rather than served as
+   * an anonymous caller.
+   */
   @Stage('deriveUser')
   async deriveUser() {
-    this.state.set('user', deriveTypedUser(this.state.required.jwtPayload ?? {}));
+    const user = deriveTypedUser(this.state.required.jwtPayload ?? {});
+    if (!user.sub) {
+      this.logger.warn('deriveUser: verified token has no sub, client_id or azp claim, returning 401');
+      this.respond({
+        kind: 'unauthorized',
+        prmMetadataHeader: buildInvalidTokenHeader(
+          this.state.required.prmUrl,
+          'Token has no subject: the sub, client_id and azp claims are all missing',
+        ),
+      });
+      return;
+    }
+    this.state.set('user', user);
   }
 
   /**

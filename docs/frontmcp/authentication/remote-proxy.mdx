@@ -185,26 +185,33 @@ The proxy stores upstream IdP tokens in the token vault:
 
 ### Automatic Refresh
 
-<Warning>
-  **Not yet wired.** On-demand refresh of the **upstream** token is not currently
-  performed. The encrypted token store evicts a provider record (including its
-  refresh token) as soon as the upstream access token expires, so once the
-  upstream token lapses `this.orchestration.getToken()` returns `null`/throws and
-  the user must re-authenticate (revisit `/oauth/authorize`). The `refresh`
-  option below is accepted by the schema but does not yet drive upstream refresh.
-  (FrontMCP's **own** session token still refreshes normally via the standard
-  `refresh_token` grant at `/oauth/token`.)
-</Warning>
+When `this.orchestration.getToken()` finds the upstream access token expired, or within
+`refresh.skewSeconds` (default `60`) of its expiry, FrontMCP renews it at the provider's token
+endpoint with the upstream refresh token (`grant_type=refresh_token`, with `clientId` and
+`clientSecret`) and stores the new tokens. A provider that doesn't rotate refresh tokens keeps its
+current one; concurrent calls share one renewal. A record that holds a refresh token is kept until
+it hasn't been written for 30 days (as long as FrontMCP's own refresh tokens live); one without a
+refresh token ends at its `expires_in`, and the skew doesn't apply to it. When the provider refuses
+the renewal, `getToken()` throws `TokenNotAvailableError` (`tryGetToken()` returns `null`) and the
+user signs in again.
+
+When the client refreshes **FrontMCP's own** token (`grant_type=refresh_token` at `/oauth/token`),
+the upstream tokens move to the new token, so `this.orchestration` keeps finding them; the old
+access token no longer reaches them. They leave the old token only once the refresh token has been
+rotated, so a refresh that fails can be retried with the same refresh token. When the same refresh
+token is redeemed twice at once, one of the two may get `invalid_grant`.
+
+Up to 1.9.2 neither happened: the upstream token was gone once its `expires_in` passed, and after
+any client refresh.
 
 ```typescript
 auth: {
   mode: 'remote',
   provider: 'https://legacy-idp.example.com',
   clientId: 'my-client',
-  // Accepted but does not yet refresh the UPSTREAM token (see warning above).
   refresh: {
-    enabled: true,
-    skewSeconds: 60,
+    enabled: true, // default; false never renews the upstream token
+    skewSeconds: 60, // renew this many seconds before the upstream token expires
   },
 }
 ```

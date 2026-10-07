@@ -226,6 +226,28 @@ describe('unknown client ids are refused by default (#261)', () => {
 
     expect(response.status).toBe(200);
   });
+
+  it('refuses a CIMD client_id with CimdDisabledError when CIMD is off, even with requireRegisteredClients: false', async () => {
+    const server = await serverWith({
+      mode: 'local',
+      requireRegisteredClients: false,
+      cimd: { enabled: false },
+    } as AuthConfig);
+
+    const response = await httpGet(
+      server.handler,
+      authorizePath({
+        client_id: 'https://client.example.com/oauth/metadata.json',
+        redirect_uri: 'http://127.0.0.1:7777/cb',
+        state: 'x',
+      }),
+      HOST,
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('location')).toBeNull();
+    expect(await response.text()).toContain('CIMD (Client ID Metadata Documents) is disabled on this server');
+  });
 });
 
 describe('the server grants only the scopes it allows (#262)', () => {

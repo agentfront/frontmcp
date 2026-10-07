@@ -52,7 +52,7 @@ Public mode allows all connections without authentication. Use this for developm
 class MyApp {}
 ```
 
-- `sessionTtl` -- session lifetime in seconds.
+- `sessionTtl` -- lifetime in seconds (a positive whole number, default 3600) of the anonymous tokens `/oauth/token` issues (`expires_in` and `exp`); session ids don't expire.
 - `anonymousScopes` -- scopes granted to all unauthenticated clients (`this.auth.scopes`).
 - `publicAccess` -- `{ tools, prompts, rateLimit }`: the tools and prompts an anonymous caller may list and call (`'all'` by default; others answer `PUBLIC_ACCESS_DENIED`), and its calls per IP per minute (default 60).
 
@@ -95,7 +95,8 @@ Local mode runs a built-in OAuth 2.1 authorization server and signs its own JWT 
 class Server {}
 ```
 
-- `local.issuer` -- the issuer named everywhere: discovery's `issuer` and `authorization_servers`, the RFC 9207 `iss` on every authorization response (errors included), and the tokens' `iss`. Without it: `FRONTMCP_PUBLIC_URL` (plus the entry path) when pinned, else the `FRONTMCP_PUBLIC_HOST` boot-time issuer (`http://<host>:<port>`), else the request's origin -- the same on the Node server and under `createFetchHandler()`.
+- `local.issuer` -- the issuer named everywhere (a trailing slash is dropped, so `<issuer>/oauth/provider/<id>/callback` never gets `//`): discovery's `issuer` and `authorization_servers`, the RFC 9207 `iss` on every authorization response (errors included), and the tokens' `iss`. Without it: `FRONTMCP_PUBLIC_URL` (plus the entry path) when pinned, else the `FRONTMCP_PUBLIC_HOST` boot-time issuer (`http://<host>:<port>`), else the request's origin -- the same on the Node server and under `createFetchHandler()`.
+- `local.signKey` / `local.jwks` -- accepted but not used yet: tokens are always HS256-signed with `JWT_SECRET` (set it, at least 32 bytes, the same on every instance). `incrementalAuth.allowSkip` / `showAllAppsAtOnce` are likewise accepted and not read.
 - The protected resource metadata's `scopes_supported` is what the mode grants: `allowedScopes` (local/remote), `anonymousScopes` (public), `scopes` (static), `requiredScopes` then `scopes` (transparent), plus `authProviders` scopes outside local/remote mode.
 - An MCP 2026-07-28 request has no session: anonymous and static-key callers get none minted, so `MCP_SESSION_SECRET` is needed only for session clients; `this.context.verifiedSessionId` is `undefined` there.
 - A session client's `mcp-session-id` (or legacy SSE `?sessionId=`) is served only when `session:verify` verified it: in `public`, `static` and anonymous `transparent` mode it must decrypt under `MCP_SESSION_SECRET` with the mode's signature (static: of the token that opened it); in authenticated modes it must also belong to the caller's token. Any other id gets HTTP 404 (`-32000`) and the client re-initializes -- the raw id is never used to look up a transport, since anonymous sessions share an empty token and the id is their only credential. Run every instance with the same `MCP_SESSION_SECRET`; any instance then serves a session another one minted.
@@ -200,6 +201,8 @@ class Server {}
 - `clients` -- pre-registered trusted clients (`{ clientId, redirectUris, clientName?, clientSecret?, tokenEndpointAuthMethod?, grantTypes?, responseTypes?, scope? }`) seeded at startup; accepted by the authorize/token flows **without** a DCR round-trip. Lets you disable DCR and still ship known clients.
 
 A successful registration responds `201 Created`. This `dcr` block governs the **local Authorization Server only** — it is unrelated to the upstream-provider `providerConfig.dcrEnabled` / `registrationEndpoint` fields (which register THIS server against an upstream IdP).
+
+**CIMD** (`cimd`): `cache.type: 'redis'` with `cache.redis` (`{ url }` or `{ host, port, … }`) caches client metadata documents in Redis, connected at startup (it was always in memory up to 1.9.2). With `cimd.enabled: false`, a CIMD URL client id that isn't registered is refused (`CimdDisabledError`, 400 page) even with `requireRegisteredClients: false`.
 
 ### Custom login + verification (`login` / `authenticate`)
 
@@ -326,7 +329,9 @@ the upstream IdP** — there is no FrontMCP login page and no provider-selection
 page. The IdP returns to `/oauth/provider/{id}/callback`; FrontMCP exchanges the
 code, stores the upstream tokens encrypted (server-side), derives the session
 identity (`sub`/`email`/`name`) from the **upstream user**, and mints its own
-HS256 session token for the MCP client.
+HS256 session token for the MCP client: an access token that lasts an hour and a
+refresh token that lasts 30 days (rotated on each use). The IdP controls only the
+upstream tokens' lifetime.
 
 ```typescript
 @FrontMcp({
@@ -358,7 +363,7 @@ accessor:
 class Whoami extends ToolContext {
   async execute() {
     const token = await this.orchestration.tryGetToken('idp');
-    if (!token) return { error: 'Re-authenticate' }; // upstream auto-refresh not yet wired
+    if (!token) return { error: 'Re-authenticate' }; // the provider refused to renew it
     return await (
       await this.fetch('https://auth.example.com/userinfo', {
         headers: { Authorization: `Bearer ${token}` },
@@ -368,11 +373,17 @@ class Whoami extends ToolContext {
 }
 ```
 
+An expired upstream token (or one within `refresh.skewSeconds` of expiry: default 60,
+never negative) is renewed with the provider's refresh token when a tool reads it;
+`refresh: { enabled: false }` turns that off. When the client refreshes FrontMCP's
+own token at `/oauth/token`, the upstream tokens move to the new token. They leave the
+old token only once the refresh token has been rotated, so a failed refresh can be
+retried with the same refresh token; of two redemptions of one refresh token at once,
+one may get `invalid_grant`.
+
 **Deferred (not yet wired):** upstream **Dynamic Client Registration**
 (`providerConfig.dcrEnabled` / `registrationEndpoint`) — provide a pre-registered
-`clientId`; and upstream **token auto-refresh** — once the upstream access token
-expires the user must re-authenticate (FrontMCP's own session token still
-refreshes via the `refresh_token` grant).
+`clientId`.
 
 ## OAuth Local Dev Flow
 

@@ -74,6 +74,26 @@ describe('call-tool app-level authorization (progressive/incremental)', () => {
     await expect(flow.checkToolAuthorization()).rejects.toBeInstanceOf(AuthorizationRequiredError);
   });
 
+  it('names the scopes the tool asks of its auth providers in required_scopes', async () => {
+    const flow = makeFlow({
+      tool: {
+        ...TASKS_TOOL,
+        metadata: { authProviders: ['github', { name: 'slack', scopes: ['chat:write', 'channels:read'] }] },
+      } as typeof TASKS_TOOL,
+      apps: APPS,
+      incrementalAuth: { enabled: true },
+      authInfo: { extra: { user: { sub: 'u1', authorized_apps: ['notes'] } } },
+    });
+
+    const error = await flow.checkToolAuthorization().catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(AuthorizationRequiredError);
+    expect((error as AuthorizationRequiredError).toMcpError()._meta.required_scopes).toEqual([
+      'chat:write',
+      'channels:read',
+    ]);
+  });
+
   it('reads the claim from the bearer token when extra.user is absent (transport-agnostic)', async () => {
     // A JWT whose payload is { authorized_apps: ['notes'] } (no signature needed
     // — checkToolAuthorization decodes already-verified claims).
