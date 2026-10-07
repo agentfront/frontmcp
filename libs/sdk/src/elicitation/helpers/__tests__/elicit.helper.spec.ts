@@ -1,6 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { type FrontMcpContext } from '../../../context';
+import { ElicitationFallbackRequired } from '../../../errors';
 import { type ElicitOptions, type ElicitResult } from '../../elicitation.types';
 import { performElicit, type ElicitHelperDeps } from '../elicit.helper';
 
@@ -50,5 +51,32 @@ describe('performElicit: an accepted URL-mode answer carries no content', () => 
     );
 
     expect(result).toStrictEqual(formAnswer);
+  });
+});
+
+describe('performElicit: an empty elicitationId counts as left out', () => {
+  it('generates the id of a URL-mode question', async () => {
+    const sentOptions: Array<ElicitOptions | undefined> = [];
+    const context = {
+      transport: {
+        elicit: async (_message: string, _schema: unknown, options?: ElicitOptions) => {
+          sentOptions.push(options);
+          return { status: 'accept' };
+        },
+      },
+    } as unknown as Partial<FrontMcpContext>;
+
+    await performElicit(depsWith(context), 'Sign in', z.object({}), { ...urlMode, elicitationId: '' });
+
+    expect(sentOptions[0]?.elicitationId).toMatch(/^elicit-/);
+  });
+
+  it('generates the id of a fallback question', async () => {
+    const deps = { ...depsWith({}), getClientCapabilities: () => ({}) };
+
+    const asking = performElicit(deps, 'Proceed?', z.object({ confirmed: z.boolean() }), { elicitationId: '' });
+
+    await expect(asking).rejects.toBeInstanceOf(ElicitationFallbackRequired);
+    await expect(asking).rejects.toMatchObject({ elicitId: expect.stringMatching(/^elicit-/) });
   });
 });

@@ -5,8 +5,11 @@
 import { loggingOptionsSchema, LogLevel } from '../../common';
 
 describe('FRONTMCP_LOG_LEVEL', () => {
+  const originalLogLevel = process.env['FRONTMCP_LOG_LEVEL'];
+
   afterEach(() => {
-    delete process.env['FRONTMCP_LOG_LEVEL'];
+    if (originalLogLevel === undefined) delete process.env['FRONTMCP_LOG_LEVEL'];
+    else process.env['FRONTMCP_LOG_LEVEL'] = originalLogLevel;
   });
 
   it.each([

@@ -4,6 +4,8 @@
  * Comprehensive tests for RedisStorageAdapter with mocked ioredis.
  */
 
+import type { RedisOptions } from 'ioredis';
+
 import { StorageConfigError, StorageConnectionError } from '../../errors';
 import { createRedisClient, RedisStorageAdapter } from '../redis';
 
@@ -40,6 +42,18 @@ jest.mock('ioredis', () => ({
   default: MockRedisClass,
   __esModule: true,
 }));
+
+/** The options a real ioredis client settles on for the arguments the last client was created with. */
+function optionsIoredisReads(): RedisOptions {
+  const RealRedis = jest.requireActual<typeof import('ioredis')>('ioredis').default;
+  const [first, second] = MockRedisClass.mock.calls.at(-1) as unknown as [string | RedisOptions, RedisOptions?];
+  const client =
+    typeof first === 'string'
+      ? new RealRedis(first, { ...second, lazyConnect: true })
+      : new RealRedis({ ...first, lazyConnect: true });
+  client.disconnect();
+  return client.options;
+}
 
 describe('RedisStorageAdapter', () => {
   const originalEnv = { ...process.env };
@@ -165,16 +179,19 @@ describe('RedisStorageAdapter', () => {
     it('passes the fields the URL leaves out to ioredis', async () => {
       const adapter = new RedisStorageAdapter({ url: 'redis://cache:6379', config: { password: 'p' } });
       await adapter.connect();
-      expect(MockRedisClass).toHaveBeenCalledWith(
-        'redis://cache:6379',
-        expect.objectContaining({ password: 'p', lazyConnect: false }),
-      );
+      expect(optionsIoredisReads()).toMatchObject({ host: 'cache', port: 6379, password: 'p', lazyConnect: true });
+    });
+
+    it('passes the password beside a URL that names only the user', async () => {
+      const adapter = new RedisStorageAdapter({ url: 'redis://default@cache', config: { password: 'p' } });
+      await adapter.connect();
+      expect(optionsIoredisReads()).toMatchObject({ host: 'cache', username: 'default', password: 'p' });
     });
 
     it('accepts a url inside config, like the top-level redis option', async () => {
       const adapter = new RedisStorageAdapter({ config: { url: 'rediss://cache', db: 3 } });
       await adapter.connect();
-      expect(MockRedisClass).toHaveBeenCalledWith('rediss://cache', expect.objectContaining({ db: 3 }));
+      expect(optionsIoredisReads()).toMatchObject({ host: 'cache', db: 3, tls: {} });
     });
 
     it('treats a config whose url is undefined as a host config', async () => {
@@ -1077,9 +1094,12 @@ describe('createRedisClient', () => {
     expect(mockRedisInstance.on).toHaveBeenCalledWith('error', expect.any(Function));
   });
 
-  it('passes a url through and defaults host and port otherwise', () => {
+  it('reads a url, passes a socket path through and defaults host and port otherwise', () => {
     createRedisClient({ url: 'redis://h:1' });
-    expect(MockRedisClass).toHaveBeenLastCalledWith('redis://h:1', expect.any(Object));
+    expect(MockRedisClass).toHaveBeenLastCalledWith(expect.objectContaining({ host: 'h', port: 1 }));
+
+    createRedisClient({ url: '/tmp/redis.sock' });
+    expect(MockRedisClass).toHaveBeenLastCalledWith('/tmp/redis.sock', expect.any(Object));
 
     createRedisClient({});
     expect(MockRedisClass).toHaveBeenLastCalledWith(expect.objectContaining({ host: 'localhost', port: 6379 }));
@@ -1088,9 +1108,38 @@ describe('createRedisClient', () => {
   it('fills in from the fields beside a url only what the url leaves out', () => {
     createRedisClient({ url: 'redis://cache.internal:6380', password: 'secret', db: 2, tls: true });
 
-    expect(MockRedisClass).toHaveBeenLastCalledWith(
-      'redis://cache.internal:6380',
-      expect.objectContaining({ password: 'secret', db: 2, tls: {} }),
+    expect(optionsIoredisReads()).toMatchObject({
+      host: 'cache.internal',
+      port: 6380,
+      password: 'secret',
+      db: 2,
+      tls: {},
+    });
+  });
+
+  it('gives the client the password beside a url that names only the user', () => {
+    createRedisClient({ url: 'redis://default@cache.internal', password: 'secret' });
+
+    expect(optionsIoredisReads()).toMatchObject({ host: 'cache.internal', username: 'default', password: 'secret' });
+  });
+
+  it('keeps what the url states, its query options included', () => {
+    createRedisClient({ url: 'rediss://:pw@cache.internal:6380/2?family=0&connectTimeout=500' });
+
+    expect(optionsIoredisReads()).toMatchObject({
+      host: 'cache.internal',
+      port: 6380,
+      password: 'pw',
+      db: 2,
+      tls: {},
+      family: 0,
+      connectTimeout: '500',
+    });
+  });
+
+  it('refuses a password that contradicts the ?password= of the url', () => {
+    expect(() => createRedisClient({ url: 'redis://cache.internal?password=first', password: 'second' })).toThrow(
+      'redis password contradicts redis.url',
     );
   });
 

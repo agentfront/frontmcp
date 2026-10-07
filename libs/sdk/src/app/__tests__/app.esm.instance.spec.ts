@@ -79,6 +79,29 @@ describe('App.esm()', () => {
     );
   });
 
+  it('warns about the kinds it skips before an entry fails to build', async () => {
+    warnings.length = 0;
+    const manifest = { ...loadResult.manifest, providers: [{}] };
+    Object.defineProperty(manifest, 'tools', {
+      get: () => {
+        throw new Error('tool needs the package provider');
+      },
+    });
+    load.mockResolvedValue({ ...loadResult, manifest });
+    const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
+
+    await expect(
+      FrontMcpInstance.createDirect({
+        info: { name: 'esm-gateway', version: '1.0.0' },
+        apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme' })],
+        logging: { transports: [WarningCapture] },
+      }),
+    ).rejects.toThrow('tool needs the package provider');
+    expect(warnings).toContain(
+      "ESM app acme: App.esm() loads only tools, resources and prompts; the package's providers are not loaded",
+    );
+  });
+
   it('hands the import map to the loader', async () => {
     await createGateway({ importMap: { zod: 'https://cdn.example.com/zod.mjs' } });
 

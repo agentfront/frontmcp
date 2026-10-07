@@ -95,7 +95,7 @@ export async function performElicit<S extends ZodType>(
     throw new InvalidInputError('url is required when mode is "url"');
   }
   const elicitOptions =
-    options?.mode === 'url' ? { ...options, elicitationId: options.elicitationId ?? generateElicitationId() } : options;
+    options?.mode === 'url' ? { ...options, elicitationId: options.elicitationId || generateElicitationId() } : options;
 
   const ctx = tryGetContext();
 
@@ -166,7 +166,7 @@ export async function performElicit<S extends ZodType>(
   if (!supportsElicitation(capabilities, mode)) {
     // 5. Fallback: throw error with context for re-invocation
     // This triggers the fallback flow handled by CallToolFlow/CallAgentFlow
-    const elicitId = elicitOptions?.elicitationId ?? generateElicitationId();
+    const elicitId = elicitOptions?.elicitationId || generateElicitationId();
     const ttl = elicitOptions?.ttl ?? DEFAULT_ELICIT_TTL;
 
     // Convert Zod schema to JSON Schema for the fallback response

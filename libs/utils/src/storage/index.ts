@@ -33,7 +33,7 @@ export { attachRedisErrorListener, DEFAULT_REDIS_ERROR_LOG_INTERVAL_MS } from '.
 export type { RedisErrorListenerOptions, ErrorEmitterClient } from './redis-error-listener';
 
 export { mergeRedisUrlFields, describeRedisUrlConflicts } from './redis-url';
-export type { RedisUrlMerge, RedisUrlSiblingFields } from './redis-url';
+export type { RedisUrlConnection, RedisUrlMerge, RedisUrlSiblingFields } from './redis-url';
 
 // Namespace utilities
 export {

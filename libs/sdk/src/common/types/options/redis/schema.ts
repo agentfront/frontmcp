@@ -190,7 +190,8 @@ export function parseRedisUrl(raw: string): ParsedRedisUrl | string {
 
   const port = url.port ? Number(url.port) : 6379;
   if (port === 0) return 'redis.url port must be between 1 and 65535';
-  const password = url.password ? decodeUrlCredential(url.password) : undefined;
+  // ioredis also reads the password from ?password=, so the URL's conflict check does too
+  const password = url.password ? decodeUrlCredential(url.password) : url.searchParams.get('password') || undefined;
   if (url.password && password === undefined) return malformedEscapeProblem('password');
   return { host, port, ...(password !== undefined ? { password } : {}), db, tls: url.protocol === 'rediss:' };
 }

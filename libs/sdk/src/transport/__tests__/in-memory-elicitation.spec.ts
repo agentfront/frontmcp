@@ -42,7 +42,25 @@ class ConnectBillingTool extends ToolContext {
   }
 }
 
-@App({ id: 'desk', name: 'Desk', tools: [ConfirmTool, ConnectBillingTool], plugins: [ElicitationAuditPlugin] })
+@Tool({ name: 'connect_billing_with_empty_id', inputSchema: {} })
+class ConnectBillingWithEmptyIdTool extends ToolContext {
+  async execute() {
+    // Straight to the transport, so only the elicitation:request flow sees the empty id
+    const answer = await this.context.transport?.elicit('Sign in to billing', z.object({}), {
+      mode: 'url',
+      url: 'https://billing.example/connect',
+      elicitationId: '',
+    });
+    return { action: answer?.status };
+  }
+}
+
+@App({
+  id: 'desk',
+  name: 'Desk',
+  tools: [ConfirmTool, ConnectBillingTool, ConnectBillingWithEmptyIdTool],
+  plugins: [ElicitationAuditPlugin],
+})
 class DeskApp {}
 
 function config(): FrontMcpConfigInput {
@@ -92,6 +110,22 @@ describe('elicitation through the in-memory transport', () => {
         elicitationId: expect.stringMatching(/^elicit-/),
       }),
     ]);
+  });
+
+  it('gives a URL-mode question asked with an empty elicitationId a generated one', async () => {
+    const asked: unknown[] = [];
+    const client = await connect(config(), {
+      onElicitation: async (request) => {
+        asked.push(request);
+        return { action: 'accept' };
+      },
+    });
+
+    const result = (await client.callTool('connect_billing_with_empty_id', {})) as { structuredContent?: unknown };
+    await client.close();
+
+    expect(result.structuredContent).toEqual({ action: 'accept' });
+    expect(asked).toEqual([expect.objectContaining({ mode: 'url', elicitationId: expect.stringMatching(/^elicit-/) })]);
   });
 
   it('gives an accepted URL-mode answer no content, even when the client sends some', async () => {

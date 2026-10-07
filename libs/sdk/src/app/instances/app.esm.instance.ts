@@ -325,6 +325,15 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     const logger = this.scopeProviders.getActiveScope().logger;
     const namespace = this.metadata.namespace ?? this.metadata.name;
 
+    // Before any entry is built, so a tool that fails on a missing manifest provider follows the warning.
+    const notLoaded = UNLOADED_MANIFEST_KINDS.filter((kind) => (manifest[kind]?.length ?? 0) > 0);
+    if (notLoaded.length > 0) {
+      logger.warn(
+        `ESM app ${this.id}: App.esm() loads only tools, resources and prompts; ` +
+          `the package's ${notLoaded.join(', ')} are not loaded`,
+      );
+    }
+
     const filter = this.metadata.filter;
     const prefixLength = namespace ? namespace.length + 1 : 0;
     const included =
@@ -359,13 +368,6 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     logger.info(
       `ESM app ${this.id} registered: ${tools.length} tools, ${resources.length} resources, ${prompts.length} prompts`,
     );
-    const notLoaded = UNLOADED_MANIFEST_KINDS.filter((kind) => (manifest[kind]?.length ?? 0) > 0);
-    if (notLoaded.length > 0) {
-      logger.warn(
-        `ESM app ${this.id}: App.esm() loads only tools, resources and prompts; ` +
-          `the package's ${notLoaded.join(', ')} are not loaded`,
-      );
-    }
   }
 
   /**

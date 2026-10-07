@@ -335,6 +335,7 @@ export type {
   StorageType,
   StorageConfig,
   RedisErrorListenerOptions,
+  RedisUrlConnection,
   RedisUrlMerge,
   RedisUrlSiblingFields,
   CreateRedisClientOptions,

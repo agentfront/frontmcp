@@ -529,11 +529,12 @@ export class McpClientService {
           connection.client.callTool({ name: toolName, arguments: args }),
         );
 
+        let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new RemoteTimeoutError(appId, toolName, timeout)), timeout);
+          timeoutTimer = setTimeout(() => reject(new RemoteTimeoutError(appId, toolName, timeout)), timeout);
         });
 
-        const result = await Promise.race([toolCallPromise, timeoutPromise]);
+        const result = await Promise.race([toolCallPromise, timeoutPromise]).finally(() => clearTimeout(timeoutTimer));
 
         // Update heartbeat
         connection.lastHeartbeat = new Date();
