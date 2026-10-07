@@ -34,7 +34,8 @@ export function hasSizing(sizing?: WidgetSizing): sizing is WidgetSizing {
  * Sets `window.__mcpToolName`, `window.__mcpToolInput`,
  * `window.__mcpToolOutput`, and `window.__mcpStructuredContent`. When `sizing`
  * is provided it also sets `window.__mcpWidgetSizing` so the bridge runtime can
- * apply CSS and drive auto-resize.
+ * apply CSS and drive auto-resize, and a `displayMode` other than `'inline'` sets
+ * `window.__mcpDisplayMode`, which the bridge asks the host for once it connects.
  */
 export function buildDataInjectionScript(options: {
   toolName: string;
@@ -42,8 +43,9 @@ export function buildDataInjectionScript(options: {
   output?: unknown;
   structuredContent?: unknown;
   sizing?: WidgetSizing;
+  displayMode?: string;
 }): string {
-  const { toolName, input, output, structuredContent, sizing } = options;
+  const { toolName, input, output, structuredContent, sizing, displayMode } = options;
 
   const lines = [
     `window.__mcpAppsEnabled = true;`,
@@ -55,6 +57,10 @@ export function buildDataInjectionScript(options: {
 
   if (hasSizing(sizing)) {
     lines.push(`window.__mcpWidgetSizing = ${safeJsonForScript(sizing)};`);
+  }
+
+  if (displayMode && displayMode !== 'inline') {
+    lines.push(`window.__mcpDisplayMode = ${safeJsonForScript(displayMode)};`);
   }
 
   return `<script>\n${lines.join('\n')}\n</script>`;

@@ -523,7 +523,7 @@ export interface WidgetManifest {
  *     'ui/widgetAccessible': true,
  *
  *     // CSP configuration
- *     'ui/csp': { connect_domains: ['api.weather.com'] },
+ *     'ui/csp': { connectDomains: ['https://api.weather.com'] },
  *   }
  * }
  * ```

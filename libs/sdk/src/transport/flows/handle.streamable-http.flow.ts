@@ -19,7 +19,12 @@ import {
   type ServerResponse,
 } from '../../common';
 import { InternalMcpError, TransportServiceNotAvailableError } from '../../errors';
-import { createExtAppsMessageHandler, type ExtAppsHostCapabilities, type ExtAppsJsonRpcRequest } from '../../ext-apps';
+import {
+  createExtAppsMessageHandler,
+  type ExtAppsHostCapabilities,
+  type ExtAppsJsonRpcNotification,
+  type ExtAppsJsonRpcRequest,
+} from '../../ext-apps';
 import { applyMachineIdHeader, applyNodeAffinity } from '../../ha/ha-headers';
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
 import { mcpRequestSurface } from '../mcp-handlers/mcp-surface';
@@ -116,7 +121,11 @@ export function classifyStreamableHttpRequest(params: {
     return { requestType: 'initialize' };
   }
 
-  if (typeof jsonRpcMethod === 'string' && jsonRpcMethod.startsWith('ui/')) {
+  // A client never sends `notifications/message` (MCP logging goes server to client); a widget logs with it
+  if (
+    typeof jsonRpcMethod === 'string' &&
+    (jsonRpcMethod.startsWith('ui/') || jsonRpcMethod === 'notifications/message')
+  ) {
     return { requestType: 'extApps' };
   }
 
@@ -700,10 +709,18 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
+    const message = request.body as ExtAppsJsonRpcRequest | ExtAppsJsonRpcNotification;
+    // A JSON-RPC notification (no id) is answered with 202 and no body, never with a JSON-RPC response
+    const isNotification = !('id' in message);
 
     if (this.scope.metadata.extApps?.enabled === false) {
       const rpc = request.body as ExtAppsJsonRpcRequest;
       logger.verbose('onExtApps: ext-apps disabled by config', { method: rpc?.method });
+      if (isNotification) {
+        response.status(202).end();
+        this.handled();
+        return;
+      }
       response.status(200).json({
         jsonrpc: '2.0',
         id: rpc?.id ?? null,
@@ -834,8 +851,13 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     });
 
     // 5. Handle the request
-    const jsonRpcRequest = request.body as ExtAppsJsonRpcRequest;
-    const jsonRpcResponse = await handler.handleRequest(jsonRpcRequest);
+    if (isNotification) {
+      await handler.handleNotification(message);
+      response.status(202).end();
+      this.handled();
+      return;
+    }
+    const jsonRpcResponse = await handler.handleRequest(message);
 
     // 6. Send response
     response.status(200).json(jsonRpcResponse);

@@ -18,15 +18,32 @@ import {
   type ExtAppsHostCapabilities,
   type ExtAppsInitializeParams,
   type ExtAppsInitializeResult,
+  type ExtAppsJsonRpcNotification,
   type ExtAppsJsonRpcRequest,
   type ExtAppsJsonRpcResponse,
+  type ExtAppsLogLevel,
+  type ExtAppsLogMessageParams,
   type ExtAppsLogParams,
+  type ExtAppsMcpLogLevel,
   type ExtAppsOpenLinkParams,
   type ExtAppsRegisterToolParams,
   type ExtAppsSetDisplayModeParams,
+  type ExtAppsSpecUpdateModelContextParams,
   type ExtAppsUnregisterToolParams,
   type ExtAppsUpdateModelContextParams,
 } from './ext-apps.types';
+
+/** The server log level each MCP logging level of `notifications/message` is written at. */
+const MCP_LOG_LEVELS: Record<ExtAppsMcpLogLevel, ExtAppsLogLevel> = {
+  debug: 'debug',
+  info: 'info',
+  notice: 'info',
+  warning: 'warn',
+  error: 'error',
+  critical: 'error',
+  alert: 'error',
+  emergency: 'error',
+};
 
 /**
  * Context for handling ext-apps messages.
@@ -66,15 +83,17 @@ export interface ExtAppsMessageHandlerOptions {
 /**
  * Message handler for ext-apps widget-to-host JSON-RPC communication.
  *
- * Handles all JSON-RPC methods defined in the MCP Apps specification:
- * - ui/callServerTool - Proxy tool calls to the MCP server
- * - ui/updateModelContext - Update the model context with widget state
- * - ui/openLink - Request to open a URL
- * - ui/setDisplayMode - Request display mode change
- * - ui/close - Close the widget
- * - ui/log - Forward logs to server logger
- * - ui/registerTool - Register a widget-defined tool
- * - ui/unregisterTool - Unregister a widget-defined tool
+ * Handles the MCP Apps methods a widget sends, and the earlier FrontMCP names that widgets
+ * already deployed still send (in parentheses):
+ * - ui/update-model-context (ui/updateModelContext) - Update the model context with widget state
+ * - ui/open-link (ui/openLink) - Request to open a URL
+ * - ui/request-display-mode (ui/setDisplayMode) - Request display mode change
+ * - notifications/message (ui/log) - Forward logs to server logger
+ * - ui/callServerTool - Proxy tool calls to the MCP server (a spec widget sends a standard
+ *   `tools/call`, which the server handles as any MCP request)
+ * - ui/notifications/request-teardown (ui/close) - Close the widget
+ * - ui/registerTool - Register a widget-defined tool (FrontMCP extension, not in the spec)
+ * - ui/unregisterTool - Unregister a widget-defined tool (FrontMCP extension, not in the spec)
  *
  * @example
  * ```typescript
@@ -158,6 +177,29 @@ export class ExtAppsMessageHandler {
   }
 
   /**
+   * Handle a JSON-RPC notification from a widget (`notifications/message`,
+   * `ui/notifications/request-teardown`). A notification gets no answer, so a failure is only
+   * logged, and a notification this handler does not know is ignored.
+   *
+   * @param notification - The JSON-RPC notification
+   */
+  async handleNotification(notification: ExtAppsJsonRpcNotification): Promise<void> {
+    const { method, params } = notification;
+
+    if (method !== 'notifications/message' && method !== 'ui/notifications/request-teardown') {
+      this.logger.verbose(`handleNotification: ignoring method=${method}`);
+      return;
+    }
+
+    try {
+      await this.routeMethod(method, params);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`handleNotification: method=${method} failed: ${errorMessage}`);
+    }
+  }
+
+  /**
    * Route a method to its handler.
    */
   private async routeMethod(method: string, params: unknown): Promise<unknown> {
@@ -178,20 +220,29 @@ export class ExtAppsMessageHandler {
       case 'ui/callServerTool':
         return this.handleCallServerTool(normalizedParams as ExtAppsCallServerToolParams);
 
+      case 'ui/update-model-context':
+        return this.handleSpecUpdateModelContext(normalizedParams as ExtAppsSpecUpdateModelContextParams);
+
       case 'ui/updateModelContext':
         return this.handleUpdateModelContext(normalizedParams as ExtAppsUpdateModelContextParams);
 
+      case 'ui/open-link':
       case 'ui/openLink':
         return this.handleOpenLink(normalizedParams as ExtAppsOpenLinkParams);
 
       // Display and lifecycle
+      case 'ui/request-display-mode':
       case 'ui/setDisplayMode':
         return this.handleSetDisplayMode(normalizedParams as ExtAppsSetDisplayModeParams);
 
+      case 'ui/notifications/request-teardown':
       case 'ui/close':
         return this.handleClose(normalizedParams as ExtAppsCloseParams);
 
       // Logging
+      case 'notifications/message':
+        return this.handleLogMessage(normalizedParams as ExtAppsLogMessageParams);
+
       case 'ui/log':
         return this.handleLog(normalizedParams as ExtAppsLogParams);
 
@@ -263,7 +314,31 @@ export class ExtAppsMessageHandler {
   }
 
   /**
-   * Handle ui/openLink - Request to open a URL.
+   * Handle ui/update-model-context - Replace the model context with the widget's `content` and
+   * `structuredContent`: the context callback gets `{ content?, structuredContent? }` and `merge: false`.
+   */
+  private async handleSpecUpdateModelContext(params: ExtAppsSpecUpdateModelContextParams): Promise<void> {
+    const { content, structuredContent } = params;
+
+    if (content !== undefined && !Array.isArray(content)) {
+      throw new ExtAppsInvalidParamsError('content must be an array of content blocks');
+    }
+    if (
+      structuredContent !== undefined &&
+      (typeof structuredContent !== 'object' || structuredContent === null || Array.isArray(structuredContent))
+    ) {
+      throw new ExtAppsInvalidParamsError('structuredContent must be an object');
+    }
+
+    const context: ExtAppsSpecUpdateModelContextParams = {};
+    if (content !== undefined) context.content = content;
+    if (structuredContent !== undefined) context.structuredContent = structuredContent;
+
+    await this.handleUpdateModelContext({ context, merge: false });
+  }
+
+  /**
+   * Handle ui/open-link and ui/openLink - Request to open a URL.
    */
   private async handleOpenLink(params: ExtAppsOpenLinkParams): Promise<void> {
     if (!this.hostCapabilities.openLink) {
@@ -301,9 +376,10 @@ export class ExtAppsMessageHandler {
   }
 
   /**
-   * Handle ui/setDisplayMode - Request display mode change.
+   * Handle ui/request-display-mode and ui/setDisplayMode - Request display mode change.
+   * Answers with the mode that was set, as `ui/request-display-mode` defines.
    */
-  private async handleSetDisplayMode(params: ExtAppsSetDisplayModeParams): Promise<void> {
+  private async handleSetDisplayMode(params: ExtAppsSetDisplayModeParams): Promise<{ mode: string }> {
     const { mode } = params;
 
     if (!mode || !['inline', 'fullscreen', 'pip'].includes(mode)) {
@@ -322,10 +398,12 @@ export class ExtAppsMessageHandler {
     this.logger.verbose(`handleSetDisplayMode: mode=${mode}`);
 
     await this.context.setDisplayMode(mode);
+    return { mode };
   }
 
   /**
-   * Handle ui/close - Close the widget.
+   * Handle ui/notifications/request-teardown and ui/close - Close the widget. The spec
+   * notification has no params, so `reason` comes only with ui/close.
    */
   private async handleClose(params: ExtAppsCloseParams): Promise<void> {
     if (!this.context.close) {
@@ -359,6 +437,35 @@ export class ExtAppsMessageHandler {
       throw new ExtAppsInvalidParamsError(`Invalid log level '${level}'. Must be one of: ${validLevels.join(', ')}`);
     }
 
+    this.writeWidgetLog(level ?? 'info', message, data);
+  }
+
+  /**
+   * Handle notifications/message - Forward a widget's MCP log message to server logger.
+   * A string `data` is the message; any other `data` is logged under the logger name.
+   */
+  private async handleLogMessage(params: ExtAppsLogMessageParams): Promise<void> {
+    if (!this.hostCapabilities.logging) {
+      throw new ExtAppsNotSupportedError('Logging not supported by host');
+    }
+
+    const { level, logger, data } = params;
+
+    const serverLevel = Object.hasOwn(MCP_LOG_LEVELS, level) ? MCP_LOG_LEVELS[level] : undefined;
+    if (!serverLevel) {
+      throw new ExtAppsInvalidParamsError(
+        `Invalid log level '${level}'. Must be one of: ${Object.keys(MCP_LOG_LEVELS).join(', ')}`,
+      );
+    }
+
+    if (typeof data === 'string') {
+      this.writeWidgetLog(serverLevel, data, undefined);
+    } else {
+      this.writeWidgetLog(serverLevel, logger ?? 'widget log', data);
+    }
+  }
+
+  private writeWidgetLog(level: ExtAppsLogLevel, message: string, data: unknown): void {
     const widgetLogger = this.logger.child(`Widget:${this.context.sessionId}`);
 
     switch (level) {

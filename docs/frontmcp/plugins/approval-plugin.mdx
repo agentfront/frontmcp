@@ -17,8 +17,8 @@ The Approval Plugin provides Claude Code-style permission management for FrontMC
     Session, user, time-limited, and context-specific approvals
   </Card>
 
-  <Card title="PKCE Security" icon="lock">
-    RFC 7636 PKCE webhooks for secure external approval systems
+  <Card title="PKCE Challenges" icon="lock">
+    RFC 7636 PKCE challenges to build an external approval flow on
   </Card>
 
   <Card title="Audit Trail" icon="clipboard-list">
@@ -50,7 +50,7 @@ npm install @frontmcp/plugin-approval
   </Step>
 
   <Step title="Grant/Revoke">
-    Approvals are granted via `this.approval` methods or external webhooks
+    Approvals are granted by your code, via `this.approval` methods or the approval store
   </Step>
 </Steps>
 
@@ -280,9 +280,18 @@ ApprovalPlugin.init({
 });
 ```
 
+<Warning>
+  Neither mode contacts an external system in FrontMCP 1.9. `recheck` (the default) checks the stored approvals on every
+  call, and its `recheck.url`, `auth`, `interval` and `maxAttempts` are accepted and unused: nothing is polled.
+  `webhook` registers the [`ChallengeService`](#pkce-webhook-flow) (`ChallengeServiceToken`) as well, and its
+  `webhook.url`, `includeJwt` and `callbackPath` are accepted and unused: no request is sent and no callback route is
+  served. Asking someone and recording the answer is up to your code, for example with `this.elicit()` and
+  `this.approval.grantSessionApproval()`.
+</Warning>
+
 ### Recheck Mode (Default)
 
-In recheck mode, the plugin polls an external API for approval status:
+The options below are reserved for polling an external API for approval status:
 
 ```ts
 ApprovalPlugin.init({
@@ -298,7 +307,8 @@ ApprovalPlugin.init({
 
 ### Webhook Mode with PKCE
 
-For secure external approval systems using PKCE (RFC 7636):
+Registers the `ChallengeService`, for an external approval flow of your own built on PKCE (RFC 7636). The `webhook`
+options below are reserved:
 
 ```ts
 ApprovalPlugin.init({
@@ -521,7 +531,8 @@ await this.approval.grantSessionApproval('tool', {
 
 ## PKCE Webhook Flow
 
-For external approval systems, the plugin implements RFC 7636 PKCE:
+The `ChallengeService` that `mode: 'webhook'` registers provides the PKCE steps of this flow (`createChallenge()`,
+`verifyAndConsume()`); sending the request and serving the callback are up to your code. The flow it is designed for:
 
 ```
 1. Generate PKCE pair: code_verifier (64 chars) + code_challenge = SHA256(verifier)
@@ -534,7 +545,7 @@ For external approval systems, the plugin implements RFC 7636 PKCE:
 
 ### Webhook Request
 
-The plugin sends to your webhook URL:
+A request to your approval system carries:
 
 ```json
 {
@@ -675,7 +686,7 @@ import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
 import { ApprovalPlugin, userGrantor } from '@frontmcp/plugin-approval';
 import { z } from '@frontmcp/sdk';
 
-// Configure approval plugin with webhook mode
+// Configure approval plugin with webhook mode (registers the ChallengeService; sends no request itself)
 const approvalPlugin = ApprovalPlugin.init({
   mode: 'webhook',
   webhook: {

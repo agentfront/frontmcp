@@ -142,8 +142,13 @@ The sandboxed VM runs AgentScript (a restricted JavaScript subset). Presets cont
 
 `while`, `do-while` and `for-in` loops are always refused by the sandbox. Scripts have no `console` in any preset
 (`vm.allowConsole` has no effect); a script that refers to the global `console` is refused before it runs (a field named
-`console` is fine). Log with `mcpLog(level, message)`. The `codecall:execute` description advertises `for-of` and names
-`for` as needing `vm.allowLoops`.
+`console` is fine). Log with `mcpLog(level, message)`. The `codecall:execute` description is written from the effective
+`vm` options (loops, `disabledBuiltins`/`disabledGlobals`, `timeoutMs`, the `maxSteps` tool-call cap), and
+`codecall:search`'s from `topK` and the `minRelevanceScore` default, `0.1` (up to 1.9.2 both named fixed values).
+`vm.disabledBuiltins` and `vm.disabledGlobals` refuse a script that refers to a listed global (`illegal_access`,
+`JSON is disabled by vm.disabledGlobals`); they add to what the sandbox already refuses (up to 1.9.2 they were
+ignored). Every loop that runs more than 10,000 times ends with `Maximum iteration limit exceeded (10000). This limit
+prevents infinite loops.`
 
 ### Meta-Tools Exposed
 
@@ -407,7 +412,8 @@ anonymous caller cannot use `user`, nor `session` or `tool` without a session. N
 
 ## 3. Approval Plugin (`@frontmcp/plugin-approval`)
 
-Tool authorization workflow with PKCE webhook security. Require explicit user or system approval before sensitive tools execute.
+Tool authorization workflow. Require explicit user or system approval before sensitive tools execute; your code records
+the approvals (`this.approval`, the store).
 
 ### Installation
 
@@ -431,7 +437,7 @@ class BasicServer {}
 })
 class AuditedServer {}
 
-// Webhook mode -- PKCE-secured external approval flow
+// Webhook mode -- also registers the PKCE ChallengeService (the webhook options are reserved, see Modes)
 @FrontMcp({
   plugins: [
     ApprovalPlugin.init({
@@ -457,7 +463,11 @@ tools marked `approval` ran unapproved.
 ### Modes
 
 - `recheck` -- Re-evaluates approval status on every tool call. Approval can be granted programmatically via `this.approval.grantSessionApproval()`. Good for interactive approval flows where the user confirms in-band.
-- `webhook` -- Sends a PKCE-secured webhook to an external approval service. The external service calls back to confirm or deny. Suitable for compliance workflows requiring out-of-band approval.
+- `webhook` -- Also registers the `ChallengeService` (`ChallengeServiceToken`), PKCE challenges for an external approval flow you build yourself.
+
+Neither mode contacts an external system in 1.9: `recheck.url`/`auth`/`interval`/`maxAttempts` poll nothing, and
+`webhook.url`/`includeJwt`/`callbackPath` send no request and serve no route. Ask with `this.elicit()` (or your own
+UI) and record the answer with `this.approval.grantSessionApproval()`.
 
 ### Pre-approved contexts come from the session
 

@@ -2,7 +2,7 @@
  * Tests for x-frontmcp schema validation functions
  */
 
-import { validateFrontMcpExtension, FRONTMCP_SCHEMA_VERSION, SUPPORTED_VERSIONS } from '../openapi.frontmcp-schema';
+import { FRONTMCP_SCHEMA_VERSION, SUPPORTED_VERSIONS, validateFrontMcpExtension } from '../openapi.frontmcp-schema';
 import { createMockLogger } from './fixtures';
 
 describe('validateFrontMcpExtension', () => {
@@ -99,6 +99,18 @@ describe('validateFrontMcpExtension', () => {
       expect(result.success).toBe(true);
       expect(result.warnings).toContain("Unknown field 'unknownField' in x-frontmcp (will be ignored)");
       expect(result.warnings).toContain("Unknown field 'anotherUnknown' in x-frontmcp (will be ignored)");
+    });
+
+    it('does not warn about icons and meta, which the tool generator applies', () => {
+      const mockLogger = createMockLogger();
+      const result = validateFrontMcpExtension(
+        { icons: [{ src: 'https://desk.example/ticket.svg' }], meta: { 'desk/area': 'support' } },
+        'testTool',
+        mockLogger,
+      );
+
+      expect(result.warnings).toEqual([]);
+      expect(mockLogger.warn).not.toHaveBeenCalled();
     });
   });
 

@@ -7,6 +7,8 @@
  * @packageDocumentation
  */
 
+import { MCP_APPS_DISPLAY_MODES, WIDGET_CALL_META_KEY } from '@frontmcp/uipack/bridge-runtime';
+
 /**
  * Options for generating the bridge IIFE.
  */
@@ -489,7 +491,18 @@ var ExtAppsAdapter = {
 
     if ('method' in data && !('id' in data)) {
       this.handleNotification(context, data);
+      return;
     }
+
+    if ('method' in data && 'id' in data) {
+      this.handleRequest(context, data, event.origin);
+    }
+  },
+  handleRequest: function(context, request, origin) {
+    // ui/resource-teardown: the host is about to unmount the view; reply once listeners have cleaned up.
+    if (request.method !== 'ui/resource-teardown') return;
+    window.dispatchEvent(new CustomEvent('bridge:teardown', { detail: {} }));
+    window.parent.postMessage({ jsonrpc: '2.0', id: request.id, result: {} }, origin);
   },
   handleNotification: function(context, notification) {
     var params = notification.params || {};
@@ -508,6 +521,10 @@ var ExtAppsAdapter = {
       case 'ui/notifications/host-context-changed':
         Object.assign(context.hostContext, params);
         context.notifyContextChange(params);
+        break;
+      case 'ui/notifications/tool-cancelled':
+      case 'ui/notifications/cancelled':
+        window.dispatchEvent(new CustomEvent('tool:cancelled', { detail: { reason: params.reason } }));
         break;
     }
   },
@@ -560,16 +577,16 @@ var ExtAppsAdapter = {
     var self = this;
     var params = {
       appInfo: { name: 'FrontMCP Widget', version: '1.0.0' },
-      appCapabilities: { tools: { listChanged: false } },
+      appCapabilities: { tools: { listChanged: false }, availableDisplayModes: ${JSON.stringify(MCP_APPS_DISPLAY_MODES)} },
       protocolVersion: '2024-11-05'
     };
 
     return this.sendRequest('ui/initialize', params).then(function(result) {
       self.hostCapabilities = result.hostCapabilities || {};
       self.capabilities = Object.assign({}, self.capabilities, {
-        canCallTools: Boolean(self.hostCapabilities.serverToolProxy),
+        canCallTools: Boolean(self.hostCapabilities.serverTools || self.hostCapabilities.serverToolProxy),
         canSendMessages: true,
-        canOpenLinks: Boolean(self.hostCapabilities.openLink),
+        canOpenLinks: Boolean(self.hostCapabilities.openLinks || self.hostCapabilities.openLink),
         supportsDisplayModes: true
       });
       if (result.hostContext) {
@@ -578,23 +595,28 @@ var ExtAppsAdapter = {
     });
   },
   callTool: function(context, name, args) {
-    if (!this.hostCapabilities.serverToolProxy) {
+    if (!this.hostCapabilities.serverTools && !this.hostCapabilities.serverToolProxy) {
       return Promise.reject(new Error('Server tool proxy not supported'));
     }
-    return this.sendRequest('ui/callServerTool', { name: name, arguments: args });
+    return this.sendRequest('tools/call', { name: name, arguments: args || {}, _meta: { '${WIDGET_CALL_META_KEY}': true } });
   },
   sendMessage: function(context, content) {
     return this.sendRequest('ui/message', { content: content });
   },
   openLink: function(context, url) {
-    if (!this.hostCapabilities.openLink) {
+    if (!this.hostCapabilities.openLinks && !this.hostCapabilities.openLink) {
       window.open(url, '_blank', 'noopener,noreferrer');
       return Promise.resolve();
     }
-    return this.sendRequest('ui/openLink', { url: url });
+    return this.sendRequest('ui/open-link', { url: url });
   },
   requestDisplayMode: function(context, mode) {
-    return this.sendRequest('ui/setDisplayMode', { mode: mode });
+    // Ask only for a mode the host offers; it answers with the mode it actually set.
+    var offered = context.hostContext.availableDisplayModes;
+    if (!Array.isArray(offered) || offered.indexOf(mode) === -1) {
+      return Promise.reject(new Error('Display mode "' + mode + '" is not available on this host'));
+    }
+    return this.sendRequest('ui/request-display-mode', { mode: mode });
   },
   setSize: function(context, size) {
     // Standard ext-apps sizing: the view tells the host its dimensions with the
@@ -605,7 +627,8 @@ var ExtAppsAdapter = {
     return this.sendNotification('ui/notifications/size-changed', params);
   },
   requestClose: function(context) {
-    return this.sendRequest('ui/close', {});
+    // The host decides whether to tear the view down; it answers with ui/resource-teardown if it does.
+    return this.sendNotification('ui/notifications/request-teardown', {});
   }
 };
 `.trim();
@@ -998,8 +1021,10 @@ FrontMcpBridge.prototype.openLink = function(url) {
 FrontMcpBridge.prototype.requestDisplayMode = function(mode) {
   if (!this._adapter) return Promise.reject(new Error('Not initialized'));
   var self = this;
-  return this._adapter.requestDisplayMode(this._context, mode).then(function() {
-    self._context.hostContext.displayMode = mode;
+  return this._adapter.requestDisplayMode(this._context, mode).then(function(result) {
+    // The host may set another mode than the one asked for, e.g. when it refuses the change.
+    var setMode = result && result.mode;
+    if (${JSON.stringify(MCP_APPS_DISPLAY_MODES)}.indexOf(setMode) !== -1) self._context.hostContext.displayMode = setMode;
   });
 };
 

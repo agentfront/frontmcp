@@ -34,6 +34,7 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
   const inputTransforms = metadata.adapter?.inputTransforms ?? [];
   const toolTransform = metadata.adapter?.toolTransform ?? {};
   const postToolTransform = metadata.adapter?.postToolTransform;
+  const serverFilledKeys = new Set(inputTransforms.map((transform) => transform.inputKey));
 
   // Validate and parse x-frontmcp extension from OpenAPI spec
   const frontmcpValidation = validateFrontMcpExtension(metadata.frontmcp, openapiTool.name, logger);
@@ -138,9 +139,12 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
     // Get the FrontMcpContext for full context access (sessionId, traceId, authInfo, etc.)
     const ctx = toolCtx.context;
 
-    // 0. The SDK passes a raw-schema tool's arguments through, so check them against the spec here
+    // 0. The server's value wins over one the model sent for an argument inputTransforms fills in
+    const modelInput = omitKeys(input, serverFilledKeys);
+
+    // The SDK passes a raw-schema tool's arguments through, so check them against the spec here
     if (argumentCheck && !argumentCheck.conversionFailed) {
-      const validation = argumentCheck.schema.safeParse(input);
+      const validation = argumentCheck.schema.safeParse(modelInput);
       if (!validation.success) {
         const problems = validation.error.issues.map((issue) => `${issue.path.join('.') || 'input'}: ${issue.message}`);
         throw new InvalidInputError(`Invalid arguments for tool '${openapiTool.name}': ${problems.join('; ')}`);
@@ -153,11 +157,7 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
       env: process.env,
       tool: openapiTool,
     };
-    const injectedInput = await injectTransformedValues(
-      input as Record<string, unknown>,
-      inputTransforms,
-      transformContext,
-    );
+    const injectedInput = await injectTransformedValues(modelInput, inputTransforms, transformContext);
 
     // 2. Resolve security from context, and from the input for the schemes it carries. Whether the
     // operation is authenticated is decided on the request as built (step 5b), after
@@ -410,6 +410,11 @@ async function safeInject(
  */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function omitKeys(input: unknown, keys: ReadonlySet<string>): unknown {
+  if (keys.size === 0 || !isPlainObject(input)) return input;
+  return Object.fromEntries(Object.entries(input).filter(([key]) => !keys.has(key)));
 }
 
 /**
