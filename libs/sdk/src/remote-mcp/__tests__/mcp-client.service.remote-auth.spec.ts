@@ -194,6 +194,18 @@ describe('McpClientService — remoteAuth and retries', () => {
     expect(requests.filter((request) => request.method === 'tools/call')).toHaveLength(2);
   });
 
+  it('clears the call timeout once the call settles', async () => {
+    fakeMcpServer();
+    await service.connect(connectRequest({ transportOptions: { timeout: 43_210 } }));
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+    const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
+
+    await service.callTool('upstream', 'echo', {});
+
+    const callTimeoutIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 43_210);
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(setTimeoutSpy.mock.results[callTimeoutIndex]?.value);
+  });
+
   it('does not retry a call the remote rejected with HTTP 400', async () => {
     const { requests } = fakeMcpServer({ failCallsBeforeSuccess: 1, failWithStatus: 400 });
     await service.connect(connectRequest({ transportOptions: { retryAttempts: 2, retryDelayMs: 1 } }));
