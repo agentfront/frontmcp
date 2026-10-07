@@ -100,7 +100,11 @@ curl -X POST https://example.com/mcp \
 ```
 
 The result lists `supportedVersions`, `capabilities` (including `extensions`),
-and `instructions`.
+and `instructions`. The capabilities and instructions are those `initialize`
+sends: `experimental['claude/channel']` when the server has channels, and the
+server's `instructions` with the channel hint and the skill catalog
+(`skillsConfig.injectInstructions`), listing only the skills that caller may see.
+Up to 1.9.2 neither the channel capability nor the hint and catalog were sent.
 
 ### Mirrored request headers
 

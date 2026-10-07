@@ -183,9 +183,8 @@ export function buildSkillsCatalogSummary(
   // (including the footer) never exceeds MAX_SKILL_CATALOG_CHARS.
   const effectiveCap = MAX_SKILL_CATALOG_CHARS - TRUNCATION_FOOTER_RESERVE;
   for (const skill of skills) {
-    const meta = skill.metadata;
-    const name = sanitizeName(meta.name);
-    const description = sanitizeDescription(meta.description);
+    const name = sanitizeName(skill.metadata.name);
+    const description = sanitizeDescription(skill.getDescription());
     const line = description ? `- **${name}**: ${description}` : `- **${name}**`;
     if (charCount + line.length + 1 > effectiveCap) {
       truncated = true;
@@ -347,7 +346,7 @@ function buildSkillUriHints(skills: readonly SkillEntry[], extraUris: readonly s
   if (skills.length === 0) return '';
   const lines = ['Available skills (load via resources/read):'];
   for (const skill of skills) {
-    lines.push(`- skill://${skill.getSkillPath()}/SKILL.md — ${skill.metadata.description}`);
+    lines.push(`- skill://${skill.getSkillPath()}/SKILL.md — ${skill.getDescription()}`);
   }
   for (const extra of extraUris) {
     lines.push(`- ${extra}`);

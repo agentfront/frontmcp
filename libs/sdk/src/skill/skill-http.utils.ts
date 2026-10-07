@@ -57,7 +57,7 @@ export function formatSkillsForLlmCompact(skills: SkillEntry[]): string {
     lines.push(`# ${skill.name}`);
 
     // Description
-    lines.push(skill.metadata.description);
+    lines.push(skill.getDescription());
 
     // Tools (if any)
     const toolNames = skill.getToolNames();
@@ -301,7 +301,7 @@ export function skillToApiResponse(
   const result: SkillApiResponse = {
     id: skill.metadata.id ?? skill.metadata.name,
     name: skill.metadata.name,
-    description: skill.metadata.description,
+    description: skill.getDescription(),
     tags: skill.metadata.tags ?? [],
     tools: skill.getToolNames(),
     parameters: skill.metadata.parameters?.map((p) => ({

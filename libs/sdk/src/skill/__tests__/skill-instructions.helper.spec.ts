@@ -15,7 +15,13 @@ interface FakeSkill {
   isHidden?(): boolean;
 }
 
-function makeRegistry(skills: FakeSkill[]): SkillRegistryInterface {
+/** A fake skill as the helper reads it: its description through `getDescription()`, like a SkillInstance. */
+function asEntry(skill: FakeSkill) {
+  return { ...skill, getDescription: () => skill.metadata.description ?? '' };
+}
+
+function makeRegistry(fakeSkills: FakeSkill[]): SkillRegistryInterface {
+  const skills = fakeSkills.map(asEntry);
   // Only `getSkills` is exercised by the helper; everything else can throw.
   const registry: Partial<SkillRegistryInterface> = {
     getSkills: ((opts?: unknown) => {
@@ -36,7 +42,7 @@ function makeMutableRegistry(initial: FakeSkill[]): {
   registry: SkillRegistryInterface;
   add(skill: FakeSkill): void;
 } {
-  const skills = [...initial];
+  const skills = initial.map(asEntry);
   const registry: Partial<SkillRegistryInterface> = {
     getSkills: ((opts?: unknown) => {
       const o = (opts ?? {}) as { visibility?: string };
@@ -51,7 +57,7 @@ function makeMutableRegistry(initial: FakeSkill[]): {
   return {
     registry: registry as SkillRegistryInterface,
     add(skill) {
-      skills.push(skill);
+      skills.push(asEntry(skill));
     },
   };
 }

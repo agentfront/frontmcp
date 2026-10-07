@@ -335,12 +335,17 @@ describe('skills:filter flow', () => {
       );
     });
 
-    it('never names a skill the flow drops in the 2026-07-28 server/discover instructions', async () => {
+    it('lists the skills the flow keeps, and only those, in the 2026-07-28 server/discover instructions', async () => {
       const server = await createTestFetchServer({ ...serverConfig, instructions: 'Guides server.' });
       const { message } = await rpc20260728(server.handler, 'server/discover');
 
       expect(JSON.stringify(message.result)).not.toContain('restricted-guide');
-      expect(message.result?.['instructions']).toBe('Guides server.');
+      expect(message.result?.['instructions']).toBe(
+        [
+          'Guides server.',
+          "Available skills (read the `skill://index.json` resource for each skill's `SKILL.md` URI):\n\n- **public-guide**: Public onboarding guide",
+        ].join('\n\n---\n\n'),
+      );
     });
   });
 });

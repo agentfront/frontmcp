@@ -59,7 +59,7 @@ export class Sep2640SkillIndexResource extends ResourceContext {
     const entries = skills.map((skill) =>
       buildSkillMdIndexEntry({
         name: skill.metadata.name,
-        description: skill.metadata.description,
+        description: skill.getDescription(),
         skillPathSegments: skill.getSkillPathSegments(),
       }),
     );
