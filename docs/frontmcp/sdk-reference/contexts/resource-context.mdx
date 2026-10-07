@@ -61,7 +61,7 @@ interface ReadResourceResult {
 
 ### respond(value)
 
-Set output and end execution immediately.
+End `execute()` with `value` as its result, checked and normalized exactly as a returned value is. Up to 1.9.2 the read failed with `Resource "…" read failed: Resource output not found`.
 
 ```typescript
 respond(value: Out): never

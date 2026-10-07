@@ -5,6 +5,7 @@ import { EmptyResultSchema, UnsubscribeRequestSchema } from '@frontmcp/protocol'
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
+import { mcpRequestSessionId } from '../../transport/mcp-handlers/mcp-surface';
 
 const inputSchema = z.object({
   request: UnsubscribeRequestSchema,
@@ -17,7 +18,7 @@ const stateSchema = z.object({
   input: z.object({
     uri: z.string().min(1),
   }),
-  sessionId: z.string(),
+  sessionId: z.string().optional(),
   output: outputSchema,
 });
 
@@ -73,13 +74,8 @@ export default class UnsubscribeResourceFlow extends FlowBase<typeof name> {
       throw new InvalidMethodError(method, 'resources/unsubscribe');
     }
 
-    // Get session ID from context - required for subscription tracking
-    const sessionId = (ctx as Record<string, unknown> | undefined)?.['sessionId'];
-    if (!sessionId || typeof sessionId !== 'string') {
-      this.logger.warn('parseInput: sessionId not found in context');
-      throw new InvalidInputError('Session ID is required for resource unsubscriptions');
-    }
-
+    // The session the subscription belongs to: a request without one is answered without unsubscribing
+    const sessionId = mcpRequestSessionId(ctx);
     this.state.set({ input: params, sessionId });
     this.logger.verbose('parseInput:done');
   }
@@ -88,7 +84,11 @@ export default class UnsubscribeResourceFlow extends FlowBase<typeof name> {
   async unsubscribe() {
     this.logger.verbose('unsubscribe:start');
     const { uri } = this.state.required.input;
-    const { sessionId } = this.state.required;
+    const { sessionId } = this.state;
+    if (!sessionId) {
+      this.logger.warn('unsubscribe: no session ID in the request context');
+      return;
+    }
 
     // Per MCP spec, unsubscribe should succeed even if the resource doesn't exist
     // or the session wasn't subscribed. We just silently succeed.

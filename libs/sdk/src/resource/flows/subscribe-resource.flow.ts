@@ -3,8 +3,12 @@
 import { z } from '@frontmcp/lazy-zod';
 import { EmptyResultSchema, SubscribeRequestSchema } from '@frontmcp/protocol';
 
+import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
+import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError, ResourceNotFoundError } from '../../errors';
+import { isUIResourceUri } from '../../tool/ui';
+import { mcpRequestSessionId } from '../../transport/mcp-handlers/mcp-surface';
 
 const inputSchema = z.object({
   request: SubscribeRequestSchema,
@@ -17,7 +21,7 @@ const stateSchema = z.object({
   input: z.object({
     uri: z.string().min(1),
   }),
-  sessionId: z.string(),
+  sessionId: z.string().optional(),
   output: outputSchema,
 });
 
@@ -73,30 +77,40 @@ export default class SubscribeResourceFlow extends FlowBase<typeof name> {
       throw new InvalidMethodError(method, 'resources/subscribe');
     }
 
-    // Get session ID from context - required for subscription tracking
-    const sessionId = (ctx as Record<string, unknown> | undefined)?.['sessionId'];
-    if (!sessionId || typeof sessionId !== 'string') {
-      this.logger.warn('parseInput: sessionId not found in context');
-      throw new InvalidInputError('Session ID is required for resource subscriptions');
-    }
-
+    // The session the subscription belongs to: a request without one is answered without subscribing
+    const sessionId = mcpRequestSessionId(ctx);
     this.state.set({ input: params, sessionId });
     this.logger.verbose('parseInput:done');
   }
 
+  /** Refuse what resources/read refuses, with the same error, so a subscription can't reveal a resource it can't read. */
   @Stage('validateResource')
   async validateResource() {
     this.logger.verbose('validateResource:start');
 
     const { uri } = this.state.required.input;
-    this.logger.info(`validateResource: checking resource with URI "${uri}"`);
+    // `ui://` widget URIs are served from the tool UI registry and carry no `availableWhen` of their own
+    if (isUIResourceUri(uri)) return;
 
-    // Verify the resource exists before allowing subscription
-    const match = this.scope.resources.findResourceForUri(uri);
-
+    let match = this.scope.resources.findResourceForUri(uri);
     if (!match) {
-      this.logger.warn(`validateResource: resource for URI "${uri}" not found`);
-      throw new ResourceNotFoundError(uri);
+      // Remote apps list their resources lazily, as resources/read accounts for
+      await loadRemoteAppCapabilities(this.scope);
+      match = this.scope.resources.findResourceForUri(uri);
+    }
+    if (!match) throw new ResourceNotFoundError(uri);
+
+    const { availableWhen } = match.instance.metadata;
+    const surface = callSurfaceOf(this.input.ctx);
+    const availability = availabilityForCall(availableWhen, surface);
+    if (availability === 'not-offered') throw new ResourceNotFoundError(uri);
+    if (availability === 'unavailable') {
+      throw entryUnavailableError(
+        match.instance.isTemplate ? 'ResourceTemplate' : 'Resource',
+        uri,
+        availableWhen,
+        surface,
+      );
     }
 
     this.logger.verbose('validateResource:done');
@@ -106,7 +120,11 @@ export default class SubscribeResourceFlow extends FlowBase<typeof name> {
   async subscribe() {
     this.logger.verbose('subscribe:start');
     const { uri } = this.state.required.input;
-    const { sessionId } = this.state.required;
+    const { sessionId } = this.state;
+    if (!sessionId) {
+      this.logger.warn('subscribe: no session ID in the request context');
+      return;
+    }
 
     const isNew = this.scope.notifications.subscribeResource(sessionId, uri);
 

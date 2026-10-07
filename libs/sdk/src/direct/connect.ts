@@ -8,28 +8,29 @@
 import 'reflect-metadata';
 
 import { getDecoratorConfig, type FrontMcpConfigInput } from '../common';
+import type { FrontMcpInstance } from '../front-mcp/front-mcp';
 import type { Scope } from '../scope/scope.instance';
 import type { ConnectOptions, DirectClient, LLMConnectOptions } from './client.types';
 import { PLATFORM_CLIENT_INFO } from './llm-platform';
 
-// Cache for initialized scopes (singleton per parsed config)
+// Cache for initialized servers (singleton per parsed config)
 // Using let to allow reassignment in clearScopeCache()
-let scopeCache = new WeakMap<object, Promise<Scope>>();
+let instanceCache = new WeakMap<object, Promise<FrontMcpInstance>>();
 
-/** How many connected clients share each cached scope. */
-const scopeClients = new WeakMap<Promise<Scope>, number>();
+/** How many connected clients share each cached server. */
+const instanceClients = new WeakMap<Promise<FrontMcpInstance>, number>();
 
 /**
- * Get or create a scope for the given config.
+ * Get or create the server for the given config.
  * Uses WeakMap caching to ensure singleton behavior per config object.
  * Synchronous up to the cache lookup, so a caller can count its client before anything else runs.
  *
  * @internal
  */
-function getScope(
+function getInstance(
   config: FrontMcpConfigInput,
   mode?: 'full' | 'cli',
-): { cacheKey: object; scopePromise: Promise<Scope> } {
+): { cacheKey: object; instancePromise: Promise<FrontMcpInstance> } {
   // Handle @FrontMcp-decorated class (e.g., from schema-extractor loading a bundle).
   // `getDecoratorConfig` returns the parsed metadata via the SDK's stable accessor.
   let resolvedConfig = config;
@@ -40,40 +41,43 @@ function getScope(
     }
   }
   // Create a unique cache key based on config
-  // Since config is passed by reference, same config object = same scope
+  // Since config is passed by reference, same config object = same server
   const cacheKey = resolvedConfig as object;
 
-  let scopePromise = scopeCache.get(cacheKey);
-  if (!scopePromise) {
-    scopePromise = (async () => {
+  let instancePromise = instanceCache.get(cacheKey);
+  if (!instancePromise) {
+    instancePromise = (async () => {
       try {
         const { FrontMcpInstance } = await import('../front-mcp/front-mcp.js');
-        const { PublicMcpError } = await import('../errors/index.js');
-
         // Create instance without starting HTTP server
         // CLI mode skips non-essential registries for faster startup
-        const instance =
-          mode === 'cli'
-            ? await FrontMcpInstance.createForCli(resolvedConfig)
-            : await FrontMcpInstance.createForGraph(resolvedConfig);
-        // The scope holding the server's own apps, not a standalone app's (such as DashboardApp's)
-        const scope = instance.getPrimaryScope();
-
-        if (!scope) {
-          throw new PublicMcpError('No scopes initialized. Ensure at least one app is configured.', 'NO_SCOPES', 500);
-        }
-
-        return scope as Scope;
+        return mode === 'cli'
+          ? await FrontMcpInstance.createForCli(resolvedConfig)
+          : await FrontMcpInstance.createForGraph(resolvedConfig);
       } catch (error) {
         // Remove from cache on failure to allow retry
-        scopeCache.delete(cacheKey);
+        instanceCache.delete(cacheKey);
         throw error;
       }
     })();
-    scopeCache.set(cacheKey, scopePromise);
+    instanceCache.set(cacheKey, instancePromise);
   }
 
-  return { cacheKey, scopePromise };
+  return { cacheKey, instancePromise };
+}
+
+/**
+ * The endpoint a client connects to: the scope holding the server's own apps (not a standalone app's, such as
+ * DashboardApp's), or the endpoint of the app `app` names.
+ */
+async function endpointScope(instance: FrontMcpInstance, app?: string): Promise<Scope> {
+  if (app !== undefined) return instance.getAppScope(app) as Scope;
+  const scope = instance.getPrimaryScope();
+  if (!scope) {
+    const { PublicMcpError } = await import('../errors/index.js');
+    throw new PublicMcpError('No scopes initialized. Ensure at least one app is configured.', 'NO_SCOPES', 500);
+  }
+  return scope as Scope;
 }
 
 /**
@@ -83,7 +87,8 @@ function getScope(
  * The client provides MCP operations with LLM-aware response formatting.
  *
  * @param config - FrontMCP configuration (same as @FrontMcp decorator)
- * @param options - Connection options including clientInfo, session, and authToken
+ * @param options - Connection options including clientInfo, session, and authToken; `app` connects to the endpoint
+ *   that app has of its own (each app's with `splitByApp`, a `standalone` app's otherwise) instead of the main one
  * @returns Connected DirectClient instance
  *
  * @example Basic connection
@@ -112,30 +117,38 @@ function getScope(
  * // Tools will be formatted for OpenAI
  * const tools = await client.listTools();
  * ```
+ *
+ * @example One app of a splitByApp server
+ * ```typescript
+ * const billing = await connect(SplitServerConfig, { app: 'billing' });
+ * ```
  */
 export async function connect(
   config: FrontMcpConfigInput,
-  options?: ConnectOptions & { mode?: 'full' | 'cli' },
+  options?: ConnectOptions & { mode?: 'full' | 'cli'; app?: string },
 ): Promise<DirectClient> {
   const { DirectClientImpl } = await import('./direct-client.js');
-  // Clients of the same config share its scope, which is disposed when the last of them closes. The client is
-  // counted before any await, so another client closing meanwhile cannot dispose the scope under this one.
-  const { cacheKey, scopePromise } = getScope(config, options?.mode);
-  scopeClients.set(scopePromise, (scopeClients.get(scopePromise) ?? 0) + 1);
+  // Clients of the same config share its server, which is disposed when the last of them closes. The client is
+  // counted before any await, so another client closing meanwhile cannot dispose the server under this one.
+  const { cacheKey, instancePromise } = getInstance(config, options?.mode);
+  instanceClients.set(instancePromise, (instanceClients.get(instancePromise) ?? 0) + 1);
   const leave = () => {
-    const remaining = (scopeClients.get(scopePromise) ?? 1) - 1;
-    scopeClients.set(scopePromise, remaining);
+    const remaining = (instanceClients.get(instancePromise) ?? 1) - 1;
+    instanceClients.set(instancePromise, remaining);
     return remaining;
   };
   const release = async () => {
     if (leave() > 0) return;
-    if (scopeCache.get(cacheKey) === scopePromise) scopeCache.delete(cacheKey);
-    await (await scopePromise).dispose();
+    if (instanceCache.get(cacheKey) === instancePromise) instanceCache.delete(cacheKey);
+    const instance = await instancePromise;
+    await Promise.all((instance.getScopes() as Scope[]).map((scope) => scope.dispose()));
   };
   try {
-    return await DirectClientImpl.create(await scopePromise, options, release);
+    const scope = await endpointScope(await instancePromise, options?.app);
+    return await DirectClientImpl.create(scope, options, release);
   } catch (error) {
-    leave();
+    // Best-effort like a client's close(), which runs the same release: the caller needs this error
+    await release().catch(() => undefined);
     throw error;
   }
 }
@@ -314,5 +327,5 @@ export async function connectVercelAI(config: FrontMcpConfigInput, options?: LLM
  * @internal
  */
 export function clearScopeCache(): void {
-  scopeCache = new WeakMap<object, Promise<Scope>>();
+  instanceCache = new WeakMap<object, Promise<FrontMcpInstance>>();
 }

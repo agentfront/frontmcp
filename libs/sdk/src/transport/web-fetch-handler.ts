@@ -188,6 +188,18 @@ function metricsResponse(result: MetricsHttpResult): Response {
  * ```
  */
 export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandlerOptions = {}): WebFetchHandler {
+  return buildWebFetchHandler(scope, options);
+}
+
+/**
+ * {@link createWebFetchHandler}, with the entry paths a 404 lists: by default the handler's own, and every endpoint's
+ * when it serves one endpoint of several.
+ */
+function buildWebFetchHandler(
+  scope: Scope,
+  options: CreateWebFetchHandlerOptions,
+  listedEntryPaths?: readonly string[],
+): WebFetchHandler {
   const httpConfig = scope.metadata.http;
   const healthConfig = scope.metadata.health ?? {};
   // `health.enabled: false` turns the probes off entirely; an explicit
@@ -369,7 +381,10 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
     if (!entryPaths.has(normalizePath(url.pathname))) {
       const authResponse = await runMatchingHttpFlowWeb(scope, request, { ctx, env });
       if (authResponse) return withCors(authResponse, request);
-      return withCors(Response.json({ error: 'Not Found', entryPaths: [...entryPaths] }, { status: 404 }), request);
+      return withCors(
+        Response.json({ error: 'Not Found', entryPaths: listedEntryPaths ?? [...entryPaths] }, { status: 404 }),
+        request,
+      );
     }
 
     // Run the request through the REAL `http:request` flow (auth, quota, router,
@@ -397,36 +412,29 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
 }
 
 /**
- * A fetch handler for every scope of a server: a `splitByApp` app, or a `standalone` one, has a scope
- * of its own served at its path (`<entryPath>/<appId>`), as the Express host serves it. A request goes
- * to the scope whose path is the longest prefix of the request's, else to `primary`, which also serves
- * the entry path itself when no scope with apps is mounted there, and answers the health probes and
- * `/metrics` outside every scope's path.
+ * A fetch handler for every scope of a server, each served at its path (`<entryPath>`, or `<entryPath>/<appId>` for a
+ * `splitByApp` or `standalone` app's own scope), exactly where the Node server serves it: with `splitByApp` nothing is
+ * served at the entry path itself. A request goes to the scope whose path is the longest prefix of the request's, else
+ * to the scope at the entry path, else to `primary`, which also answers the health probes and `/metrics`. A 404 lists
+ * every scope's path.
  */
 export function createServerFetchHandler(
   primary: Scope,
   scopes: readonly Scope[],
   options: CreateWebFetchHandlerOptions = {},
 ): WebFetchHandler {
-  const basePathOf = (scope: Scope) => `${normalizeEntryPrefix(scope.entryPath)}${normalizeScopeBase(scope.routeBase)}`;
-  const served = scopes.filter((scope) => scope === primary || scope.apps.getApps().length > 0);
-  if (served.length <= 1) return createWebFetchHandler(primary, options);
-
-  const entryPath = normalizeEntryPrefix(primary.entryPath);
-  const rootServed = served.some((scope) => scope !== primary && basePathOf(scope) === entryPath);
-  const routes = served
-    .map((scope) => {
-      const basePath = basePathOf(scope);
-      const paths = scope === primary && !rootServed ? [basePath || '/', entryPath || '/'] : [basePath || '/'];
-      const scopeOptions = {
-        ...options,
-        entryPath: [...new Set(paths)],
-        ...(scope !== primary && { metrics: undefined }),
-      };
-      return { scope, basePath, handler: createWebFetchHandler(scope, scopeOptions) };
-    })
+  const routes = scopes
+    .map((scope) => ({
+      scope,
+      basePath: `${normalizeEntryPrefix(scope.entryPath)}${normalizeScopeBase(scope.routeBase)}`,
+    }))
     .sort((a, b) => b.basePath.length - a.basePath.length);
-  const primaryRoute = routes.find((route) => route.scope === primary) ?? routes[routes.length - 1];
+  const endpointPaths = routes.map(({ basePath }) => basePath || '/');
+  const handlers = routes.map(({ scope, basePath }) => {
+    const scopeOptions = { ...options, entryPath: basePath || '/', ...(scope !== primary && { metrics: undefined }) };
+    return { scope, basePath, handler: buildWebFetchHandler(scope, scopeOptions, endpointPaths) };
+  });
+  const primaryRoute = handlers.find((route) => route.scope === primary) ?? handlers[handlers.length - 1];
   const isUnder = (path: string, basePath: string) =>
     basePath !== '' && (path === basePath || path.startsWith(`${basePath}/`));
 
@@ -434,7 +442,7 @@ export function createServerFetchHandler(
   const metricsConfig = options.metrics?.config;
   if (metricsConfig?.enabled === true) {
     const metricsEndpoint = normalizeEntryPrefix(metricsPath(metricsConfig));
-    if (routes.some(({ scope, basePath }) => scope !== primary && isUnder(metricsEndpoint, basePath))) {
+    if (handlers.some(({ scope, basePath }) => scope !== primary && isUnder(metricsEndpoint, basePath))) {
       throw new MetricsPathConflictError(metricsPath(metricsConfig));
     }
   }
@@ -442,8 +450,8 @@ export function createServerFetchHandler(
   return (request, ctx, env) => {
     const path = scopePathOf(new URL(request.url).pathname);
     const route =
-      routes.find(({ basePath }) => isUnder(path, basePath)) ??
-      routes.find(({ basePath }) => basePath === '') ??
+      handlers.find(({ basePath }) => isUnder(path, basePath)) ??
+      handlers.find(({ basePath }) => basePath === '') ??
       primaryRoute;
     return route.handler(request, ctx, env);
   };

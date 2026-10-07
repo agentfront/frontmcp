@@ -29,8 +29,8 @@ class ConsoleApp {}
 @App({ id: 'metrics', name: 'Metrics', tools: [namedTool('report')] })
 class MetricsApp {}
 
-async function toolNamesAt(handler: (request: Request) => Promise<Response>, path: string): Promise<string[]> {
-  const response = await handler(
+function toolsListAt(handler: (request: Request) => Promise<Response>, path: string): Promise<Response> {
+  return handler(
     new Request(`http://localhost${path}`, {
       method: 'POST',
       headers: {
@@ -53,6 +53,10 @@ async function toolNamesAt(handler: (request: Request) => Promise<Response>, pat
       }),
     }),
   );
+}
+
+async function toolNamesAt(handler: (request: Request) => Promise<Response>, path: string): Promise<string[]> {
+  const response = await toolsListAt(handler, path);
   const body = (await response.json()) as { result?: { tools?: Array<{ name: string }> } };
   return (body.result?.tools ?? []).map((tool) => tool.name).sort();
 }
@@ -68,6 +72,36 @@ describe('createFetchHandler() with several scopes', () => {
 
     await expect(toolNamesAt(handler, '/billing')).resolves.toEqual(['charge']);
     await expect(toolNamesAt(handler, '/support')).resolves.toEqual(['open_ticket']);
+  });
+
+  it.each(['/', '/elsewhere'])(
+    'answers %s of a splitByApp server with a 404 that lists every endpoint, as the Node server answers it',
+    async (path) => {
+      const handler = await FrontMcpInstance.createFetchHandler({
+        info: { name: 'split-fetch-root', version: '1.0.0' },
+        apps: [BillingApp, SupportApp],
+        splitByApp: true,
+        logging: { level: LogLevel.Off },
+      });
+
+      const response = await toolsListAt(handler, path);
+
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: 'Not Found', entryPaths: ['/billing', '/support'] });
+    },
+  );
+
+  it("serves a splitByApp server's only app at its own path, not at the entry path", async () => {
+    const handler = await FrontMcpInstance.createFetchHandler({
+      info: { name: 'split-fetch-one', version: '1.0.0' },
+      apps: [BillingApp],
+      splitByApp: true,
+      http: { entryPath: '/mcp' },
+      logging: { level: LogLevel.Off },
+    });
+
+    await expect(toolNamesAt(handler, '/mcp/billing')).resolves.toEqual(['charge']);
+    expect((await toolsListAt(handler, '/mcp')).status).toBe(404);
   });
 
   it('serves a standalone app at its own path, next to the server', async () => {

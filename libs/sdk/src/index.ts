@@ -365,6 +365,28 @@ export const AgentCallHook = FlowHooksOf('agents:call-agent');
 export const ChannelSendHook = FlowHooksOf('channels:send-notification');
 export const ChannelListHook = FlowHooksOf('channels:list');
 
+// Built-in flows no other export reaches. Exporting them puts their `ExtendFlows` entries in the published type graph,
+// so `FlowHooksOf()`, `FlowCtxOf` and `@Flow` accept every flow name FrontMCP runs.
+export type { default as AuthVerifyFlow } from './auth/flows/auth.verify.flow';
+export type { default as SessionVerifyFlow } from './auth/flows/session.verify.flow';
+export type { default as OauthAuthUiExtraFlow } from './auth/flows/oauth.auth-ui.flow';
+export type { default as OauthConnectFlow } from './auth/flows/oauth.connect.flow';
+export type { default as OauthProviderCallbackFlow } from './auth/flows/oauth.provider-callback.flow';
+export type { default as OauthUserInfoFlow } from './auth/flows/oauth.userinfo.flow';
+export type { default as WellKnownJwksFlow } from './auth/flows/well-known.jwks.flow';
+export type { default as WellKnownAsFlow } from './auth/flows/well-known.oauth-authorization-server.flow';
+export type { default as WellKnownPrmFlow } from './auth/flows/well-known.prm.flow';
+export type { default as ElicitationRequestFlow } from './elicitation/flows/elicitation-request.flow';
+export type { default as ElicitationResultFlow } from './elicitation/flows/elicitation-result.flow';
+export type { default as SetLevelFlow } from './logging/flows/set-level.flow';
+export type { default as SubscribeResourceFlow } from './resource/flows/subscribe-resource.flow';
+export type { default as UnsubscribeResourceFlow } from './resource/flows/unsubscribe-resource.flow';
+export type { default as HttpIpFilterFlow } from './scope/flows/http.ip-filter.flow';
+export type { default as HandleMcp20260728Flow } from './transport/flows/handle.mcp-20260728.flow';
+export type { default as HandleSseFlow } from './transport/flows/handle.sse.flow';
+export type { default as HandleStatelessHttpFlow } from './transport/flows/handle.stateless-http.flow';
+export type { default as HandleStreamableHttpFlow } from './transport/flows/handle.streamable-http.flow';
+
 // Whether a plugin's hooks judge an entry, so its list hooks follow its own gate
 export { isEntryGatedBy } from './hooks/hook-coverage';
 export type { HookGatedEntry } from './hooks/hook-coverage';
@@ -430,6 +452,7 @@ export type {
   ConnectOptions,
   LLMConnectOptions,
   SessionOptions,
+  CallToolOptions,
   ClientInfo,
   LLMPlatform,
 } from './direct';
