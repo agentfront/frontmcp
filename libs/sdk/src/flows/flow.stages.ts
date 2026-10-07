@@ -10,6 +10,9 @@ export type StageEntry<C> = {
 
 export type StageMap<C> = Record<string, StageEntry<C>[]>;
 
+/** Runs one hook a plugin, app or entry injected into a flow (`run`), so the run's observer can wrap it. */
+export type HookRunner = (hook: { stage: string; target: unknown }, run: () => Promise<void>) => Promise<void>;
+
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 const CACHE: WeakMap<Function, StageMap<any>> = new WeakMap();
@@ -95,6 +98,7 @@ export function mergeHookMetasIntoStageMap<C>(
   table: StageMap<C>,
   metas: HookMetadata[],
   orderStart = 100_000,
+  runHook: HookRunner = (_hook, run) => run(),
 ) {
   let order = orderStart;
 
@@ -124,11 +128,9 @@ export function mergeHookMetasIntoStageMap<C>(
         if (typeof impl !== 'function') return skipHook();
         if (m.filter && !(await m.filter(ctx))) return skipHook();
 
-        if (m.type === 'around') {
-          return impl.call(target, ctx, next);
-        } else {
-          return impl.call(target, ctx);
-        }
+        return runHook({ stage: resolved, target }, async () =>
+          m.type === 'around' ? impl.call(target, ctx, next) : impl.call(target, ctx),
+        );
       },
     };
 

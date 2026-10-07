@@ -11,10 +11,10 @@ import {
   type EntryOwnerRef,
   type RemoteAppMetadata,
 } from '../common';
-import { InvalidRegistryKindError, RegistryDependencyNotRegisteredError } from '../errors';
+import { DuplicateAppIdError, InvalidRegistryKindError, RegistryDependencyNotRegisteredError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
-import { appDiscoveryDeps, normalizeApp } from './app.utils';
+import { appDiscoveryDeps, appIdOf, normalizeApp } from './app.utils';
 import { AppEsmInstance, AppLocalInstance, AppRemoteInstance } from './instances';
 
 export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, AppType[]> {
@@ -35,8 +35,14 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
     const tokens = new Set<Token>();
     const defs = new Map<Token, AppRecord>();
     const graph = new Map<Token, Set<Token>>();
+    const remoteAppIds = new Set<string>();
     for (const raw of list) {
       const rec = normalizeApp(raw);
+      if (rec.kind === AppKind.REMOTE_VALUE && !rec.useValue) {
+        const appId = appIdOf(rec.metadata);
+        if (remoteAppIds.has(appId)) throw new DuplicateAppIdError(appId);
+        remoteAppIds.add(appId);
+      }
       const provide = rec.provide;
       tokens.add(provide);
       defs.set(provide, rec);

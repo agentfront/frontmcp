@@ -194,6 +194,11 @@ try {
 }
 ```
 
+`ConfigPlugin` throws it at startup, so the server doesn't start. With `ConfigPlugin.init({ schema, strict: false })`
+(or `loadConfig(schema, { strict: false, onInvalid })`), invalid settings log a warning (call `onInvalid`) instead,
+and the settings are served as read, without the schema's defaults. `strict` defaults to `true`; up to 1.9.2 it had
+no effect.
+
 ## Dependency
 
 YAML loading depends on [js-yaml](https://www.npmjs.com/package/js-yaml) version `^4.1.1` or higher. This dependency is included in `@frontmcp/sdk` and requires no additional installation.

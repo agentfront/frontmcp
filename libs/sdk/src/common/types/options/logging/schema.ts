@@ -2,16 +2,27 @@
 // Zod schema for logging configuration
 
 import { z } from '@frontmcp/lazy-zod';
+import { getEnv } from '@frontmcp/utils';
 
 import { annotatedFrontMcpLoggerSchema } from '../../../schemas';
 import type { RawZodShape } from '../../common.types';
-import { LogLevel, type LoggingOptionsInterface } from './interfaces';
+import { LogLevel, LogLevelName, type LoggingOptionsInterface } from './interfaces';
+
+/** The level `FRONTMCP_LOG_LEVEL` names (`debug`, `verbose`, `info`, `warn`, `error` or `off`, in any case), if any. */
+function logLevelFromEnv(): LogLevel | undefined {
+  const name = getEnv('FRONTMCP_LOG_LEVEL')?.trim().toLowerCase();
+  const match = Object.entries(LogLevelName).find(([, levelName]) => levelName === name);
+  return match ? (Number(match[0]) as LogLevel) : undefined;
+}
 
 /**
  * Logging options Zod schema.
  */
 export const loggingOptionsSchema = z.object({
-  level: z.nativeEnum(LogLevel).optional().default(LogLevel.Info),
+  level: z
+    .nativeEnum(LogLevel)
+    .optional()
+    .default(() => logLevelFromEnv() ?? LogLevel.Info),
   prefix: z.string().optional(),
   enableConsole: z.boolean().optional().default(true),
   transports: z.array(annotatedFrontMcpLoggerSchema).optional().default([]),

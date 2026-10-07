@@ -586,6 +586,24 @@ describe('initializeRequestHandler', () => {
       });
     });
 
+    it("sends info's title, websiteUrl and icons in serverInfo", async () => {
+      const info = {
+        name: 'help-desk',
+        title: 'Help Desk',
+        version: '1.0.0',
+        websiteUrl: 'https://desk.example.com',
+        icons: [{ src: 'https://desk.example.com/icon.png' }],
+      };
+      const handler = initializeRequestHandler({
+        ...handlerOptions,
+        scope: { ...mockScope, metadata: { ...mockScope.metadata, info } } as any,
+      });
+
+      const result = await handler.handler(createRequest(), createContext() as any);
+
+      expect(result.serverInfo).toEqual(info);
+    });
+
     it('should return capabilities from server options', async () => {
       const handler = initializeRequestHandler(handlerOptions);
       const request = createRequest();

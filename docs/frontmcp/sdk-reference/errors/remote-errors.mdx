@@ -135,7 +135,8 @@ new RemotePromptNotFoundError(appId: string, promptName: string)
 
 ### RemoteAuthError
 
-Thrown when authentication to a remote server fails (missing credentials).
+Thrown when authentication to a remote server fails: a `remoteAuth: { mode: 'mapped' }` mapper throws, or the
+remote answers a tool call, resource read or prompt request with HTTP `401`.
 
 | Property       | Type                  | Value                 |
 | -------------- | --------------------- | --------------------- |

@@ -13,6 +13,7 @@ import { type ElicitOptions, type ElicitResult } from '../elicitation';
 import { ELICITATION_META_KEY } from '../elicitation/elicitation-meta';
 import { ElicitationTimeoutError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
+import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { buildScopedServerOptions } from './build-scoped-server-options';
 
@@ -160,7 +161,9 @@ export async function createInMemoryServer(
   const mcpServer = new McpServer(scope.metadata.info, serverOptions);
 
   // Register handlers with auth context injection
-  const handlers = createMcpHandlers({ scope, serverOptions });
+  const composeInstructions = (caller?: { authInfo?: unknown }) =>
+    composeCallerInstructions(scope, { ctx: caller, skillUriHints: true });
+  const handlers = createMcpHandlers({ scope, serverOptions, composeInstructions });
   for (const handler of handlers) {
     // Wrap handler to inject auth context
     const originalHandler = handler.handler;

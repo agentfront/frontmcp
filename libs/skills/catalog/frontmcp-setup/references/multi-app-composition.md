@@ -69,7 +69,7 @@ export default class Server {}
 
 ## ESM Apps (npm Packages)
 
-Load an `@App`-decorated class from an npm package at runtime using `app.esm()`. The package is fetched, cached, and its default export is treated as a local app.
+Load an npm package at runtime using `app.esm()`. The package is fetched and cached, and the `tools`, `resources` and `prompts` its manifest exports are registered under the namespace. Its `skills`, `agents`, `jobs`, `workflows` and `providers` are not loaded; the server logs a warning naming them.
 
 ```typescript
 import { app, FrontMcp } from '@frontmcp/sdk';
@@ -157,13 +157,18 @@ export default class Server {}
 | `headers`         | `Record<string, string>`             | -          | Additional headers for all requests                                                                                        |
 | `protocolVersion` | `'legacy' \| '2026-07-28' \| 'auto'` | `'legacy'` | MCP revision: session + `initialize`, the stateless 2026-07-28 client (URL remotes only), or probe `server/discover` first |
 
+A transient error is a network failure, a call that ran past `timeout`, or an HTTP `408`, `425`, `429` or `5xx` answer other than `501` and `505`, whatever its body says; a `400` or `404` is not retried. A call that timed out or got a `5xx` may have run on the remote already, so a retry can run it twice: set `retryAttempts: 0` for a remote whose tools must not run twice. Up to 1.9.2 a call that ran past `timeout` was not retried. On a 2026-07-28 remote, a `Retry-After` header on the answer sets the wait, up to the backoff's longest one.
+
 Each remote tool, resource, resource template and prompt is listed once; when `cacheTTL` expires the gateway re-reads the remote's lists and replaces what it proxied before (dropped entries disappear, nothing is duplicated).
 
 `RemoteAuthConfig` modes:
 
 - `{ mode: 'static', credentials: { type: 'bearer' | 'basic' | 'apiKey', value: string } }` -- static credentials for trusted internal services, sent on every request (discovery included)
 - `{ mode: 'forward', tokenClaim?: string, headerName?: string }` -- forward the calling user's token (or one claim of it with `tokenClaim`) as `Bearer <token>` in `headerName` (default `Authorization`) on that user's calls; discovery runs outside any request and carries only `transportOptions.headers`
-- `{ mode: 'oauth' }` -- let the remote server handle its own OAuth flow
+- `{ mode: 'mapped', mapper: (authInfo) => credentials }` -- credentials (as in `static`) computed from each caller's auth info, on that caller's calls; a mapper that throws fails the call with `RemoteAuthError`
+- `{ mode: 'oauth' }` -- no gateway credentials; the gateway runs no OAuth flow against the remote, so this only fits a remote that serves it without credentials
+
+A call the remote refuses with HTTP `401` fails with `RemoteAuthError` (`REMOTE_AUTH_ERROR`, JSON-RPC `-32001`), whatever the mode.
 
 `filter` matches the remote's entry names before the namespace prefix; resource templates match under `resources`.
 
@@ -220,6 +225,8 @@ app.remote('https://api.example.com/mcp', { namespace: 'api' });
 app.esm('@acme/tools@^1.0.0', { namespace: 'acme' });
 // ESM tools are exposed as: acme:tool_name
 ```
+
+A remote or ESM app's id is its `name`, else its `namespace`, else the package name (or the URL's first host label). Two such apps with one id stop startup with `DuplicateAppIdError`, so give each `app.esm()` of the same package its own `name` or `namespace`.
 
 ## Shared Tools
 

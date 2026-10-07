@@ -7,7 +7,6 @@
  */
 
 import { type Token } from '@frontmcp/di';
-import { idFromString } from '@frontmcp/utils';
 
 import {
   AppEntry,
@@ -38,6 +37,7 @@ import { buildRemoteConnectRequest, mcpClientServiceOf } from '../../remote-mcp/
 import ResourceRegistry from '../../resource/resource.registry';
 import type { SkillRegistryInterface } from '../../skill/skill.registry';
 import ToolRegistry from '../../tool/tool.registry';
+import { appIdOf } from '../app.utils';
 
 /**
  * Empty plugin registry for remote apps (remote apps don't have local plugins)
@@ -191,7 +191,7 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
 
   constructor(record: AppRecord, scopeProviders: ProviderRegistry) {
     super(record);
-    this.id = this.metadata.id ?? idFromString(this.metadata.name);
+    this.id = appIdOf(this.metadata);
     this.scopeProviders = scopeProviders;
 
     // Create app owner reference

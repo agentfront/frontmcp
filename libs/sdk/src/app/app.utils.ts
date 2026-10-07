@@ -1,5 +1,5 @@
 import { depsOfClass, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
-import { isValidMcpUri } from '@frontmcp/utils';
+import { idFromString, isValidMcpUri } from '@frontmcp/utils';
 
 import {
   AppKind,
@@ -19,6 +19,11 @@ export function collectAppMetadata(cls: AppType): LocalAppMetadata {
       [key]: getMetadata(token, cls),
     });
   }, {} as LocalAppMetadata);
+}
+
+/** The id an app is known by: its own `id`, else one derived from its `name`. */
+export function appIdOf(metadata: { id?: string; name: string }): string {
+  return metadata.id ?? idFromString(metadata.name);
 }
 
 /**

@@ -174,6 +174,7 @@ Notes:
 
 - `logging.prefix` adds a static scope tag to all records (e.g., app name or environment), child loggers' included: a child created with `logger.child('SessionVerifyFlow')` logs with the prefix `billing-edge:SessionVerifyFlow`. Up to 1.9.1 only the root logger's records carried it.
 - Transports receive `rec.level` and `rec.levelName`; the framework already filtered below‑level logs.
+- Without a `logging.level`, the level is the one the `FRONTMCP_LOG_LEVEL` environment variable names (`debug`, `verbose`, `info`, `warn`, `error` or `off`), else `info`. `@frontmcp/testing`'s `test.use({ logLevel })` sets it for the server it starts.
 
 ```ts
 logging: {

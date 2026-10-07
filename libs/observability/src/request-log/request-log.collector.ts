@@ -1,5 +1,5 @@
 import type { StructuredLogEntry } from '../logging/structured-log.types';
-import type { RequestLog, RequestLogEntry, RequestLogCollectorOptions } from './request-log.types';
+import type { RequestLog, RequestLogCollectorOptions, RequestLogEntry } from './request-log.types';
 
 /**
  * RequestLogCollector — per-request accumulator for structured log entries.
@@ -137,6 +137,14 @@ export class RequestLogCollector {
   setStatus(status: RequestLog['status'], statusCode?: number): void {
     this.status = status;
     this.statusCode = statusCode;
+  }
+
+  /**
+   * Set the HTTP status the request was answered with; one of 400 or more marks it failed.
+   */
+  setStatusCode(statusCode: number): void {
+    this.statusCode = statusCode;
+    if (statusCode >= 400) this.status = 'error';
   }
 
   /**

@@ -20,6 +20,7 @@ import { type AuthInfo } from '@frontmcp/protocol';
 import { randomUUID } from '@frontmcp/utils';
 
 import { type Scope } from '../scope/scope.instance';
+import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { buildScopedServerOptions, type ScopedServerOptions } from './build-scoped-server-options';
 import { type PersistentSessionOwnerStore } from './persistent-session-owner';
@@ -67,7 +68,9 @@ async function wireServer(
   const { createMcpHandlers } = await import('./mcp-handlers/index.js');
 
   const mcpServer = new McpServer(scope.metadata.info, serverOptions);
-  for (const handler of createMcpHandlers({ scope, serverOptions })) {
+  const composeInstructions = (caller?: { authInfo?: unknown }) =>
+    composeCallerInstructions(scope, { ctx: caller, skillUriHints: true });
+  for (const handler of createMcpHandlers({ scope, serverOptions, composeInstructions })) {
     const originalHandler = handler.handler;
     const wrappedHandler = async (req: unknown, ctx: Record<string, unknown>): Promise<unknown> => {
       // Per-request auth comes from the transport's `handleRequest({ authInfo })`

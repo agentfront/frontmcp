@@ -6,8 +6,6 @@
  * AppEsmInstance loads the package code locally and executes in-process.
  */
 
-import { idFromString } from '@frontmcp/utils';
-
 import {
   AppEntry,
   type AdapterEntry,
@@ -43,6 +41,10 @@ import ResourceRegistry from '../../resource/resource.registry';
 import { type SkillRegistryInterface } from '../../skill/skill.registry';
 import { ToolInstance } from '../../tool/tool.instance';
 import ToolRegistry from '../../tool/tool.registry';
+import { appIdOf } from '../app.utils';
+
+/** The kinds of entry a package manifest may export that an ESM app does not load. */
+const UNLOADED_MANIFEST_KINDS = ['skills', 'agents', 'jobs', 'workflows', 'providers'] as const;
 
 /**
  * Empty plugin registry for ESM apps.
@@ -172,7 +174,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
 
   constructor(record: AppRecord, scopeProviders: ProviderRegistry) {
     super(record);
-    this.id = this.metadata.id ?? idFromString(this.metadata.name);
+    this.id = appIdOf(this.metadata);
     this.scopeProviders = scopeProviders;
 
     this.appOwner = {
@@ -322,6 +324,15 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   private async registerFromManifest(manifest: FrontMcpPackageManifest): Promise<void> {
     const logger = this.scopeProviders.getActiveScope().logger;
     const namespace = this.metadata.namespace ?? this.metadata.name;
+
+    // Before any entry is built, so a tool that fails on a missing manifest provider follows the warning.
+    const notLoaded = UNLOADED_MANIFEST_KINDS.filter((kind) => (manifest[kind]?.length ?? 0) > 0);
+    if (notLoaded.length > 0) {
+      logger.warn(
+        `ESM app ${this.id}: App.esm() loads only tools, resources and prompts; ` +
+          `the package's ${notLoaded.join(', ')} are not loaded`,
+      );
+    }
 
     const filter = this.metadata.filter;
     const prefixLength = namespace ? namespace.length + 1 : 0;
