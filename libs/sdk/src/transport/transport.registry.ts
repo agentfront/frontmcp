@@ -144,6 +144,9 @@ export class TransportService {
   /** Sessions whose local transports are being dropped because another node owns them now. */
   private readonly relinquishing = new Set<string>();
 
+  /** Local sessions whose stored record this node wrote or read: a missing record means the session ended. */
+  private readonly storedLocalSessions = new Set<string>();
+
   /**
    * Redis key prefix under which session records are stored.
    * The session store appends `session:` to the transport key prefix.
@@ -303,6 +306,7 @@ export class TransportService {
     this.lastTtlRefreshAt.clear();
     this.lastBusRefreshAt.clear();
     this.ownershipGeneration.clear();
+    this.storedLocalSessions.clear();
     await this.teardownSessionStore();
   }
 
@@ -537,9 +541,10 @@ export class TransportService {
    * When the record cannot be read the session is served here, and checked again on its next request.
    */
   private async holdsLocalSession(sessionId: string): Promise<boolean> {
+    if (!this.distributed) return this.isStillStored(sessionId);
     const haManager = this.scope.haManager;
     const store = this.sessionStore;
-    if (!this.distributed || !haManager || !store) return true;
+    if (!haManager || !store) return true;
     const generation = haManager.livenessGeneration();
     if (generation !== undefined && this.ownershipGeneration.get(sessionId) === generation) return true;
 
@@ -571,6 +576,30 @@ export class TransportService {
     } finally {
       this.relinquishing.delete(sessionId);
     }
+    return false;
+  }
+
+  /**
+   * Outside distributed mode several instances may hold one session in memory (#713). A session whose
+   * stored record this instance wrote or read is gone was deleted through another instance, or expired:
+   * it is dropped here too. When the store cannot be read the session is served here.
+   */
+  private async isStillStored(sessionId: string): Promise<boolean> {
+    const store = this.sessionStore;
+    if (!store || !this.storedLocalSessions.has(sessionId)) return true;
+    try {
+      if (await store.exists(sessionId)) return true;
+    } catch (error) {
+      this.scope.logger.warn('[TransportService] Could not confirm the session is still stored — serving it here', {
+        sessionId: sessionId.slice(0, 20),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return true;
+    }
+    this.scope.logger.info('[TransportService] The stored session is gone — dropping its transport here', {
+      sessionId: sessionId.slice(0, 20),
+    });
+    await this.destroyLocalSession(sessionId, 'the session was deleted');
     return false;
   }
 
@@ -790,6 +819,7 @@ export class TransportService {
     }
 
     this.insertLocal(key, transporter);
+    if (sessionStore) this.storedLocalSessions.add(sessionId);
 
     // Restore client capabilities from stored session so that
     // elicitation, root listing, and notification delivery work after recreation.
@@ -895,12 +925,17 @@ export class TransportService {
         lastAccessedAt: Date.now(),
         initialized: true, // Mark as initialized for session recreation
       };
-      sessionStore.set(sessionId, storedSession, defaultTtlMs).catch((err) => {
-        this.scope.logger.warn(`[TransportService] Failed to persist session to ${this.sessionStoreLabel()}`, {
-          sessionId: sessionId.slice(0, 20),
-          error: err instanceof Error ? err.message : String(err),
-        });
-      });
+      sessionStore.set(sessionId, storedSession, defaultTtlMs).then(
+        () => {
+          if (this.localSessionIds.has(sessionId)) this.storedLocalSessions.add(sessionId);
+        },
+        (err) => {
+          this.scope.logger.warn(`[TransportService] Failed to persist session to ${this.sessionStoreLabel()}`, {
+            sessionId: sessionId.slice(0, 20),
+            error: err instanceof Error ? err.message : String(err),
+          });
+        },
+      );
     }
 
     if (this.distributed && this.bus) {
@@ -1234,6 +1269,7 @@ export class TransportService {
       else {
         this.localSessionIds.delete(key.sessionId);
         this.ownershipGeneration.delete(key.sessionId);
+        this.storedLocalSessions.delete(key.sessionId);
       }
     }
     if (tokenBucket.size === 0) typeBucket.delete(key.tokenHash);

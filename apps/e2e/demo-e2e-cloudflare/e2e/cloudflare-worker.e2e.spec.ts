@@ -173,7 +173,8 @@ describe('FrontMCP on Cloudflare Workers (workerd)', () => {
     const res = await fetch(`${BASE_URL}/metrics`, { signal: AbortSignal.timeout(5000) });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/plain; version=0.0.4');
-    expect(await res.text()).toContain('frontmcp_process_uptime_seconds');
+    // A Worker has no process to measure: its gauges are left out, not reported as 0.
+    expect(await res.text()).not.toContain('frontmcp_process_');
   });
 
   it('completes an MCP initialize handshake', async () => {

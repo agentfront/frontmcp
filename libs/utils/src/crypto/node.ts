@@ -181,7 +181,12 @@ export function rsaSign(
   return crypto.sign(algorithm, data, signingKey);
 }
 
-export function rsaVerify(jwtAlg: string, data: Buffer, publicJwk: JsonWebKey, signature: Buffer): boolean {
+export function rsaVerify(
+  jwtAlg: string,
+  data: Buffer | Uint8Array,
+  publicJwk: JsonWebKey,
+  signature: Buffer | Uint8Array,
+): boolean {
   const publicKey = crypto.createPublicKey({ key: publicJwk as crypto.JsonWebKey, format: 'jwk' });
   const nodeAlgorithm = jwtAlgToNodeAlg(jwtAlg);
   const verifyKey: crypto.KeyObject | crypto.VerifyKeyObjectInput = isRsaPssAlg(jwtAlg)

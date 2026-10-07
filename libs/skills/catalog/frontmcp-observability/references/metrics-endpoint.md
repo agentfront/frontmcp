@@ -62,6 +62,8 @@ On Cloudflare Workers `require()` cannot reach bundled modules, so `frontmcp bui
 | Framework counters | `frontmcp_skills_bundle_pulls_total`, `frontmcp_skills_signature_*_total`, `frontmcp_skills_replay_*_total`, `frontmcp_skills_audit_*_total`                    |
 | Custom counters    | Anything emitted via `createCounter('my_total').inc()` from `@frontmcp/observability`                                                                           |
 
+A gauge the runtime cannot measure is left out rather than reported as `0`: a Cloudflare Worker, which has no process, serves none of the process gauges. Up to 1.9.2 a Worker listed five `frontmcp_process_*` gauges, all `0`.
+
 ## Token auth
 
 ```typescript
@@ -132,7 +134,7 @@ Keep label values bounded (status codes, enum members, tool names) — unbounded
 ### Runtime
 
 - [ ] `curl http://<host>:<port>/metrics` returns 200 with Content-Type `text/plain; version=0.0.4; charset=utf-8`
-- [ ] Output contains at least one `frontmcp_process_*` gauge (proves the process-stats collector ran)
+- [ ] On Node, output contains at least one `frontmcp_process_*` gauge (proves the process-stats collector ran; a Cloudflare Worker serves none)
 - [ ] Output contains every `frontmcp_skills_*_total` counter incremented since startup
 - [ ] When `auth: 'token'`, requests without `Authorization: Bearer …` return 401 and wrong tokens return 403
 - [ ] Default `@FrontMcp({})` (no `metrics:` key) → `GET /metrics` returns 404 (route was never registered)

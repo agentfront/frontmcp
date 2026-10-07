@@ -1,7 +1,14 @@
 import * as fs from 'fs';
 import { join } from 'path';
 
-import { formatFiles, generateFiles, names as nxNames, type GeneratorCallback, type Tree } from '@nx/devkit';
+import {
+  formatFiles,
+  generateFiles,
+  installPackagesTask,
+  names as nxNames,
+  type GeneratorCallback,
+  type Tree,
+} from '@nx/devkit';
 
 import { addFrontmcpDependencies } from '../../utils/add-dependencies.js';
 import { ensureYarnBerryPinned } from '../../utils/package-manager.js';
@@ -40,16 +47,16 @@ async function serverGeneratorInternal(tree: Tree, schema: ServerGeneratorSchema
   }
 
   // The lambda build wraps the server with @codegenie/serverless-express and fails without it.
-  const installTask =
-    options.deploymentTarget === 'lambda'
-      ? addFrontmcpDependencies(tree, getLambdaDependencies(), {}, { keepExistingVersions: true })
-      : undefined;
+  if (options.deploymentTarget === 'lambda') {
+    addFrontmcpDependencies(tree, getLambdaDependencies(), {}, { keepExistingVersions: true });
+  }
 
   if (!options.skipFormat) {
     await formatFiles(tree);
   }
 
-  return installTask;
+  // The shell's package.json joins the workspace: install, so the lock file the Dockerfile installs from lists it.
+  return () => installPackagesTask(tree, true);
 }
 
 function scaffoldCatalogSkills(tree: Tree, projectRoot: string, target: string, bundle: string): void {

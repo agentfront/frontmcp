@@ -205,3 +205,5 @@ const hash = await sha256Hex('data');
 const verifier = generateCodeVerifier();
 const challenge = await generateCodeChallenge(verifier);
 ```
+
+The browser build of `@frontmcp/utils` never references `node:crypto`: there the Node-only RSA helpers (`rsaSignBase64Url`, `rsaVerifySync`, `pemToPublicJwk`, `generateRsaKeyPair`) throw, and `rsaVerify` uses WebCrypto. The storage clients it loads on demand (`@upstash/redis`, `@vercel/kv`, `ioredis`) are optional peers, which Vite replaces with a stub when they are not installed. In 1.9.2 esbuild stopped a browser build with `Could not resolve "node:crypto"`, and Vite failed with `failed to resolve import "@upstash/redis"`.

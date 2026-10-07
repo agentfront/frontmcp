@@ -5,11 +5,13 @@
  * These libraries work in both Node.js and browsers.
  */
 
-import { sha256 as sha256Hash } from '@noble/hashes/sha2.js';
-import { hmac } from '@noble/hashes/hmac.js';
-import { hkdf } from '@noble/hashes/hkdf.js';
-import { randomBytes as nobleRandomBytes } from '@noble/hashes/utils.js';
 import { gcm } from '@noble/ciphers/aes.js';
+import { hkdf } from '@noble/hashes/hkdf.js';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 as sha256Hash } from '@noble/hashes/sha2.js';
+import { randomBytes as nobleRandomBytes } from '@noble/hashes/utils.js';
+
+import { isRsaPssAlg, jwtAlgToWebCryptoAlg } from './jwt-alg';
 import type { CryptoProvider } from './types';
 
 /**
@@ -126,11 +128,35 @@ export const browserCrypto: CryptoProvider = {
 /** Alias for conditional import resolution via `#crypto-provider`. */
 export { browserCrypto as cryptoProvider };
 
+function nodeOnly(name: string): never {
+  throw new Error(`${name} is only available in Node.js runtimes`);
+}
+
+// The Node provider's RSA helpers, so `#crypto-provider` exports the same names in every runtime.
+export function rsaVerify(): boolean {
+  return nodeOnly('rsaVerify');
+}
+
+export function rsaSignBase64Url(): string {
+  return nodeOnly('rsaSignBase64Url');
+}
+
+export function rsaVerifySync(): boolean {
+  return nodeOnly('rsaVerifySync');
+}
+
+export function pemToPublicJwk(): JsonWebKey {
+  return nodeOnly('pemToPublicJwk');
+}
+
+export function generateRsaKeyPair(): never {
+  return nodeOnly('generateRsaKeyPair');
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // RSA VERIFICATION (Browser-compatible via WebCrypto)
 // ═══════════════════════════════════════════════════════════════════
 
-import { isRsaPssAlg, jwtAlgToWebCryptoAlg } from './jwt-alg';
 export { isRsaPssAlg, jwtAlgToWebCryptoAlg } from './jwt-alg';
 
 /**
