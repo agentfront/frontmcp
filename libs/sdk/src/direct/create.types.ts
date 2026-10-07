@@ -19,24 +19,34 @@ import type {
   WorkflowType,
 } from '../common/interfaces';
 import type { FrontMcpConfigInput } from '../common/metadata';
-import type {
-  AuthOptionsInput,
-  ElicitationOptionsInput,
-  ExtAppsOptionsInput,
-  LoggingOptionsInput,
-  PaginationOptions,
-  PubsubOptionsInput,
-  RedisOptionsInput,
-  ServerInfoOptions,
-  SkillsConfigOptionsInput,
-  TransportOptionsInput,
-} from '../common/types';
+import type { AuthOptionsInput } from '../common/types';
+
+/** The `@FrontMcp` options of a server whose apps share one endpoint, as `FrontMcpInstance.createDirect()` takes them. */
+type ServerConfigInput = Extract<FrontMcpConfigInput, { splitByApp?: false }>;
+
+/**
+ * `@FrontMcp` options `create()` sets itself (`apps`, `serve`, `splitByApp`), takes for its synthetic app instead, or
+ * that an in-process server has no use for.
+ */
+type CreateOwnedServerOptions =
+  | 'apps'
+  | 'serve'
+  | 'splitByApp'
+  | 'http'
+  | '__sourceDir'
+  | 'tools'
+  | 'resources'
+  | 'skills'
+  | 'plugins'
+  | 'adapters'
+  | 'providers'
+  | 'auth';
 
 /**
  * Flat configuration for the `create()` factory function.
  *
- * Combines server-level metadata (info, redis, transport, etc.) with
- * app-level entries (tools, resources, prompts, etc.) into a single object.
+ * Takes every `@FrontMcp` server option (info, redis, transport, fetch, ui, authorities, instructions, ...) with the
+ * app-level entries (tools, resources, prompts, etc.) in a single object.
  * Internally, app-level fields are wrapped into a synthetic app definition.
  *
  * @example
@@ -52,42 +62,7 @@ import type {
  * });
  * ```
  */
-export interface CreateConfig {
-  // ── Server-level fields ──────────────────────────────────────────────
-
-  /** Server name and version (required) */
-  info: ServerInfoOptions;
-
-  /** Redis configuration for sessions, persistence, etc. */
-  redis?: RedisOptionsInput;
-
-  /** Pub/Sub configuration (Redis-only) for resource subscriptions */
-  pubsub?: PubsubOptionsInput;
-
-  /** Transport and session lifecycle configuration */
-  transport?: TransportOptionsInput;
-
-  /** Logging configuration */
-  logging?: LoggingOptionsInput;
-
-  /** Pagination configuration for list operations */
-  pagination?: PaginationOptions;
-
-  /** Elicitation configuration for interactive user input */
-  elicitation?: ElicitationOptionsInput;
-
-  /** Skills HTTP endpoints configuration */
-  skillsConfig?: SkillsConfigOptionsInput;
-
-  /** MCP Apps (ext-apps) configuration */
-  extApps?: ExtAppsOptionsInput;
-
-  /** How tool results the server can't encode are treated (`@FrontMcp({ output })`) */
-  output?: FrontMcpConfigInput['output'];
-
-  /** Rate limits, concurrency and timeouts for every tool (`@FrontMcp({ throttle })`) */
-  throttle?: FrontMcpConfigInput['throttle'];
-
+export interface CreateConfig extends Omit<ServerConfigInput, CreateOwnedServerOptions> {
   // ── App-level fields ─────────────────────────────────────────────────
 
   /** Tool classes or builder-defined tools */
@@ -125,17 +100,6 @@ export interface CreateConfig {
 
   /** Workflow definitions for the app */
   workflowDefinitions?: WorkflowType[];
-
-  // ── Server-level job system fields ─────────────────────────────────
-
-  /** Jobs system configuration (enables job/workflow features) */
-  jobs?: {
-    enabled: boolean;
-    store?: {
-      redis?: RedisOptionsInput;
-      keyPrefix?: string;
-    };
-  };
 
   // ── create()-specific fields ─────────────────────────────────────────
 

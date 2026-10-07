@@ -97,7 +97,7 @@ tryGet<T>(token: Token<T>): T | undefined
 
 #### respond(value)
 
-Set output and end execution immediately.
+End `execute()` with `value` as its result, checked and normalized exactly as a returned value is. Up to 1.9.2 the request failed with `Prompt execution failed: Prompt output not found`.
 
 ```typescript
 respond(value: GetPromptResult): never

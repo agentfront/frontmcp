@@ -3,92 +3,23 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
-import { InternalMcpError, InvalidInputError } from '../../errors';
+import { InvalidInputError, PublicMcpError } from '../../errors';
+import { SkillsLoadRequestSchema, SkillsLoadResultSchema } from '../../transport/mcp-handlers/skills-mcp.types';
 import type { SkillActivationResult, SkillPolicyMode } from '../session/skill-session.types';
 import { assertSkillAuthorized } from '../skill-authorities.helper';
 import { createSkillEntryResolver } from '../skill-entry.resolver';
 import { isSkillServable, skillToolsForCaller } from '../skill-filter.helper';
 import { formatSkillForLLMWithSchemas } from '../skill-http.utils';
 import type { SkillLoadResult } from '../skill-storage.interface';
-import { formatSkillForLLM, generateNextSteps } from '../skill.utils';
+import { formatSkillForLLM } from '../skill.utils';
 
-// Input schema matching MCP request format - supports multiple skill IDs
 const inputSchema = z.object({
-  request: z.object({
-    method: z.literal('skills/load'),
-    params: z.object({
-      skillIds: z.array(z.string().min(1)).min(1).max(5).describe('Array of skill IDs to load (1-5 skills)'),
-      format: z
-        .enum(['full', 'instructions-only'])
-        .default('full')
-        .describe('Output format: full (all details) or instructions-only (just the workflow steps)'),
-      activateSession: z
-        .boolean()
-        .default(false)
-        .describe('Whether to activate a skill session for tool authorization enforcement'),
-      policyMode: z
-        .enum(['strict', 'approval', 'permissive'])
-        .optional()
-        .describe('Tool authorization policy mode (only used when activateSession is true)'),
-    }),
-  }),
+  request: SkillsLoadRequestSchema,
   ctx: z.unknown(),
 });
 
-// Single skill result schema
-const skillResultSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string(),
-  instructions: z.string(),
-  tools: z.array(
-    z.object({
-      name: z.string(),
-      purpose: z.string().optional(),
-      available: z.boolean(),
-      inputSchema: z.unknown().optional().describe('JSON Schema for tool input'),
-      outputSchema: z.unknown().optional().describe('JSON Schema for tool output'),
-    }),
-  ),
-  parameters: z
-    .array(
-      z.object({
-        name: z.string(),
-        description: z.string().optional(),
-        required: z.boolean().optional(),
-        type: z.string().optional(),
-      }),
-    )
-    .optional(),
-  availableTools: z.array(z.string()),
-  missingTools: z.array(z.string()),
-  isComplete: z.boolean(),
-  warning: z.string().optional(),
-  formattedContent: z.string().describe('Formatted skill content ready for LLM consumption (includes tool schemas)'),
-  // Session activation info (only present when activateSession is true)
-  session: z
-    .object({
-      activated: z.boolean(),
-      sessionId: z.string().optional(),
-      policyMode: z.enum(['strict', 'approval', 'permissive']).optional(),
-      allowedTools: z.array(z.string()).optional(),
-    })
-    .optional(),
-});
+const outputSchema = SkillsLoadResultSchema;
 
-// Output schema with multiple skills and summary
-const outputSchema = z.object({
-  skills: z.array(skillResultSchema),
-  summary: z.object({
-    totalSkills: z.number(),
-    totalTools: z.number(),
-    allToolsAvailable: z.boolean(),
-    combinedWarnings: z.array(z.string()).optional(),
-  }),
-  nextSteps: z.string().describe('Guidance on what to do next with the loaded skills'),
-});
-
-type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 // Load result with activation info for state
@@ -159,15 +90,14 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
   async parseInput() {
     this.logger.verbose('parseInput:start');
 
-    let params: Input['request']['params'];
+    let params: z.infer<typeof SkillsLoadRequestSchema>['params'];
     try {
-      const inputData = inputSchema.parse(this.rawInput);
-      params = inputData.request.params;
+      params = inputSchema.parse(this.rawInput).request.params;
     } catch (e) {
       throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.issues : undefined);
     }
 
-    const { skillIds, format, activateSession, policyMode } = params;
+    const { skillIds, format = 'full', activateSession = false, policyMode } = params;
 
     this.state.set({ skillIds, format, activateSession, policyMode, warnings: [] });
     this.logger.verbose('parseInput:done');
@@ -181,7 +111,7 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
     const skillRegistry = this.scope.skills;
 
     if (!skillRegistry) {
-      throw new InternalMcpError('Skill registry not configured');
+      throw new PublicMcpError('Skills capability not available', 'CAPABILITY_NOT_AVAILABLE', 501);
     }
 
     // AuthInfo for entry-level authorities checks (RBAC/ABAC/ReBAC). MCP flows
@@ -205,7 +135,7 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       // No-op when the skill has no `authorities` or no engine is configured.
       const entry = resolveEntry(skillId, result.skill.id);
       if (entry) {
-        if (!(await isSkillServable(this.scope, entry))) {
+        if (!(await isSkillServable(this.scope, entry, ctx))) {
           warnings.push(`Skill "${skillId}" not found`);
           continue;
         }
@@ -214,7 +144,9 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
 
       // Only the tools the caller can reach count as available (and have schemas): an agent-only
       // tool is missing to an MCP client, as `tools/list` and `tools/call` treat it.
-      loadResults.push({ loadResult: skillToolsForCaller(result, this.scope.tools, ctx) });
+      const loadResult = skillToolsForCaller(result, this.scope.tools, ctx);
+      if (loadResult.warning) warnings.push(loadResult.warning);
+      loadResults.push({ loadResult });
     }
 
     this.state.set({ loadResults, warnings });
@@ -228,7 +160,8 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
   @Stage('activateSessions')
   async activateSessions() {
     this.logger.verbose('activateSessions:start');
-    const { activateSession, policyMode, loadResults } = this.state.required;
+    const { activateSession, loadResults } = this.state.required;
+    const { policyMode } = this.state;
 
     if (!activateSession || !loadResults || loadResults.length === 0) {
       this.logger.verbose('activateSessions:skip (not requested or no skills loaded)');
@@ -273,155 +206,70 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
-    const { loadResults, warnings = [], format, activateSession } = this.state.required;
-
-    if (!loadResults || loadResults.length === 0) {
-      // Return empty result with guidance
-      const output: Output = {
-        skills: [],
-        summary: {
-          totalSkills: 0,
-          totalTools: 0,
-          allToolsAvailable: true,
-          combinedWarnings: warnings.length > 0 ? warnings : undefined,
-        },
-        nextSteps:
-          'No skills were loaded. ' +
-          (warnings.length > 0 ? warnings.join('; ') : 'Try searchSkills to find available skills.'),
-      };
-      this.respond(output);
-      return;
-    }
+    const { loadResults = [], warnings = [], format, activateSession } = this.state.required;
 
     const toolRegistry = this.scope.tools;
-    const skillResults: z.infer<typeof skillResultSchema>[] = [];
-    let totalTools = 0;
+    const withSchemas = format !== 'instructions-only';
+    const toolsByName = new Map(
+      withSchemas && toolRegistry ? toolRegistry.getTools(false).map((t) => [t.name, t]) : [],
+    );
+    const allToolNames = new Set<string>();
     let allToolsAvailable = true;
 
-    // Pre-index tool entries for O(1) lookup instead of O(n) per tool
-    const toolEntryByName = toolRegistry ? new Map(toolRegistry.getTools(true).map((te) => [te.name, te])) : null;
+    const skills: Output['skills'] = loadResults.map(({ loadResult, activationResult }) => {
+      const { skill, availableTools, missingTools, isComplete } = loadResult;
+      if (!isComplete) allToolsAvailable = false;
+      for (const tool of skill.tools) allToolNames.add(tool.name);
 
-    for (const { loadResult, activationResult } of loadResults) {
-      const { skill, availableTools, missingTools, isComplete, warning } = loadResult;
-
-      if (missingTools.length > 0) {
-        allToolsAvailable = false;
-      }
-
-      // Build tools array with availability info and schemas
-      const tools = skill.tools.map((t) => {
-        const isAvailable = availableTools.includes(t.name);
-        const result: {
-          name: string;
-          purpose?: string;
-          available: boolean;
-          inputSchema?: unknown;
-          outputSchema?: unknown;
-        } = {
-          name: t.name,
-          purpose: t.purpose,
-          available: isAvailable,
-        };
-
-        // Include schemas for available tools
-        if (isAvailable && toolEntryByName) {
-          const toolEntry = toolEntryByName.get(t.name);
-          if (toolEntry) {
-            // Use getInputJsonSchema() to handle both raw JSON schemas and Zod-defined schemas
-            const inputSchema = toolEntry.getInputJsonSchema?.() ?? toolEntry.rawInputSchema;
-            if (inputSchema) {
-              result.inputSchema = inputSchema;
-            }
-            const rawOutput = toolEntry.getRawOutputSchema?.() ?? toolEntry.rawOutputSchema;
-            if (rawOutput) {
-              result.outputSchema = rawOutput;
-            }
-          }
-        }
-
-        return result;
+      const tools = skill.tools.map(({ name, purpose }) => {
+        const available = availableTools.includes(name);
+        const toolEntry = withSchemas && available ? toolsByName.get(name) : undefined;
+        return { name, purpose, available, ...(toolEntry && { inputSchema: toolEntry.getInputJsonSchema() }) };
       });
-
-      totalTools += tools.length;
-
-      // Format content for LLM
-      let formattedContent: string;
-      if (format === 'instructions-only') {
-        formattedContent = skill.instructions;
-      } else if (toolRegistry) {
-        formattedContent = formatSkillForLLMWithSchemas(skill, availableTools, missingTools, toolRegistry);
-      } else {
-        formattedContent = formatSkillForLLM(skill, availableTools, missingTools);
-      }
-
-      const skillResult: z.infer<typeof skillResultSchema> = {
-        id: skill.id,
-        name: skill.name,
-        description: skill.description,
-        instructions: skill.instructions,
-        tools,
-        parameters: skill.parameters?.map((p) => ({
-          name: p.name,
-          description: p.description,
-          required: p.required,
-          type: p.type,
-        })),
-        availableTools,
-        missingTools,
-        isComplete,
-        warning,
-        formattedContent,
-      };
-
-      // Add session info if activation was requested
-      if (activateSession) {
-        if (activationResult) {
-          skillResult.session = {
+      const session = activationResult
+        ? {
             activated: true,
             sessionId: activationResult.session.sessionId,
             policyMode: activationResult.session.policyMode,
             allowedTools: activationResult.availableTools,
-          };
-        } else {
-          skillResult.session = {
-            activated: false,
-          };
-        }
-      }
+          }
+        : { activated: false };
 
-      skillResults.push(skillResult);
-    }
+      return {
+        id: skill.id,
+        name: skill.name,
+        description: skill.description ?? '',
+        instructions: skill.instructions,
+        tools,
+        parameters: skill.parameters?.map(({ name, description, required, type }) => ({
+          name,
+          description,
+          required,
+          type,
+        })),
+        availableTools,
+        missingTools,
+        isComplete,
+        formattedContent: toolRegistry
+          ? formatSkillForLLMWithSchemas(skill, availableTools, missingTools, toolRegistry)
+          : formatSkillForLLM(skill, availableTools, missingTools),
+        session: activateSession ? session : undefined,
+      };
+    });
 
-    // Collect all warnings
-    const allWarnings = [...warnings];
-    for (const result of skillResults) {
-      if (result.warning) {
-        allWarnings.push(result.warning);
-      }
-    }
-
-    // Generate next steps guidance
-    const nextSteps = generateNextSteps(
-      skillResults.map((r) => ({
-        name: r.name,
-        isComplete: r.isComplete,
-        tools: r.tools,
-      })),
-      allToolsAvailable,
-    );
-
-    const output: Output = {
-      skills: skillResults,
+    this.respond({
+      skills,
       summary: {
-        totalSkills: skillResults.length,
-        totalTools,
+        totalSkills: skills.length,
+        totalTools: allToolNames.size,
         allToolsAvailable,
-        combinedWarnings: allWarnings.length > 0 ? allWarnings : undefined,
+        combinedWarnings: warnings.length > 0 ? warnings : undefined,
       },
-      nextSteps,
-    };
-
-    this.respond(output);
+      nextSteps:
+        skills.length > 0
+          ? `Loaded ${skills.length} skill(s). Follow the instructions to complete the task.`
+          : 'No skills were loaded. Check the skill IDs and try again.',
+    });
     this.logger.verbose('finalize:done');
   }
 }

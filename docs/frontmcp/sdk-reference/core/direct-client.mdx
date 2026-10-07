@@ -11,7 +11,7 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'sdk', 'reference', 'api
 interface DirectClient {
   // Tools
   listTools(): Promise<FormattedTools>;
-  callTool(name: string, args?: Record<string, unknown>): Promise<FormattedToolResult>;
+  callTool(name: string, args?: Record<string, unknown>, options?: CallToolOptions): Promise<FormattedToolResult>;
 
   // Resources
   listResources(): Promise<ListResourcesResult>;
@@ -103,11 +103,14 @@ const tools = await client.listTools();
 ## Connection Options
 
 ```typescript
+// connect(config, options?: ConnectOptions & { app?: string })
+// `app` connects to the endpoint that app has of its own (splitByApp, or a standalone app)
 interface ConnectOptions {
   clientInfo?: ClientInfo;
   session?: SessionOptions;
   authToken?: string;
   capabilities?: Partial<ClientCapabilities>;
+  onElicitation?: ElicitationHandler;
 }
 
 interface SessionOptions {
@@ -118,6 +121,7 @@ interface SessionOptions {
     email?: string;
     [key: string]: unknown;
   };
+  scopes?: string[]; // the caller's scopes: this.auth.scopes in the tools
 }
 
 interface ClientInfo {
@@ -137,7 +141,7 @@ const tools = await client.listTools();
 // FormattedTools depends on detected platform
 ```
 
-### callTool(name, args?)
+### callTool(name, args?, options?)
 
 Execute a tool and get platform-formatted result. The OpenAI, Claude, LangChain and Vercel AI formats have no place for a result's `isError`, so with them a failed call rejects with `ToolCallError`: `message` is the tool's error text and `result` the raw `CallToolResult` (pass it to the model as an error, for example Claude's `is_error: true`). The raw format returns the result with `isError`. Up to 1.9.1 the platform formats dropped `isError`.
 
@@ -145,6 +149,14 @@ Execute a tool and get platform-formatted result. The OpenAI, Claude, LangChain 
 const result = await client.callTool('my_tool', {
   input: 'test',
   count: 5,
+});
+```
+
+Pass `onProgress` to hear the tool's `this.progress()` updates: the call then carries a progress token, without which `this.progress()` sends nothing and returns `false` (as it always did up to 1.9.2).
+
+```typescript
+await client.callTool('import_tickets', { file: 'tickets.csv' }, {
+  onProgress: ({ progress, total, message }) => console.log(progress, total, message),
 });
 ```
 
@@ -320,6 +332,8 @@ console.log(status.stepResults);    // { step1: { state, outputs }, ... }
 
 Register or replace the handler for elicitation requests: the questions the tools ask with `this.elicit()` (form or URL mode). Questions reach a client only if it declared the `elicitation` capability when it connected: pass `onElicitation` in the connect options (which declares `form` and `url`), or `capabilities: { elicitation: { form: {} } }`. A client that declared it without a handler declines every question. A client that did not declare it gets the fallback flow, answered with `submitElicitationResult()`. Up to 1.9.1 the questions never reached the handler.
 
+The handler gets the question's `message`, `requestedSchema` and `mode` (and `url` in URL mode), with its `elicitId` and `expiresAt` (a timestamp in milliseconds). Up to 1.9.2 those two were missing.
+
 ```typescript
 const unsubscribe = client.onElicitation(async (request) => {
   console.log('Server asking:', request.message);
@@ -338,10 +352,12 @@ const unsubscribe = client.onElicitation(async (request) => {
 
 ### submitElicitationResult(elicitId, response)
 
-Submit elicitation response.
+Answer a question from the fallback flow: a tool result whose `_meta.elicitationPending.elicitId` names it. It calls the `sendElicitationResult` tool, which runs the waiting tool again with the answer, and returns that tool's result, formatted as `callTool()` formats it. Up to 1.9.2 it sent an `elicitation/result` request, which failed with `-32601` `Method not found`.
 
 ```typescript
-await client.submitElicitationResult('elicit-123', {
+const pending = await client.callTool('close_ticket', { id: 'T-1' });
+const { elicitId } = pending._meta.elicitationPending;
+const result = await client.submitElicitationResult(elicitId, {
   action: 'accept',
   content: { confirmed: true },
 });
@@ -351,7 +367,7 @@ await client.submitElicitationResult('elicit-123', {
 
 ### close()
 
-Close the client connection. `connect()` clients of the same config object share one server, which is disposed when the last of them closes; closing one leaves the others' sessions as they are. Up to 1.9.1 closing one disposed the server under the others, clearing their client info.
+Close the client connection. `connect()` clients of the same config object share one server, which is disposed when the last of them closes; closing one leaves the others' sessions as they are. Up to 1.9.1 closing one disposed the server under the others, clearing their client info. A client from a `DirectMcpServer`'s `connect()` never disposes the server: `server.dispose()` does. Up to 1.9.2 closing one disposed part of it, so `registerTool()` failed and the other clients stopped getting notifications.
 
 ```typescript
 await client.close();
@@ -456,6 +472,14 @@ const client = await connect(config, {
 
 // Tools will have access to auth context
 const result = await client.callTool('get_my_profile');
+```
+
+`session.scopes` gives the tools their caller's scopes (`this.auth.scopes`, `this.auth.hasScope()`), as `authContext.scopes` does for `create()`; without it they're `[]`.
+
+```typescript
+const client = await connect(config, {
+  session: { user: { sub: 'user-123' }, scopes: ['tickets:write'] },
+});
 ```
 
 ## Scope Caching

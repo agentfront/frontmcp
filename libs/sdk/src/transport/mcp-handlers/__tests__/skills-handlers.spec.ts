@@ -1,8 +1,14 @@
 /**
  * Skills MCP Handlers Tests
  *
- * Tests for the skills/search, skills/load, and skills/list MCP handlers.
+ * Tests for the skills/search, skills/load, and skills/list MCP handlers. skills/search and skills/load
+ * run the real `skills:search` / `skills:load` flows on the mock scope.
  */
+import { runFlowStages } from '../../../__test-utils__';
+import { FrontMcpFlowTokens, type FlowMetadata, type FlowName, type FlowType } from '../../../common';
+import { ProviderNotAvailableError } from '../../../errors';
+import LoadSkillFlow from '../../../skill/flows/load-skill.flow';
+import SearchSkillsFlow from '../../../skill/flows/search-skills.flow';
 import { type McpHandlerOptions } from '../mcp-handlers.types';
 import skillsListRequestHandler from '../skills-list-request.handler';
 import skillsLoadRequestHandler from '../skills-load-request.handler';
@@ -40,12 +46,39 @@ describe('Skills MCP Handlers', () => {
     findByName: jest.fn(),
   };
 
-  // Create mock scope
+  // The flows the handlers run, with their stages in order
+  const handlerFlows: Partial<Record<string, { flow: FlowType; stages: string[] }>> = {
+    'skills:search': { flow: SearchSkillsFlow, stages: ['parseInput', 'search', 'finalize'] },
+    'skills:load': { flow: LoadSkillFlow, stages: ['parseInput', 'loadSkills', 'activateSessions', 'finalize'] },
+  };
+
+  const flowMetadataOf = (flow: FlowType, name: string) =>
+    ({
+      name,
+      inputSchema: Reflect.getMetadata(FrontMcpFlowTokens.inputSchema, flow),
+      outputSchema: Reflect.getMetadata(FrontMcpFlowTokens.outputSchema, flow),
+      plan: Reflect.getMetadata(FrontMcpFlowTokens.plan, flow),
+    }) as FlowMetadata<FlowName>;
+
+  // Create mock scope: the handlers' own flows run for real on the scope that runs them, others (`skills:filter`) are mocked
   const createMockScope = () => ({
     logger: mockLogger,
     skills: mockSkillRegistry,
     tools: mockToolRegistry,
-    runFlowForOutput: mockRunFlowForOutput,
+    providers: {
+      get: () => {
+        throw new ProviderNotAvailableError('telemetry');
+      },
+    },
+    async runFlowForOutput(this: object, name: string, input: unknown) {
+      const handlerFlow = handlerFlows[name];
+      if (!handlerFlow) return mockRunFlowForOutput(name, input);
+      const FlowClass = handlerFlow.flow as unknown as new (...args: unknown[]) => unknown;
+      const run = new FlowClass(flowMetadataOf(handlerFlow.flow, name), input, this, jest.fn(), new Map());
+      const { output, error } = await runFlowStages(run, handlerFlow.stages);
+      if (error) throw error;
+      return output;
+    },
   });
 
   // Create handler options

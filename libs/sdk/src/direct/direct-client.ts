@@ -8,6 +8,7 @@ import {
   Client,
   type CallToolResult,
   type CompleteResult,
+  type ElicitRequestParams,
   type GetPromptResult,
   type Implementation,
   type ListPromptsResult,
@@ -20,6 +21,7 @@ import {
 import { fileExists, pathResolve, randomUUID } from '@frontmcp/utils';
 
 import { listAllPages } from '../common/utils/list-all-pages.utils';
+import { ELICITATION_META_KEY } from '../elicitation/elicitation-meta';
 import { PublicMcpError, ToolCallError } from '../errors';
 import type { Scope } from '../scope/scope.instance';
 import {
@@ -29,6 +31,7 @@ import {
 } from '../transport/mcp-handlers/skills-mcp.types';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type {
+  CallToolOptions,
   ClientInfo,
   CompleteOptions,
   ConnectOptions,
@@ -99,7 +102,7 @@ export class DirectClientImpl implements DirectClient {
   // Scope reference for build-time operations (collectSkillAssets)
   private scopeRef?: Scope;
 
-  // Releases the scope when this client closes (see `create()`)
+  // Releases the scope when this client closes, for clients that share a scope (see `connect()`)
   private releaseScope?: () => Promise<void>;
 
   private constructor(
@@ -122,6 +125,7 @@ export class DirectClientImpl implements DirectClient {
    *
    * @param scope - FrontMCP scope to connect to
    * @param options - Connection options
+   * @param releaseScope - Runs when the client closes; the scope's owner disposes it otherwise
    * @returns Connected DirectClient instance
    *
    * @internal Use `connect()` or LLM-specific helpers instead.
@@ -129,7 +133,7 @@ export class DirectClientImpl implements DirectClient {
   static async create(
     scope: Scope,
     options?: ConnectOptions,
-    releaseScope: () => Promise<void> = () => scope.dispose(),
+    releaseScope?: () => Promise<void>,
   ): Promise<DirectClient> {
     // Dynamic imports for tree-shaking
     const { createInMemoryServer } = await import('../transport/in-memory-server.js');
@@ -148,6 +152,9 @@ export class DirectClientImpl implements DirectClient {
         ...options.session.user,
         sub: options.session.user?.sub ?? 'direct',
       };
+    }
+    if (options?.session?.scopes) {
+      authInfo['scopes'] = options.session.scopes;
     }
 
     // Create in-memory server with auth context
@@ -248,10 +255,10 @@ export class DirectClientImpl implements DirectClient {
       // Handler for elicitation requests (server-to-client request, not notification)
       // The client responds with an ElicitResult
       if (typeof mcpClient.setRequestHandler === 'function') {
-        mcpClient.setRequestHandler(ElicitRequestSchema, async (request: { params?: ElicitationRequest }) => {
+        mcpClient.setRequestHandler(ElicitRequestSchema, async (request: { params?: ElicitRequestParams }) => {
           const params = request.params;
           if (params) {
-            return this.handleElicitationRequestInternal(params);
+            return this.handleElicitationRequestInternal(toElicitationRequest(params));
           }
           return { action: 'decline' };
         });
@@ -294,11 +301,17 @@ export class DirectClientImpl implements DirectClient {
     return formatToolsForPlatform(tools, this.platform);
   }
 
-  async callTool(name: string, args?: Record<string, unknown>): Promise<FormattedToolResult> {
-    const result = await this.mcpClient.callTool({
-      name,
-      arguments: args ?? {},
-    });
+  async callTool(
+    name: string,
+    args?: Record<string, unknown>,
+    options?: CallToolOptions,
+  ): Promise<FormattedToolResult> {
+    // The MCP client sends a progress token with the call when it has a progress callback
+    const result = await this.mcpClient.callTool(
+      { name, arguments: args ?? {} },
+      undefined,
+      options?.onProgress && { onprogress: options.onProgress },
+    );
     // An LLM platform's format has no place for isError, so a failed call rejects with the raw result
     if (result.isError && this.platform !== 'raw') throw new ToolCallError(name, result as CallToolResult);
     // The result type may vary depending on MCP SDK version
@@ -558,18 +571,8 @@ export class DirectClientImpl implements DirectClient {
     };
   }
 
-  async submitElicitationResult(elicitId: string, response: ElicitationResponse): Promise<void> {
-    await this.mcpClient.request(
-      {
-        method: 'elicitation/result',
-        params: {
-          elicitId,
-          result: response,
-        },
-      },
-
-      {} as any, // Schema validation happens server-side
-    );
+  async submitElicitationResult(elicitId: string, response: ElicitationResponse): Promise<FormattedToolResult> {
+    return this.callTool('sendElicitationResult', { elicitId, ...response });
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -740,6 +743,14 @@ export class DirectClientImpl implements DirectClient {
 
     return { entries };
   }
+}
+
+/** The question an `elicitation/create` request asks, with the id and expiry the in-process server sends in `_meta`. */
+function toElicitationRequest(params: ElicitRequestParams): ElicitationRequest {
+  const { _meta, ...question } = params;
+  const sent = _meta?.[ELICITATION_META_KEY] as Partial<Pick<ElicitationRequest, 'elicitId' | 'expiresAt'>> | undefined;
+  const elicitId = sent?.elicitId ?? ('elicitationId' in question ? question.elicitationId : '');
+  return { ...question, elicitId, expiresAt: sent?.expiresAt ?? 0 } as ElicitationRequest;
 }
 
 /**

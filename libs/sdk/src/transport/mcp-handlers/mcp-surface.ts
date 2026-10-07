@@ -22,3 +22,9 @@ export function withMcpSurface<Ctx extends object>(
 ): Ctx & { surface: CallSurface } {
   return { ...ctx, surface: mcpRequestSurface(scope) };
 }
+
+/** The session id the transport put in an MCP request context's auth info, if any. */
+export function mcpRequestSessionId(ctx: unknown): string | undefined {
+  const sessionId = (ctx as { authInfo?: { sessionId?: unknown } } | undefined)?.authInfo?.sessionId;
+  return typeof sessionId === 'string' && sessionId ? sessionId : undefined;
+}

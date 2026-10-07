@@ -1,9 +1,11 @@
 import { UnsubscribeRequestSchema, type EmptyResult, type UnsubscribeRequest } from '@frontmcp/protocol';
 
+import { toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
+import { withMcpSurface } from './mcp-surface';
 
 /**
- * Handler for the resources/unsubscribe MCP request.
+ * Handler for the resources/unsubscribe MCP request: runs the `resources:unsubscribe` flow.
  * Per MCP 2025-11-25 spec, this allows clients to unsubscribe from
  * receiving notifications about a specific resource.
  */
@@ -11,26 +13,11 @@ export default function UnsubscribeRequestHandler({ scope }: McpHandlerOptions) 
   return {
     requestSchema: UnsubscribeRequestSchema,
     handler: async (request: UnsubscribeRequest, ctx): Promise<EmptyResult> => {
-      const { uri } = request.params;
-
-      // Get session ID from auth context
-      const sessionId = ctx.authInfo?.sessionId;
-      if (!sessionId) {
-        scope.logger.warn('resources/unsubscribe: No session ID found in request context');
-        return {};
+      try {
+        return await scope.runFlowForOutput('resources:unsubscribe', { request, ctx: withMcpSurface(scope, ctx) });
+      } catch (error) {
+        throw toSdkMcpError(error);
       }
-
-      // Unsubscribe the session from the resource
-      const wasSubscribed = scope.notifications.unsubscribeResource(sessionId, uri);
-
-      if (wasSubscribed) {
-        scope.logger.info(`resources/unsubscribe: Session ${sessionId.slice(0, 20)}... unsubscribed from ${uri}`);
-      } else {
-        scope.logger.debug(`resources/unsubscribe: Session ${sessionId.slice(0, 20)}... was not subscribed to ${uri}`);
-      }
-
-      // Per MCP spec, return empty result
-      return {};
     },
   } satisfies McpHandler<UnsubscribeRequest, EmptyResult>;
 }

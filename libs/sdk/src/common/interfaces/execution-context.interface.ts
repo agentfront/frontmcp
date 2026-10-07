@@ -19,7 +19,7 @@ import { workerEnvOf } from '../../context/frontmcp-context-storage';
 import { RequestContextNotAvailableError } from '../../errors/mcp.error';
 import { type CallSurface } from '../availability';
 import { type ScopeEntry } from '../entries';
-import { callableToolName, type ToolLookupScope } from '../utils/tool-lookup.utils';
+import { type ToolLookupScope } from '../utils/tool-lookup.utils';
 import { FlowControl } from './flow.interface';
 import { type ProviderRegistryInterface } from './internal';
 import { type FrontMcpLogger } from './logger.interface';
@@ -273,7 +273,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
     const request = {
       method: 'tools/call' as const,
       params: {
-        name: callableToolName(callScope, name),
+        name,
         arguments: args ?? {},
         ...(Object.keys(requestMeta).length > 0 && { _meta: requestMeta }),
       },

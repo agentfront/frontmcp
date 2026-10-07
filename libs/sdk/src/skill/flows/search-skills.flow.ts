@@ -2,8 +2,10 @@
 
 import { z } from '@frontmcp/lazy-zod';
 
-import { Flow, FlowBase, FlowHooksOf, normalizeToolRef, type FlowPlan, type FlowRunOptions } from '../../common';
-import { DependencyNotFoundError, InvalidInputError } from '../../errors';
+import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
+import { extractToolNames } from '../../common/metadata/skill.metadata';
+import { DependencyNotFoundError, InvalidInputError, ProviderNotAvailableError, PublicMcpError } from '../../errors';
+import { SkillsSearchRequestSchema, SkillsSearchResultSchema } from '../../transport/mcp-handlers/skills-mcp.types';
 import { filterDiscoverableSkillResults } from '../skill-filter.helper';
 import { type SkillSearchOptions, type SkillSearchResult } from '../skill-storage.interface';
 
@@ -25,7 +27,7 @@ interface FlowTelemetryAccessor {
  * Probe for the observability TelemetryAccessor without taking a hard import
  * dependency. Returns undefined when ObservabilityPlugin is not installed.
  *
- * Only swallows `DependencyNotFoundError` — any other error (DI
+ * Only swallows the not-registered errors (`ProviderNotAvailableError`, `DependencyNotFoundError`) — any other error (DI
  * misconfiguration, circular deps, factory throws) propagates so real bugs
  * are surfaced rather than silently degrading telemetry.
  */
@@ -37,49 +39,18 @@ function tryGetTelemetry(flow: SearchSkillsFlow): FlowTelemetryAccessor | undefi
     }
     return undefined;
   } catch (err) {
-    if (err instanceof DependencyNotFoundError) return undefined;
+    if (err instanceof ProviderNotAvailableError || err instanceof DependencyNotFoundError) return undefined;
     throw err;
   }
 }
 
-// Input schema matching MCP request format
 const inputSchema = z.object({
-  request: z.object({
-    method: z.literal('skills/search'),
-    params: z.object({
-      query: z.string().min(1).describe('Search query to find relevant skills'),
-      tags: z.array(z.string()).optional().describe('Filter by specific tags'),
-      tools: z.array(z.string()).optional().describe('Filter by skills that use specific tools'),
-      limit: z.number().min(1).max(50).default(10).describe('Maximum number of results to return'),
-      requireAllTools: z.boolean().default(false).describe('Only return skills where all tools are available'),
-    }),
-  }),
+  request: SkillsSearchRequestSchema,
   ctx: z.unknown(),
 });
 
-// Output schema
-const outputSchema = z.object({
-  skills: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      description: z.string(),
-      score: z.number(),
-      tags: z.array(z.string()).optional(),
-      tools: z.array(
-        z.object({
-          name: z.string(),
-          available: z.boolean(),
-        }),
-      ),
-      source: z.enum(['local', 'external']),
-    }),
-  ),
-  total: z.number(),
-  hasMore: z.boolean(),
-});
+const outputSchema = SkillsSearchResultSchema;
 
-type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 const stateSchema = z.object({
@@ -148,22 +119,15 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
   async parseInput() {
     this.logger.verbose('parseInput:start');
 
-    let params: Input['request']['params'];
+    let params: z.infer<typeof SkillsSearchRequestSchema>['params'];
     try {
-      const inputData = inputSchema.parse(this.rawInput);
-      params = inputData.request.params;
+      params = inputSchema.parse(this.rawInput).request.params;
     } catch (e) {
       throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.issues : undefined);
     }
 
-    const { query, tags, tools, limit, requireAllTools } = params;
-
-    const options: SkillSearchOptions = {
-      tags,
-      tools,
-      topK: limit,
-      requireAllTools,
-    };
+    const { query, tags, tools, limit = 10, requireAllTools } = params;
+    const options: SkillSearchOptions = { tags, tools, topK: limit, requireAllTools };
 
     this.state.set({ query, options });
     this.logger.verbose('parseInput:done');
@@ -188,20 +152,14 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
     });
 
     const skillRegistry = this.scope.skills;
-
-    if (!skillRegistry || !skillRegistry.hasAny()) {
-      this.state.set({ results: [] });
-      // Same privacy rule applies to result events: emit only counts/booleans,
-      // never per-result IDs or scores.
-      telemetry?.addEvent('skill_search.results', { count: 0, truncated: false });
-      this.logger.verbose('search:no-skills');
-      return;
+    if (!skillRegistry) {
+      throw new PublicMcpError('Skills capability not available', 'CAPABILITY_NOT_AVAILABLE', 501);
     }
 
-    // Search for skills
     const results = await skillRegistry.search(query, options);
     this.state.set({ results });
 
+    // Same privacy rule applies to result events: emit only counts/booleans, never per-result IDs or scores.
     telemetry?.addEvent('skill_search.results', {
       count: results.length,
       truncated: results.length >= topK,
@@ -214,69 +172,48 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
   async finalize() {
     this.logger.verbose('finalize:start');
     const { results, options } = this.state.required;
+    const searchResults = results as SkillSearchResult[];
 
-    // Store pre-filtered count for hasMore calculation
-    const preFilteredCount = (results as SkillSearchResult[]).length;
-
-    // Filter by MCP visibility (only 'mcp' or 'both' should be visible via MCP tools)
-    const mcpVisibleResults = (results as SkillSearchResult[]).filter((result) => {
+    // Only skills visible over MCP ('mcp' or 'both')
+    const mcpVisibleResults = searchResults.filter((result) => {
       const visibility = result.metadata.visibility ?? 'both';
       return visibility === 'mcp' || visibility === 'both';
     });
 
-    // Hide skills the caller can't discover: authority-gated ones (mirrors
-    // `filterByAuthorities` for tools/resources; evaluated WITHOUT request
-    // input, so role/permission/claims-based authorities only), then those the
-    // `skills:filter` flow drops.
+    // Hide skills the caller can't discover: authority-gated ones (mirrors `filterByAuthorities` for
+    // tools/resources; evaluated WITHOUT request input, so role/permission/claims-based authorities only),
+    // then those the `skills:filter` flow drops.
     const registry = this.scope.skills;
-    const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
-    const authInfo = (ctx?.['authInfo'] ?? {}) as Record<string, unknown>;
+    const ctx = this.input.ctx as { authInfo?: Record<string, unknown> } | undefined;
     const servableResults = registry
-      ? await filterDiscoverableSkillResults(this.scope, registry, mcpVisibleResults, { authInfo })
+      ? await filterDiscoverableSkillResults(this.scope, registry, mcpVisibleResults, {
+          authInfo: ctx?.authInfo ?? {},
+          ctx,
+        })
       : mcpVisibleResults;
 
-    // Transform results to output format
     const skills = servableResults.map((result) => ({
       id: result.metadata.id ?? result.metadata.name,
       name: result.metadata.name,
-      description: result.metadata.description,
+      description: result.metadata.description ?? '',
       score: result.score,
       tags: result.metadata.tags,
-      tools: (result.metadata.tools ?? []).map((t) => {
-        // Use normalizeToolRef to correctly handle all tool reference types
-        // including class-based refs where t.name would be the class name
-        try {
-          const normalized = normalizeToolRef(t);
-          return {
-            name: normalized.name,
-            available: result.availableTools.includes(normalized.name),
-          };
-        } catch {
-          // Fallback for edge cases
-          const toolName = typeof t === 'string' ? t : ((t as { name?: string }).name ?? 'unknown');
-          return {
-            name: toolName,
-            available: result.availableTools.includes(toolName),
-          };
-        }
-      }),
+      tools: extractToolNames(result.metadata).map((name) => ({
+        name,
+        available: result.availableTools.includes(name),
+      })),
       source: result.source,
     }));
 
-    // Pagination info:
-    // - total: number of MCP-visible results returned
-    // - hasMore: true if pre-filtered results hit the limit (more results may exist)
-    // Note: We use preFilteredCount for hasMore because visibility filtering is post-search.
-    // We can't know the exact total of matching skills without a full scan,
-    // so we report the actual returned count and indicate if limit was reached.
-    const limit = options.topK ?? 10;
-    const total = skills.length;
-    const hasMore = preFilteredCount >= limit;
-
+    // hasMore: the search filled its limit before visibility filtering, so more may exist
     const output: Output = {
       skills,
-      total,
-      hasMore,
+      total: skills.length,
+      hasMore: searchResults.length >= (options.topK ?? 10),
+      guidance:
+        skills.length > 0
+          ? `Found ${skills.length} matching skill(s). Use skills/load with skill IDs to load full content.`
+          : 'No matching skills found. Try different search terms or list all skills with skills/list.',
     };
 
     this.state.set({ output });
