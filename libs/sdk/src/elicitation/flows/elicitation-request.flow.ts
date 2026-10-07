@@ -151,8 +151,8 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
 
     const { elicitationId, ttl } = this.state;
 
-    // Generate elicit ID if not provided (using cryptographically strong UUID)
-    const elicitId = elicitationId ?? `elicit-${randomUUID()}`;
+    // Generate elicit ID if not provided or empty (using cryptographically strong UUID)
+    const elicitId = elicitationId || `elicit-${randomUUID()}`;
     const expiresAt = Date.now() + (ttl ?? DEFAULT_ELICIT_TTL);
 
     this.state.set({ elicitId, expiresAt });

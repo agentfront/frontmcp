@@ -66,7 +66,7 @@ Always check `result.status === 'accept'` before reading `result.content` — `c
 
 ## URL mode
 
-For an out-of-band step (OAuth, payment), pass `{ mode: 'url', url, elicitationId }`: `url` is the page the client opens (required: a URL-mode `elicit()` without it fails with `INVALID_INPUT`) and `elicitationId` an opaque id that correlates its completion (FrontMCP generates one when you omit it, but the page needs it to report back). Both are sent on every transport, MCP 2026-07-28 included. An accepted URL-mode answer carries no `content`, as MCP specifies: the schema is not checked against it, so pass `z.object({})` and read what the user did from where the page stored it. Up to 1.9.2 such an answer failed the schema check with `INVALID_INPUT`, and `elicitationId` was required.
+For an out-of-band step (OAuth, payment), pass `{ mode: 'url', url, elicitationId }`: `url` is the page the client opens (required: a URL-mode `elicit()` without it fails with `INVALID_INPUT`) and `elicitationId` an opaque id that correlates its completion (FrontMCP generates one when you omit it or pass an empty one, but the page needs it to report back). Both are sent on every transport, MCP 2026-07-28 included. An accepted URL-mode answer carries no `content`, as MCP specifies: the schema is not checked against it, so pass `z.object({})` and read what the user did from where the page stored it. Up to 1.9.2 such an answer failed the schema check with `INVALID_INPUT`, and `elicitationId` was required.
 
 ```typescript
 const elicitationId = randomUUID();

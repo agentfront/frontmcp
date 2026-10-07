@@ -69,7 +69,7 @@ export interface ElicitOptions {
 
   /**
    * Unique identifier for URL-mode elicitation, which correlates its completion.
-   * Generated when a URL-mode elicitation leaves it out.
+   * Generated when a URL-mode elicitation leaves it out or empty.
    */
   elicitationId?: string;
 
