@@ -10,6 +10,8 @@
 
 import { decryptAesGcm, encryptAesGcm, hkdfSha256, randomBytes } from '@frontmcp/utils';
 
+import { REFRESH_TOKEN_TTL_MS } from './authorization.store';
+
 /**
  * Internal token record structure (upstream provider tokens).
  */
@@ -19,6 +21,25 @@ export interface ProviderTokenRecord {
   expiresAt?: number;
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * When a record is dropped. Its access token's expiry, unless it holds a refresh token: the access
+ * token is then renewed with it, so the record stays until it hasn't been written for as long as
+ * FrontMCP's own refresh tokens live.
+ */
+export function recordDropAt(record: ProviderTokenRecord): number | undefined {
+  if (!record.refreshToken) return record.expiresAt;
+  return Math.max(record.expiresAt ?? 0, record.updatedAt + REFRESH_TOKEN_TTL_MS);
+}
+
+/**
+ * Whether the record's access token is still usable. One that can be refreshed counts as expired
+ * `refreshSkewMs` before its expiry, so it is renewed before it lapses.
+ */
+export function hasLiveAccessToken(record: ProviderTokenRecord, refreshSkewMs = 0): boolean {
+  if (record.expiresAt === undefined) return true;
+  return record.expiresAt - (record.refreshToken ? refreshSkewMs : 0) > Date.now();
 }
 
 const HKDF_SALT = new TextEncoder().encode('frontmcp-token-store');

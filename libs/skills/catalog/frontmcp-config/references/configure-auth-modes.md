@@ -24,6 +24,8 @@ Anonymous callers hold `anonymousScopes`. With `publicAccess`, they list, call a
 
 A JWT bearer is still verified against this instance's own HS256 secret. A bearer that is **not** a JWT is ignored and the request is served anonymously — public mode has no issuer or JWKS to verify it against, and a credentialed request must never fare worse than an anonymous one. For a first-class shared secret, use static mode below.
 
+Public and static mode have no authorization server: `/.well-known/oauth-authorization-server` answers 404 and the protected resource metadata omits `authorization_servers` (local/remote serve their own metadata; transparent redirects to the provider's).
+
 ## Static Mode
 
 A fixed shared secret on every request — the shape non-OAuth MCP hosts expect (ChatGPT's custom-app connector calls it "Access token / API key"). No OAuth, no JWT, no JWKS.
@@ -64,7 +66,7 @@ auth: {
 
 **Use when:** Behind an API gateway or reverse proxy that handles auth.
 
-> Transparent also accepts `allowAnonymous` (default `false`) + `anonymousScopes` (default `['anonymous']`) to admit tokenless requests as anonymous, and `requiredScopes` to reject tokens missing a scope (read from the `scope` and `scp` claims, which `this.auth.scopes` also merges). Without `providerConfig.jwks`/`jwksUri`, keys come from `<provider>/.well-known/jwks.json`, else the discovered `jwks_uri`. A token without `sub` takes its subject from `client_id`, else `azp`. `expectedAudience` is shared across transparent/local/remote, not transparent-only.
+> Transparent also accepts `allowAnonymous` (default `false`) + `anonymousScopes` (default `['anonymous']`) to admit tokenless requests as anonymous, and `requiredScopes` to reject tokens missing a scope (read from the `scope` and `scp` claims, which `this.auth.scopes` also merges). Without `providerConfig.jwks`/`jwksUri`, keys come from `<provider>/.well-known/jwks.json`, else the discovered `jwks_uri`; they are cached for 6 hours, and a token whose `kid` the cache lacks triggers a refetch first (at most once a minute per provider), so rotated keys work immediately. A token without `sub` takes its subject from `client_id`, else `azp`; one with none of the three is refused with 401 `invalid_token` (never served as anonymous). `expectedAudience` is shared across transparent/local/remote, not transparent-only.
 
 > **Claim validation (transparent):** a valid JWKS signature alone does not bind a token to this server — every service behind the same IdP shares the signing keys. FrontMCP therefore validates the token `iss` against `provider` (plus any `providerConfig.additionalIssuers`, each matched with/without a trailing slash) **by default**, and validates `aud` against `expectedAudience` when the token carries one. This blocks replay of a token minted by the same IdP for a different issuer or audience. Set `providerConfig.additionalIssuers: ['https://gateway.example']` to trust a known extra issuer. `providerConfig.verifyIssuer: false` **disables the issuer check entirely** (accepts any issuer signed by the JWKS) — only for a trusted gateway whose re-minted issuer you cannot enumerate, and always paired with a strict `expectedAudience`.
 
@@ -94,7 +96,7 @@ Local mode also accepts `allowDefaultPublic` (default `false` — set `true` to 
 
 > **Public origin (security):** pin `FRONTMCP_PUBLIC_URL` in production. The issuer / resource / OAuth-discovery URLs and the transparent expected audience derive from it rather than from request headers; `X-Forwarded-Host`/`X-Forwarded-Proto` are ignored unless `FRONTMCP_TRUST_PROXY=1` (a trusted proxy that strips client-supplied forwarded headers). The Web fetch handler (`createFetchHandler`, Workers) takes the address from the request URL, never from a `Host` header that disagrees with it.
 
-**Progressive / incremental authorization** (opt-in via `incrementalAuth`): when enabled, the minted token carries an `authorized_apps` claim and a `tools/call` for an app NOT in that claim resolves to a `CallToolResult` with `isError: true` and `_meta.code === 'AUTHORIZATION_REQUIRED'` (fields: `authorization_required: true`, `app`, `tool`, `auth_url`, `required_scopes`, `session_mode`, `supports_incremental`). The client declares the initial grant on `/oauth/authorize?…&apps=crm` (omit `apps` to grant all apps) and expands it later by **following the `auth_url` from the failed call** — that URL carries a framework-signed, single-use `ticket` naming the target app and the prior grant, and the new token's claim is the **union** of the prior apps plus the target (the user identity and already-granted apps are preserved; upstream tokens stay server-side). Do NOT hand-assemble `…&mode=incremental&app=slack`: since 1.7.2 (GHSA-2c4g-9c8x-6m8g) an authorize without a valid ticket is an ordinary login and runs the full credential gate, and `/oauth/callback` ignores an `incremental=true` parameter entirely. Single use is enforced with a conditional write against the configured session storage, so a **multi-instance deployment needs shared storage** (Redis, or any adapter supporting `ifNotExists`) for that guarantee to hold across instances; a backend without conditional writes (Cloudflare KV) degrades to an in-memory guard that holds within one instance only and warns at first use. Without an `incrementalAuth` block, no claim is minted and there is **no** app-level gating (allow-all preserved). `consent` (tool-level) and `incrementalAuth` (app-level) are independent.
+**Progressive / incremental authorization** (opt-in via `incrementalAuth`): when enabled, the minted token carries an `authorized_apps` claim and a `tools/call` for an app NOT in that claim resolves to a `CallToolResult` with `isError: true` and `_meta.code === 'AUTHORIZATION_REQUIRED'` (fields: `authorization_required: true`, `app`, `tool`, `auth_url`, `required_scopes` — the scopes the tool's `authProviders` ask for, omitted when none — `session_mode`, `supports_incremental`; `elicit_id` and `pending_auth_id` are not filled yet). The client declares the initial grant on `/oauth/authorize?…&apps=crm` (omit `apps` to grant all apps) and expands it later by **following the `auth_url` from the failed call** — that URL carries a framework-signed, single-use `ticket` naming the target app and the prior grant, and the new token's claim is the **union** of the prior apps plus the target (the user identity and already-granted apps are preserved; upstream tokens stay server-side). Do NOT hand-assemble `…&mode=incremental&app=slack`: since 1.7.2 (GHSA-2c4g-9c8x-6m8g) an authorize without a valid ticket is an ordinary login and runs the full credential gate, and `/oauth/callback` ignores an `incremental=true` parameter entirely. Single use is enforced with a conditional write against the configured session storage, so a **multi-instance deployment needs shared storage** (Redis, or any adapter supporting `ifNotExists`) for that guarantee to hold across instances; a backend without conditional writes (Cloudflare KV) degrades to an in-memory guard that holds within one instance only and warns at first use. Without an `incrementalAuth` block, no claim is minted and there is **no** app-level gating (allow-all preserved). `consent` (tool-level) and `incrementalAuth` (app-level) are independent.
 
 To collect and verify your own credentials, add a declarative `login` (custom page fields / title / subject strategy) and an `authenticate(input, ctx)` verifier that returns `{ ok: true, sub?, claims? }` (custom claims are embedded in the token; reserved claims are stripped) or `{ ok: false, message }` (re-renders the login page; no code issued). Both are optional and default to the built-in email login. See `configure-auth.md` for a full example.
 
@@ -147,11 +149,15 @@ non-standard IdPs, override them with
 
 > **MCP client registration (upgrade note):** `requireRegisteredClients` defaults to `true` in remote mode too (it was `false` in 1.8.2 and earlier). Remote mode has no `dcr` block (no pre-registered clients) and FrontMCP's own `/oauth/register` is off in production, so a production remote server with the defaults admits only MCP clients that use a CIMD client-id URL; an unregistered plain `client_id` gets a 400 `Unknown client_id` page. Migrate clients to CIMD, or set `requireRegisteredClients: false` for local development only (an unregistered client's `redirect_uri` can't be checked). FrontMCP grants only the scopes in `allowedScopes` (default: the OpenID scopes), unrelated to `scopes` (what it asks the IdP for).
 
+Upstream tokens are renewed with the provider's refresh token once expired (or
+within `refresh.skewSeconds`, default 60; `refresh.enabled: false` turns it off),
+and move to the new token when the client refreshes FrontMCP's own. The IdP
+controls only the upstream tokens' lifetime: FrontMCP's own access token lasts an
+hour and its refresh token 30 days (rotated on each use).
+
 **Deferred (not yet wired):** upstream **Dynamic Client Registration**
 (`providerConfig.dcrEnabled` / `registrationEndpoint`) — a pre-registered
-`clientId` is required; and upstream **token auto-refresh** — once the upstream
-access token expires the user must re-authenticate (FrontMCP's own session token
-still refreshes via the `refresh_token` grant).
+`clientId` is required.
 
 **Use when:** Enterprise deployments delegating user authentication to a single
 centralized IdP that may not support DCR, while keeping FrontMCP-issued sessions,
@@ -159,17 +165,17 @@ upstream-token access in tools, and an optional consent layer.
 
 ## Comparison Table
 
-| Feature                  | Public        | Static               | Transparent     | Local                           | Remote                            |
-| ------------------------ | ------------- | -------------------- | --------------- | ------------------------------- | --------------------------------- |
-| Token issuance           | Anonymous JWT | None (opaque secret) | None (upstream) | Self-signed (HS256)             | Self-signed (HS256)               |
-| Signing                  | HS256 secret  | n/a                  | Upstream JWKS   | HS256 secret (`JWT_SECRET`)     | HS256 secret (`JWT_SECRET`)       |
-| Session-token refresh    | No            | No                   | No              | Yes                             | Yes                               |
-| Upstream-token refresh   | n/a           | n/a                  | n/a             | On-demand (when wired)          | Not yet wired (re-auth on expiry) |
-| Identity source          | Anonymous     | Configured token     | Upstream token  | Login form / `authenticate()`   | Upstream IdP user                 |
-| PKCE support             | No            | No                   | No              | Yes                             | Yes                               |
-| Token persistence        | n/a           | n/a                  | n/a             | memory / sqlite / redis         | memory / sqlite / redis           |
-| Consent (tool selection) | No            | No                   | No              | Optional (screen + enforcement) | Optional (screen + enforcement)   |
-| Upstream OAuth providers | No            | No                   | No              | 0..N (declared `providers[]`)   | Exactly 1 (mandatory)             |
+| Feature                  | Public        | Static               | Transparent     | Local                           | Remote                          |
+| ------------------------ | ------------- | -------------------- | --------------- | ------------------------------- | ------------------------------- |
+| Token issuance           | Anonymous JWT | None (opaque secret) | None (upstream) | Self-signed (HS256)             | Self-signed (HS256)             |
+| Signing                  | HS256 secret  | n/a                  | Upstream JWKS   | HS256 secret (`JWT_SECRET`)     | HS256 secret (`JWT_SECRET`)     |
+| Session-token refresh    | No            | No                   | No              | Yes                             | Yes                             |
+| Upstream-token refresh   | n/a           | n/a                  | n/a             | On demand (`refresh`)           | On demand (`refresh`)           |
+| Identity source          | Anonymous     | Configured token     | Upstream token  | Login form / `authenticate()`   | Upstream IdP user               |
+| PKCE support             | No            | No                   | No              | Yes                             | Yes                             |
+| Token persistence        | n/a           | n/a                  | n/a             | memory / sqlite / redis         | memory / sqlite / redis         |
+| Consent (tool selection) | No            | No                   | No              | Optional (screen + enforcement) | Optional (screen + enforcement) |
+| Upstream OAuth providers | No            | No                   | No              | 0..N (declared `providers[]`)   | Exactly 1 (mandatory)           |
 
 > "Remote" still issues its own HS256 session token to the MCP client; it delegates **user authentication** to a single upstream IdP rather than delegating token signing. `GET /oauth/authorize` redirects straight to that IdP (no in-tree login page), and tools read the upstream token via `this.orchestration.getToken(id)`.
 

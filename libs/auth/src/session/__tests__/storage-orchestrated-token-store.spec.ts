@@ -11,6 +11,7 @@
 import { createNamespacedStorage, MemoryStorageAdapter, randomBytes } from '@frontmcp/utils';
 
 import { EncryptionKeyNotConfiguredError } from '../../errors/auth-internal.errors';
+import { REFRESH_TOKEN_TTL_MS } from '../authorization.store';
 import { StorageOrchestratedTokenStore } from '../storage-orchestrated-token.store';
 
 function encKey(): Uint8Array {
@@ -126,6 +127,22 @@ describe('StorageOrchestratedTokenStore', () => {
       const store = new StorageOrchestratedTokenStore(adapter);
       await store.storeTokens('auth-1', 'github', { accessToken: 'gho_a', expiresAt: Date.now() - 1000 });
       expect(await store.getAccessToken('auth-1', 'github')).toBeNull();
+    });
+
+    it('keeps a refreshable record past its access token, with a storage TTL as long as a refresh token lives', async () => {
+      const store = new StorageOrchestratedTokenStore(adapter, { refreshSkewMs: 60_000 });
+      const setSpy = jest.spyOn(adapter, 'set');
+      await store.storeTokens('auth-1', 'github', {
+        accessToken: 'gho_a',
+        refreshToken: 'ghr_b',
+        expiresAt: Date.now() + 30_000,
+      });
+
+      expect(await store.getAccessToken('auth-1', 'github')).toBeNull();
+      expect(await store.getRefreshToken('auth-1', 'github')).toBe('ghr_b');
+      expect(setSpy).toHaveBeenCalledWith('otok:auth-1:github', expect.any(String), {
+        ttlSeconds: REFRESH_TOKEN_TTL_MS / 1000,
+      });
     });
 
     it('applies defaultTtlMs as the record expiresAt when none provided', async () => {
@@ -258,6 +275,22 @@ describe('StorageOrchestratedTokenStore', () => {
       // The good record migrated; the corrupted one was skipped (left in place).
       expect(await store.getAccessToken('real-auth', 'github')).toBe('good');
       expect(await adapter.get('otok:pending:abc:google')).toBe('garbage-not-an-envelope');
+    });
+  });
+
+  describe('copyTokens', () => {
+    it.each([
+      ['plaintext', undefined],
+      ['encrypted', encKey()],
+    ])('copies %s tokens to another authorization id and keeps them under the source', async (_mode, encryptionKey) => {
+      const store = new StorageOrchestratedTokenStore(adapter, { encryptionKey });
+      await store.storeTokens('auth-old', 'github', { accessToken: 'secret', refreshToken: 'refresh' });
+
+      await store.copyTokens('auth-old', 'auth-new');
+
+      expect(await store.getAccessToken('auth-old', 'github')).toBe('secret');
+      expect(await store.getAccessToken('auth-new', 'github')).toBe('secret');
+      expect(await store.getRefreshToken('auth-new', 'github')).toBe('refresh');
     });
   });
 

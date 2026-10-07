@@ -74,6 +74,9 @@ historical allow‑all behavior is preserved).
 export class Server {}
 ```
 
+`allowSkip` and `showAllAppsAtOnce` are accepted but not read yet: the provider picker always lets the user leave
+providers unlinked (`federatedAuth.requiredProviders` makes them mandatory), and there is no step-by-step page.
+
 <Note>
   `incrementalAuth` and `consent` are **independent** features. `consent` gates which
   **tools** a token may call (the `consent` claim); `incrementalAuth` gates which **apps**
@@ -185,6 +188,9 @@ surface the authorize link). The error class is
   }
 }
 ```
+
+`required_scopes` lists the scopes the tool's `authProviders` ask for (left out when they name none; up to 1.9.2 it
+was never filled). The `_meta` type also declares `elicit_id` and `pending_auth_id`; FrontMCP doesn't fill them yet.
 
 <Note>
   In **stateless** session mode there is no `auth_url` and `supports_incremental` is
@@ -368,13 +374,14 @@ it for a token with `authorized_apps: ["crm", "slack"]`.
   `authenticate()` verifier. Before 1.7.2 these parameters let an unauthenticated caller
   skip that verifier and obtain a token as the operator.
 
-  Tickets are valid for 5 minutes and can be claimed **once**; a replayed ticket falls back
-  to an ordinary login rather than failing the request. Single use is enforced with a
-  conditional write against the configured session storage, so **a multi-instance
-  deployment needs shared storage** (Redis, or any adapter supporting `ifNotExists`) for
-  the guarantee to hold across instances. A backend without conditional writes — Cloudflare
-  KV, for example — degrades to an in-memory guard that holds within one instance only, and
-  logs a warning at first use.
+Tickets are valid for 5 minutes and can be claimed **once**; a replayed ticket falls back
+to an ordinary login rather than failing the request. Single use is enforced with a
+conditional write against the configured session storage, so **a multi-instance
+deployment needs shared storage** (Redis, or any adapter supporting `ifNotExists`) for
+the guarantee to hold across instances. A backend without conditional writes — Cloudflare
+KV, for example — degrades to an in-memory guard that holds within one instance only, and
+logs a warning at first use.
+
 </Warning>
 
 <Note>

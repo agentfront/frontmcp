@@ -70,6 +70,7 @@ import {
   HttpJsonSchema,
   httpRespond,
   isPublicMode,
+  NO_STORE_HEADERS,
   resourceUriMatches,
   StageHookOf,
   type FlowPlan,
@@ -255,6 +256,8 @@ const Stage = StageHookOf(name);
   middleware: {
     method: 'POST',
     path: '/oauth/token',
+    // Never cached, errors included (RFC 6749 §5.1, §5.2)
+    responseHeaders: NO_STORE_HEADERS,
   },
 })
 export default class OauthTokenFlow extends FlowBase<typeof name> {
@@ -363,7 +366,7 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
       this.state.set('tokenResponse', {
         access_token: accessToken,
         token_type: 'Bearer',
-        expires_in: 86400,
+        expires_in: localAuth.anonymousTokenTtlSeconds(),
         refresh_token: randomUUID(),
       });
       return;
@@ -436,7 +439,7 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
       this.state.set('tokenResponse', {
         access_token: accessToken,
         token_type: 'Bearer',
-        expires_in: 86400,
+        expires_in: localAuth.anonymousTokenTtlSeconds(),
         refresh_token: randomUUID(),
       });
       return;
@@ -529,7 +532,7 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
     this.state.set('tokenResponse', {
       access_token: accessToken,
       token_type: 'Bearer',
-      expires_in: 86400,
+      expires_in: localAuth.anonymousTokenTtlSeconds(),
       refresh_token: randomUUID(),
     });
   }

@@ -6,7 +6,7 @@ description: 'Set up a FrontMCP server with public (unauthenticated) access and 
 tags: [config, auth, session, public, mode, setup]
 features:
   - "Configuring `mode: 'public'` for unauthenticated access"
-  - 'Setting `sessionTtl` to control anonymous session lifetime'
+  - 'Setting `sessionTtl` to control the lifetime of anonymous tokens'
   - 'Granting `anonymousScopes` so tools can check scope-based permissions even without auth'
 ---
 
@@ -53,7 +53,7 @@ class Server {}
 ## What This Demonstrates
 
 - Configuring `mode: 'public'` for unauthenticated access
-- Setting `sessionTtl` to control anonymous session lifetime
+- Setting `sessionTtl` to control the lifetime of anonymous tokens
 - Granting `anonymousScopes` so tools can check scope-based permissions even without auth
 
 ## Related

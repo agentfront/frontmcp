@@ -5,7 +5,8 @@
  *   `WWW-Authenticate` header, not an empty one;
  * - `requiredScopes` reads the `scp` claim (Entra ID, Okta) as well as `scope`;
  * - a token with no `sub` takes its subject from `client_id` (RFC 9068 §2.2)
- *   instead of reading as anonymous.
+ *   instead of reading as anonymous, and one with no `client_id` or `azp`
+ *   either is refused.
  */
 import 'reflect-metadata';
 
@@ -216,5 +217,18 @@ describe('token claims and challenges', () => {
     const text = await call.text();
     expect(text).toContain('\\"sub\\":\\"billing-service\\"');
     expect(text).toContain('\\"isAnonymous\\":false');
+  });
+
+  it('refuses a verified token with no sub, client_id or azp instead of serving it as anonymous', async () => {
+    const server = await serverWith(transparentAuth({ allowAnonymous: true }));
+    const token = await idpToken({ scope: 'tickets:read' });
+
+    const response = await mcpPost(server, initialize, token);
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toContain('error="invalid_token"');
+    expect(response.headers.get('www-authenticate')).toContain(
+      'Token has no subject: the sub, client_id and azp claims are all missing',
+    );
   });
 });

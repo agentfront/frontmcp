@@ -40,6 +40,9 @@ const MAX_JWKS_FETCH_BYTES = 1_048_576; // 1 MiB
 /** Max redirect hops followed during a discovery/JWKS fetch (each re-validated). */
 const MAX_JWKS_FETCH_HOPS = 3;
 
+/** The shortest time between two key refetches a token with an unknown `kid` starts, per provider. */
+const UNKNOWN_KID_REFETCH_COOLDOWN_MS = 60_000;
+
 /** The refusal of a provider-signed token without `exp`, worded as the gateway path (`jose`) words it. */
 const MISSING_EXP_ERROR = 'missing required "exp" claim';
 
@@ -77,6 +80,9 @@ export class JwksService {
 
   // Provider JWKS cache (providerId -> jwks + fetchedAt)
   private providerJwks = new Map<string, { jwks: JSONWebKeySet; fetchedAt: number }>();
+
+  // The last key refetch an unknown `kid` started, per provider (see refetchForUnknownKid)
+  private unknownKidRefetches = new Map<string, { startedAt: number; done: Promise<JSONWebKeySet | undefined> }>();
 
   // Track if key has been initialized (for async loading)
   private keyInitialized = false;
@@ -152,6 +158,9 @@ export class JwksService {
       let jwks: JSONWebKeySet | undefined;
       try {
         jwks = await this.getJwksForProvider(p);
+        if (kid && !p.jwks?.keys?.length && !jwks?.keys?.some((key) => key.kid === kid)) {
+          jwks = (await this.refetchForUnknownKid(p)) ?? jwks;
+        }
         if (!jwks?.keys?.length) continue;
         const JWKS = createLocalJWKSet(jwks);
         // `undefined` when the provider opts out of issuer validation
@@ -405,14 +414,47 @@ export class JwksService {
       return cached.jwks;
     }
 
-    // If we have a jwksUri, try it
+    const fetched = await this.fetchProviderJwks(ref);
+    if (fetched) return fetched;
+
+    // Bounded stale-serving: when a refetch fails, keep serving the cached keys
+    // only within a grace window, then fail closed (return undefined). Otherwise
+    // a revoked/rotated key would be trusted forever whenever the JWKS endpoint
+    // is unreachable (e.g. an attacker DoS-ing it after a key compromise).
+    const maxStaleMs = Math.max(this.opts.providerJwksTtlMs * 4, 60_000);
+    if (cached && Date.now() - cached.fetchedAt < maxStaleMs) {
+      return cached.jwks;
+    }
+    return undefined;
+  }
+
+  /**
+   * Fetch a provider's keys again for a token whose `kid` the cached keys don't have (a key the
+   * provider started using since), ahead of the cache's TTL. At most one refetch per provider per
+   * {@link UNKNOWN_KID_REFETCH_COOLDOWN_MS}: tokens that arrive meanwhile wait for the one in flight or
+   * use its result, so a flood of tokens with made-up `kid`s can't hammer the provider. Only freshly
+   * fetched keys are returned: a failed refetch never revives cached keys past the stale window.
+   */
+  private refetchForUnknownKid(ref: ProviderVerifyRef): Promise<JSONWebKeySet | undefined> {
+    let refetch = this.unknownKidRefetches.get(ref.id);
+    if (!refetch || Date.now() - refetch.startedAt >= UNKNOWN_KID_REFETCH_COOLDOWN_MS) {
+      refetch = { startedAt: Date.now(), done: this.fetchProviderJwks(ref) };
+      this.unknownKidRefetches.set(ref.id, refetch);
+    }
+    return refetch.done;
+  }
+
+  /**
+   * Fetch a provider's keys, and cache them: from `jwksUri`, else the conventional location, else
+   * the `jwks_uri` of the issuer's OAuth or OpenID metadata. Every URL goes through the same scheme
+   * and SSRF checks (`fetchJson`), `jwks_uri` included.
+   */
+  private async fetchProviderJwks(ref: ProviderVerifyRef): Promise<JSONWebKeySet | undefined> {
     if (ref.jwksUri) {
       const fromUri = await this.tryFetchJwks(ref.id, ref.jwksUri);
       if (fromUri?.keys?.length) return fromUri;
     }
 
-    // The conventional location, then discovery via the issuer's .well-known documents. Every URL goes
-    // through the same scheme and SSRF checks (`fetchJson`), `jwks_uri` included.
     const issuer = trimSlash(ref.issuerUrl);
     const fromWellKnown = await this.tryFetchJwks(ref.id, `${issuer}/.well-known/jwks.json`);
     if (fromWellKnown?.keys?.length) return fromWellKnown;
@@ -423,15 +465,6 @@ export class JwksService {
         const fromMeta = await this.tryFetchJwks(ref.id, uri);
         if (fromMeta?.keys?.length) return fromMeta;
       }
-    }
-
-    // Bounded stale-serving: when a refetch fails, keep serving the cached keys
-    // only within a grace window, then fail closed (return undefined). Otherwise
-    // a revoked/rotated key would be trusted forever whenever the JWKS endpoint
-    // is unreachable (e.g. an attacker DoS-ing it after a key compromise).
-    const maxStaleMs = Math.max(this.opts.providerJwksTtlMs * 4, 60_000);
-    if (cached && Date.now() - cached.fetchedAt < maxStaleMs) {
-      return cached.jwks;
     }
     return undefined;
   }
