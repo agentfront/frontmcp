@@ -4,6 +4,7 @@ import CachePlugin from '@frontmcp/plugin-cache';
 import {
   DynamicPlugin,
   FrontMcpLogger,
+  FrontMcpToolTokens,
   isEntryGatedBy,
   ListToolsHook,
   Plugin,
@@ -15,6 +16,7 @@ import {
   type HookGatedEntry,
   type ProviderType,
   type ToolEntry,
+  type ToolType,
 } from '@frontmcp/sdk';
 
 import {
@@ -30,6 +32,8 @@ import { ToolSearchService } from './services';
 import { AuditLoggerService, type AuditEvent } from './services/audit-logger.service';
 import EnclaveService from './services/enclave.service';
 import { DescribeTool, ExecuteTool, InvokeTool, SearchKnowledgeTool, SearchSkillsTool, SearchTool } from './tools';
+import { buildExecuteToolDescription } from './tools/execute.schema';
+import { buildSearchToolDescription } from './tools/search.schema';
 
 /**
  * What a CodeCall audit event contributes to a log line.
@@ -59,7 +63,6 @@ function callContextOf(flowCtx: FlowCtxOf<'tools:call-tool'>): unknown {
   description: 'CodeCall plugin: AgentScript-based meta-tools for orchestrating MCP tools',
   providers: [],
   plugins: [CachePlugin],
-  tools: [SearchTool, SearchSkillsTool, SearchKnowledgeTool, DescribeTool, ExecuteTool, InvokeTool],
 })
 export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions, CodeCallPluginOptionsInput> {
   options: CodeCallPluginOptions;
@@ -134,6 +137,34 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
           );
         },
       },
+    ];
+  }
+
+  /**
+   * The CodeCall meta-tools. `codecall:search` and `codecall:execute` describe the `topK` and the
+   * script limits these options give, since the model plans its calls from those descriptions.
+   */
+  static override dynamicTools(options: CodeCallPluginOptionsInput): ToolType[] {
+    const config = new CodeCallConfig(codeCallPluginOptionsSchema.parse(options)).getAll();
+    class ConfiguredSearchTool extends SearchTool {}
+    class ConfiguredExecuteTool extends ExecuteTool {}
+    Reflect.defineMetadata(
+      FrontMcpToolTokens.description,
+      buildSearchToolDescription(config.topK),
+      ConfiguredSearchTool,
+    );
+    Reflect.defineMetadata(
+      FrontMcpToolTokens.description,
+      buildExecuteToolDescription(config.resolvedVm),
+      ConfiguredExecuteTool,
+    );
+    return [
+      ConfiguredSearchTool,
+      SearchSkillsTool,
+      SearchKnowledgeTool,
+      DescribeTool,
+      ConfiguredExecuteTool,
+      InvokeTool,
     ];
   }
 

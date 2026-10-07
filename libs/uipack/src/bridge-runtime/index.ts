@@ -12,5 +12,7 @@ export {
   generatePlatformBundle,
   UNIVERSAL_BRIDGE_SCRIPT,
   BRIDGE_SCRIPT_TAGS,
+  WIDGET_CALL_META_KEY,
+  MCP_APPS_DISPLAY_MODES,
   type IIFEGeneratorOptions,
 } from './iife-generator';

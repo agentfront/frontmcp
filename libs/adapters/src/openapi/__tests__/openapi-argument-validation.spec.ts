@@ -40,6 +40,40 @@ const spec: OpenAPIV3.Document = {
         responses: { '200': { description: 'ok' } },
       },
     },
+    '/tickets/export': {
+      get: {
+        operationId: 'exportTickets',
+        parameters: [
+          {
+            name: 'format',
+            in: 'query',
+            required: true,
+            schema: { type: 'string', enum: ['csv', 'json'], default: 'csv' },
+          },
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 20 } },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
+    '/tickets/{ticketId}/notes': {
+      post: {
+        operationId: 'addNote',
+        parameters: [{ name: 'ticketId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['text', 'channel'],
+                properties: { text: { type: 'string' }, channel: { type: 'string', enum: ['email', 'mcp'] } },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'ok' } },
+      },
+    },
     '/hosts/{hostId}': {
       get: {
         operationId: 'getHost',
@@ -55,19 +89,28 @@ const spec: OpenAPIV3.Document = {
 
 describe('OpenAPI tool arguments', () => {
   const requestedUrls: string[] = [];
+  const requestedBodies: unknown[] = [];
   const realFetch = global.fetch;
   let server: DirectMcpServer;
 
   beforeAll(async () => {
-    global.fetch = (async (url: string | URL | Request) => {
+    global.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       requestedUrls.push(String(url));
+      requestedBodies.push(typeof init?.body === 'string' ? JSON.parse(init.body) : undefined);
       return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
     }) as typeof fetch;
 
     @App({
       id: 'desk',
       name: 'Desk',
-      adapters: [OpenapiAdapter.init({ name: 'desk', baseUrl: 'https://api.example.com', spec })],
+      adapters: [
+        OpenapiAdapter.init({
+          name: 'desk',
+          baseUrl: 'https://api.example.com',
+          spec,
+          inputTransforms: { perTool: { addNote: [{ inputKey: 'channel', inject: () => 'mcp' }] } },
+        }),
+      ],
     })
     class DeskApp {}
 
@@ -85,6 +128,7 @@ describe('OpenAPI tool arguments', () => {
 
   beforeEach(() => {
     requestedUrls.length = 0;
+    requestedBodies.length = 0;
   });
 
   it('refuses a value the spec does not allow, and sends nothing', async () => {
@@ -117,5 +161,33 @@ describe('OpenAPI tool arguments', () => {
 
     expect(result.isError).toBeFalsy();
     expect(requestedUrls).toEqual([`https://api.example.com/hosts/${hostId}?hostname=my_host.internal`]);
+  });
+
+  it('sends the spec default of a required parameter the model left out', async () => {
+    const result = await server.callTool('exportTickets', {});
+
+    expect(result.isError).toBeFalsy();
+    expect(requestedUrls).toEqual(['https://api.example.com/tickets/export?format=csv']);
+  });
+
+  it('lists the default in the input schema', async () => {
+    const { tools } = await server.listTools();
+    const exportTickets = tools.find((listed) => listed.name === 'exportTickets');
+
+    expect(exportTickets?.inputSchema.properties?.['format']).toMatchObject({ default: 'csv' });
+  });
+
+  it('sends the value the model gave over the default', async () => {
+    await server.callTool('exportTickets', { format: 'json' });
+
+    expect(requestedUrls).toEqual(['https://api.example.com/tickets/export?format=json']);
+  });
+
+  it('replaces an argument the server fills in when the model sends it anyway', async () => {
+    const result = await server.callTool('addNote', { ticketId: 'T-1', text: 'Rebooted', channel: 'email' });
+
+    expect(result.isError).toBeFalsy();
+    expect(requestedUrls).toEqual(['https://api.example.com/tickets/T-1/notes']);
+    expect(requestedBodies).toEqual([{ text: 'Rebooted', channel: 'mcp' }]);
   });
 });

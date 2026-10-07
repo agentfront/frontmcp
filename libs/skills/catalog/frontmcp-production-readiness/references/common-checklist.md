@@ -166,7 +166,7 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 ## ExtApps / Widgets (if enabled)
 
 - [ ] Host capabilities are reviewed — only enable what widgets need
-- [ ] `serverToolProxy` is disabled if widgets should not call MCP tools
+- [ ] `serverToolProxy` is disabled if widgets should not call MCP tools with the earlier `ui/callServerTool` (it does not cover the standard `tools/call` a widget sends through its host, which runs as any MCP client call)
 - [ ] Widget session validation is active (default with HTTP transport)
 - [ ] CSP headers are configured for hosted widget origins
 

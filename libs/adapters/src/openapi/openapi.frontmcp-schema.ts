@@ -97,7 +97,7 @@ export type FrontMcpExample = z.infer<typeof FrontMcpExampleSchema>;
 // Known Fields for Validation
 // ============================================================================
 
-/** Known field names for validation */
+/** Known field names for validation; mcp-from-openapi applies `meta` and `icons` itself */
 const KNOWN_EXTENSION_FIELDS = new Set([
   'version',
   'annotations',
@@ -106,6 +106,8 @@ const KNOWN_EXTENSION_FIELDS = new Set([
   'tags',
   'hideFromDiscovery',
   'examples',
+  'meta',
+  'icons',
 ]);
 
 const KNOWN_ANNOTATION_FIELDS = new Set([

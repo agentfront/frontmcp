@@ -118,6 +118,8 @@ export interface ShellConfig {
   customShell?: ResolvedShellTemplate | string;
   /** Widget sizing configuration (height/aspect-ratio/auto-resize). */
   sizing?: WidgetSizing;
+  /** Display mode the widget asks the host for once the bridge connects; `'inline'` asks for none. */
+  displayMode?: 'inline' | 'fullscreen' | 'pip';
   /**
    * Pluggable inline-module mount tail. Default = the widget `McpBridgeProvider`
    * mount from `@frontmcp/ui/react`. See {@link ShellMountDescriptor}.

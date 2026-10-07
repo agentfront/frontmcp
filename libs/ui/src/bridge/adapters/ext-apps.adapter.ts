@@ -8,6 +8,8 @@
  * @packageDocumentation
  */
 
+import { MCP_APPS_DISPLAY_MODES, WIDGET_CALL_META_KEY } from '@frontmcp/uipack/bridge-runtime';
+
 import type {
   AdapterConfig,
   DisplayMode,
@@ -81,6 +83,7 @@ export class ExtAppsAdapter extends BaseAdapter {
   private _trustedOrigin: string | undefined;
   private _originTrustPending = false; // Guard against race condition in trust-on-first-use
   private _hostCapabilities: ExtAppsInitializeResult['hostCapabilities'] = {};
+  private modelContext: Record<string, unknown> | undefined;
 
   constructor(config?: ExtAppsAdapterConfig) {
     super();
@@ -199,13 +202,14 @@ export class ExtAppsAdapter extends BaseAdapter {
   // ============================================
 
   override async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-    if (!this._hostCapabilities.serverToolProxy) {
+    if (!this._hostCapabilities.serverTools && !this._hostCapabilities.serverToolProxy) {
       throw new ExtAppsNotSupportedError('Server tool proxy not supported by host');
     }
 
-    return this._sendRequest('ui/callServerTool', {
+    return this._sendRequest('tools/call', {
       name,
       arguments: args,
+      _meta: { [WIDGET_CALL_META_KEY]: true },
     });
   }
 
@@ -214,17 +218,27 @@ export class ExtAppsAdapter extends BaseAdapter {
   }
 
   override async openLink(url: string): Promise<void> {
-    if (!this._hostCapabilities.openLink) {
+    if (!this._hostCapabilities.openLinks && !this._hostCapabilities.openLink) {
       // Fallback to window.open
       return super.openLink(url);
     }
 
-    await this._sendRequest('ui/openLink', { url });
+    await this._sendRequest('ui/open-link', { url });
   }
 
+  /**
+   * Ask the host for a display mode it offers (`hostContext.availableDisplayModes`), and keep the
+   * mode it answers with, which differs from `mode` when the host refuses the change.
+   */
   override async requestDisplayMode(mode: DisplayMode): Promise<void> {
-    await this._sendRequest('ui/setDisplayMode', { mode });
-    this._hostContext = { ...this._hostContext, displayMode: mode };
+    if (!this._hostContext.availableDisplayModes?.includes(mode)) {
+      throw new ExtAppsNotSupportedError(`Display mode "${mode}" is not available on this host`);
+    }
+    const result = (await this._sendRequest('ui/request-display-mode', { mode })) as { mode?: unknown } | undefined;
+    const setMode = MCP_APPS_DISPLAY_MODES.find((displayMode) => displayMode === result?.mode);
+    if (setMode) {
+      this._hostContext = { ...this._hostContext, displayMode: setMode };
+    }
   }
 
   /**
@@ -238,8 +252,12 @@ export class ExtAppsAdapter extends BaseAdapter {
     this._sendNotification('ui/notifications/size-changed', params);
   }
 
+  /**
+   * Ask the host to tear the widget down with `ui/notifications/request-teardown`. The host
+   * decides; if it agrees, it sends `ui/resource-teardown`.
+   */
   override async requestClose(): Promise<void> {
-    await this._sendRequest('ui/close', {});
+    this._sendNotification('ui/notifications/request-teardown', {});
   }
 
   // ============================================
@@ -250,24 +268,38 @@ export class ExtAppsAdapter extends BaseAdapter {
    * Update the model context with widget state.
    *
    * This allows the widget to pass contextual information to the model,
-   * which can be used to inform subsequent interactions.
+   * which can be used to inform subsequent interactions. It is sent as
+   * `ui/update-model-context`: an object as `structuredContent` and as a JSON
+   * text block, anything else as a text block. The host keeps only the latest
+   * update, so with `merge` an object is merged into the last one here.
    *
    * @param context - The context data to update
    * @param merge - Whether to merge with existing context (default: true)
    */
   async updateModelContext(context: unknown, merge = true): Promise<void> {
-    if (!this._hostCapabilities.modelContextUpdate) {
+    if (!this._hostCapabilities.updateModelContext && !this._hostCapabilities.modelContextUpdate) {
       throw new ExtAppsNotSupportedError('Model context update not supported by host');
     }
 
-    await this._sendRequest('ui/updateModelContext', { context, merge });
+    const isObject = typeof context === 'object' && context !== null && !Array.isArray(context);
+    const structuredContent = isObject
+      ? { ...(merge ? this.modelContext : undefined), ...(context as Record<string, unknown>) }
+      : undefined;
+    this.modelContext = structuredContent;
+    const sentContext = structuredContent ?? context;
+    const text = typeof sentContext === 'string' ? sentContext : JSON.stringify(sentContext);
+
+    await this._sendRequest('ui/update-model-context', {
+      content: [{ type: 'text', text }],
+      ...(structuredContent ? { structuredContent } : {}),
+    });
   }
 
   /**
    * Send a log message to the host.
    *
    * Allows the widget to forward log messages to the host for debugging
-   * or monitoring purposes.
+   * or monitoring purposes, with the standard MCP `notifications/message`.
    *
    * @param level - Log level (debug, info, warn, error)
    * @param message - Log message
@@ -281,7 +313,10 @@ export class ExtAppsAdapter extends BaseAdapter {
       return;
     }
 
-    await this._sendRequest('ui/log', { level, message, data });
+    this._sendNotification('notifications/message', {
+      level: level === 'warn' ? 'warning' : level,
+      data: data === undefined ? message : { message, data },
+    });
   }
 
   /**
@@ -358,6 +393,22 @@ export class ExtAppsAdapter extends BaseAdapter {
       this._handleNotification(data as JsonRpcNotification);
       return;
     }
+
+    // Handle request from host
+    if ('method' in data && 'id' in data) {
+      this._handleHostRequest(data as JsonRpcRequest, event.origin);
+    }
+  }
+
+  /**
+   * Handle a JSON-RPC request from the host. `ui/resource-teardown` means the host is about to
+   * unmount the widget: emit `bridge:teardown` for cleanup, then answer `{}` to the origin it came from.
+   */
+  private _handleHostRequest(request: JsonRpcRequest, origin: string): void {
+    if (request.method !== 'ui/resource-teardown') return;
+
+    this._emitBridgeEvent('bridge:teardown', {});
+    this._postMessage({ jsonrpc: '2.0', id: request.id, result: {} }, origin);
   }
 
   /**
@@ -402,6 +453,7 @@ export class ExtAppsAdapter extends BaseAdapter {
         // Host confirms initialization complete
         break;
 
+      case 'ui/notifications/tool-cancelled':
       case 'ui/notifications/cancelled':
         this._handleCancelled(notification.params);
         break;
@@ -456,6 +508,9 @@ export class ExtAppsAdapter extends BaseAdapter {
     }
     if (params.displayMode !== undefined) {
       changes.displayMode = params.displayMode;
+    }
+    if (params.availableDisplayModes !== undefined) {
+      changes.availableDisplayModes = params.availableDisplayModes;
     }
     if (params.viewport !== undefined) {
       changes.viewport = params.viewport;
@@ -592,6 +647,7 @@ export class ExtAppsAdapter extends BaseAdapter {
         tools: {
           listChanged: false,
         },
+        availableDisplayModes: [...MCP_APPS_DISPLAY_MODES],
       },
       protocolVersion: this._config.options?.protocolVersion || '2024-11-05',
     };
@@ -612,9 +668,9 @@ export class ExtAppsAdapter extends BaseAdapter {
       // Update adapter capabilities based on host
       this._capabilities = {
         ...this._capabilities,
-        canCallTools: Boolean(this._hostCapabilities.serverToolProxy),
+        canCallTools: Boolean(this._hostCapabilities.serverTools || this._hostCapabilities.serverToolProxy),
         canSendMessages: true,
-        canOpenLinks: Boolean(this._hostCapabilities.openLink),
+        canOpenLinks: Boolean(this._hostCapabilities.openLinks || this._hostCapabilities.openLink),
         supportsDisplayModes: true,
       };
 

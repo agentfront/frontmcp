@@ -278,9 +278,9 @@ CodeCallPlugin.init({
     maxSteps: 10000,
     allowLoops: true, // for and for-of; false allows for-of only
 
-    // Blocked identifiers (in addition to preset)
-    disabledBuiltins: ['eval', 'Function'],
-    disabledGlobals: ['process', 'require'],
+    // Names a script may not use, refused before it runs
+    disabledBuiltins: ['eval', 'Function', 'parseInt'],
+    disabledGlobals: ['process', 'require', 'JSON'],
   },
 });
 ```
@@ -298,8 +298,25 @@ CodeCallPlugin.init({
 sandbox refuses `while`, `do-while` and `for-in` whatever `allowLoops` says. Scripts have no `console` in any
 preset, so `allowConsole` has no effect: a script that refers to the global `console` is refused before it runs (a
 field named `console`, as in `result.platform.console`, is fine), and `mcpLog(level, message)` is the way to log. The
-`codecall:execute` description advertises `for-of` and names `for` as needing `allowLoops`, so a model's scripts run on
-every preset. Up to 1.9.1 `allowLoops: false` let a `for` loop run.
+`codecall:execute` description is written from the effective `vm` options: the loops `allowLoops` permits, the names
+`disabledBuiltins` and `disabledGlobals` list, `timeoutMs` and the tool-call cap (`maxSteps`), so a model's scripts run
+on every preset. `codecall:search`'s description gives the server's `topK` and the `minRelevanceScore` default, `0.1`.
+Up to 1.9.1 `allowLoops: false` let a `for` loop run, and up to 1.9.2 the descriptions named fixed limits (a 30 s
+timeout, 100 tool calls, a 0.3 threshold) whatever the configuration said.
+
+`disabledBuiltins` and `disabledGlobals` name globals a script may not use: a script that refers to one is refused
+before it runs, with `illegal_access` and `JSON is disabled by vm.disabledGlobals` (a field or key with that name, as in
+`formats.JSON`, is fine). They add to what the sandbox already refuses: AgentScript never gets `eval`, `require`,
+`process` or `fetch`, so leaving one out of the list doesn't allow it. Up to 1.9.2 both lists were accepted and ignored.
+
+A loop that runs more than 10,000 times ends the script with `runtime_error`, `Maximum iteration limit exceeded (10000).
+This limit prevents infinite loops.`, whatever the loop; up to 1.9.2 a `for` loop gave a different message, without the
+count, and the error name `DoubleVMExecutionError`.
+
+<Note>
+  `allowConsole` stays deprecated: the sandbox (`@enclave-vm/core`) writes a script's `console` output to the server's
+  own stdout, which would corrupt a stdio transport, and offers no way to capture it.
+</Note>
 
 ### Preset Details
 

@@ -31,6 +31,7 @@ function resolveDataInjectionScript(args: {
   output?: unknown;
   structuredContent?: unknown;
   sizing?: ShellConfig['sizing'];
+  displayMode?: ShellConfig['displayMode'];
 }): string {
   if (args.dataInjection) {
     return buildCustomDataInjectionScript(args.dataInjection);
@@ -41,6 +42,7 @@ function resolveDataInjectionScript(args: {
     output: args.output,
     structuredContent: args.structuredContent,
     sizing: args.sizing,
+    displayMode: args.displayMode,
   });
 }
 
@@ -75,6 +77,7 @@ export function buildShell(content: string, config: ShellConfig): ShellResult {
     includeBridge = true,
     title,
     sizing,
+    displayMode,
   } = config;
 
   const { customShell, dataInjection } = config;
@@ -85,6 +88,7 @@ export function buildShell(content: string, config: ShellConfig): ShellResult {
     output,
     structuredContent,
     sizing,
+    displayMode,
   });
 
   if (!withShell) {
@@ -108,6 +112,7 @@ export function buildShell(content: string, config: ShellConfig): ShellResult {
       includeBridge,
       title,
       sizing,
+      displayMode,
       dataInjection,
     });
   }
@@ -173,6 +178,7 @@ function buildCustomShell(
     includeBridge: boolean;
     title?: string;
     sizing?: ShellConfig['sizing'];
+    displayMode?: ShellConfig['displayMode'];
     dataInjection?: ShellDataInjectionDescriptor;
   },
 ): ShellResult {
@@ -199,6 +205,7 @@ function buildCustomShell(
     output: ctx.output,
     structuredContent: ctx.structuredContent,
     sizing: ctx.sizing,
+    displayMode: ctx.displayMode,
   });
 
   // Static sizing CSS rides along with the {{DATA}} placeholder so it lands in

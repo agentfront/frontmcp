@@ -58,6 +58,12 @@ function appendCookie(headers: Headers, name: string, value: unknown): void {
   headers.set('Cookie', combined);
 }
 
+/** The spec's `default` for an input, which a required parameter the model left out is sent with. */
+function specDefault(tool: McpOpenAPITool, inputKey: string): unknown {
+  const property = tool.inputSchema.properties?.[inputKey];
+  return typeof property === 'object' ? property.default : undefined;
+}
+
 /**
  * Build HTTP request from OpenAPI tool and input parameters
  *
@@ -94,7 +100,7 @@ export function buildRequest(
     // Skip security parameters (already handled by SecurityResolver)
     if (mapper.security) continue;
 
-    const value = input[mapper.inputKey];
+    const value = input[mapper.inputKey] ?? (mapper.required ? specDefault(tool, mapper.inputKey) : undefined);
 
     // Check required parameters
     if (value === undefined || value === null) {

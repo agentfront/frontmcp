@@ -7,7 +7,7 @@
  * @jest-environment jsdom
  */
 
-import { ExtAppsAdapter } from '../ext-apps.adapter';
+import { ExtAppsAdapter, ExtAppsNotSupportedError } from '../ext-apps.adapter';
 
 describe('ExtAppsAdapter', () => {
   let adapter: ExtAppsAdapter;
@@ -238,6 +238,223 @@ describe('ExtAppsAdapter', () => {
 
         expect(postMessage).not.toHaveBeenCalled();
       });
+    });
+
+    describe('MCP Apps spec methods', () => {
+      const HOST_ORIGIN = 'https://host.example';
+      let postMessage: jest.SpyInstance;
+
+      function connectTo(hostCapabilities: Record<string, unknown>): void {
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._hostCapabilities = hostCapabilities;
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._trustedOrigin = HOST_ORIGIN;
+      }
+
+      function sent(method: string): unknown[] {
+        return postMessage.mock.calls
+          .map(([message]) => message as { method?: string; params?: unknown })
+          .filter((message) => message.method === method)
+          .map((message) => message.params);
+      }
+
+      function offerDisplayModes(modes: string[]): void {
+        // @ts-expect-error - accessing protected property for testing
+        adapterWithConfig._hostContext = { ...adapterWithConfig._hostContext, availableDisplayModes: modes };
+      }
+
+      function answer(method: string, result: unknown): void {
+        const request = postMessage.mock.calls
+          .map(([message]) => message as { id?: number; method?: string })
+          .find((message) => message.method === method);
+        const data = { jsonrpc: '2.0', id: request?.id, result };
+        // @ts-expect-error - accessing private method for testing
+        adapterWithConfig._handleMessage({ data, origin: HOST_ORIGIN } as MessageEvent);
+      }
+
+      beforeEach(() => {
+        postMessage = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => undefined);
+      });
+
+      afterEach(() => {
+        adapterWithConfig.dispose();
+        jest.restoreAllMocks();
+      });
+
+      it('calls a server tool with tools/call, marked as the widget own call', () => {
+        connectTo({ serverTools: {} });
+
+        adapterWithConfig.callTool('close_ticket', { id: 'T-1' }).catch(() => undefined);
+
+        expect(sent('tools/call')).toEqual([
+          { name: 'close_ticket', arguments: { id: 'T-1' }, _meta: { 'frontmcp/widgetCall': true } },
+        ]);
+        expect(sent('ui/callServerTool')).toEqual([]);
+      });
+
+      it('opens a link with ui/open-link', () => {
+        connectTo({ openLinks: {} });
+
+        adapterWithConfig.openLink('https://example.com/docs').catch(() => undefined);
+
+        expect(sent('ui/open-link')).toEqual([{ url: 'https://example.com/docs' }]);
+        expect(sent('ui/openLink')).toEqual([]);
+      });
+
+      it('declares the display modes it supports in ui/initialize', () => {
+        connectTo({});
+
+        // @ts-expect-error - accessing private method for testing
+        adapterWithConfig._performHandshake().catch(() => undefined);
+
+        expect(sent('ui/initialize')).toEqual([
+          expect.objectContaining({
+            appCapabilities: expect.objectContaining({ availableDisplayModes: ['inline', 'fullscreen', 'pip'] }),
+          }),
+        ]);
+      });
+
+      it('asks for a display mode the host offers with ui/request-display-mode', () => {
+        connectTo({});
+        offerDisplayModes(['inline', 'fullscreen']);
+
+        adapterWithConfig.requestDisplayMode('fullscreen').catch(() => undefined);
+
+        expect(sent('ui/request-display-mode')).toEqual([{ mode: 'fullscreen' }]);
+        expect(sent('ui/setDisplayMode')).toEqual([]);
+      });
+
+      it('does not ask for a display mode the host does not offer', async () => {
+        connectTo({});
+        offerDisplayModes(['inline']);
+
+        await expect(adapterWithConfig.requestDisplayMode('fullscreen')).rejects.toThrow(ExtAppsNotSupportedError);
+
+        expect(sent('ui/request-display-mode')).toEqual([]);
+      });
+
+      it('learns the display modes the host offers from host-context-changed', async () => {
+        connectTo({});
+        offerDisplayModes(['inline']);
+        await expect(adapterWithConfig.requestDisplayMode('pip')).rejects.toThrow(ExtAppsNotSupportedError);
+
+        // @ts-expect-error - accessing private method for testing
+        adapterWithConfig._handleNotification({
+          jsonrpc: '2.0',
+          method: 'ui/notifications/host-context-changed',
+          params: { availableDisplayModes: ['inline', 'pip'] },
+        });
+
+        adapterWithConfig.requestDisplayMode('pip').catch(() => undefined);
+
+        expect(sent('ui/request-display-mode')).toEqual([{ mode: 'pip' }]);
+      });
+
+      it('keeps the display mode the host set, not the one it asked for', async () => {
+        connectTo({});
+        offerDisplayModes(['inline', 'fullscreen', 'pip']);
+
+        const request = adapterWithConfig.requestDisplayMode('fullscreen');
+        answer('ui/request-display-mode', { mode: 'pip' });
+        await request;
+
+        expect(adapterWithConfig.getHostContext().displayMode).toBe('pip');
+      });
+
+      it('sends model context as ui/update-model-context, merging object updates', () => {
+        connectTo({ updateModelContext: { text: {} } });
+
+        adapterWithConfig.updateModelContext({ city: 'Oslo' }).catch(() => undefined);
+        adapterWithConfig.updateModelContext({ unit: 'C' }).catch(() => undefined);
+        adapterWithConfig.updateModelContext('The user picked Oslo', false).catch(() => undefined);
+
+        expect(sent('ui/update-model-context')).toEqual([
+          { content: [{ type: 'text', text: '{"city":"Oslo"}' }], structuredContent: { city: 'Oslo' } },
+          {
+            content: [{ type: 'text', text: '{"city":"Oslo","unit":"C"}' }],
+            structuredContent: { city: 'Oslo', unit: 'C' },
+          },
+          { content: [{ type: 'text', text: 'The user picked Oslo' }] },
+        ]);
+      });
+
+      it('logs with a notifications/message notification at the MCP level', async () => {
+        connectTo({ logging: {} });
+
+        await adapterWithConfig.log('warn', 'Quota low', { remaining: 3 });
+
+        expect(postMessage).toHaveBeenCalledWith(
+          {
+            jsonrpc: '2.0',
+            method: 'notifications/message',
+            params: { level: 'warning', data: { message: 'Quota low', data: { remaining: 3 } } },
+          },
+          HOST_ORIGIN,
+        );
+        expect(sent('ui/log')).toEqual([]);
+      });
+
+      it('asks the host to tear the widget down with a ui/notifications/request-teardown notification', async () => {
+        connectTo({});
+
+        await adapterWithConfig.requestClose();
+
+        expect(postMessage).toHaveBeenCalledWith(
+          { jsonrpc: '2.0', method: 'ui/notifications/request-teardown', params: {} },
+          HOST_ORIGIN,
+        );
+        expect(sent('ui/close')).toEqual([]);
+      });
+
+      describe('ui/resource-teardown', () => {
+        const teardownRequest = { jsonrpc: '2.0', id: 900, method: 'ui/resource-teardown', params: {} };
+
+        function receive(origin: string): void {
+          // @ts-expect-error - accessing private method for testing
+          adapterWithConfig._handleMessage({ data: teardownRequest, origin } as MessageEvent);
+        }
+
+        it('fires bridge:teardown, then answers the host with an empty result', () => {
+          connectTo({});
+          const answeredBeforeCleanup: number[] = [];
+          const listener = () => answeredBeforeCleanup.push(postMessage.mock.calls.length);
+          window.addEventListener('bridge:teardown', listener);
+
+          receive(HOST_ORIGIN);
+          window.removeEventListener('bridge:teardown', listener);
+
+          expect(answeredBeforeCleanup).toEqual([0]);
+          expect(postMessage.mock.calls).toEqual([[{ jsonrpc: '2.0', id: 900, result: {} }, HOST_ORIGIN]]);
+        });
+
+        it('ignores a teardown request from an origin it does not trust', () => {
+          connectTo({});
+          const teardowns: Event[] = [];
+          const listener = (event: Event) => teardowns.push(event);
+          window.addEventListener('bridge:teardown', listener);
+
+          receive('https://other.example');
+          window.removeEventListener('bridge:teardown', listener);
+
+          expect(teardowns).toEqual([]);
+          expect(postMessage).not.toHaveBeenCalled();
+        });
+      });
+
+      it.each(['ui/notifications/tool-cancelled', 'ui/notifications/cancelled'])(
+        'reports a %s notification as a tool:cancelled event with its reason',
+        (method) => {
+          const reasons: unknown[] = [];
+          const listener = (event: Event) => reasons.push((event as CustomEvent).detail);
+          window.addEventListener('tool:cancelled', listener);
+
+          // @ts-expect-error - accessing private method for testing
+          adapterWithConfig._handleNotification({ jsonrpc: '2.0', method, params: { reason: 'user action' } });
+          window.removeEventListener('tool:cancelled', listener);
+
+          expect(reasons).toEqual([{ reason: 'user action' }]);
+        },
+      );
     });
 
     describe('updateModelContext', () => {

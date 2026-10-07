@@ -13,6 +13,7 @@ export type {
   // Core message params
   ExtAppsCallServerToolParams,
   ExtAppsUpdateModelContextParams,
+  ExtAppsSpecUpdateModelContextParams,
   ExtAppsOpenLinkParams,
   // Display and lifecycle
   ExtAppsDisplayMode,
@@ -21,6 +22,8 @@ export type {
   // Logging
   ExtAppsLogLevel,
   ExtAppsLogParams,
+  ExtAppsMcpLogLevel,
+  ExtAppsLogMessageParams,
   // Widget-defined tools
   ExtAppsRegisterToolParams,
   ExtAppsUnregisterToolParams,

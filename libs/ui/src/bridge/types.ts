@@ -70,6 +70,8 @@ export interface HostContext {
   theme: 'light' | 'dark';
   /** Current display mode */
   displayMode: DisplayMode;
+  /** Display modes the host offers (MCP Apps) */
+  availableDisplayModes?: DisplayMode[];
   /** BCP 47 locale */
   locale: string;
   /** IANA timezone */
@@ -360,6 +362,8 @@ export interface ExtAppsInitializeParams {
     tools?: {
       listChanged: boolean;
     };
+    /** Display modes the widget supports */
+    availableDisplayModes?: DisplayMode[];
   };
   protocolVersion: string;
 }
@@ -374,15 +378,21 @@ export interface ExtAppsInitializeResult {
     version: string;
   };
   hostCapabilities: {
-    /** Host supports opening links */
+    /** Host supports opening links (MCP Apps spec name) */
+    openLinks?: Record<string, unknown>;
+    /** Host supports opening links (earlier FrontMCP name) */
     openLink?: boolean;
-    /** Host supports proxying tool calls to the MCP server */
+    /** Host can proxy tool calls to the MCP server (MCP Apps spec name) */
+    serverTools?: { listChanged?: boolean };
+    /** Host supports proxying tool calls to the MCP server (earlier FrontMCP name) */
     serverToolProxy?: boolean;
     /** Host supports reading resources */
     resourceRead?: boolean;
     /** Host supports logging */
-    logging?: boolean;
-    /** Host supports model context updates */
+    logging?: boolean | Record<string, unknown>;
+    /** Host accepts `ui/update-model-context`, with the content types it takes (MCP Apps spec name) */
+    updateModelContext?: Record<string, unknown>;
+    /** Host supports model context updates (earlier FrontMCP name) */
     modelContextUpdate?: boolean;
     /** Host supports widget-defined tools */
     widgetTools?: boolean;
@@ -414,6 +424,7 @@ export interface ExtAppsToolResultParams {
 export interface ExtAppsHostContextChangeParams {
   theme?: 'light' | 'dark';
   displayMode?: DisplayMode;
+  availableDisplayModes?: DisplayMode[];
   viewport?: ViewportInfo;
   locale?: string;
   timezone?: string;
@@ -430,6 +441,7 @@ export type BridgeEventType =
   | 'bridge:ready'
   | 'bridge:error'
   | 'bridge:adapter-changed'
+  | 'bridge:teardown'
   | 'context:change'
   | 'tool:input'
   | 'tool:input-partial'
@@ -443,6 +455,8 @@ export interface BridgeEventPayloads {
   'bridge:ready': { adapter: string };
   'bridge:error': { error: Error; adapter?: string };
   'bridge:adapter-changed': { from?: string; to: string };
+  /** The host is about to unmount the widget (MCP Apps `ui/resource-teardown`); clean up synchronously. */
+  'bridge:teardown': Record<string, never>;
   'context:change': Partial<HostContext>;
   'tool:input': { arguments: Record<string, unknown> };
   'tool:input-partial': { arguments: Record<string, unknown> };

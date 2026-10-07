@@ -1,13 +1,14 @@
 // file: libs/plugins/src/codecall/providers/code-call.config.ts
 
-import { Provider, ProviderScope, BaseConfig } from '@frontmcp/sdk';
+import { BaseConfig, Provider, ProviderScope } from '@frontmcp/sdk';
+
+import { type ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import {
-  CodeCallPluginOptions,
-  CodeCallVmOptions,
-  CodeCallVmPreset,
   codeCallPluginOptionsSchema,
+  type CodeCallPluginOptions,
+  type CodeCallVmOptions,
+  type CodeCallVmPreset,
 } from '../codecall.types';
-import { ResolvedCodeCallVmOptions } from '../codecall.symbol';
 
 /**
  * CodeCall configuration provider with convict-like API
@@ -49,9 +50,17 @@ export default class CodeCallConfig extends BaseConfig<
   }
 }
 
+/** Iterations the sandbox allows each loop of a script; not configurable. */
+export const MAX_ITERATIONS_PER_LOOP = 10000;
+
+/** Tool calls a script may make: `vm.maxSteps`, else 100. */
+export function maxToolCallsOf(vmOptions: ResolvedCodeCallVmOptions): number {
+  return vmOptions.maxSteps || 100;
+}
+
 // ---- VM Options Resolution ----
 
-function resolveVmOptions(vmOptions?: CodeCallVmOptions): ResolvedCodeCallVmOptions {
+export function resolveVmOptions(vmOptions?: CodeCallVmOptions): ResolvedCodeCallVmOptions {
   const preset: CodeCallVmPreset = vmOptions?.preset ?? 'secure';
 
   const base = presetDefaults(preset);
