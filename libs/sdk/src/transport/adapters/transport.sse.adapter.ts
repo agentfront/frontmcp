@@ -115,8 +115,8 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     // Cancel any previous pending elicit (only one per session)
     await this.cancelPendingElicit();
 
-    // Generate elicit ID
-    const elicitId = elicitationId ?? `elicit-${this.newRequestId}`;
+    // Generate elicit ID if not provided or empty
+    const elicitId = elicitationId || `elicit-${this.newRequestId}`;
     const sessionId = this.key.sessionId;
     const expiresAt = Date.now() + ttl;
 

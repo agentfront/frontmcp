@@ -172,7 +172,7 @@ const result = await this.elicit(
 
 ### URL Mode
 
-Redirects the user to an external URL for out-of-band interaction (OAuth, payments, etc.). URL mode requires the `url` the client opens; an elicitation without it fails with `INVALID_INPUT`. The `elicitationId` is an opaque identifier that correlates the out-of-band callback with the pending elicitation: pass your own (the page needs it to report back), or FrontMCP generates one. Both are sent in the `elicitation/create` request, on every transport and under MCP 2026-07-28 in the `input_required` result.
+Redirects the user to an external URL for out-of-band interaction (OAuth, payments, etc.). URL mode requires the `url` the client opens; an elicitation without it fails with `INVALID_INPUT`. The `elicitationId` is an opaque identifier that correlates the out-of-band callback with the pending elicitation: pass your own (the page needs it to report back), or FrontMCP generates one, also for an empty one. Both are sent in the `elicitation/create` request, on every transport and under MCP 2026-07-28 in the `input_required` result.
 
 The answer only says whether the user accepted, declined or cancelled: as MCP specifies, an accepted URL-mode answer carries no `content`, so the schema you pass is not checked against it and `result.content` is `undefined`. What the user did on the page reaches your server through the page, under the `elicitationId` or the state it was given:
 

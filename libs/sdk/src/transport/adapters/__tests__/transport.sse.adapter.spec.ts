@@ -13,7 +13,10 @@ describe('TransportSSEAdapter.sendElicitRequest', () => {
     await expect(request).rejects.toThrow('url is required when mode is "url"');
   });
 
-  it('sends a URL-mode question with no elicitationId under a generated one', async () => {
+  it.each([
+    ['no elicitationId', undefined],
+    ['an empty elicitationId', ''],
+  ])('sends a URL-mode question with %s under a generated one', async (_case, elicitationId) => {
     const sent: Array<{ params?: Record<string, unknown> }> = [];
     const sseAdapter = Object.create(TransportSSEAdapter.prototype) as TransportSSEAdapter;
     Object.defineProperty(sseAdapter, 'newRequestId', { get: () => 7 });
@@ -34,6 +37,7 @@ describe('TransportSSEAdapter.sendElicitRequest', () => {
     const answer = await sseAdapter.sendElicitRequest(1, 'Sign in', z.object({}), {
       mode: 'url',
       url: 'https://example.com/consent',
+      elicitationId,
     });
 
     expect(answer).toEqual({ status: 'accept' });

@@ -80,7 +80,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   private readonly keyPrefix: string;
   private readonly subscriptionHandlers = new Map<string, Set<MessageHandler>>();
   private readonly connectionUrl?: string;
-  private readonly urlFillIns: RedisUrlMerge['fillIns'];
+  /** The connection options of a URL this adapter reads itself; undefined for one only ioredis reads. */
+  private readonly urlOptions?: RedisOptions;
 
   constructor(options: RedisAdapterOptions = {}) {
     super();
@@ -111,7 +112,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
     this.keyPrefix = options.keyPrefix ?? '';
     const configUrl = options.config?.url;
     this.connectionUrl = options.url ?? (typeof configUrl === 'string' ? configUrl : undefined);
-    this.urlFillIns = this.connectionUrl ? resolveUrlFillIns(this.connectionUrl, options) : {};
+    this.urlOptions = this.connectionUrl ? resolveUrlOptions(this.connectionUrl, options) : undefined;
   }
 
   // ============================================
@@ -144,13 +145,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
         // Use external client
         client = this.options.client as Redis;
       } else {
-        // Create new client
-        const RedisClass = getRedisClass();
-        if (this.connectionUrl) {
-          client = new RedisClass(this.connectionUrl, this.buildRedisOptions());
-        } else {
-          client = new RedisClass(this.buildRedisOptions());
-        }
+        client = this.newClient();
         client.on('error', recordSocketError);
       }
 
@@ -451,7 +446,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
    */
   private buildRedisOptions(): RedisOptions {
     if (this.connectionUrl) {
-      return { ...toFillInOptions(this.urlFillIns), lazyConnect: false, maxRetriesPerRequest: 3 };
+      return { lazyConnect: false, maxRetriesPerRequest: 3, ...this.urlOptions };
     }
 
     const config = this.options.config;
@@ -470,16 +465,24 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   }
 
   /**
+   * Create a client this adapter owns. A URL only ioredis reads goes to it as is.
+   */
+  private newClient(): Redis {
+    const RedisClass = getRedisClass();
+    if (this.connectionUrl && !this.urlOptions) {
+      return new RedisClass(this.connectionUrl, this.buildRedisOptions());
+    }
+    return new RedisClass(this.buildRedisOptions());
+  }
+
+  /**
    * Create subscriber connection.
    */
   private async createSubscriber(): Promise<void> {
-    const RedisClass = getRedisClass();
     let subscriber: Redis;
 
-    if (this.connectionUrl) {
-      subscriber = new RedisClass(this.connectionUrl, this.buildRedisOptions());
-    } else if (this.options.config) {
-      subscriber = new RedisClass(this.buildRedisOptions());
+    if (this.connectionUrl || this.options.config) {
+      subscriber = this.newClient();
     } else if (this.options.client) {
       // Duplicate the client for subscriber
       subscriber = (this.options.client as Redis).duplicate();
@@ -532,24 +535,31 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   }
 }
 
-function resolveUrlFillIns(connectionUrl: string, options: RedisAdapterOptions): RedisUrlMerge['fillIns'] {
+function resolveUrlOptions(connectionUrl: string, options: RedisAdapterOptions): RedisOptions | undefined {
   const { url: configUrl, ...siblingFields } = { url: undefined, ...options.config };
   if (options.url && configUrl && configUrl !== options.url) {
     throw new StorageConfigError('redis', 'redis.url and redis.config.url name different servers; set one of them.');
   }
-  return checkedUrlFillIns(connectionUrl, siblingFields);
+  return urlConnectionOptions(connectionUrl, siblingFields);
 }
 
-/** The fields beside a url fill in what it leaves out; one that contradicts it throws a StorageConfigError. */
-function checkedUrlFillIns(url: string, fields: RedisUrlSiblingFields): RedisUrlMerge['fillIns'] {
+/**
+ * The ioredis options for a url and the fields beside it: what the URL states, then what the fields
+ * fill in. ioredis would keep a username-only URL's empty password over a filled-in one, so it gets
+ * these options instead of the URL. A field that contradicts the URL throws a StorageConfigError;
+ * undefined for a URL only ioredis reads.
+ */
+function urlConnectionOptions(url: string, fields: RedisUrlSiblingFields): RedisOptions | undefined {
   const merge = mergeRedisUrlFields(url, fields);
-  if (merge && merge.conflicts.length > 0) {
+  if (!merge) return undefined;
+  if (merge.conflicts.length > 0) {
     throw new StorageConfigError('redis', describeRedisUrlConflicts(merge.conflicts));
   }
-  return merge?.fillIns ?? {};
+  const { queryOptions, tls, ...stated } = merge.connection;
+  return { ...queryOptions, ...stated, ...toFillInOptions(merge.fillIns), ...(tls ? { tls: {} } : {}) };
 }
 
-/** ioredis keeps what a URL states and takes only the missing fields from these options. */
+/** The connection fields a URL leaves out, as ioredis options. */
 function toFillInOptions({ port, password, db, tls }: RedisUrlMerge['fillIns']): RedisOptions {
   return {
     ...(port !== undefined ? { port } : {}),
@@ -579,19 +589,24 @@ export interface CreateRedisClientOptions {
  * password, db, tls), and one that contradicts it throws a `StorageConfigError`.
  */
 export function createRedisClient(options: CreateRedisClientOptions): Redis {
-  const urlOptions = options.url ? toFillInOptions(checkedUrlFillIns(options.url, options)) : undefined;
+  const urlOptions = options.url ? urlConnectionOptions(options.url, options) : undefined;
   const RedisClass = getRedisClass();
   const baseOptions: RedisOptions = { lazyConnect: false, maxRetriesPerRequest: 3 };
-  const client = options.url
-    ? new RedisClass(options.url, { ...baseOptions, ...urlOptions })
-    : new RedisClass({
-        ...baseOptions,
-        host: options.host ?? 'localhost',
-        port: options.port ?? 6379,
-        password: options.password,
-        db: options.db ?? 0,
-        tls: options.tls ? {} : undefined,
-      });
+  let client: Redis;
+  if (urlOptions) {
+    client = new RedisClass({ ...baseOptions, ...urlOptions });
+  } else if (options.url) {
+    client = new RedisClass(options.url, baseOptions);
+  } else {
+    client = new RedisClass({
+      ...baseOptions,
+      host: options.host ?? 'localhost',
+      port: options.port ?? 6379,
+      password: options.password,
+      db: options.db ?? 0,
+      tls: options.tls ? {} : undefined,
+    });
+  }
   attachRedisErrorListener(client, { label: options.label ?? 'redis', logger: options.logger });
   return client;
 }

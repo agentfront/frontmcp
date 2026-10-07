@@ -413,7 +413,7 @@ For production, configure Redis storage:
 })
 ```
 
-The job state and definition stores connect with every connection field of `store.redis`: `host`, `port`, `password`, `db` and `tls`, or a `url` (`redis://` or `rediss://`). Beside a `url`, those fields fill in only what the URL leaves out, and one that contradicts it stops startup, as for the server's `redis` option. Up to 1.9.2 the job stores connected with `host` and `port` alone, so `password`, `db` and `tls`, and the password and TLS of a `url`, were dropped.
+The job state and definition stores connect with every connection field of `store.redis`: `host`, `port`, `password`, `db` and `tls`, or a `url` (`redis://` or `rediss://`). Beside a `url`, those fields fill in only what the URL leaves out, and one that contradicts it stops startup, as for the server's `redis` option. Up to 1.9.2 the job stores connected with the `url` alone, or with `host` and `port` alone, so the `password`, `db` and `tls` fields were dropped, whether set on their own or beside a `url`; a password, database or `rediss://` TLS written in the `url` itself was kept.
 
 ---
 
