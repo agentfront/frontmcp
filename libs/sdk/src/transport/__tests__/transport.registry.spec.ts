@@ -861,6 +861,61 @@ describe('TransportService', () => {
   });
 
   // ============================================
+  // A session deleted through another instance (#713)
+  // ============================================
+
+  describe('a session another instance deleted', () => {
+    const tokenHash = sha256Hex('test-token');
+    const stored = {
+      session: { id: 'shared', authorizationId: tokenHash, protocol: 'streamable-http', createdAt: 1, nodeId: 'other' },
+      authorizationId: tokenHash,
+      createdAt: 1,
+      lastAccessedAt: 1,
+    };
+
+    beforeEach(async () => {
+      service = new TransportService(mockScope as never, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+    });
+
+    it('stops serving a recreated session from memory once its stored record is gone', async () => {
+      const transport = await service.recreateTransporter(
+        'streamable-http',
+        'test-token',
+        'shared',
+        stored as never,
+        mockResponse as never,
+      );
+      mockRedisSessionStore.exists.mockResolvedValueOnce(true);
+      expect(await service.getTransporter('streamable-http', 'test-token', 'shared')).toBe(transport);
+
+      mockRedisSessionStore.exists.mockResolvedValueOnce(false);
+      expect(await service.getTransporter('streamable-http', 'test-token', 'shared')).toBeUndefined();
+      expect(transport.destroy).toHaveBeenCalled();
+      expect(await service.getTransporter('streamable-http', 'test-token', 'shared')).toBeUndefined();
+    });
+
+    it('stops serving a session it created once its stored record is gone', async () => {
+      const transport = await service.createTransporter('streamable-http', 'test-token', 'mine', mockResponse as never);
+      mockRedisSessionStore.exists.mockResolvedValueOnce(false);
+
+      expect(await service.getTransporter('streamable-http', 'test-token', 'mine')).toBeUndefined();
+      expect(transport.destroy).toHaveBeenCalled();
+    });
+
+    it('keeps serving a session whose record it could not store, or when the store cannot be read', async () => {
+      mockRedisSessionStore.set.mockRejectedValueOnce(new Error('Redis down'));
+      const unstored = await service.createTransporter('streamable-http', 'test-token', 'a', mockResponse as never);
+      expect(await service.getTransporter('streamable-http', 'test-token', 'a')).toBe(unstored);
+
+      const created = await service.createTransporter('streamable-http', 'test-token', 'b', mockResponse as never);
+      mockRedisSessionStore.exists.mockRejectedValueOnce(new Error('Redis down'));
+      expect(await service.getTransporter('streamable-http', 'test-token', 'b')).toBe(created);
+      expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ============================================
   // updateStoredSessionCapabilities Tests
   // ============================================
 
@@ -1553,6 +1608,7 @@ describe('TransportService - Redis HA behaviour (#646)', () => {
       await service.ready;
       await service.createTransporter('streamable-http', 'tok', 'sess-ttl', mockResponse as never);
       mockRedisSessionStore.get.mockClear();
+      mockRedisSessionStore.exists.mockResolvedValue(true);
       return service;
     }
 

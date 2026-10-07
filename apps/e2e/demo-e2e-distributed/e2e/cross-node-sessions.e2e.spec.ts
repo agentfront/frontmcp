@@ -81,6 +81,11 @@ describe('Distributed cross-node sessions (#680)', () => {
     // The session keeps working on its owner, and a list request relays too.
     const list = await mcpPost(other.info.baseUrl, 'tools/list', {}, { sessionId });
     expect(JSON.stringify(list.message?.result)).toContain('"echo"');
+
+    // The owner outlives the 500 ms after which @hono/node-server drains a served request.
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    const direct = await callTool(owner.info.baseUrl, sessionId, 'echo', { message: 'still up' });
+    expect(toolText(direct)).toContain('[node-0] still up');
   });
 
   skipIf(SKIP)('relays DELETE to the owner, which ends the session for every node', async () => {

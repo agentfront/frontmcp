@@ -56,6 +56,8 @@ When enabled, every scrape returns:
 | Framework counters | `frontmcp_skills_bundle_pulls_total`, `frontmcp_skills_signature_*_total`, `frontmcp_skills_replay_*_total`, `frontmcp_skills_audit_*_total`                                  | `@frontmcp/observability`'s in-memory counter snapshot store |
 | Custom counters    | Anything emitted via `createCounter('my_counter_total').inc()`                                                                                                                | Same snapshot store                                          |
 
+A gauge the runtime cannot measure is left out rather than reported as `0`: a Cloudflare Worker, which has no process, serves none of the process gauges. Up to 1.9.2 a Worker listed five `frontmcp_process_*` gauges, all `0`.
+
 `createCounter()` from `@frontmcp/observability` writes into the same store the scrape reads from — no extra wiring needed.
 
 ## Configuration

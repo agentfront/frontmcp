@@ -2,8 +2,8 @@
  * Table formatting for process status / list output.
  */
 
-import { ProcessInfo } from './types';
 import { c } from '../../core/colors';
+import { type ProcessInfo } from './types';
 
 export function formatProcessTable(processes: ProcessInfo[]): string {
   if (processes.length === 0) {
@@ -101,7 +101,7 @@ export function formatProcessDetail(p: ProcessInfo): string {
   lines.push(`${c('bold', 'Started:')}     ${p.startedAt}`);
   lines.push(`${c('bold', 'Uptime:')}      ${p.status === 'running' ? p.uptime : '-'}`);
   lines.push(`${c('bold', 'Restarts:')}    ${p.restartCount}`);
-  lines.push(`${c('bold', 'CLI Version:')} ${p.cliVersion}`);
+  if (p.cliVersion) lines.push(`${c('bold', 'CLI Version:')} ${p.cliVersion}`);
 
   return lines.join('\n');
 }

@@ -3,13 +3,15 @@ import { rspack } from '@rspack/core';
 
 import { fileExists } from '@frontmcp/utils';
 import { c } from '../../core/colors';
+import { OPTIONAL_RUNTIME_PEERS } from '../package/runtime-packages';
 
 /**
- * Packages the SDK `require()`s lazily behind a try/catch (storage backends,
- * observability, Vercel KV). A fresh project has none of them installed, and
- * rspack treats every `require()` as a hard import — so a missing one failed the
- * whole build with "Module not found". They are bundled when installed and left
- * as a runtime `require()` (which the SDK already guards) when they are not.
+ * The optional peers of `@frontmcp/sdk` and `@frontmcp/utils` (storage backends,
+ * observability, Vercel KV, Upstash, ...), which they load lazily with `require()`
+ * or `import()`. A fresh project has none of them installed, and rspack treats each
+ * as a hard import — so a missing one failed the whole build with "Module not found".
+ * They are bundled when installed and left as a runtime `require()` (which the SDK
+ * already guards) when they are not.
  *
  * `@codegenie/serverless-express` is the Lambda entry's adapter. The lambda
  * target refuses to build without it, so for that target it is always installed
@@ -17,11 +19,8 @@ import { c } from '../../core/colors';
  * template's `CodeUri`) carries no `node_modules`, and leaving it external made
  * the function fail to load (#680).
  */
-export const OPTIONAL_RUNTIME_PACKAGES = [
-  '@frontmcp/storage-sqlite',
-  '@frontmcp/observability',
-  '@vercel/kv',
-  '@opentelemetry/sdk-trace-base',
+export const OPTIONAL_RUNTIME_PACKAGES: readonly string[] = [
+  ...OPTIONAL_RUNTIME_PEERS,
   '@codegenie/serverless-express',
 ];
 
@@ -102,16 +101,6 @@ export async function bundleForServerless(
       'react-dom': 'react-dom',
       'react-dom/server': 'react-dom/server',
       'react/jsx-runtime': 'react/jsx-runtime',
-      // #368 round-3 — `@frontmcp/sdk/esm` contains lazy `await import('openai')`
-      // and `await import('@anthropic-ai/sdk')` calls inside agent adapters.
-      // These are intentionally optional peers (only resolved when the user
-      // actually instantiates an OpenAI/Anthropic agent), but rspack treats
-      // them as hard imports during static analysis and the vercel/lambda
-      // build fails because neither is installed. Externalizing tells rspack
-      // to leave the `require()` in place — the dynamic-import branch only
-      // executes if the user wires up the corresponding agent.
-      openai: 'openai',
-      '@anthropic-ai/sdk': '@anthropic-ai/sdk',
       },
     ],
     resolve: {

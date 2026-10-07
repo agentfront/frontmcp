@@ -183,7 +183,7 @@ Serverless functions are stateless between invocations. All persistent state mus
 ### Bundle-time behavior of serverless builds
 
 - `process.env.NODE_ENV` stays a runtime lookup in the Vercel and Lambda bundles. It is not inlined as `"production"` at build time, so a deployment's own `NODE_ENV` (and the production-only checks that read it) behave the same as on a Node server.
-- Optional packages the server may or may not use (`@frontmcp/storage-sqlite`, `@frontmcp/observability`, `@vercel/kv`, `@opentelemetry/sdk-trace-base`) are bundled when installed and left as a lazy `require()` when they are not, so a missing optional package no longer fails the build with "Module not found". `better-sqlite3` (a native addon) is always left external.
+- The optional peers of `@frontmcp/sdk` and `@frontmcp/utils` (`@frontmcp/storage-sqlite`, `@frontmcp/observability`, `@opentelemetry/api`, `@opentelemetry/sdk-trace-base`, `@vercel/kv`, `@upstash/redis`, `ioredis`, `@enclave-vm/core`, `openai`, `@anthropic-ai/sdk`) are bundled when installed and left as a lazy `require()` when they are not, so a missing optional package no longer fails the build with "Module not found". `better-sqlite3` (a native addon) is always left external. In 1.9.2 a project without `@upstash/redis` failed the `vercel` and `lambda` builds with `Can't resolve '@upstash/redis'`.
 
 ## Verification Checklist
 

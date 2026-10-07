@@ -92,7 +92,7 @@ export function generateCliEntry(options: CliEntryOptions): string {
     generateServeCommand(serverBundleFilename, selfContained),
     generateDoctorCommand(appName, options.nativeDeps),
     generateInstallCommand(appName, options.nativeDeps, selfContained),
-    generateDaemonCommands(appName, serverBundleFilename, selfContained),
+    generateDaemonCommands(appName, appVersion, serverBundleFilename, selfContained),
     generateFooter(),
   ];
 
@@ -1788,7 +1788,12 @@ program
   });`;
 }
 
-function generateDaemonCommands(appName: string, serverBundleFilename: string, selfContained?: boolean): string {
+function generateDaemonCommands(
+  appName: string,
+  appVersion: string,
+  serverBundleFilename: string,
+  selfContained?: boolean,
+): string {
   return `var daemonCmd = program.command('daemon').description('Daemon management');
 
 daemonCmd
@@ -1883,7 +1888,8 @@ ${selfContained ? `    // SEA mode: spawn the binary itself in daemon mode — a
       name: ${JSON.stringify(appName)},
       entry: ${selfContained ? 'process.execPath' : 'serverBundlePath'},
       startedAt: new Date().toISOString(),
-      restartCount: 0
+      restartCount: 0,
+      cliVersion: ${JSON.stringify(appVersion)}
     };
     if (usePort) {
       pidData.port = opts.port;

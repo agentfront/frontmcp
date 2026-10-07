@@ -1,5 +1,5 @@
-import { formatUptime, formatProcessTable, formatProcessDetail } from '../format';
-import { ProcessInfo } from '../types';
+import { formatProcessDetail, formatProcessTable, formatUptime } from '../format';
+import { type ProcessInfo } from '../types';
 
 describe('pm.format', () => {
   describe('formatUptime', () => {
@@ -80,6 +80,22 @@ describe('pm.format', () => {
       expect(result).toContain('/path/to/main.ts');
       expect(result).toContain('2');
       expect(result).toContain('0.8.1');
+    });
+
+    it('leaves out the CLI version a pid file does not record (an older compiled CLI daemon)', () => {
+      const process: ProcessInfo = {
+        name: 'bin-daemon',
+        pid: 54321,
+        supervisorPid: 54321,
+        status: 'running',
+        entry: '/path/to/bin',
+        startedAt: '2024-01-01T00:00:00.000Z',
+        restartCount: 0,
+        uptime: '10s',
+        cliVersion: '',
+      };
+
+      expect(formatProcessDetail(process)).not.toContain('CLI Version');
     });
 
     it('should include socket path when present', () => {

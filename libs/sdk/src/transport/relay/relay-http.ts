@@ -137,6 +137,10 @@ export function isRelayedRequest(request: ServerRequest): boolean {
  * Rebuild the `ServerRequest` of a relayed request on the session owner.
  * Its socket peer is the client's address on the node that received the request,
  * so client-IP rules see the same client they would have seen there.
+ *
+ * It behaves as a request whose body has arrived: reading (`resume()`) ends it with `end`,
+ * as `@hono/node-server` expects when it drains a request after the response; and its socket
+ * has nothing to close.
  */
 export function createRelayedServerRequest(relayed: RelayedHttpRequest, sourceNodeId: string): ServerRequest {
   const headers = normalizeRequestHeaders(relayed.headers);
@@ -147,6 +151,13 @@ export function createRelayedServerRequest(relayed: RelayedHttpRequest, sourceNo
   const socket = {
     remoteAddress: relayed.peerAddress,
     encrypted: relayed.encrypted === true,
+    destroyed: false,
+    destroy(): void {
+      socket.destroyed = true;
+    },
+    destroySoon(): void {
+      socket.destroyed = true;
+    },
   };
   const request = Object.assign(new RelayEmitter(), {
     method: relayed.method,
@@ -164,12 +175,24 @@ export function createRelayedServerRequest(relayed: RelayedHttpRequest, sourceNo
     httpVersionMinor: 1,
     complete: true,
     readable: false,
+    readableEnded: false,
     aborted: false,
     errored: null,
+    destroyed: false,
     socket,
     connection: socket,
+    resume() {
+      if (!request.readableEnded) {
+        request.readableEnded = true;
+        queueMicrotask(() => request.emit('end'));
+      }
+      return request;
+    },
+    pause() {
+      return request;
+    },
     destroy(): void {
-      // Nothing to release: the body arrived with the message.
+      request.destroyed = true;
     },
   });
   // The MCP SDK's Node transport rebuilds a Web Request from this object; a body it

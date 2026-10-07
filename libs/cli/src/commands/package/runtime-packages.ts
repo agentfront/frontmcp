@@ -26,7 +26,8 @@ const REQUIRED_PACKAGES = ['@frontmcp/sdk', 'reflect-metadata'] as const;
 /**
  * The optional peers of `@frontmcp/sdk` and `@frontmcp/utils` (`peerDependenciesMeta` in
  * their package.json — a unit test keeps them in sync). Both packages load these lazily,
- * so each is installed when the project declares it.
+ * so each is installed when the project declares it, and `frontmcp build` bundles each
+ * only when it is installed.
  */
 export const OPTIONAL_RUNTIME_PEERS = [
   '@anthropic-ai/sdk',
@@ -35,6 +36,7 @@ export const OPTIONAL_RUNTIME_PEERS = [
   '@frontmcp/storage-sqlite',
   '@opentelemetry/api',
   '@opentelemetry/sdk-trace-base',
+  '@upstash/redis',
   '@vercel/kv',
   'ioredis',
   'openai',
