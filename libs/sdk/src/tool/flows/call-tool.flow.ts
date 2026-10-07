@@ -688,11 +688,17 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // Require explicit authorization - build auth URL
       const authUrl = this.buildProgressiveAuthUrl(appId, tool?.fullName || '', authInfo, claimAuthorizedApps);
 
+      // The scopes the tool asks of its auth providers, so the client knows what the authorization grants.
+      const requiredScopes = normalizeToolAuthProviders(tool?.metadata?.authProviders).flatMap(
+        (provider) => provider.scopes ?? [],
+      );
+
       this.logger.info(`checkToolAuthorization: authorization required for app "${appId}"`);
       throw new AuthorizationRequiredError({
         appId,
         toolId: tool?.fullName || tool?.name || 'unknown',
         authUrl,
+        requiredScopes: requiredScopes.length > 0 ? [...new Set(requiredScopes)] : undefined,
         message: `Authorization required for ${appId}. Please authorize to use ${tool?.fullName || tool?.name}.`,
       });
     }

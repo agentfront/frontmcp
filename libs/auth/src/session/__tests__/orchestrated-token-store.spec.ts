@@ -5,8 +5,10 @@
  * and all public methods of the InMemoryOrchestratedTokenStore.
  */
 
-import { InMemoryOrchestratedTokenStore } from '../orchestrated-token.store';
 import { randomBytes } from '@frontmcp/utils';
+
+import { REFRESH_TOKEN_TTL_MS } from '../authorization.store';
+import { InMemoryOrchestratedTokenStore } from '../orchestrated-token.store';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -386,7 +388,7 @@ describe('InMemoryOrchestratedTokenStore', () => {
       store.dispose();
     });
 
-    it('should return null for expired refresh token', async () => {
+    it('keeps the refresh token once the access token has expired, to renew it', async () => {
       const store = createStore();
       await store.storeTokens('auth-1', 'github', {
         accessToken: 'tok',
@@ -394,7 +396,36 @@ describe('InMemoryOrchestratedTokenStore', () => {
         expiresAt: Date.now() - 1000,
       });
 
+      expect(await store.getAccessToken('auth-1', 'github')).toBeNull();
+      expect(await store.getRefreshToken('auth-1', 'github')).toBe('ref');
+      expect(await store.hasTokens('auth-1', 'github')).toBe(true);
+
+      store.dispose();
+    });
+
+    it('drops a refreshable record once it has not been written for as long as a refresh token lives', async () => {
+      const store = createStore();
+      await store.storeTokens('auth-1', 'github', { accessToken: 'tok', refreshToken: 'ref', expiresAt: Date.now() });
+      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + REFRESH_TOKEN_TTL_MS + 1000);
+
       expect(await store.getRefreshToken('auth-1', 'github')).toBeNull();
+      expect(store.size).toBe(0);
+
+      jest.restoreAllMocks();
+      store.dispose();
+    });
+
+    it('stops returning a refreshable access token refreshSkewMs before it expires', async () => {
+      const store = new InMemoryOrchestratedTokenStore({ cleanupIntervalMs: 999999999, refreshSkewMs: 60_000 });
+      await store.storeTokens('auth-1', 'renewable', {
+        accessToken: 'tok',
+        refreshToken: 'ref',
+        expiresAt: Date.now() + 30_000,
+      });
+      await store.storeTokens('auth-1', 'final', { accessToken: 'tok', expiresAt: Date.now() + 30_000 });
+
+      expect(await store.getAccessToken('auth-1', 'renewable')).toBeNull();
+      expect(await store.getAccessToken('auth-1', 'final')).toBe('tok');
 
       store.dispose();
     });
@@ -543,6 +574,27 @@ describe('InMemoryOrchestratedTokenStore', () => {
 
       await store.migrateTokens('nonexistent', 'target');
       expect(store.size).toBe(0);
+
+      store.dispose();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // copyTokens
+  // -----------------------------------------------------------------------
+  describe('copyTokens', () => {
+    it.each([
+      ['plaintext', undefined],
+      ['encrypted', makeEncryptionKey()],
+    ])('copies %s tokens to another authorization id and keeps them under the source', async (_mode, encryptionKey) => {
+      const store = createStore({ encryptionKey });
+      await store.storeTokens('auth-old', 'github', { accessToken: 'secret', refreshToken: 'refresh' });
+
+      await store.copyTokens('auth-old', 'auth-new');
+
+      expect(await store.getAccessToken('auth-old', 'github')).toBe('secret');
+      expect(await store.getAccessToken('auth-new', 'github')).toBe('secret');
+      expect(await store.getRefreshToken('auth-new', 'github')).toBe('refresh');
 
       store.dispose();
     });

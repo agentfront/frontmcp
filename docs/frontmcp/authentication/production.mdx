@@ -49,32 +49,35 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 
   </Step>
 
-  <Step title="Provide Persistent Signing Keys">
-    Auto-generated keys are lost on restart. Provide stable keys.
+  <Step title="Provide a Persistent Signing Secret">
+    `local` and `remote` mode sign their tokens with HS256 using `JWT_SECRET` (at least 32 bytes; production refuses
+    to start without it). It also encrypts the stored upstream provider tokens. Without it, a random per-process secret
+    is used, so tokens die on every restart. Give every instance the same value.
 
-    ```typescript
-    auth: {
-      local: {
-        signKey: JSON.parse(process.env.JWT_SIGNING_KEY),
-      },
-    }
+    ```bash
+    JWT_SECRET=$(openssl rand -hex 32)
     ```
+
+    <Note>
+      `local.signKey` and `local.jwks` (and public mode's `signKey` and `jwks`) are accepted but not used yet: tokens
+      are always signed with `JWT_SECRET`.
+    </Note>
 
   </Step>
 
   <Step title="Enable Refresh Token Flow">
-    For `local` and `remote` modes, opt into automatic token refresh.
+    For `local` and `remote` modes, upstream provider tokens (`this.orchestration.getToken`) are renewed with the provider's refresh token when they expire, `skewSeconds` early. It is on by default; `enabled: false` turns it off.
 
     ```typescript
     auth: {
       refresh: {
         enabled: true,
-        skewSeconds: 60, // refresh tokens this many seconds before expiry
+        skewSeconds: 60, // renew upstream tokens this many seconds before expiry
       },
     }
     ```
 
-    In **remote** mode, token TTLs are controlled by the upstream identity provider — FrontMCP does not mint its own access/refresh tokens. In **local** mode, FrontMCP acts as the authorization server and mints its own tokens (signed with `local.signKey`).
+    In both **local** and **remote** mode FrontMCP is the authorization server for its clients: it mints its own access tokens (HS256-signed with `JWT_SECRET`, valid for an hour) and refresh tokens (30 days, rotated on each use). In **remote** mode the upstream identity provider controls only the lifetime of its own tokens, the provider tokens tools read through `this.orchestration`, which `refresh` renews.
 
   </Step>
 
@@ -118,7 +121,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 <Check>**Confidential clients** - Clients registered with `client_secret_basic`/`client_secret_post` are authenticated with a constant-time secret check on both the code-exchange and refresh grants.</Check>
 <Check>**Rate limiting** - Protect token endpoints from brute force</Check>
 <Check>**Monitoring** - Alert on auth failures, unusual patterns</Check>
-<Check>**Key rotation** - Rotate signing keys periodically (30-90 days)</Check>
+<Check>**Secret rotation** - Rotate `JWT_SECRET` periodically, knowing it signs clients out</Check>
 <Check>**Scope minimization** - Request only necessary scopes</Check>
 <Check>**Consent UI** - Let users see what they're authorizing</Check>
 
@@ -146,10 +149,7 @@ import { FrontMcp } from '@frontmcp/sdk';
       },
     },
 
-    // Stable keys
-    local: {
-      signKey: JSON.parse(process.env.JWT_SIGNING_KEY!),
-    },
+    // Tokens are HS256-signed with the JWT_SECRET environment variable
 
     // Token refresh settings
     refresh: {
@@ -172,8 +172,8 @@ REDIS_HOST=redis.example.com
 REDIS_PORT=6379
 REDIS_PASSWORD=your-redis-password
 
-# Required for token signing
-JWT_SIGNING_KEY='{"kty":"RSA","kid":"prod-key-1",...}'
+# Required for token signing (HS256, at least 32 bytes)
+JWT_SECRET=your-64-hex-character-secret
 
 # Pin the canonical public origin (issuer / resource / discovery / audience are
 # derived from it instead of request headers). Strongly recommended.
@@ -210,47 +210,13 @@ IDP_EXPECTED_AUDIENCE=https://api.yourservice.com
 
 ## Key Management
 
-### Generating Production Keys
+### Signing Secret
 
-```bash
-# Generate RS256 key pair
-openssl genrsa -out private.pem 2048
-openssl rsa -in private.pem -pubout -out public.pem
+Tokens are HS256-signed with `JWT_SECRET`. Generate it with `openssl rand -hex 32` and keep it in your secret manager.
+Rotating it invalidates every access token signed with the old value, and the upstream provider tokens stored under it:
+clients sign in again (see [Token & Sessions](/frontmcp/authentication/token)).
 
-# Convert to JWK format (use a tool like step-cli)
-step crypto jwk create --kty RSA --use sig --alg RS256 \
-  public.jwk private.jwk
-```
-
-### Key Rotation Strategy
-
-```mermaid
-graph LR
-    A[Key 1 Active] --> B[Generate Key 2]
-    B --> C[Add Key 2 to JWKS]
-    C --> D[Switch signing to Key 2]
-    D --> E[Wait for Key 1 tokens to expire]
-    E --> F[Remove Key 1 from JWKS]
-```
-
-### Configuration for Key Rotation
-
-The `local` block accepts a single `signKey` (and optional `jwks` containing previous keys for validation during rollover). Rotation is performed by deploying a new server build with an updated `signKey` while keeping the old key in `jwks` until in-flight tokens expire.
-
-```typescript
-auth: {
-  local: {
-    // Private key used to sign new tokens
-    signKey: currentPrivateJwk,
-    // Public JWKS — clients/relying parties use this to validate tokens.
-    // Include the previous public key during rollover so old (still-valid)
-    // tokens continue to verify until they expire. NEVER put private key
-    // material in jwks.
-    jwks: { keys: [currentPublicJwk, previousPublicJwk] },
-    issuer: 'https://your-server.example.com',
-  },
-}
-```
+`local.signKey` and `local.jwks`, meant for asymmetric signing with a key rollover, are accepted but not used yet.
 
 ---
 
@@ -324,11 +290,9 @@ export class Server {}
   <Accordion title="Tokens invalid after deployment">
     **Cause:** Auto-generated keys changed after restart.
 
-    **Solution:** Provide persistent signing keys via environment variable:
-    ```typescript
-    local: {
-      signKey: JSON.parse(process.env.JWT_SIGNING_KEY!),
-    }
+    **Solution:** Set `JWT_SECRET` to the same value on every instance and across restarts:
+    ```bash
+    JWT_SECRET=$(openssl rand -hex 32)
     ```
 
   </Accordion>
@@ -493,11 +457,9 @@ location /oauth/token {
 
   <Tab title="Stateless">
     ```typescript
-    // No shared state needed - tokens contain all info
+    // No shared state needed - tokens contain all info; every instance shares JWT_SECRET
     auth: {
-      local: {
-        signKey: JSON.parse(process.env.JWT_SIGNING_KEY!),
-      },
+      mode: 'local',
     }
     ```
 

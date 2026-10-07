@@ -11,9 +11,11 @@
  * - Returns decrypted strings directly (encryption is handled internally)
  */
 
+import { decryptAesGcm, encryptAesGcm, hkdfSha256, randomBytes } from '@frontmcp/utils';
+
 import type { TokenStore } from '../authorization/orchestrated.authorization';
-import { encryptAesGcm, decryptAesGcm, randomBytes, hkdfSha256 } from '@frontmcp/utils';
 import { EncryptionKeyNotConfiguredError } from '../errors/auth-internal.errors';
+import { hasLiveAccessToken, recordDropAt } from './orchestrated-token.crypto';
 
 /**
  * Internal token record structure
@@ -48,6 +50,13 @@ export interface InMemoryOrchestratedTokenStoreOptions {
    * @default 60000 (1 minute)
    */
   cleanupIntervalMs?: number;
+
+  /**
+   * How long before its expiry an access token that can be refreshed stops being returned, so the
+   * caller renews it before it lapses (`refresh.skewSeconds`).
+   * @default 0
+   */
+  refreshSkewMs?: number;
 }
 
 /**
@@ -96,9 +105,13 @@ export class InMemoryOrchestratedTokenStore implements TokenStore {
   /** Default TTL for records */
   private readonly defaultTtlMs?: number;
 
+  /** How long before its expiry a refreshable access token stops being returned */
+  private readonly refreshSkewMs: number;
+
   constructor(options: InMemoryOrchestratedTokenStoreOptions = {}) {
     this.encryptionKey = options.encryptionKey;
     this.defaultTtlMs = options.defaultTtlMs;
+    this.refreshSkewMs = options.refreshSkewMs ?? 0;
 
     // Start cleanup timer
     const cleanupIntervalMs = options.cleanupIntervalMs ?? 60000;
@@ -208,8 +221,8 @@ export class InMemoryOrchestratedTokenStore implements TokenStore {
       record = stored as ProviderTokenRecord;
     }
 
-    // Check expiration
-    if (record.expiresAt && record.expiresAt < Date.now()) {
+    const dropAt = recordDropAt(record);
+    if (dropAt && dropAt < Date.now()) {
       this.tokens.delete(key);
       return null;
     }
@@ -218,11 +231,12 @@ export class InMemoryOrchestratedTokenStore implements TokenStore {
   }
 
   /**
-   * Retrieve decrypted access token for a provider
+   * Retrieve decrypted access token for a provider, or null once it has expired (a record with a
+   * refresh token keeps that, to renew it)
    */
   async getAccessToken(authorizationId: string, providerId: string): Promise<string | null> {
     const record = await this.getRecord(authorizationId, providerId);
-    return record?.accessToken ?? null;
+    return record && hasLiveAccessToken(record, this.refreshSkewMs) ? record.accessToken : null;
   }
 
   /**
@@ -341,7 +355,8 @@ export class InMemoryOrchestratedTokenStore implements TokenStore {
         record = stored as ProviderTokenRecord;
       }
 
-      if (record?.expiresAt && record.expiresAt < now) {
+      const dropAt = record ? recordDropAt(record) : undefined;
+      if (dropAt && dropAt < now) {
         keysToDelete.push(key);
       }
     }
@@ -386,45 +401,43 @@ export class InMemoryOrchestratedTokenStore implements TokenStore {
    * @param toAuthId - Target authorization ID (e.g., "def456")
    */
   async migrateTokens(fromAuthId: string, toAuthId: string): Promise<void> {
-    const prefix = `${fromAuthId}:`;
-    const keysToMigrate: string[] = [];
-
-    // Find all keys with the source authorization ID
-    for (const key of this.tokens.keys()) {
-      if (key.startsWith(prefix)) {
-        keysToMigrate.push(key);
-      }
-    }
-
-    // Migrate each token to the new authorization ID
-    for (const oldKey of keysToMigrate) {
-      const providerId = oldKey.slice(prefix.length);
-      const newKey = this.buildKey(toAuthId, providerId);
-
-      // Get the stored value (encrypted or not)
-      const stored = this.tokens.get(oldKey);
-      if (!stored) {
-        continue;
-      }
-
-      // If encrypted, we need to decrypt with old key and re-encrypt with new key
-      if (this.encryptionKey) {
-        try {
-          const record = await this.decryptRecord(oldKey, stored as string);
-          const encrypted = await this.encryptRecord(newKey, record);
-          this.tokens.set(newKey, encrypted);
-        } catch {
-          // Skip corrupted records
-          continue;
-        }
-      } else {
-        // Plain storage, just copy
-        this.tokens.set(newKey, stored);
-      }
-
-      // Delete old entry
+    for (const oldKey of await this.copyRecords(fromAuthId, toAuthId)) {
       this.tokens.delete(oldKey);
       this.derivedKeys.delete(oldKey);
     }
+  }
+
+  /**
+   * Copy tokens from one authorization ID to another, keeping them under the source ID too.
+   */
+  async copyTokens(fromAuthId: string, toAuthId: string): Promise<void> {
+    await this.copyRecords(fromAuthId, toAuthId);
+  }
+
+  /** Copy every record of `fromAuthId` to `toAuthId`, skipping a corrupted one; returns the keys copied. */
+  private async copyRecords(fromAuthId: string, toAuthId: string): Promise<string[]> {
+    const prefix = `${fromAuthId}:`;
+    const sourceKeys = [...this.tokens.keys()].filter((key) => key.startsWith(prefix));
+    const copiedKeys: string[] = [];
+
+    for (const oldKey of sourceKeys) {
+      const stored = this.tokens.get(oldKey);
+      if (!stored) continue;
+      const newKey = this.buildKey(toAuthId, oldKey.slice(prefix.length));
+
+      // An encrypted record is decrypted with the old key and re-encrypted with the new one
+      if (this.encryptionKey) {
+        try {
+          const record = await this.decryptRecord(oldKey, stored as string);
+          this.tokens.set(newKey, await this.encryptRecord(newKey, record));
+        } catch {
+          continue;
+        }
+      } else {
+        this.tokens.set(newKey, stored);
+      }
+      copiedKeys.push(oldKey);
+    }
+    return copiedKeys;
   }
 }

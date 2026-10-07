@@ -4,6 +4,7 @@ import {
   createSecureStore,
   createTokenStorageAdapter,
   DcrClientRegistry,
+  deriveAuthorizationId,
   InMemoryAuthorizationStore,
   InMemoryConsentStore,
   InMemoryFederatedAuthSessionStore,
@@ -17,6 +18,7 @@ import {
   StorageConsentStore,
   StorageFederatedAuthSessionStore,
   StorageOrchestratedTokenStore,
+  TokenNotAvailableError,
   verifyPkce,
   type AuthorizationStore,
   type ConsentStore,
@@ -25,6 +27,7 @@ import {
   type JSONWebKeySet,
   type SecureStoreBackend,
   type SecureStoreConfig,
+  type TokenRefreshCallback,
   type TokenStorageConfig,
   type OrchestratedTokenStore as TokenStore,
   type VerifyResult,
@@ -35,7 +38,6 @@ import {
   MemoryStorageAdapter,
   randomBytes,
   randomUUID,
-  sha256Hex,
   StorageNotSupportedError,
   type StorageAdapter,
 } from '@frontmcp/utils';
@@ -449,6 +451,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
   /** Provider configurations (indexed by provider ID) */
   private readonly providerConfigs = new Map<string, UpstreamProviderConfig>();
+  /** Provider token renewals in flight, by provider and refresh token (see {@link providerTokenRefresher}). */
+  private readonly providerRenewals = new Map<string, ReturnType<TokenRefreshCallback>>();
 
   /**
    * Remote-mode single upstream provider id (set by {@link registerRemoteProvider}).
@@ -539,6 +543,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     this.federatedSessionStoreImpl = new InMemoryFederatedAuthSessionStore();
     this.orchestratedTokenStoreImpl = new InMemoryOrchestratedTokenStore({
       encryptionKey: this.secret, // Reuse JWT secret for token encryption
+      refreshSkewMs: this.providerRefreshSkewMs(),
     });
     this.consentStoreImpl = new InMemoryConsentStore();
 
@@ -574,11 +579,17 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     return this.configuredIssuer(options) ?? `http://${this.host}:${this.port}${this.scope.fullPath}`;
   }
 
-  /** The issuer the options name: `issuer` in public mode, `local.issuer` in local and remote mode. */
+  /**
+   * The issuer the options name: `issuer` in public mode, `local.issuer` in local and remote mode,
+   * without a trailing slash, since the callback and metadata URLs are built by appending paths to it.
+   */
   private configuredIssuer(options: LocalPrimaryAuthOptions): string | undefined {
-    if (isPublicMode(options)) return options.issuer;
-    if (isOrchestratedMode(options)) return options.local?.issuer;
-    return undefined;
+    const configured = isPublicMode(options)
+      ? options.issuer
+      : isOrchestratedMode(options)
+        ? options.local?.issuer
+        : undefined;
+    return configured === undefined ? undefined : normalizeIssuer(configured);
   }
 
   /**
@@ -671,6 +682,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.federatedSessionStoreImpl = new StorageFederatedAuthSessionStore(adapter);
       this.orchestratedTokenStoreImpl = new StorageOrchestratedTokenStore(adapter, {
         encryptionKey: this.secret,
+        refreshSkewMs: this.providerRefreshSkewMs(),
       });
       this.consentStoreImpl = new StorageConsentStore(adapter);
 
@@ -936,10 +948,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt()
       .setIssuer(options.issuer ?? this.issuer)
-      .setExpirationTime('1d')
+      .setExpirationTime(`${this.anonymousTokenTtlSeconds()}s`)
       .setJti(randomUUID());
     if (options.audience) jwt.setAudience(options.audience);
     return jwt.sign(this.secret);
+  }
+
+  /** How long an anonymous token lives: public mode's `sessionTtl` (default an hour), a day otherwise. */
+  anonymousTokenTtlSeconds(): number {
+    return isPublicMode(this.options) ? (this.options.sessionTtl ?? 3600) : 86400;
   }
 
   /** The scopes an anonymous caller holds: `anonymousScopes`, default `['anonymous']`. */
@@ -1189,20 +1206,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     const accessToken = await this.signAccessToken(user, codeRecord.scopes, resource, consentMetadata, issuer);
 
     // Migrate tokens from pending to real authorization ID (for federated auth)
+    let providerTokensId: string | undefined;
     if (codeRecord.pendingAuthId && codeRecord.federatedLoginUsed) {
-      try {
-        const pendingAuthId = `pending:${codeRecord.pendingAuthId}`;
-        // Compute the new authorization ID from the JWT signature (same as OrchestratedAuthorization.generateAuthorizationId)
-        const parts = accessToken.split('.');
-        const signature = parts[2] || accessToken;
-        const newAuthId = sha256Hex(signature).substring(0, 16);
-
-        await this.orchestratedTokenStore.migrateTokens(pendingAuthId, newAuthId);
-        this.logger.info(`Migrated tokens from ${pendingAuthId} to ${newAuthId}`);
-      } catch (err) {
-        // Log but don't fail the token exchange
-        this.logger.warn(`Failed to migrate tokens: ${err}`);
-      }
+      providerTokensId = await this.moveProviderTokens(`pending:${codeRecord.pendingAuthId}`, accessToken);
     }
 
     // Create refresh token — carry the grant's consent / progressive-auth /
@@ -1223,6 +1229,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       federatedLoginUsed: codeRecord.federatedLoginUsed,
       selectedProviderIds: codeRecord.selectedProviderIds,
       skippedProviderIds: codeRecord.skippedProviderIds,
+      providerTokensId,
     });
     await this.authorizationStore.storeRefreshToken(refreshTokenRecord);
     // Bind the issued refresh token to the (already used-marked) code so a later
@@ -1238,6 +1245,54 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       refresh_token: refreshTokenRecord.token,
       scope: codeRecord.scopes.join(' '),
     };
+  }
+
+  /**
+   * Move the upstream provider tokens stored under `fromAuthorizationId` to the authorization id of
+   * `accessToken`, where `this.orchestration` looks for them. Returns where they are now: that id, or
+   * `fromAuthorizationId` when the move failed, so the next refresh tries again (the token is still
+   * issued; its tools find no provider token until then).
+   */
+  private async moveProviderTokens(fromAuthorizationId: string, accessToken: string): Promise<string> {
+    const toAuthorizationId = deriveAuthorizationId(accessToken);
+    try {
+      await this.orchestratedTokenStore.migrateTokens(fromAuthorizationId, toAuthorizationId);
+      this.logger.info(`Migrated tokens from ${fromAuthorizationId} to ${toAuthorizationId}`);
+      return toAuthorizationId;
+    } catch (err) {
+      this.logger.warn(`Failed to migrate tokens: ${err}`);
+      return fromAuthorizationId;
+    }
+  }
+
+  /**
+   * Copy the upstream provider tokens stored under `fromAuthorizationId` to the authorization id of
+   * `accessToken`. Returns that id, or undefined when the store cannot copy (the refresh then moves them)
+   * or the copy failed (the token is issued without them, and the next refresh copies them again).
+   */
+  private async copyProviderTokens(fromAuthorizationId: string, accessToken: string): Promise<string | undefined> {
+    const store = this.orchestratedTokenStore;
+    if (!store.copyTokens) return undefined;
+    const toAuthorizationId = deriveAuthorizationId(accessToken);
+    try {
+      await store.copyTokens(fromAuthorizationId, toAuthorizationId);
+      return toAuthorizationId;
+    } catch (err) {
+      this.logger.warn(`Failed to copy provider tokens: ${err}`);
+      await this.discardProviderTokens(toAuthorizationId);
+      return undefined;
+    }
+  }
+
+  /** Remove the upstream provider tokens stored under `authorizationId`; a failure leaves them to expire. */
+  private async discardProviderTokens(authorizationId: string): Promise<void> {
+    const store = this.orchestratedTokenStore;
+    try {
+      const providerIds = await store.getProviderIds(authorizationId);
+      await Promise.all(providerIds.map((providerId) => store.deleteTokens(authorizationId, providerId)));
+    } catch (err) {
+      this.logger.warn(`Failed to discard provider tokens: ${err}`);
+    }
   }
 
   /**
@@ -1304,6 +1359,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // A refresh token issued before tokens named their resource gets one now (#269).
     const resource = tokenRecord.resource ?? defaultAudience;
     const accessToken = await this.signAccessToken(user, tokenRecord.scopes, resource, consentMetadata, issuer);
+    // Provider tokens are copied to the new access token, and leave the old one only once the rotation succeeded.
+    const sourceId = tokenRecord.providerTokensId;
+    const copiedTo = sourceId ? await this.copyProviderTokens(sourceId, accessToken) : undefined;
+    // A concurrent redemption may have rotated this refresh token, and removed the copied source, since it was read.
+    if (sourceId && !(await this.authorizationStore.getRefreshToken(refreshToken))) {
+      if (copiedTo) await this.discardProviderTokens(copiedTo);
+      this.logger.warn('Refresh token was redeemed by a concurrent request');
+      return { error: 'invalid_grant', error_description: 'Refresh token is invalid or expired' };
+    }
 
     // Rotate refresh token — forward the same grant metadata to the new record.
     const newRefreshRecord = this.authorizationStore.createRefreshTokenRecord({
@@ -1320,8 +1384,22 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       federatedLoginUsed: tokenRecord.federatedLoginUsed,
       selectedProviderIds: tokenRecord.selectedProviderIds,
       skippedProviderIds: tokenRecord.skippedProviderIds,
+      providerTokensId: copiedTo ?? sourceId,
     });
-    await this.authorizationStore.rotateRefreshToken(refreshToken, newRefreshRecord);
+    try {
+      await this.authorizationStore.rotateRefreshToken(refreshToken, newRefreshRecord);
+    } catch (err) {
+      if (copiedTo) await this.discardProviderTokens(copiedTo);
+      throw err;
+    }
+    if (sourceId && copiedTo) await this.discardProviderTokens(sourceId);
+    // A store that cannot copy moves them now; the rotated record names their new place once the move succeeded.
+    if (sourceId && !this.orchestratedTokenStore.copyTokens) {
+      const movedTo = await this.moveProviderTokens(sourceId, accessToken);
+      if (movedTo !== sourceId) {
+        await this.authorizationStore.storeRefreshToken({ ...newRefreshRecord, providerTokensId: movedTo });
+      }
+    }
 
     this.logger.info(`Tokens refreshed for user: ${user.sub}`);
 
@@ -1427,10 +1505,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       provide: JwksService,
     });
 
-    // Register CIMD service if initialized
+    // Register CIMD service if initialized; its cache (Redis with `cimd.cache.type: 'redis'`) is created now
     if (this.cimdService) {
+      const cimdService = this.cimdService;
+      if (cimdService.enabled) await cimdService.initialize();
+      this.scope.onDispose(() => cimdService.dispose());
       this.providers.injectProvider({
-        value: this.cimdService,
+        value: cimdService,
         metadata: {
           scope: ProviderScope.GLOBAL,
           name: 'auth:cimd-service',
@@ -1960,5 +2041,43 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
         error_description: `Failed to refresh token with provider: ${err}`,
       };
     }
+  }
+
+  /**
+   * What renews an upstream provider's access token with its refresh token when `this.orchestration`
+   * finds it expired, or none with `refresh.enabled: false`. Renewals with the same refresh token
+   * share one request: a provider that rotates refresh tokens accepts each only once.
+   */
+  providerTokenRefresher(): TokenRefreshCallback | undefined {
+    if (!isOrchestratedMode(this.options) || this.options.refresh?.enabled === false) return undefined;
+    return (providerId, refreshToken) => {
+      const key = JSON.stringify([providerId, refreshToken]);
+      const inFlight = this.providerRenewals.get(key);
+      if (inFlight) return inFlight;
+      const renewal = this.renewProviderToken(providerId, refreshToken).finally(() =>
+        this.providerRenewals.delete(key),
+      );
+      this.providerRenewals.set(key, renewal);
+      return renewal;
+    };
+  }
+
+  private async renewProviderToken(providerId: string, refreshToken: string): ReturnType<TokenRefreshCallback> {
+    const result = await this.refreshProviderToken(providerId, refreshToken);
+    if ('error' in result || typeof result.access_token !== 'string' || !result.access_token) {
+      this.logger.warn(
+        `Provider ${providerId} did not refresh its token: ${'error' in result ? result.error : 'no access_token'}`,
+      );
+      throw new TokenNotAvailableError(
+        `Provider "${providerId}" did not refresh its token; the user has to sign in again`,
+      );
+    }
+    return { accessToken: result.access_token, refreshToken: result.refresh_token, expiresIn: result.expires_in };
+  }
+
+  /** How long before its expiry a provider token is renewed: `refresh.skewSeconds` (default 60), none with `refresh` off. */
+  private providerRefreshSkewMs(): number {
+    if (!isOrchestratedMode(this.options) || this.options.refresh?.enabled === false) return 0;
+    return (this.options.refresh?.skewSeconds ?? 60) * 1000;
   }
 }

@@ -27,7 +27,8 @@ const inputSchema = httpInputSchema;
 const stateSchema = z.object({
   resource: z.string().min(1),
   baseUrl: z.string().min(1),
-  // The authorization server to name: the issuer this server names for the request (#629).
+  // The authorization server to name: the issuer this server names for the request (#629). None in
+  // public and static mode, which have no authorization server.
   authorizationServer: z.string().min(1).optional(),
   scopesSupported: z.array(z.string()),
   isOrchestrated: z.boolean(),
@@ -37,7 +38,7 @@ const outputSchema = HttpJsonSchema.extend({
   body: z
     .object({
       resource: z.string().min(1),
-      authorization_servers: z.array(z.string().min(1)).min(1),
+      authorization_servers: z.array(z.string().min(1)).min(1).optional(),
       scopes_supported: z.array(z.string()).optional(),
       bearer_methods_supported: z.array(z.string()).default(['header']),
     })
@@ -101,9 +102,8 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
     // A server that issues its own tokens names the issuer it names everywhere else for this
     // request (`LocalPrimaryAuth.issuerFor`, #629): its authorization server metadata, the RFC 9207
     // `iss` of its authorization responses and its tokens' `iss` all say the same.
-    const authorizationServer = (
-      scope.auth as { issuerFor?: (request: ServerRequest) => string } | undefined
-    )?.issuerFor?.(request);
+    const authorizationServer =
+      (scope.auth as { issuerFor?: (request: ServerRequest) => string } | undefined)?.issuerFor?.(request) ?? baseUrl;
     // Advertise the scopes a client can actually be given here, by mode (#262, #629): `allowedScopes`
     // in local and remote mode, `anonymousScopes` in public mode, the static credential's `scopes`,
     // transparent mode's `requiredScopes` and upstream `scopes`.
@@ -112,12 +112,13 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
     const authOptions = (scope.auth?.options ?? scope.metadata.auth) as ResourceScopeOptions | undefined;
     const granted = resourceScopesFor(authOptions);
     const orchestrated = authOptions?.mode === 'local' || authOptions?.mode === 'remote';
+    const hasAuthorizationServer = authOptions?.mode !== 'public' && authOptions?.mode !== 'static';
     const scopesSupported = orchestrated ? granted : [...new Set([...granted, ...scope.getAllSupportedScopes()])];
     this.state.set(
       stateSchema.parse({
         resource,
         baseUrl,
-        authorizationServer,
+        authorizationServer: hasAuthorizationServer ? authorizationServer : undefined,
         scopesSupported,
         isOrchestrated: false, //scope.orchestrated,// TODO: fix
       }),
@@ -125,10 +126,12 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
   }
 
   @Stage('collectData') async collectData() {
-    const { resource, baseUrl, scopesSupported, isOrchestrated } = this.state.required;
+    const { resource, scopesSupported, isOrchestrated } = this.state.required;
     const { authorizationServer } = this.state;
-    // RFC 9728 §2: `scopes_supported` is optional; a server that names no scopes leaves it out.
+    // RFC 9728 §2: `scopes_supported` and `authorization_servers` are optional; a server that names no
+    // scopes, or has no authorization server (public and static mode), leaves them out.
     const scopes = scopesSupported.length > 0 ? { scopes_supported: scopesSupported } : {};
+    const authorizationServers = authorizationServer ? { authorization_servers: [authorizationServer] } : {};
 
     if (isOrchestrated) {
       this.respond({
@@ -141,7 +144,7 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
         headers: { 'cache-control': 'no-store' },
         body: {
           resource,
-          authorization_servers: [authorizationServer ?? baseUrl],
+          ...authorizationServers,
           ...scopes,
           bearer_methods_supported: ['header'],
         },
@@ -161,7 +164,7 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
       headers: { 'cache-control': 'no-store' },
       body: {
         resource,
-        authorization_servers: [authorizationServer ?? baseUrl],
+        ...authorizationServers,
         ...scopes,
         bearer_methods_supported: ['header'],
       },

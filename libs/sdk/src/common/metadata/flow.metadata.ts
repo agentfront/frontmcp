@@ -17,6 +17,8 @@ export interface FlowMiddlewareOptions {
   path?: RegExp | string; // string can be "/test/**" or "/test/*/asds", default to all paths
   method?: HttpMethod; // default to all methods
   canActivate?: CanActivateFlow[];
+  /** Headers every response of the route carries: a stage's, a hook's or a guard's, and a failure's. */
+  responseHeaders?: Readonly<Record<string, string>>;
 }
 
 export type FlowRunOptions<

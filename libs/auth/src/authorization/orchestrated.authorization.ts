@@ -1,11 +1,12 @@
 // auth/authorization/orchestrated.authorization.ts
 
-import { AuthorizationBase } from './authorization.class';
-import type { AuthorizationCreateCtx, AuthUser, AuthMode } from './authorization.types';
-import type { ProviderSnapshot } from '../session/session.types';
 import type { EncryptedBlob } from '@frontmcp/utils';
+
+import { NoProviderIdError, TokenNotAvailableError, TokenStoreRequiredError } from '../errors/auth-internal.errors';
+import type { ProviderSnapshot } from '../session/session.types';
 import { deriveAuthorizationId } from '../utils/authorization-id.utils';
-import { NoProviderIdError, TokenStoreRequiredError, TokenNotAvailableError } from '../errors/auth-internal.errors';
+import { AuthorizationBase } from './authorization.class';
+import type { AuthMode, AuthorizationCreateCtx, AuthUser } from './authorization.types';
 
 /**
  * Token store interface for orchestrated mode
@@ -59,6 +60,15 @@ export interface TokenStore {
    * @param toAuthId - Target authorization ID (e.g., "def456")
    */
   migrateTokens(fromAuthId: string, toAuthId: string): Promise<void>;
+
+  /**
+   * Copy tokens from one authorization ID to another, keeping them under the source ID too.
+   * Optional: without it a client refresh moves them with `migrateTokens` once the refresh token is rotated.
+   *
+   * @param fromAuthId - Source authorization ID
+   * @param toAuthId - Target authorization ID
+   */
+  copyTokens?(fromAuthId: string, toAuthId: string): Promise<void>;
 }
 
 /**
@@ -352,10 +362,10 @@ export class OrchestratedAuthorization extends AuthorizationBase {
     // Perform refresh
     const result = await this.#onTokenRefresh(providerId, refreshToken);
 
-    // Store new tokens
+    // Store new tokens; a provider that doesn't rotate refresh tokens leaves the current one valid
     await this.#tokenStore.storeTokens(this.id, providerId, {
       accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
+      refreshToken: result.refreshToken ?? refreshToken,
       expiresAt: result.expiresIn ? Date.now() + result.expiresIn * 1000 : undefined,
     });
 
