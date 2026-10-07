@@ -25,6 +25,9 @@ function makeSkill(overrides: Partial<SkillEntry> & { name: string; description:
     },
     getSkillPathSegments: () => [overrides.name],
     getSkillPath: () => overrides.name,
+    getDescription(this: SkillEntry) {
+      return this.metadata.description;
+    },
     ...overrides,
   } as unknown as SkillEntry;
 }

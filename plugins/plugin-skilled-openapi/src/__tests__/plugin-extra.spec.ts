@@ -19,8 +19,8 @@ import { ScopeEntry } from '@frontmcp/sdk';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
 import SkilledOpenApiPlugin, { SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN } from '../skilled-openapi.plugin';
-import { searchSkillDescription } from '../tools/search-skill.schema';
 import { BundleSyncService } from '../sync/bundle-sync.service';
+import { searchSkillDescription } from '../tools/search-skill.schema';
 
 const validBundle = {
   schemaVersion: 1,
@@ -61,7 +61,9 @@ function fakeScope(extra: Record<string, unknown>): unknown {
 /** Minimal fake skill registry whose `getSkills` returns a single mcp skill. */
 function fakeSkillRegistryWithOne() {
   return {
-    getSkills: jest.fn(() => [{ metadata: { name: 'billing', description: 'Manage billing' } }]),
+    getSkills: jest.fn(() => [
+      { metadata: { name: 'billing', description: 'Manage billing' }, getDescription: () => 'Manage billing' },
+    ]),
   };
 }
 
@@ -215,9 +217,7 @@ describe('SkilledOpenApiPlugin host-injected runtime deps (attach)', () => {
         logger,
         skills: { registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })) },
         providers: {
-          get: jest.fn((token: unknown) =>
-            token === SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN ? runtimeDeps : undefined,
-          ),
+          get: jest.fn((token: unknown) => (token === SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN ? runtimeDeps : undefined)),
         },
       };
       const sync = await factory.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
@@ -244,9 +244,7 @@ describe('SkilledOpenApiPlugin host-injected runtime deps (attach)', () => {
         logger,
         skills: { registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })) },
         providers: {
-          get: jest.fn((token: unknown) =>
-            token === SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN ? runtimeDeps : undefined,
-          ),
+          get: jest.fn((token: unknown) => (token === SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN ? runtimeDeps : undefined)),
         },
       };
       const sync = await factory.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());

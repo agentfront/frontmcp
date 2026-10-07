@@ -596,16 +596,17 @@ class DocsAgent extends AgentContext {}
 
 ## Execution Options
 
-| Option                           | Default  | Effect                                                                                                                                          |
-| -------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `execution.maxIterations`        | `10`     | Max tool-call rounds of the LLM loop                                                                                                            |
-| `execution.timeout`              | `120000` | Max run time in ms                                                                                                                              |
-| `execution.inheritParentTools`   | `false`  | Also offer the model the tools of the scope the agent is registered in, other than agents; they run through that scope's `tools:call-tool` flow |
-| `execution.inheritPlugins`       | `false`  | Also run the app's and server's plugin hooks for the agent's own tools                                                                          |
-| `execution.useToolFlow`          | `true`   | Own tools through its `tools:call-tool` flow (hooks, limits, authorization); `false` runs them directly. Nested agents always use their flow    |
-| `execution.enableAutoProgress`   | `false`  | Send progress notifications during the loop                                                                                                     |
-| `execution.notificationInterval` | `1000`   | Least ms between two automatic progress updates; sooner ones are skipped, the last one is always sent                                           |
-| `execution.enableStreaming`      | `false`  | Not supported yet: the agent replies once the run completes, and `true` is reported at startup                                                  |
+| Option                           | Default  | Effect                                                                                                                                             |
+| -------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execution.maxIterations`        | `10`     | Max tool-call rounds of the LLM loop                                                                                                               |
+| `execution.timeout`              | `120000` | Max run time in ms                                                                                                                                 |
+| `execution.inheritParentTools`   | `false`  | Also offer the model the tools of the scope the agent is registered in, other than agents; they run through that scope's `tools:call-tool` flow    |
+| `execution.inheritPlugins`       | `false`  | Also run the app's and server's plugin hooks for the agent's own tools                                                                             |
+| `execution.useToolFlow`          | `true`   | Own tools through its `tools:call-tool` flow (hooks, limits, authorization); `false` runs them directly. Nested agents always use their flow       |
+| `execution.enableNotifications`  | `true`   | Send `Calling tool: <name>` and `Tool <name> failed: <message>` log messages (the failure's public message only); `false` also stops auto progress |
+| `execution.enableAutoProgress`   | `false`  | Send progress notifications during the loop; each value is higher than the last                                                                    |
+| `execution.notificationInterval` | `1000`   | Least ms between two automatic progress updates; sooner ones are skipped, the last one is always sent                                              |
+| `execution.enableStreaming`      | `false`  | Not supported yet: the agent replies once the run completes, and `true` is reported at startup                                                     |
 
 Through that flow the agent's own tools get the `rateLimit`, `concurrency` and `timeout` they declare (else the `throttle` defaults), as the app's tools do; a `rateLimit` or `concurrency` there is enforced without a `throttle` option. The calls an agent makes during its run (its model's tool calls, its nested and swarm agents) run inside the `throttle.globalConcurrency` slot of the call that runs the agent.
 

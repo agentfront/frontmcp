@@ -1,5 +1,10 @@
 import 'reflect-metadata';
 
+import {
+  createTestFetchServer,
+  rpc20260728,
+  type TestFetchServer,
+} from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { App, LogLevel, Skill, SkillContext, type SkillContent } from '../../common';
 import { connect } from '../../direct';
 import type { DirectClient } from '../../direct/client.types';
@@ -18,7 +23,11 @@ class ReleaseNotesSkill extends SkillContext {
 class TriageSkill extends SkillContext {
   override async build(): Promise<SkillContent> {
     const content = await super.build();
-    return { ...content, instructions: `${content.instructions}\n\nAdded by build().` };
+    return {
+      ...content,
+      description: 'Triage tickets by severity',
+      instructions: `${content.instructions}\n\nAdded by build().`,
+    };
   }
 }
 
@@ -60,6 +69,73 @@ describe('SkillContext overrides', () => {
 
   it('serves the decorator instructions when nothing is overridden', async () => {
     await expect(instructionsOf('plain')).resolves.toBe('Plain steps.');
+  });
+
+  it('lists the description an overridden build() returns in skill://index.json, as SKILL.md has it', async () => {
+    const index = await client.readResource('skill://index.json');
+    const document = JSON.parse((index.contents[0] as { text: string }).text) as {
+      skills: Array<{ name?: string; description: string }>;
+    };
+    const skillMd = await client.readResource('skill://triage/SKILL.md');
+
+    expect(document.skills.find((entry) => entry.name === 'triage')?.description).toBe('Triage tickets by severity');
+    expect((skillMd.contents[0] as { text: string }).text).toContain('description: Triage tickets by severity');
+  });
+
+  it('describes the SKILL.md resource with that description in resources/list', async () => {
+    const { resources } = await client.listResources();
+
+    expect(resources.find((resource) => resource.uri === 'skill://triage/SKILL.md')?.description).toBe(
+      'Triage tickets by severity',
+    );
+  });
+});
+
+describe('the description an overridden build() returns, wherever skills are listed', () => {
+  const builtDescription = 'Triage tickets by severity';
+  let client: DirectClient;
+  let server: TestFetchServer;
+
+  beforeAll(async () => {
+    const config = {
+      info: { name: 'skill-context-listings', version: '1.0.0' },
+      apps: [DeskApp],
+      logging: { level: LogLevel.Off },
+      skillsConfig: { enabled: true, sep2640InInstructions: true },
+    };
+    client = await connect(config);
+    server = await createTestFetchServer(config);
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  async function get(path: string): Promise<string> {
+    return (await server.handler(new Request(new URL(path, 'http://localhost')))).text();
+  }
+
+  it('in skills/search and skills/list', async () => {
+    const found = await client.searchSkills('triage tickets');
+    const listed = await client.listSkills();
+
+    expect(found.skills.find((skill) => skill.name === 'triage')?.description).toBe(builtDescription);
+    expect(listed.skills.find((skill) => skill.name === 'triage')?.description).toBe(builtDescription);
+  });
+
+  it('in the skill catalog and skill:// hints of the instructions', async () => {
+    const { message } = await rpc20260728(server.handler, 'server/discover');
+    const instructions = String(message.result?.['instructions']);
+
+    expect(instructions).toContain(`- **triage**: ${builtDescription}`);
+    expect(instructions).toContain(`- skill://triage/SKILL.md — ${builtDescription}`);
+  });
+
+  it('in /llm.txt and the /skills HTTP listing', async () => {
+    const listing = JSON.parse(await get('/skills')) as { skills: Array<{ name: string; description: string }> };
+
+    expect(await get('/llm.txt')).toContain(`# triage\n${builtDescription}`);
+    expect(listing.skills.find((skill) => skill.name === 'triage')?.description).toBe(builtDescription);
   });
 });
 

@@ -13,12 +13,36 @@ describe('TransportSSEAdapter.sendElicitRequest', () => {
     await expect(request).rejects.toThrow('url is required when mode is "url"');
   });
 
-  it('refuses a URL-mode question with no elicitationId', async () => {
-    const request = adapter.sendElicitRequest(1, 'Sign in', z.object({}), {
-      mode: 'url',
-      url: 'https://example.com/consent',
+  it.each([
+    ['no elicitationId', undefined],
+    ['an empty elicitationId', ''],
+  ])('sends a URL-mode question with %s under a generated one', async (_case, elicitationId) => {
+    const sent: Array<{ params?: Record<string, unknown> }> = [];
+    const sseAdapter = Object.create(TransportSSEAdapter.prototype) as TransportSSEAdapter;
+    Object.defineProperty(sseAdapter, 'newRequestId', { get: () => 7 });
+    Object.assign(sseAdapter, {
+      key: { sessionId: 'session-1' },
+      logger: { info: jest.fn() },
+      transport: { send: async (message: { params?: Record<string, unknown> }) => sent.push(message) },
+      cancelPendingElicit: async () => undefined,
+      requireElicitStore: () => ({
+        setPending: async () => undefined,
+        subscribeResult: async (_id: string, onResult: (result: unknown) => void) => {
+          onResult({ status: 'accept' });
+          return async () => undefined;
+        },
+      }),
     });
 
-    await expect(request).rejects.toThrow('elicitationId is required when mode is "url"');
+    const answer = await sseAdapter.sendElicitRequest(1, 'Sign in', z.object({}), {
+      mode: 'url',
+      url: 'https://example.com/consent',
+      elicitationId,
+    });
+
+    expect(answer).toEqual({ status: 'accept' });
+    expect(sent[0]?.params).toEqual(
+      expect.objectContaining({ mode: 'url', url: 'https://example.com/consent', elicitationId: 'elicit-7' }),
+    );
   });
 });

@@ -59,7 +59,7 @@ function skillExtensionMetadata(skill: SkillEntry): Record<string, unknown> {
  *
  * The record carries SEP-conformant metadata:
  *   - `name` = skill's frontmatter name
- *   - `description` = skill's frontmatter description
+ *   - `description` = skill's frontmatter description (what a `build()` override returns, once loaded)
  *   - `mimeType` = `text/markdown`
  *   - `annotations.audience` = `["assistant"]`
  *   - `annotations.priority` = 0.8 (the SEP-recommended SKILL.md priority)
@@ -94,7 +94,7 @@ export function buildPerSkillResourceRecord(
     ...skillExtensionMetadata(skill),
     uri,
     name: skill.metadata.name,
-    description: skill.metadata.description,
+    description: skill.getDescription(),
     mimeType: SKILL_MD_MIME_TYPE,
     annotations,
     _meta: meta,
@@ -219,7 +219,7 @@ function refreshFromSkill(resource: PerSkillResource, skill: SkillEntry): void {
     if (!(key in extensions)) Reflect.deleteProperty(resource.metadata, key);
   }
   Object.assign(resource.metadata, extensions);
-  resource.metadata['description'] = skill.metadata.description;
+  resource.metadata['description'] = skill.getDescription();
   if (skill.metadata.availableWhen === undefined) Reflect.deleteProperty(resource.metadata, 'availableWhen');
   else resource.metadata['availableWhen'] = skill.metadata.availableWhen;
   resource.extensionKeys = Object.keys(extensions);

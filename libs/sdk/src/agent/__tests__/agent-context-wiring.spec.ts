@@ -363,3 +363,105 @@ describe('agent notifications under MCP 2026-07-28', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------- progress order and failure messages
+
+const twoReadsModel = {
+  completion: async (prompt: AgentPrompt) => {
+    if (prompt.messages.length > 1) return { content: 'done', finishReason: 'stop' as const };
+    const read = (id: string) => ({ id, name: 'list_tickets', arguments: {} });
+    return { content: null, finishReason: 'tool_calls' as const, toolCalls: [read('read-1'), read('read-2')] };
+  },
+};
+
+@Agent({
+  name: 'double_reader',
+  inputSchema: {},
+  llm: { adapter: twoReadsModel },
+  tools: [ListTicketsTool],
+  execution: { enableAutoProgress: true, notificationInterval: 1 },
+})
+class DoubleReaderAgent extends AgentContext {}
+
+@Tool({ name: 'read_ledger', inputSchema: {} })
+class ReadLedgerTool extends ToolContext {
+  async execute(): Promise<{ ok: boolean }> {
+    throw new Error('connect ECONNREFUSED 10.0.4.7:5432');
+  }
+}
+
+@Agent({
+  name: 'bookkeeper',
+  inputSchema: {},
+  llm: { adapter: callingModel('bookkeeper', 'read_ledger') },
+  tools: [ReadLedgerTool],
+})
+class BookkeeperAgent extends AgentContext {}
+
+@App({
+  id: 'ledger',
+  name: 'Ledger',
+  providers: [TicketStore],
+  agents: [DoubleReaderAgent, BookkeeperAgent, RefuserAgent],
+})
+class LedgerApp {}
+
+describe('agent progress order and failure messages', () => {
+  let fetchServer: TestFetchServer;
+
+  beforeAll(async () => {
+    fetchServer = await createTestFetchServer({
+      info: { name: 'agent-progress-order', version: '1.0.0' },
+      apps: [LedgerApp],
+    });
+  });
+
+  const logMessages = async (agentTool: string) => {
+    const { notifications } = await rpc20260728(
+      fetchServer.handler,
+      'tools/call',
+      { name: agentTool, arguments: {} },
+      { meta: { [MCP_20260728_META.logLevel]: 'info' } },
+    );
+    return notifications
+      .filter((notification) => notification.method === 'notifications/message')
+      .map((notification) => (notification.params?.['data'] as { message: string }).message);
+  };
+
+  it('raises the progress with every update, across tool calls and iterations', async () => {
+    // Every clock read is a millisecond later, so the 1 ms notificationInterval lets each update through
+    let clock = Date.now();
+    const clockSpy = jest.spyOn(Date, 'now').mockImplementation(() => ++clock);
+    const { notifications } = await rpc20260728(
+      fetchServer.handler,
+      'tools/call',
+      { name: 'invoke_double_reader', arguments: {} },
+      { meta: { progressToken: 'order-1' } },
+    ).finally(() => clockSpy.mockRestore());
+    const updates = notifications.map((notification) => notification.params as { progress: number; message: string });
+
+    expect(updates.map((update) => update.message)).toEqual([
+      'Starting LLM call (iteration 1/10)',
+      'LLM response received',
+      'Executing tool 1/2: list_tickets',
+      'Executing tool 2/2: list_tickets',
+      'Starting LLM call (iteration 2/10)',
+      'LLM response received',
+      'Agent completed',
+    ]);
+    const values = updates.map((update) => update.progress);
+    expect(values.every((value, index) => index === 0 || value > values[index - 1])).toBe(true);
+  });
+
+  it("tells the client a tool failed without the error's internal text", async () => {
+    const messages = await logMessages('invoke_bookkeeper');
+
+    const failure = messages.find((message) => message.startsWith('Tool read_ledger failed: '));
+    expect(failure).toMatch(/^Tool read_ledger failed: Internal FrontMCP error/);
+    expect(messages.join('\n')).not.toContain('ECONNREFUSED');
+  });
+
+  it("tells the client a public error's message", async () => {
+    expect(await logMessages('invoke_refuser')).toContain('Tool refuse failed: The ticket is locked');
+  });
+});

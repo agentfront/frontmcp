@@ -107,10 +107,7 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
   ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
     const { mode = 'form', ttl = DEFAULT_ELICIT_TTL, elicitationId, url } = options ?? {};
 
-    // URL mode requires elicitationId for out-of-band tracking, and the url the client opens
-    if (mode === 'url' && !elicitationId) {
-      throw new InvalidInputError('elicitationId is required when mode is "url"');
-    }
+    // URL mode requires the url the client opens; its elicitationId is generated when not given
     if (mode === 'url' && !url) {
       throw new InvalidInputError('url is required when mode is "url"');
     }
@@ -118,8 +115,8 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     // Cancel any previous pending elicit (only one per session)
     await this.cancelPendingElicit();
 
-    // Generate elicit ID
-    const elicitId = elicitationId ?? `elicit-${this.newRequestId}`;
+    // Generate elicit ID if not provided or empty
+    const elicitId = elicitationId || `elicit-${this.newRequestId}`;
     const sessionId = this.key.sessionId;
     const expiresAt = Date.now() + ttl;
 
@@ -141,9 +138,9 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
       requestedSchema: toJSONSchema(requestedSchema as ZodType),
     };
 
-    // Add elicitationId for URL mode
-    if (mode === 'url' && elicitationId) {
-      params['elicitationId'] = elicitationId;
+    // URL mode names the page to open and the id that correlates its completion
+    if (mode === 'url') {
+      params['elicitationId'] = elicitId;
       params['url'] = url;
     }
 

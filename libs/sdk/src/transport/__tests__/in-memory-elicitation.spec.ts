@@ -2,11 +2,12 @@ import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
 
-import { App, LogLevel, Plugin, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
+import { App, LogLevel, Plugin, Tool, ToolContext, type FlowCtxOf, type FrontMcpConfigInput } from '../../common';
 import { connect } from '../../direct/connect';
 import { ElicitationRequestHook, ElicitationResultHook } from '../../elicitation/hooks/elicitation.hooks';
 
 const ranStages: string[] = [];
+const builtResults: unknown[] = [];
 
 @Plugin({ name: 'elicitation-audit' })
 class ElicitationAuditPlugin {
@@ -16,8 +17,9 @@ class ElicitationAuditPlugin {
   }
 
   @ElicitationResultHook.Did('buildResult')
-  async afterResult() {
+  async afterResult(ctx: FlowCtxOf<'elicitation:result'>) {
     ranStages.push('elicitation:result');
+    builtResults.push(ctx.state.elicitResult);
   }
 }
 
@@ -29,7 +31,36 @@ class ConfirmTool extends ToolContext {
   }
 }
 
-@App({ id: 'desk', name: 'Desk', tools: [ConfirmTool], plugins: [ElicitationAuditPlugin] })
+@Tool({ name: 'connect_billing', inputSchema: {} })
+class ConnectBillingTool extends ToolContext {
+  async execute() {
+    const answer = await this.elicit('Sign in to billing', z.object({}), {
+      mode: 'url',
+      url: 'https://billing.example/connect',
+    });
+    return { action: answer.status, content: answer.content };
+  }
+}
+
+@Tool({ name: 'connect_billing_with_empty_id', inputSchema: {} })
+class ConnectBillingWithEmptyIdTool extends ToolContext {
+  async execute() {
+    // Straight to the transport, so only the elicitation:request flow sees the empty id
+    const answer = await this.context.transport?.elicit('Sign in to billing', z.object({}), {
+      mode: 'url',
+      url: 'https://billing.example/connect',
+      elicitationId: '',
+    });
+    return { action: answer?.status };
+  }
+}
+
+@App({
+  id: 'desk',
+  name: 'Desk',
+  tools: [ConfirmTool, ConnectBillingTool, ConnectBillingWithEmptyIdTool],
+  plugins: [ElicitationAuditPlugin],
+})
 class DeskApp {}
 
 function config(): FrontMcpConfigInput {
@@ -44,6 +75,7 @@ function config(): FrontMcpConfigInput {
 describe('elicitation through the in-memory transport', () => {
   beforeEach(() => {
     ranStages.length = 0;
+    builtResults.length = 0;
   });
 
   it('runs the elicitation:request and elicitation:result flows, so their hooks fire', async () => {
@@ -56,6 +88,56 @@ describe('elicitation through the in-memory transport', () => {
 
     expect(result.structuredContent).toEqual({ action: 'accept', confirmed: true });
     expect(ranStages).toEqual(['elicitation:request', 'elicitation:result']);
+  });
+
+  it('takes an accepted URL-mode answer without content, and gives the question an elicitationId', async () => {
+    const asked: unknown[] = [];
+    const client = await connect(config(), {
+      onElicitation: async (request) => {
+        asked.push(request);
+        return { action: 'accept' };
+      },
+    });
+
+    const result = (await client.callTool('connect_billing', {})) as { structuredContent?: unknown };
+    await client.close();
+
+    expect(result.structuredContent).toEqual({ action: 'accept' });
+    expect(asked).toEqual([
+      expect.objectContaining({
+        mode: 'url',
+        url: 'https://billing.example/connect',
+        elicitationId: expect.stringMatching(/^elicit-/),
+      }),
+    ]);
+  });
+
+  it('gives a URL-mode question asked with an empty elicitationId a generated one', async () => {
+    const asked: unknown[] = [];
+    const client = await connect(config(), {
+      onElicitation: async (request) => {
+        asked.push(request);
+        return { action: 'accept' };
+      },
+    });
+
+    const result = (await client.callTool('connect_billing_with_empty_id', {})) as { structuredContent?: unknown };
+    await client.close();
+
+    expect(result.structuredContent).toEqual({ action: 'accept' });
+    expect(asked).toEqual([expect.objectContaining({ mode: 'url', elicitationId: expect.stringMatching(/^elicit-/) })]);
+  });
+
+  it('gives an accepted URL-mode answer no content, even when the client sends some', async () => {
+    const client = await connect(config(), {
+      onElicitation: async () => ({ action: 'accept', content: { token: 'from-client' } }),
+    });
+
+    const result = (await client.callTool('connect_billing', {})) as { structuredContent?: unknown };
+    await client.close();
+
+    expect(result.structuredContent).toStrictEqual({ action: 'accept' });
+    expect(builtResults).toStrictEqual([{ status: 'accept' }]);
   });
 
   it('fails an unanswered question with ElicitationTimeoutError', async () => {
