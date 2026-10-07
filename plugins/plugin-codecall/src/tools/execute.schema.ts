@@ -1,10 +1,24 @@
 // file: libs/plugins/src/codecall/tools/execute.schema.ts
 import { z } from '@frontmcp/lazy-zod';
 
+import type { ResolvedCodeCallVmOptions } from '../codecall.symbol';
+import { MAX_ITERATIONS_PER_LOOP, maxToolCallsOf, resolveVmOptions } from '../providers/code-call.config';
+
 /** Minimum script length - at least a simple callTool invocation */
 const MIN_EXECUTE_SCRIPT_LENGTH = 'return callTool("a",{})'.length;
 
-export const executeToolDescription = `Execute AgentScript (safe JS subset) for multi-tool orchestration.
+/** Names the AgentScript sandbox refuses in every preset, shown in the description. */
+const ALWAYS_BLOCKED_NAMES = ['eval', 'require', 'fetch', 'setTimeout', 'process', 'globalThis'];
+
+/** The `codecall:execute` description for the server's resolved `vm` options. */
+export function buildExecuteToolDescription(vmOptions: ResolvedCodeCallVmOptions): string {
+  const loops = vmOptions.allowLoops ? 'for, for-of' : 'for-of';
+  const blockedLoops = vmOptions.allowLoops ? 'while, do-while' : 'while, do-while, for';
+  const blockedNames = new Set([...ALWAYS_BLOCKED_NAMES, ...vmOptions.disabledBuiltins, ...vmOptions.disabledGlobals]);
+  const namespaces = ['Math', 'JSON'].filter((name) => !blockedNames.has(name)).map((name) => `${name}.*, `);
+  const timeoutSeconds = vmOptions.timeoutMs / 1000;
+  const maxToolCalls = maxToolCallsOf(vmOptions);
+  return `Execute AgentScript (safe JS subset) for multi-tool orchestration.
 
 API: await callTool(name, args, opts?)
 - Default: throws on error
@@ -19,12 +33,15 @@ for (const u of users.items) {
 }
 return results;
 
-ALLOWED: for-of, arrow fn, map/filter/reduce/find, Math.*, JSON.*, if/else, destructuring, spread, template literals
-BLOCKED: while, do-while, for (unless the server sets vm.allowLoops), console (use mcpLog), function decl, eval, require, fetch, setTimeout, process, globalThis
+ALLOWED: ${loops}, arrow fn, map/filter/reduce/find, ${namespaces.join('')}if/else, destructuring, spread, template literals
+BLOCKED: ${blockedLoops}, console (use mcpLog), function decl, ${[...blockedNames].join(', ')}
 
 ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED
 STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout
-LIMITS: 10K iter/loop, 30s timeout, 100 calls max`;
+LIMITS: ${MAX_ITERATIONS_PER_LOOP} iterations per loop, ${timeoutSeconds}s timeout, ${maxToolCalls} tool calls`;
+}
+
+export const executeToolDescription = buildExecuteToolDescription(resolveVmOptions());
 
 export const executeToolInputSchema = {
   script: z

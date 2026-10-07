@@ -56,34 +56,72 @@ Key components:
 
 1. **Widget Initialization**: Widget sends `ui/initialize` with capabilities
 2. **Host Response**: Server responds with host capabilities and context
-3. **Widget Actions**: Widget sends requests (callServerTool, updateModelContext, etc.)
+3. **Widget Actions**: Widget sends requests (`tools/call`, `ui/update-model-context`, etc.)
 4. **Host Notifications**: Server sends notifications (tool-input, tool-result, context-changed)
 
 ## JSON-RPC Methods
 
 ### Widget → Host Requests
 
-| Method                  | Purpose                         | Host Capability Required              |
-| ----------------------- | ------------------------------- | ------------------------------------- |
-| `ui/initialize`         | Protocol handshake              | (always supported)                    |
-| `ui/callServerTool`     | Invoke a server-side MCP tool   | `serverToolProxy`                     |
-| `ui/updateModelContext` | Update model context with state | `modelContextUpdate`                  |
-| `ui/openLink`           | Request to open a URL           | `openLink`                            |
-| `ui/setDisplayMode`     | Change display mode             | Handler context must provide callback |
-| `ui/close`              | Close the widget                | Handler context must provide callback |
-| `ui/log`                | Send log message to host        | `logging`                             |
-| `ui/registerTool`       | Register widget-defined tool    | `widgetTools`                         |
-| `ui/unregisterTool`     | Unregister widget-defined tool  | `widgetTools`                         |
+The MCP Apps spec names come first. The handler still accepts the earlier FrontMCP names, which
+widgets built before the bridges sent the spec names keep sending.
+
+| Method                                              | Purpose                         | Host Capability Required                |
+| --------------------------------------------------- | ------------------------------- | --------------------------------------- |
+| `ui/initialize`                                     | Protocol handshake              | (always supported)                      |
+| `tools/call` (earlier: `ui/callServerTool`)         | Invoke a server-side MCP tool   | `serverToolProxy` (`ui/callServerTool`) |
+| `ui/update-model-context` (`ui/updateModelContext`) | Update model context with state | `modelContextUpdate`                    |
+| `ui/open-link` (`ui/openLink`)                      | Request to open a URL           | `openLink`                              |
+| `ui/request-display-mode` (`ui/setDisplayMode`)     | Change display mode             | Handler context must provide callback   |
+| `ui/notifications/request-teardown` (`ui/close`)    | Close the widget                | Handler context must provide callback   |
+| `notifications/message` (`ui/log`)                  | Send log message to host        | `logging`                               |
+| `ui/registerTool` (FrontMCP extension)              | Register widget-defined tool    | `widgetTools`                           |
+| `ui/unregisterTool` (FrontMCP extension)            | Unregister widget-defined tool  | `widgetTools`                           |
+
+- `tools/call` is the standard MCP request, so it runs the `tools:call-tool` flow like any other
+  client's call; the bridge marks it with `_meta['frontmcp/widgetCall']: true`, so the result
+  carries the tool's data without its rendered page.
+- `ui/update-model-context` takes `{ content?, structuredContent? }`, and each update replaces the
+  previous one: the context callback gets those fields and `merge: false`. `ui/updateModelContext`
+  takes `{ context, merge? }`.
+- `ui/request-display-mode` answers with `{ mode }`.
+- `ui/notifications/request-teardown` is a notification with no params (`ui/close` took
+  `{ reason? }`); the host decides whether to tear the widget down.
+- `ui/registerTool` and `ui/unregisterTool` are FrontMCP extensions: the MCP Apps spec has no
+  widget-defined tools, so a spec host does not answer them.
+- `notifications/message` is a JSON-RPC notification with the MCP logging params
+  `{ level, logger?, data }` (levels `debug` to `emergency`). Over HTTP it is answered with 202 and
+  no body, as is any other notification a widget sends.
 
 ### Host → Widget Notifications
 
-| Method                                  | Purpose                     |
-| --------------------------------------- | --------------------------- |
-| `ui/notifications/tool-input`           | Tool arguments available    |
-| `ui/notifications/tool-input-partial`   | Streaming tool input update |
-| `ui/notifications/tool-result`          | Tool execution result       |
-| `ui/notifications/host-context-changed` | Theme, display mode changed |
-| `ui/notifications/cancelled`            | Operation was cancelled     |
+| Method                                  | Purpose                      |
+| --------------------------------------- | ---------------------------- |
+| `ui/notifications/tool-input`           | Tool arguments available     |
+| `ui/notifications/tool-input-partial`   | Streaming tool input update  |
+| `ui/notifications/tool-result`          | Tool execution result        |
+| `ui/notifications/host-context-changed` | Theme, display mode changed  |
+| `ui/notifications/tool-cancelled`       | Tool execution was cancelled |
+
+The bridges report `ui/notifications/tool-cancelled` (`{ reason? }`) as a `tool:cancelled` event, and
+still accept the earlier `ui/notifications/cancelled`.
+
+### Host → Widget Requests
+
+| Method                 | Purpose                                 |
+| ---------------------- | --------------------------------------- |
+| `ui/resource-teardown` | The host is about to unmount the widget |
+
+The bridges answer a `ui/resource-teardown` request (params `{}`) only when it comes from the
+trusted host origin: they fire a `bridge:teardown` event on `window`, then reply with the result `{}`. Clean up synchronously in a listener; the
+host may unmount the widget once the reply arrives. The host sends it after it agrees to a
+widget's `ui/notifications/request-teardown`, or on its own.
+
+```javascript
+window.addEventListener('bridge:teardown', () => {
+  clearInterval(pollTimer);
+});
+```
 
 ## Files in this folder
 
@@ -199,8 +237,8 @@ Custom error classes for proper JSON-RPC error codes:
 ```typescript
 import {
   ExtAppsError,
-  ExtAppsMethodNotFoundError,
   ExtAppsInvalidParamsError,
+  ExtAppsMethodNotFoundError,
   ExtAppsNotSupportedError,
   ExtAppsToolNotFoundError,
 } from '@frontmcp/sdk/ext-apps';
@@ -353,19 +391,18 @@ sequenceDiagram
   participant Widget as Widget (iframe)
   participant Bridge as FrontMcpBridge
   participant Host as AI Host
-  participant Handler as ExtAppsMessageHandler
-  participant Tools as ToolRegistry
+  participant Tools as MCP Server
 
   Widget->>Bridge: callTool('weather', {city: 'NYC'})
-  Bridge->>Host: postMessage({jsonrpc: '2.0', method: 'ui/callServerTool', ...})
-  Host->>Handler: handleRequest(request)
-  Handler->>Handler: validate params
-  Handler->>Tools: callTool('weather', {city: 'NYC'})
-  Tools-->>Handler: {temperature: 72, ...}
-  Handler-->>Host: {jsonrpc: '2.0', result: {...}}
+  Bridge->>Host: postMessage({jsonrpc: '2.0', method: 'tools/call', params: {..., _meta: {'frontmcp/widgetCall': true}}})
+  Host->>Tools: tools/call (tools:call-tool flow)
+  Tools-->>Host: {structuredContent: {temperature: 72, ...}}
   Host-->>Bridge: postMessage(response)
   Bridge-->>Widget: {temperature: 72, ...}
 ```
+
+A host that forwards the earlier `ui/callServerTool` to the server reaches `ExtAppsMessageHandler`
+instead, which runs the same `tools:call-tool` flow.
 
 ## Sequence Diagram: Initialization
 

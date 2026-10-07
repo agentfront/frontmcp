@@ -16,9 +16,9 @@ import {
 import type { NamespacedStorage, RootStorage, StorageConfig } from '@frontmcp/utils';
 
 import type { ToolApprovalRequirement } from './approval';
-import { resolveApprovalRequirement } from './approval/policy';
 import { resolveApprovalIdentity } from './approval.identity';
 import { ApprovalServiceToken, ApprovalStoreToken, ChallengeServiceToken } from './approval.symbols';
+import { resolveApprovalRequirement } from './approval/policy';
 import ApprovalCheckPlugin from './hooks/approval-check.hook';
 import { createApprovalService } from './services/approval.service';
 import { ChallengeService } from './services/challenge.service';
@@ -51,15 +51,15 @@ export interface ApprovalPluginOptions {
   namespace?: string;
 
   /**
-   * Approval workflow mode.
-   * - 'recheck': Poll external API for approval status
-   * - 'webhook': Use PKCE-secured webhooks for approval
+   * Approval workflow mode. Neither contacts an external system yet: approvals are recorded by your code.
+   * - 'recheck': Check the stored approvals on every call
+   * - 'webhook': Also register the PKCE `ChallengeService` (`ChallengeServiceToken`)
    * @default 'recheck'
    */
   mode?: ApprovalMode;
 
   /**
-   * Recheck mode configuration.
+   * Recheck mode configuration. Reserved: accepted and not used, nothing is polled.
    */
   recheck?: {
     /** URL to check for approval status */
@@ -73,7 +73,7 @@ export interface ApprovalPluginOptions {
   };
 
   /**
-   * Webhook mode configuration.
+   * Webhook mode configuration. Only `challengeTtl` is used; no request is sent and no callback route is served.
    */
   webhook?: {
     /** URL to send approval requests */
@@ -115,8 +115,7 @@ export interface ApprovalPluginOptions {
  * Features:
  * - Tool approval checking via hook
  * - Multiple approval scopes (session, user, time-limited, context-specific)
- * - PKCE webhook security for external approval systems
- * - Recheck mode for polling approval status
+ * - PKCE challenges (`mode: 'webhook'`) to build an external approval flow on
  * - Full audit trail support
  *
  * @example Basic usage

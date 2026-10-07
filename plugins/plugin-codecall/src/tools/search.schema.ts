@@ -1,7 +1,14 @@
 // file: libs/plugins/src/codecall/tools/search.schema.ts
 import { z } from '@frontmcp/lazy-zod';
 
-export const searchToolDescription = `Find tools by splitting user request into atomic actions.
+import { codeCallPluginOptionsSchema } from '../codecall.types';
+
+/** The `minRelevanceScore` a `codecall:search` call that names none is given. */
+export const DEFAULT_MIN_RELEVANCE_SCORE = 0.1;
+
+/** The `codecall:search` description for a server whose `topK` is `topK`. */
+export function buildSearchToolDescription(topK: number): string {
+  return `Find tools by splitting user request into atomic actions.
 
 DECOMPOSE: "delete users and send email" → queries: ["delete user", "send email"]
 DECOMPOSE: "get order and refund" → queries: ["get order", "calculate refund"]
@@ -13,12 +20,15 @@ INPUT:
 - queries: string[] (required) - atomic action phrases, max 10
 - appIds?: string[] - filter by app
 - excludeToolNames?: string[] - skip known tools
-- topK?: number (default: the server's topK, 8 unless configured) - results per query
-- minRelevanceScore?: number (default 0.3) - minimum match threshold
+- topK?: number (default ${topK}) - results per query
+- minRelevanceScore?: number (default ${DEFAULT_MIN_RELEVANCE_SCORE}) - minimum match threshold
 
 OUTPUT: Flat deduplicated tool list. relevanceScore: 0.5+=good, 0.7+=strong match.
 
 FLOW: search → describe → execute/invoke`;
+}
+
+export const searchToolDescription = buildSearchToolDescription(codeCallPluginOptionsSchema.parse({}).topK);
 
 export const searchToolInputSchema = {
   queries: z
@@ -40,8 +50,8 @@ export const searchToolInputSchema = {
     .min(0)
     .max(1)
     .optional()
-    .default(0.1)
-    .describe('Minimum relevance threshold (default 0.1)'),
+    .default(DEFAULT_MIN_RELEVANCE_SCORE)
+    .describe(`Minimum relevance threshold (default ${DEFAULT_MIN_RELEVANCE_SCORE})`),
 };
 
 export type SearchToolInput = z.infer<z.ZodObject<typeof searchToolInputSchema>>;

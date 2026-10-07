@@ -64,7 +64,7 @@ The widget file is read when the tool is called, from where the **compiled** too
 </Info>
 
 <Info>
-**`ui.csp` is now emitted on the widget resource (#455).** FrontMCP attaches `ui.csp` to the `resources/read` content item's `_meta.ui.csp` (and `_meta['ui/csp']`) so MCP Apps hosts — particularly Claude — actually honor it. Previously the CSP only appeared on the tool listing, where Claude ignored it.
+**`ui.csp` is now emitted on the widget resource (#455).** FrontMCP attaches `ui.csp` to the `resources/read` content item's `_meta.ui.csp` (and `_meta['ui/csp']`) so MCP Apps hosts — particularly Claude — actually honor it. Previously the CSP only appeared on the tool listing, where Claude ignored it. The keys are the MCP Apps `connectDomains` / `resourceDomains`; up to 1.9.2 only the snake_case `connect_domains` / `resource_domains` were sent there, and they stay alongside for hosts that adapted to them.
 </Info>
 
 <Info>
@@ -188,11 +188,14 @@ ui: {
 ## UI Configuration Options
 
 <ParamField path="ui.widgetDescription" type="string">
-  Human-readable description of what the widget displays. Shown to users in UI-capable hosts.
+  What the widget displays, for the model. Sent on the widget resource as `_meta['openai/widgetDescription']`.
 </ParamField>
 
 <ParamField path="ui.displayMode" type="'inline' | 'fullscreen' | 'pip'">
-  Preferred display mode (hint to the host — may be ignored):
+  Preferred display mode, which the page asks the host for once its bridge connects: `ui/request-display-mode` when an
+  MCP Apps host offers the mode in `hostContext.availableDisplayModes` (the bridge's `ui/initialize` declares `inline`,
+  `fullscreen` and `pip` in `appCapabilities.availableDisplayModes`), or `window.openai.requestDisplayMode()`. The host
+  may refuse, and the bridge keeps the mode the host answers with, not the one it asked for:
   - `inline` - Rendered inline in the conversation (default)
   - `fullscreen` - Request fullscreen display
   - `pip` - Picture-in-picture
@@ -201,7 +204,7 @@ ui: {
 <ParamField path="ui.servingMode" type="'auto' | 'inline' | 'static' | 'hybrid' | 'direct-url' | 'custom-url'">
   How the HTML is delivered to the client (default: `auto`):
   - `auto` - Auto-select per host (OpenAI / Claude / unknown)
-  - `inline` - Embedded in tool response `_meta['ui/html']` on every call (a call the widget makes back through `ui/callServerTool` gets the data only)
+  - `inline` - Embedded in tool response `_meta['ui/html']` on every call (a call the widget makes back through `ui/callServerTool`, or a `tools/call` the bridge marks with `_meta['frontmcp/widgetCall']`, gets the data only)
   - `static` - Pre-compiled at startup; client fetches `ui://widget/{toolName}.html` via `resources/read`
   - `hybrid` - Shell pre-compiled at startup; each call carries only a **reference** in `_meta['ui/component']` (`{ type, hash, toolName }`) — no component code and no data. The widget is still rendered from its `ui://` resource
   - `direct-url` / `custom-url` - **Not implemented.** Accepted by the schema, but the widget is served inline, as with `inline`; startup logs a warning
@@ -219,7 +222,7 @@ The tool name in the URI is percent-encoded, as `tools/list` advertises it: a na
 </ParamField>
 
 <ParamField path="ui.escapeStringResults" type="boolean">
-  HTML-escape a plain string returned by the template function; `html` / `trustedHtml` results still render as markup. Unset (the 1.9 default) escapes them too and logs a one-time notice per tool when a string looked like markup; `true` escapes without the notice; `false` renders strings that look like HTML as markup (the 1.8 behaviour). Overrides the server-wide `@FrontMcp({ ui: { escapeStringResults } })` default. See [Escaping string results](#escaping-string-results).
+  HTML-escape a plain string returned by the template function; `html` / `trustedHtml` results still render as markup. Unset (the default since 1.9.2) escapes them too and logs a one-time notice per tool when a string looked like markup; `true` escapes without the notice; `false` renders strings that look like HTML as markup (the behaviour before 1.9.2). Overrides the server-wide `@FrontMcp({ ui: { escapeStringResults } })` default. See [Escaping string results](#escaping-string-results).
 </ParamField>
 
 ---
@@ -268,7 +271,7 @@ function Refresh() {
 }
 ```
 
-Whether the host lets a widget call tools is the host's decision; the `widgetAccessible` option has no effect yet (see [Options that have no effect yet](#options-that-have-no-effect-yet)).
+Whether the host lets a widget call tools is the host's decision. The OpenAI Apps SDK requires the tool to say so: set `widgetAccessible: true`, which `tools/list` sends as `_meta['openai/widgetAccessible']`.
 
 ---
 
@@ -351,12 +354,12 @@ ui: { template, escapeStringResults: false }
 
 | `escapeStringResults` | Plain string result                                           | `html` / `trustedHtml` result |
 | --------------------- | ------------------------------------------------------------- | ----------------------------- |
-| unset (1.9 default)   | Escaped; a one-time notice is logged if it looked like markup | Rendered as markup            |
+| unset (since 1.9.2)   | Escaped; a one-time notice is logged if it looked like markup | Rendered as markup            |
 | `true`                | Escaped and shown as text, no notice                          | Rendered as markup            |
-| `false`               | Rendered as markup when it looks like HTML (1.8 behaviour)    | Rendered as markup            |
+| `false`               | Rendered as markup when it looks like HTML (before 1.9.2)     | Rendered as markup            |
 
 <Warning>
-**Since FrontMCP 1.9 plain string results are escaped by default** (1.8 rendered them as markup and logged a notice). A widget that now shows its markup as text returns a plain string: build it with `html` / `trustedHtml`, or set `escapeStringResults: false` while you migrate. Each tool whose template returns a plain markup string logs a notice once, naming the tool.
+**Since FrontMCP 1.9.2 plain string results are escaped by default** (earlier releases rendered them as markup). A widget that now shows its markup as text returns a plain string: build it with `html` / `trustedHtml`, or set `escapeStringResults: false` while you migrate. Each tool whose template returns a plain markup string logs a notice once, naming the tool.
 </Warning>
 
 Other results are always escaped: plain text is shown as text, an object as JSON inside `<pre>`, and a chart config or base64 PDF (`JVBERi…`) is embedded as script data. A value that starts with the PDF signature but is not base64 is shown as text. A static string template (`template: '<div>…</div>'`) is your own markup and is never escaped.
@@ -442,11 +445,24 @@ A string that contains both `<` and `>` is treated as **HTML** and used as writt
 - Markdown strings are always escaped as described in the previous section.
 - Tool output shown by a `.tsx` widget is rendered by React, which escapes text nodes.
 
+## Options the host reads
+
+| Option              | Where the host gets it                                                                                               |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `widgetDescription` | The widget resource's `_meta['openai/widgetDescription']` (OpenAI Apps SDK), read by the model when the widget loads |
+| `widgetAccessible`  | `tools/list` `_meta['openai/widgetAccessible']`, which the OpenAI Apps SDK requires for `window.openai.callTool()`   |
+| `prefersBorder`     | The widget resource's `_meta.ui.prefersBorder` (MCP Apps) and `_meta['openai/widgetPrefersBorder']`                  |
+| `sandboxDomain`     | The widget resource's `_meta.ui.domain` (MCP Apps) and `_meta['openai/widgetDomain']`                                |
+| `displayMode`       | Asked for when the bridge connects, if offered: `ui/request-display-mode`, or `window.openai.requestDisplayMode()`   |
+| `csp`               | Also as `_meta['openai/widgetCSP']` on the widget resource, with snake_case keys (`connect_domains`)                 |
+
+Up to 1.9.2 the first five were accepted and ignored.
+
 ## Options that have no effect yet
 
 These `ui` options pass schema validation but nothing reads them, so setting one changes nothing. Startup logs a single warning per tool that lists them:
 
-`widgetDescription`, `widgetAccessible`, `displayMode`, `prefersBorder`, `sandboxDomain`, `contentSecurity`, `hydrate`, `runtimeOptions`, `mdxComponents`, `bundlingMode`, `uiType`, `htmlResponsePrefix`.
+`contentSecurity`, `hydrate`, `runtimeOptions`, `mdxComponents`, `bundlingMode`, `uiType`, `htmlResponsePrefix`.
 
 `servingMode: 'direct-url'` and `'custom-url'` are also not implemented (the widget is served inline), and `'hybrid'` sends only a reference (see [UI Configuration Options](#ui-configuration-options)). There is no dual HTML payload for Claude: the tool result carries no extra HTML text block, so `htmlResponsePrefix` does nothing.
 

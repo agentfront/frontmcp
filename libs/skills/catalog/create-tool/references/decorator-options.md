@@ -43,7 +43,7 @@ Full surface of the `@Tool` decorator. Mandatory fields are bolded.
 
 - **`rateLimit` + `concurrency`** — independent. Rate-limit caps invocations over time; concurrency caps simultaneous in-flight. A "1 req/s with max 2 concurrent" tool is fine: bursts can run two at once, then back off.
 - **`timeout` + `rateLimit`** — orthogonal. Timeout wraps a single call; rate-limit wraps the rate of calls.
-- **`authProviders` + widget tool calls** — a widget that calls back to a tool requiring `authProviders: ['github']` fails if no GitHub session exists. (`ui.widgetAccessible` is accepted but has no effect yet.)
+- **`authProviders` + widget tool calls** — a widget that calls back to a tool requiring `authProviders: ['github']` fails if no GitHub session exists. (Under the OpenAI Apps SDK the widget's tool must set `ui.widgetAccessible: true`, sent as `_meta['openai/widgetAccessible']`.)
 - **`availableWhen` + `visibility`** — `availableWhen` is a hard constraint (filtered out of `tools/list` AND blocked from execution when context doesn't match); `visibility: 'hidden'` is a soft hide (filtered from `tools/list` but still callable by name). `visibility: 'internal'` blocks external `tools/call` entirely (in-process `this.callTool` only).
 - **`ui.servingMode === 'static'` + `availableWhen`** — static widgets pre-compile at startup. If a tool is filtered out by `availableWhen`, its static widget isn't compiled either.
 

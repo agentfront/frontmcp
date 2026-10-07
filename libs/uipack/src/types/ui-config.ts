@@ -44,8 +44,10 @@ export interface FileBundleOptions {
  * **Where this is emitted (issue #455 fix):** FrontMCP attaches this
  * configuration to the **resource** content item returned by
  * `resources/read` for `ui://widget/{toolName}.html`, as both
- * `_meta.ui.csp` (nested) and `_meta['ui/csp']` (slash) with snake_case
- * `connect_domains` / `resource_domains` fields. MCP Apps hosts (notably
+ * `_meta.ui.csp` (nested) and `_meta['ui/csp']` (slash) with the MCP Apps
+ * `connectDomains` / `resourceDomains` keys (the snake_case keys sent up to
+ * 1.9.2 stay alongside), and as `_meta['openai/widgetCSP']` with the OpenAI
+ * Apps SDK's `connect_domains` / `resource_domains`. MCP Apps hosts (notably
  * Claude) only honor CSP declared on the resource — declarations on the
  * tool's `_meta.ui.csp` are ignored.
  */
@@ -401,11 +403,11 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   /**
    * HTML-escape a plain string returned by a template function.
    *
-   * - unset (1.9 default): plain strings are escaped and shown as text, and a one-time notice per
+   * - unset (the default since 1.9.2): plain strings are escaped and shown as text, and a one-time notice per
    *   tool is logged when one looked like markup; markup built with `ctx.helpers.html` or wrapped
    *   with `ctx.helpers.trustedHtml` still renders as HTML.
    * - `true`: the same, without the notice.
-   * - `false`: strings that look like HTML render as markup (the 1.8 behaviour).
+   * - `false`: strings that look like HTML render as markup (the behaviour before 1.9.2).
    *
    * Overrides the server-wide `@FrontMcp({ ui: { escapeStringResults } })` default.
    * Static string templates (`template: '<div>…</div>'`) are author markup and never escaped.
@@ -413,17 +415,16 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   escapeStringResults?: boolean;
 
   /**
-   * Whether the widget can invoke tools via the MCP bridge.
-   * When true, the widget gains access to `window.mcpBridge.callTool()`.
-   * Exposed in `_meta.ui` for platform discovery.
-   *
-   * Default: false
+   * Whether the widget may call tools itself. Sent in `tools/list` as
+   * `_meta['openai/widgetAccessible']`, which the OpenAI Apps SDK requires for
+   * `window.openai.callTool()`; MCP Apps hosts let widgets call tools by default.
    */
   widgetAccessible?: boolean;
 
   /**
-   * Preferred display mode for the widget.
-   * - 'inline': Rendered inline in the conversation (default)
+   * Preferred display mode for the widget, which the page asks the host for once its
+   * bridge connects (`ui/request-display-mode`, or `window.openai.requestDisplayMode()`).
+   * - 'inline': Rendered inline in the conversation (default; nothing is asked)
    * - 'fullscreen': Request fullscreen display
    * - 'pip': Picture-in-picture mode
    *
@@ -484,8 +485,8 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   autoResize?: boolean;
 
   /**
-   * Human-readable description shown to users about what the widget does.
-   * Exposed in `_meta.ui` for platform discovery.
+   * What the widget shows, for the model. Sent on the widget resource as
+   * `_meta['openai/widgetDescription']` (OpenAI Apps SDK).
    */
   widgetDescription?: string;
 
@@ -609,7 +610,8 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
 
   /**
    * Whether to show a border around the UI widget.
-   * MCP Apps spec: `_meta.ui.prefersBorder`
+   * Sent on the widget resource as `_meta.ui.prefersBorder` (MCP Apps) and
+   * `_meta['openai/widgetPrefersBorder']` (OpenAI Apps SDK).
    *
    * When true, hosts should render a visible border around the sandbox iframe.
    * Useful for visual clarity when the widget content doesn't have its own borders.
@@ -620,7 +622,8 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
 
   /**
    * Dedicated sandbox domain for the widget.
-   * MCP Apps spec: `_meta.ui.domain`
+   * Sent on the widget resource as `_meta.ui.domain` (MCP Apps) and
+   * `_meta['openai/widgetDomain']` (OpenAI Apps SDK).
    *
    * When specified, the host should load the widget in an iframe with this
    * domain as the origin, providing additional isolation.

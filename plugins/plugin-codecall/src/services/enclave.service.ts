@@ -13,6 +13,7 @@ import { Provider, ProviderScope } from '@frontmcp/sdk';
 import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import type { CodeCallSidecarOptions } from '../codecall.types';
 import type CodeCallConfig from '../providers/code-call.config';
+import { MAX_ITERATIONS_PER_LOOP, maxToolCallsOf } from '../providers/code-call.config';
 import { findScriptPolicyIssues } from '../security/script-policy';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
 import { withScriptLines } from '../utils/script-lines';
@@ -78,6 +79,15 @@ function toolFailureName(error: unknown): string {
   const name = error && typeof error === 'object' ? (error as { name?: unknown }).name : undefined;
   return typeof name === 'string' && name ? name.slice(0, 128) : 'ToolError';
 }
+
+/** How the sandbox's messages for a loop that ran too often start; a `for` loop's names no count. */
+const ITERATION_LIMIT_PREFIX = 'Maximum iteration limit exceeded';
+
+/** One error for every loop that ran too often, as the sandbox reports a `for…of` loop's. */
+const ITERATION_LIMIT_ERROR = {
+  name: 'Error',
+  message: `${ITERATION_LIMIT_PREFIX} (${MAX_ITERATIONS_PER_LOOP}). This limit prevents infinite loops.`,
+};
 
 /** `@enclave-vm/ast`'s message for a script that doesn't parse. */
 const PARSE_FAILURE_PREFIX = 'Failed to parse AgentScript code: ';
@@ -244,8 +254,8 @@ export default class EnclaveService {
     // Create enclave with configuration from CodeCallConfig
     const options: CreateEnclaveOptions = {
       timeout: this.vmOptions.timeoutMs,
-      maxToolCalls: this.vmOptions.maxSteps || 100,
-      maxIterations: 10000,
+      maxToolCalls: maxToolCallsOf(this.vmOptions),
+      maxIterations: MAX_ITERATIONS_PER_LOOP,
       maxSanitizeDepth: this.vmOptions.maxSanitizeDepth,
       maxSanitizeProperties: this.vmOptions.maxSanitizeProperties,
       toolHandler,
@@ -291,7 +301,21 @@ export default class EnclaveService {
     }
 
     // Handle error cases
-    const error = result.error ?? { name: 'Error', message: 'Script execution failed' };
+    const reportedError = result.error ?? { name: 'Error', message: 'Script execution failed' };
+
+    // A script a failing tool ended, the tool's error uncaught (or rethrown): the sandbox hands back
+    // only the error's name and message, so it is matched to the failure the tool handler threw by
+    // both. A script that caught the failure and threw its own error with the same message is not
+    // matched: its error has the sandbox's own name, not the tool's.
+    const toolFailure = [...toolFailures]
+      .reverse()
+      .find((failure) => failure.message === reportedError.message && failure.name === reportedError.name);
+
+    // The sandbox's own iteration-limit error, not a tool's whose message starts the same way.
+    const error =
+      !toolFailure && reportedError.message?.startsWith(ITERATION_LIMIT_PREFIX)
+        ? { ...reportedError, ...ITERATION_LIMIT_ERROR }
+        : reportedError;
 
     // A script that doesn't parse: the sandbox reports it as a generic error of its own.
     if (error.code === 'ENCLAVE_ERROR' && error.message?.startsWith(PARSE_FAILURE_PREFIX)) {
@@ -305,13 +329,6 @@ export default class EnclaveService {
       };
     }
 
-    // A script a failing tool ended, the tool's error uncaught (or rethrown): the sandbox hands back
-    // only the error's name and message, so it is matched to the failure the tool handler threw by
-    // both. A script that caught the failure and threw its own error with the same message is not
-    // matched: its error has the sandbox's own name, not the tool's.
-    const toolFailure = [...toolFailures]
-      .reverse()
-      .find((failure) => failure.message === error.message && failure.name === error.name);
     if (toolFailure) {
       return {
         success: false,

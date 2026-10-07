@@ -143,16 +143,10 @@ describe('OpenapiAdapter options that 1.9.1 ignored (#767)', () => {
   }
 
   it('matches excludeMethods and includeMethods whatever their case', async () => {
-    const excludeUpper = ['DELETE', 'Put', 'POST'] as unknown as NonNullable<
-      OpenApiAdapterOptions['generateOptions']
-    >['excludeMethods'];
-
-    expect(await namesOf(adapterFor({ generateOptions: { excludeMethods: excludeUpper } }))).not.toContain(
+    expect(await namesOf(adapterFor({ generateOptions: { excludeMethods: ['DELETE', 'Put', 'POST'] } }))).not.toContain(
       'deleteUser',
     );
-    expect(
-      await namesOf(adapterFor({ generateOptions: { includeMethods: ['DELETE'] as unknown as ['delete'] } })),
-    ).toEqual(['deleteUser']);
+    expect(await namesOf(adapterFor({ generateOptions: { includeMethods: ['DELETE'] } }))).toEqual(['deleteUser']);
   });
 
   it('refuses a method name that is not an HTTP method', () => {

@@ -10,6 +10,7 @@ import {
   resolveServingMode,
   type ToolResponseContent,
 } from '@frontmcp/uipack/adapters';
+import { WIDGET_CALL_META_KEY } from '@frontmcp/uipack/bridge-runtime';
 import {
   awaitOutsideRequest,
   findNonFiniteNumber,
@@ -115,6 +116,13 @@ interface ElicitationFallbackResponse {
       instructions: string;
     };
   };
+}
+
+/** Whether a `tools/call`'s `_meta` marks it as a widget's own call (see `WIDGET_CALL_META_KEY`). */
+function isWidgetCall(requestMeta: unknown): boolean {
+  return (
+    typeof requestMeta === 'object' && requestMeta !== null && Reflect.get(requestMeta, WIDGET_CALL_META_KEY) === true
+  );
 }
 
 const inputSchema = z.object({
@@ -1283,9 +1291,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const rawOutput = declaredOutput(tool, executeOutput);
 
     // Skip UI for calls that want the data only: an agent's tool calls, and the calls a widget
-    // makes back to the server through `ui/callServerTool`
+    // makes back to the server, through `ui/callServerTool` or a `tools/call` its bridge marks
     const ctx = this.input.ctx;
-    if (ctx?._skipUI) {
+    if (ctx?._skipUI || isWidgetCall(input?.['_meta'])) {
       this.logger.verbose('applyUI:skip (agent or widget call - structured data only)');
       return;
     }

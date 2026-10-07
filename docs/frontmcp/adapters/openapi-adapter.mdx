@@ -23,7 +23,9 @@ The OpenAPI Adapter automatically converts OpenAPI 3.x specifications into fully
   `enum`, a missing required field) fails with `Invalid arguments for tool '<name>': <field>: <problem>` before any
   request is sent; up to 1.9.1 such arguments were sent as given. `format` is not enforced (it is an annotation in
   JSON Schema 2020-12), a `oneOf` is accepted when any branch matches, and a credential argument
-  (`securitySchemesInInput`) may be left out when the server supplies the credential
+  (`securitySchemesInInput`) may be left out when the server supplies the credential. A required parameter with a
+  spec `default` that the model leaves out is sent with that default (up to 1.9.2 the call failed with
+  `Required query parameter '<name>' … is missing`)
 - **Flexible** — Filter operations, customize schemas, and inject custom logic
 
 ## Installation
@@ -382,7 +384,7 @@ OpenapiAdapter.init({
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
   generateOptions: {
-    excludeMethods: ['delete', 'put'], // lower-case method names
+    excludeMethods: ['delete', 'PUT'], // any case
   },
 });
 ```
@@ -422,14 +424,14 @@ OpenapiAdapter.init({
 
 </CodeGroup>
 
-| Option                                    | Type              | Keeps an operation when…                                                    |
-| ----------------------------------------- | ----------------- | --------------------------------------------------------------------------- |
-| `includeTags` / `excludeTags`             | `string[]`        | it carries one of the tags / none of the tags                               |
-| `includeMethods` / `excludeMethods`       | `HTTPMethod[]`    | its method (`'get'`, `'post'`, …, any case) is listed / is not listed       |
-| `includePaths` / `excludePaths`           | `string[]`        | its path matches one of the globs / none of the globs                       |
-| `includeOperations` / `excludeOperations` | `string[]`        | its `operationId` is listed (one without an id is left out) / is not listed |
-| `readOnlyOnly`                            | `boolean`         | its effective annotations say `readOnlyHint: true`                          |
-| `filterFn`                                | `(op) => boolean` | the function returns `true` (runs after every other filter)                 |
+| Option                                    | Type                  | Keeps an operation when…                                                    |
+| ----------------------------------------- | --------------------- | --------------------------------------------------------------------------- |
+| `includeTags` / `excludeTags`             | `string[]`            | it carries one of the tags / none of the tags                               |
+| `includeMethods` / `excludeMethods`       | `OpenApiHttpMethod[]` | its method (`'get'`, `'GET'`, `'Get'`, …) is listed / is not listed         |
+| `includePaths` / `excludePaths`           | `string[]`            | its path matches one of the globs / none of the globs                       |
+| `includeOperations` / `excludeOperations` | `string[]`            | its `operationId` is listed (one without an id is left out) / is not listed |
+| `readOnlyOnly`                            | `boolean`             | its effective annotations say `readOnlyHint: true`                          |
+| `filterFn`                                | `(op) => boolean`     | the function returns `true` (runs after every other filter)                 |
 
 Filters combine: an operation becomes a tool only when it passes every filter you set. Deprecated operations are left out unless `includeDeprecated: true`. A method name that is not an HTTP method (`'remove'`) stops the adapter at construction instead of matching nothing. Up to 1.9.1 an upper-case method name (`'DELETE'`) silently matched nothing, and `includeOperations` let operations without an `operationId` through.
 
@@ -525,6 +527,10 @@ OpenapiAdapter.init({
 ```
 
 </CodeGroup>
+
+An input a transform fills in is the server's: when the model sends a value for it anyway, that value is dropped
+before the arguments are checked, and the injected one is sent. In 1.9.2 such a call was refused with
+`Unrecognized key`.
 
 <Check>
   **Security Benefit:** Sensitive inputs like tenant IDs and user IDs are injected server-side, never exposed to MCP clients.
@@ -842,6 +848,11 @@ paths:
 | `tags`              | `string[]` | Categorization tags                                                                       |
 | `hideFromDiscovery` | `boolean`  | Hide from tool listing                                                                    |
 | `examples`          | `array`    | Usage examples with input/output                                                          |
+| `icons`             | `array`    | The tool's icons, `{ src, mimeType?, sizes? }`                                            |
+| `meta`              | `object`   | Entries for the tool's `_meta`                                                            |
+
+A field not in this table is ignored with an `Unknown field '<name>' in x-frontmcp (will be ignored)` warning. Up to
+1.9.2 `icons` and `meta` got that warning too, though the tool received them.
 
 <Tip>
   Use `x-frontmcp` in your OpenAPI spec for declarative configuration.

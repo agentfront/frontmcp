@@ -666,6 +666,11 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
             }
           }
 
+          // OpenAI Apps SDK: whether the widget may call tools itself (`window.openai.callTool`)
+          if (uiConfig.widgetAccessible !== undefined) {
+            meta['openai/widgetAccessible'] = uiConfig.widgetAccessible;
+          }
+
           item._meta = { ...item._meta, ...meta };
         }
 

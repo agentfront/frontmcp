@@ -12,7 +12,7 @@ import type { ImportResolver } from '../resolver/types';
 import { buildShell } from '../shell/builder';
 import { createTemplateHelpers, hasSizing } from '../shell/data-injector';
 import { isTrustedHtml } from '../shell/trusted-html';
-import type { WidgetSizing } from '../shell/types';
+import type { ShellConfig, WidgetSizing } from '../shell/types';
 import { escapeHtml } from '../utils';
 import { MCP_APPS_MIME_TYPE } from './constants';
 import { detectContentType } from './content-detector';
@@ -49,6 +49,8 @@ export interface RenderToolTemplateOptions {
    * shell, and is mirrored onto the returned `meta` as `ui/preferredHeight` etc.
    */
   sizing?: WidgetSizing;
+  /** `ui.displayMode`: the display mode the page asks the host for once its bridge connects. */
+  displayMode?: ShellConfig['displayMode'];
   /**
    * Extra origins the widget may load from (`resourceDomains`) or call (`connectDomains`), from the
    * tool's `ui.csp`. Merged into the page's own Content-Security-Policy on every template path.
@@ -56,7 +58,7 @@ export interface RenderToolTemplateOptions {
   csp?: { connectDomains?: string[]; resourceDomains?: string[] };
   /**
    * HTML-escape a plain string returned by a template function; results built with
-   * `html` / `trustedHtml` stay markup. Unset is the 1.9 default: strings are escaped, and a
+   * `html` / `trustedHtml` stay markup. Unset is the default since 1.9.2: strings are escaped, and a
    * one-time notice per tool is logged when one looked like markup. `true` escapes without the
    * notice; `false` renders strings that look like HTML as markup.
    */
@@ -116,7 +118,7 @@ function noticeStringResult(toolName: string, logger: { warn: (message: string) 
   noticedStringResultTools.add(toolName);
   logger.warn(
     `[frontmcp] The UI template of tool "${toolName}" returned a plain string containing markup. ` +
-      'FrontMCP 1.9 HTML-escapes plain string results by default, so it is shown as text. Build the markup with ' +
+      'Since 1.9.2, FrontMCP HTML-escapes plain string results by default, so it is shown as text. Build the markup with ' +
       'ctx.helpers.html`…` (interpolated values are escaped) or wrap safe markup with ctx.helpers.trustedHtml(). ' +
       'Set ui.escapeStringResults: false to render plain strings as markup, or true to silence this notice. ' +
       `See ${STRING_RESULT_DOCS}`,
@@ -236,6 +238,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     includeBridge: true,
     resolver,
     sizing,
+    displayMode: options.displayMode,
     csp: options.csp ? buildCspConfig(resolver, options.csp) : undefined,
   };
 

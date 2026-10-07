@@ -78,7 +78,10 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
   private poller: OpenApiSpecPoller | null = null;
   private updateCallbacks = new Set<(response: FrontMcpAdapterResponse) => void>();
   private rebuildChain: Promise<void> = Promise.resolve();
-  private readonly methodFilters: { includeMethods?: HttpMethod[]; excludeMethods?: HttpMethod[] };
+  private readonly methodFilters: {
+    includeMethods: HttpMethod[] | undefined;
+    excludeMethods: HttpMethod[] | undefined;
+  };
 
   constructor(options: OpenApiAdapterOptions) {
     super();

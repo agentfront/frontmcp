@@ -11,7 +11,7 @@ import {
 
 import type { ResolvedCodeCallVmOptions } from '../codecall.symbol';
 
-type ScriptPolicyOptions = Pick<ResolvedCodeCallVmOptions, 'allowLoops'>;
+type ScriptPolicyOptions = Pick<ResolvedCodeCallVmOptions, 'allowLoops' | 'disabledBuiltins' | 'disabledGlobals'>;
 
 interface AstNode {
   type: string;
@@ -70,29 +70,40 @@ function visitIdentifierReferences(
   }
 }
 
-/** Refuses references to the global `console`; a property or key named `console` is not one. */
-class GlobalConsoleRule implements ValidationRule {
-  readonly name = 'codecall-global-console';
-  readonly description = 'console is not available in CodeCall scripts';
+/** Refuses references to the globals it has messages for; a property or key with such a name is not one. */
+class DisallowedGlobalsRule implements ValidationRule {
+  readonly name = 'codecall-disallowed-globals';
+  readonly description = 'Globals CodeCall scripts may not use';
   readonly defaultSeverity = ValidationSeverity.ERROR;
   readonly enabledByDefault = true;
 
+  constructor(private readonly messages: ReadonlyMap<string, string>) {}
+
   validate(context: ValidationContext): void {
     visitIdentifierReferences(context.ast as unknown as AstNode, (identifier) => {
-      if (identifier.name !== 'console') return;
+      const message = identifier.name === undefined ? undefined : this.messages.get(identifier.name);
+      if (message === undefined) return;
       context.report({
         code: 'DISALLOWED_IDENTIFIER',
-        message: 'console is not available in CodeCall scripts; use mcpLog(level, message)',
+        message,
         location: identifier.loc ? { line: identifier.loc.start.line, column: identifier.loc.start.column } : undefined,
-        data: { identifier: 'console' },
+        data: { identifier: identifier.name },
       });
     });
   }
 }
 
-function scriptPolicyRules({ allowLoops }: ScriptPolicyOptions): ValidationRule[] {
-  const rules: ValidationRule[] = [new GlobalConsoleRule()];
-  if (!allowLoops) {
+function disallowedGlobalMessages({ disabledBuiltins, disabledGlobals }: ScriptPolicyOptions): Map<string, string> {
+  return new Map([
+    ...disabledBuiltins.map((name): [string, string] => [name, `${name} is disabled by vm.disabledBuiltins`]),
+    ...disabledGlobals.map((name): [string, string] => [name, `${name} is disabled by vm.disabledGlobals`]),
+    ['console', 'console is not available in CodeCall scripts; use mcpLog(level, message)'],
+  ]);
+}
+
+function scriptPolicyRules(options: ScriptPolicyOptions): ValidationRule[] {
+  const rules: ValidationRule[] = [new DisallowedGlobalsRule(disallowedGlobalMessages(options))];
+  if (!options.allowLoops) {
     rules.push(
       new ForbiddenLoopRule({
         allowFor: false,
@@ -108,10 +119,11 @@ function scriptPolicyRules({ allowLoops }: ScriptPolicyOptions): ValidationRule[
 }
 
 /**
- * The places a script uses a loop `vm.allowLoops: false` turns off, or `console`, which the sandbox
- * never gives a script, in the script's own lines. The sandbox takes no loop option, so CodeCall
- * checks before it runs the script, parsing it the way the sandbox does. A script none of those
- * parses accept is left to the sandbox, which fails on the same parse and reports the syntax error.
+ * The places a script uses a loop `vm.allowLoops: false` turns off, a global `vm.disabledBuiltins` or
+ * `vm.disabledGlobals` lists, or `console`, which the sandbox never gives a script, in the script's
+ * own lines. The sandbox takes no option for these, so CodeCall checks before it runs the script,
+ * parsing it the way the sandbox does. A script none of those parses accept is left to the sandbox,
+ * which fails on the same parse and reports the syntax error.
  */
 export async function findScriptPolicyIssues(code: string, options: ScriptPolicyOptions): Promise<ValidationIssue[]> {
   const validator = new JSAstValidator(scriptPolicyRules(options));

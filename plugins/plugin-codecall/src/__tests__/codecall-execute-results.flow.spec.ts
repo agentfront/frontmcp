@@ -10,7 +10,15 @@
 import 'reflect-metadata';
 
 import { Client, type CallToolResult } from '@frontmcp/protocol';
-import { App, createInMemoryServer, FrontMcpInstance, LogLevel, Tool, ToolContext } from '@frontmcp/sdk';
+import {
+  App,
+  createInMemoryServer,
+  FrontMcpInstance,
+  LogLevel,
+  PublicMcpError,
+  Tool,
+  ToolContext,
+} from '@frontmcp/sdk';
 
 import CodeCallPlugin from '../codecall.plugin';
 
@@ -28,6 +36,14 @@ function recordingTool(name: string, failure?: string) {
     }
   }
   return RecordingTool;
+}
+
+/** A tool whose own error, passed to the client as it is, starts like the sandbox's iteration-limit error. */
+@Tool({ name: 'mail.import', description: 'Imports mail for the results spec', inputSchema: {} })
+class ImportMailTool extends ToolContext {
+  async execute(): Promise<never> {
+    throw new PublicMcpError('Maximum iteration limit exceeded in the validation of 50000 rows');
+  }
 }
 
 interface ExecuteOutcome {
@@ -49,6 +65,7 @@ describe('codecall:execute result kinds', () => {
         recordingTool('mail.send'),
         recordingTool('mail.fail', `mail.fail failed at ${process.cwd()}/internal/secret.ts:12:3`),
         recordingTool('mail.slow', 'the upstream request timed out'),
+        ImportMailTool,
         // Names the sandbox refuses as namespace methods or tool names: they must not break the
         // namespaces a script can use.
         recordingTool('mail.fetch'),
@@ -136,6 +153,20 @@ describe('codecall:execute result kinds', () => {
 
       expect(outcome.status).toBe('tool_error');
       expect(outcome.error).toMatchObject({ toolName: 'mail.slow', code: 'TIMEOUT' });
+    });
+
+    it("keeps a tool's error that reads like the sandbox's iteration limit", async () => {
+      const outcome = await run("return await callTool('mail.import', {});");
+
+      expect(outcome).toEqual({
+        status: 'tool_error',
+        error: {
+          source: 'tool',
+          toolName: 'mail.import',
+          message: 'Maximum iteration limit exceeded in the validation of 50000 rows',
+          code: 'VALIDATION',
+        },
+      });
     });
 
     it('reports a tool call the policy refused', async () => {

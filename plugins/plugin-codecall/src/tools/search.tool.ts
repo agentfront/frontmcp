@@ -4,6 +4,7 @@ import { getCallSurface, Tool, ToolContext } from '@frontmcp/sdk';
 import { ToolSearchService } from '../services';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import {
+  DEFAULT_MIN_RELEVANCE_SCORE,
   searchToolDescription,
   searchToolInputSchema,
   searchToolOutputSchema,
@@ -40,7 +41,7 @@ interface ToolMatch {
 })
 export default class SearchTool extends ToolContext {
   async execute(input: SearchToolInput): Promise<SearchToolOutput> {
-    const { queries, appIds, excludeToolNames = [], topK, minRelevanceScore = 0.3 } = input;
+    const { queries, appIds, excludeToolNames = [], topK, minRelevanceScore = DEFAULT_MIN_RELEVANCE_SCORE } = input;
 
     const searchService = this.get(ToolSearchService);
     const warnings: SearchToolOutput['warnings'] = [];

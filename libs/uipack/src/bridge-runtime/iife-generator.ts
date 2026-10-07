@@ -8,6 +8,15 @@
  */
 
 /**
+ * The `_meta` key the bridge sets on a widget's own `tools/call`, so the server answers with the
+ * data and does not render the tool's page again into a widget that is already on screen.
+ */
+export const WIDGET_CALL_META_KEY = 'frontmcp/widgetCall';
+
+/** The display modes a widget supports, declared to an MCP Apps host in `ui/initialize`. */
+export const MCP_APPS_DISPLAY_MODES = ['inline', 'fullscreen', 'pip'] as const;
+
+/**
  * Options for generating the bridge IIFE.
  */
 export interface IIFEGeneratorOptions {
@@ -107,6 +116,8 @@ export function generateBridgeIIFE(options: IIFEGeneratorOptions = {}): string {
   parts.push('bridge.initialize().then(function() {');
   parts.push('  log("Bridge initialized with adapter: " + bridge.adapterId);');
   parts.push('  window.dispatchEvent(new CustomEvent("bridge:ready", { detail: { adapter: bridge.adapterId } }));');
+  // The display mode the tool's `ui.displayMode` asks for, requested only from a host that offers it
+  parts.push('  if (window.__mcpDisplayMode) bridge.requestDisplayMode(window.__mcpDisplayMode).catch(function() {});');
   parts.push('}).catch(function(err) {');
   parts.push('  console.error("[FrontMcpBridge] Init failed:", err);');
   parts.push('  window.dispatchEvent(new CustomEvent("bridge:error", { detail: { error: err } }));');
@@ -490,6 +501,9 @@ var OpenAIAdapter = {
     return Promise.resolve();
   },
   requestDisplayMode: function(context, mode) {
+    if (window.openai && typeof window.openai.requestDisplayMode === 'function') {
+      return Promise.resolve(window.openai.requestDisplayMode({ mode: mode }));
+    }
     return Promise.resolve();
   },
   setSize: function(context, size) {
@@ -532,6 +546,7 @@ var ExtAppsAdapter = {
   hostCapabilities: {},
   handshakeSettled: false,
   pendingSize: null,
+  modelContext: null,
   canHandle: function() {
     if (typeof window === 'undefined') return false;
     if (window.parent === window) return false;
@@ -610,7 +625,18 @@ var ExtAppsAdapter = {
 
     if ('method' in data && !('id' in data)) {
       this.handleNotification(context, data);
+      return;
     }
+
+    if ('method' in data && 'id' in data) {
+      this.handleRequest(context, data, event.origin);
+    }
+  },
+  handleRequest: function(context, request, origin) {
+    // ui/resource-teardown: the host is about to unmount the view; reply once listeners have cleaned up.
+    if (request.method !== 'ui/resource-teardown') return;
+    window.dispatchEvent(new CustomEvent('bridge:teardown', { detail: {} }));
+    window.parent.postMessage({ jsonrpc: '2.0', id: request.id, result: {} }, origin);
   },
   handleNotification: function(context, notification) {
     var params = notification.params || {};
@@ -635,6 +661,7 @@ var ExtAppsAdapter = {
         Object.assign(context.hostContext, params);
         context.notifyContextChange(params);
         break;
+      case 'ui/notifications/tool-cancelled':
       case 'ui/notifications/cancelled':
         window.dispatchEvent(new CustomEvent('tool:cancelled', { detail: { reason: params.reason } }));
         break;
@@ -699,7 +726,7 @@ var ExtAppsAdapter = {
     var id = ++this.requestId;
     var params = {
       appInfo: { name: 'FrontMCP Widget', version: '1.0.0' },
-      appCapabilities: { tools: { listChanged: false } },
+      appCapabilities: { tools: { listChanged: false }, availableDisplayModes: ${JSON.stringify(MCP_APPS_DISPLAY_MODES)} },
       protocolVersion: '2024-11-05'
     };
 
@@ -767,20 +794,25 @@ var ExtAppsAdapter = {
       return Promise.reject(new Error('Server tool proxy not supported'));
     }
     // Per ext-apps spec: use standard MCP method 'tools/call' (not 'ui/callServerTool')
-    return this.sendRequest('tools/call', { name: name, arguments: args || {} });
+    return this.sendRequest('tools/call', { name: name, arguments: args || {}, _meta: { '${WIDGET_CALL_META_KEY}': true } });
   },
   sendMessage: function(context, content) {
     return this.sendRequest('ui/message', { content: content });
   },
   openLink: function(context, url) {
-    if (!this.hostCapabilities.openLink) {
+    if (!this.hostCapabilities.openLinks && !this.hostCapabilities.openLink) {
       window.open(url, '_blank', 'noopener,noreferrer');
       return Promise.resolve();
     }
-    return this.sendRequest('ui/openLink', { url: url });
+    return this.sendRequest('ui/open-link', { url: url });
   },
   requestDisplayMode: function(context, mode) {
-    return this.sendRequest('ui/setDisplayMode', { mode: mode });
+    // Ask only for a mode the host offers; it answers with the mode it actually set.
+    var offered = context.hostContext.availableDisplayModes;
+    if (!Array.isArray(offered) || offered.indexOf(mode) === -1) {
+      return Promise.reject(new Error('Display mode "' + mode + '" is not available on this host'));
+    }
+    return this.sendRequest('ui/request-display-mode', { mode: mode });
   },
   setSize: function(context, size) {
     // Standard ext-apps sizing: the view tells the host its dimensions with the
@@ -801,14 +833,22 @@ var ExtAppsAdapter = {
     return this.sendNotification('ui/notifications/size-changed', params);
   },
   requestClose: function(context) {
-    return this.sendRequest('ui/close', {});
+    // The host decides whether to tear the view down; it answers with ui/resource-teardown if it does.
+    return this.sendNotification('ui/notifications/request-teardown', {});
   },
   // Extended ext-apps methods (full specification)
   updateModelContext: function(context, data, merge) {
-    if (!this.hostCapabilities.modelContextUpdate) {
+    if (!this.hostCapabilities.updateModelContext && !this.hostCapabilities.modelContextUpdate) {
       return Promise.reject(new Error('Model context update not supported'));
     }
-    return this.sendRequest('ui/updateModelContext', { context: data, merge: merge !== false });
+    // The host keeps only the latest update, so an object merges into the last one here.
+    var isObject = data !== null && typeof data === 'object' && !Array.isArray(data);
+    var modelContext = isObject && merge !== false ? Object.assign({}, this.modelContext, data) : data;
+    this.modelContext = isObject ? modelContext : null;
+    var text = typeof modelContext === 'string' ? modelContext : JSON.stringify(modelContext);
+    var params = { content: [{ type: 'text', text: text }] };
+    if (isObject) params.structuredContent = modelContext;
+    return this.sendRequest('ui/update-model-context', params);
   },
   log: function(context, level, message, data) {
     if (!this.hostCapabilities.logging) {
@@ -817,7 +857,10 @@ var ExtAppsAdapter = {
       logFn('[Widget] ' + message, data);
       return Promise.resolve();
     }
-    return this.sendRequest('ui/log', { level: level, message: message, data: data });
+    return this.sendNotification('notifications/message', {
+      level: level === 'warn' ? 'warning' : level,
+      data: data === undefined ? message : { message: message, data: data }
+    });
   },
   registerTool: function(context, name, description, inputSchema) {
     if (!this.hostCapabilities.widgetTools) {
@@ -1237,8 +1280,10 @@ FrontMcpBridge.prototype.openLink = function(url) {
 FrontMcpBridge.prototype.requestDisplayMode = function(mode) {
   if (!this._adapter) return Promise.reject(new Error('Not initialized'));
   var self = this;
-  return this._adapter.requestDisplayMode(this._context, mode).then(function() {
-    self._context.hostContext.displayMode = mode;
+  return this._adapter.requestDisplayMode(this._context, mode).then(function(result) {
+    // The host may set another mode than the one asked for, e.g. when it refuses the change.
+    var setMode = result && result.mode;
+    if (${JSON.stringify(MCP_APPS_DISPLAY_MODES)}.indexOf(setMode) !== -1) self._context.hostContext.displayMode = setMode;
   });
 };
 

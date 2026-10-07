@@ -8,16 +8,28 @@ describe('describeIgnoredUiOptions (#645)', () => {
   });
 
   it('names a single ignored option in the singular', () => {
-    const [message] = describeIgnoredUiOptions('weather', { prefersBorder: true });
+    const [message] = describeIgnoredUiOptions('weather', { hydrate: true });
     expect(message).toContain('Tool "weather"');
-    expect(message).toContain('`ui.prefersBorder` is accepted but not used yet');
+    expect(message).toContain('`ui.hydrate` is accepted but not used yet');
   });
 
   it('lists several ignored options in one message', () => {
-    const messages = describeIgnoredUiOptions('weather', { widgetDescription: 'd', hydrate: true, bundlingMode: 'x' });
+    const messages = describeIgnoredUiOptions('weather', { uiType: 'html', hydrate: true, bundlingMode: 'x' });
     expect(messages).toHaveLength(1);
-    expect(messages[0]).toContain('`ui.widgetDescription`, `ui.hydrate`, `ui.bundlingMode`');
+    expect(messages[0]).toContain('`ui.hydrate`, `ui.bundlingMode`, `ui.uiType`');
     expect(messages[0]).toContain('are accepted but not used yet');
+  });
+
+  it('says nothing about the options sent to the host', () => {
+    expect(
+      describeIgnoredUiOptions('weather', {
+        widgetDescription: 'd',
+        widgetAccessible: true,
+        displayMode: 'fullscreen',
+        prefersBorder: true,
+        sandboxDomain: 'https://weather.example',
+      }),
+    ).toEqual([]);
   });
 
   it.each(['direct-url', 'custom-url'])('flags servingMode %s as not implemented', (servingMode) => {

@@ -1,9 +1,25 @@
-import type { GenerateOptions, LoadOptions, McpOpenAPITool, SecurityContext, ToolMetadata } from 'mcp-from-openapi';
+import type {
+  GenerateOptions,
+  HTTPMethod,
+  LoadOptions,
+  McpOpenAPITool,
+  SecurityContext,
+  ToolMetadata,
+} from 'mcp-from-openapi';
 import { type OpenAPIV3, type OpenAPIV3_1 } from 'openapi-types';
 
 import type { FrontMcpContext, FrontMcpLogger, ToolAnnotations, ToolExample, ToolUIConfig } from '@frontmcp/sdk';
 
 import type { SpecPollerOptions } from './openapi-spec-poller.types';
+
+/** An HTTP method in any of its usual cases; `includeMethods` and `excludeMethods` ignore the case. */
+export type OpenApiHttpMethod = HTTPMethod | Uppercase<HTTPMethod> | Capitalize<HTTPMethod>;
+
+/** `GenerateOptions` from mcp-from-openapi, with method filters that take any case. */
+export type OpenApiGenerateOptions = Omit<GenerateOptions, 'includeMethods' | 'excludeMethods'> & {
+  includeMethods?: OpenApiHttpMethod[];
+  excludeMethods?: OpenApiHttpMethod[];
+};
 
 // ============================================================================
 // Input Transform Types
@@ -786,7 +802,7 @@ interface BaseOptions {
    * Options for generating tools from the OpenAPI specification
    * @see GenerateOptions from mcp-from-openapi
    */
-  generateOptions?: GenerateOptions;
+  generateOptions?: OpenApiGenerateOptions;
 
   /**
    * Specify which security schemes should be included in the tool's input schema.
