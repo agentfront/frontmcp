@@ -40,7 +40,7 @@ import {
 } from '../../common';
 import { callSurfaceOf, entryUnavailableError, isOfferedOnSurface } from '../../common/availability';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
-import { lookupTool, toolNameCandidates } from '../../common/utils/tool-lookup.utils';
+import { lookupTool, ownerQualifiedName, toolNameCandidates } from '../../common/utils/tool-lookup.utils';
 import { runOnSurface } from '../../context/call-surface';
 import { runAsTool } from '../../context/running-tool';
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
@@ -306,7 +306,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // When the resolution came through the alias rather than the original
     // request name, log a one-time deprecation hint so callers can migrate
     // off the legacy spelling.
-    if (tool && tool.fullName !== name && tool.name !== name) {
+    const exactNames = [name, ownerQualifiedName(name)];
+    if (tool && !exactNames.includes(tool.fullName) && !exactNames.includes(tool.name)) {
       const [, alias] = toolNameCandidates(name);
       this.logger.warn(
         `findTool: tool "${name}" resolved via legacy name alias to "${alias}". ` +
@@ -322,7 +323,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // This is a REGISTRY-LEVEL constraint (availableWhen), not HTTP/flow-level auth.
       // A tool the caller's surface isn't offered is never reported as existing (see below).
       const allUnfiltered = this.scope.tools.listAllInstances();
-      const unavailable = allUnfiltered.find((t) => t.fullName === name || t.name === name);
+      const unavailable = allUnfiltered.find((t) => exactNames.includes(t.fullName) || exactNames.includes(t.name));
       if (unavailable && isOfferedOnSurface(unavailable.metadata.availableWhen, callSurface)) {
         // Issue #417 — the structured error names the axes that blocked the call, judged for the
         // call's own surface (none for in-process dispatch), as the prompt and resource flows do.

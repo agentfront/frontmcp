@@ -425,9 +425,22 @@ describe('DirectClientImpl', () => {
 
       await client.callTool('test_tool', { arg1: 'value1' });
 
-      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'test_tool',
-        arguments: { arg1: 'value1' },
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith(
+        { name: 'test_tool', arguments: { arg1: 'value1' } },
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should ask for progress when onProgress is given', async () => {
+      const mockScope = createMockScope();
+      const client = await DirectClientImpl.create(mockScope as Scope);
+      const onProgress = jest.fn();
+
+      await client.callTool('test_tool', {}, { onProgress });
+
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({ name: 'test_tool', arguments: {} }, undefined, {
+        onprogress: onProgress,
       });
     });
 
@@ -437,10 +450,7 @@ describe('DirectClientImpl', () => {
 
       await client.callTool('test_tool');
 
-      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'test_tool',
-        arguments: {},
-      });
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({ name: 'test_tool', arguments: {} }, undefined, undefined);
     });
 
     it('should format result for OpenAI platform', async () => {
@@ -778,37 +788,29 @@ describe('DirectClientImpl', () => {
       expect(handler).not.toHaveBeenCalled();
     });
 
-    it('submitElicitationResult should call MCP client with correct request', async () => {
-      mockMcpClient.request.mockResolvedValueOnce(undefined);
+    it('submitElicitationResult should call the sendElicitationResult tool and return its result', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({ content: [{ type: 'text', text: 'closed' }] });
 
-      await client.submitElicitationResult('elicit-123', { action: 'accept', content: { value: 42 } });
+      const result = await client.submitElicitationResult('elicit-123', { action: 'accept', content: { value: 42 } });
 
-      expect(mockMcpClient.request).toHaveBeenCalledWith(
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith(
         {
-          method: 'elicitation/result',
-          params: {
-            elicitId: 'elicit-123',
-            result: { action: 'accept', content: { value: 42 } },
-          },
+          name: 'sendElicitationResult',
+          arguments: { elicitId: 'elicit-123', action: 'accept', content: { value: 42 } },
         },
-        expect.anything(),
+        undefined,
+        undefined,
       );
+      expect(result).toEqual({ content: [{ type: 'text', text: 'closed' }] });
     });
 
     it('submitElicitationResult should handle decline response', async () => {
-      mockMcpClient.request.mockResolvedValueOnce(undefined);
-
       await client.submitElicitationResult('elicit-456', { action: 'decline' });
 
-      expect(mockMcpClient.request).toHaveBeenCalledWith(
-        {
-          method: 'elicitation/result',
-          params: {
-            elicitId: 'elicit-456',
-            result: { action: 'decline' },
-          },
-        },
-        expect.anything(),
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith(
+        { name: 'sendElicitationResult', arguments: { elicitId: 'elicit-456', action: 'decline' } },
+        undefined,
+        undefined,
       );
     });
 
@@ -833,15 +835,15 @@ describe('DirectClientImpl', () => {
       newClient.onElicitation(handler);
 
       // Simulate receiving an elicitation request and await the result
+      const expiresAt = Date.now() + 60000;
       expect(elicitationRequestHandler).toBeDefined();
       if (elicitationRequestHandler) {
         const result = await elicitationRequestHandler({
           params: {
-            elicitId: 'test-elicit-123',
             message: 'Please confirm',
             requestedSchema: { type: 'object' },
             mode: 'form',
-            expiresAt: Date.now() + 60000,
+            _meta: { 'frontmcp/elicitation': { elicitId: 'test-elicit-123', expiresAt } },
           },
         });
 
@@ -850,12 +852,13 @@ describe('DirectClientImpl', () => {
       }
 
       // Verify handler was called with the request
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({
-          elicitId: 'test-elicit-123',
-          message: 'Please confirm',
-        }),
-      );
+      expect(handler).toHaveBeenCalledWith({
+        elicitId: 'test-elicit-123',
+        expiresAt,
+        message: 'Please confirm',
+        requestedSchema: { type: 'object' },
+        mode: 'form',
+      });
     });
   });
 

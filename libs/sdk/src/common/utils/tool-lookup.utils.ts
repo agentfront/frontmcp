@@ -14,8 +14,23 @@ export function toolNameCandidates(name: string): string[] {
   return [name, name.includes('_') ? name.replace(/_/g, '-') : name.replace(/-/g, '_')];
 }
 
-/** Finds a tool by name or alias in the scope, then in remote apps whose tools have not reached the scope yet. */
+/**
+ * Finds a tool by name or alias in the scope, then in remote apps whose tools have not reached the scope yet. A name
+ * that finds nothing is read as `owner.name`, the full name `owner:name`, so `tools/call` and `this.callTool()`
+ * reach the same tools.
+ */
 export function lookupTool(scope: ToolLookupScope, name: string): ToolEntry | undefined {
+  const fullName = ownerQualifiedName(name);
+  return findTool(scope, name) ?? (fullName === undefined ? undefined : findTool(scope, fullName));
+}
+
+/** `owner.name` read as the full name `owner:name`, or `undefined` for a name without an owner part. */
+export function ownerQualifiedName(name: string): string | undefined {
+  const separator = name.indexOf('.');
+  return separator > 0 ? `${name.slice(0, separator)}:${name.slice(separator + 1)}` : undefined;
+}
+
+function findTool(scope: ToolLookupScope, name: string): ToolEntry | undefined {
   const candidateNames = toolNameCandidates(name);
   const matchesCandidate = (entry: { fullName: string; name: string }) =>
     candidateNames.includes(entry.fullName) || candidateNames.includes(entry.name);
@@ -31,17 +46,4 @@ export function lookupTool(scope: ToolLookupScope, name: string): ToolEntry | un
     }
   }
   return undefined;
-}
-
-/**
- * The name a call of `name` resolves by: `name` itself when {@link lookupTool} finds a tool by it, else
- * `owner.name` read as the full name `owner:name` when that finds one, else `name` (the flow reports it).
- */
-export function callableToolName(scope: Partial<ToolLookupScope>, name: string): string {
-  const { tools, providers } = scope;
-  if (!tools || lookupTool({ tools, providers }, name)) return name;
-  const separator = name.indexOf('.');
-  if (separator <= 0) return name;
-  const fullName = `${name.slice(0, separator)}:${name.slice(separator + 1)}`;
-  return lookupTool({ tools, providers }, fullName) ? fullName : name;
 }

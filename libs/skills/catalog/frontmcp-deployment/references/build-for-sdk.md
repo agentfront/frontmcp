@@ -140,13 +140,14 @@ create({
   adapters?: AdapterType[],
   auth?: AuthOptionsInput,
 
-  // Server-level
+  // Server-level: every other @FrontMcp option, passed on as it is (except http and splitByApp)
   redis?: RedisOptionsInput,
   transport?: TransportOptionsInput,
   logging?: LoggingOptionsInput,
   elicitation?: ElicitationOptionsInput,
   output?: OutputPolicy,  // as @FrontMcp({ output })
   throttle?: GuardConfig, // as @FrontMcp({ throttle })
+  fetch?, ui?, authorities?, instructions?, channels?, tasks?, health?, metrics?, observability?, // ...
 
   // create()-specific
   appName?: string,       // defaults to info.name
@@ -210,27 +211,34 @@ const tools = await client.listTools();
 ```typescript
 const client = await connectOpenAI(config, {
   clientInfo: { name: 'my-app', version: '1.0' },
-  session: { id: 'session-123', user: { sub: 'user-id', name: 'Alice' } },
+  session: { id: 'session-123', user: { sub: 'user-id', name: 'Alice' }, scopes: ['tickets:write'] },
   authToken: 'jwt-token-here',
   capabilities: { roots: { listChanged: true } },
 });
+
+// One app of a splitByApp server (or a standalone app's own endpoint): its tools only
+const billing = await connect(config, { app: 'billing' });
+const billingServer = await FrontMcpInstance.createDirect(config, { app: 'billing' });
 ```
+
+`server.dispose()` shuts the whole server down (every scope, the endpoints it doesn't serve included), as `FrontMcpInstance.shutdown()` does. An `app` without an endpoint of its own rejects after the server built for it is shut down; `connect()` then also disposes the shared server when no other client uses it, so the next `connect()` builds a new one.
 
 ## DirectClient API
 
 All `connect*()` functions return a `DirectClient` with these methods:
 
-| Method                   | Description                                                                                                                                                                     |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `listTools()`            | List tools in platform-specific format                                                                                                                                          |
-| `callTool(name, args)`   | Execute a tool; with an LLM platform format (OpenAI, Claude, LangChain, Vercel AI) a failed call (`isError`) rejects with `ToolCallError` (`message`, raw `result`)             |
-| `listResources()`        | List all resources (follows every page)                                                                                                                                         |
-| `readResource(uri)`      | Read a resource                                                                                                                                                                 |
-| `listPrompts()`          | List all prompts (follows every page)                                                                                                                                           |
-| `getPrompt(name, args)`  | Get a prompt                                                                                                                                                                    |
-| `onElicitation(handler)` | Answer the tools' `this.elicit()` questions. Pass `onElicitation` to `connect()` to declare elicitation; without it the tool gets the fallback flow (`submitElicitationResult`) |
-| `setLogLevel(level)`     | Set the `notifications/message` level                                                                                                                                           |
-| `close()`                | Clean up connection; clients of the same config share one server, disposed when the last of them closes                                                                         |
+| Method                                        | Description                                                                                                                                                                                                                                              |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listTools()`                                 | List tools in platform-specific format                                                                                                                                                                                                                   |
+| `callTool(name, args, options?)`              | Execute a tool; with an LLM platform format (OpenAI, Claude, LangChain, Vercel AI) a failed call (`isError`) rejects with `ToolCallError` (`message`, raw `result`). `{ onProgress }` sends a progress token, so the tool's `this.progress()` reaches it |
+| `listResources()`                             | List all resources (follows every page)                                                                                                                                                                                                                  |
+| `readResource(uri)`                           | Read a resource                                                                                                                                                                                                                                          |
+| `listPrompts()`                               | List all prompts (follows every page)                                                                                                                                                                                                                    |
+| `getPrompt(name, args)`                       | Get a prompt                                                                                                                                                                                                                                             |
+| `onElicitation(handler)`                      | Answer the tools' `this.elicit()` questions (the handler gets `elicitId`, `expiresAt`, `message`, `requestedSchema`, `mode`). Pass `onElicitation` to `connect()` to declare elicitation; without it the tool gets the fallback flow                     |
+| `submitElicitationResult(elicitId, response)` | Answer a fallback question (`_meta.elicitationPending.elicitId`): calls the `sendElicitationResult` tool and returns the waiting tool's result                                                                                                           |
+| `setLogLevel(level)`                          | Set the `notifications/message` level                                                                                                                                                                                                                    |
+| `close()`                                     | Clean up connection; clients of the same config share one server, disposed when the last of them closes. A `server.connect()` client leaves its server to `server.dispose()`                                                                             |
 
 ## SDK vs Node Target
 

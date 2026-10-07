@@ -195,6 +195,8 @@ class AnalyticsApp {}
 
 The type is: `standalone?: 'includeInParent' | boolean` (defaults to `false`).
 
+A `standalone` app (and, with `splitByApp: true`, every app) is served over HTTP at `<entryPath>/<appId>`, by the Node server and `createFetchHandler()` alike; with `splitByApp` nothing is served at the entry path itself (404, listing every endpoint's path). In process, `FrontMcpInstance.createDirect(config, { app: 'admin' })` and `connect(config, { app: 'admin' })` reach that app's own endpoint; without `app` they serve the server's main endpoint.
+
 ## Tool Namespacing
 
 A local app's tool keeps its own name while no other tool in the server shares it. When two tools share a name, each is listed with its owner's id as a prefix: `appId:toolName`.
