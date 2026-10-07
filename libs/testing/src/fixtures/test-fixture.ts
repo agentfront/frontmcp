@@ -182,9 +182,13 @@ function serverKey(config: TestConfig): string {
   });
 }
 
-/** Environment the fixture hands to the server it boots, so its entry file can follow `test.use({ auth })` */
+/**
+ * Environment the fixture hands to the server it boots: `test.use({ logLevel })` as the server's default log level,
+ * and `test.use({ auth })` for its entry file to follow.
+ */
 function serverEnv(config: TestConfig): Record<string, string> | undefined {
   const extra: Record<string, string> = {};
+  if (config.logLevel) extra['FRONTMCP_LOG_LEVEL'] = config.logLevel;
   if (config.auth?.mode) extra['FRONTMCP_TEST_AUTH_MODE'] = config.auth.mode;
   if (config.auth?.type) extra['FRONTMCP_TEST_AUTH_TYPE'] = config.auth.type;
   if (Object.keys(extra).length === 0 && !config.env) return undefined;

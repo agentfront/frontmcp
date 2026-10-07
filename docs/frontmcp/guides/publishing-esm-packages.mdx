@@ -39,6 +39,8 @@ interface FrontMcpPackageManifest {
 }
 ```
 
+`App.esm()` registers the manifest's `tools`, `resources` and `prompts`. Its `skills`, `agents`, `jobs`, `workflows` and `providers` are not loaded: the server logs a warning that names them. A tool that needs a provider resolves the server's providers.
+
 ---
 
 ## Step 1: Scaffold the Package

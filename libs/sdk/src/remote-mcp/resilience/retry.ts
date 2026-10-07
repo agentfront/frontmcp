@@ -85,14 +85,11 @@ export async function withRetry<T>(operation: () => Promise<T>, options: RetryOp
         throw lastError;
       }
 
-      // Calculate delay
-      const delayMs = calculateDelay(
-        attempt,
-        opts.initialDelayMs,
-        opts.maxDelayMs,
-        opts.backoffMultiplier,
-        opts.jitterFactor,
-      );
+      const retryAfterMs = remoteHttpFailureOf(lastError)?.retryAfterMs;
+      const delayMs =
+        retryAfterMs !== undefined
+          ? Math.min(retryAfterMs, opts.maxDelayMs)
+          : calculateDelay(attempt, opts.initialDelayMs, opts.maxDelayMs, opts.backoffMultiplier, opts.jitterFactor);
 
       // Notify retry callback
       opts.onRetry(attempt, lastError, delayMs);
@@ -107,48 +104,64 @@ export async function withRetry<T>(operation: () => Promise<T>, options: RetryOp
   throw lastError ?? new Error('No error captured during retry');
 }
 
+/** How a remote answered a request that failed over HTTP: its status, and the wait its `Retry-After` asked for. */
+export interface RemoteHttpFailure {
+  status: number;
+  retryAfterMs?: number;
+}
+
+interface HttpFailureFields {
+  http?: Partial<RemoteHttpFailure>;
+  code?: unknown;
+  originalError?: unknown;
+  cause?: unknown;
+  message?: unknown;
+}
+
+const LEGACY_SSE_STATUS = /\(HTTP (\d{3})\)/;
+
 /**
- * Common retryable error detection for MCP operations
+ * The HTTP failure behind `error` or an error it wraps (`originalError`, `cause`): the `http` the
+ * 2026-07-28 client records, the numeric `code` of the Streamable HTTP and SSE transports' errors (a
+ * JSON-RPC code is negative), or the `(HTTP 503)` the legacy SSE transport writes in its message.
+ */
+export function remoteHttpFailureOf(error: unknown): RemoteHttpFailure | undefined {
+  for (let current = error, depth = 0; current && typeof current === 'object' && depth < 5; depth++) {
+    const fields = current as HttpFailureFields;
+    if (typeof fields.http?.status === 'number') return { ...fields.http, status: fields.http.status };
+    const legacyStatus = typeof fields.message === 'string' ? LEGACY_SSE_STATUS.exec(fields.message)?.[1] : undefined;
+    const status = typeof fields.code === 'number' ? fields.code : Number(legacyStatus);
+    if (status >= 100 && status <= 599) return { status };
+    current = fields.originalError ?? fields.cause;
+  }
+  return undefined;
+}
+
+/** Statuses worth another try: request timeout, too early, too many requests, and server errors but 501 and 505. */
+function isTransientStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || (status >= 500 && status !== 501 && status !== 505);
+}
+
+/**
+ * Whether a failed remote operation is worth another try: by the HTTP status the remote answered with,
+ * else when the request failed on the network or timed out.
  */
 export function isTransientError(error: Error): boolean {
+  const httpFailure = remoteHttpFailureOf(error);
+  if (httpFailure) return isTransientStatus(httpFailure.status);
+
   const message = error.message?.toLowerCase() || '';
   const name = error.name?.toLowerCase() || '';
-
-  // Network errors
-  if (
+  return (
     message.includes('network') ||
     message.includes('econnrefused') ||
     message.includes('econnreset') ||
     message.includes('etimedout') ||
     message.includes('socket hang up') ||
-    message.includes('fetch failed')
-  ) {
-    return true;
-  }
-
-  // Timeout errors
-  if (message.includes('timeout') || name.includes('timeout')) {
-    return true;
-  }
-
-  // Temporary server errors (5xx)
-  if (
-    message.includes('502') ||
-    message.includes('503') ||
-    message.includes('504') ||
-    message.includes('bad gateway') ||
-    message.includes('service unavailable') ||
-    message.includes('gateway timeout')
-  ) {
-    return true;
-  }
-
-  // Rate limiting
-  if (message.includes('429') || message.includes('rate limit') || message.includes('too many requests')) {
-    return true;
-  }
-
-  return false;
+    message.includes('fetch failed') ||
+    message.includes('timeout') ||
+    name.includes('timeout')
+  );
 }
 
 /**

@@ -47,7 +47,10 @@ export interface TestConfig {
    * Use this for testing servers configured with `auth: { mode: 'public' }`.
    */
   publicMode?: boolean;
-  /** Server log level */
+  /**
+   * The booted server's log level (`FRONTMCP_LOG_LEVEL`), for a server whose `logging.level` isn't set.
+   * `debug` also prints the server's command and output.
+   */
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Environment variables to pass to the server */
   env?: Record<string, string>;

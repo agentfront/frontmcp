@@ -3,7 +3,15 @@
  * @description Barrel exports for remote MCP resilience utilities
  */
 
-export { withRetry, isTransientError, isConnectionError, isAuthError, type RetryOptions } from './retry';
+export {
+  withRetry,
+  isTransientError,
+  isConnectionError,
+  isAuthError,
+  remoteHttpFailureOf,
+  type RemoteHttpFailure,
+  type RetryOptions,
+} from './retry';
 
 export {
   CircuitBreaker,

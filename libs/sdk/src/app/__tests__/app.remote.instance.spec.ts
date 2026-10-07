@@ -55,6 +55,27 @@ describe('App.remote()', () => {
     return server;
   }
 
+  describe('remoteAuth', () => {
+    it("keeps mode 'mapped' and its mapper through the metadata schema, and hands it to the client", async () => {
+      const mapper = () => ({ type: 'apiKey' as const, value: 'key' });
+      const parsed = frontMcpRemoteAppMetadataSchema.parse(
+        App.remote('https://api.example.com/mcp', { remoteAuth: { mode: 'mapped', mapper } }),
+      );
+      expect(parsed.remoteAuth).toEqual({ mode: 'mapped', mapper });
+
+      await createGateway({ remoteAuth: { mode: 'mapped', mapper } });
+      expect(connect.mock.calls[0][0].auth).toEqual({ mode: 'mapped', mapper });
+    });
+
+    it('rejects a mapped mode without a mapper function', () => {
+      const result = frontMcpRemoteAppMetadataSchema.safeParse({
+        ...App.remote('https://api.example.com/mcp'),
+        remoteAuth: { mode: 'mapped', mapper: 'key' },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
   describe('transportOptions.protocolVersion', () => {
     it.each(['legacy', '2026-07-28', 'auto'] as const)('keeps "%s" through the metadata schema', (protocolVersion) => {
       const parsed = frontMcpRemoteAppMetadataSchema.parse(

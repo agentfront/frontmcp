@@ -5,6 +5,7 @@
  * replaced, by a minimal MCP server that records each request's headers.
  */
 import { createMockLogger } from '../../__test-utils__/fixtures/flow.fixtures';
+import { RemoteAuthError } from '../../errors';
 import { McpClientService } from '../mcp-client.service';
 import type { McpConnectRequest } from '../mcp-client.types';
 
@@ -19,7 +20,7 @@ function jwt(payload: Record<string, unknown>): string {
   return `${encode({ alg: 'none' })}.${encode(payload)}.`;
 }
 
-function fakeMcpServer(options: { failCallsBeforeSuccess?: number } = {}) {
+function fakeMcpServer(options: { failCallsBeforeSuccess?: number; failWithStatus?: number; hang?: boolean } = {}) {
   const requests: RecordedRequest[] = [];
   let failuresLeft = options.failCallsBeforeSuccess ?? 0;
   const fetchMock = jest.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
@@ -32,7 +33,11 @@ function fakeMcpServer(options: { failCallsBeforeSuccess?: number } = {}) {
       apiKey: headers.get('x-api-key'),
     });
     if (message.id === undefined) return new Response(null, { status: 202 });
-    if (message.method === 'tools/call' && failuresLeft-- > 0) throw new Error('fetch failed: ECONNRESET');
+    if (message.method === 'tools/call' && failuresLeft-- > 0) {
+      if (options.hang) return new Promise<Response>(() => undefined);
+      if (options.failWithStatus) return new Response('boom', { status: options.failWithStatus });
+      throw new Error('fetch failed: ECONNRESET');
+    }
     const results: Record<string, unknown> = {
       initialize: {
         protocolVersion: '2025-06-18',
@@ -136,12 +141,77 @@ describe('McpClientService — remoteAuth and retries', () => {
     expect(requests.find((request) => request.method === 'tools/call')?.apiKey).toBe('key-for-desk');
   });
 
+  it('fails the call with RemoteAuthError when the mapper throws', async () => {
+    fakeMcpServer();
+    await service.connect(
+      connectRequest({
+        auth: {
+          mode: 'mapped',
+          mapper: () => {
+            throw new Error('no key for this caller');
+          },
+        },
+      }),
+    );
+
+    await expect(service.callTool('upstream', 'echo', {})).rejects.toThrow(RemoteAuthError);
+  });
+
+  it('fails a call the remote refused with HTTP 401 with RemoteAuthError, without retrying it', async () => {
+    const { requests } = fakeMcpServer({ failCallsBeforeSuccess: 1, failWithStatus: 401 });
+    await service.connect(connectRequest({ transportOptions: { retryAttempts: 2, retryDelayMs: 1 } }));
+
+    await expect(service.callTool('upstream', 'echo', {})).rejects.toThrow(
+      'Authentication failed for remote server "upstream": the remote server refused the credentials (HTTP 401)',
+    );
+    expect(requests.filter((request) => request.method === 'tools/call')).toHaveLength(1);
+  });
+
   it('retries a call retryAttempts times, waiting retryDelayMs', async () => {
     const { requests } = fakeMcpServer({ failCallsBeforeSuccess: 2 });
     await service.connect(connectRequest({ transportOptions: { retryAttempts: 2, retryDelayMs: 1 } }));
 
     await expect(service.callTool('upstream', 'echo', {})).resolves.toEqual(expect.objectContaining({}));
     expect(requests.filter((request) => request.method === 'tools/call')).toHaveLength(3);
+  });
+
+  it.each([503, 429, 408])(
+    'retries a call the remote answered with HTTP %i, whatever the body says',
+    async (status) => {
+      const { requests } = fakeMcpServer({ failCallsBeforeSuccess: 2, failWithStatus: status });
+      await service.connect(connectRequest({ transportOptions: { retryAttempts: 2, retryDelayMs: 1 } }));
+
+      await expect(service.callTool('upstream', 'echo', {})).resolves.toEqual(expect.objectContaining({}));
+      expect(requests.filter((request) => request.method === 'tools/call')).toHaveLength(3);
+    },
+  );
+
+  it('retries a call that ran past transportOptions.timeout', async () => {
+    const { requests } = fakeMcpServer({ failCallsBeforeSuccess: 1, hang: true });
+    await service.connect(connectRequest({ transportOptions: { timeout: 50, retryAttempts: 2, retryDelayMs: 1 } }));
+
+    await expect(service.callTool('upstream', 'echo', {})).resolves.toEqual(expect.objectContaining({}));
+    expect(requests.filter((request) => request.method === 'tools/call')).toHaveLength(2);
+  });
+
+  it('clears the call timeout once the call settles', async () => {
+    fakeMcpServer();
+    await service.connect(connectRequest({ transportOptions: { timeout: 43_210 } }));
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+    const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
+
+    await service.callTool('upstream', 'echo', {});
+
+    const callTimeoutIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 43_210);
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(setTimeoutSpy.mock.results[callTimeoutIndex]?.value);
+  });
+
+  it('does not retry a call the remote rejected with HTTP 400', async () => {
+    const { requests } = fakeMcpServer({ failCallsBeforeSuccess: 1, failWithStatus: 400 });
+    await service.connect(connectRequest({ transportOptions: { retryAttempts: 2, retryDelayMs: 1 } }));
+
+    await expect(service.callTool('upstream', 'echo', {})).rejects.toThrow('boom');
+    expect(requests.filter((request) => request.method === 'tools/call')).toHaveLength(1);
   });
 
   it('does not retry with retryAttempts: 0', async () => {

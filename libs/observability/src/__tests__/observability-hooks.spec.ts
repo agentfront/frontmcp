@@ -484,13 +484,36 @@ describe('Auto-instrumentation Hooks', () => {
       expect(fetchSpan!.status.code).toBe(SpanStatusCode.ERROR);
     });
 
-    it('should skip when fetchSpans is false', () => {
+    it('sends the fetch span as the parent in traceparent, keeping a traceparent the caller set', async () => {
       const ctx = makeFlowCtx();
-      const origFetch = jest.fn();
+      onToolWillParse(DEFAULT_OPTS, ctx);
+      const origFetch = jest.fn().mockResolvedValue({ status: 200 } as Response);
+      ctx.state.toolContext = { fetch: origFetch };
+
+      wrapContextFetch(DEFAULT_OPTS, ctx);
+      await ctx.state.toolContext.fetch('https://api.example.com');
+      await ctx.state.toolContext.fetch('https://api.example.com', { headers: { traceparent: 'mine' } });
+
+      const fetchSpan = exporter.getFinishedSpans().find((s) => s.name === 'GET');
+      const { traceId, spanId } = fetchSpan!.spanContext();
+      expect(new Headers(origFetch.mock.calls[0][1].headers).get('traceparent')).toBe(`00-${traceId}-${spanId}-01`);
+      expect(new Headers(origFetch.mock.calls[1][1].headers).get('traceparent')).toBe('mine');
+    });
+
+    it('records no fetch span with fetchSpans: false, and sends the running span as the parent', async () => {
+      const ctx = makeFlowCtx();
+      onToolWillParse(DEFAULT_OPTS, ctx);
+      const origFetch = jest.fn().mockResolvedValue({ status: 200 } as Response);
       ctx.state.toolContext = { fetch: origFetch };
 
       wrapContextFetch({ ...DEFAULT_OPTS, fetchSpans: false }, ctx);
-      expect(ctx.state.toolContext.fetch).toBe(origFetch);
+      await ctx.state.toolContext.fetch('https://api.example.com');
+
+      expect(exporter.getFinishedSpans().find((s) => s.name === 'GET')).toBeUndefined();
+      const rpcSpan = ctx.state[SPAN_KEY] as { spanContext(): { spanId: string } };
+      expect(new Headers(origFetch.mock.calls[0][1].headers).get('traceparent')).toContain(
+        rpcSpan.spanContext().spanId,
+      );
     });
 
     it('should handle missing context', () => {

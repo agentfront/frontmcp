@@ -68,7 +68,7 @@ The `App.esm()` method creates an app entry that loads the npm package `@acme/mc
     The export is normalized into a `FrontMcpPackageManifest` — supporting plain objects, decorated classes, or named exports.
   </Step>
   <Step title="Register Primitives">
-    Tools, resources, and prompts from the manifest are registered into standard registries with full hook and lifecycle support.
+    Tools, resources, and prompts from the manifest are registered into standard registries with full hook and lifecycle support. The manifest's skills, agents, jobs, workflows and providers are not loaded; the server logs a warning naming them.
   </Step>
 </Steps>
 
@@ -92,7 +92,7 @@ App.esm(specifier: string, options?: EsmAppOptions): RemoteAppMetadata
 ### Options
 
 <ParamField path="name" type="string">
-  Override the auto-derived app name (defaults to the package's full name).
+  Override the auto-derived app name (defaults to the package's full name). The app's id comes from `name`; without one, from `namespace`, else from the package name. Two `App.esm()` or `App.remote()` apps with one id stop the server at startup with `DuplicateAppIdError`, so give each `App.esm()` of the same package its own `name` or `namespace`.
 </ParamField>
 
 <ParamField path="namespace" type="string">

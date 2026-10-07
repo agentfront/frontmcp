@@ -108,15 +108,19 @@ observability: {
     oauthSpans: true,          // OAuth flow spans
     elicitationSpans: true,    // Elicitation spans
     hookSpans: false,          // Emit a NEW child span per hook (verbose; default off)
-    startupReport: true,       // Emit startup span on first request
+    startupReport: true,       // Emit a frontmcp.startup span once the server is ready
   },
 }
 ```
 
+- A failed call ends its spans with status ERROR and the message the client sees in production, and an `exception` event of the error's code (`PUBLIC_ERROR`), the error `this.fail()` was given included. A plain `Error` (thrown by a hook, say) is recorded as the client receives it: the masked `Internal FrontMCP error. Please contact support with error ID: err_…` message and `SERVER_ERROR`; the request log's `error` is `{ type: 'GenericServerError', message, code: 'SERVER_ERROR', error_id }` with the error ID the client and the server's error log carry.
+- `this.fetch()` in a tool sends a `traceparent` naming its `GET` client span (or, with `fetchSpans: false`, the running span) as the parent, so the service called nests under it. A `traceparent` you set yourself is kept.
+- With `NODE_ENV=development` and no TracerProvider registered, FrontMCP registers one that prints each span to the console.
+
 ### `flowStageEvents` vs `hookSpans` — what's the difference?
 
 - `flowStageEvents: true` (default) — the plugin's hooks attach **events** (`addEvent('stage.execute.start')`, etc.) onto the existing parent span (e.g. the tool span). One span per request stage; many events per span. Cheap, easy to read.
-- `hookSpans: true` (default off) — the plugin emits a **separate child span** for each hook invocation. Produces a much deeper, noisier trace and is intended for low-level debugging of the SDK pipeline itself. Most users should leave this off.
+- `hookSpans: true` (default off) — the plugin emits a **separate child span** (`hook <stage>`, with `frontmcp.hook.owner`) for each hook a plugin, app or entry runs, inside its flow's span. Produces a much deeper, noisier trace and is intended for low-level debugging of the SDK pipeline itself. Most users should leave this off.
 
 In other words: events live inside an existing span; hook spans add their own spans to the tree.
 

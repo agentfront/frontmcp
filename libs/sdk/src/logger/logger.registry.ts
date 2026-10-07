@@ -4,7 +4,7 @@ import { ProviderScope, tokenName, type Token } from '@frontmcp/di';
 
 import {
   FrontMcpLogger,
-  LogLevel,
+  loggingOptionsSchema,
   type LoggingConfigType,
   type LogTransportInterface,
   type LogTransportType,
@@ -23,11 +23,7 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
 
   constructor(globalProviders: ProviderRegistry) {
     const { logging } = globalProviders.get(FrontMcpConfig);
-    const loggingConfig = logging ?? {
-      level: LogLevel.Info,
-      enableConsole: true,
-      transports: [] as LogTransportType[],
-    };
+    const loggingConfig = logging ?? loggingOptionsSchema.parse({});
     const { transports, ...config } = loggingConfig;
     const list: LogTransportType[] = [...(transports ?? [])];
     if (config.enableConsole) {

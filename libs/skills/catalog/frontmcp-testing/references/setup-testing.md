@@ -411,6 +411,7 @@ test.beforeEach(async ({ mcp }) => {
 - `transport: 'sse'` (in `test.use()` or `server.createClient()`) uses the legacy HTTP+SSE transport: `GET <entryPath>/sse`, messages POSTed to the endpoint the server names, responses read from the stream. The server must enable it (`transport: { protocol: { legacy: true } }`); otherwise connecting fails with the HTTP status. Against a default (public) server it connects with the anonymous token, without `publicMode: true`.
 - `port: 0` (or omitting `port`) picks any free port. Ports are reserved with a cross-process lock, so parallel Jest workers do not collide.
 - `auth: { mode, type }` reaches the server process as `FRONTMCP_TEST_AUTH_MODE` / `FRONTMCP_TEST_AUTH_TYPE`; `mode: 'public'` also keeps the `mcp` client anonymous.
+- `logLevel` reaches the server process as `FRONTMCP_LOG_LEVEL`, its log level unless its `logging.level` is set; `'debug'` also prints the server's command and output. Up to 1.9.2 only `'debug'` did anything.
 - `test.each` / `test.describe.each` pass the row values to the callback (fixtures first for `test.each`):
 
 ```typescript

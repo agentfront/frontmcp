@@ -32,6 +32,10 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 | `info`   | `ServerInfoOptions` | Server metadata (`name`, `version`, and optional `title`, `websiteUrl`, `icons`) |
 | `apps`   | `AppType[]`         | Array of app classes to register                                                 |
 
+`info` is the `serverInfo` of every `initialize` response, `title`, `websiteUrl` and `icons` included; without a `title`,
+`serverInfo.title` is the `name`. Up to 1.9.2, `serverInfo.title` was always the `name`. The `instructions` below reach
+every transport's `initialize`, `createFetchHandler()` and `connect()` included; up to 1.9.2 those two sent none.
+
 ### Server Metadata
 
 | Property       | Type     | Default | Description                                                                                                                                                                                                         |
