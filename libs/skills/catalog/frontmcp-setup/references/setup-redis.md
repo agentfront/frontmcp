@@ -149,7 +149,7 @@ redis: {
 },
 ```
 
-The URL is the base: `host` / `port` / `password` / `db` / `tls` beside it only fill in what the URL leaves out (`{ url: 'redis://cache:6379', password }` adds the password; `tls: true` upgrades a `redis://` URL). A field that contradicts the URL — another host, port, password or db, or `tls: false` with `rediss://` — is a validation error naming the field, never silently dropped. `pubsub` and `throttle.storage.redis` follow the same rule.
+The URL is the base: `host` / `port` / `password` / `db` / `tls` beside it only fill in what the URL leaves out (`{ url: 'redis://cache:6379', password }` adds the password; `tls: true` upgrades a `redis://` URL). A field that contradicts the URL — another host, port, password or db, or `tls: false` with `rediss://` — is a validation error naming the field, never silently dropped. The URL's password may also come from `?password=`; a URL naming only the user (`redis://default@cache`) leaves it out, so a `password` beside it is used. `pubsub`, `throttle.storage.redis` and the job stores' `store.redis` follow the same rule.
 
 ### For Vercel KV
 
