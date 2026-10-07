@@ -779,14 +779,27 @@ export function isClientFacingError(error: unknown): boolean {
   return isPublicError(error) || error instanceof AuthorityDeniedError;
 }
 
+/** The MCP error each error was converted to, so its error ID is the same wherever it is reported. */
+const convertedErrors = new WeakMap<object, McpError>();
+
 /**
- * Convert any error to an MCP error
+ * Convert any error to an MCP error. The same error always converts to the same MCP error.
  */
 export function toMcpError(error: any): McpError {
   if (error instanceof McpError) {
     return error;
   }
 
+  if (error !== null && typeof error === 'object') {
+    const converted = convertedErrors.get(error) ?? convertToMcpError(error);
+    convertedErrors.set(error, converted);
+    return converted;
+  }
+
+  return convertToMcpError(error);
+}
+
+function convertToMcpError(error: unknown): McpError {
   if (error instanceof AuthorityDeniedError) {
     return new AuthorityDeniedMcpError(error);
   }

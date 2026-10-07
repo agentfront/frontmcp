@@ -81,6 +81,19 @@ export class ReservedAppIdError extends InternalMcpError {
 }
 
 /**
+ * Thrown when two `App.esm()` / `App.remote()` apps resolve to one id, which would make their entries
+ * replace each other in the lists.
+ */
+export class DuplicateAppIdError extends InternalMcpError {
+  constructor(appId: string) {
+    super(
+      `Two apps share the id "${appId}": give each App.esm() / App.remote() its own \`name\` or \`namespace\`.`,
+      'DUPLICATE_APP_ID',
+    );
+  }
+}
+
+/**
  * Thrown when a flow is not registered in the flow registry.
  */
 export class FlowNotRegisteredError extends InternalMcpError {

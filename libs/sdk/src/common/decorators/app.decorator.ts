@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 
+import { idFromString } from '@frontmcp/utils';
+
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
 import {
@@ -91,6 +93,11 @@ function FrontMcpApp(providedMetadata: LocalAppMetadata): ClassDecorator {
 // STATIC METHODS: App.esm() and App.remote()
 // ═══════════════════════════════════════════════════════════════════
 
+/** An app without a `name` of its own takes its id from its `namespace`, so two apps of one package or host differ. */
+function namespaceIdOf(options?: { name?: string; namespace?: string }): Pick<RemoteAppMetadata, 'id'> {
+  return options?.name === undefined && options?.namespace ? { id: idFromString(options.namespace) } : {};
+}
+
 /**
  * Load an @App-decorated class from an npm package at runtime.
  *
@@ -122,6 +129,7 @@ function esmApp(specifier: string, options?: EsmAppOptions): RemoteAppMetadata {
 
   return {
     name: options?.name ?? parsed.fullName,
+    ...namespaceIdOf(options),
     urlType: 'esm',
     url: specifier,
     namespace: options?.namespace,
@@ -150,6 +158,7 @@ function remoteApp(url: string, options?: RemoteUrlAppOptions): RemoteAppMetadat
 
   return {
     name: options?.name ?? derivedName,
+    ...namespaceIdOf(options),
     urlType: 'url',
     url,
     namespace: options?.namespace,

@@ -179,6 +179,14 @@ test.describe('auth mode public keeps the client anonymous', () => {
   });
 });
 
+test.describe('logLevel reaches the server', () => {
+  test.use({ logLevel: 'warn' });
+
+  test('the booted server gets it as FRONTMCP_LOG_LEVEL', async () => {
+    expect(recorded.starts[recorded.starts.length - 1].env).toEqual({ SHARED: 'file', FRONTMCP_LOG_LEVEL: 'warn' });
+  });
+});
+
 describe('after the run', () => {
   it('every block ran with the values it was registered with', () => {
     expect(seen).toEqual(expect.arrayContaining(['file', 'A', 'B', 'each:one:1', 'each:two:2', 'row:x:1', 'row:y:2']));

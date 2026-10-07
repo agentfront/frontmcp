@@ -110,7 +110,7 @@ export interface RequestLogCollectorOptions {
   /** Maximum entries to collect per request (default: 500) */
   maxEntries?: number;
 
-  /** Include input/output summaries (default: true) */
+  /** Accepted, but not read yet: request logs carry no input or output summaries. */
   includeSummaries?: boolean;
 
   /** Callback when request log is complete */

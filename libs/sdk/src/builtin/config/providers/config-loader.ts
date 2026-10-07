@@ -31,6 +31,13 @@ export interface ConfigLoaderOptions {
   loadYaml?: boolean;
   /** Whether to populate process.env (default: true) */
   populateProcessEnv?: boolean;
+  /**
+   * Whether settings that don't match the schema throw `ConfigValidationError` (default: true).
+   * With `false`, they are returned as read, without the schema's defaults, after `onInvalid`.
+   */
+  strict?: boolean;
+  /** Called with the validation error when `strict` is `false` and the settings don't match the schema. */
+  onInvalid?: (error: ConfigValidationError) => void;
 }
 
 /**
@@ -53,6 +60,8 @@ export async function loadConfig<T extends object>(
     loadEnv = true,
     loadYaml = false,
     populateProcessEnv: shouldPopulate = true,
+    strict = true,
+    onInvalid,
   } = options;
 
   // Start with empty config (schema defaults will fill gaps)
@@ -85,11 +94,12 @@ export async function loadConfig<T extends object>(
 
   // 3. Parse with schema (applies defaults and validates)
   const result = schema.safeParse(config);
-  if (!result.success) {
-    throw new ConfigValidationError('Configuration validation failed', result.error);
-  }
+  if (result.success) return result.data;
 
-  return result.data;
+  const error = new ConfigValidationError('Configuration validation failed', result.error);
+  if (strict) throw error;
+  onInvalid?.(error);
+  return config as T;
 }
 
 /**

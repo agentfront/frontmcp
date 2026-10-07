@@ -156,6 +156,29 @@ describe('createWebFetchHandler (Cloudflare Worker path)', () => {
   });
 });
 
+describe('createWebFetchHandler initialize', () => {
+  let instance: FrontMcpInstance | undefined;
+
+  afterAll(async () => {
+    await instance?.dispose?.();
+  });
+
+  it("answers with the server's instructions and info.title, as the Node server does", async () => {
+    instance = await FrontMcpInstance.createForGraph({
+      info: { name: 'help-desk', title: 'Help Desk', version: '1.0.0' },
+      instructions: 'Find tickets with echo first.',
+      apps: [WebFetchApp],
+    });
+    const handler = createWebFetchHandler(instance.getScopes()[0] as Scope);
+
+    const res = await handler(mcpRequestAt('/', INITIALIZE));
+
+    const json = await readMcpResult<{ result?: { instructions?: string; serverInfo?: { title?: string } } }>(res);
+    expect(json.result?.instructions).toContain('Find tickets with echo first.');
+    expect(json.result?.serverInfo?.title).toBe('Help Desk');
+  });
+});
+
 describe('createWebFetchHandler config-driven routing, CORS & SSE', () => {
   const instances: FrontMcpInstance[] = [];
 

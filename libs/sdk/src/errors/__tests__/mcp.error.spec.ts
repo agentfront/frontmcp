@@ -196,6 +196,16 @@ describe('MCP Error Handling', () => {
 
       expect(error.errorId).toMatch(/^err_[a-f0-9]{16}$/);
     });
+
+    it('maps a plain error to one MCP error, so every reader of it reports the same error ID', () => {
+      const plain = new Error('vault password rejected');
+
+      const mapped = toMcpError(plain);
+
+      expect(toMcpError(plain)).toBe(mapped);
+      expect(formatMcpErrorResponse(plain, false)._meta?.errorId).toBe(mapped.errorId);
+      expect(toMcpError(new Error('vault password rejected')).errorId).not.toBe(mapped.errorId);
+    });
   });
 
   describe('Error Inheritance', () => {

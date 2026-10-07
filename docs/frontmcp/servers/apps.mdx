@@ -162,6 +162,8 @@ export default class GatewayServer {}
 | `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities                                        |
 | `filter`           | `AppFilterConfig`              | Include/exclude filter for selectively importing primitives             |
 
+The app's id is its `name`; without one, its `namespace`, else the hostname's first label. Two `App.remote()` or `App.esm()` apps with one id (for example `https://mcp.github.com` and `https://mcp.linear.app`, both `mcp`) stop the server at startup with `DuplicateAppIdError`: give each its own `name` or `namespace`.
+
 ### Transport Options
 
 ```ts
@@ -174,6 +176,8 @@ transportOptions: {
   protocolVersion: 'auto',     // 'legacy' (default) | '2026-07-28' | 'auto'
 }
 ```
+
+A transient error is a network failure, a call that ran past `timeout`, or an HTTP `408`, `425`, `429` or `5xx` answer other than `501` and `505`, whatever its body says; a `400` or `404` is not retried. A call that timed out or got a `5xx` may have run on the remote already, so a retry can run it twice: set `retryAttempts: 0` for a remote whose tools must not run twice. Up to 1.9.2 a call that ran past `timeout` was not retried. On a 2026-07-28 remote, a `Retry-After` header on the answer sets the wait, up to the backoff's longest one.
 
 `protocolVersion` selects the MCP revision the gateway speaks to the remote:
 
@@ -202,9 +206,18 @@ remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: process.env[
 remoteAuth: { mode: 'forward' }
 remoteAuth: { mode: 'forward', tokenClaim: 'upstream_token', headerName: 'X-Upstream-Auth' }
 
+// Credentials mapped from each caller's auth info, on that caller's calls
+remoteAuth: { mode: 'mapped', mapper: (authInfo) => ({ type: 'apiKey', value: keyFor(authInfo?.clientId) }) }
+
 // No gateway credentials: the remote runs its own OAuth
 remoteAuth: { mode: 'oauth' }
 ```
+
+`mapped` calls `mapper` for each tool call, resource read and prompt request with the caller's auth info,
+and sends the credentials it returns (`bearer`, `basic` or `apiKey`, as in `static`). A mapper that throws
+fails the call with `RemoteAuthError` (`REMOTE_AUTH_ERROR`, JSON-RPC `-32001`), and so does a call the remote
+refuses with HTTP `401`, whatever the mode. `oauth` adds no credentials: the gateway does not run an OAuth flow
+against the remote, so it only fits a remote that serves the gateway without them.
 
 With `forward`, the gateway sends `Bearer <token>` in `headerName` (default `Authorization`); with
 `tokenClaim`, the token is the value of that claim of the caller's JWT instead of the whole token. A call

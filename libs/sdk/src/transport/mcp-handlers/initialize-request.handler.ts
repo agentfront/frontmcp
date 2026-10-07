@@ -205,11 +205,7 @@ export default function initializeRequestHandler({
       const result: InitializeResult = {
         capabilities: serverOptions.capabilities ?? {},
         instructions: instructions && instructions.length > 0 ? instructions : undefined,
-        serverInfo: {
-          name: configuredInfo.name,
-          version: configuredInfo.version,
-          title: configuredInfo.name,
-        },
+        serverInfo: { ...configuredInfo, title: configuredInfo.title ?? configuredInfo.name },
         protocolVersion,
       };
 

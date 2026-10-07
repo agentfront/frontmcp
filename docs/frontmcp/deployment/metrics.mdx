@@ -137,7 +137,9 @@ Each category maps to a counter-name prefix:
 | `auth`      | `frontmcp_auth_`                        |
 | `sessions`  | `frontmcp_session_`                     |
 
-Omit `include` to emit every category.
+Omit `include` to emit every category. FrontMCP itself counts only the `skills` counters above: it records no request,
+tool-call, error or duration counters, so the other categories match the counters you create with those prefixes
+(`createCounter('frontmcp_tool_my_calls_total')`).
 
 ### Path conflicts
 
