@@ -182,7 +182,7 @@ export class JobExecutionManager {
     await this.stateStore.createRun(runRecord);
 
     if (opts.background) {
-      const runOpts = withBackgroundContext(opts, this.scope?.id);
+      const runOpts = withBackgroundContext(opts, (this.scope ?? workflow.providers.getActiveScope()).id);
       runRequestExclusive(() => this.executeWorkflowBackground(workflow, jobRegistry, runId, runOpts)).catch(
         async (err) => {
           this.logger.error(`Background workflow execution failed: ${err}`);
@@ -426,9 +426,8 @@ export class JobExecutionManager {
  * context (same session, auth, trace and context tokens, no transport), or, for a caller without one
  * (a trigger, in-process code), a fresh context for its auth and session in scope `scopeId`.
  */
-function withBackgroundContext<Options extends ExecuteJobOptions>(opts: Options, scopeId: string | undefined): Options {
+function withBackgroundContext<Options extends ExecuteJobOptions>(opts: Options, scopeId: string): Options {
   if (opts.context) return { ...opts, context: detachedRunContext(opts.context) };
-  if (scopeId === undefined) return opts;
   const sessionFromAuth = opts.authInfo?.['sessionId'];
   const sessionId =
     opts.sessionId ?? (typeof sessionFromAuth === 'string' && sessionFromAuth ? sessionFromAuth : undefined);

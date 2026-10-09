@@ -234,6 +234,15 @@ class HookedJob extends JobContext {
 })
 class CountFlow {}
 
+@Workflow({
+  name: 'whoami_flow',
+  steps: [
+    { id: 'first', jobName: 'whoami_job' },
+    { id: 'second', jobName: 'whoami_job', dependsOn: ['first'] },
+  ],
+})
+class WhoAmIFlow {}
+
 @App({
   id: 'desk',
   name: 'Desk',
@@ -251,7 +260,7 @@ class CountFlow {}
     WhoAmIJob,
     HookedJob,
   ],
-  workflows: [CountFlow],
+  workflows: [CountFlow, WhoAmIFlow],
 })
 class DeskApp {}
 
@@ -311,8 +320,12 @@ describe('jobs:execute-job flow (#700)', () => {
   }
 
   async function waitForRun(runId: string): Promise<JobRunRecord> {
+    return waitForRunOf(manager, runId);
+  }
+
+  async function waitForRunOf(runs: JobExecutionManager, runId: string): Promise<JobRunRecord> {
     for (let poll = 0; poll < 200; poll++) {
-      const run = await manager.getStatus(runId);
+      const run = await runs.getStatus(runId);
       if (run && (run.state === 'completed' || run.state === 'failed')) return run;
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
@@ -495,6 +508,25 @@ describe('jobs:execute-job flow (#700)', () => {
 
     await expect(scopeless.getStatus(runId)).resolves.toEqual(expect.objectContaining({ state: 'completed' }));
     expect(trace).toContain('step:count_flow/first:in-run');
+  });
+
+  it('runs every step of a background workflow of a manager without a scope in one context for the caller session', async () => {
+    const workflow = scope.workflows?.findByName('whoami_flow');
+    const jobs = scope.jobs;
+    if (!workflow || !jobs) throw new Error('whoami_flow is not registered');
+    const scopeless = new JobExecutionManager(new MemoryJobStateStore(), scope.logger);
+
+    const { runId } = await scopeless.executeWorkflow(workflow, jobs, {
+      background: true,
+      sessionId: 'workflow-session',
+    });
+    const run = await waitForRunOf(scopeless, runId);
+
+    const { stepResults } = run.result as {
+      stepResults: Record<string, { outputs: { sessionId: string; requestId: string } }>;
+    };
+    expect(stepResults['first']?.outputs.sessionId).toBe('workflow-session');
+    expect(stepResults['second']?.outputs).toEqual(stepResults['first']?.outputs);
   });
 
   it('abandons an attempt whose signal was aborted, with a generic reason for a non-Error one', async () => {
