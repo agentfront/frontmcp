@@ -193,7 +193,8 @@ function managerExecPath(manager: PackageManagerBinary, host: ToolHost): ToolCom
   const p = pathFor(host.platform);
   const base = p.basename(execpath).toLowerCase();
   // The manager's own name, then a version or an extension: `bunx.exe` is not `bun`.
-  if (!new RegExp(`^${manager}([-.]|$)`).test(base)) return undefined;
+  const rest = base.startsWith(manager) ? base.slice(manager.length) : undefined;
+  if (rest === undefined || !(rest === '' || rest.startsWith('.') || rest.startsWith('-'))) return undefined;
   if (/\.[cm]?js$/.test(base)) return { label: manager, command: host.execPath, args: [execpath] };
   if (/\.(exe|com)$/.test(base)) return { label: manager, command: execpath, args: [] };
   return undefined;
