@@ -391,7 +391,7 @@ Register with `init()`:
 class MyServer {}
 ```
 
-Listing the class itself (`plugins: [MyPlugin]`) is the same as `MyPlugin.init()`: the constructor, `dynamicProviders` and `dynamicTools` all get `{}`, so the plugin installs the providers and tools its default options give. A plugin whose options are required fails at startup with its own error. Up to 1.9.3 the class form got none of the option-derived providers or tools (`plugins: [CodeCallPlugin]` served no tools; `plugins: [RememberPlugin]` failed on the first `this.remember`).
+Listing the class itself (`plugins: [MyPlugin]`) is the same as `MyPlugin.init()`: the constructor, `dynamicProviders` and `dynamicTools` all get `{}`, so the plugin installs the providers and tools its default options give. A plugin that validates required options at runtime fails at startup with its own error; TypeScript types alone validate nothing, so a plugin without such a check starts with `{}`. Up to 1.9.3 the class form got none of the option-derived providers or tools (`plugins: [CodeCallPlugin]` served no tools; `plugins: [RememberPlugin]` failed on the first `this.remember`).
 
 ### Option-derived providers are registered before nested plugins
 
