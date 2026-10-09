@@ -49,6 +49,47 @@ export interface PluginScopeInfo {
 /** Plugin value instances some registry has installed; a later registry builds its own (#647). */
 const installedPluginValues = new WeakSet<object>();
 
+/**
+ * Builds a plugin listed as its class (`plugins: [SomePlugin]`, or `{ provide, useClass }`). A plugin
+ * configured by options (a `DynamicPlugin`) is built exactly as `SomePlugin.init()` builds it when given
+ * none: its constructor, `static dynamicProviders` and `static dynamicTools` all get `{}`, so the
+ * class form installs the same providers and tools. Up to 1.9.3 the class form got neither: a plugin
+ * whose tools exist only in `dynamicTools` (CodeCall) installed no tools while its hooks still ran,
+ * and one whose services come from `dynamicProviders` (Remember, Approval) failed on first use (#803).
+ */
+function instantiateClassPlugin(
+  klass: Ctor<PluginInstance>,
+  depsInstances: unknown[],
+  recordProviders: ProviderType[] | undefined,
+): { pluginInstance: PluginInstance; dynamicProviders: ProviderType[] | undefined; dynamicTools: readonly ToolType[] } {
+  if (!isConfiguredByOptions(klass)) {
+    return { pluginInstance: new klass(...depsInstances), dynamicProviders: recordProviders, dynamicTools: [] };
+  }
+  // The order `init()` uses, so a plugin that needs options (`FeatureFlagPlugin`'s `adapter`) fails at
+  // startup with its own configuration error.
+  const options = {};
+  const optionDerived = collectDynamicProviders(klass, options);
+  const dynamicTools = collectDynamicTools(klass, options);
+  return {
+    pluginInstance: new klass(options),
+    dynamicProviders:
+      optionDerived.length > 0
+        ? dedupePluginProviders([...optionDerived, ...(recordProviders ?? [])])
+        : recordProviders,
+    dynamicTools,
+  };
+}
+
+/**
+ * Whether a plugin class takes options: a `DynamicPlugin`, or a class with its static option hooks
+ * (read off the class, so a plugin built against another copy of the SDK is recognised too).
+ */
+function isConfiguredByOptions(klass: Ctor<PluginInstance>): boolean {
+  if (isDynamicPluginClass(klass)) return true;
+  const hooks = klass as { dynamicProviders?: unknown; dynamicTools?: unknown };
+  return typeof hooks.dynamicProviders === 'function' || typeof hooks.dynamicTools === 'function';
+}
+
 export default class PluginRegistry
   extends RegistryAbstract<PluginInstance, PluginRecord, PluginType[]>
   implements PluginRegistryInterface
@@ -324,7 +365,8 @@ export default class PluginRegistry
   /**
    * Builds the plugin instance and the providers it contributes; a factory's options exist only once
    * it has run, so the providers and tools a plugin derives from them are collected here (#678).
-   * `init(options)` records already carry theirs (`dynamicTools` is then empty).
+   * `init(options)` records already carry theirs (`dynamicTools` is then empty). A plugin listed as
+   * its class gets the ones its default options give (#803).
    */
   private async instantiatePlugin(
     rec: PluginRecord,
@@ -338,17 +380,9 @@ export default class PluginRegistry
 
     switch (rec.kind) {
       case PluginKind.CLASS:
-        return {
-          pluginInstance: new (rec.useClass as Ctor<PluginInstance>)(...depsInstances),
-          dynamicProviders: rec.providers,
-          dynamicTools: [],
-        };
+        return instantiateClassPlugin(rec.useClass as Ctor<PluginInstance>, depsInstances, rec.providers);
       case PluginKind.CLASS_TOKEN:
-        return {
-          pluginInstance: new (rec.provide as Ctor<PluginInstance>)(...depsInstances),
-          dynamicProviders: rec.providers,
-          dynamicTools: [],
-        };
+        return instantiateClassPlugin(rec.provide as Ctor<PluginInstance>, depsInstances, rec.providers);
       case PluginKind.VALUE: {
         // One `SomePlugin.init(options)` record can be installed by several registries (an app class
         // used by two servers). The first keeps the configured instance; each later one builds its own

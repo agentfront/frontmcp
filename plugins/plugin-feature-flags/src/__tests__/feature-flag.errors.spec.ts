@@ -26,6 +26,20 @@ describe('FeatureFlagPlugin startup validation', () => {
     expect(() => FeatureFlagPlugin.init()).toThrow(/adapter/);
   });
 
+  it('rejects plugins: [FeatureFlagPlugin] (no init) at startup and names the missing adapter (#803)', async () => {
+    @App({ id: 'ff-class-form', name: 'Class form', plugins: [FeatureFlagPlugin] })
+    class ClassFormApp {}
+
+    const started = connect({
+      info: { name: 'ff-class-form', version: '1.0.0' },
+      apps: [ClassFormApp],
+      logging: { level: LogLevel.Off },
+    });
+
+    await expect(started).rejects.toThrow(FeatureFlagConfigurationError);
+    await expect(started).rejects.toThrow(/adapter/);
+  });
+
   it('rejects an unknown adapter name and lists the supported ones', () => {
     const options = { adapter: 'nope' } as unknown as Parameters<typeof FeatureFlagPlugin.init>[0];
 
