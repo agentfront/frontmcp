@@ -255,7 +255,9 @@ each process tree to close (`taskkill /T`) and forces it (`taskkill /T /F`) when
 taskkill reports it cannot or the 2 seconds run out. Processes left running by a
 child that already exited are found by parent PID and stopped too. Ending the
 `frontmcp dev` process itself from outside (Task Manager, `taskkill /F`) also takes
-the server down, because every process in the chain is started directly by `node`.
+the server down when the project installs `tsx`: every process in the chain is then
+started directly by `node`, so each one's exit ends the processes it started. (The
+`npx` fallback runs tsx through npm, which starts it through a shell.)
 
 ### Running from a subfolder
 

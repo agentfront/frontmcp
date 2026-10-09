@@ -60,7 +60,8 @@ export function queryChildPids(pid: number): number[] {
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      `Get-CimInstance Win32_Process -Filter "ParentProcessId=${pid}" | ForEach-Object { $_.ProcessId }`,
+      // Single quotes: a double quote inside an argument would need Windows command-line escaping
+      `Get-CimInstance Win32_Process -Filter 'ParentProcessId=${pid}' | ForEach-Object { $_.ProcessId }`,
     ],
     { encoding: 'utf8', windowsHide: true, timeout: 15_000 },
   );

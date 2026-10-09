@@ -73,7 +73,7 @@ describe('queryChildPids', () => {
     const [command, args] = spawnSyncMock.mock.calls[0];
     expect(command).toBe('powershell.exe');
     expect(args).toContain('-NoProfile');
-    expect(args[args.length - 1]).toContain('Get-CimInstance Win32_Process -Filter "ParentProcessId=77"');
+    expect(args[args.length - 1]).toContain("Get-CimInstance Win32_Process -Filter 'ParentProcessId=77'");
   });
 
   it('returns nothing when the lookup fails or the PID is not a process id', () => {
