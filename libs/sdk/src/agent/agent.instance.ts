@@ -228,22 +228,6 @@ export class AgentInstance<
 
     // Create the agent as a standard tool for parent scope registration
     await this.createAgentAsTool();
-
-    // Say so at startup when the agent declares something nothing acts on
-    this.warnAboutUnusedOptions();
-  }
-
-  /**
-   * Options the agent accepts that have no effect yet, logged at startup instead of being dropped
-   * silently: `execution.enableStreaming`.
-   */
-  private warnAboutUnusedOptions(): void {
-    if (this.record.metadata.execution?.enableStreaming === true) {
-      this.scope.logger.warn(
-        `Agent "${this.name}": execution.enableStreaming is not supported yet and has no effect; ` +
-          `the agent replies once its run completes. Use enableAutoProgress for progress notifications during the run.`,
-      );
-    }
   }
 
   /**

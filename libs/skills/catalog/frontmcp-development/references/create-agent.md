@@ -601,19 +601,38 @@ class DocsAgent extends AgentContext {}
 
 ## Execution Options
 
-| Option                           | Default  | Effect                                                                                                                                             |
-| -------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `execution.maxIterations`        | `10`     | Max tool-call rounds of the LLM loop                                                                                                               |
-| `execution.timeout`              | `120000` | Max run time in ms                                                                                                                                 |
-| `execution.inheritParentTools`   | `false`  | Also offer the model the tools of the scope the agent is registered in, other than agents; they run through that scope's `tools:call-tool` flow    |
-| `execution.inheritPlugins`       | `false`  | Also run the app's and server's plugin hooks for the agent's own tools                                                                             |
-| `execution.useToolFlow`          | `true`   | Own tools through its `tools:call-tool` flow (hooks, limits, authorization); `false` runs them directly. Nested agents always use their flow       |
-| `execution.enableNotifications`  | `true`   | Send `Calling tool: <name>` and `Tool <name> failed: <message>` log messages (the failure's public message only); `false` also stops auto progress |
-| `execution.enableAutoProgress`   | `false`  | Send progress notifications during the loop; each value is higher than the last                                                                    |
-| `execution.notificationInterval` | `1000`   | Least ms between two automatic progress updates; sooner ones are skipped, the last one is always sent                                              |
-| `execution.enableStreaming`      | `false`  | Not supported yet: the agent replies once the run completes, and `true` is reported at startup                                                     |
+| Option                           | Default  | Effect                                                                                                                                                                               |
+| -------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `execution.maxIterations`        | `10`     | Max tool-call rounds of the LLM loop                                                                                                                                                 |
+| `execution.timeout`              | `120000` | Max run time in ms                                                                                                                                                                   |
+| `execution.inheritParentTools`   | `false`  | Also offer the model the tools of the scope the agent is registered in, other than agents; they run through that scope's `tools:call-tool` flow                                      |
+| `execution.inheritPlugins`       | `false`  | Also run the app's and server's plugin hooks for the agent's own tools                                                                                                               |
+| `execution.useToolFlow`          | `true`   | Own tools through its `tools:call-tool` flow (hooks, limits, authorization); `false` runs them directly. Nested agents always use their flow                                         |
+| `execution.enableNotifications`  | `true`   | Send `Calling tool: <name>` and `Tool <name> failed: <message>` log messages (the failure's public message only); `false` also stops auto progress                                   |
+| `execution.enableAutoProgress`   | `false`  | Send progress notifications during the loop; each value is higher than the last                                                                                                      |
+| `execution.notificationInterval` | `1000`   | Least ms between two automatic progress updates; sooner ones are skipped, the last one is always sent                                                                                |
+| `execution.enableStreaming`      | `false`  | Stream the model's text: with a request `progressToken`, each chunk is a `notifications/progress` (`progress` = chunk count, `message` = chunk, no `total`); the result is unchanged |
 
 Through that flow the agent's own tools get the `rateLimit`, `concurrency` and `timeout` they declare (else the `throttle` defaults), as the app's tools do; a `rateLimit` or `concurrency` there is enforced without a `throttle` option. The calls an agent makes during its run (its model's tool calls, its nested and swarm agents) run inside the `throttle.globalConcurrency` slot of the call that runs the agent.
+
+### Streaming (`execution.enableStreaming`)
+
+```typescript
+@Agent({
+  name: 'storyteller',
+  description: 'Tells a story as it writes it',
+  llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
+  inputSchema: { topic: z.string() },
+  execution: { enableStreaming: true },
+})
+class StorytellerAgent extends AgentContext {}
+```
+
+- Streams only when the client sends `_meta.progressToken`; without it the agent runs unstreamed and sends nothing extra.
+- Each chunk of the model's text is one `notifications/progress` on that token: `progress` counts chunks across the run (1, 2, 3, ...), `message` is the chunk, `total` is omitted. Text the model writes before calling tools is streamed too; tool calls run as usual (arguments come from the stream's final completion).
+- The tool result is identical to an unstreamed run. An `outputSchema` agent streams text and validates once at the end (`INVALID_OUTPUT` after streaming if it doesn't match).
+- Falls back to an unstreamed run when the adapter has no `streamCompletion()` (the built-in OpenAI/Anthropic adapters have one), or when the class overrides `completion()` but not `streamCompletion()`. A streamed run calls the model through `streamCompletion()`.
+- `enableAutoProgress` sends no progress notifications in a streamed run (the token carries the text); its log messages still go out. Nested and swarm agents the model calls are not streamed.
 
 ## Common Patterns
 

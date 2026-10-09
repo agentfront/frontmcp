@@ -4,8 +4,14 @@
 
 import 'reflect-metadata';
 
-import { AgentCompletion, AgentLlmAdapter } from '../../common';
-import { AgentExecutionLoop, AgentMaxIterationsError, ToolExecutor } from '../agent-execution-loop';
+import { type AgentCompletion, type AgentCompletionChunk, type AgentLlmAdapter } from '../../common';
+import {
+  AgentExecutionLoop,
+  AgentMaxIterationsError,
+  type AgentExecutionResult,
+  type AgentStreamEvent,
+  type ToolExecutor,
+} from '../agent-execution-loop';
 
 // Mock LLM adapter factory
 function createMockAdapter(responses: AgentCompletion[]): AgentLlmAdapter {
@@ -467,6 +473,258 @@ describe('AgentExecutionLoop', () => {
 
       expect(result.durationMs).toBeDefined();
       expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('runStreaming', () => {
+    /** An adapter that streams one scripted reply per call. */
+    function streamingAdapter(replies: AgentCompletionChunk[][]): AgentLlmAdapter {
+      let call = 0;
+      return {
+        completion: jest.fn(),
+        streamCompletion: jest.fn(async function* () {
+          const reply = replies[Math.min(call++, replies.length - 1)];
+          for (const chunk of reply) yield chunk;
+        }),
+      };
+    }
+
+    async function drain(
+      stream: AsyncGenerator<AgentStreamEvent, AgentExecutionResult>,
+    ): Promise<{ events: AgentStreamEvent[]; result: AgentExecutionResult }> {
+      const events: AgentStreamEvent[] = [];
+      for (let step = await stream.next(); ; step = await stream.next()) {
+        if (step.done) return { events, result: step.value };
+        events.push(step.value);
+      }
+    }
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('yields the text as it arrives and returns the run result, as its last event does', async () => {
+      const onIteration = jest.fn();
+      const loop = new AgentExecutionLoop({
+        adapter: streamingAdapter([
+          [
+            { type: 'content', content: 'Hel' },
+            { type: 'content', content: 'lo' },
+            {
+              type: 'done',
+              completion: { content: 'Hello', finishReason: 'stop', usage: { promptTokens: 3, completionTokens: 2 } },
+            },
+          ],
+        ]),
+        systemInstructions: 'x',
+        tools: [],
+        onIteration,
+      });
+
+      const { events, result } = await drain(loop.runStreaming('Hi', jest.fn()));
+
+      expect(events.filter((event) => event.type === 'content')).toEqual([
+        { type: 'content', content: 'Hel' },
+        { type: 'content', content: 'lo' },
+      ]);
+      expect(result).toMatchObject({
+        content: 'Hello',
+        iterations: 1,
+        success: true,
+        usage: { promptTokens: 3, completionTokens: 2, totalTokens: 5 },
+      });
+      expect(events[events.length - 1]).toEqual({ type: 'done', result });
+      expect(onIteration).toHaveBeenCalledWith(1, { role: 'assistant', content: 'Hello' });
+    });
+
+    it('runs the tool calls of the completion the stream ends with, with their complete arguments', async () => {
+      const toolExecutor = jest.fn().mockResolvedValue({ tide: 'noon' });
+      const loop = new AgentExecutionLoop({
+        adapter: streamingAdapter([
+          [
+            { type: 'content', content: 'Checking. ' },
+            // Announced before its arguments are known
+            { type: 'tool_call', toolCall: { id: 'c1', name: 'lookup', arguments: {} } },
+            {
+              type: 'done',
+              completion: {
+                content: 'Checking. ',
+                finishReason: 'tool_calls',
+                toolCalls: [{ id: 'c1', name: 'lookup', arguments: { topic: 'tides' } }],
+              },
+            },
+          ],
+          [
+            { type: 'content', content: 'At noon.' },
+            { type: 'done', completion: { content: 'At noon.', finishReason: 'stop' } },
+          ],
+        ]),
+        systemInstructions: 'x',
+        tools: [{ name: 'lookup', parameters: { type: 'object' } }],
+      });
+
+      const { events, result } = await drain(loop.runStreaming('When is high tide?', toolExecutor));
+
+      expect(toolExecutor).toHaveBeenCalledWith('lookup', { topic: 'tides' });
+      expect(events.map((event) => event.type)).toEqual([
+        'iteration',
+        'content',
+        'tool_call',
+        'tool_start',
+        'tool_end',
+        'iteration',
+        'content',
+        'done',
+      ]);
+      expect(result.content).toBe('At noon.');
+      expect(result.iterations).toBe(2);
+      expect(result.messages.map((message) => message.role)).toEqual(['user', 'assistant', 'tool', 'assistant']);
+    });
+
+    it('puts together the tool calls a stream announces when it ends without a completion', async () => {
+      const toolExecutor = jest.fn().mockResolvedValue('ok');
+      const loop = new AgentExecutionLoop({
+        adapter: streamingAdapter([
+          [
+            { type: 'tool_call', toolCall: { id: 'c1', name: 'lookup' } },
+            { type: 'tool_call', toolCall: { id: 'c1', name: undefined, arguments: { topic: 'tides' } } },
+            { type: 'tool_call', toolCall: { id: 'c2' } },
+          ],
+          [{ type: 'content', content: 'Done.' }],
+        ]),
+        systemInstructions: 'x',
+        tools: [],
+      });
+
+      const { result } = await drain(loop.runStreaming('Go', toolExecutor));
+
+      expect(toolExecutor.mock.calls).toEqual([
+        ['lookup', { topic: 'tides' }],
+        ['', {}],
+      ]);
+      expect(result.content).toBe('Done.');
+    });
+
+    it('yields the text of a reply that arrives in one piece as one chunk', async () => {
+      const adapter: AgentLlmAdapter = {
+        completion: jest.fn(),
+        // An adapter that can't really stream: its stream only ends with the completion
+        streamCompletion: async function* () {
+          yield { type: 'done', completion: { content: 'All at once', finishReason: 'stop' } };
+        },
+      };
+      const loop = new AgentExecutionLoop({ adapter, systemInstructions: 'x', tools: [] });
+
+      const { events, result } = await drain(loop.runStreaming('Hi', jest.fn()));
+
+      expect(events.filter((event) => event.type === 'content')).toEqual([{ type: 'content', content: 'All at once' }]);
+      expect(result.content).toBe('All at once');
+    });
+
+    it('calls completion() of an adapter without streamCompletion(), and yields its text and usage', async () => {
+      const adapter = createMockAdapter([
+        {
+          content: null,
+          finishReason: 'tool_calls',
+          toolCalls: [{ id: 'c1', name: 'lookup', arguments: {} }],
+          usage: { promptTokens: 1, completionTokens: 1 },
+        },
+        { content: 'Done', finishReason: 'stop', usage: { promptTokens: 2, completionTokens: 2 } },
+      ]);
+      const loop = new AgentExecutionLoop({ adapter, systemInstructions: 'x', tools: [] });
+
+      const { events, result } = await drain(loop.runStreaming('Hi', jest.fn().mockResolvedValue('found')));
+
+      expect(adapter.completion).toHaveBeenCalledTimes(2);
+      expect(events.filter((event) => event.type === 'content')).toEqual([{ type: 'content', content: 'Done' }]);
+      expect(result.usage).toEqual({ promptTokens: 3, completionTokens: 3, totalTokens: 6 });
+    });
+
+    it('passes a tool failure to the model as the tool result', async () => {
+      const loop = new AgentExecutionLoop({
+        adapter: streamingAdapter([
+          [
+            {
+              type: 'done',
+              completion: {
+                content: null,
+                finishReason: 'tool_calls',
+                toolCalls: [{ id: 'c1', name: 'lookup', arguments: {} }],
+              },
+            },
+          ],
+          [{ type: 'done', completion: { content: 'Sorry', finishReason: 'stop' } }],
+        ]),
+        systemInstructions: 'x',
+        tools: [],
+      });
+
+      const { events, result } = await drain(
+        loop.runStreaming('Hi', jest.fn().mockRejectedValue(new Error('lookup is down'))),
+      );
+
+      const toolEnd = events.find((event) => event.type === 'tool_end');
+      expect(toolEnd).toMatchObject({ result: { error: 'lookup is down' }, error: new Error('lookup is down') });
+      expect(result.messages[2]).toMatchObject({ role: 'tool', content: '{"error":"lookup is down"}' });
+      expect(result.content).toBe('Sorry');
+    });
+
+    it('fails with the maximum iterations error when the model keeps calling tools', async () => {
+      const loop = new AgentExecutionLoop({
+        adapter: streamingAdapter([
+          [
+            {
+              type: 'done',
+              completion: {
+                content: null,
+                finishReason: 'tool_calls',
+                toolCalls: [{ id: 'c1', name: 'lookup', arguments: {} }],
+              },
+            },
+          ],
+        ]),
+        systemInstructions: 'x',
+        tools: [],
+        maxIterations: 2,
+      });
+
+      const { events, result } = await drain(loop.runStreaming('Hi', jest.fn().mockResolvedValue('again')));
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeInstanceOf(AgentMaxIterationsError);
+      expect(events.slice(-2).map((event) => event.type)).toEqual(['error', 'done']);
+    });
+
+    it('fails with the timeout error when the run takes longer than its timeout', async () => {
+      const adapter: AgentLlmAdapter = {
+        completion: jest.fn(),
+        streamCompletion: async function* () {
+          yield { type: 'content', content: 'Thinking' };
+          await new Promise(() => undefined);
+        },
+      };
+      const loop = new AgentExecutionLoop({ adapter, systemInstructions: 'x', tools: [], timeout: 20 });
+
+      const { events, result } = await drain(loop.runStreaming('Hi', jest.fn()));
+
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toBe('Agent execution timed out after 20ms');
+      expect(events.map((event) => event.type)).toEqual(['iteration', 'content', 'error', 'done']);
+    });
+
+    it('clears its timer for every step', async () => {
+      jest.useFakeTimers();
+      const loop = new AgentExecutionLoop({
+        adapter: streamingAdapter([[{ type: 'content', content: 'Hi' }]]),
+        systemInstructions: 'x',
+        tools: [],
+        timeout: 60_000,
+      });
+
+      const { result } = await drain(loop.runStreaming('Hi', jest.fn()));
+
+      expect(result.success).toBe(true);
+      expect(jest.getTimerCount()).toBe(0);
     });
   });
 });

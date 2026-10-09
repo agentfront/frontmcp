@@ -62,7 +62,7 @@ test.describe('Agents E2E', () => {
     test('should have correct number of agent tools', async ({ mcp }) => {
       const tools = await mcp.tools.list();
       const agentTools = tools.filter((t) => t.name.startsWith('invoke_'));
-      expect(agentTools.length).toBe(4);
+      expect(agentTools.length).toBe(5);
     });
 
     test('should have required property markers in schemas', async ({ mcp }) => {

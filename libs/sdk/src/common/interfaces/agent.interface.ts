@@ -1,6 +1,11 @@
 import { type ZodType } from '@frontmcp/lazy-zod';
 
-import { AgentExecutionLoop, type ToolExecutor } from '../../agent/agent-execution-loop';
+import {
+  AgentExecutionLoop,
+  type AgentExecutionResult,
+  type AgentStreamEvent,
+  type ToolExecutor,
+} from '../../agent/agent-execution-loop';
 import { type FrontMcpContext } from '../../context/frontmcp-context';
 import { FrontMcpContextStorage } from '../../context/frontmcp-context-storage';
 import { performElicit, type ElicitOptions, type ElicitResult } from '../../elicitation';
@@ -229,10 +234,17 @@ export class AgentContext<
    * 2. Sends to LLM with available tools
    * 3. Executes tool calls and loops until final response
    * 4. Sends notifications on tool calls and output
+   *
+   * With `execution.enableStreaming`, when the request carries a progress token and the model can be
+   * streamed (see {@link streamsReplies}), the model's text is sent as it arrives, one
+   * `notifications/progress` per chunk (see {@link streamAgentLoop}). The result is the same either way.
    */
   protected async runAgentLoop(input: In): Promise<Out> {
     // Build user message from input
     const userMessage = this.buildUserMessage(input);
+
+    // Stream the model's text to the client, when it asked for progress and the model can stream
+    const streaming = this.streamsReplies();
 
     // Determine if auto progress is enabled
     const enableAutoProgress =
@@ -246,6 +258,8 @@ export class AgentContext<
     let lastSentProgress = -1;
     let lastAutoProgressAt: number | undefined;
     const autoProgress = (progress: number, message: string, isFinal = false) => {
+      // A streamed run's progress notifications carry its text: automatic updates would be mixed into it
+      if (streaming) return;
       const now = Date.now();
       // MCP requires every progress value to be higher than the one before it
       if (progress <= lastSentProgress) return;
@@ -255,9 +269,15 @@ export class AgentContext<
       void this.progress(progress, 100, message);
     };
 
-    // Create execution loop: every completion goes through completion(), so an override sees them all
+    // Create execution loop: every completion goes through completion(), or streamCompletion() in a
+    // streamed run, so an override sees them all
     const loop = new AgentExecutionLoop({
-      adapter: { completion: (prompt, tools, options) => this.completion(prompt, tools, options) },
+      adapter: {
+        completion: (prompt, tools, options) => this.completion(prompt, tools, options),
+        ...(streaming && {
+          streamCompletion: (prompt, tools, options) => this.streamCompletion(prompt, tools, options),
+        }),
+      },
       systemInstructions: this.systemInstructions,
       tools: this.toolDefinitions,
       maxIterations,
@@ -337,14 +357,52 @@ export class AgentContext<
     const executor: ToolExecutor = async (name, args) => this.executeTool(name, args);
 
     // Run the loop
-    const result = await loop.run(userMessage, executor);
+    const result = streaming
+      ? await this.streamAgentLoop(loop.runStreaming(userMessage, executor))
+      : await loop.run(userMessage, executor);
 
     if (!result.success && result.error) {
       throw result.error;
     }
 
-    // Parse the LLM response as output
+    // Parse the LLM response as output (an `outputSchema` validates it once, after the run)
     return this.parseAgentResponse(result.content) as Out;
+  }
+
+  /**
+   * Whether this run streams the model's text: `execution.enableStreaming` is set, the request carries a
+   * progress token (`_meta.progressToken`) for the notifications to go out on, and the model can be
+   * streamed: the agent's LLM adapter has `streamCompletion()`, or this class overrides
+   * `streamCompletion()`. A class that overrides `completion()` alone is not streamed, so its override
+   * keeps seeing every completion. Otherwise the run is not streamed, as without the option.
+   */
+  protected streamsReplies(): boolean {
+    if (this.metadata.execution?.enableStreaming !== true || this._progressToken === undefined) return false;
+    const overridesCompletion = this.completion !== AgentContext.prototype.completion;
+    const overridesStreamCompletion = this.streamCompletion !== AgentContext.prototype.streamCompletion;
+    return (
+      overridesStreamCompletion || (!overridesCompletion && typeof this.llmAdapter.streamCompletion === 'function')
+    );
+  }
+
+  /**
+   * Run a streamed loop to its end, sending each chunk of the model's text as it arrives in a
+   * `notifications/progress` on the request's progress token: `progress` counts the chunks (1, 2, 3, ...,
+   * across the whole run, so it only rises), `message` is the chunk, and `total` is left out. This
+   * includes text the model writes before it calls tools. Returns the run's result.
+   */
+  protected async streamAgentLoop(
+    events: AsyncGenerator<AgentStreamEvent, AgentExecutionResult>,
+  ): Promise<AgentExecutionResult> {
+    let chunks = 0;
+    for (let step = await events.next(); ; step = await events.next()) {
+      if (step.done) return step.value;
+      const event = step.value;
+      if (event.type === 'content' && event.content) {
+        chunks += 1;
+        await this.progress(chunks, undefined, event.content);
+      }
+    }
   }
 
   /**
@@ -461,7 +519,8 @@ export class AgentContext<
   }
 
   /**
-   * Stream a completion from the LLM.
+   * Stream a completion from the LLM: what a streamed run (`execution.enableStreaming`) calls the model
+   * through, instead of {@link completion}.
    *
    * Override this method to add custom streaming logic.
    */
@@ -606,7 +665,7 @@ export class AgentContext<
     const sink = this.requestNotificationSink();
     if (sink) return sink.progress(progress, total, message);
 
-    if (!this._progressToken) {
+    if (this._progressToken === undefined) {
       this.logger.debug('Cannot send progress: no progressToken in request');
       return false;
     }

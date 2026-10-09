@@ -509,6 +509,7 @@ Control agent execution behavior:
     timeout: 120000,            // Timeout in ms (default: 120000)
     enableNotifications: true,  // Send tool-call log messages and allow auto progress (default: true)
     enableAutoProgress: false,  // Auto progress during LLM calls (default: false)
+    enableStreaming: false,     // Stream the model's text as progress notifications (default: false)
     inheritParentTools: false,  // Also offer the model the app's tools (default: false)
     inheritPlugins: false,      // Also run the app's and server's plugins for the agent's tools (default: false)
     useToolFlow: true,          // Execute tools through call-tool flow (default: true)
@@ -524,7 +525,7 @@ class LongRunningAgent extends AgentContext { ... }
 With `inheritParentTools: true`, the model is also offered the tools of the scope the agent is registered in (the server's tools, which include its app's; a nested agent gets its parent agent's), other than agents: which agents it can call is `swarm`'s to decide. Those tools run through that scope's `tools:call-tool` flow, with the hooks and gates that apply there, whatever `useToolFlow` says. Only tools whose `availableWhen.surface` offers them to agents are included, and the agent's own tools win a name clash. By default the model is offered the agent's own tools only.
 
 <Note>
-`enableStreaming` is not supported yet: the agent replies once its run completes, and an agent that sets `enableStreaming: true` is reported with a warning at startup. Use `enableAutoProgress` for progress notifications during the run. Up to 1.8.7 `enableStreaming`, `inheritParentTools` and `inheritPlugins` were accepted and ignored, and the documented default of `inheritParentTools` was `true`.
+Up to 1.8.7 `enableStreaming`, `inheritParentTools` and `inheritPlugins` were accepted and ignored, and the documented default of `inheritParentTools` was `true`. Up to 1.9.3 `enableStreaming` had no effect and was reported with a warning at startup; it now streams the model's text (see [Streaming the Reply](#streaming-the-reply)).
 </Note>
 
 ### Tool Execution Mode
@@ -673,6 +674,42 @@ Progress notifications are only sent if the client includes a `progressToken` in
 `execution.notificationInterval` (default 1000 ms) is the least time between two automatic progress updates: an update that comes sooner is skipped, except the last one (`Agent completed` or `Agent failed: ...`), which is always sent. It doesn't apply to your own `this.progress()` calls.
 
 Each iteration has an equal share of the first 80%: its LLM call the first half, its tool calls the second, so every automatic update is higher than the one before it, as MCP requires. Up to 1.9.2 the value could go down: with two tool calls, `Executing tool 2/2` reported 14 and the next `Starting LLM call (iteration 2/10)` 8.
+
+### Streaming the Reply
+
+With `execution.enableStreaming: true`, the agent sends its model's text to the client as the model writes it, over the request's progress token:
+
+```ts
+@Agent({
+  name: 'storyteller',
+  execution: { enableStreaming: true },
+  llm: { ... },
+})
+class StorytellerAgent extends AgentContext {}
+```
+
+Each chunk is one `notifications/progress` on the `progressToken` the client sent in the request's `_meta`:
+
+```json
+{ "method": "notifications/progress", "params": { "progressToken": "story-1", "progress": 1, "message": "Once " } }
+{ "method": "notifications/progress", "params": { "progressToken": "story-1", "progress": 2, "message": "upon " } }
+{ "method": "notifications/progress", "params": { "progressToken": "story-1", "progress": 3, "message": "a time." } }
+```
+
+- `progress` counts the chunks across the whole run (1, 2, 3, ...), so it only rises, as MCP requires. `total` is left out: the length of the reply isn't known ahead. `message` is the chunk; concatenate the messages to rebuild the text.
+- The text the model writes before it calls tools is streamed too. Tool calls run as in any run (their arguments come from the completion the model's stream ends with), and the text after them keeps streaming with the next `progress` values.
+- The call's result is exactly what it would be without streaming: the final reply only, parsed as usual. An agent with an `outputSchema` streams its text too, and its reply is validated once, after the run; a reply that doesn't match fails the call with `INVALID_OUTPUT` after it was streamed.
+- The notifications reach the client the way `this.progress()` does: on a session, and under MCP 2026-07-28 on the request's own response stream. A nested or swarm agent the model calls is not streamed: its reply is the calling model's tool result.
+
+The run is not streamed, and behaves as without the option, when:
+
+- the request has no `progressToken`: nothing is sent, as before;
+- the agent's LLM adapter has no `streamCompletion()` (the built-in OpenAI and Anthropic adapters have one), unless the agent class overrides `streamCompletion()`;
+- the agent class overrides `completion()` but not `streamCompletion()`, so its override keeps seeing every completion. In a streamed run the model is called through `streamCompletion()`.
+
+In a streamed run `enableAutoProgress` sends no progress notifications, since the progress token carries the text; its log messages still go out. Override `streamsReplies()` on the agent class to decide per run whether to stream.
+
+Up to 1.9.3 `enableStreaming` had no effect: the agent replied once its run completed, and startup logged a warning. The loop's streaming mode also ran a streamed tool call with empty arguments (`{}`), since the OpenAI and Anthropic adapters announce a tool call before its arguments arrive, and it had no timeout.
 
 ### Tool-Call Messages
 
