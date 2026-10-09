@@ -283,10 +283,17 @@ describe('agent streaming under MCP 2026-07-28', () => {
 
   it('answers with the same result as an unstreamed run', async () => {
     // The run's duration aside, and the agent's name for an agent without the option
-    const withoutDuration = (result: CallToolResult | undefined) => ({
-      ...result,
-      _meta: { ...result?._meta, durationMs: 0 },
-    });
+    const withoutDuration = (result: CallToolResult | undefined) => {
+      const execution = result?._meta?.['agent/execution'];
+      return {
+        ...result,
+        _meta: {
+          ...result?._meta,
+          durationMs: 0,
+          ...(execution && typeof execution === 'object' ? { 'agent/execution': { ...execution, durationMs: 0 } } : {}),
+        },
+      };
+    };
     const streamed = await call('narrator', 'story-2');
     const unstreamed = await call('narrator');
     const withoutOption = await call('quiet_narrator', 'story-3');
