@@ -11,7 +11,7 @@ const REMOTE_APP_OWNER = { kind: 'app', id: 'remote-crm' } as const;
 
 function createScopeWithLazyRemoteApp(): ScopeEntry {
   let capabilitiesLoaded = false;
-  const remotePrompt = { owner: REMOTE_APP_OWNER };
+  const remotePrompt = { owner: REMOTE_APP_OWNER, fullName: `${REMOTE_APP_OWNER.id}:remote-summary` };
   const remoteResource = { owner: REMOTE_APP_OWNER };
   const remoteApp = {
     id: REMOTE_APP_OWNER.id,
@@ -25,6 +25,7 @@ function createScopeWithLazyRemoteApp(): ScopeEntry {
     prompts: {
       findByName: (promptName: string) =>
         capabilitiesLoaded && promptName === 'remote-summary' ? remotePrompt : undefined,
+      getPrompts: () => (capabilitiesLoaded ? [remotePrompt] : []),
       lineageOf: () => [REMOTE_APP_OWNER],
     },
     resources: {
@@ -39,6 +40,17 @@ function createScopeWithLazyRemoteApp(): ScopeEntry {
 describe('hook owner of an entry a remote app loads lazily', () => {
   it('resolves the owning remote app for prompts/get before its capabilities are loaded', async () => {
     const rawInput = { request: { method: 'prompts/get', params: { name: 'remote-summary' } }, ctx: {} };
+
+    await expect(GetPromptFlow.resolveHookOwnerId?.(rawInput, createScopeWithLazyRemoteApp())).resolves.toBe(
+      REMOTE_APP_OWNER.id,
+    );
+  });
+
+  it('resolves the owning app for the app-qualified prompt name prompts/list may give', async () => {
+    const rawInput = {
+      request: { method: 'prompts/get', params: { name: `${REMOTE_APP_OWNER.id}:remote-summary` } },
+      ctx: {},
+    };
 
     await expect(GetPromptFlow.resolveHookOwnerId?.(rawInput, createScopeWithLazyRemoteApp())).resolves.toBe(
       REMOTE_APP_OWNER.id,

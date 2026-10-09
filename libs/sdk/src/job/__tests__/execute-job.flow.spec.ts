@@ -18,7 +18,7 @@ import { type Scope } from '../../scope/scope.instance';
 import { JobExecutionManager } from '../execution/job-execution.manager';
 import ExecuteJobFlow from '../flows/execute-job.flow';
 import { retryDelayMs, runJobAttemptFlow, willRetryJobAttempt } from '../job-attempt';
-import { type JobRunRecord } from '../store/job-state.interface';
+import { type JobRunRecord, type WorkflowRunRecord } from '../store/job-state.interface';
 import { MemoryJobStateStore } from '../store/memory-job-state.store';
 
 const trace: string[] = [];
@@ -146,6 +146,32 @@ class UnrecordedFailingJob extends JobContext {
   }
 }
 
+let sendRuns = 0;
+
+/** A job with side effects, which a run store failing to record it must not run again. */
+@Job({ name: 'send_job', inputSchema: {}, outputSchema: { sent: z.number() }, retry: { maxAttempts: 3, backoffMs: 1 } })
+class SendJob extends JobContext {
+  async execute() {
+    sendRuns++;
+    return { sent: sendRuns };
+  }
+}
+
+/** A run store that fails its next `failures` writes of a completed run. */
+class FailingCompletionStore extends MemoryJobStateStore {
+  constructor(private failures: number) {
+    super();
+  }
+
+  override async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
+    if (updates.state === 'completed' && this.failures > 0) {
+      this.failures--;
+      throw new Error('the run store is unavailable');
+    }
+    await super.updateRun(runId, updates);
+  }
+}
+
 @Job({ name: 'aborted_job', inputSchema: {}, outputSchema: {} })
 class AbortedJob extends JobContext {
   async execute() {
@@ -220,6 +246,7 @@ class CountFlow {}
     UnrecordedJob,
     UnrecordedFailingJob,
     ThrowerJob,
+    SendJob,
     AbortedJob,
     WhoAmIJob,
     HookedJob,
@@ -269,6 +296,7 @@ describe('jobs:execute-job flow (#700)', () => {
   beforeEach(() => {
     trace.length = 0;
     guardedRuns = 0;
+    sendRuns = 0;
   });
 
   function jobNamed(name: string) {
@@ -477,6 +505,25 @@ describe('jobs:execute-job flow (#700)', () => {
       runJobAttemptFlow({ job: jobNamed('count_job'), input: {}, attempt: 1, authInfo: {}, signal: abandon.signal }),
     ).rejects.toThrow('The job attempt was abandoned');
     expect(trace).not.toContain('did:createJobContext:count_job:1');
+  });
+
+  it('does not run a completed job again when the run store fails to record it, and records it once it can', async () => {
+    const recorder = new JobExecutionManager(new FailingCompletionStore(1), scope.logger);
+
+    const result = await recorder.executeJob(jobNamed('send_job'), {});
+
+    expect(result).toEqual(expect.objectContaining({ state: 'completed', result: { sent: 1 } }));
+    expect(sendRuns).toBe(1);
+    await expect(recorder.getStatus(result.runId)).resolves.toEqual(
+      expect.objectContaining({ state: 'completed', attempt: 1, result: { sent: 1 } }),
+    );
+  });
+
+  it("fails a completed job's run with the store's error, not by running the job again, when the store keeps failing", async () => {
+    const recorder = new JobExecutionManager(new FailingCompletionStore(2), scope.logger);
+
+    await expect(recorder.executeJob(jobNamed('send_job'), {})).rejects.toThrow('the run store is unavailable');
+    expect(sendRuns).toBe(1);
   });
 
   it('records a thrown non-Error value as an Error', async () => {

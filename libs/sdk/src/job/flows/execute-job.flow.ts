@@ -23,6 +23,7 @@ import {
   EXECUTE_JOB_FLOW,
   toJobError,
   willRetryJobAttempt,
+  type JobAttemptOutcome,
   type JobAttemptWorkflowStep,
   type JobRunRecorder,
 } from '../job-attempt';
@@ -233,6 +234,9 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
    * Record how the attempt ended on the run record, and notify: `completed` with its result,
    * `retrying` when another attempt follows, `failed` when none does. A workflow step has no run
    * record of its own; its workflow run records the step.
+   *
+   * A run store that fails the write does not fail the attempt, which would run a completed job
+   * again: the attempt ends as it did, and the manager records it once more.
    */
   @Stage('updateRunState')
   async updateRunState() {
@@ -240,13 +244,20 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
     if (!run) return;
     const { attempt } = this.input;
     const { flowError, answer } = this.state;
+    let outcome: JobAttemptOutcome;
     if (!flowError && answer) {
-      await run.recordAttempt({ state: 'completed', attempt, result: answer.result, logs: answer.logs });
-      return;
+      outcome = { state: 'completed', attempt, result: answer.result, logs: answer.logs };
+    } else {
+      const error = flowError ?? new InternalMcpError('The job attempt ended before it produced a result');
+      outcome = { state: willRetryJobAttempt(error, attempt, run.maxAttempts) ? 'retrying' : 'failed', attempt, error };
     }
-    const error = flowError ?? new InternalMcpError('The job attempt ended before it produced a result');
-    const state = willRetryJobAttempt(error, attempt, run.maxAttempts) ? 'retrying' : 'failed';
-    await run.recordAttempt({ state, attempt, error });
+    try {
+      await run.recordAttempt(outcome);
+    } catch (error) {
+      this.logger.warn(
+        `updateRunState: could not record attempt ${attempt} as ${outcome.state}: ${toJobError(error).message}`,
+      );
+    }
   }
 
   @Stage('finalize')

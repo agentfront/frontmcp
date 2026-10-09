@@ -347,8 +347,9 @@ steps.
   mismatch is not retried, any other error is.
 - **Answering for the job**: a hook that calls `flowCtx.respond({ result, logs })` (a cache, say) ends the attempt with
   that result, and the run records it. The result does not go through `validateOutput`.
-- **The run record always gets the outcome**: if a hook keeps `updateRunState` from running, the job execution manager
-  records the attempt itself.
+- **The run record always gets the outcome**: if a hook keeps `updateRunState` from running, or the run store fails its
+  write, the job execution manager records the attempt itself. A store that fails to record a completed job never runs
+  the job again: if the manager's write fails too, the call fails with the store's error.
 - **Background runs** run their attempts in the run's own context: a copy of the caller's (same session, auth and
   trace, a request id of its own, no transport), or, for a caller without one, a fresh context for the auth it passed.
 - **Which hooks run**: the hooks of a plugin or provider installed on an app run for that app's jobs only. A job declared

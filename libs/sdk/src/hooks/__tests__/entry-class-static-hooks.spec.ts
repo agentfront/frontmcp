@@ -239,6 +239,12 @@ describe('static entry-class hooks on stages before the instance exists (#701)',
       expect(JSON.stringify(greeting)).toContain('Hello Dr. Ada');
       expect(JSON.stringify(farewell)).toContain('Bye Ada');
     });
+
+    it('runs for its prompt asked for by the app-qualified name prompts/list may give it', async () => {
+      const greeting = await server.getPrompt('static-hooks:greeting', { name: 'Ada' });
+
+      expect(JSON.stringify(greeting)).toContain('Hello Dr. Ada');
+    });
   });
 
   describe('agents', () => {

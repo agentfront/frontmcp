@@ -15,6 +15,7 @@ import {
   toJobError,
   willRetryJobAttempt,
   type JobAttemptOutcome,
+  type JobAttemptResult,
   type JobRunRecorder,
 } from '../job-attempt';
 import { detachedRunContext } from '../job-context-providers';
@@ -263,8 +264,9 @@ export class JobExecutionManager {
     // Each attempt is one run of the `jobs:execute-job` flow, which records how it ended (#700).
     // The first attempt always runs; `retry.maxAttempts` is at least 1.
     for (let attempt = 1; ; attempt++) {
+      let answer: JobAttemptResult;
       try {
-        const { result, logs } = await runJobAttemptFlow({
+        answer = await runJobAttemptFlow({
           job,
           input,
           attempt,
@@ -274,9 +276,6 @@ export class JobExecutionManager {
           authoritiesContextBuilder: opts.authoritiesContextBuilder,
           run,
         });
-        // A hook may keep the flow from recording; the run record still gets the outcome
-        await run.ensureRecorded({ state: 'completed', attempt, result, logs });
-        return { runId, result, state: 'completed', logs: [...logs] };
       } catch (err) {
         const error = toJobError(err);
         const retry = willRetryJobAttempt(error, attempt, maxAttempts);
@@ -284,7 +283,13 @@ export class JobExecutionManager {
         await run.ensureRecorded({ state: retry ? 'retrying' : 'failed', attempt, error });
         if (!retry) throw error;
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs(retryConfig, attempt)));
+        continue;
       }
+      // A hook may keep the flow from recording, or the run store failed its write; the run record
+      // still gets the outcome. The job ran: a store error from here on is never retried.
+      const { result, logs } = answer;
+      await run.ensureRecorded({ state: 'completed', attempt, result, logs });
+      return { runId, result, state: 'completed', logs: [...logs] };
     }
   }
 
@@ -438,8 +443,8 @@ function withBackgroundContext<Options extends ExecuteJobOptions>(opts: Options,
 
 /**
  * The run recorder a run's attempts write through, remembering which attempts it recorded, so the
- * manager records an attempt only when its flow did not (it failed before `updateRunState`, or a hook
- * kept that stage from running).
+ * manager records an attempt only when its flow did not (it failed before `updateRunState`, a hook
+ * kept that stage from running, or the run store failed the write).
  */
 class RunRecorder implements JobRunRecorder {
   private readonly recorded = new Set<number>();
@@ -451,8 +456,8 @@ class RunRecorder implements JobRunRecorder {
   ) {}
 
   async recordAttempt(outcome: JobAttemptOutcome): Promise<void> {
-    this.recorded.add(outcome.attempt);
     await this.write(outcome);
+    this.recorded.add(outcome.attempt);
   }
 
   async ensureRecorded(outcome: JobAttemptOutcome): Promise<void> {
