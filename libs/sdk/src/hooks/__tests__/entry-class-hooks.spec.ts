@@ -1,8 +1,9 @@
 /**
  * Hooks declared on an entry class run on the instance built for each call. The SDK accepted hooks
- * that could never run there and dropped them silently (#678): hooks on stages that run before the
- * instance exists, list hooks (no instance is built to list entries), and any hook on a `@Job` class
- * (jobs do not run through a hookable flow). Each now fails at startup.
+ * that could never run there and dropped them silently (#678): instance hooks on stages that run
+ * before the instance exists, and list hooks (no instance is built to list entries). Each now fails at
+ * startup. A `@Job` class's hooks run on its `jobs:execute-job` flow (#700); a hook it declares for
+ * any other flow fails at startup.
  */
 import 'reflect-metadata';
 
@@ -19,6 +20,7 @@ import {
   FlowHooksOf,
   Job,
   JobContext,
+  JobHook,
   ListResourcesHook,
   ListToolsHook,
   LogLevel,
@@ -238,12 +240,12 @@ describe('entry class hooks that would never run fail at startup', () => {
     await expect(startWith(EarlyAgentApp)).rejects.toThrow(/Agent "EarlyAgent" declares hooks that would never run/);
   });
 
-  it('rejects any hook declared on a job class', async () => {
+  it('rejects a job class hook for a flow other than the job flow (#700)', async () => {
     @Job({ name: 'hooked_job', inputSchema: {}, outputSchema: { ok: z.boolean() } })
     class HookedJob extends JobContext {
       @ToolHook.Will('execute')
       audit() {
-        // never reached: jobs do not run through a hookable flow
+        // never reached: a job's attempts run jobs:execute-job, not tools:call-tool
       }
 
       async execute() {
@@ -254,7 +256,27 @@ describe('entry class hooks that would never run fail at startup', () => {
     class JobsApp {}
 
     await expect(startWith(JobsApp, { jobs: { enabled: true } })).rejects.toThrow(
-      /Job "HookedJob" declares hooks \(audit\(\) on tools:call-tool\), but jobs do not run through a hookable flow/,
+      /Job "HookedJob" has hooks for unsupported flows: audit\(\) on tools:call-tool\. Only the job flow \(jobs:execute-job\)/,
+    );
+  });
+
+  it('rejects a job class instance hook on a stage before the job instance exists (#700)', async () => {
+    @Job({ name: 'early_job', inputSchema: {}, outputSchema: { ok: z.boolean() } })
+    class EarlyJob extends JobContext {
+      @JobHook.Will('checkJobAuthorization')
+      early() {
+        // never reached: no instance exists yet
+      }
+
+      async execute() {
+        return { ok: true };
+      }
+    }
+    @App({ id: 'early-jobs', name: 'EarlyJobs', jobs: [EarlyJob] })
+    class EarlyJobsApp {}
+
+    await expect(startWith(EarlyJobsApp, { jobs: { enabled: true } })).rejects.toThrow(
+      /Job "EarlyJob" declares hooks that would never run: early\(\) \(will 'checkJobAuthorization' of jobs:execute-job\): runs before 'createJobContext'.*declare it as a static method/,
     );
   });
 

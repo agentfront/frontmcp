@@ -225,6 +225,34 @@ async execute(input) {
 }
 ```
 
+## Hooks
+
+Each attempt of a job runs the hookable `jobs:execute-job` flow (`JobHook`), so plugins and providers can hook every
+run, retry and workflow step of a job. A job class can declare hooks for that flow too: instance methods from
+`createJobContext` on, `static` methods for the earlier stages.
+
+```typescript
+@Job({ name: 'sync-data', inputSchema: { source: z.string() }, outputSchema: { synced: z.number() } })
+class SyncDataJob extends JobContext {
+  @JobHook.Will('checkJobAuthorization')
+  static checkSource(flowCtx: FlowCtxOf<'jobs:execute-job'>) {
+    // Runs before the job instance exists; `this` is the class
+  }
+
+  @JobHook.Did('execute')
+  afterExecute() {
+    this.log(`attempt ${this.attempt} done`);
+  }
+
+  async execute(input: { source: string }) {
+    return { synced: 0 };
+  }
+}
+```
+
+See [Jobs: Hooks](/frontmcp/servers/jobs#hooks) for the stages and how retries, background runs and workflow steps run
+them.
+
 ## Related
 
 <CardGroup cols={2}>

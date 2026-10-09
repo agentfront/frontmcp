@@ -128,7 +128,7 @@ class GenerateReportJob extends JobContext {
 
 - `this.attempt` -- the current attempt number (1-based). On the first run, `this.attempt` is `1`. On the first retry, it is `2`, and so on (up to 1.9.1 it was always `1`).
 - `this.get(token)` -- a job declared on an `@App` resolves that app's providers, as the app's tools do (up to 1.9.1 it saw only the server's).
-- `this.context`, `this.remember`, `this.featureFlags` and other CONTEXT-scoped providers -- a job started by `execute_job` or `execute_workflow` runs with the caller's request context; a background run gets its own copy (same session, auth and trace, no transport). Up to 1.9.1 they threw inside a job.
+- `this.context`, `this.remember`, `this.featureFlags` and other CONTEXT-scoped providers -- a job started by `execute_job` or `execute_workflow` runs with the caller's request context; a background run gets its own copy (same session, auth and trace, no transport), or a fresh context for the passed auth when the caller had none. Up to 1.9.1 they threw inside a job.
 - `this.input` -- the validated input object.
 - `this.metadata` -- job metadata from the decorator.
 - `this.scope` -- the current scope instance.
@@ -270,7 +270,7 @@ Control who can interact with jobs using the `permissions` field. **`permissions
 
 **Requires 1.7.2 or later.** Before 1.7.2 (GHSA-58v2-gpcc-jmqv) the `permissions` array was validated and stored but never evaluated — every job was reachable by every caller who could reach `execute_job`. On older versions do not rely on this field for access control.
 
-Semantics: no rules for an action means allow (the documented default); once any rule targets an action, **all** rules for that action must pass, and `roles`/`scopes` within a single rule are **any-of**. A directly executed job is checked in `JobExecutionManager` (the `execute_job` tool, triggers, background runs); a job reached as a workflow step is checked against its own rules in `WorkflowStepExecutor`, so authorizing the workflow does not launder the jobs it references. `list_jobs` hides entries the caller could not run, and a denial is indistinguishable from "not found" so restricted job names cannot be enumerated.
+Semantics: no rules for an action means allow (the documented default); once any rule targets an action, **all** rules for that action must pass, and `roles`/`scopes` within a single rule are **any-of**. A directly executed job is checked in `JobExecutionManager` when the run starts, before any run record exists (the `execute_job` tool, triggers, background runs); every attempt is then checked again by the `checkJobAuthorization` stage of its `jobs:execute-job` flow, and that is where a job reached as a workflow step is checked against its own rules, so authorizing the workflow does not launder the jobs it references. A denial is not retried. `list_jobs` hides entries the caller could not run, and a denial is indistinguishable from "not found" so restricted job names cannot be enumerated.
 
 ### Permission Rule Shape
 
@@ -351,6 +351,42 @@ permissions: [
   { action: 'read', roles: ['admin', 'operator', 'viewer'] },
   { action: 'list', roles: ['admin', 'operator', 'viewer'] },
 ];
+```
+
+## Hooks
+
+Every attempt of a job runs the hookable `jobs:execute-job` flow -- `execute_job` inline or in the background, each retry, each workflow step, and any in-process call of the job execution manager -- so audit, metrics, quota and authorization attach to job runs like to any other entry. Hook it from a plugin or provider with `JobHook` (`FlowHooksOf('jobs:execute-job')`):
+
+```typescript
+import { FlowCtxOf, JobHook, Plugin } from '@frontmcp/sdk';
+
+@Plugin({ name: 'job-audit' })
+class JobAuditPlugin {
+  @JobHook.Did('updateRunState')
+  recorded(flowCtx: FlowCtxOf<'jobs:execute-job'>) {
+    const { job, attempt, runId, workflow, flowError } = flowCtx.state;
+    audit.record({ job: job?.name, attempt, runId, step: workflow?.stepId, ok: !flowError });
+  }
+}
+```
+
+Stages: `parseInput` -> `checkJobAuthorization` -> `validateInput` -> `createJobContext` -> `execute` -> `validateOutput` -> `updateRunState` -> `finalize`. `updateRunState` writes the attempt to the run record (`completed`, `retrying` or `failed`) and notifies; a workflow step has no run record of its own (`state.runId` unset, `state.workflow` set). One flow run per attempt: a job with `retry.maxAttempts: 3` can run a hook three times per call. A hook that throws fails the attempt (a `JobNotAuthorizedError` is not retried); a hook that calls `flowCtx.respond({ result, logs })` answers for the job and the run records that result. The hooks of a plugin installed on an app run for that app's jobs only.
+
+A `@Job` class can declare hooks for `jobs:execute-job` itself, which run only for its attempts: instance methods from `createJobContext` on (`Did('createJobContext')`, `Will('execute')`, ...), `static` methods for the earlier stages (`parseInput`, `checkJobAuthorization`, `validateInput`). A hook for another flow fails startup with `InvalidHookFlowError`. Up to 1.9.3 jobs ran outside any flow and any hook on a job class failed startup.
+
+```typescript
+@Job({ name: 'export-report', inputSchema: { tenant: z.string() }, outputSchema: { url: z.string() } })
+class ExportReportJob extends JobContext {
+  @JobHook.Will('checkJobAuthorization')
+  static refuseSuspended(flowCtx: FlowCtxOf<'jobs:execute-job'>) {
+    const tenant = (flowCtx.state.input as { tenant?: string } | undefined)?.tenant;
+    if (tenant && suspendedTenants.has(tenant)) throw new JobNotAuthorizedError('export-report');
+  }
+
+  async execute({ tenant }: { tenant: string }) {
+    return { url: await exportFor(tenant) };
+  }
+}
 ```
 
 ## Function Builder
@@ -622,6 +658,7 @@ class DataServer {}
 | Attempt awareness | Check `this.attempt` for retry-specific logic                                        | Ignoring attempt number                                              | `this.attempt` is 1-based; use it to log retry context or adjust behavior                                                              |
 | Job logging       | `this.log('message')` for persistent, queryable logs                                 | Using `console.log()`                                                | `this.log()` persists with job state; `console.log` is ephemeral                                                                       |
 | Permissions       | `permissions: [{ action: 'execute', roles: [...] }, ...]` (array, singular `action`) | `permissions: { actions: [...], roles, predicate }` (does not parse) | The schema requires an array of `{ action, roles, scopes, custom }` rules; `actions` plural and top-level `predicate` are not accepted |
+| Job hooks         | `@JobHook.Will('execute')` on a plugin, or on the `@Job` class itself                | Hooking `tools:call-tool` for `execute_job`                          | `jobs:execute-job` runs for every attempt, background run and workflow step; the `execute_job` tool's flow sees only the call          |
 
 ## Verification Checklist
 

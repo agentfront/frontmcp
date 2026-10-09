@@ -1,33 +1,11 @@
 import { depsOfClass, depsOfFunc, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
 
-import { type JobEntry } from '../common/entries/job.entry';
-import { FlowControl } from '../common/interfaces/flow.interface';
 import { type JobContext, type JobType } from '../common/interfaces/job.interface';
 import { type JobMetadata } from '../common/metadata/job.metadata';
 import { JobKind, type JobFunctionTokenRecord, type JobRecord } from '../common/records/job.record';
 import { extendedJobMetadata, FrontMcpJobTokens } from '../common/tokens/job.tokens';
 import { isExternalEntryRecord, unsupportedExternalEntry } from '../common/utils/external-entry.utils';
-import { runOnSurface } from '../context/call-surface';
 import { InvalidEntityError } from '../errors';
-
-/**
- * Run one attempt of a job: its `execute()` on the `'job'` surface, whose value, or the one it passed
- * to `this.respond()`, must match the job's `outputSchema`. Returns that value as the schema parses it.
- */
-export async function runJobAttempt(
-  job: JobEntry,
-  ctx: ReturnType<JobEntry['create']>,
-  input: ReturnType<JobEntry['parseInput']>,
-): Promise<unknown> {
-  let result: unknown;
-  try {
-    result = await runOnSurface('job', async () => ctx.execute(input));
-  } catch (error) {
-    if (!(error instanceof FlowControl && error.type === 'respond')) throw error;
-    result = error.output;
-  }
-  return job.parseOutput(result);
-}
 
 export function collectJobMetadata(cls: JobType): JobMetadata {
   const extended = getMetadata(extendedJobMetadata, cls);

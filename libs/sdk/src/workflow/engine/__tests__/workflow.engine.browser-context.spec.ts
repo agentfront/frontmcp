@@ -9,10 +9,14 @@
  * Without `AsyncContext` the engine now runs ready steps one after another, so each step runs once,
  * on its own surface, and the workflow takes about the sum of its steps.
  */
-import type { JobEntry } from '../../../common/entries/job.entry';
+import 'reflect-metadata';
+
+import { App, Job, JobContext, LogLevel } from '../../../common';
 import type { WorkflowMetadata } from '../../../common/metadata/workflow.metadata';
 import { getCallSurface } from '../../../context/call-surface';
-import type { JobRegistryInterface } from '../../../job/job.registry';
+import { type DirectMcpServer } from '../../../direct/direct.types';
+import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
+import { type Scope } from '../../../scope/scope.instance';
 import { WorkflowEngine } from '../workflow.engine';
 
 jest.mock('#async-context', () => jest.requireActual('../../../../../utils/src/async-context/browser-async-context'));
@@ -25,52 +29,59 @@ const logger = {
   verbose: jest.fn(),
 } as unknown as ConstructorParameters<typeof WorkflowEngine>[2];
 
-interface Probe {
-  executions: number;
-  inFlight: number;
-  maxInFlight: number;
-  surfaces: Array<string | undefined>;
+const probe = { executions: 0, inFlight: 0, maxInFlight: 0, surfaces: [] as Array<string | undefined> };
+
+abstract class SlowFetch extends JobContext {
+  async execute() {
+    probe.executions++;
+    probe.inFlight++;
+    probe.maxInFlight = Math.max(probe.maxInFlight, probe.inFlight);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      probe.surfaces.push(getCallSurface());
+      return {};
+    } finally {
+      probe.inFlight--;
+    }
+  }
 }
 
-function registryOf(probe: Probe, names: string[], ms: number): JobRegistryInterface {
-  const jobs = new Map<string, JobEntry>(
-    names.map((name) => [
-      name,
-      {
-        name,
-        metadata: { name },
-        parseInput: (input: unknown) => input,
-        parseOutput: (output: unknown) => output,
-        create: () => ({
-          loadAuthContext: async () => undefined,
-          execute: async () => {
-            probe.executions++;
-            probe.inFlight++;
-            probe.maxInFlight = Math.max(probe.maxInFlight, probe.inFlight);
-            try {
-              await new Promise((resolve) => setTimeout(resolve, ms));
-              probe.surfaces.push(getCallSurface());
-              return { job: name };
-            } finally {
-              probe.inFlight--;
-            }
-          },
-        }),
-      } as unknown as JobEntry,
-    ]),
-  );
-  return { findByName: (name: string) => jobs.get(name) } as unknown as JobRegistryInterface;
-}
+@Job({ name: 'fetch-a', inputSchema: {}, outputSchema: {} })
+class FetchA extends SlowFetch {}
+
+@Job({ name: 'fetch-b', inputSchema: {}, outputSchema: {} })
+class FetchB extends SlowFetch {}
+
+@Job({ name: 'fetch-c', inputSchema: {}, outputSchema: {} })
+class FetchC extends SlowFetch {}
+
+@App({ id: 'fan-out', name: 'Fan out', jobs: [FetchA, FetchB, FetchC] })
+class FanOutApp {}
 
 describe('WorkflowEngine without AsyncContext (browser build)', () => {
+  let server: DirectMcpServer;
+
+  beforeAll(async () => {
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'workflow-engine-browser-context', version: '1.0.0' },
+      apps: [FanOutApp],
+      logging: { level: LogLevel.Off },
+    });
+  });
+
+  afterAll(async () => {
+    await server.dispose();
+  });
+
   it('runs independent steps once each, one after another, each on the job surface', async () => {
-    const probe: Probe = { executions: 0, inFlight: 0, maxInFlight: 0, surfaces: [] };
+    const registry = (server as unknown as { scope: Scope }).scope.jobs;
+    if (!registry) throw new Error('jobs are not enabled');
     const names = ['fetch-a', 'fetch-b', 'fetch-c'];
     const metadata = {
       name: 'fan-out',
       steps: names.map((name) => ({ id: name, jobName: name })),
     } as unknown as WorkflowMetadata;
-    const engine = new WorkflowEngine(metadata, registryOf(probe, names, 50), logger, { authInfo: {} });
+    const engine = new WorkflowEngine(metadata, registry, logger, { authInfo: {} });
 
     const result = await engine.execute({});
 

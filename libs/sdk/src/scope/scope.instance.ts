@@ -969,6 +969,7 @@ export class Scope extends ScopeEntry {
 
       const result = await registerJobCapabilities({
         providers: this.scopeProviders,
+        flowRegistry: this.scopeFlows,
         owner: scopeRef,
         jobsList: allJobs,
         jobProviders,
