@@ -76,7 +76,7 @@ import AuditPlugin from './plugins/audit.plugin';
 export default class MyApp {}
 ```
 
-A `DynamicPlugin` listed as its class is built exactly as `AuditPlugin.init()` builds it: its constructor, `static dynamicProviders` and `static dynamicTools` all get `{}`, so `plugins: [AuditPlugin]` installs the same providers and tools as `plugins: [AuditPlugin.init()]`. A plugin whose options are required fails at startup with its own error (`FeatureFlagPlugin` names the missing `adapter`). Up to 1.9.3 the class form got none of the providers or tools a plugin derives from its options: `plugins: [CodeCallPlugin]` left the server with no tools, and `plugins: [RememberPlugin]` failed on the first `this.remember`.
+A `DynamicPlugin` listed as its class is built exactly as `AuditPlugin.init()` builds it: its constructor, `static dynamicProviders` and `static dynamicTools` all get `{}`, so `plugins: [AuditPlugin]` installs the same providers and tools as `plugins: [AuditPlugin.init()]`. A plugin that validates required options at runtime fails at startup with its own error (`FeatureFlagPlugin` names the missing `adapter`); TypeScript types alone validate nothing, so a plugin without such a check starts with `{}`. Up to 1.9.3 the class form got none of the providers or tools a plugin derives from its options: `plugins: [CodeCallPlugin]` left the server with no tools, and `plugins: [RememberPlugin]` failed on the first `this.remember`.
 
 ## Adding Hooks
 

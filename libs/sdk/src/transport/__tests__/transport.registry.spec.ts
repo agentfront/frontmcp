@@ -950,21 +950,29 @@ describe('TransportService', () => {
       expect(jest.getTimerCount()).toBe(0);
     });
 
-    it('honours persistence.sessionCheckTimeoutMs, and checks again on the next request', async () => {
+    it('honours persistence.sessionCheckTimeoutMs, and checks again once the store answers', async () => {
       service = new TransportService(mockScope as never, { redis: { host: 'localhost' }, sessionCheckTimeoutMs: 20 });
       await service.ready;
       const transport = await service.createTransporter('streamable-http', 'test-token', 'held', mockResponse as never);
 
-      mockRedisSessionStore.exists.mockImplementationOnce(never);
+      let answer: (exists: boolean) => void = () => undefined;
+      mockRedisSessionStore.exists.mockImplementationOnce(() => new Promise<boolean>((resolve) => (answer = resolve)));
       expect(await service.getTransporter('streamable-http', 'test-token', 'held')).toBe(transport);
       expect(mockScope.logger.warn).toHaveBeenCalledWith(
         '[TransportService] Could not confirm the session is still stored — serving it here',
         expect.objectContaining({ error: 'The session store did not answer within 20 ms' }),
       );
 
+      // While that read is unanswered, the next request waits on it instead of sending another.
+      expect(await service.getTransporter('streamable-http', 'test-token', 'held')).toBe(transport);
+      expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(1);
+
       // Redis answers again: the record is gone, so the session is dropped here too.
+      answer(true);
+      await new Promise((resolve) => setImmediate(resolve));
       mockRedisSessionStore.exists.mockResolvedValueOnce(false);
       expect(await service.getTransporter('streamable-http', 'test-token', 'held')).toBeUndefined();
+      expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(2);
       expect(transport.destroy).toHaveBeenCalledWith('the session was deleted');
     });
 

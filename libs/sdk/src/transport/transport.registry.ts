@@ -156,6 +156,9 @@ export class TransportService {
   /** How long the per-request check of a session held in memory waits for the session store. */
   private readonly sessionCheckTimeoutMs: number;
 
+  /** Session-store reads of the per-request check that have not settled yet, by read and session. */
+  private readonly pendingSessionChecks = new Map<string, Promise<unknown>>();
+
   /**
    * Redis key prefix under which session records are stored.
    * The session store appends `session:` to the transport key prefix.
@@ -562,7 +565,8 @@ export class TransportService {
 
     let ownerNodeId: string | undefined;
     try {
-      ownerNodeId = (await this.withSessionCheckTimeout(store.get(sessionId)))?.session?.nodeId;
+      ownerNodeId = (await this.withSessionCheckTimeout(`get:${sessionId}`, () => store.get(sessionId)))?.session
+        ?.nodeId;
     } catch (error) {
       this.scope.logger.warn('[HA] Could not confirm this node still owns the session — serving it here', {
         sessionId: sessionId.slice(0, 20),
@@ -601,7 +605,7 @@ export class TransportService {
     const store = this.sessionStore;
     if (!store || !this.storedLocalSessions.has(sessionId)) return true;
     try {
-      if (await this.withSessionCheckTimeout(store.exists(sessionId))) return true;
+      if (await this.withSessionCheckTimeout(`exists:${sessionId}`, () => store.exists(sessionId))) return true;
     } catch (error) {
       this.scope.logger.warn('[TransportService] Could not confirm the session is still stored — serving it here', {
         sessionId: sessionId.slice(0, 20),
@@ -621,8 +625,16 @@ export class TransportService {
    * connection but never answers (a paused Redis, a partition that does not reset TCP) would otherwise
    * hold the request open: the read rejects after `persistence.sessionCheckTimeoutMs` instead, so the
    * caller takes its "store unreadable" path and serves the session from memory.
+   *
+   * The timer does not cancel the read. While one is unanswered, later requests for the same session
+   * wait on it rather than send another, so a silent store never accumulates a backlog of commands.
    */
-  private withSessionCheckTimeout<T>(read: Promise<T>): Promise<T> {
+  private withSessionCheckTimeout<T>(key: string, issueRead: () => Promise<T>): Promise<T> {
+    let read = this.pendingSessionChecks.get(key) as Promise<T> | undefined;
+    if (!read) {
+      read = issueRead().finally(() => this.pendingSessionChecks.delete(key));
+      this.pendingSessionChecks.set(key, read);
+    }
     const timeoutMs = this.sessionCheckTimeoutMs;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<never>((_resolve, reject) => {

@@ -106,6 +106,9 @@ describe('plugins: [CodeCallPlugin] without init() (#803)', () => {
         (error: Error) => ({ rejected: error.message }),
       );
 
-    expect(await outcome(classForm)).toEqual(await outcome(initForm));
+    const classOutcome = await outcome(classForm);
+    // Refused in both forms: never an ordinary successful result.
+    expect(classOutcome).not.toEqual({ isError: false });
+    expect(classOutcome).toEqual(await outcome(initForm));
   });
 });
