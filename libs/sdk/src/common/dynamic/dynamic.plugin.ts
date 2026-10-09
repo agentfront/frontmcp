@@ -1,5 +1,6 @@
 // dynamic-plugin.ts
 import { type Reference } from '@frontmcp/di';
+import { brandClass, isBrandedInstance } from '@frontmcp/utils';
 
 import { MethodNotImplementedError } from '../../errors/transport.errors';
 import { type PluginType, type ProviderType, type ToolType } from '../interfaces';
@@ -71,6 +72,14 @@ export function initOptionsOf(instance: object): { options: unknown } | undefine
  */
 export abstract class DynamicPlugin<TOptions extends object, TInput extends object = TOptions> {
   /**
+   * `instanceof DynamicPlugin` also recognises a plugin built on another copy of the SDK in the
+   * process, such as the CommonJS copy `@frontmcp/observability` loads in an ES-module project (#802).
+   */
+  static [Symbol.hasInstance](value: unknown): boolean {
+    return isBrandedInstance(this, value);
+  }
+
+  /**
    * Brand for resolved options type (used internally).
    */
   declare __options_brand: TOptions;
@@ -136,3 +145,5 @@ export abstract class DynamicPlugin<TOptions extends object, TInput extends obje
     };
   }
 }
+
+brandClass(DynamicPlugin, '@frontmcp/sdk:DynamicPlugin');

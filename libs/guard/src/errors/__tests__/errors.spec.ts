@@ -118,3 +118,31 @@ describe('GuardStorageUnavailableError', () => {
     expect(new GuardStorageUnavailableError('auto').message).toContain('unavailable: unknown error.');
   });
 });
+
+describe('guard errors from another copy of @frontmcp/guard (#802)', () => {
+  type ErrorsModule = typeof import('../errors');
+
+  function loadSecondCopy(): ErrorsModule {
+    let copy: ErrorsModule | undefined;
+    jest.isolateModules(() => {
+      copy = jest.requireActual<ErrorsModule>('../errors');
+    });
+    if (!copy) throw new Error('the second copy did not load');
+    return copy;
+  }
+
+  const second = loadSecondCopy();
+
+  it('recognises the other copy as GuardError and GuardStorageUnavailableError', () => {
+    expect(second.GuardError).not.toBe(GuardError);
+    expect(new second.GuardStorageUnavailableError('redis')).toBeInstanceOf(GuardStorageUnavailableError);
+    expect(new second.GuardStorageUnavailableError('redis')).toBeInstanceOf(GuardError);
+    expect(new second.ConcurrencyLimitError('tool', 1)).toBeInstanceOf(GuardError);
+  });
+
+  it('keeps subclass checks exact', () => {
+    expect(new second.ConcurrencyLimitError('tool', 1) instanceof GuardStorageUnavailableError).toBe(false);
+    expect(new second.GuardError('x', 'X', 400) instanceof GuardStorageUnavailableError).toBe(false);
+    expect(new Error('x') instanceof GuardError).toBe(false);
+  });
+});
