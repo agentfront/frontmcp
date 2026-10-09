@@ -389,13 +389,34 @@ class IsolatedAgent extends AgentContext { ... }
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `tools`     | The agent's model, which is offered them as tools. Clients aren't.                                                                                                                             |
 | `providers` | The agent's tools (`this.get(DatabaseService)`). They don't have to be registered in the app too: up to 1.8.7 an agent provider the app didn't also register stopped the server from starting. |
-| `resources` | Nobody, unless exported: the agent's model is sent tools only. A resource that isn't exported is reported at startup.                                                                          |
-| `prompts`   | Nobody, unless exported, as for resources.                                                                                                                                                     |
+| `resources` | The agent's model, through the built-in `list_resources` and `read_resource` tools (see [Reading resources and prompts](#reading-resources-and-prompts)). Clients, only when exported.         |
+| `prompts`   | The agent's model, through the built-in `list_prompts` and `get_prompt` tools. Clients, only when exported.                                                                                    |
 | `agents`    | The agent's model (see [Nested Agents](#nested-agents)).                                                                                                                                       |
 
 The agent's tools also see the providers of the agent's app and of the server, as the app's own tools do (for a nested agent, those of its parent agent too). Up to 1.9.1 an app provider failed in an agent's tool with `Provider "TicketStore" is not available`; only server-level providers reached it.
 
 From the agent's own code, `this.callTool(name, args)` reaches the agent's own tools and its nested agents' `invoke_<agent-id>` tools, which run in the agent's scope, and otherwise the tools of the server. Up to 1.9.1 it found only the server's tools, so a call to one of the agent's own tools or nested agents answered `Tool not found`.
+
+### Reading resources and prompts
+
+An agent that declares `resources` offers its model two more tools, `list_resources` and `read_resource`; one that declares `prompts` offers `list_prompts` and `get_prompt`. An agent that declares neither is offered no extra tool. The model reads every resource and prompt the agent declares, exported or not (`exports` only decides what clients see), and those a nested agent exports to it.
+
+| Tool             | Arguments                                           | What the model gets                                                                                          |
+| ---------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `list_resources` | none                                                | `{ resources: [{ uri, name, title?, description?, mimeType? }], resourceTemplates: [{ uriTemplate, ... }] }` |
+| `read_resource`  | `{ uri }`: a listed URI, or a filled-in template    | The resource's text                                                                                          |
+| `list_prompts`   | none                                                | `{ prompts: [{ name, title?, description?, arguments? }] }`                                                  |
+| `get_prompt`     | `{ name, arguments? }` (values are sent as strings) | The prompt's description, then each message headed by its role (`[user]`, `[assistant]`)                     |
+
+Each one runs through the agent scope's own flow: `resources:list-resources` and `resources:list-resource-templates`, `resources:read-resource`, `prompts:list-prompts` and `prompts:get-prompt`, on the `agent` surface. The hooks of the plugins installed on the agent run for these flows, the resource's or prompt's `authorities` are evaluated against the caller the agent runs for, `availableWhen.surface` applies (a resource offered on `['mcp']` only is neither listed nor readable), and `execution.useToolFlow: false` does not skip them. `publicAccess` is not checked again: the anonymous caller's call to the agent was.
+
+A read that fails reaches the model as the tool's error, as a failing tool does: an unknown URI reads `{"error":"Resource not found: library://missing"}`, an unknown prompt `{"error":"Prompt not found: farewell"}`, a denied authority `{"error":"Access denied to Resource ..."}`.
+
+Text reaches the model as it is. A resource read with one text content is that text; with several contents, each is headed by its URI and MIME type. Binary content is never sent: a `blob` content, an image or audio message, or a blob embedded in a prompt is replaced by a one-line description such as `[binary content omitted: library://cover (image/png, 6 bytes)]`. A resource link in a prompt is named by its URI, which `read_resource` can read.
+
+None of the agent's own tools (its `tools`, a plugin's or adapter's tool, a nested agent's `invoke_` tool) may take the name of a built-in tool it is offered: the server refuses to start with `AgentConfigurationError` (`Agent "isolated-agent" has a tool named "read_resource", the name of a built-in tool its model reads the agent's resources and prompts with. Rename the tool.`). A tool named `get_prompt` on an agent that declares no prompts is fine. A tool of the agent's scope by one of these names, offered with `inheritParentTools`, is not offered to the model: the built-in wins.
+
+Up to 1.9.3 the model was offered tools only: an agent's resources and prompts reached nothing unless exported, and those that were not exported were reported at startup.
 
 ### Exports
 

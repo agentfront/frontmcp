@@ -12,7 +12,7 @@
  * - Mocking and interception
  * - Raw protocol access
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Agents E2E', () => {
   test.use({
@@ -62,7 +62,7 @@ test.describe('Agents E2E', () => {
     test('should have correct number of agent tools', async ({ mcp }) => {
       const tools = await mcp.tools.list();
       const agentTools = tools.filter((t) => t.name.startsWith('invoke_'));
-      expect(agentTools.length).toBe(3);
+      expect(agentTools.length).toBe(4);
     });
 
     test('should have required property markers in schemas', async ({ mcp }) => {

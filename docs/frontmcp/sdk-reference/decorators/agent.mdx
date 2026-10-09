@@ -77,8 +77,8 @@ Agents can use the default `execute()` from `AgentContext` (which runs the LLM a
 | `agents`             | `AgentType[]`          | Nested agents, offered to the agent's model as `invoke_<agent>` tools and callable with `this.invokeAgent()`                        |
 | `providers`          | `ProviderType[]`       | Providers for the agent's tools                                                                                                     |
 | `plugins`            | `PluginType[]`         | Plugins whose hooks run for the agent's tools                                                                                       |
-| `resources`          | `ResourceType[]`       | Agent-scoped resources (not sent to the model; served to clients when exported)                                                     |
-| `prompts`            | `PromptType[]`         | Agent-scoped prompts (not sent to the model; served to clients when exported)                                                       |
+| `resources`          | `ResourceType[]`       | Agent-scoped resources, read by the agent's model with `list_resources` / `read_resource`; served to clients when exported          |
+| `prompts`            | `PromptType[]`         | Agent-scoped prompts, read by the agent's model with `list_prompts` / `get_prompt`; served to clients when exported                 |
 | `exports`            | `AgentExportsConfig`   | `{ resources?, prompts?, providers? }` shared with the scope the agent is registered in                                             |
 | `swarm`              | `AgentSwarmConfig`     | `{ canSeeOtherAgents?, visibleAgents?, isVisible?, maxCallDepth? }`: which other agents it can call, and how deep                   |
 | `execution`          | `AgentExecutionConfig` | `{ maxIterations?, timeout?, inheritParentTools?, inheritPlugins?, useToolFlow?, enableAutoProgress?, notificationInterval?, ... }` |

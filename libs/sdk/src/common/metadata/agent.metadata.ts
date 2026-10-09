@@ -477,14 +477,19 @@ export interface AgentMetadata<
   tools?: ToolType[];
 
   /**
-   * Agent-scoped resources. The agent's model is sent tools only, so these reach clients only when
-   * exported (`exports.resources`); one that isn't is reported at startup.
+   * Agent-scoped resources. The agent's model reads them, exported or not, with the built-in
+   * `list_resources` and `read_resource` tools, which run through the agent scope's
+   * `resources:list-resources`, `resources:list-resource-templates` and `resources:read-resource` flows.
+   * Clients see them only when exported (`exports.resources`). None of the agent's own tools may be
+   * named `list_resources` or `read_resource`.
    */
   resources?: ResourceType[];
 
   /**
-   * Agent-scoped prompts. The agent's model is sent tools only, so these reach clients only when
-   * exported (`exports.prompts`); one that isn't is reported at startup.
+   * Agent-scoped prompts. The agent's model gets them, exported or not, with the built-in
+   * `list_prompts` and `get_prompt` tools, which run through the agent scope's `prompts:list-prompts`
+   * and `prompts:get-prompt` flows. Clients see them only when exported (`exports.prompts`). None of the
+   * agent's own tools may be named `list_prompts` or `get_prompt`.
    */
   prompts?: PromptType[];
 

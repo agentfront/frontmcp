@@ -511,13 +511,16 @@ function toContentArray<T extends ContentBlock>(expectedType: T['type'], value: 
  * ```
  */
 export function buildAgentToolDefinitions(tools: ToolEntry[]): AgentToolDefinition[] {
-  return tools.map((tool) => {
-    const parameters = tool.getInputJsonSchema() ?? { type: 'object', properties: {} };
+  return tools.map(buildAgentToolDefinition);
+}
 
-    return {
-      name: tool.metadata.id ?? tool.metadata.name,
-      description: tool.metadata.description ?? '',
-      parameters,
-    };
-  });
+/** The {@link AgentToolDefinition} of one tool entry: see {@link buildAgentToolDefinitions}. */
+export function buildAgentToolDefinition(tool: ToolEntry): AgentToolDefinition {
+  const parameters = tool.getInputJsonSchema() ?? { type: 'object', properties: {} };
+
+  return {
+    name: tool.metadata.id ?? tool.metadata.name,
+    description: tool.metadata.description ?? '',
+    parameters,
+  };
 }
