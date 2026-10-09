@@ -140,6 +140,11 @@ describe('packageManagerCommand', () => {
       const host = windows([], { npm_execpath: 'C:\\yarn\\yarn' });
       expect(packageManagerCommand('yarn', [], host).command).toBe('cmd.exe');
     });
+
+    it('ignore an npm_execpath of another tool whose name starts with the manager', () => {
+      const host = windows([], { npm_execpath: 'C:\\Users\\me\\.bun\\bin\\bunx.exe' });
+      expect(packageManagerCommand('bun', ['install'], host).command).toBe('cmd.exe');
+    });
   });
 });
 
