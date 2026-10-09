@@ -495,6 +495,26 @@ describe('TransportService — distributed sessions (#680)', () => {
       await expect(service.findRemoteSessionOwner(request())).resolves.toBeUndefined();
       expect(local.destroy).not.toHaveBeenCalled();
     });
+
+    it('serves the session here when the store does not answer in time (#804)', async () => {
+      const { service, scope, local } = await holdLocalSession();
+      jest.useFakeTimers();
+      try {
+        mockStore.get.mockImplementationOnce(() => new Promise<never>(() => undefined));
+        const lookup = service.getTransporter('streamable-http', TOKEN, SESSION_ID);
+        await jest.advanceTimersByTimeAsync(500);
+
+        await expect(lookup).resolves.toBe(local);
+        expect(scope.logger.warn).toHaveBeenCalledWith(
+          '[HA] Could not confirm this node still owns the session — serving it here',
+          expect.objectContaining({ error: 'The session store did not answer within 500 ms' }),
+        );
+        expect(local.destroy).not.toHaveBeenCalled();
+        expect(jest.getTimerCount()).toBe(0);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
   });
 
   describe('lookupSessionOwner', () => {

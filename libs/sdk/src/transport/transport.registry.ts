@@ -34,6 +34,12 @@ import {
 const SESSION_STORE_RETRY_BASE_MS = 1000;
 const SESSION_STORE_RETRY_MAX_MS = 30000;
 
+/**
+ * Default for `transport.persistence.sessionCheckTimeoutMs`: how long a request for a session held in
+ * memory waits for the session store to confirm the session before it is served from memory anyway.
+ */
+const DEFAULT_SESSION_CHECK_TIMEOUT_MS = 500;
+
 /** How often a node re-advertises a session it keeps serving (the bus entry lives one hour). */
 const BUS_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
@@ -147,6 +153,9 @@ export class TransportService {
   /** Local sessions whose stored record this node wrote or read: a missing record means the session ended. */
   private readonly storedLocalSessions = new Set<string>();
 
+  /** How long the per-request check of a session held in memory waits for the session store. */
+  private readonly sessionCheckTimeoutMs: number;
+
   /**
    * Redis key prefix under which session records are stored.
    * The session store appends `session:` to the transport key prefix.
@@ -160,6 +169,9 @@ export class TransportService {
     this.persistenceConfig = persistenceConfig;
     this.distributed = !!bus;
     this.bus = bus;
+    this.sessionCheckTimeoutMs =
+      (persistenceConfig !== false ? persistenceConfig?.sessionCheckTimeoutMs : undefined) ??
+      DEFAULT_SESSION_CHECK_TIMEOUT_MS;
 
     // Initialize session store if persistence is enabled. Simplified format:
     //   false       = explicitly disabled
@@ -550,7 +562,7 @@ export class TransportService {
 
     let ownerNodeId: string | undefined;
     try {
-      ownerNodeId = (await store.get(sessionId))?.session?.nodeId;
+      ownerNodeId = (await this.withSessionCheckTimeout(store.get(sessionId)))?.session?.nodeId;
     } catch (error) {
       this.scope.logger.warn('[HA] Could not confirm this node still owns the session — serving it here', {
         sessionId: sessionId.slice(0, 20),
@@ -582,13 +594,14 @@ export class TransportService {
   /**
    * Outside distributed mode several instances may hold one session in memory (#713). A session whose
    * stored record this instance wrote or read is gone was deleted through another instance, or expired:
-   * it is dropped here too. When the store cannot be read the session is served here.
+   * it is dropped here too. When the store cannot be read, or does not answer within
+   * `persistence.sessionCheckTimeoutMs`, the session is served here.
    */
   private async isStillStored(sessionId: string): Promise<boolean> {
     const store = this.sessionStore;
     if (!store || !this.storedLocalSessions.has(sessionId)) return true;
     try {
-      if (await store.exists(sessionId)) return true;
+      if (await this.withSessionCheckTimeout(store.exists(sessionId))) return true;
     } catch (error) {
       this.scope.logger.warn('[TransportService] Could not confirm the session is still stored — serving it here', {
         sessionId: sessionId.slice(0, 20),
@@ -601,6 +614,23 @@ export class TransportService {
     });
     await this.destroyLocalSession(sessionId, 'the session was deleted');
     return false;
+  }
+
+  /**
+   * Bound a session-store read made while serving a session held in memory. A store that accepts the
+   * connection but never answers (a paused Redis, a partition that does not reset TCP) would otherwise
+   * hold the request open: the read rejects after `persistence.sessionCheckTimeoutMs` instead, so the
+   * caller takes its "store unreadable" path and serves the session from memory.
+   */
+  private withSessionCheckTimeout<T>(read: Promise<T>): Promise<T> {
+    const timeoutMs = this.sessionCheckTimeoutMs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(`The session store did not answer within ${timeoutMs} ms`)), timeoutMs);
+      // A pending check must never keep the process alive.
+      timer.unref?.();
+    });
+    return Promise.race([read, timedOut]).finally(() => clearTimeout(timer));
   }
 
   /** Whether a node's heartbeat is present (`true` when liveness cannot be determined). */
