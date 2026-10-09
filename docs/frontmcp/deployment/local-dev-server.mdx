@@ -178,6 +178,12 @@ export default class Greet extends ToolContext {
 
 Your server will start (default `http://localhost:3000`). The console will print the MCP endpoint.
 
+`frontmcp dev` runs your project's own `tsx` (the `--watch` runner) and `typescript`
+(`tsc --noEmit --watch`) with the current `node` — no `npx`, and no shell, so it
+behaves the same on macOS, Linux and Windows. Install both as dev dependencies
+(`npm i -D tsx typescript`); when one is missing the CLI falls back to
+`npx -y tsx` / `npx -y --package typescript tsc`.
+
 ### Port conflict handling
 
 `frontmcp dev` performs a pre-flight TCP probe before spawning `tsx --watch`. If
@@ -244,6 +250,13 @@ runner, the server it forks and the `tsc --watch` type-checker — and waits unt
 they have exited (up to 2 seconds, then `SIGKILL`) before it exits, so the port is
 free when the command returns.
 
+On Windows there are no process groups or catchable `SIGTERM`: the CLI first asks
+each process tree to close (`taskkill /T`) and forces it (`taskkill /T /F`) when
+taskkill reports it cannot or the 2 seconds run out. Processes left running by a
+child that already exited are found by parent PID and stopped too. Ending the
+`frontmcp dev` process itself from outside (Task Manager, `taskkill /F`) also takes
+the server down, because every process in the chain is started directly by `node`.
+
 ### Running from a subfolder
 
 `frontmcp dev` and `frontmcp build` find `frontmcp.config.*` by walking up from the
@@ -281,6 +294,13 @@ npm run doctor
 ```
 
 Ensures Node/npm versions, entry detection, and `tsconfig.json` are correct.
+
+- **Windows: `spawn EINVAL` or `npm not found in PATH`**
+  Before 1.9.3 `frontmcp dev` started `npx.cmd` without a shell, which Node rejects
+  with `EINVAL` since its CVE-2024-27980 fix, and `frontmcp doctor` reported a working
+  npm as missing for the same reason. Upgrade the CLI: package-manager commands now
+  run npm's own `npm-cli.js` / `npx-cli.js` with `node` (from `npm_execpath`, or the
+  npm installed next to `node.exe`), and tools with their JS entry.
 
 - **Entry detection**
   The CLI looks for `package.json.main`; if missing, it falls back to `src/main.ts`. If no entry is found, it will tell you how to create one.

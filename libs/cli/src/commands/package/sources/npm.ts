@@ -3,9 +3,12 @@
  * Supports --registry for private registries.
  */
 
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
+
 import { runCmd } from '@frontmcp/utils';
+
+import { packageManagerCommand, runTool } from '../../../shared/tool-command';
 
 export async function fetchFromNpm(pkg: string, tmpDir: string, registryUrl?: string): Promise<string> {
   // npm pack downloads a tarball to the target directory
@@ -14,7 +17,7 @@ export async function fetchFromNpm(pkg: string, tmpDir: string, registryUrl?: st
     packArgs.push('--registry', registryUrl);
   }
 
-  await runCmd('npm', packArgs);
+  await runTool(packageManagerCommand('npm', packArgs));
 
   // Find the tarball - derive expected name from package to disambiguate
   const files = fs.readdirSync(tmpDir).filter((f: string) => f.endsWith('.tgz'));

@@ -68,6 +68,7 @@ export {
   symlink,
   access,
   fileExists,
+  fileExistsSync,
   readJSON,
   writeJSON,
   ensureDir,

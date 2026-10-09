@@ -354,6 +354,41 @@ jobs:
           retention-days: 1
           if-no-files-found: warn
 
+  # `frontmcp dev` on Windows (#731): spawning npm/npx/tsx/tsc and stopping the
+  # child process tree work differently there, and nothing else runs on Windows.
+  # Lean on purpose: it reuses the Linux build's dist artifact (plain JS) and runs
+  # only the two dev specs, without rebuilding their dependencies.
+  windows-cli-dev:
+    name: "Windows: frontmcp dev E2E"
+    needs: [setup, build]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      NX_DAEMON: "false"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node + Yarn
+        uses: ./.github/actions/setup-node-yarn
+        with:
+          node-version: ${{ needs.setup.outputs.node-version }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+
+      - name: Run cli-dev-signals and cli-dev-stdio
+        run: >-
+          npx nx run demo-e2e-cli-exec:test
+          --excludeTaskDependencies
+          --skip-nx-cache
+          --testFile="cli-dev-(signals|stdio)\.e2e\.spec\.ts"
+
   # Coverage report (runs on main branch only, merges artifacts from test jobs)
   coverage:
     name: "Coverage Report"

@@ -3,7 +3,7 @@
 import { spawn } from 'child_process';
 import * as path from 'path';
 
-import { fileExists, readFile } from '@frontmcp/utils';
+import { fileExists, fileExistsSync, readFile } from '@frontmcp/utils';
 
 import { resolveEntry } from '../../../shared/fs';
 import { runDoctor } from '../doctor';
@@ -24,6 +24,7 @@ jest.mock('child_process', () => {
 jest.mock('@frontmcp/utils', () => {
   return {
     fileExists: jest.fn(),
+    fileExistsSync: jest.fn(() => false),
     readFile: jest.fn(),
   };
 });
@@ -49,7 +50,7 @@ function mockNpmVersion(version: string) {
     emitter.stdout = new EventEmitter();
     setTimeout(() => {
       emitter.stdout.emit('data', version);
-      emitter.emit('close');
+      emitter.emit('close', 0);
     }, 0);
     return emitter;
   });
@@ -317,6 +318,51 @@ describe('doctor command', () => {
       if (opts) {
         expect(opts.shell).not.toBe(true);
       }
+    });
+
+    it('reports an npm probe that exits non-zero as npm not found', async () => {
+      (spawn as jest.Mock).mockImplementation(() => {
+        const { EventEmitter } = require('events');
+        const emitter = new EventEmitter();
+        emitter.stdout = new EventEmitter();
+        setTimeout(() => emitter.emit('close', 1), 0);
+        return emitter;
+      });
+      (fileExists as jest.Mock).mockResolvedValue(true);
+      mockTsconfig({ compilerOptions: {} });
+      (resolveEntry as jest.Mock).mockResolvedValue('/test/src/main.ts');
+
+      await runDoctor();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('❌ npm not found'));
+    });
+
+    // #731 — `npm.cmd` without a shell throws EINVAL on Windows, which doctor
+    // reported as "npm not found in PATH".
+    describe('on Windows', () => {
+      const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+
+      afterEach(() => {
+        if (originalPlatform) Object.defineProperty(process, 'platform', originalPlatform);
+        (fileExistsSync as jest.Mock).mockReset().mockReturnValue(false);
+      });
+
+      it("runs npm's npm-cli.js with node, without a shell", async () => {
+        Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+        (fileExistsSync as jest.Mock).mockImplementation((p: string) => p.endsWith('npm-cli.js'));
+        (fileExists as jest.Mock).mockResolvedValue(true);
+        mockTsconfig({ compilerOptions: {} });
+        (resolveEntry as jest.Mock).mockResolvedValue('/test/src/main.ts');
+
+        await runDoctor();
+
+        const [command, args, options] = (spawn as jest.Mock).mock.calls[0];
+        expect(command).toBe(process.execPath);
+        expect(args[0]).toMatch(/npm-cli\.js$/);
+        expect(args.slice(1)).toEqual(['-v']);
+        expect(options).toMatchObject({ shell: false });
+        expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('✅ npm 10.5.0'));
+      });
     });
 
     it('should show entry file path when found', async () => {

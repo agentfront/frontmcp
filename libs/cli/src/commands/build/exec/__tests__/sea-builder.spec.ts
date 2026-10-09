@@ -9,14 +9,18 @@ jest.mock('fs', () => ({
   statSync: jest.fn().mockReturnValue({ size: 1000000 }),
 }));
 
-jest.mock('@frontmcp/utils', () => ({ runCmd: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('@frontmcp/utils', () => ({
+  runCmd: jest.fn().mockResolvedValue(undefined),
+  fileExistsSync: jest.fn(() => false),
+  readFileSync: jest.fn(),
+}));
 
 jest.mock('../../../../core/colors', () => ({
   c: (_: string, t: string) => t,
 }));
 
 import { buildSea } from '../sea-builder';
-import { runCmd } from '@frontmcp/utils';
+import { fileExistsSync, runCmd } from '@frontmcp/utils';
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockRunCmd = runCmd as jest.MockedFunction<typeof runCmd>;
@@ -60,10 +64,11 @@ describe('buildSea', () => {
 
     await buildSea('/tmp/out/app.bundle.js', '/tmp/out', 'app');
 
-    expect(mockRunCmd).toHaveBeenCalledWith(
-      'node',
-      ['--experimental-sea-config', path.join('/tmp/out', 'app.sea-config.json')],
-    );
+    // The node that is copied into the binary is the one that builds its blob.
+    expect(mockRunCmd).toHaveBeenCalledWith(process.execPath, [
+      '--experimental-sea-config',
+      path.join('/tmp/out', 'app.sea-config.json'),
+    ]);
   });
 
   it('should copy process.execPath and chmod 755', async () => {
@@ -129,7 +134,20 @@ describe('buildSea', () => {
       path.join('/tmp/out', 'app.blob'),
       '--sentinel-fuse',
       'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2',
-    ]);
+    ], {});
+  });
+
+  // #731 — `npx` alone fails with ENOENT on Windows and `npx.cmd` with EINVAL.
+  it('runs postject through npm\'s npx-cli.js with node on Windows', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    (fileExistsSync as jest.Mock).mockImplementation((p: string) => p.endsWith('npx-cli.js'));
+
+    await buildSea('/tmp/out/app.bundle.js', '/tmp/out', 'app');
+
+    const postjectCall = mockRunCmd.mock.calls.find((c: unknown[]) => (c[1] as string[]).includes('postject'));
+    expect(postjectCall?.[0]).toBe(process.execPath);
+    expect(postjectCall?.[1][0]).toMatch(/npx-cli\.js$/);
+    expect(postjectCall?.[1].slice(1, 3)).toEqual(['-y', 'postject']);
   });
 
   it('should add --macho-segment-name on macOS', async () => {

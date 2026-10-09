@@ -1,8 +1,7 @@
-import { runCmd } from '@frontmcp/utils';
-
 import { resolveConfig, type FrontMcpConfigParsed } from '../../config';
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
+import { packageManagerCommand, runTool } from '../../shared/tool-command';
 
 /**
  * Build the argv passed to `npx` to launch the modern MCP Inspector
@@ -80,5 +79,6 @@ export async function runInspector(opts: ParsedArgs = { _: [] } as unknown as Pa
   // ⊕ config.env.dev) to the Inspector child so any env-gated server config
   // (API keys, feature flags) the user keeps in `frontmcp.config.env.dev` is
   // visible to the MCP server the Inspector spawns under it.
-  await runCmd('npx', args, { env: resolved.effectiveEnv, cwd: process.cwd() });
+  // #731 — resolved without a shell; `npx` alone does not start on Windows.
+  await runTool(packageManagerCommand('npx', args), { env: resolved.effectiveEnv, cwd: process.cwd() });
 }
