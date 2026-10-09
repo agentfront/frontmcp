@@ -41,10 +41,22 @@ export type AttributesResolver = (ctx: FrontMcpContext) => Record<string, unknow
 interface FeatureFlagBaseOptions {
   /**
    * What `this.featureFlags.isEnabled()` answers when the adapter throws or has no answer for the
-   * flag and the call passes no `defaultValue` of its own. Gates use their ref's `defaultValue`.
+   * flag and the call passes no `defaultValue` of its own. Gates never read it: they use their ref's
+   * `defaultValue`, then {@link gateDefaultValue}.
    * @default false
    */
   defaultValue?: boolean;
+  /**
+   * What a gate answers for an entry whose `featureFlag` ref sets no `defaultValue`, when the adapter
+   * throws or has no answer for the flag. The gates are the `tools/call`, `resources/read`,
+   * `prompts/get` and `completion/complete` checks and the list and skill filters. A ref's own
+   * `defaultValue` wins over it.
+   *
+   * Gates fail closed by default. `true` makes every gated entry without a ref default available
+   * while the flag service is down or missing a flag, so set it only when that is what you want.
+   * @default false
+   */
+  gateDefaultValue?: boolean;
   cacheStrategy?: FeatureFlagCacheStrategy;
   cacheTtlMs?: number;
   userIdResolver?: UserIdResolver;
