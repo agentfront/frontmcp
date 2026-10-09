@@ -20,6 +20,7 @@ import type {
 } from '../common/interfaces';
 import type { FrontMcpConfigInput } from '../common/metadata';
 import type { AuthOptionsInput } from '../common/types';
+import type { DirectServerOptions } from './direct.types';
 
 /** The `@FrontMcp` options of a server whose apps share one endpoint, as `FrontMcpInstance.createDirect()` takes them. */
 type ServerConfigInput = Extract<FrontMcpConfigInput, { splitByApp?: false }>;
@@ -62,7 +63,7 @@ type CreateOwnedServerOptions =
  * });
  * ```
  */
-export interface CreateConfig extends Omit<ServerConfigInput, CreateOwnedServerOptions> {
+export interface CreateConfig extends Omit<ServerConfigInput, CreateOwnedServerOptions>, DirectServerOptions {
   // ── App-level fields ─────────────────────────────────────────────────
 
   /** Tool classes or builder-defined tools */
@@ -120,6 +121,8 @@ export interface CreateConfig extends Omit<ServerConfigInput, CreateOwnedServerO
    * Cache key for reusing server instances.
    * Same `cacheKey` returns the same `DirectMcpServer` promise.
    * Calling `dispose()` on the server automatically evicts it from the cache.
+   * The cached server keeps the `workerEnv` of the call that created it; pass a call's own bindings with
+   * `DirectCallOptions.workerEnv`.
    */
   cacheKey?: string;
 }

@@ -18,6 +18,7 @@ import type {
   ServerCapabilities,
 } from '@frontmcp/protocol';
 
+import type { DirectWorkerEnv } from './direct.types';
 import type { FormattedToolResult, FormattedTools } from './llm-platform';
 
 // Re-export platform-specific types for convenience
@@ -445,6 +446,13 @@ export interface ConnectOptions {
    * `capabilities.elicitation`) the server takes the fallback flow and `submitElicitationResult()` answers instead.
    */
   onElicitation?: ElicitationHandler;
+  /**
+   * Platform bindings for every request this client sends, read by the tools, resources, prompts, jobs and agents
+   * it calls as `this.workerEnv` (on Cloudflare, the `env` of the Worker, Durable Object or queue consumer holding
+   * the client). Replaces the server's default `workerEnv` (`create({ workerEnv })`) for this client. Kept in each
+   * request's context only — never copied into `process.env`.
+   */
+  workerEnv?: DirectWorkerEnv;
 }
 
 /**
@@ -475,6 +483,8 @@ export interface LLMConnectOptions {
    * `capabilities.elicitation`) the server takes the fallback flow and `submitElicitationResult()` answers instead.
    */
   onElicitation?: ElicitationHandler;
+  /** Platform bindings the called code reads as `this.workerEnv` (see {@link ConnectOptions.workerEnv}). */
+  workerEnv?: DirectWorkerEnv;
 }
 
 /**

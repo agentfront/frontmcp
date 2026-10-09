@@ -110,12 +110,14 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
     // MCP handlers pass { request, ctx } where ctx has authInfo
     const mcpCtx = (input as any)?.ctx;
 
-    // Direct calls carry their headers as `ctx.metadata` (#709); such a call is its own request
+    // Direct calls carry their headers as `ctx.metadata` (#709) and their platform bindings as
+    // `ctx.platformEnv` (#706); such a call is its own request
     const inProcessMetadata: InProcessRequestMetadata | undefined = mcpCtx?.metadata;
+    const inProcessPlatformEnv: unknown = mcpCtx?.platformEnv;
 
     // Check if we're already in a context (e.g., HTTP middleware flow)
     const existingContext = contextStorage.getStore();
-    if (existingContext && !inProcessMetadata) {
+    if (existingContext && !inProcessMetadata && inProcessPlatformEnv === undefined) {
       // Already in context, run directly
       return flow.run(input, deps ?? new Map()) as Promise<FlowOutputOf<Name> | undefined>;
     }
@@ -149,6 +151,8 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
           scopeId: scope.id,
           authInfo,
           ...(inProcessMetadata ? inProcessRequestContext(inProcessMetadata) : {}),
+          // Per request, in the context only: `this.workerEnv` reads it; process.env is never written
+          ...(inProcessPlatformEnv !== undefined ? { platformEnv: inProcessPlatformEnv } : {}),
         },
         async () => {
           return flow.run(input, deps ?? new Map()) as Promise<FlowOutputOf<Name> | undefined>;

@@ -52,6 +52,35 @@ export interface DirectRequestMetadata {
 }
 
 /**
+ * Platform bindings a direct call hands to the code it runs, read there as `this.workerEnv`: on
+ * Cloudflare, the `env` a Worker, Durable Object or queue consumer receives (KV namespaces, D1
+ * databases, R2 buckets, Durable Object namespaces, `[vars]`, secrets).
+ *
+ * Named after the property that reads it (`this.workerEnv`); the request context keeps it as
+ * `FrontMcpContext.platformEnv`, the same place a Worker request's `env` goes.
+ */
+export type DirectWorkerEnv = Readonly<Record<string, unknown>>;
+
+/**
+ * Server-wide options of a direct server (`create()`, `FrontMcpInstance.createDirect()`).
+ */
+export interface DirectServerOptions {
+  /**
+   * Default platform bindings for every call and every `connect()`ed client of this server, read
+   * by tools, resources, prompts, jobs and agents as `this.workerEnv`. A call's or a client's own
+   * `workerEnv` replaces it (the two are not merged). Kept in each request's context only — never
+   * copied into `process.env`.
+   *
+   * @example
+   * ```typescript
+   * // Inside a Durable Object
+   * const server = await create({ info, tools: [CartTool], workerEnv: this.env });
+   * ```
+   */
+  workerEnv?: DirectWorkerEnv;
+}
+
+/**
  * Options for direct method calls.
  */
 export interface DirectCallOptions {
@@ -59,6 +88,20 @@ export interface DirectCallOptions {
   authContext?: DirectAuthContext;
   /** Request metadata */
   metadata?: DirectRequestMetadata;
+  /**
+   * Platform bindings for this call only, read by the tool, resource, prompt, job or agent it
+   * runs as `this.workerEnv`. Replaces the server's default `workerEnv` for this call (not merged
+   * with it); without either, `this.workerEnv` is `undefined`. Each call keeps its own bindings,
+   * so concurrent calls with different bindings never see each other's. Never copied into
+   * `process.env`.
+   *
+   * @example
+   * ```typescript
+   * // A queue consumer handing each batch's env to the tools it calls
+   * await server.callTool('ingest', { batch }, { workerEnv: env });
+   * ```
+   */
+  workerEnv?: DirectWorkerEnv;
 }
 
 /**
