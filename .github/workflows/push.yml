@@ -372,10 +372,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Setup Node + Yarn
-        uses: ./.github/actions/setup-node-yarn
+      # Not ./.github/actions/setup-node-yarn: on Windows its `corepack enable` runs
+      # before setup-node installs the pinned Node, so the shims land in the runner's
+      # Node and setup-node's `cache: yarn` probe finds the preinstalled Yarn 1.22,
+      # which refuses a project pinned to Yarn 4.
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ needs.setup.outputs.node-version }}
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+        env:
+          npm_config_onnxruntime_node_install_cuda: skip
 
       - name: Download build artifacts
         uses: actions/download-artifact@v8
