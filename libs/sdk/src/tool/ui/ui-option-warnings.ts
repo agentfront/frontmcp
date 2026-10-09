@@ -50,6 +50,27 @@ export function describeIgnoredUiOptions(toolName: string, ui: Record<string, un
 }
 
 /**
+ * Describe a server or app `ui.servingMode` default (#720) that does not do what its name says,
+ * once for every tool that inherits it rather than once per tool.
+ *
+ * @param owner - Where the default is set, e.g. "`@FrontMcp({ ui })`"
+ * @param mode - The default, if set
+ */
+export function describeServingModeDefault(owner: string, mode: string | undefined): string[] {
+  if ((UNSUPPORTED_SERVING_MODES as readonly unknown[]).includes(mode)) {
+    return [
+      `${owner}: \`ui.servingMode: '${String(mode)}'\` is not implemented; tools that inherit it are served inline, as with \`servingMode: 'inline'\`.`,
+    ];
+  }
+  if (mode === 'hybrid') {
+    return [
+      `${owner}: \`ui.servingMode: 'hybrid'\` sends only a reference in \`_meta['ui/component']\` ({ type, hash, toolName }), not the component code; the widgets of the tools that inherit it are rendered from their \`ui://\` resource.`,
+    ];
+  }
+  return [];
+}
+
+/**
  * The `ui.csp` origins the widget page's Content-Security-Policy cannot list, one message per
  * origin. They are left out of the policy FrontMCP writes into the page; the resource `_meta`
  * still carries them as written, for the host to judge.

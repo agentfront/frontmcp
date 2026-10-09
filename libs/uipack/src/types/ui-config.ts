@@ -533,6 +533,9 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - `'custom-url'`: Served from a custom URL (CDN, external hosting).
    *   Requires `customWidgetUrl` to be set.
    *
+   * When unset, the FrontMCP SDK uses the app's `@App({ ui: { servingMode } })` default, else the
+   * server's `@FrontMcp({ ui: { servingMode } })`, else `'auto'`.
+   *
    * @default 'auto'
    */
   servingMode?: WidgetServingMode;

@@ -34,6 +34,7 @@ import {
   type ServerRequest,
   type Token,
   type Type,
+  type WidgetServingMode,
 } from '../common';
 import { type ChannelType } from '../common/interfaces/channel.interface';
 import { type JobType } from '../common/interfaces/job.interface';
@@ -91,7 +92,8 @@ import { ToolInstance } from '../tool/tool.instance';
 import ToolRegistry from '../tool/tool.registry';
 import { normalizeTool } from '../tool/tool.utils';
 import { hasUIConfig, StaticWidgetResourceTemplate, ToolUIRegistry } from '../tool/ui';
-import { describeIgnoredUiOptions } from '../tool/ui/ui-option-warnings';
+import { toolServingMode } from '../tool/ui/serving-mode-default';
+import { describeIgnoredUiOptions, describeServingModeDefault } from '../tool/ui/ui-option-warnings';
 import { RedisTransportBus } from '../transport/bus';
 import { createEventStore } from '../transport/event-stores';
 import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/request-state';
@@ -1185,13 +1187,27 @@ export class Scope extends ScopeEntry {
       }
     }
 
+    // The server's and the apps' `ui.servingMode` defaults (#720): one notice each, not one per tool
+    for (const message of describeServingModeDefault('`@FrontMcp({ ui })`', this.metadata.ui?.servingMode)) {
+      this.logger.warn(message);
+    }
+    for (const app of this.apps.getApps()) {
+      const appMode = (app.metadata as { ui?: { servingMode?: WidgetServingMode } }).ui?.servingMode;
+      for (const message of describeServingModeDefault(`App "${app.id}" \`@App({ ui })\``, appMode)) {
+        this.logger.warn(message);
+      }
+    }
+
     // Register static widget template for OpenAI discovery (ui://widget/{toolName}.html)
     this.scopeResources.registerDynamicResource(StaticWidgetResourceTemplate);
     this.logger.verbose(`Registered UI resource template for ${toolsWithUI.length} tool(s) with UI configs`);
 
-    // Pre-compile static widgets for tools with servingMode: 'static'
+    // Each tool's serving mode: its own `ui.servingMode`, else its app's or the server's default
+    const servingModes = new Map(toolsWithUI.map((t) => [t, toolServingMode(t, this)] as const));
+
+    // Pre-compile static widgets for tools served in 'static' mode
     const staticModeTools = toolsWithUI.filter(
-      (t) => t.metadata.ui && t.metadata.ui.servingMode === 'static' && t.metadata.ui.template,
+      (t) => t.metadata.ui && servingModes.get(t) === 'static' && t.metadata.ui.template,
     );
 
     if (staticModeTools.length > 0) {
@@ -1224,13 +1240,11 @@ export class Scope extends ScopeEntry {
       );
     }
 
-    // Pre-compile lean widget shells for inline mode tools
-    const inlineTools = toolsWithUI.filter(
-      (t) =>
-        t.metadata.ui &&
-        (t.metadata.ui.servingMode === 'inline' || !t.metadata.ui.servingMode) &&
-        t.metadata.ui.template,
-    );
+    // Pre-compile lean widget shells for inline mode tools ('auto' serves inline)
+    const inlineTools = toolsWithUI.filter((t) => {
+      const mode = servingModes.get(t);
+      return t.metadata.ui && (mode === 'inline' || mode === 'auto') && t.metadata.ui.template;
+    });
 
     if (inlineTools.length > 0) {
       let inlineCompiledCount = 0;
@@ -1263,7 +1277,7 @@ export class Scope extends ScopeEntry {
 
     // Pre-compile hybrid widget shells for hybrid mode tools
     const hybridTools = toolsWithUI.filter(
-      (t) => t.metadata.ui && t.metadata.ui.servingMode === 'hybrid' && t.metadata.ui.template,
+      (t) => t.metadata.ui && servingModes.get(t) === 'hybrid' && t.metadata.ui.template,
     );
 
     if (hybridTools.length > 0) {
