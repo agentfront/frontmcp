@@ -13,6 +13,8 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   redis: tokenFactory.meta('redis'),
   pubsub: tokenFactory.meta('pubsub'),
   transport: tokenFactory.meta('transport'),
+  // deprecated pre-1.0 session options: accepted only to warn that they are ignored (#702)
+  session: tokenFactory.meta('session'),
   serve: tokenFactory.meta('serve'),
   splitByApp: tokenFactory.meta('splitByApp'),
   auth: tokenFactory.meta('auth'),

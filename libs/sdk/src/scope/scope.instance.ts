@@ -315,7 +315,7 @@ export class Scope extends ScopeEntry {
     }
     this.transportService = new TransportService(this, effectivePersistence, transportBus);
     warnIfRequestStateKeyNotShared({ logger: this.logger, metadata: this.metadata });
-    warnIfSessionModeIgnored({ logger: this.logger, transport: transportConfig });
+    warnIfSessionModeIgnored({ logger: this.logger, transport: transportConfig, session: this.metadata.session });
 
     // Orphan session scanner (distributed mode only — scans for dead-pod sessions).
     // A claimed session is re-advertised on the bus, so every node relays its requests here.

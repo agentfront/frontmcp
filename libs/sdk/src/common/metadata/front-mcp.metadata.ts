@@ -43,10 +43,12 @@ import {
   type RawZodShape,
   type RedisOptionsInput,
   type ServerInfoOptions,
+  type SessionOptionsInterface,
   type SkillsConfigOptionsInput,
   type SqliteOptionsInput,
   type TransportOptionsInput,
 } from '../types';
+import { legacySessionOptionsSchema } from '../types/options/session/schema';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
@@ -111,6 +113,15 @@ export interface FrontMcpBaseMetadata {
    * @default {} (all transport options use their schema defaults)
    */
   transport?: TransportOptionsInput; // Optional in input, but always defined in output
+
+  /**
+   * The pre-1.0 session options, replaced by `transport` in v1.0.
+   *
+   * @deprecated Ignored: sessions follow `transport.protocol` (`'stateless-api'` serves without
+   * them) and platform detection is `transport.platformDetection`. Accepted only so a config that
+   * still sets it gets a startup warning instead of losing it silently. Removed in the next major.
+   */
+  session?: SessionOptionsInterface;
 
   /**
    * Additional providers that are available to all apps.
@@ -583,6 +594,8 @@ export const frontMcpBaseSchema = z.object({
   redis: redisOptionsSchema.optional(),
   pubsub: pubsubOptionsSchema.optional(),
   transport: transportOptionsSchema.optional().transform((val) => val ?? transportOptionsSchema.parse({})),
+  // Deprecated and ignored (#702): kept so `warnIfSessionModeIgnored` can warn about it at startup
+  session: legacySessionOptionsSchema.optional(),
   logging: loggingOptionsSchema.optional(),
   pagination: paginationOptionsSchema.optional(),
   fetch: outboundFetchOptionsSchema.optional(),

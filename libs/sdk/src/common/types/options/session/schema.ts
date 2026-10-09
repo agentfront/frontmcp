@@ -26,12 +26,26 @@ export const platformDetectionConfigSchema = z.object({
 
 /**
  * Session options Zod schema.
+ *
+ * @deprecated Nothing reads these options (see {@link SessionOptionsInterface}); removed in the next major.
  */
 export const sessionOptionsSchema = z.object({
   sessionMode: z
     .union([z.literal('stateful'), z.literal('stateless'), z.function()])
     .optional()
     .default('stateless'),
+  platformDetection: platformDetectionConfigSchema.optional(),
+} satisfies RawZodShape<SessionOptionsInterface>);
+
+/**
+ * The pre-1.0 `@FrontMcp({ session })` option as a server config accepts it: no defaults, and nothing
+ * reads it. It is kept so a config that still sets it gets a startup warning instead of losing the
+ * option silently. Removed in the next major.
+ *
+ * @deprecated Use `transport.protocol` and `transport.platformDetection`.
+ */
+export const legacySessionOptionsSchema = z.object({
+  sessionMode: z.union([z.literal('stateful'), z.literal('stateless'), z.function()]).optional(),
   platformDetection: platformDetectionConfigSchema.optional(),
 } satisfies RawZodShape<SessionOptionsInterface>);
 

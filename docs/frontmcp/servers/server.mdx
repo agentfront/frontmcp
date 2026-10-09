@@ -82,8 +82,8 @@ Everything else is optional with sensible defaults.
   /** Transport & session lifecycle (NEW in v0.6) */
   transport?: {
     // Session lifecycle
-    // sessionMode has no effect since v1.0: sessions follow transport.protocol ('stateless-api' serves
-    // without them). A value other than 'stateful' logs a startup warning.
+    // sessionMode is deprecated and ignored: sessions follow transport.protocol ('stateless-api' serves
+    // without them). A value other than 'stateful' logs a startup warning; removed in the next major.
     platformDetection?: {
       mappings?: { pattern: string | RegExp; platform: AIPlatformType }[],
       customOnly?: boolean,
@@ -387,6 +387,20 @@ A mapping is how a client that declares MCP Apps is opted out of it:
   },
 })
 ```
+
+#### Migrating off `sessionMode`
+
+`transport.sessionMode` and the pre-1.0 top-level `session` option (`session.sessionMode`, `session.platformDetection`) are deprecated: nothing reads them, and both are removed in the next major. Through 1.x they are still accepted, and a value that asks for something the server does not do logs a startup warning that names the replacement:
+
+| Before (ignored)                                       | After                                                                |
+| ------------------------------------------------------ | -------------------------------------------------------------------- |
+| `transport: { sessionMode: 'stateless' }`              | `transport: { protocol: 'stateless-api' }` — serves without sessions |
+| `transport: { sessionMode: 'stateful' }` (the default) | remove it — `'legacy'`, `'modern'` and `'full'` keep sessions        |
+| `transport: { sessionMode: (issuer) => ... }`          | pick a `protocol`; per-app policies need `splitByApp` (see below)    |
+| `session: { sessionMode: 'stateless' }`                | `transport: { protocol: 'stateless-api' }`                           |
+| `session: { platformDetection: { ... } }`              | `transport: { platformDetection: { ... } }`                          |
+
+`sessionMode: 'stateless'` once meant embedding upstream provider tokens in the JWT. That no longer happens in any configuration: the tokens FrontMCP keeps stay server-side in `auth.tokenStorage`. Up to 1.9.2 a top-level `session` option was dropped without a warning, and the `transport.sessionMode` warning did not say it would be removed.
 
 ### Protocol Presets
 
