@@ -57,6 +57,15 @@ function mintSessionId(uuid: string): string {
 
 const SESSION_ID = mintSessionId('session-1');
 
+/**
+ * Change the next-to-last character. It always carries six bits of the payload (the last one may
+ * carry padding bits only), so the result never decrypts, whatever IV the id was minted with.
+ */
+function tamperedSessionId(sessionId: string): string {
+  const replaced = sessionId.at(-2) === 'A' ? 'B' : 'A';
+  return `${sessionId.slice(0, -2)}${replaced}${sessionId.slice(-1)}`;
+}
+
 function createLogger() {
   const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), verbose: jest.fn(), debug: jest.fn() };
   return { ...logger, child: jest.fn(() => logger) };
@@ -344,7 +353,7 @@ describe('TransportService — distributed sessions (#680)', () => {
         service.findRemoteSessionOwner(request({ 'mcp-session-id': 'attacker-chosen-id' })),
       ).resolves.toBeUndefined();
       await expect(
-        service.findRemoteSessionOwner(request({ 'mcp-session-id': `${SESSION_ID.slice(0, -2)}AA` })),
+        service.findRemoteSessionOwner(request({ 'mcp-session-id': tamperedSessionId(SESSION_ID) })),
       ).resolves.toBeUndefined();
       expect(bus.lookupOwner).not.toHaveBeenCalled();
       expect(mockStore.get).not.toHaveBeenCalled();
