@@ -17,6 +17,7 @@ import {
   type PromptContext,
   type PromptEntry,
   type ScopeEntry,
+  type Token,
 } from '../../common';
 import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
 import { runOnSurface } from '../../context/call-surface';
@@ -115,6 +116,13 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     if (!prompt) return undefined;
     resolvedPrompts.remember(rawInput, promptName, prompt);
     return appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner);
+  }
+
+  /** The class of the prompt the request names, whose `static` hooks run from `parseInput` on (#701). */
+  static override resolveHookEntryClass(rawInput: unknown, scope: ScopeEntry): Token | undefined {
+    const promptName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
+    if (typeof promptName !== 'string') return undefined;
+    return (resolvedPrompts.peek(rawInput, promptName) ?? scope.prompts.findByName(promptName))?.record.provide;
   }
 
   logger = this.scopeLogger.child('GetPromptFlow');

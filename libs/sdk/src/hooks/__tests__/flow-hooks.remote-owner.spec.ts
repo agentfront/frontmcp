@@ -1,9 +1,11 @@
 import 'reflect-metadata';
 
+import CallAgentFlow from '../../agent/flows/call-agent.flow';
 import { type ScopeEntry } from '../../common';
 import CompleteFlow from '../../completion/flows/complete.flow';
 import GetPromptFlow from '../../prompt/flows/get-prompt.flow';
 import ReadResourceFlow from '../../resource/flows/read-resource.flow';
+import CallToolFlow from '../../tool/flows/call-tool.flow';
 
 const REMOTE_APP_OWNER = { kind: 'app', id: 'remote-crm' } as const;
 
@@ -63,5 +65,34 @@ describe('hook owner of an entry a remote app loads lazily', () => {
     await expect(CompleteFlow.resolveHookOwnerId?.(rawInput, createScopeWithLazyRemoteApp())).resolves.toBe(
       REMOTE_APP_OWNER.id,
     );
+  });
+});
+
+describe('entry class of a run, for its static hooks (#701)', () => {
+  it('names no class for a request that names no entry', () => {
+    const scope = createScopeWithLazyRemoteApp();
+    const nameless = { request: { method: 'x', params: {} }, ctx: {} };
+
+    expect(CallToolFlow.resolveHookEntryClass?.(nameless, scope)).toBeUndefined();
+    expect(GetPromptFlow.resolveHookEntryClass?.(nameless, scope)).toBeUndefined();
+    expect(ReadResourceFlow.resolveHookEntryClass?.(nameless, scope)).toBeUndefined();
+    expect(CallAgentFlow.resolveHookEntryClass?.(nameless, scope)).toBeUndefined();
+  });
+
+  it('names no agent class when the scope has no agent registry', () => {
+    const rawInput = { request: { method: 'tools/call', params: { name: 'triage' } }, ctx: {} };
+
+    expect(CallAgentFlow.resolveHookEntryClass?.(rawInput, createScopeWithLazyRemoteApp())).toBeUndefined();
+  });
+
+  it('names no class for an entry the scope does not know', () => {
+    const scope = createScopeWithLazyRemoteApp();
+
+    expect(
+      GetPromptFlow.resolveHookEntryClass?.({ request: { params: { name: 'missing' } }, ctx: {} }, scope),
+    ).toBeUndefined();
+    expect(
+      ReadResourceFlow.resolveHookEntryClass?.({ request: { params: { uri: 'missing://1' } }, ctx: {} }, scope),
+    ).toBeUndefined();
   });
 });

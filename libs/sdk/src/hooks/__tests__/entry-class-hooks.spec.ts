@@ -34,11 +34,17 @@ import {
 } from '../../index';
 import { describeUnreachableEntryClassHooks, unreachableHooksMessage } from '../entry-class-hooks';
 
-function hook(flow: string, type: 'will' | 'did' | 'around' | 'stage', stage: string, method = 'm'): HookRecord {
+function hook(
+  flow: string,
+  type: 'will' | 'did' | 'around' | 'stage',
+  stage: string,
+  method = 'm',
+  isStatic = false,
+): HookRecord {
   return {
     kind: HookKind.METHOD_TOKEN,
     provide: () => undefined,
-    metadata: { flow, type, stage, method, target: null } as HookRecord['metadata'],
+    metadata: { flow, type, stage, method, target: null, static: isStatic } as HookRecord['metadata'],
   };
 }
 
@@ -72,6 +78,28 @@ describe('describeUnreachableEntryClassHooks', () => {
     expect(problems).toHaveLength(3);
     expect(problems[0]).toContain("early() (will 'findTool' of tools:call-tool)");
     expect(problems[0]).toContain("runs before 'createToolCallContext'");
+    expect(problems[0]).toContain('declare it as a static method to run it without an instance');
+  });
+
+  it('accepts static hooks on any stage of the entry flow, the stage that builds the instance included (#701)', () => {
+    const hooks = [
+      hook('tools:call-tool', 'will', 'parseInput', 'first', true),
+      hook('tools:call-tool', 'around', 'findTool', 'wrap', true),
+      hook('tools:call-tool', 'will', 'createToolCallContext', 'beforeBuild', true),
+      hook('tools:call-tool', 'did', 'execute', 'after', true),
+    ];
+    expect(describeUnreachableEntryClassHooks(hooks, join, ['tools:list-tools'])).toEqual([]);
+  });
+
+  it('still flags a static list-flow hook (#701)', () => {
+    const problems = describeUnreachableEntryClassHooks(
+      [hook('tools:list-tools', 'did', 'findTools', 'hide', true)],
+      join,
+      ['tools:list-tools'],
+    );
+    expect(problems).toEqual([
+      "static hide() (did 'findTools' of tools:list-tools): list flows build no entry instance and resolve no single entry to run it for",
+    ]);
   });
 
   it('flags every list-flow hook', () => {
@@ -79,7 +107,7 @@ describe('describeUnreachableEntryClassHooks', () => {
       'tools:list-tools',
     ]);
     expect(problems).toEqual([
-      "hide() (did 'findTools' of tools:list-tools): list flows build no entry instance to run it on",
+      "hide() (did 'findTools' of tools:list-tools): list flows build no entry instance and resolve no single entry to run it for",
     ]);
   });
 
@@ -90,7 +118,7 @@ describe('describeUnreachableEntryClassHooks', () => {
 
   it('builds a startup message naming the class and each hook', () => {
     expect(unreachableHooksMessage('Tool', 'MyTool', ['a', 'b'])).toMatch(
-      /^Tool "MyTool" declares hooks that would never run: a; b\. Hooks declared on a tool class/,
+      /^Tool "MyTool" declares hooks that would never run: a; b\. Hooks declared as instance methods on a tool class .*static methods run without one/,
     );
   });
 });

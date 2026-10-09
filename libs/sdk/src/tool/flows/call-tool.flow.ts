@@ -38,6 +38,7 @@ import {
   type FlowPlan,
   type FlowRunOptions,
   type ScopeEntry,
+  type Token,
 } from '../../common';
 import { callSurfaceOf, entryUnavailableError, isOfferedOnSurface } from '../../common/availability';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
@@ -241,6 +242,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (!tool) return undefined;
     resolvedTools.remember(rawInput, toolName, tool);
     return hookOwnerIdOf(scope.tools.lineageOf(tool) ?? [], tool.owner);
+  }
+
+  /** The class of the tool the call names, whose `static` hooks run from `parseInput` on (#701). */
+  static override resolveHookEntryClass(rawInput: unknown, scope: ScopeEntry): Token | undefined {
+    const toolName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
+    if (typeof toolName !== 'string') return undefined;
+    return (resolvedTools.peek(rawInput, toolName) ?? lookupTool(scope, toolName))?.record.provide;
   }
 
   logger = this.scopeLogger.child('CallToolFlow');
