@@ -114,7 +114,7 @@ void registerWebMcpTools(resolveDocumentModelContext(), tools, (modelContext) =>
   must pass the `modelContext` it is given to `WebMcpPlugin.init()`.
 - `registerWebMcpTools(modelContext, tools, loadServer, { exposedTo? })` registers the list at once. The first call
   loads the server with `loadServer` (once, however many calls arrive together) and runs through the plugin; a failed
-  load rejects that call, and the next call tries again. From then on the plugin registers and unregisters tools as
+  load rejects that call (a server it built is disposed, and the listed tools stay), and the next call tries again. From then on the plugin registers and unregisters tools as
   the server's tools change, and `server.dispose()` unregisters them. A listed tool the loaded server lacks is
   unregistered. Without a `modelContext` (no WebMCP) it does nothing.
 - `@frontmcp/plugin-webmcp/register` does not import `@frontmcp/sdk`; it is a few kilobytes.

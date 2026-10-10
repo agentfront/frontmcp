@@ -100,6 +100,11 @@ export async function listWebMcpTools(
   }
 }
 
+/** One load of the server; a failed one no longer touches the page's registrations. */
+interface LoadAttempt {
+  failed: boolean;
+}
+
 /** A tool registered from the list, until the plugin adopts it or the server turns out not to have it. */
 interface Placeholder {
   fingerprint: string;
@@ -158,23 +163,42 @@ class LazyWebMcpTools {
 
   private async loadThroughPlugin(): Promise<void> {
     const pluginSync = createPluginSync();
+    const attempt: LoadAttempt = { failed: false };
     const handoff = withSyncListener(
-      { registerTool: (tool, options) => this.adopt(tool, options) },
+      { registerTool: (tool, options) => this.adopt(tool, options, attempt) },
       pluginSync.listener,
     );
-    await this.loadServer(handoff);
-    await pluginSync.whenSynced();
+    const server = await this.loadServer(handoff);
+    try {
+      await pluginSync.whenSynced();
+    } catch (error) {
+      await this.abandon(attempt, server);
+      throw error;
+    }
     for (const [name, placeholder] of this.placeholders) {
       if (!placeholder.adopted) this.release(name, placeholder);
     }
+  }
+
+  /** Forget what a failed load's plugin registered, keep the listed tools for the next try, and dispose its server. */
+  private async abandon(attempt: LoadAttempt, server: unknown): Promise<void> {
+    attempt.failed = true;
+    this.executors.clear();
+    for (const placeholder of this.placeholders.values()) placeholder.adopted = false;
+    const disposable = server as { dispose?: () => unknown } | undefined;
+    if (typeof disposable?.dispose === 'function') await Promise.resolve(disposable.dispose()).catch(() => undefined);
   }
 
   /**
    * A registration from the plugin: an unchanged listed tool keeps its registration and runs the plugin's
    * `execute`; anything else replaces the listed tool of that name, or is new, and goes to the page's context.
    */
-  private async adopt(tool: ModelContextTool, options?: ModelContextRegisterToolOptions): Promise<void> {
-    if (options?.signal?.aborted) return;
+  private async adopt(
+    tool: ModelContextTool,
+    options: ModelContextRegisterToolOptions | undefined,
+    attempt: LoadAttempt,
+  ): Promise<void> {
+    if (attempt.failed || options?.signal?.aborted) return;
     const { execute, ...descriptor } = tool;
     const placeholder = this.placeholders.get(tool.name);
     const kept =
@@ -185,6 +209,7 @@ class LazyWebMcpTools {
     options?.signal?.addEventListener(
       'abort',
       () => {
+        if (attempt.failed) return;
         if (this.executors.get(tool.name) === execute) this.executors.delete(tool.name);
         if (kept) this.release(tool.name, kept);
       },

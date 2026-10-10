@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import { z } from '@frontmcp/lazy-zod';
 import { create, LogLevel, Tool, ToolContext, type DirectMcpServer } from '@frontmcp/sdk';
 
+import { syncListenerOf } from '../webmcp.handoff';
 import { listWebMcpTools, registerWebMcpTools, type WebMcpToolDescriptor } from '../webmcp.lazy';
 import WebMcpPlugin from '../webmcp.plugin';
 import type { ModelContext } from '../webmcp.types';
@@ -238,6 +239,60 @@ describe('registerWebMcpTools', () => {
     await expect(modelContext.execute('shop.checkout')).rejects.toThrow('chunk failed to load');
     await expect(modelContext.execute('shop.checkout')).resolves.toEqual({ value: 'ordered' });
     expect(attempts).toBe(2);
+  });
+
+  it('disposes a server whose first sync failed, and registers each tool once when the next call loads again', async () => {
+    const failedServer = { dispose: jest.fn(), registrations: new AbortController() };
+    let attempts = 0;
+    await registerWebMcpTools(modelContext, listed, async (context) => {
+      attempts++;
+      if (attempts > 1) {
+        server = await createShopServer(context);
+        return server;
+      }
+      // A plugin that adopts the listed tools, then fails to finish its sync
+      const listener = syncListenerOf(context);
+      listener?.started();
+      for (const descriptor of listed) {
+        await context.registerTool(
+          { ...descriptor, execute: async () => 'from the failed server' },
+          { signal: failedServer.registrations.signal },
+        );
+      }
+      await context.registerTool(
+        { name: 'shop.extra', description: 'Only on the failed server', execute: async () => 'extra' },
+        { signal: failedServer.registrations.signal },
+      );
+      failedServer.dispose.mockImplementation(async () => {
+        failedServer.registrations.abort();
+        throw new Error('dispose failed too');
+      });
+      listener?.synced(new Error('listing failed'));
+      return failedServer;
+    });
+
+    await expect(modelContext.execute('shop.checkout')).rejects.toThrow('listing failed');
+    expect(failedServer.dispose).toHaveBeenCalledTimes(1);
+    expect(modelContext.names()).toEqual(['shop.checkout', 'shop.get_cart', 'shop.search_products']);
+
+    await expect(modelContext.execute('shop.checkout')).resolves.toEqual({ value: 'ordered' });
+    for (const descriptor of listed) {
+      expect(modelContext.registerCalls.filter((name) => name === descriptor.name)).toHaveLength(1);
+    }
+    expect(modelContext.names()).toEqual(['shop.checkout', 'shop.get_cart', 'shop.search_products']);
+  });
+
+  it('rejects the call when the loaded server has no plugin on the given context, and loads again on the next call', async () => {
+    let attempts = 0;
+    await registerWebMcpTools(modelContext, listed, async (context) => {
+      attempts++;
+      if (attempts === 1) return undefined;
+      server = await createShopServer(context);
+      return server;
+    });
+
+    await expect(modelContext.execute('shop.checkout')).rejects.toThrow(/WebMcpPlugin\.init\(\{ modelContext \}\)/);
+    await expect(modelContext.execute('shop.checkout')).resolves.toEqual({ value: 'ordered' });
   });
 
   it('skips a listed tool the page context refuses', async () => {

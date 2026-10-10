@@ -1167,7 +1167,7 @@ void registerWebMcpTools(resolveDocumentModelContext(), tools, (modelContext) =>
 ```
 
 - `listWebMcpTools(factory)` returns exactly what the plugin passes to `registerTool()` (names, titles, descriptions, input schemas, hints), then disposes the server. The factory must hand the `modelContext` it gets to `WebMcpPlugin.init()`; otherwise it rejects.
-- `registerWebMcpTools(modelContext, tools, loadServer, { exposedTo? })` registers the list at once. The first call loads the server once (concurrent first calls share the load) and runs through the plugin; a failed load rejects that call and the next call retries. Then the plugin follows the server's tool changes; a listed tool the server lacks is unregistered. No `modelContext` → does nothing.
+- `registerWebMcpTools(modelContext, tools, loadServer, { exposedTo? })` registers the list at once. The first call loads the server once (concurrent first calls share the load) and runs through the plugin; a failed load rejects that call (a server it built is disposed, the listed tools stay) and the next call retries. Then the plugin follows the server's tool changes; a listed tool the server lacks is unregistered. No `modelContext` → does nothing.
 - `@frontmcp/plugin-webmcp/register` never imports `@frontmcp/sdk` (a few KB, CJS and ESM).
 
 ## Common Patterns
