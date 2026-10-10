@@ -112,3 +112,25 @@ describe('AuthorityDeniedError', () => {
     });
   });
 });
+
+describe('AuthorityDeniedError from another copy of @frontmcp/auth (#802)', () => {
+  type ErrorsModule = typeof import('../authorities.errors');
+
+  function loadSecondCopy(): ErrorsModule {
+    let copy: ErrorsModule | undefined;
+    jest.isolateModules(() => {
+      copy = jest.requireActual<ErrorsModule>('../authorities.errors');
+    });
+    if (!copy) throw new Error('the second copy did not load');
+    return copy;
+  }
+
+  it('is recognised as an AuthorityDeniedError', () => {
+    const second = loadSecondCopy();
+    const denied = new second.AuthorityDeniedError({ entryType: 'Tool', entryName: 'x', deniedBy: 'policy' });
+
+    expect(second.AuthorityDeniedError).not.toBe(AuthorityDeniedError);
+    expect(denied).toBeInstanceOf(AuthorityDeniedError);
+    expect(new Error('x') instanceof AuthorityDeniedError).toBe(false);
+  });
+});

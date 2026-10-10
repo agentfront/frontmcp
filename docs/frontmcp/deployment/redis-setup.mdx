@@ -170,6 +170,15 @@ Redis lets several instances share sessions, but each instance still signs and e
 
 An anonymous session minted by one instance is honored by any instance with the same `MCP_SESSION_SECRET`: the instance that receives the request recreates the transport from the stored session (in distributed mode it relays to, or takes over from, the node recorded with that session).
 
+Before an instance serves a session it holds in memory, it checks that the session's stored record still exists, so a session deleted or expired through one instance is dropped on the others too. That check waits at most `transport.persistence.sessionCheckTimeoutMs` (default `500`) for Redis. If Redis accepts the connection but doesn't answer (a paused container, a network partition that doesn't reset TCP, a long-running command), the instance serves the session from memory, logs `[TransportService] Could not confirm the session is still stored — serving it here` with `The session store did not answer within 500 ms`, and checks again on the session's next request. In 1.9.3 such a request waited until Redis answered.
+
+```typescript
+@FrontMcp({
+  redis: { url: process.env.REDIS_URL },
+  transport: { persistence: { sessionCheckTimeoutMs: 250 } },
+})
+```
+
 ### When Redis is unreachable at startup
 
 Not every Redis consumer reacts the same way when Redis is down as the server starts:

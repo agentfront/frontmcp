@@ -5,6 +5,8 @@
  * Uses MCP FORBIDDEN error code (-32003) for JSON-RPC responses.
  */
 
+import { brandClass, isBrandedInstance } from '@frontmcp/utils';
+
 import type { AuthoritiesDenial } from './authorities.types';
 
 /**
@@ -39,6 +41,14 @@ export interface AuthorityDeniedErrorParams {
  * with code -32003 (FORBIDDEN).
  */
 export class AuthorityDeniedError extends Error {
+  /**
+   * `instanceof AuthorityDeniedError` also recognises a denial from another copy of this package in the
+   * process, so every copy of `@frontmcp/sdk` answers it as a FORBIDDEN error (#802).
+   */
+  static override [Symbol.hasInstance](value: unknown): boolean {
+    return isBrandedInstance(this, value);
+  }
+
   /** MCP error code for JSON-RPC responses */
   readonly mcpErrorCode = FORBIDDEN_CODE;
   /** HTTP status code equivalent */
@@ -85,3 +95,5 @@ export class AuthorityDeniedError extends Error {
     };
   }
 }
+
+brandClass(AuthorityDeniedError, '@frontmcp/auth:AuthorityDeniedError');

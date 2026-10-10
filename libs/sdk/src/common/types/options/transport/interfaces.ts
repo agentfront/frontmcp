@@ -188,6 +188,21 @@ export interface PersistenceConfig {
    * @default 3600000 (1 hour)
    */
   defaultTtlMs?: number;
+
+  /**
+   * How long a request waits for the session store when it checks a session this
+   * instance holds in memory (milliseconds).
+   *
+   * Before serving a session from memory, an instance confirms the stored record still
+   * exists (outside distributed mode), or that this node still owns it (in distributed
+   * mode, after a heartbeat gap). A store that accepts the connection but does not answer
+   * (a paused Redis, a network partition) would otherwise hold the request open. When the
+   * store does not answer in time, the session is served from memory and checked again on
+   * its next request, as when the store returns an error.
+   *
+   * @default 500
+   */
+  sessionCheckTimeoutMs?: number;
 }
 
 // ============================================

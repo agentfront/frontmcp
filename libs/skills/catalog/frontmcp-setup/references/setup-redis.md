@@ -332,6 +332,7 @@ Every instance behind the load balancer needs the **same** values:
 ### What happens when Redis is down at startup
 
 - `redis` and `transport.persistence` fall back to in-memory storage and log the failure (`[TransportService] Failed to connect to redis - session persistence disabled`); the server starts.
+- If Redis stops answering while the server runs (a paused container, a partition that doesn't reset TCP), a request for a session the instance holds in memory waits at most `transport.persistence.sessionCheckTimeoutMs` (default `500`) for the "is the session still stored" check, then serves the session from memory and logs `Could not confirm the session is still stored — serving it here` with `The session store did not answer within 500 ms`.
 - `throttle.storage` fails closed: startup aborts with `GuardStorageUnavailableError` (`throttle.storage (redis) is unavailable: …`), the default in production. If Redis goes away while the server runs, a rate-limited call is refused with the same error, not `Internal FrontMCP error` (HTTP 503 from the `global` check; an `isError` result with `_meta.code: 'GUARD_STORAGE_UNAVAILABLE'` inside `tools/call`). Opt in to per-instance counters explicitly (they also cover a mid-run outage):
 
 ```typescript

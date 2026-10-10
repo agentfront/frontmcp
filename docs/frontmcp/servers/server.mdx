@@ -96,6 +96,7 @@ Everything else is optional with sensible defaults.
     // Session persistence (Redis-backed, auto-enabled when redis is configured)
     persistence?: false | {
       defaultTtlMs?: 3600000,   // 1 hour
+      sessionCheckTimeoutMs?: 500, // how long a request waits for the store to confirm a session held in memory
     },
 
     // Distributed mode
@@ -477,9 +478,10 @@ To customize persistence TTL:
 })
 ```
 
-| Option         | Default   | Description                          |
-| -------------- | --------- | ------------------------------------ |
-| `defaultTtlMs` | `3600000` | Session TTL in milliseconds (1 hour) |
+| Option                  | Default   | Description                                                                                                                                                                                                                                                                      |
+| ----------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defaultTtlMs`          | `3600000` | Session TTL in milliseconds (1 hour)                                                                                                                                                                                                                                             |
+| `sessionCheckTimeoutMs` | `500`     | How long a request for a session this instance holds in memory waits for the store to confirm the session (milliseconds). When the store does not answer in time (a paused Redis, a network partition), the session is served from memory and checked again on its next request. |
 
 <Info>
 Session persistence uses the top-level `redis` config. Configure `redis` once and it's automatically shared by `transport.persistence` and `auth.tokenStorage`.

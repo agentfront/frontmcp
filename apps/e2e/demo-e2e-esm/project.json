@@ -35,7 +35,7 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "dependsOn": ["^build", { "projects": ["sdk", "uipack", "ui"], "target": "build" }],
+      "dependsOn": ["^build", { "projects": ["sdk", "uipack", "ui", "observability"], "target": "build" }],
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-esm"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-esm/jest.e2e.config.ts",
@@ -44,7 +44,7 @@
     },
     "test:e2e": {
       "executor": "@nx/jest:jest",
-      "dependsOn": [{ "projects": ["sdk", "uipack", "ui"], "target": "build" }],
+      "dependsOn": [{ "projects": ["sdk", "uipack", "ui", "observability"], "target": "build" }],
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-esm-e2e"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-esm/jest.e2e.config.ts",

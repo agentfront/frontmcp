@@ -1,7 +1,7 @@
 // errors/mcp.error.ts
 import { AuthorityDeniedError } from '@frontmcp/auth';
 import { GuardError, GuardStorageUnavailableError } from '@frontmcp/guard';
-import { bytesToHex, isProduction, randomBytes } from '@frontmcp/utils';
+import { brandClass, bytesToHex, isBrandedInstance, isProduction, randomBytes } from '@frontmcp/utils';
 
 /**
  * MCP-specific error codes per JSON-RPC specification.
@@ -35,6 +35,15 @@ let sequentialErrorIds = 0;
  * Base class for all MCP-related errors
  */
 export abstract class McpError extends Error {
+  /**
+   * `instanceof McpError` (and `PublicMcpError`, `InternalMcpError`) also recognises an error made by
+   * another copy of the SDK in the process, such as the CommonJS copy `@frontmcp/observability` loads
+   * in an ES-module project (#802). Other subclasses keep the plain check.
+   */
+  static override [Symbol.hasInstance](value: unknown): boolean {
+    return isBrandedInstance(this, value);
+  }
+
   /**
    * Unique error ID for tracking in logs
    */
@@ -118,6 +127,8 @@ export abstract class McpError extends Error {
   }
 }
 
+brandClass(McpError, '@frontmcp/sdk:McpError');
+
 /**
  * Public errors - safe to expose to clients
  * These include validation errors, not found errors, etc.
@@ -147,6 +158,8 @@ export class PublicMcpError extends McpError {
   }
 }
 
+brandClass(PublicMcpError, '@frontmcp/sdk:PublicMcpError');
+
 /**
  * Internal errors - should not expose details to clients
  * These are server errors, unexpected failures, etc.
@@ -165,6 +178,8 @@ export class InternalMcpError extends McpError {
     return `Internal FrontMCP error. Please contact support with error ID: ${this.errorId}`;
   }
 }
+
+brandClass(InternalMcpError, '@frontmcp/sdk:InternalMcpError');
 
 // ============================================================================
 // Specific Error Classes
@@ -779,8 +794,17 @@ export function isClientFacingError(error: unknown): boolean {
   return isPublicError(error) || error instanceof AuthorityDeniedError;
 }
 
-/** The MCP error each error was converted to, so its error ID is the same wherever it is reported. */
-const convertedErrors = new WeakMap<object, McpError>();
+const CONVERTED_ERRORS = Symbol.for('@frontmcp/sdk/converted-errors');
+
+/**
+ * The MCP error each error was converted to, so its error ID is the same wherever it is reported.
+ * Kept on `globalThis`, so another copy of the SDK in the process (#802) reports the same ID too.
+ */
+function convertedErrors(): WeakMap<object, McpError> {
+  const host = globalThis as typeof globalThis & { [CONVERTED_ERRORS]?: WeakMap<object, McpError> };
+  host[CONVERTED_ERRORS] ??= new WeakMap<object, McpError>();
+  return host[CONVERTED_ERRORS];
+}
 
 /**
  * Convert any error to an MCP error. The same error always converts to the same MCP error.
@@ -791,8 +815,8 @@ export function toMcpError(error: any): McpError {
   }
 
   if (error !== null && typeof error === 'object') {
-    const converted = convertedErrors.get(error) ?? convertToMcpError(error);
-    convertedErrors.set(error, converted);
+    const converted = convertedErrors().get(error) ?? convertToMcpError(error);
+    convertedErrors().set(error, converted);
     return converted;
   }
 

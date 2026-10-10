@@ -52,6 +52,8 @@ CodeCallPlugin.init({
 });
 ```
 
+`plugins: [CodeCallPlugin]`, the class without `init()`, is the same as `CodeCallPlugin.init()`: the defaults below, with the six `codecall:*` meta-tools and `CodeCallConfig`. Up to 1.9.3 the class form installed no tools (1.9.2: the tools without `CodeCallConfig`), while `codecall_only` still hid the app's own tools, so `tools/list` was empty.
+
 ---
 
 ## Tool Visibility Modes
