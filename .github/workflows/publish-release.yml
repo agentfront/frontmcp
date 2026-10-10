@@ -600,6 +600,32 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.DOCS_SYNC_TOKEN }}
 
+      # frontmcp.dev opens a "Move to FrontMCP X.Y.Z" pull request: its docs are drafted from this release's
+      # diff and pull request descriptions, then reviewed (frontmcp.dev's docs/release-pass.md).
+      - name: Notify frontmcp.dev
+        if: ${{ needs.prepare.outputs.is_prerelease != 'true' }}
+        continue-on-error: true
+        uses: actions/github-script@v8
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PREVIOUS_TAG: ${{ steps.prev_version.outputs.prev_tag }}
+        with:
+          github-token: ${{ secrets.DOCS_SYNC_TOKEN }}
+          script: |
+            const version = process.env.VERSION;
+            try {
+              await github.rest.repos.createDispatchEvent({
+                owner: 'agentfront',
+                repo: 'frontmcp.dev',
+                event_type: 'frontmcp-release',
+                client_payload: { version, tag: `v${version}`, previousTag: process.env.PREVIOUS_TAG },
+              });
+              console.log(`Sent frontmcp-release for v${version} to agentfront/frontmcp.dev`);
+            } catch (error) {
+              console.error(`Could not notify frontmcp.dev: ${error.message}`);
+              if (error.status === 404) console.error('Check that DOCS_SYNC_TOKEN can write to agentfront/frontmcp.dev');
+            }
+
       - name: Final summary
         run: |
           echo "## Release Complete" >> "$GITHUB_STEP_SUMMARY"

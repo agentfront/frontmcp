@@ -177,6 +177,8 @@ Required in GitHub repository settings:
 
 - `CODEX_OPENAI_KEY` - OpenAI API key for Codex (environment: release)
 - `NPM_TOKEN` - npm publish token (for trusted publishing)
+- `DOCS_SYNC_TOKEN` (organization secret) - also starts frontmcp.dev's release pass, so it needs Contents: read and write
+  on `agentfront/frontmcp.dev`
 
 ### Node Version
 
@@ -209,11 +211,16 @@ Specified in `.nvmrc` file at repository root.
 ## Documentation
 
 FrontMCP's documentation is [frontmcp.dev](https://frontmcp.dev), built from the `agentfront/frontmcp.dev` repository.
-This repository has no docs site. It connects to the docs in three places:
+This repository has no docs site. It connects to the docs in four places:
+
+- **The release pass:** after publishing a release that isn't a prerelease, the publish workflow sends
+  `repository_dispatch` `frontmcp-release` (`{ version, tag, previousTag }`) to `agentfront/frontmcp.dev`. There, Codex
+  drafts the docs changes from this release's diff and pull request descriptions, and a "Move to FrontMCP X.Y.Z" pull
+  request opens for review (frontmcp.dev's `docs/release-pass.md`).
 
 - **Release highlights:** the publish workflow writes them into the GitHub Release body as a hidden
   `CARD_MDX_START … CARD_MDX_END` block, and frontmcp.dev's releases page reads them from there.
-- **What changed for users:** each PR's "User-facing change" section. frontmcp.dev's pass for a release reads these to
-  find the pages to update.
+- **What changed for users:** each PR's "User-facing change" section. The release pass gives these to Codex as its main
+  input, so a change users see needs one.
 - **The skills catalog** (`libs/skills/catalog`) is the documentation that ships with FrontMCP. It stays in this
   repository and changes in the same PR as the behavior it describes.
