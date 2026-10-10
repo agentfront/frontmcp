@@ -280,7 +280,7 @@ Object-typed parameters accept JSON strings that are automatically parsed.
 
 **Tool name conflict resolution:** if a tool name collides with a built-in command (e.g., `login`, `serve`), the tool subcommand is automatically suffixed with `-tool` (e.g., `login-tool`).
 
-**Auth token injection:** when `cli.authRequired` is `true` in config, an active OAuth token is automatically injected into tool/resource/prompt calls.
+**Auth token injection:** when `cli.authRequired` is `true` in config, the active session's stored token is sent with every tool/resource/prompt call, and those commands refuse to run (exit 1) until `login` or `connect --token` has stored one.
 
 ### `frontmcp.config.js` — CLI Options
 

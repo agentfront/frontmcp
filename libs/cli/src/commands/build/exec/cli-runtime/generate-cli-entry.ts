@@ -206,13 +206,20 @@ var SERVER_BUNDLE = '../${serverBundleFilename}';`
 var _client = null;
 async function getClient() {
   if (_client) return _client;
+${authRequired ? `
+  var credBlob = await creds.createCredentialStore().get(sessions.getActiveSessionName());
+  if (!credBlob || !credBlob.token) {
+    throw new Error('Not logged in. Run "' + APP_NAME + ' login" or "' + APP_NAME + ' connect --token <token>" first.');
+  }
+  var connectOpts = { authToken: credBlob.token, mode: 'cli' };` : `
+  var connectOpts = { mode: 'cli' };`}
 
   // Try daemon first — Unix socket HTTP (~5-15ms vs ~420ms in-process)
   var socketPath = path.join(FRONTMCP_HOME, 'sockets', APP_NAME + '.sock');
   if (fs.existsSync(socketPath)) {
     try {
       var daemonClient = require('./daemon-client');
-      var dc = daemonClient.createDaemonClient(socketPath);
+      var dc = daemonClient.createDaemonClient(socketPath${authRequired ? ', { authToken: credBlob.token }' : ''});
       await dc.ping();
       _client = dc;
       return _client;
@@ -226,13 +233,8 @@ async function getClient() {
   delete process.env.FRONTMCP_SCHEMA_EXTRACT;
   var configOrClass = mod.default || mod;
   var sdk = require('@frontmcp/sdk');
-  var connect = sdk.connect || sdk.direct.connect;${authRequired ? `
-  var sessionName = sessions.getActiveSessionName();
-  var store = creds.createCredentialStore();
-  var credBlob = await store.get(sessionName);
-  var connectOpts = credBlob ? { authToken: credBlob.token, mode: 'cli' } : { mode: 'cli' };
-  _client = await connect(configOrClass, connectOpts);` : `
-  _client = await connect(configOrClass, { mode: 'cli' });`}
+  var connect = sdk.connect || sdk.direct.connect;
+  _client = await connect(configOrClass, connectOpts);
   return _client;
 }
 

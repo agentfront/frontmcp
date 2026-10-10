@@ -567,6 +567,25 @@ describe('generateCliEntry', () => {
       const source = generateCliEntry(makeOptions({ authRequired: false }));
       expect(source).not.toContain('credBlob');
       expect(source).not.toContain('authToken');
+      expect(source).not.toContain('Not logged in');
+    });
+
+    it('refuses to connect without a stored credential, before trying the daemon', () => {
+      const source = generateCliEntry(makeOptions({ authRequired: true }));
+      const getClient = source.slice(source.indexOf('async function getClient()'), source.indexOf('async function closeClient()'));
+      const guardIdx = getClient.indexOf('if (!credBlob || !credBlob.token)');
+      expect(guardIdx).toBeGreaterThan(-1);
+      expect(getClient).toContain(
+        `throw new Error('Not logged in. Run "' + APP_NAME + ' login" or "' + APP_NAME + ' connect --token <token>" first.');`,
+      );
+      expect(guardIdx).toBeLessThan(getClient.indexOf("require('./daemon-client')"));
+    });
+
+    it('sends the stored token on the daemon path and the in-process path alike', () => {
+      const source = generateCliEntry(makeOptions({ authRequired: true }));
+      expect(source).toContain('daemonClient.createDaemonClient(socketPath, { authToken: credBlob.token })');
+      expect(source).toContain("var connectOpts = { authToken: credBlob.token, mode: 'cli' };");
+      expect(source).toContain('_client = await connect(configOrClass, connectOpts);');
     });
   });
 
