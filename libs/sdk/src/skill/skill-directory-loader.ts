@@ -9,11 +9,12 @@
  * @module skill/skill-directory-loader
  */
 
-import { basename, fileExists, joinPath, readdir, readFile, stat } from '@frontmcp/utils';
+import { basename, fileExists, isAbsolute, pathJoin, pathResolve, readdir, readFile, stat } from '@frontmcp/utils';
 
 import { type FrontMcpLogger } from '../common';
 import { skillMetadataSchema, type SkillMetadata, type SkillResources } from '../common/metadata/skill.metadata';
 import { SkillKind, type SkillFileRecord } from '../common/records/skill.record';
+import { captureCallerDir } from '../common/utils/caller-dir.utils';
 import { InvalidSkillError } from '../errors/sdk.errors';
 import { parseSkillMdFrontmatter, skillMdFrontmatterToMetadata } from './skill-md-parser';
 
@@ -38,17 +39,17 @@ export interface ScanResult {
 export async function scanSkillResources(dirPath: string): Promise<ScanResult> {
   const resources: SkillResources = {};
 
-  const scriptsPath = joinPath(dirPath, 'scripts');
-  const referencesPath = joinPath(dirPath, 'references');
-  const assetsPath = joinPath(dirPath, 'assets');
-  const examplesPath = joinPath(dirPath, 'examples');
+  const scriptsPath = pathJoin(dirPath, 'scripts');
+  const referencesPath = pathJoin(dirPath, 'references');
+  const assetsPath = pathJoin(dirPath, 'assets');
+  const examplesPath = pathJoin(dirPath, 'examples');
 
   const checks = await Promise.all([
     checkDirectory(scriptsPath),
     checkDirectory(referencesPath),
     checkDirectory(assetsPath),
     checkDirectory(examplesPath),
-    fileExists(joinPath(dirPath, 'SKILL.md')),
+    fileExists(pathJoin(dirPath, 'SKILL.md')),
   ]);
 
   if (checks[0]) resources.scripts = scriptsPath;
@@ -104,7 +105,7 @@ export async function findNestedSkillMd(
       throw err;
     }
     for (const entry of entries) {
-      const full = joinPath(current, entry);
+      const full = pathJoin(current, entry);
       let entryStat;
       try {
         entryStat = await stat(full);
@@ -127,19 +128,42 @@ export async function findNestedSkillMd(
   return found.sort();
 }
 
+const SKILL_DIRECTORY_LOADER_BASENAMES = ['skill-directory-loader.ts', 'skill-directory-loader.js'] as const;
+
+/**
+ * The directory `dirPath` names: an absolute path as is; a relative one against the calling file's
+ * directory, or else the working directory, whichever holds a SKILL.md (the calling file's when neither does).
+ */
+async function resolveSkillDirectory(dirPath: string, callerDir: string | undefined): Promise<string> {
+  if (isAbsolute(dirPath)) return dirPath;
+  const fromCaller = callerDir ? pathResolve(callerDir, dirPath) : undefined;
+  if (fromCaller && (await fileExists(pathJoin(fromCaller, 'SKILL.md')))) return fromCaller;
+  const fromCwd = pathResolve(dirPath);
+  if (await fileExists(pathJoin(fromCwd, 'SKILL.md'))) return fromCwd;
+  return fromCaller ?? fromCwd;
+}
+
 /**
  * Load a full skill directory into a SkillFileRecord.
  *
  * Reads SKILL.md, parses frontmatter, detects resource directories,
  * and validates the result.
  *
- * @param dirPath - Path to the skill directory
+ * @param dirPath - Path to the skill directory. A relative path resolves against the directory of the
+ *   file that calls this function, then the working directory.
  * @param logger - Optional SDK logger for structured warnings
  * @returns A SkillFileRecord ready for registration
  * @throws Error if SKILL.md is not found or metadata is invalid
  */
 export async function loadSkillDirectory(dirPath: string, logger?: FrontMcpLogger): Promise<SkillFileRecord> {
-  const skillMdPath = joinPath(dirPath, 'SKILL.md');
+  return loadResolvedSkillDirectory(
+    await resolveSkillDirectory(dirPath, captureCallerDir(SKILL_DIRECTORY_LOADER_BASENAMES)),
+    logger,
+  );
+}
+
+async function loadResolvedSkillDirectory(dirPath: string, logger?: FrontMcpLogger): Promise<SkillFileRecord> {
+  const skillMdPath = pathJoin(dirPath, 'SKILL.md');
 
   // Verify SKILL.md exists
   const exists = await fileExists(skillMdPath);
@@ -223,12 +247,14 @@ export async function loadSkillDirectory(dirPath: string, logger?: FrontMcpLogge
  * Convenience helper to load a skill directory.
  * Returns a SkillFileRecord suitable for passing to `@FrontMcp({ skills: [...] })`.
  *
- * @param dirPath - Path to the skill directory containing SKILL.md
+ * @param dirPath - Path to the skill directory containing SKILL.md. A relative path resolves against the
+ *   directory of the file that calls `skillDir()`, then the working directory.
  * @param logger - Optional SDK logger for structured warnings
  * @returns A SkillFileRecord
  *
  * @example
  * ```typescript
+ * // skills/review-pr next to this file
  * const mySkill = await skillDir('./skills/review-pr');
  *
  * @FrontMcp({ skills: [mySkill] })

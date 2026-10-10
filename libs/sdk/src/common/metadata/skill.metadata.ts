@@ -372,10 +372,12 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
   specMetadata?: Record<string, string>;
 
   /**
-   * Space-delimited list of pre-approved tool names.
+   * Space-delimited list of the client agent's tools the skill pre-approves.
    * Maps to the `allowed-tools` field in the Anthropic Agent Skills specification.
-   * Tools listed here are considered pre-approved for the skill and don't require
-   * additional user confirmation.
+   *
+   * Informational: it is handed to the client agent (e.g. Claude Code) unchanged, in the skill's
+   * SKILL.md frontmatter, its `skill://` resources and the skills HTTP API. The server neither
+   * enforces nor uses it. To name the server tools a skill uses, list them in `tools`.
    *
    * @example 'Read Edit Bash(git status) Bash(git diff)'
    */

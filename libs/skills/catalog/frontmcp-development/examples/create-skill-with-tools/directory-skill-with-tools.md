@@ -69,6 +69,7 @@ Follow these steps to deploy the service...
 // src/skills/load-skills.ts
 import { skillDir } from '@frontmcp/sdk';
 
+// Resolves against this file's directory, then the working directory
 const DeployServiceSkill = await skillDir('./skills/deploy-service');
 ```
 
@@ -103,7 +104,7 @@ class AnalyzeCodebaseTool extends ToolContext {
   priority: 10,
   license: 'MIT',
   compatibility: 'Node.js 24+',
-  allowedTools: 'Read Edit Bash(git status)',
+  allowedTools: 'Read Edit Bash(git status)', // client agent tools to pre-approve; not enforced by the server
   specMetadata: {
     author: 'platform-team',
     version: '2.0.0',

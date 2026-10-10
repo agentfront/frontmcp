@@ -50,7 +50,7 @@ Create a class extending `SkillContext` and decorate it with `@Skill`. The decor
 | `license`           | `string`                                        | No       | License identifier per Agent Skills spec (e.g., `'MIT'`)       |
 | `compatibility`     | `string`                                        | No       | Environment requirements (max 500 chars)                       |
 | `specMetadata`      | `Record<string, string>`                        | No       | Arbitrary key-value map (Agent Skills spec `metadata` field)   |
-| `allowedTools`      | `string`                                        | No       | Space-delimited pre-approved tool names (Agent Skills spec)    |
+| `allowedTools`      | `string`                                        | No       | Client agent tools to pre-approve; the server ignores it       |
 | `resources`         | `SkillResources`                                | No       | Bundled dirs: `{ scripts?, references?, assets? }`             |
 
 With `toolValidation: 'strict'`, the server refuses to start when a referenced tool isn't registered (`SkillValidationError`), unless `@FrontMcp({ skillsConfig: { failOnInvalidSkills: false } })` is set, which logs such skills as errors instead.
@@ -196,7 +196,7 @@ interface SkillContent {
   license?: string;
   compatibility?: string;
   specMetadata?: Record<string, string>;
-  allowedTools?: string; // space-delimited pre-approved tools
+  allowedTools?: string; // client agent tools to pre-approve (SKILL.md `allowed-tools`); the server does not enforce it
   resources?: SkillResources; // bundled scripts/, references/, assets/
 }
 ```
@@ -276,6 +276,8 @@ import { skillDir } from '@frontmcp/sdk';
 
 const CodingStandards = await skillDir('./skills/coding-standards');
 ```
+
+A relative path resolves against the directory of the file that calls `skillDir()` (here, `skills/` next to it), then the working directory; an absolute path is used as is. Up to 1.9.4 a relative path was not found at all.
 
 The `SKILL.md` file uses YAML frontmatter for metadata, followed by the instructions body:
 

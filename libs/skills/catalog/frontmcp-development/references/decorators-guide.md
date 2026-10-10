@@ -380,7 +380,7 @@ class ResearchAgent extends AgentContext {} // the default execute() runs the LL
 | `license?`           | License identifier (per Agent Skills spec, e.g., `'MIT'`)                      |
 | `compatibility?`     | Environment requirements (max 500 chars, e.g., `'Node.js 18+'`)                |
 | `specMetadata?`      | Arbitrary key-value map (Agent Skills spec `metadata` field)                   |
-| `allowedTools?`      | Space-delimited pre-approved tool names (Agent Skills spec)                    |
+| `allowedTools?`      | Client agent tools to pre-approve (Agent Skills spec); the server ignores it   |
 | `resources?`         | Bundled dirs: `{ scripts?, references?, assets? }` (Agent Skills spec)         |
 
 `toolValidation: 'strict'` makes the server refuse to start when a referenced tool isn't registered.
