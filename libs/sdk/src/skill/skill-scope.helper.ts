@@ -114,6 +114,7 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
   }
 
   if (skillsConfig?.externalProvider) {
+    await skillsConfig.externalProvider.initialize();
     skillRegistry.setExternalProvider(skillsConfig.externalProvider);
   }
 

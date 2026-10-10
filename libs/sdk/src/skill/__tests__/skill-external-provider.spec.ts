@@ -132,4 +132,34 @@ describe('skillsConfig.externalProvider', () => {
   it('refuses a value that is not an external skill provider', async () => {
     await expect(connectWith([DeskApp], { mode: 'read-only' })).rejects.toThrow(/externalProvider/);
   });
+
+  it('refuses an object that lacks part of the provider interface', async () => {
+    const partial = {
+      initialize: async () => undefined,
+      isReadOnly: () => true,
+      search: async () => [],
+      load: async () => null,
+    };
+
+    await expect(connectWith([DeskApp], partial)).rejects.toThrow(/externalProvider/);
+  });
+
+  it('initializes the provider before the server uses it', async () => {
+    class ConnectingProvider extends InMemoryExternalProvider {
+      connected = false;
+      override async initialize(): Promise<void> {
+        await super.initialize();
+        this.connected = true;
+      }
+      protected override async searchExternal(): Promise<SkillSearchResult[]> {
+        if (!this.connected) throw new Error('not connected');
+        return super.searchExternal();
+      }
+    }
+    client = await connectWith([BareApp], new ConnectingProvider({ mode: 'read-only' }));
+
+    const found = await client.searchSkills('remote');
+
+    expect(found.skills.map((entry) => entry.name)).toContain('remote-skill');
+  });
 });

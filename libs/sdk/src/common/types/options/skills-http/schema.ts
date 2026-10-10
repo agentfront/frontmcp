@@ -84,15 +84,22 @@ export const skillsConfigAuditOptionsSchema = z.object({
   headAnchorIntervalMs: z.number().int().positive().optional(),
 });
 
+/** The provider methods the skill registry calls. */
+const EXTERNAL_SKILL_PROVIDER_METHODS = [
+  'initialize',
+  'isReadOnly',
+  'search',
+  'load',
+  'list',
+  'count',
+  'syncSkills',
+] as const;
+
 /** Duck-typed, since `instanceof` fails across copies of the SDK. */
 function isExternalSkillProvider(value: unknown): value is ExternalSkillProviderBase {
   if (typeof value !== 'object' || value === null) return false;
-  const provider = value as Partial<Record<'isReadOnly' | 'search' | 'load', unknown>>;
-  return (
-    typeof provider.isReadOnly === 'function' &&
-    typeof provider.search === 'function' &&
-    typeof provider.load === 'function'
-  );
+  const provider = value as Partial<Record<(typeof EXTERNAL_SKILL_PROVIDER_METHODS)[number], unknown>>;
+  return EXTERNAL_SKILL_PROVIDER_METHODS.every((method) => typeof provider[method] === 'function');
 }
 
 /**
@@ -117,7 +124,7 @@ export const skillsConfigOptionsSchema = z.object({
   failOnInvalidSkills: z.boolean().optional(),
   externalProvider: z
     .custom<ExternalSkillProviderBase>(isExternalSkillProvider, {
-      message: 'externalProvider must be an ExternalSkillProviderBase (isReadOnly, search and load functions)',
+      message: `externalProvider must be an ExternalSkillProviderBase (${EXTERNAL_SKILL_PROVIDER_METHODS.join(', ')} functions)`,
     })
     .optional(),
 } satisfies RawZodShape<SkillsConfigOptionsInterface>);
