@@ -1,12 +1,12 @@
 # Contributing to FrontMCP
 
-Thanks for helping improve FrontMCP! This repo hosts the core SDK, CLI, adapters, plugins, docs, and the demo app. The
-project follows the [Code of Conduct](./CODE_OF_CONDUCT.md); by participating you agree to uphold it.
+Thanks for helping improve FrontMCP! This repo hosts the core SDK, CLI, adapters, plugins, the skills catalog, and the demo
+app; the documentation is at [frontmcp.dev](https://frontmcp.dev). The project follows the [Code of Conduct](./CODE_OF_CONDUCT.md); by participating you agree to uphold it.
 
 ## Ways to Contribute
 
 - Report reproducible bugs, missing docs, or regression risks via GitHub issues.
-- Improve docs (`/docs`), snippets, or the demo app in `apps/demo`.
+- Improve the skills catalog (`libs/skills/catalog`) or the demo app in `apps/demo`.
 - Fix bugs or add features inside the packages under `libs/*`.
 - Build adapters/plugins/examples that showcase how the SDK should be used.
 
@@ -39,7 +39,7 @@ Helpful references:
 
 - `README.md` for a high-level overview and quickstart.
 - `CHANGELOG.md` for release notes—update it when user-facing behavior changes.
-- `docs/` for the Mintlify-based documentation site (`yarn docs:local` runs a local preview).
+- [frontmcp.dev](https://frontmcp.dev) for the documentation, which lives in a separate repository.
 
 ## Day-to-Day Commands
 
@@ -49,7 +49,6 @@ yarn nx test sdk               # run Jest tests for libs/sdk
 yarn nx lint plugins           # lint a specific project
 yarn nx run-many -t lint,test  # run lint+test for everything
 yarn nx run-many -t build      # build all publishable packages
-yarn docs:local                # preview the docs site locally
 yarn nx affected --target test --base main  # limit CI work to changed projects
 ```
 
@@ -77,9 +76,11 @@ transport/session/auth flows, also try the Inspector (`npx frontmcp inspector`) 
 
 ## Documentation and Samples
 
-- Docs live in `docs/` (Mintlify). After editing, run `yarn docs:local` to confirm the nav/build passes.
+- FrontMCP's docs live on [frontmcp.dev](https://frontmcp.dev), in a separate repository. Report a docs problem as an
+  issue here.
+- When your change alters what users see, fill in the PR template's "User-facing change" section, and update the
+  matching entries in `libs/skills/catalog`.
 - Keep `README.md` in sync with notable DX changes (new scripts, requirements, etc.).
-- Update code snippets under `docs/snippets` if your change alters their behavior.
 - Demo updates should remain scoped and easy to understand; prefer creating a new sample app/tool over overloading
   existing ones.
 
@@ -87,13 +88,12 @@ transport/session/auth flows, also try the Inspector (`npx frontmcp inspector`) 
 
 1. Open/mention an issue for significant changes.
 2. Rebase on the latest `main`; keep history clean (squash in your fork if needed).
-3. Add or update unit tests plus docs/snippets.
+3. Add or update unit tests, and the skills catalog when behavior changes.
 4. Run:
    - `yarn nx run-many -t lint,test`
    - `yarn nx run-many -t build`
-   - `yarn docs:local` (if docs changed)
    - `npx frontmcp doctor` and try Inspector if your change affects runtime behavior.
-5. Update `CHANGELOG.md` when the change is user-facing.
+5. Update `CHANGELOG.md` and fill in the PR template's "User-facing change" section when the change is user-facing.
 6. Include screenshots or logs when the change affects dev tooling or Inspector UX.
 
 Maintainers handle publishing; do not run manual `npm publish` steps.
