@@ -8,7 +8,8 @@
  *   only ever sent the agent's own tools, and those only ran the agent's own plugins' hooks.
  * - `exports` exported nothing: an exported prompt or resource never reached `prompts/list` or
  *   `resources/list`, and an exported provider never reached the app.
- * - `execution.enableStreaming`, and resources or prompts nothing reads, are now reported at startup.
+ * - `execution.enableStreaming`, and resources and prompts that are not exported, were reported at
+ *   startup until the agent streamed its reply (#698) and its model could read them (#699).
  * - An `executeTool()` override never saw the model's tool calls.
  * - The agent's options are `this.metadata` (there is no `this.options`).
  */
@@ -540,17 +541,12 @@ describe('@Agent options', () => {
   });
 
   describe('startup warnings', () => {
-    it('reports execution.enableStreaming, which is not supported yet', () => {
-      expect(logLines).toContainEqual(
-        expect.stringContaining('Agent "streamer": execution.enableStreaming is not supported yet and has no effect'),
-      );
+    it('does not report execution.enableStreaming, which streams the reply (#698)', () => {
+      expect(logLines.filter((line) => line.includes('Agent "streamer"'))).toEqual([]);
     });
 
-    it('reports resources and prompts that nothing reads', () => {
-      expect(logLines).toContainEqual(
-        expect.stringContaining('Agent "librarian" declares prompts [staff_only] that nothing reads'),
-      );
-      expect(logLines.filter((line) => line.includes('Agent "librarian" declares'))).toHaveLength(1);
+    it('does not report resources or prompts that are not exported: the agent model reads them', () => {
+      expect(logLines.filter((line) => line.includes('Agent "librarian"'))).toEqual([]);
     });
   });
 
