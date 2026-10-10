@@ -45,12 +45,7 @@ export interface SkillAuditSigner {
   getKeyId(): string;
   /** Algorithm this signer uses. */
   getAlg(): SkillAuditSignatureAlg;
-  /**
-   * Derive a separate key from the signer's secret key material (HKDF-SHA256 with `info`), without
-   * exposing that material. The writer keys the `subjectMode: 'hash'` HMAC with it when no
-   * `subjectHashSecret` is given. A signer that holds no usable key material (an HSM or KMS signer)
-   * leaves it out, and the writer records subjects as `'redacted'` instead.
-   */
+  /** HKDF-SHA256 key derived from the signer's key material, never the material itself; keyless (HSM/KMS) signers leave it out. */
   deriveKey?(info: string, length: number): Uint8Array;
 }
 

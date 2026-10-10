@@ -60,10 +60,7 @@ function appendCookie(headers: Headers, name: string, value: unknown): void {
 
 const DOT_SEGMENTS = new Set(['.', '..']);
 
-/**
- * Refuse a URL whose path parameters moved it off the operation's path: a dot segment the
- * template does not have, or a parsed path outside the base path plus the template's literal prefix.
- */
+/** Refuse a URL whose path parameters add a dot segment or leave the base path plus the template's literal prefix. */
 function assertPathStaysOnOperation(tool: McpOpenAPITool, apiBaseUrl: string, resolvedPath: string, url: string) {
   const templatePath = tool.metadata.path;
   const templateSegments = templatePath.split('/');

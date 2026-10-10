@@ -32,12 +32,7 @@ export interface TaskStore {
    */
   create(record: TaskRecord): Promise<void>;
 
-  /**
-   * Persist a new record unless its owner (`record.sessionId`) already has `maxActive` unfinished
-   * tasks (`working` or `input_required`). Returns `false`, writing nothing, when the owner is at the
-   * cap. Atomic across every node that shares the store. A task stops counting once it reaches a
-   * terminal status, is deleted, or expires.
-   */
+  /** Atomically persist the record unless its owner already has `maxActive` unfinished tasks; `false` writes nothing. */
   createWithinLimit(record: TaskRecord, maxActive: number): Promise<boolean>;
 
   /**

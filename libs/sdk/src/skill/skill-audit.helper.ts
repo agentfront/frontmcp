@@ -226,10 +226,7 @@ function createDefaultSigner(mod: AuditModuleShape, logger: FrontMcpLogger): unk
   return new mod.Hs256AuditSigner(bytes, 'frontmcp-default-hs256');
 }
 
-/**
- * The writer options from `skillsConfig.audit`: only the fields the writer reads. `headAnchorIntervalMs`
- * is validated by the schema but not read yet (see `SkillAuditConfig.headAnchorIntervalMs`).
- */
+/** The writer options from `skillsConfig.audit` (`headAnchorIntervalMs` is validated but not read yet). */
 function auditWriterOptions(audit: SkillsConfigAuditOptions): AuditWriterOptionsShape | undefined {
   const options: AuditWriterOptionsShape = {};
   if (audit.subjectMode !== undefined) options.subjectMode = audit.subjectMode;
@@ -243,8 +240,7 @@ function auditWriterOptions(audit: SkillsConfigAuditOptions): AuditWriterOptions
 }
 
 function createDefaultStore(mod: AuditModuleShape, logger: FrontMcpLogger): unknown {
-  // An in-memory log in production loses every record on restart and is not shared across pods,
-  // so production refuses it as it refuses the default signer.
+  // An in-memory log loses every record on restart, so production refuses it like the default signer.
   if (isProductionRuntime()) {
     throw new Error(
       '[skill-audit] refusing to use the in-memory audit store in production. Configure ' +

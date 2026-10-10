@@ -155,8 +155,7 @@ export async function executeSkillAction(args: {
     );
   }
 
-  // 5) Validate JSON response against the op's output schema (errors pass through). The audit
-  //    records the outcome the caller gets: an answer that fails the schema is a failure.
+  // 5) Validate JSON response against the op's output schema; the audit records the outcome the caller gets.
   const isJsonResponse = (result.contentType ?? '').toLowerCase().includes('application/json');
   if (result.ok && isJsonResponse && result.data !== undefined && result.data !== null) {
     const outputParse = schemas.output.safeParse(result.data);

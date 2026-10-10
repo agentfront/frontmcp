@@ -60,11 +60,7 @@ export interface SkillAuditStore {
   /** Read records in sequence order. Used by the verifier and by HTTP viewers. */
   read(opts?: SkillAuditReadOptions): Promise<SkillAuditRecord[]>;
 
-  /**
-   * Give back a sequence number from {@link nextSequence} whose record was never appended (its
-   * signing or append failed), so the chain has no gap the verifier reports. Optional and
-   * best-effort: a store that cannot roll back leaves it out.
-   */
+  /** Give back a {@link nextSequence} number whose record was never appended, so the chain has no gap (best-effort). */
   releaseSequence?(sequence: number): Promise<void>;
 }
 

@@ -147,13 +147,7 @@ const SUBJECT_HASH_KEY_LENGTH = 32;
 export interface SkillAuditWriterOptions {
   /** See {@link SkillAuditSubjectMode}. Default: `'hash'`. */
   subjectMode?: SkillAuditSubjectMode;
-  /**
-   * Key for the subject HMAC when `subjectMode: 'hash'`. When omitted, the key is derived
-   * from the signer's key material ({@link SkillAuditSigner.deriveKey}, HKDF-SHA256 with info
-   * `frontmcp:audit:subject`), so it changes when the signing key does. A signer that cannot
-   * derive one makes the writer record subjects as `'redacted'`, with a warning at construction.
-   * Pass a stable host-managed key to keep subject hashes joinable across signing-key rotations.
-   */
+  /** HMAC key for `subjectMode: 'hash'`; unset, it is {@link SkillAuditSigner.deriveKey}'s, or subjects are `'redacted'`. */
   subjectHashSecret?: Uint8Array;
   /** See {@link SKILL_AUDIT_QUEUE_MAX}. Default: 1000. */
   maxQueueDepth?: number;
@@ -407,10 +401,7 @@ export class SkillAuditWriter {
     }
   }
 
-  /**
-   * Best-effort sequence rollback through {@link SkillAuditStore.releaseSequence}, so a failed
-   * write leaves no gap the verifier reports. Never throws: a failed rollback leaves the gap.
-   */
+  /** Best-effort {@link SkillAuditStore.releaseSequence}; never throws, so a failed rollback leaves the gap. */
   private async releaseUnusedSequence(allocated: number): Promise<void> {
     if (!this.store.releaseSequence) return;
     try {

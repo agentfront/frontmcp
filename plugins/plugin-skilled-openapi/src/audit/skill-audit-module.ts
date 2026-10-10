@@ -1,10 +1,7 @@
 import * as skillAuditModule from '@frontmcp/adapters/skills';
 import { hasSkillAuditFactory, setSkillAuditFactory } from '@frontmcp/sdk';
 
-/**
- * Register the skill audit module with the SDK, so `skillsConfig.audit` builds its writer without
- * the host calling `setSkillAuditFactory()`. A factory the host already registered is kept.
- */
+/** Register the audit module so `skillsConfig.audit` works without `setSkillAuditFactory()`; a host's own is kept. */
 export function registerSkillAuditModule(): void {
   if (!hasSkillAuditFactory()) setSkillAuditFactory(() => skillAuditModule);
 }

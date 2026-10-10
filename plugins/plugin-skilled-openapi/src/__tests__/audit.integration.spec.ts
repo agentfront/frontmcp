@@ -1,6 +1,4 @@
-/**
- * `skillsConfig.audit` on a real server with the plugin installed, without `setSkillAuditFactory()`.
- */
+/** `skillsConfig.audit` on a real server with the plugin installed, without `setSkillAuditFactory()`. */
 import 'reflect-metadata';
 
 import {

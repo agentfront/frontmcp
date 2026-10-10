@@ -447,13 +447,7 @@ export interface SkillsConfigAuditOptions {
    * @default 'hash'
    */
   subjectMode?: 'plain' | 'hash' | 'omit';
-  /**
-   * Key for the `subjectMode: 'hash'` HMAC: at least 32 bytes (a string is UTF-8 encoded). When
-   * omitted, the key is derived from the signer's key material (HKDF), so subject hashes change
-   * when the signing key does; a signer that cannot derive one (an HSM or KMS signer) records
-   * subjects as `'redacted'` and logs a warning at startup. Set it to keep subject hashes stable
-   * across signing-key rotations.
-   */
+  /** HMAC key for `subjectMode: 'hash'` (at least 32 bytes); unset, it is derived from the signer's key material. */
   subjectHashSecret?: string | Uint8Array;
   /**
    * Periodic head-anchor interval (milliseconds). Reserved for v1.3.0

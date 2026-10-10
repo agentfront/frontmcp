@@ -255,10 +255,7 @@ export class SqliteTaskStore implements TaskStoreInterface {
     this.prepared().insert.run(...this.rowValues(record));
   }
 
-  /**
-   * Insert unless the owner already has `maxActive` unfinished, unexpired rows. When it does, the
-   * owner's tasks whose CLI worker died are marked failed first, so they stop counting.
-   */
+  /** Insert unless the owner has `maxActive` unfinished rows, after failing the ones whose CLI worker died. */
   async createWithinLimit(record: TaskRecord, maxActive: number): Promise<boolean> {
     if (record.expiresAt <= Date.now()) {
       await this.create(record);
@@ -277,8 +274,7 @@ export class SqliteTaskStore implements TaskStoreInterface {
       return null;
     }
     const record = this.rowToRecord(row);
-    // Orphan detection: a task whose CLI worker died is marked failed. Spec §Task Lifecycle: only
-    // `working` and `input_required` are non-terminal — don't touch anything else.
+    // Orphan detection: an unfinished task whose CLI worker died is marked failed.
     if (this.isOrphaned(record)) {
       const failed = await this.failOrphan(record);
       if (failed) return failed;

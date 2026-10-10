@@ -43,9 +43,7 @@ export function clientSupportsTasks(clientCapabilities: Record<string, unknown>)
  * `result` / `error` only appear once the task is terminal, and `inputRequests`
  * only while it is paused waiting for the client — mirroring what the client is
  * actually allowed to act on at each point in the lifecycle.
- *
- * In this revision `failed` means a JSON-RPC error. A tool result with `isError: true` is stored as
- * `failed` (what 2025-11-25 reports), so it is projected as `completed` with that result.
+ * A tool result with `isError: true` is stored as `failed` (2025-11-25) and projected as `completed` here.
  */
 export function taskToWire20260728(record: TaskRecord): Record<string, unknown> {
   const status = record.status === 'failed' && record.outcome?.kind === 'ok' ? 'completed' : record.status;
@@ -154,8 +152,7 @@ export async function dispatchTasksMethod(options: TasksDispatchOptions): Promis
   }
 
   if (method === 'tasks/cancel') {
-    // Cancellation is cooperative and a terminal task is already done; the
-    // spec asks servers to acknowledge rather than error.
+    // A terminal task is already done; the spec asks servers to acknowledge rather than error.
     if (TERMINAL_TASK_STATUSES.includes(record.status)) return { kind: 'result', result: {} };
     // The hookable flow a 2025-11-25 cancel runs: it signals the runner (SIGTERM for a CLI worker) and every node.
     try {

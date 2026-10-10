@@ -107,12 +107,7 @@ export function linkRecord(
 
 /** Options for {@link verifyChain}. */
 export interface AuditChainVerifyOptions {
-  /**
-   * The record just before `records`, for verifying a window read from the middle of the chain
-   * (`store.read({ from, limit })`): the first record must follow it in sequence and carry its hash
-   * as `prevHash`. Pass a record you verified earlier, or read `from - 1` and verify it too.
-   * Without it, the first record must be the chain's first (`prevHash` is the genesis sentinel).
-   */
+  /** The already-verified record just before a window read with `read({ from })`; without it the first record must be the genesis. */
   previous?: SkillAuditRecord;
 }
 

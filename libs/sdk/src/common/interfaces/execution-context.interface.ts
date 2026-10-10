@@ -218,10 +218,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
     return this.providers.getScope();
   }
 
-  /**
-   * Try to get a dependency, returning undefined if not found. A token nothing registered is the
-   * expected case and stays quiet; a registered provider that cannot be resolved logs a warning.
-   */
+  /** Try to get a dependency, returning undefined if not found; only a registered provider that fails to resolve warns. */
   tryGet<T>(token: Token<T>): T | undefined {
     try {
       return this.providers.get(token);

@@ -558,11 +558,7 @@ export interface FrontMcpBaseMetadata {
     defaultTtlMs?: number;
     maxTtlMs?: number;
     defaultPollIntervalMs?: number;
-    /**
-     * Maximum tasks a caller may have unfinished (`working` or `input_required`) at once: per session,
-     * or per authenticated subject under protocol 2026-07-28. Over it, a task is refused with
-     * `CONCURRENCY_LIMIT`. Default 16.
-     */
+    /** Unfinished tasks a caller may have at once (per session, or per subject under 2026-07-28); default 16. */
     maxConcurrentPerSession?: number;
     /**
      * Throw at startup instead of warning when the runtime cannot run tasks

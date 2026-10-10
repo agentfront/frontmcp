@@ -20,10 +20,7 @@ export const FRONTMCP_SUPPORTED_PROTOCOL_VERSIONS = [
   '2024-11-05',
 ] as const;
 
-/**
- * Revisions `initialize` negotiates: every supported revision except 2026-07-28, which removed
- * `initialize`. A request for any other revision is answered with the latest of these.
- */
+/** Revisions `initialize` negotiates: every supported one except 2026-07-28, which removed `initialize`. */
 export const INITIALIZE_PROTOCOL_VERSIONS: readonly string[] = FRONTMCP_SUPPORTED_PROTOCOL_VERSIONS.filter(
   (version) => version !== PROTOCOL_2026_07_28,
 );

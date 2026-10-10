@@ -65,10 +65,7 @@ export class TaskAugmentationRequiredError extends PublicMcpError {
   }
 }
 
-/**
- * The caller already has as many unfinished tasks as `tasks.maxConcurrentPerSession` allows. Answered
- * like the guard's concurrency limit: an `isError` result whose `_meta.code` is `CONCURRENCY_LIMIT`.
- */
+/** The caller is at `tasks.maxConcurrentPerSession`; answered like the guard's `CONCURRENCY_LIMIT`. */
 export class TaskConcurrencyLimitError extends PublicMcpError {
   readonly maxConcurrent: number;
   constructor(maxConcurrent: number) {

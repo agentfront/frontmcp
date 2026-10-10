@@ -1,8 +1,4 @@
-/**
- * StorageTaskStore.createWithinLimit on the memory backend and on a Redis-shaped one: the real
- * RedisStorageAdapter over an in-memory ioredis stand-in whose every command yields first, so
- * concurrent calls interleave the way network round trips do.
- */
+/** Memory, and the real RedisStorageAdapter over an ioredis stand-in whose commands yield so concurrent calls interleave. */
 import {
   createMemoryStorage,
   createRootStorage,

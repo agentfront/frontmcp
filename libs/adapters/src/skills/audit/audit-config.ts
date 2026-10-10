@@ -80,11 +80,7 @@ export interface SkillAuditConfig {
    */
   subjectMode?: SkillAuditSubjectMode;
 
-  /**
-   * Key for the `subjectMode: 'hash'` HMAC: at least 32 bytes (a string is UTF-8 encoded). When
-   * omitted, the key is derived from the signer's key material, so subject hashes change when the
-   * signing key does; a signer that cannot derive one records subjects as `'redacted'` and warns.
-   */
+  /** HMAC key for `subjectMode: 'hash'` (at least 32 bytes); unset, it is derived from the signer's key material. */
   subjectHashSecret?: string | Uint8Array;
 
   /**

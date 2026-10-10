@@ -6,8 +6,7 @@
  *
  * Key layout (under the store's NamespacedStorage):
  *  - `records:{sessionId}:{taskId}` — the TaskRecord JSON
- *  - `slots:{sessionId}:{n}` — the taskId holding concurrency slot `n` of that owner (see
- *    `createWithinLimit`); expires with the task's record
+ *  - `slots:{sessionId}:{n}` — the taskId holding the owner's concurrency slot `n`; expires with its record
  *  - Pub/sub channels:
  *      - `terminal:{taskId}` — fires when a task reaches terminal status
  *      - `cancel:{taskId}`   — fires when a task is asked to cancel
@@ -75,11 +74,7 @@ export class StorageTaskStore implements TaskStore {
     this.logger?.debug('[StorageTaskStore] created', { taskId: record.taskId, ttlSeconds });
   }
 
-  /**
-   * Each owner has `maxActive` slot keys; a task holds one from creation until it finishes, is
-   * deleted, or expires (the slot key carries the record's TTL). A slot is claimed with a write
-   * that only succeeds while the key is absent, so two nodes never hold the same slot.
-   */
+  /** A task holds one of its owner's `maxActive` slot keys, claimed by a write-if-absent, until it finishes. */
   async createWithinLimit(record: TaskRecord, maxActive: number): Promise<boolean> {
     const ttlSeconds = expiresAtToTTL(record.expiresAt);
     if (ttlSeconds <= 0) {
@@ -163,10 +158,7 @@ export class StorageTaskStore implements TaskStore {
     return undefined;
   }
 
-  /**
-   * Free the slots whose task has already finished (a release that failed) or whose CLI worker
-   * died, which also marks that task failed. A slot whose record is not written yet is left alone.
-   */
+  /** Free slots held by finished tasks or by tasks whose CLI worker died (marked failed); others are left alone. */
   private async reclaimSlots(owner: string, holders: ReadonlyArray<string | null>): Promise<boolean> {
     let reclaimed = false;
     for (const holderTaskId of holders) {
