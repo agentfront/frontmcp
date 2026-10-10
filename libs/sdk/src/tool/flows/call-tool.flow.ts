@@ -61,6 +61,7 @@ import {
   RateLimitError,
   TaskAugmentationNotSupportedError,
   TaskAugmentationRequiredError,
+  TaskConcurrencyLimitError,
   TaskStoreNotInitializedError,
   ToolCredentialsRequiredError,
   ToolExecutionError,
@@ -488,7 +489,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       record.progressToken = this.state.progressToken;
     }
 
-    await store.create(record);
+    const maxActive = config.maxConcurrentPerSession ?? TASK_DEFAULTS.maxConcurrentPerSession;
+    if (!(await store.createWithinLimit(record, maxActive))) {
+      throw new TaskConcurrencyLimitError(maxActive);
+    }
 
     const notifier = new TaskNotifier(this.scope.notifications, this.logger);
     // Emit the initial `working` status notification on the same SSE stream as

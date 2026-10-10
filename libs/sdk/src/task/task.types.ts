@@ -139,6 +139,12 @@ export interface TaskRecord {
   inputResponses?: Record<string, Record<string, unknown>>;
 
   /**
+   * The concurrency slot a key-value task store gave this task when it was created
+   * (`TaskStore.createWithinLimit`). Released when the task finishes; internal, never sent to clients.
+   */
+  concurrencySlot?: number;
+
+  /**
    * Identifies the runtime executing the task so we can orphan-detect and
    * cross-process cancel.
    *
@@ -200,7 +206,11 @@ export interface TasksConfig {
   /** Suggested poll interval reported to clients. */
   defaultPollIntervalMs?: number;
 
-  /** Maximum concurrent task records per session. */
+  /**
+   * Maximum tasks a caller may have unfinished (`working` or `input_required`) at once: per session,
+   * or per authenticated subject under protocol 2026-07-28. A task over it is refused with
+   * `CONCURRENCY_LIMIT`. Default 16.
+   */
   maxConcurrentPerSession?: number;
 
   /** Key prefix for the store. Default: 'mcp:task:'. */

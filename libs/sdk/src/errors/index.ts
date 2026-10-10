@@ -99,6 +99,7 @@ export {
   TaskAlreadyTerminalError,
   TaskAugmentationNotSupportedError,
   TaskAugmentationRequiredError,
+  TaskConcurrencyLimitError,
   TaskStoreNotInitializedError,
 } from './task.error';
 

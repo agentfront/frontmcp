@@ -729,3 +729,96 @@ describe('SqliteTaskStore', () => {
     });
   });
 });
+
+describe('SqliteTaskStore.createWithinLimit', () => {
+  const stores: Array<{ store: SqliteTaskStore; dbPath: string }> = [];
+
+  function openStore(livenessProbe: (pid: number) => boolean = () => true): SqliteTaskStore {
+    const dbPath = tmpDbPath();
+    const store = new SqliteTaskStore({ path: dbPath, ttlCleanupIntervalMs: 0, livenessProbe });
+    stores.push({ store, dbPath });
+    return store;
+  }
+
+  afterEach(async () => {
+    for (const { store, dbPath } of stores.splice(0)) {
+      await store.destroy();
+      cleanup(dbPath);
+    }
+  });
+
+  it('refuses a task over the cap, and counts each owner separately', async () => {
+    const store = openStore();
+
+    expect(await store.createWithinLimit(makeRecord({ taskId: 'a1' }), 2)).toBe(true);
+    expect(await store.createWithinLimit(makeRecord({ taskId: 'a2' }), 2)).toBe(true);
+    expect(await store.createWithinLimit(makeRecord({ taskId: 'a3' }), 2)).toBe(false);
+    expect(await store.get('a3', 's-1')).toBeNull();
+    expect(await store.createWithinLimit(makeRecord({ taskId: 'b1', sessionId: 's-2' }), 2)).toBe(true);
+  });
+
+  it('counts a task waiting for input', async () => {
+    const store = openStore();
+    await store.createWithinLimit(makeRecord({ taskId: 'a1', status: 'input_required' }), 1);
+
+    expect(await store.createWithinLimit(makeRecord({ taskId: 'a2' }), 1)).toBe(false);
+  });
+
+  it.each(['completed', 'failed', 'cancelled'] as const)('stops counting a task once it is %s', async (status) => {
+    const store = openStore();
+    await store.createWithinLimit(makeRecord({ taskId: 'a1' }), 1);
+    await store.update('a1', 's-1', { status });
+
+    expect(await store.createWithinLimit(makeRecord({ taskId: 'a2' }), 1)).toBe(true);
+  });
+
+  it('stops counting a task once it is deleted', async () => {
+    const store = openStore();
+    await store.createWithinLimit(makeRecord({ taskId: 'a1' }), 1);
+    await store.delete('a1', 's-1');
+
+    expect(await store.createWithinLimit(makeRecord({ taskId: 'a2' }), 1)).toBe(true);
+  });
+
+  it('stops counting a task once it expires, before or after cleanup', async () => {
+    const store = openStore();
+    await store.createWithinLimit(makeRecord({ taskId: 'a1', expiresAt: Date.now() + 50 }), 2);
+    await store.createWithinLimit(makeRecord({ taskId: 'a2', expiresAt: Date.now() + 50 }), 2);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    expect(await store.createWithinLimit(makeRecord({ taskId: 'a3' }), 2)).toBe(true);
+    store.purgeExpired();
+    expect(await store.createWithinLimit(makeRecord({ taskId: 'a4' }), 2)).toBe(true);
+  });
+
+  it('marks a task whose CLI worker died as failed, and stops counting it', async () => {
+    const deadPid = 4242;
+    const store = openStore((pid) => pid !== deadPid);
+    await store.createWithinLimit(makeRecord({ taskId: 'a1', executor: { host: 'cli', pid: deadPid } }), 1);
+
+    expect(await store.createWithinLimit(makeRecord({ taskId: 'a2' }), 1)).toBe(true);
+    expect((await store.get('a1', 's-1'))?.status).toBe('failed');
+  });
+
+  it('keeps counting a task whose CLI worker is alive', async () => {
+    const store = openStore(() => true);
+    await store.createWithinLimit(makeRecord({ taskId: 'a1', executor: { host: 'cli', pid: 4242 } }), 1);
+
+    expect(await store.createWithinLimit(makeRecord({ taskId: 'a2' }), 1)).toBe(false);
+  });
+
+  it('holds the cap across two stores sharing one database file', async () => {
+    const first = openStore();
+    const dbPath = stores[0]?.dbPath ?? '';
+    const second = new SqliteTaskStore({ path: dbPath, ttlCleanupIntervalMs: 0 });
+
+    const created = await Promise.all(
+      Array.from({ length: 10 }, (_, index) =>
+        (index % 2 === 0 ? first : second).createWithinLimit(makeRecord({ taskId: `t${index}` }), 4),
+      ),
+    );
+    await second.destroy();
+
+    expect(created.filter(Boolean)).toHaveLength(4);
+  });
+});

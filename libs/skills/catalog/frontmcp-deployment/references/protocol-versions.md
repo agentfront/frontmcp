@@ -172,6 +172,14 @@ still works. `tasks/list` and `tasks/result` were removed.
 Tasks require an **authenticated** caller — without protocol sessions an
 anonymous task cannot be scoped to its creator, so a public server refuses.
 
+A caller may have at most `tasks.maxConcurrentPerSession` (default 16) tasks
+unfinished (`working` or `input_required`) at once: counted per authenticated
+subject (`sub`) under this revision, and per session under earlier ones. A task
+over the cap is refused the way a guard concurrency limit is, with an `isError`
+result whose `_meta.code` is `CONCURRENCY_LIMIT`; the count drops as tasks
+complete, fail, are cancelled or expire. The count is atomic across instances
+sharing a Redis, Upstash or SQLite task store.
+
 ## Connecting as a client
 
 The upstream `@modelcontextprotocol/sdk` client cannot speak this revision:
