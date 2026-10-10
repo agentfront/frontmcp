@@ -684,6 +684,17 @@ describe('plugin-emitter (issue #411)', () => {
       parseToml(handWritten);
     });
 
+    it('matches a dotted server name literally when looking for a hand-written table', async () => {
+      await writeFile(configPath, '[mcp_servers."helpxdesk"]\ncommand = "other"\n');
+      await emitCodexEntry({ configPath, name: 'help.desk', command: 'help-desk', args: [] });
+      expect(Object.keys(await readCodexServers()).sort()).toEqual(['help.desk', 'helpxdesk']);
+
+      await writeFile(configPath, '[mcp_servers."help.desk"]\ncommand = "hand-written"\n');
+      await expect(emitCodexEntry({ configPath, name: 'help.desk', command: 'help-desk', args: [] })).rejects.toThrow(
+        'outside the frontmcp markers',
+      );
+    });
+
     it('does not mistake a hand-written server with a longer name for a duplicate', async () => {
       await writeFile(configPath, '[mcp_servers.help-desk-two]\ncommand = "two"\n');
       await emitCodexEntry({ configPath, name: 'help-desk', command: 'help-desk', args: [] });

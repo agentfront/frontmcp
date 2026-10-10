@@ -736,11 +736,19 @@ function migrateLegacyCodexBlocks(content: string): string {
   });
 }
 
+function definesCodexServerTable(content: string, name: string): boolean {
+  const keyForms = [name, `"${name}"`, `'${name}'`];
+  return content.split(/\r?\n/).some((line) => {
+    const tablePrefix = /^\s*\[\s*mcp_servers\s*\.\s*/.exec(line);
+    if (!tablePrefix) return false;
+    const rest = line.slice(tablePrefix[0].length);
+    return keyForms.some((key) => rest.startsWith(key) && /^\s*[\].]/.test(rest.slice(key.length)));
+  });
+}
+
 function assertNoUnmanagedCodexTable(content: string, name: string, configPath: string): void {
   const unmanaged = content.replace(MANAGED_CODEX_BLOCK, '');
-  const key = name.replace(/\./g, '\\.');
-  const tableHeader = new RegExp(`^\\s*\\[\\s*mcp_servers\\s*\\.\\s*(?:${key}|"${key}"|'${key}')\\s*[\\].]`, 'm');
-  if (tableHeader.test(unmanaged)) {
+  if (definesCodexServerTable(unmanaged, name)) {
     throw new Error(
       `${configPath} already defines [mcp_servers.${tomlBareKey(name)}] outside the frontmcp markers. ` +
         `Remove that table from ${configPath} (or rename the server in frontmcp.config), then run install again.`,
