@@ -2,6 +2,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { getHostname } from '@frontmcp/utils';
+
 import { SqliteTaskStore, type SqliteTaskLogger, type TaskRecord } from '../sqlite-task.store';
 
 function tmpDbPath(): string {
@@ -820,5 +822,48 @@ describe('SqliteTaskStore.createWithinLimit', () => {
     await second.destroy();
 
     expect(created.filter(Boolean)).toHaveLength(4);
+  });
+});
+
+describe('SqliteTaskStore orphan detection and the worker host', () => {
+  const deadPid = 4242;
+  const stores: Array<{ store: SqliteTaskStore; dbPath: string }> = [];
+
+  function openStore(): SqliteTaskStore {
+    const dbPath = tmpDbPath();
+    const store = new SqliteTaskStore({
+      path: dbPath,
+      ttlCleanupIntervalMs: 0,
+      livenessProbe: (pid) => pid !== deadPid,
+    });
+    stores.push({ store, dbPath });
+    return store;
+  }
+
+  afterEach(async () => {
+    for (const { store, dbPath } of stores.splice(0)) {
+      await store.destroy();
+      cleanup(dbPath);
+    }
+  });
+
+  it.each([
+    ['on this host', getHostname()],
+    ['recorded without a host', undefined],
+  ])('marks a task whose CLI worker died %s as failed', async (_label, hostname) => {
+    const store = openStore();
+    await store.create(makeRecord({ taskId: 'a1', executor: { host: 'cli', pid: deadPid, hostname } }));
+
+    expect((await store.get('a1', 's-1'))?.status).toBe('failed');
+  });
+
+  it('leaves a task whose CLI worker runs on another host as it is, on get, list and create', async () => {
+    const store = openStore();
+    const elsewhere = { host: 'cli' as const, pid: deadPid, hostname: 'another-host.internal' };
+    await store.createWithinLimit(makeRecord({ taskId: 'a1', executor: elsewhere }), 1);
+
+    expect((await store.get('a1', 's-1'))?.status).toBe('working');
+    expect((await store.list('s-1')).tasks.map((task) => task.status)).toEqual(['working']);
+    expect(await store.createWithinLimit(makeRecord({ taskId: 'a2' }), 1)).toBe(false);
   });
 });

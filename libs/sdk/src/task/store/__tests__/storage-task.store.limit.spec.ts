@@ -2,6 +2,7 @@
 import {
   createMemoryStorage,
   createRootStorage,
+  getHostname,
   RedisStorageAdapter,
   type NamespacedStorage,
   type StorageAdapter,
@@ -209,13 +210,35 @@ describe.each(backends)('StorageTaskStore.createWithinLimit (%s)', (_name, openB
     expect(await store.createWithinLimit(newTask({ expiresAt: realNow + 60_000 }), 1)).toBe(true);
   });
 
-  it('reclaims the slot of a task whose CLI worker died, and marks the task failed', async () => {
+  it('reclaims the slot of a task whose CLI worker died, recorded without a host, and marks it failed', async () => {
     const crashed = newTask();
     await store.createWithinLimit(crashed, 1);
     await store.update(crashed.taskId, 'owner-A', { executor: { host: 'cli', pid: DEAD_WORKER_PID } });
 
     expect(await store.createWithinLimit(newTask(), 1)).toBe(true);
     expect((await store.get(crashed.taskId, 'owner-A'))?.status).toBe('failed');
+  });
+
+  it('reclaims the slot of a task whose CLI worker died on this host', async () => {
+    const crashed = newTask();
+    await store.createWithinLimit(crashed, 1);
+    await store.update(crashed.taskId, 'owner-A', {
+      executor: { host: 'cli', pid: DEAD_WORKER_PID, hostname: getHostname() },
+    });
+
+    expect(await store.createWithinLimit(newTask(), 1)).toBe(true);
+    expect((await store.get(crashed.taskId, 'owner-A'))?.status).toBe('failed');
+  });
+
+  it('keeps the slot of a task whose CLI worker runs on another host', async () => {
+    const elsewhere = newTask();
+    await store.createWithinLimit(elsewhere, 1);
+    await store.update(elsewhere.taskId, 'owner-A', {
+      executor: { host: 'cli', pid: DEAD_WORKER_PID, hostname: 'another-host.internal' },
+    });
+
+    expect(await store.createWithinLimit(newTask(), 1)).toBe(false);
+    expect((await store.get(elsewhere.taskId, 'owner-A'))?.status).toBe('working');
   });
 
   it('keeps the slot of a task whose CLI worker is alive', async () => {

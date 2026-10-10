@@ -11,7 +11,7 @@ import 'reflect-metadata';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { mkdtemp, rm } from '@frontmcp/utils';
+import { getHostname, mkdtemp, rm } from '@frontmcp/utils';
 
 import { App, frontMcpMetadataSchema, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../../common';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
@@ -135,6 +135,9 @@ describe('task worker scope', () => {
     const record = await finished('task-orders');
     expect(record?.status).toBe('completed');
     expect(JSON.stringify(record?.outcome)).toContain('orders');
+    expect(record?.executor).toEqual(
+      expect.objectContaining({ host: 'cli', pid: process.pid, hostname: getHostname() }),
+    );
   });
 
   it('runs a task recorded without a scope, by an earlier release, through the primary scope', async () => {

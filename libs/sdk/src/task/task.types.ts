@@ -153,6 +153,8 @@ export interface TaskRecord {
     host: 'in-process' | 'cli';
     pid?: number;
     spawnedAt?: string;
+    /** Name of the machine running the CLI worker; its `pid` is probed or signalled only from that machine. */
+    hostname?: string;
   };
 }
 

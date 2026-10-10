@@ -168,8 +168,10 @@ A tool with `execution: { taskSupport: 'optional' }` then returns
 `{ "resultType": "task", "task": { "taskId", "status", "ttlMs", "pollIntervalMs" } }`.
 Poll `tasks/get`; answer `input_required` with `tasks/update`; `tasks/cancel`
 still works, through the same hookable `tasks:cancel` flow a 2025-11-25 cancel
-runs: it aborts an in-process task and sends a CLI-runner worker `SIGTERM`.
-`tasks/list` and `tasks/result` were removed.
+runs: it aborts an in-process task and sends a CLI-runner worker `SIGTERM`. A
+worker records the host it runs on, and only that host signals it or checks
+whether it died; a cancel that lands on another host still marks the task
+`cancelled`. `tasks/list` and `tasks/result` were removed.
 
 A task's outcome is exactly what the same call returns inline. A tool that throws
 or calls `this.fail()` ends its task with the inline `isError` result: the public

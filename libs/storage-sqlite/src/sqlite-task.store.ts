@@ -28,6 +28,8 @@ import { EventEmitter } from 'node:events';
 
 import type Database from 'better-sqlite3';
 
+import { getHostname } from '@frontmcp/utils';
+
 import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
 import { openDatabase, withBusyRetry } from './open-database';
 import type { SqliteStorageOptions } from './sqlite.options';
@@ -63,6 +65,8 @@ export interface TaskRecord {
     host: 'in-process' | 'cli';
     pid?: number;
     spawnedAt?: string;
+    /** Name of the machine running the CLI worker; its `pid` is probed or signalled only from that machine. */
+    hostname?: string;
   };
 }
 
@@ -418,11 +422,13 @@ export class SqliteTaskStore implements TaskStoreInterface {
     return failedAny;
   }
 
+  /** A worker on another host is never probed: its PID means nothing here. A record naming no host is probed. */
   private isOrphaned(record: TaskRecord): boolean {
     return (
       (record.status === 'working' || record.status === 'input_required') &&
       record.executor?.host === 'cli' &&
       typeof record.executor.pid === 'number' &&
+      (record.executor.hostname === undefined || record.executor.hostname === getHostname()) &&
       !this.liveness(record.executor.pid)
     );
   }

@@ -24,7 +24,7 @@ import {
 } from '@frontmcp/utils';
 
 import { type FrontMcpLogger } from '../../common';
-import { isAlive } from '../helpers/process-liveness';
+import { isAlive, isLocalWorker } from '../helpers/process-liveness';
 import { isTerminal, type TaskRecord } from '../task.types';
 import type { TaskCancelCallback, TaskListPage, TaskStore, TaskTerminalCallback, TaskUnsubscribe } from './task.store';
 
@@ -158,7 +158,7 @@ export class StorageTaskStore implements TaskStore {
     return undefined;
   }
 
-  /** Free slots held by finished tasks or by tasks whose CLI worker died (marked failed); others are left alone. */
+  /** Free slots held by finished tasks or by tasks whose CLI worker died on this host (marked failed); others stay. */
   private async reclaimSlots(owner: string, holders: ReadonlyArray<string | null>): Promise<boolean> {
     let reclaimed = false;
     for (const holderTaskId of holders) {
@@ -170,7 +170,8 @@ export class StorageTaskStore implements TaskStore {
         reclaimed = true;
         continue;
       }
-      const workerPid = holder.executor?.host === 'cli' ? holder.executor.pid : undefined;
+      const workerPid =
+        holder.executor?.host === 'cli' && isLocalWorker(holder.executor) ? holder.executor.pid : undefined;
       if (workerPid === undefined || isAlive(workerPid)) continue;
       const failed = await this.update(holderTaskId, owner, {
         status: 'failed',
