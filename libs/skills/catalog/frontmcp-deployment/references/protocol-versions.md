@@ -169,6 +169,17 @@ A tool with `execution: { taskSupport: 'optional' }` then returns
 Poll `tasks/get`; answer `input_required` with `tasks/update`; `tasks/cancel`
 still works. `tasks/list` and `tasks/result` were removed.
 
+A task's outcome is exactly what the same call returns inline. A tool that throws
+or calls `this.fail()` ends its task with the inline `isError` result: the public
+message and `_meta.code` of a `PublicMcpError`, or, in production, `Internal
+FrontMCP error … error ID` for anything else (the real error only in the server
+log). Under 2026-07-28 that task is **`completed`**, its `result` the `isError`
+`CallToolResult`, because in this revision `failed` means a JSON-RPC error
+(`error` carries it). Check `result.isError`, not `status === 'failed'`, to tell
+a tool error. Up to 1.9.4 such a task was `failed` with an `error` whose message
+was the tool's raw error. Under 2025-11-25 the same task is still `failed` and
+`tasks/result` replays that `isError` result.
+
 Tasks require an **authenticated** caller — without protocol sessions an
 anonymous task cannot be scoped to its creator, so a public server refuses.
 

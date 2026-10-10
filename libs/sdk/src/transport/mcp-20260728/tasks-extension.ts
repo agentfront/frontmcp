@@ -42,11 +42,15 @@ export function clientSupportsTasks(clientCapabilities: Record<string, unknown>)
  * `result` / `error` only appear once the task is terminal, and `inputRequests`
  * only while it is paused waiting for the client — mirroring what the client is
  * actually allowed to act on at each point in the lifecycle.
+ *
+ * In this revision `failed` means a JSON-RPC error. A tool result with `isError: true` is stored as
+ * `failed` (what 2025-11-25 reports), so it is projected as `completed` with that result.
  */
 export function taskToWire20260728(record: TaskRecord): Record<string, unknown> {
+  const status = record.status === 'failed' && record.outcome?.kind === 'ok' ? 'completed' : record.status;
   const wire: Record<string, unknown> = {
     taskId: record.taskId,
-    status: record.status,
+    status,
     createdAt: record.createdAt,
     lastUpdatedAt: record.lastUpdatedAt,
     ttlMs: record.ttlMs,
@@ -55,7 +59,7 @@ export function taskToWire20260728(record: TaskRecord): Record<string, unknown> 
   if (record.pollIntervalMs !== undefined) wire['pollIntervalMs'] = record.pollIntervalMs;
   if (record.statusMessage !== undefined) wire['statusMessage'] = record.statusMessage;
 
-  if (record.status === 'completed' && record.outcome?.kind === 'ok') {
+  if (status === 'completed' && record.outcome?.kind === 'ok') {
     wire['result'] = record.outcome.data;
   }
   if (record.status === 'failed' && record.outcome?.kind === 'error') {
