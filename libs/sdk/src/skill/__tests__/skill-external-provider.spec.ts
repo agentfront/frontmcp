@@ -162,4 +162,27 @@ describe('skillsConfig.externalProvider', () => {
 
     expect(found.skills.map((entry) => entry.name)).toContain('remote-skill');
   });
+
+  it("lists a read-only provider's skills in skill://index.json and reads their SKILL.md", async () => {
+    client = await connectWith([DeskApp], new InMemoryExternalProvider({ mode: 'read-only' }));
+
+    const index = await client.readResource('skill://index.json');
+    const skillMd = await client.readResource('skill://remote-skill/SKILL.md');
+
+    const listed = JSON.parse(String((index.contents[0] as { text?: string }).text)) as {
+      skills: Array<{ name: string; url: string }>;
+    };
+    expect(listed.skills.map((entry) => entry.url)).toEqual(
+      expect.arrayContaining(['skill://local-skill/SKILL.md', 'skill://remote-skill/SKILL.md']),
+    );
+    expect((skillMd.contents[0] as { text?: string }).text).toContain('Do the remote thing.');
+  });
+
+  it("serves a read-only provider's skills through skill:// on a server that declares none", async () => {
+    client = await connectWith([BareApp], new InMemoryExternalProvider({ mode: 'read-only' }));
+
+    const skillMd = await client.readResource('skill://remote-skill/SKILL.md');
+
+    expect((skillMd.contents[0] as { text?: string }).text).toContain('name: remote-skill');
+  });
 });
