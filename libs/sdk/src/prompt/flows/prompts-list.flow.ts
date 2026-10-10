@@ -241,12 +241,15 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
     this.logger.verbose('filterByAuthorities:done');
   }
 
-  /** An anonymous caller sees only the prompts `publicAccess` lists. */
+  /**
+   * An anonymous caller sees only the prompts `publicAccess` lists. An agent's model listing the agent's
+   * own prompts (`agentPrivateCall`) sees them all: the caller's call to the agent was checked.
+   */
   @Stage('filterByPublicAccess')
   async filterByPublicAccess() {
     const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
     const publicAccess = publicAccessFor(this.scope.auth?.options, ctx?.['authInfo']);
-    if (!publicAccess) return;
+    if (!publicAccess || ctx?.['agentPrivateCall'] === true) return;
     this.state.set(
       'prompts',
       this.state.required.prompts.filter(({ prompt }) =>

@@ -54,9 +54,15 @@ import type ProviderRegistry from '../provider/provider.registry';
 import { normalizeProvider } from '../provider/provider.utils';
 import { isResourceTemplate, normalizeResource, normalizeResourceTemplate } from '../resource/resource.utils';
 import { ToolInstance } from '../tool/tool.instance';
-import { buildAgentToolDefinitions, buildParsedToolResult, normalizeTool } from '../tool/tool.utils';
+import { buildAgentToolDefinition, buildParsedToolResult, normalizeTool } from '../tool/tool.utils';
 import { errorBehindFlowControl } from '../transport/mcp-handlers/mcp-error.utils';
 import { createAdapter, type ConfigResolver, type CreateAdapterOptions } from './adapters';
+import {
+  AGENT_BUILTIN_TOOL_DEFINITIONS,
+  offeredAgentBuiltinTools,
+  runAgentBuiltinTool,
+  type AgentBuiltinToolName,
+} from './agent-builtin-tools';
 import { type ToolExecutor } from './agent-execution-loop';
 import { AgentScope } from './agent.scope';
 import { agentToolName, canAgentSeeSwarm, getVisibleAgentIds, isAgentVisibleToSwarm } from './agent.utils';
@@ -101,16 +107,24 @@ export const AGENT_ONLY_METADATA_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /** A tool the agent's model is offered, under the name the model calls it by. */
-interface AgentModelTool {
-  name: string;
-  entry: ToolEntry;
-  /**
-   * Where a call runs: the agent's private scope (its own tools, through that scope's `tools:call-tool`
-   * flow unless `execution.useToolFlow` is false), that scope's `tools:call-tool` flow whatever
-   * `useToolFlow` says (its nested agents' `invoke_<agent>` tools), or the scope it is registered in.
-   */
-  via: 'agent-scope' | 'nested-agent' | 'parent-scope';
-}
+type AgentModelTool =
+  | {
+      kind: 'tool';
+      name: string;
+      entry: ToolEntry;
+      /**
+       * Where a call runs: the agent's private scope (its own tools, through that scope's `tools:call-tool`
+       * flow unless `execution.useToolFlow` is false), that scope's `tools:call-tool` flow whatever
+       * `useToolFlow` says (its nested agents' `invoke_<agent>` tools), or the scope it is registered in.
+       */
+      via: 'agent-scope' | 'nested-agent' | 'parent-scope';
+    }
+  | {
+      /** A tool that reads the agent's resources or prompts through its private scope's flows (#699). */
+      kind: 'builtin';
+      name: AgentBuiltinToolName;
+      scope: AgentScope;
+    };
 
 // ============================================================================
 // Agent Instance
@@ -203,6 +217,9 @@ export class AgentInstance<
     // Initialize agent-scoped tools from metadata
     await this.initializeAgentTools();
 
+    // Its own tools must leave the names of the tools that read its resources and prompts free
+    this.assertNoBuiltinToolClash();
+
     // Create LLM adapter from configuration
     await this.initializeLlmAdapter();
 
@@ -211,42 +228,24 @@ export class AgentInstance<
 
     // Create the agent as a standard tool for parent scope registration
     await this.createAgentAsTool();
-
-    // Say so at startup when the agent declares something nothing acts on
-    this.warnAboutUnusedOptions();
   }
 
   /**
-   * Options the agent accepts that have no effect yet, logged at startup instead of being dropped
-   * silently: `execution.enableStreaming`, and resources or prompts nothing reads (the agent's model
-   * is sent tools only, so its resources and prompts reach nothing unless they are exported).
+   * Fail startup when one of the agent's own tools (its `tools`, a plugin's or adapter's tool, a nested
+   * agent's `invoke_<agent>` tool) takes the name of a built-in tool its model is offered to read its
+   * resources and prompts (`list_resources`, `read_resource`, `list_prompts`, `get_prompt`): the model
+   * could not tell them apart.
    */
-  private warnAboutUnusedOptions(): void {
-    const metadata = this.record.metadata;
-    const logger = this.scope.logger;
-
-    if (metadata.execution?.enableStreaming === true) {
-      logger.warn(
-        `Agent "${this.name}": execution.enableStreaming is not supported yet and has no effect; ` +
-          `the agent replies once its run completes. Use enableAutoProgress for progress notifications during the run.`,
-      );
-    }
-
-    const exported = new Set<unknown>([...this.exportedResources, ...this.exportedPrompts]);
-    const unread = (entries: readonly (ResourceEntry | PromptEntry)[]) =>
-      entries.filter((entry) => !exported.has(entry)).map((entry) => entry.name);
-    const unreadResources = unread(this.agentScope?.resources.getInlineResources() ?? []);
-    const unreadPrompts = unread(this.agentScope?.prompts.getInlinePrompts() ?? []);
-    if (unreadResources.length > 0 || unreadPrompts.length > 0) {
-      const listed = [
-        ...(unreadResources.length > 0 ? [`resources [${unreadResources.join(', ')}]`] : []),
-        ...(unreadPrompts.length > 0 ? [`prompts [${unreadPrompts.join(', ')}]`] : []),
-      ].join(' and ');
-      logger.warn(
-        `Agent "${this.name}" declares ${listed} that nothing reads: its model is sent tools only. ` +
-          `List them in the agent's \`exports\` to serve them to clients (resources/list, prompts/list).`,
-      );
-    }
+  private assertNoBuiltinToolClash(): void {
+    if (!this.agentScope) return;
+    const builtins = new Set<string>(offeredAgentBuiltinTools(this.agentScope));
+    const clash = this.agentTools.find((tool) => builtins.has(tool.metadata.id ?? tool.metadata.name));
+    if (!clash) return;
+    throw new AgentConfigurationError(
+      `Agent "${this.name}" has a tool named "${clash.metadata.id ?? clash.metadata.name}", the name of a ` +
+        `built-in tool its model reads the agent's resources and prompts with. Rename the tool.`,
+      { agentId: this.id },
+    );
   }
 
   /**
@@ -783,7 +782,9 @@ export class AgentInstance<
       logger: scope.logger,
       authInfo: ctx.authInfo,
       llmAdapter,
-      toolDefinitions: buildAgentToolDefinitions(modelTools.map((tool) => tool.entry)),
+      toolDefinitions: modelTools.map((tool) =>
+        tool.kind === 'builtin' ? AGENT_BUILTIN_TOOL_DEFINITIONS[tool.name] : buildAgentToolDefinition(tool.entry),
+      ),
       toolExecutor: this.createToolExecutor(ctx, modelTools),
       agentInvoker: this.createAgentInvoker(ctx),
       ...(this.agentScope && { privateScope: this.agentScope }),
@@ -793,23 +794,33 @@ export class AgentInstance<
 
   /**
    * The tools this agent's model is offered, each under the name the model calls it by:
-   * 1. the agent's own tools (`tools`, and its nested agents' `invoke_<agent>` tools), run in its private scope
+   * 1. when the agent declares resources, `list_resources` and `read_resource`, and when it declares
+   *    prompts, `list_prompts` and `get_prompt`: they run through its private scope's resource and prompt
+   *    flows (see {@link runAgentBuiltinTool});
+   * 2. the agent's own tools (`tools`, and its nested agents' `invoke_<agent>` tools), run in its private scope
    *    (a nested agent always through that scope's `tools:call-tool` flow, see {@link createToolExecutor});
-   * 2. with `swarm.canSeeOtherAgents`, the `invoke_<agent>` tools of the other agents of its scope that it
+   * 3. with `swarm.canSeeOtherAgents`, the `invoke_<agent>` tools of the other agents of its scope that it
    *    sees (`swarm.visibleAgents`, and each one's `swarm.isVisible`), run through that scope;
-   * 3. with `execution.inheritParentTools`, the tools of the scope it is registered in, other than agents,
+   * 4. with `execution.inheritParentTools`, the tools of the scope it is registered in, other than agents,
    *    run through that scope.
-   * A name already taken by an earlier tool is not offered again. Only tools whose `availableWhen.surface`
+   * A name already taken by an earlier tool is not offered again (an own tool by a built-in's name fails
+   * startup instead, see {@link assertNoBuiltinToolClash}). Only tools whose `availableWhen.surface`
    * offers them to agents are included.
    */
   private getModelTools(): AgentModelTool[] {
     const tools: AgentModelTool[] = [];
     const names = new Set<string>();
-    const add = (entry: ToolEntry, via: AgentModelTool['via']) => {
+    if (this.agentScope) {
+      for (const name of offeredAgentBuiltinTools(this.agentScope)) {
+        names.add(name);
+        tools.push({ kind: 'builtin', name, scope: this.agentScope });
+      }
+    }
+    const add = (entry: ToolEntry, via: 'agent-scope' | 'nested-agent' | 'parent-scope') => {
       const name = entry.metadata.id ?? entry.metadata.name;
       if (names.has(name) || !isOfferedOnSurface(entry.metadata.availableWhen, AGENT_SURFACE)) return;
       names.add(name);
-      tools.push({ name, entry, via });
+      tools.push({ kind: 'tool', name, entry, via });
     };
 
     const nestedAgentTools = this.getNestedAgentTools();
@@ -866,7 +877,8 @@ export class AgentInstance<
    * private scope's call-tool flow: that flow applies the gates a nested agent declares (authorities,
    * rate limit, concurrency, plugin gates), which the nested agent's `agents:call-agent` flow leaves to
    * it. Tools of the parent scope (swarm agents, inherited tools) always run through the parent
-   * scope's call-tool flow, which applies what they declare.
+   * scope's call-tool flow, which applies what they declare. The built-in tools that read the agent's
+   * resources and prompts always run through its private scope's resource and prompt flows.
    *
    * @param ctx - Extra context including authInfo
    * @param modelTools - The tools the model is offered for this run
@@ -879,7 +891,8 @@ export class AgentInstance<
       // A tool the model isn't offered (one whose `surface` leaves out agents, say) answers the model
       // as a tool the agent doesn't have.
       const offered = modelTools.find(
-        (t) => t.name === toolName || t.entry.name === toolName || t.entry.fullName === toolName,
+        (t) =>
+          t.name === toolName || (t.kind === 'tool' && (t.entry.name === toolName || t.entry.fullName === toolName)),
       );
 
       if (!offered) {
@@ -888,6 +901,10 @@ export class AgentInstance<
           toolName,
           modelTools.map((t) => t.name),
         );
+      }
+
+      if (offered.kind === 'builtin') {
+        return runAgentBuiltinTool(offered.scope, offered.name, args, { authInfo: ctx.authInfo });
       }
 
       const tool = offered.entry;
