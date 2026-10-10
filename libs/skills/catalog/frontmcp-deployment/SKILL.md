@@ -9,7 +9,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/deployment/runtime-modes
+  docs: https://frontmcp.dev/learn/running-frontmcp-anywhere
 ---
 
 # FrontMCP Deployment Router
@@ -259,5 +259,5 @@ when a server has been configured to host this skill.
 
 ## Reference
 
-- [Runtime Modes](https://docs.agentfront.dev/frontmcp/deployment/runtime-modes)
+- [Runtime Modes](https://frontmcp.dev/learn/running-frontmcp-anywhere)
 - Related skills: `deploy-to-node`, `deploy-to-vercel`, `deploy-to-lambda`, `deploy-to-cloudflare`, `build-for-cli`, `build-for-browser`, `build-for-sdk`, `configure-transport`

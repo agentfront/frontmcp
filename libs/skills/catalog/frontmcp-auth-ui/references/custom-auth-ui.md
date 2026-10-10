@@ -157,6 +157,6 @@ A non-esm.sh override URL is left as-is (no `?external=react`). Once published, 
 
 ## See also
 
-- Docs: [Custom Authorization UI (`auth.ui`)](https://docs.agentfront.dev/frontmcp/authentication/custom-ui)
+- Docs: [Custom Authorization UI (`auth.ui`)](https://frontmcp.dev/reference/auth/login-ui)
 - `frontmcp-config` → `configure-auth` — the declarative `login` / `authenticate` config (tweak the built-in page's fields without React)
 - `create-tool` → `ui-widgets` — the `@Tool({ ui: { file } })` widget pipeline this mirrors

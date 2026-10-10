@@ -154,5 +154,5 @@ docker run -d --name jaeger \
 
 ## Reference
 
-- [Observability Guide](https://docs.agentfront.dev/frontmcp/guides/observability)
+- [Observability Guide](https://frontmcp.dev/reference/server/observability)
 - Related skills: `frontmcp-config`, `frontmcp-deployment`

@@ -457,5 +457,5 @@ When two apps have prompts with the same name, `prompts/list` names each by its 
 
 ## Reference
 
-- [Prompts Documentation](https://docs.agentfront.dev/frontmcp/servers/prompts)
+- [Prompts Documentation](https://frontmcp.dev/reference/sdk/prompt)
 - Related skills: `create-tool`, `create-resource`, `create-agent`, `create-provider`

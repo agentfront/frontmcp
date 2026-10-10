@@ -2,8 +2,8 @@
 
 <a href="https://frontmcp.dev">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero.svg">
-  <img src="docs/assets/readme/hero.light.svg" alt="FrontMCP - The TypeScript way to build MCP servers" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/hero.svg">
+  <img src=".github/assets/readme/hero.light.svg" alt="FrontMCP - The TypeScript way to build MCP servers" width="100%">
 </picture>
 </a>
 
@@ -16,8 +16,8 @@
 **[frontmcp.dev](https://frontmcp.dev)** &nbsp;&middot;&nbsp; **[Learn][docs-learn]** &nbsp;&middot;&nbsp; **[Reference][docs-reference]** &nbsp;&middot;&nbsp; **[Examples][docs-examples]** &nbsp;&middot;&nbsp; **[Playground][docs-playground]** &nbsp;&middot;&nbsp; **[Blog][docs-blog]**
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/terminal.svg">
-  <img src="docs/assets/readme/terminal.light.svg" alt="npx frontmcp create my-app, then npm run dev: an MCP server running on localhost:3000" width="760">
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/terminal.svg">
+  <img src=".github/assets/readme/terminal.light.svg" alt="npx frontmcp create my-app, then npm run dev: an MCP server running on localhost:3000" width="760">
 </picture>
 
 </div>
@@ -57,8 +57,8 @@ export default class Server {}
 
 <div align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/features.svg">
-  <img src="docs/assets/readme/features.light.svg" alt="Typed end to end, auth built in, ship anywhere, every stage is a hook, tools with a face, one endpoint for any client" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/features.svg">
+  <img src=".github/assets/readme/features.light.svg" alt="Typed end to end, auth built in, ship anywhere, every stage is a hook, tools with a face, one endpoint for any client" width="100%">
 </picture>
 </div>
 
@@ -123,8 +123,6 @@ Internal, published so the above resolve: [`protocol`](libs/protocol), [`di`](li
 <div align="center">
 
 PRs welcome: see [CONTRIBUTING](./CONTRIBUTING.md). Released under the [Apache-2.0](./LICENSE) license.
-
-Docs also mirrored at [docs.agentfront.dev/frontmcp](https://docs.agentfront.dev/frontmcp).
 
 </div>
 

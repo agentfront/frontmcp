@@ -224,5 +224,5 @@ Expected `--merge-from` layout (platform dirs must match MCPB platform keys):
 ## Reference
 
 - **MCPB spec:** <https://github.com/modelcontextprotocol/mcpb>
-- **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/mcpb>
+- **Docs:** <https://frontmcp.dev/reference/cli#the-mcpb-target>
 - **Related skills:** `build-for-cli`, `build-for-sdk`, `mcp-client-integration`

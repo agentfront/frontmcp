@@ -404,5 +404,5 @@ throttle: {
 
 ## Reference
 
-- [Redis Setup Docs](https://docs.agentfront.dev/frontmcp/deployment/redis-setup)
+- [Redis Setup Docs](https://frontmcp.dev/reference/deployment/redis)
 - Related skills: `configure-session`, `setup-project`, `setup-sqlite`, `configure-transport`

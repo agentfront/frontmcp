@@ -17,7 +17,7 @@ priority: 7
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/...
+  docs: https://frontmcp.dev/...
 ---
 
 # Skill Title
@@ -164,7 +164,7 @@ frontmatter `name`.
 
 ## Reference
 
-- [Documentation](https://docs.agentfront.dev/frontmcp/...)
+- [Documentation](https://frontmcp.dev/...)
 - Related skills: `related-skill-a`, `related-skill-b`
 
 ---

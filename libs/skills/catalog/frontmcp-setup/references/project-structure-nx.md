@@ -269,5 +269,5 @@ Use `nx graph` to visualize the dependency graph and ensure no circular imports 
 
 ## Reference
 
-- [Nx Plugin Documentation](https://docs.agentfront.dev/frontmcp/nx-plugin/overview)
+- [Nx Plugin Documentation](https://frontmcp.dev/reference/nx)
 - Related skills: `project-structure-standalone`, `multi-app-composition`, `nx-workflow`, `setup-project`

@@ -539,5 +539,5 @@ frontmcp skills list --category guides       # End-to-end examples and best prac
 
 ## Reference
 
-- **Docs:** <https://docs.agentfront.dev/frontmcp/servers/skills>
+- **Docs:** <https://frontmcp.dev/reference/sdk/skill>
 - **Related skills:** `frontmcp-setup`, `frontmcp-development`, `frontmcp-config`, `frontmcp-deployment`

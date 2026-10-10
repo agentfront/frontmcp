@@ -63,7 +63,7 @@ Everything is **additive**: the 2025-and-earlier types are untouched, because a
 FrontMCP server serves both eras on the same endpoint. When upstream catches up,
 `types-20260728.ts` is the only file that has to change.
 
-See the [protocol versions guide](https://docs.agentfront.dev/frontmcp/fundamentals/protocol-versions)
+See the [protocol versions guide](https://frontmcp.dev/reference/server/protocol-versions)
 for what the revision changed and how FrontMCP selects one per request.
 
 ## License

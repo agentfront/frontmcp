@@ -77,4 +77,4 @@ For full configuration, authentication, security, and advanced features, see the
 - [`openapi-adapter`](openapi-adapter.md) — Full OpenAPI adapter reference
 - `create-adapter` — Build a custom adapter for non-OpenAPI sources
 - `create-plugin` — Build plugins for cross-cutting concerns
-- [Adapter Overview Documentation](https://docs.agentfront.dev/frontmcp/adapters/overview)
+- [Adapter Overview Documentation](https://frontmcp.dev/reference/sdk/adapter)

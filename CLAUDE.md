@@ -11,9 +11,12 @@ When you need to implement something, **read the matching skill first** — it c
 
 <!-- frontmcp:skills-end -->
 
-# Documentation Site Layout
+# Documentation
 
-The Mintlify docs in `docs/` are part of the **agentfront.dev aggregator site**, which serves multiple projects. **All FrontMCP pages live under `docs/frontmcp/`** and ship at `https://docs.agentfront.dev/frontmcp/...`. Never flatten `docs/frontmcp/*` into `docs/*`, never drop the `frontmcp/` prefix from `docs/docs.json` page references, and keep internal MDX links prefixed (e.g. `/frontmcp/servers/tools`, not `/servers/tools`). The canonical URL in `docs/docs.json` must point to `https://docs.agentfront.dev/frontmcp`.
+FrontMCP's docs are at https://frontmcp.dev, built from the private `agentfront/frontmcp.dev` repository. This repo has no docs site: don't add one, and link to frontmcp.dev pages (`https://frontmcp.dev/reference/...`, `https://frontmcp.dev/learn/...`), never to docs.agentfront.dev for FrontMCP.
+
+- The skills catalog (`libs/skills/catalog`) is the documentation that ships with FrontMCP. A behavior change updates it in the same PR: see `.claude/rules/skills-catalog-sync.md`.
+- A PR that changes what users see (an API, option, default, error code or message, CLI flag or output) fills in the "User-facing change" section of `.github/pull_request_template.md`. frontmcp.dev's pass for each release reads it.
 
 # FrontMCP Monorepo - Development Guide
 

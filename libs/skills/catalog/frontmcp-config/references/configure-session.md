@@ -223,5 +223,5 @@ When the global `redis` config already points at a real Redis instance, `pubsub`
 
 ## Reference
 
-- [Session Storage Docs](https://docs.agentfront.dev/frontmcp/deployment/redis-setup)
+- [Session Storage Docs](https://frontmcp.dev/reference/deployment/redis)
 - Related skills: `setup-redis`, `configure-auth`, `configure-transport`, `configure-elicitation`
