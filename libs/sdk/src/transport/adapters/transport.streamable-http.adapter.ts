@@ -52,9 +52,9 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
       },
       onsessioninitialized: (sessionId) => {
         if (sessionId) {
-          console.log(`session initialized: ${sessionId.slice(0, 40)}`);
+          this.logger.verbose('[StreamableHttpAdapter] session initialized', { sessionId: sessionId.slice(0, 40) });
         } else {
-          console.log(`stateless session initialized`);
+          this.logger.verbose('[StreamableHttpAdapter] stateless session initialized');
         }
       },
       // Pass EventStore from scope config (or undefined to disable resumability)
@@ -68,7 +68,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
   async initialize(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void> {
     this.ensureAuthInfo(req, this);
 
-    this.logger.info('[StreamableHttpAdapter] initialize() called', {
+    this.logger.verbose('[StreamableHttpAdapter] initialize() called', {
       method: req.method,
       sessionId: this.key.sessionId.slice(0, 30),
       bodyMethod: (req.body as { method?: string })?.method,
@@ -82,7 +82,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     await this.ready;
 
     // Debug: log transport state
-    this.logger.info('[StreamableHttpAdapter] transport state before handleRequest', {
+    this.logger.verbose('[StreamableHttpAdapter] transport state before handleRequest', {
       isRecreatable: this.transport instanceof RecreateableStreamableHTTPServerTransport,
 
       hasWebTransport: !!(this.transport as any)._webStandardTransport,
@@ -189,7 +189,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     const ttl = expiresAt - Date.now();
 
     // Send the elicitation/create request
-    this.logger.info('[StreamableHttpAdapter] sendElicitRequest: sending elicitation/create', {
+    this.logger.verbose('[StreamableHttpAdapter] sendElicitRequest: sending elicitation/create', {
       relatedRequestId,
       elicitId,
       mode: pendingRecord.mode,
@@ -199,7 +199,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
       await this.transport.send(rpcRequest(this.newRequestId, 'elicitation/create', requestParams), {
         relatedRequestId,
       });
-      this.logger.info('[StreamableHttpAdapter] sendElicitRequest: transport.send() completed');
+      this.logger.verbose('[StreamableHttpAdapter] sendElicitRequest: transport.send() completed');
     } catch (error) {
       this.logger.error('[StreamableHttpAdapter] sendElicitRequest: transport.send() failed', error);
       // Clean up pending record to avoid stale state

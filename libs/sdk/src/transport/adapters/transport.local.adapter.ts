@@ -239,7 +239,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       serverInfo: info,
     };
 
-    this.logger.info('connectServer: advertising capabilities', {
+    this.logger.verbose('connectServer: advertising capabilities', {
       hasTools: hasTools || hasAgents, // Agents expose themselves as tools
       hasResources,
       hasPrompts,
@@ -279,7 +279,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   }
 
   async destroy(reason?: string): Promise<void> {
-    console.log('destroying transporter, reason:', reason);
+    this.logger.verbose('destroying transporter', { reason });
 
     // Unregister server from notification service
     this.scope.notifications.unregisterServer(this.key.sessionId);
@@ -449,7 +449,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
    * which routes it to the correct node that's waiting for it.
    */
   handleIfElicitResult(req: AuthenticatedServerRequest): boolean {
-    this.logger.info('[handleIfElicitResult] checking request', {
+    this.logger.verbose('[handleIfElicitResult] checking request', {
       hasPendingElicit: !!this.pendingElicit,
       bodyKeys: req.body ? Object.keys(req.body) : [],
       hasResult: !!req.body?.result,
