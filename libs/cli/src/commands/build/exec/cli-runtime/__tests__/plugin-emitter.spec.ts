@@ -1,9 +1,12 @@
 import * as os from 'os';
 import * as path from 'path';
 
+import { parse as parseToml } from 'smol-toml';
+
 import { mkdtemp, readFile, rm, writeFile, fileExists, mkdir } from '@frontmcp/utils';
 
 import {
+  applyCommandOverride,
   assertValidPluginName,
   emitClaudePlugin,
   emitCodexEntry,
@@ -11,6 +14,8 @@ import {
   readInstalledPluginVersion,
   removeClaudePlugin,
   removeCodexEntry,
+  resolveSelfInvocation,
+  splitCommandLine,
 } from '../plugin-emitter';
 
 describe('plugin-emitter (issue #411)', () => {
@@ -531,84 +536,275 @@ describe('plugin-emitter (issue #411)', () => {
     });
   });
 
-  describe('emitCodexEntry', () => {
-    it('writes a new [[mcp_servers]] block when config.toml does not exist', async () => {
-      const configPath = path.join(tmp, '.codex', 'config.toml');
-      const result = await emitCodexEntry({
-        configPath,
-        name: 'codex-bin',
-        command: 'codex-bin',
-        args: ['serve', '--stdio'],
-        env: { TOKEN: '${TOKEN}' },
-      });
-      expect(result.written).toBe(true);
-      const content = await readFile(configPath);
-      expect(content).toContain('[[mcp_servers]]');
-      expect(content).toContain('name = "codex-bin"');
-      expect(content).toContain('command = "codex-bin"');
-      expect(content).toContain('args = ["serve", "--stdio"]');
-      expect(content).toContain('TOKEN = "${TOKEN}"');
-      expect(content).toContain('# frontmcp:codex-start:codex-bin');
-      expect(content).toContain('# frontmcp:codex-end:codex-bin');
+  describe('Codex entry (map shape Codex reads)', () => {
+    const legacyBlock = (name: string) =>
+      [
+        `# frontmcp:codex-start:${name}`,
+        '[[mcp_servers]]',
+        `name = "${name}"`,
+        `command = "${name}"`,
+        'args = ["serve", "--stdio"]',
+        `env = { TOKEN = "\${TOKEN}" }`,
+        `# frontmcp:codex-end:${name}`,
+      ].join('\n');
+
+    let configPath: string;
+
+    beforeEach(async () => {
+      configPath = path.join(tmp, '.codex', 'config.toml');
+      await mkdir(path.dirname(configPath), { recursive: true });
     });
 
-    it('replaces an existing block on re-emit (idempotent)', async () => {
-      const configPath = path.join(tmp, '.codex', 'config.toml');
+    async function readCodexServers(): Promise<Record<string, unknown>> {
+      const parsed = parseToml(await readFile(configPath));
+      return (parsed['mcp_servers'] ?? {}) as Record<string, unknown>;
+    }
+
+    it('writes [mcp_servers.<name>] with command and args, and no name key', async () => {
+      const result = await emitCodexEntry({ configPath, name: 'codex-bin', command: 'codex-bin', args: ['serve', '--stdio'] });
+      expect(result.written).toBe(true);
+      const content = await readFile(configPath);
+      expect(content).toContain('# frontmcp:codex-start:codex-bin\n[mcp_servers.codex-bin]\n');
+      expect(content).toContain('# frontmcp:codex-end:codex-bin');
+      expect(await readCodexServers()).toEqual({ 'codex-bin': { command: 'codex-bin', args: ['serve', '--stdio'] } });
+    });
+
+    it('forwards --env names through env_vars, sorted and de-duplicated', async () => {
+      await emitCodexEntry({ configPath, name: 'x', command: 'x', args: [], envVars: ['TOKEN', 'REGION', 'TOKEN'] });
+      expect(await readCodexServers()).toEqual({ x: { command: 'x', args: [], env_vars: ['REGION', 'TOKEN'] } });
+    });
+
+    it('quotes a server name that is not a bare TOML key', async () => {
+      await emitCodexEntry({ configPath, name: 'help.desk', command: 'help-desk', args: [] });
+      expect(await readFile(configPath)).toContain('[mcp_servers."help.desk"]');
+      expect(Object.keys(await readCodexServers())).toEqual(['help.desk']);
+    });
+
+    it('keeps servers and settings the user configured', async () => {
+      await writeFile(configPath, 'model = "o3"\n\n[mcp_servers.other]\ncommand = "other"\n');
+      await emitCodexEntry({ configPath, name: 'help-desk', command: 'help-desk', args: ['serve'] });
+      const parsed = parseToml(await readFile(configPath));
+      expect(parsed['model']).toBe('o3');
+      expect(parsed['mcp_servers']).toEqual({
+        other: { command: 'other' },
+        'help-desk': { command: 'help-desk', args: ['serve'] },
+      });
+    });
+
+    it('is idempotent: installing twice leaves one block', async () => {
+      await writeFile(configPath, '[mcp_servers.other]\ncommand = "other"\n');
+      await emitCodexEntry({ configPath, name: 'x', command: 'x', args: ['serve'] });
+      const once = await readFile(configPath);
+      await emitCodexEntry({ configPath, name: 'x', command: 'x', args: ['serve'] });
+      expect(await readFile(configPath)).toBe(once);
+      expect(Object.keys(await readCodexServers()).sort()).toEqual(['other', 'x']);
+    });
+
+    it('replaces its own block when the invocation changes', async () => {
       await emitCodexEntry({ configPath, name: 'x', command: 'x', args: ['serve'] });
       await emitCodexEntry({ configPath, name: 'x', command: 'x', args: ['serve', '--new-flag'] });
       const content = await readFile(configPath);
-      const startCount = (content.match(/# frontmcp:codex-start:x/g) ?? []).length;
-      expect(startCount).toBe(1);
-      expect(content).toContain('--new-flag');
+      expect(content.match(/# frontmcp:codex-start:x$/gm)).toHaveLength(1);
+      expect(await readCodexServers()).toEqual({ x: { command: 'x', args: ['serve', '--new-flag'] } });
     });
 
-    it('preserves user content in the file when adding/removing blocks', async () => {
-      const configPath = path.join(tmp, '.codex', 'config.toml');
-      await mkdir(path.dirname(configPath), { recursive: true });
-      await writeFile(configPath, '# user comment\n[other_section]\nfoo = "bar"\n');
-      await emitCodexEntry({ configPath, name: 'add', command: 'add', args: [] });
+    it('rewrites a block an older frontmcp wrote in the [[mcp_servers]] shape on reinstall', async () => {
+      await writeFile(configPath, `[mcp_servers.other]\ncommand = "other"\n\n${legacyBlock('help-desk')}\n`);
+      await emitCodexEntry({ configPath, name: 'help-desk', command: 'help-desk', args: ['serve', '--stdio'] });
+      expect(await readCodexServers()).toEqual({
+        other: { command: 'other' },
+        'help-desk': { command: 'help-desk', args: ['serve', '--stdio'] },
+      });
+    });
+
+    it('rewrites the legacy block of another server in place when installing a new one', async () => {
+      const userSettings = 'model = "o3"\n\n[mcp_servers.other]\ncommand = "other"\n';
+      await writeFile(configPath, `${userSettings}\n${legacyBlock('legacy')}\n`);
+      await emitCodexEntry({ configPath, name: 'help-desk', command: 'help-desk', args: [] });
       const content = await readFile(configPath);
-      expect(content).toContain('# user comment');
-      expect(content).toContain('foo = "bar"');
-      expect(content).toContain('# frontmcp:codex-start:add');
-      // Regression guard for the double-newline bug fixed in pass 2: at most a
-      // single blank line should separate the user content from the new block.
-      expect(content).not.toMatch(/\n\n\n+# frontmcp:codex-start/);
+      expect(content.startsWith(userSettings)).toBe(true);
+      expect(content).toContain(
+        '# frontmcp:codex-start:legacy\n[mcp_servers.legacy]\ncommand = "legacy"\nargs = ["serve", "--stdio"]\n',
+      );
+      expect(Object.keys(await readCodexServers()).sort()).toEqual(['help-desk', 'legacy', 'other']);
     });
 
-    it('produces single-blank-line separator when appending to file without trailing newline', async () => {
-      const configPath = path.join(tmp, '.codex', 'config.toml');
-      await mkdir(path.dirname(configPath), { recursive: true });
-      await writeFile(configPath, 'foo'); // no trailing newline
+    it('install twice, uninstall, and reinstall over a legacy block all leave a file Codex can read', async () => {
+      await writeFile(configPath, `[mcp_servers.other]\ncommand = "other"\n\n${legacyBlock('help-desk')}\n`);
+      await emitCodexEntry({ configPath, name: 'help-desk', command: 'help-desk', args: [] });
+      await emitCodexEntry({ configPath, name: 'help-desk', command: 'help-desk', args: [] });
+      expect(Object.keys(await readCodexServers()).sort()).toEqual(['help-desk', 'other']);
+
+      expect((await removeCodexEntry({ configPath, name: 'help-desk' })).removed).toBe(true);
+      expect(await readCodexServers()).toEqual({ other: { command: 'other' } });
+
+      await writeFile(configPath, `${await readFile(configPath)}\n${legacyBlock('help-desk')}\n`);
+      await emitCodexEntry({ configPath, name: 'help-desk', command: 'help-desk', args: ['serve'] });
+      expect(await readCodexServers()).toEqual({
+        other: { command: 'other' },
+        'help-desk': { command: 'help-desk', args: ['serve'] },
+      });
+    });
+
+    it('rewrites the remaining legacy blocks when another entry is uninstalled', async () => {
+      await writeFile(configPath, `${legacyBlock('legacy')}\n`);
+      await emitCodexEntry({ configPath, name: 'help-desk', command: 'help-desk', args: [] });
+      await removeCodexEntry({ configPath, name: 'help-desk' });
+      expect(Object.keys(await readCodexServers())).toEqual(['legacy']);
+    });
+
+    it('repairs legacy blocks on uninstall even when the named entry is absent', async () => {
+      await writeFile(configPath, `${legacyBlock('legacy')}\n`);
+      const result = await removeCodexEntry({ configPath, name: 'not-installed' });
+      expect(result.removed).toBe(false);
+      expect(Object.keys(await readCodexServers())).toEqual(['legacy']);
+    });
+
+    it('never matches the block of a server whose name starts with the same text', async () => {
+      await emitCodexEntry({ configPath, name: 'help-desk', command: 'help-desk', args: [] });
+      await emitCodexEntry({ configPath, name: 'help', command: 'help', args: ['serve'] });
+      expect(await readCodexServers()).toEqual({
+        'help-desk': { command: 'help-desk', args: [] },
+        help: { command: 'help', args: ['serve'] },
+      });
+      await removeCodexEntry({ configPath, name: 'help' });
+      expect(await readCodexServers()).toEqual({ 'help-desk': { command: 'help-desk', args: [] } });
+    });
+
+    it.each([
+      ['[mcp_servers.help-desk]\ncommand = "hand-written"\n'],
+      ['[mcp_servers."help-desk"]\ncommand = "hand-written"\n'],
+      ['[mcp_servers.help-desk.env]\nTOKEN = "x"\n'],
+    ])('refuses to add a second table for a server configured by hand: %j', async (handWritten) => {
+      await writeFile(configPath, handWritten);
+      await expect(emitCodexEntry({ configPath, name: 'help-desk', command: 'help-desk', args: [] })).rejects.toThrow(
+        `${configPath} already defines [mcp_servers.help-desk] outside the frontmcp markers. Remove that table from ${configPath} (or rename the server in frontmcp.config), then run install again.`,
+      );
+      expect(await readFile(configPath)).toBe(handWritten);
+      parseToml(handWritten);
+    });
+
+    it('does not mistake a hand-written server with a longer name for a duplicate', async () => {
+      await writeFile(configPath, '[mcp_servers.help-desk-two]\ncommand = "two"\n');
+      await emitCodexEntry({ configPath, name: 'help-desk', command: 'help-desk', args: [] });
+      expect(Object.keys(await readCodexServers()).sort()).toEqual(['help-desk', 'help-desk-two']);
+    });
+
+    it('produces a single blank-line separator when appending to a file without a trailing newline', async () => {
+      await writeFile(configPath, 'model = "o3"');
       await emitCodexEntry({ configPath, name: 'first', command: 'first', args: [] });
-      const content = await readFile(configPath);
-      // Expect "foo\n\n# frontmcp:codex-start:first\n..." — single blank line.
-      expect(content).toMatch(/^foo\n\n# frontmcp:codex-start:first\n/);
+      expect(await readFile(configPath)).toMatch(/^model = "o3"\n\n# frontmcp:codex-start:first\n/);
+      expect(Object.keys(await readCodexServers())).toEqual(['first']);
     });
 
     it('collapses multiple trailing newlines into a single blank-line separator', async () => {
-      const configPath = path.join(tmp, '.codex', 'config.toml');
-      await mkdir(path.dirname(configPath), { recursive: true });
-      await writeFile(configPath, 'foo\n\n\n');
+      await writeFile(configPath, 'model = "o3"\n\n\n');
       await emitCodexEntry({ configPath, name: 'second', command: 'second', args: [] });
-      const content = await readFile(configPath);
-      expect(content).toMatch(/^foo\n\n# frontmcp:codex-start:second\n/);
+      expect(await readFile(configPath)).toMatch(/^model = "o3"\n\n# frontmcp:codex-start:second\n/);
+      expect(Object.keys(await readCodexServers())).toEqual(['second']);
     });
-  });
 
-  describe('removeCodexEntry', () => {
     it('removes only the named block, preserving user content', async () => {
-      const configPath = path.join(tmp, '.codex', 'config.toml');
-      await mkdir(path.dirname(configPath), { recursive: true });
       await writeFile(configPath, '# user comment\n');
       await emitCodexEntry({ configPath, name: 'a', command: 'a', args: [] });
       await emitCodexEntry({ configPath, name: 'b', command: 'b', args: [] });
-      const result = await removeCodexEntry({ configPath, name: 'a' });
-      expect(result.removed).toBe(true);
+      expect((await removeCodexEntry({ configPath, name: 'a' })).removed).toBe(true);
       const content = await readFile(configPath);
       expect(content).toContain('# user comment');
-      expect(content).toContain('# frontmcp:codex-start:b');
       expect(content).not.toContain('# frontmcp:codex-start:a');
+      expect(Object.keys(await readCodexServers())).toEqual(['b']);
+    });
+
+    it('dryRun returns the planned content without writing', async () => {
+      const result = await emitCodexEntry({ configPath, name: 'x', command: 'x', args: [], dryRun: true });
+      expect(result.written).toBe(false);
+      expect(await fileExists(configPath)).toBe(false);
+      expect(parseToml(result.configContent)['mcp_servers']).toEqual({ x: { command: 'x', args: [] } });
+    });
+  });
+
+  describe('splitCommandLine', () => {
+    it.each([
+      ['help-desk', ['help-desk']],
+      ['node ./dist/main.js --stdio', ['node', './dist/main.js', '--stdio']],
+      ['  node   x.js  ', ['node', 'x.js']],
+      ['"/Applications/My App/bin/server" --stdio', ['/Applications/My App/bin/server', '--stdio']],
+      [`'C:\\Program Files\\nodejs\\node.exe' dist\\x.js`, ['C:\\Program Files\\nodejs\\node.exe', 'dist\\x.js']],
+      ['node --title="a b" x.js', ['node', '--title=a b', 'x.js']],
+      ['node ""', ['node', '']],
+    ])('splits %j', (commandLine, expected) => {
+      expect(splitCommandLine(commandLine)).toEqual(expected);
+    });
+
+    it('rejects an unterminated quote', () => {
+      expect(() => splitCommandLine('node "x.js')).toThrow('Unterminated " quote in --command: node "x.js');
+    });
+
+    it('rejects a value with no program', () => {
+      expect(() => splitCommandLine('   ')).toThrow('--command must name the program that starts the MCP server');
+    });
+  });
+
+  describe('applyCommandOverride', () => {
+    it('keeps the default arguments for a lone program', () => {
+      expect(applyCommandOverride('hd', ['serve', '--stdio'])).toEqual({ command: 'hd', args: ['serve', '--stdio'] });
+    });
+
+    it('replaces the default arguments when the command line has its own', () => {
+      expect(applyCommandOverride('node /abs/x.js --stdio', ['serve', '--stdio'])).toEqual({
+        command: 'node',
+        args: ['/abs/x.js', '--stdio'],
+      });
+    });
+  });
+
+  describe('resolveSelfInvocation', () => {
+    const args = ['serve', '--stdio'];
+    const execPath = '/usr/local/bin/node';
+    const scriptPath = '/usr/local/lib/node_modules/help-desk/dist/cli/help-desk-cli.bundle.js';
+    const pathEnv = ['/usr/local/bin', '/usr/bin'].join(path.delimiter);
+
+    it('writes the bin name when the bin was started from a PATH directory', () => {
+      expect(resolveSelfInvocation({ invokedPath: '/usr/local/bin/hd', execPath, scriptPath, pathEnv, args })).toEqual({
+        command: 'hd',
+        args,
+      });
+    });
+
+    it('writes the bin name for a single executable started by name', () => {
+      expect(resolveSelfInvocation({ invokedPath: 'help-desk', execPath: '/opt/hd/help-desk-cli-bin', pathEnv, args })).toEqual({
+        command: 'help-desk',
+        args,
+      });
+    });
+
+    it('writes node and the bundle for a JS bin run from a dist folder', () => {
+      const bundle = '/work/project/dist/cli/help-desk-cli.bundle.js';
+      expect(resolveSelfInvocation({ invokedPath: bundle, execPath, scriptPath: bundle, pathEnv, args })).toEqual({
+        command: execPath,
+        args: [bundle, ...args],
+      });
+    });
+
+    it('writes absolute paths for a bin npx started from its cache', () => {
+      const npxBin = '/home/me/.npm/_npx/abc/node_modules/.bin';
+      const npxPath = [npxBin, '/usr/bin'].join(path.delimiter);
+      expect(
+        resolveSelfInvocation({ invokedPath: path.join(npxBin, 'hd'), execPath, scriptPath, pathEnv: npxPath, args }),
+      ).toEqual({ command: execPath, args: [scriptPath, ...args] });
+    });
+
+    it('writes the single executable path when it was started by a relative path', () => {
+      expect(
+        resolveSelfInvocation({ invokedPath: './dist/help-desk-cli-bin', execPath: '/work/dist/help-desk-cli-bin', pathEnv, args }),
+      ).toEqual({ command: '/work/dist/help-desk-cli-bin', args });
+    });
+
+    it('writes absolute paths when PATH is empty', () => {
+      expect(resolveSelfInvocation({ invokedPath: '/usr/local/bin/hd', execPath, scriptPath, pathEnv: '', args })).toEqual({
+        command: execPath,
+        args: [scriptPath, ...args],
+      });
     });
   });
 });

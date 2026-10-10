@@ -1504,8 +1504,8 @@ program
   .option('--no-skills', 'Skip the skills/ subtree (when -p claude)')
   .option('--no-commands', 'Skip the commands/ subtree (when -p claude)')
   .option('--only-mcp', 'Skip plugin folder; just register the MCP server')
-  .option('--command <cmd>', 'Override MCP server invocation in the plugin manifest')
-  .option('--env <name>', 'Add env-var placeholder to plugin manifest (repeatable)', _frontmcpCollectArg, [])
+  .option('--command <cmd>', 'MCP server invocation: a program, optionally with its arguments (quoted as in a shell)')
+  .option('--env <name>', 'Env var the MCP server receives from the host (repeatable)', _frontmcpCollectArg, [])
   .option('--dir <dir>', 'Override plugin destination root')
   .option('--dry-run', 'Print plan; do not write')
   .option('--status', 'Print install status per provider; exit 0')
@@ -1527,9 +1527,7 @@ program
         console.error('Could not read bin-meta.json at ' + binMetaPath + '. Was the bin built with a recent frontmcp?');
         process.exit(1);
       }
-      var pkgJsonPath = pathMod.join(__dirname, '..', '..', 'package.json');
-      var cliVersion = '0.0.0';
-      try { cliVersion = (require(pkgJsonPath) || {}).version || '0.0.0'; } catch (e) { /* ok */ }
+      var cliVersion = meta.frontmcpVersion || '0.0.0';
 
       function resolveDestRoot() {
         if (opts.dir) return pathMod.resolve(opts.dir);
@@ -1582,6 +1580,17 @@ program
         return out;
       }
 
+      var invocation = opts.command
+        ? emitter.applyCommandOverride(opts.command, meta.mcpDefault.args)
+        : emitter.resolveSelfInvocation({
+            invokedPath: process.argv[1],
+            execPath: process.execPath,
+            scriptPath: ${selfContained ? 'undefined' : '__filename'},
+            pathEnv: process.env.PATH,
+            args: meta.mcpDefault.args,
+          });
+      console.log('MCP server command: ' + [invocation.command].concat(invocation.args).join(' '));
+
       function buildCommands() {
         if (opts.commands === false || opts.onlyMcp) return [];
         return (meta.prompts || []).map(function(p) {
@@ -1598,8 +1607,8 @@ program
             name: meta.name,
             version: meta.version,
             description: meta.description,
-            mcpCommand: opts.command || meta.mcpDefault.command,
-            mcpArgs: meta.mcpDefault.args,
+            mcpCommand: invocation.command,
+            mcpArgs: invocation.args,
             envHints: Array.isArray(opts.env) ? opts.env : [],
             skills: buildSkills(),
             commands: buildCommands(),
@@ -1620,15 +1629,12 @@ program
           }
         } else if (provider === 'codex') {
           var codexConfig = pathMod.join(os.homedir(), '.codex', 'config.toml');
-          var env = {};
-          var envList = Array.isArray(opts.env) ? opts.env : [];
-          for (var ei = 0; ei < envList.length; ei++) env[envList[ei]] = '${'$'}{' + envList[ei] + '}';
           var codexResult = await emitter.emitCodexEntry({
             configPath: codexConfig,
             name: meta.name,
-            command: opts.command || meta.mcpDefault.command,
-            args: meta.mcpDefault.args,
-            env: env,
+            command: invocation.command,
+            args: invocation.args,
+            envVars: Array.isArray(opts.env) ? opts.env : [],
             dryRun: opts.dryRun,
           });
           if (opts.dryRun) {
@@ -1636,7 +1642,7 @@ program
             console.log('  configPath: ' + codexConfig);
             console.log(codexResult.configContent);
           } else {
-            console.log('✓ Updated ' + codexConfig + ' with [[mcp_servers]] entry for ' + meta.name);
+            console.log('✓ Updated ' + codexConfig + ' with [mcp_servers.' + meta.name + ']');
           }
         } else {
           console.error('Unknown provider: ' + provider);
@@ -1751,7 +1757,7 @@ program
           var codexConfig = pathMod.join(os.homedir(), '.codex', 'config.toml');
           var codexResult = await emitter.removeCodexEntry({ configPath: codexConfig, name: meta.name });
           if (codexResult.removed) {
-            console.log('✓ Removed [[mcp_servers]] entry for ' + meta.name + ' from ' + codexConfig);
+            console.log('✓ Removed [mcp_servers.' + meta.name + '] from ' + codexConfig);
           } else {
             console.log('  codex: no entry for ' + meta.name + ' in ' + codexConfig);
           }

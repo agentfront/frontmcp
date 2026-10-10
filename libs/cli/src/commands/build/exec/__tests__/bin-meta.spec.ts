@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import { mkdtemp, readJSON, rm } from '@frontmcp/utils';
 
+import { getSelfVersion } from '../../../../core/version';
 import { writeBinMeta } from '../bin-meta';
 import type { FrontmcpExecConfig } from '../config';
 import type { ExtractedSchema } from '../cli-runtime/schema-extractor';
@@ -92,6 +93,13 @@ describe('writeBinMeta (issue #411)', () => {
     expect(meta.skills[0]).not.toHaveProperty('description');
     expect(meta.skills[0]).not.toHaveProperty('resourceDirs');
     expect(meta.skills[1]).not.toHaveProperty('instructionFile');
+  });
+
+  it('records the frontmcp CLI version, not the bin version, for installedBy', async () => {
+    await writeBinMeta(tmp, makeConfig({ name: 'my-bin', version: '7.7.7' }), makeSchema());
+    const meta = (await readJSON(path.join(tmp, 'bin-meta.json'))) as Record<string, unknown>;
+    expect(meta.frontmcpVersion).toBe(getSelfVersion());
+    expect(meta.frontmcpVersion).not.toBe('7.7.7');
   });
 
   it('uses cli.description when provided in config', async () => {

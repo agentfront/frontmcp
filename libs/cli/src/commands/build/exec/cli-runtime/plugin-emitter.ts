@@ -12,8 +12,8 @@
  *    directory are NEVER deleted.
  *  - Manifest written deterministically (sorted keys, fixed spacing) so
  *    snapshots are stable and re-runs are no-ops when nothing changed.
- *  - Codex emitter writes a TOML fragment without pulling in a TOML
- *    dependency — only the `[[mcp_servers]]` shape is needed.
+ *  - Codex emitter writes the `[mcp_servers.<name>]` table Codex reads,
+ *    between frontmcp markers, without pulling in a TOML dependency.
  */
 
 import * as path from 'path';
@@ -129,8 +129,27 @@ export interface EmitCodexOptions {
   name: string;
   command: string;
   args: string[];
-  env?: Record<string, string>;
+  /** Env-var names Codex forwards from its own environment (`env_vars`). */
+  envVars?: string[];
   dryRun?: boolean;
+}
+
+export interface McpInvocation {
+  command: string;
+  args: string[];
+}
+
+export interface SelfInvocationInput {
+  /** `process.argv[1]`: how the running bin was started. */
+  invokedPath: string;
+  /** `process.execPath`: node, or the single executable itself. */
+  execPath: string;
+  /** The CLI bundle file for a JS bin; undefined for a single executable. */
+  scriptPath?: string;
+  /** `process.env.PATH`. */
+  pathEnv?: string;
+  /** Arguments that start the MCP server (typically `['serve', '--stdio']`). */
+  args: string[];
 }
 
 export interface EmitCodexResult {
@@ -420,9 +439,11 @@ const CODEX_BLOCK_END = '# frontmcp:codex-end';
 export async function emitCodexEntry(opts: EmitCodexOptions): Promise<EmitCodexResult> {
   assertValidPluginName(opts.name, 'emitCodexEntry');
   const existing = (await fileExists(opts.configPath)) ? await readFile(opts.configPath) : '';
+  const migrated = migrateLegacyCodexBlocks(existing);
+  assertNoUnmanagedCodexTable(migrated, opts.name, opts.configPath);
   const previousVersion = extractCodexEntryComment(existing, opts.name);
   const newBlock = renderCodexBlock(opts);
-  const merged = replaceCodexBlock(existing, opts.name, newBlock);
+  const merged = replaceCodexBlock(migrated, opts.name, newBlock);
 
   if (!opts.dryRun) {
     await ensureDir(path.dirname(opts.configPath));
@@ -445,12 +466,89 @@ export async function removeCodexEntry(args: {
     return { removed: false, configContent: '' };
   }
   const existing = await readFile(args.configPath);
-  const stripped = stripCodexBlock(existing, args.name);
-  const removed = stripped !== existing;
-  if (removed) {
+  const migrated = migrateLegacyCodexBlocks(existing);
+  const stripped = stripCodexBlock(migrated, args.name);
+  if (stripped !== existing) {
     await writeFile(args.configPath, stripped);
   }
-  return { removed, configContent: stripped };
+  return { removed: stripped !== migrated, configContent: stripped };
+}
+
+/**
+ * Split a `--command` value into program and arguments the way a shell does:
+ * whitespace separates words, and single or double quotes group them.
+ */
+export function splitCommandLine(commandLine: string): string[] {
+  const words: string[] = [];
+  let currentWord = '';
+  let inWord = false;
+  let openQuote: string | undefined;
+  for (const char of commandLine) {
+    if (openQuote) {
+      if (char === openQuote) {
+        openQuote = undefined;
+      } else {
+        currentWord += char;
+      }
+    } else if (char === '"' || char === "'") {
+      openQuote = char;
+      inWord = true;
+    } else if (/\s/.test(char)) {
+      if (inWord) {
+        words.push(currentWord);
+        currentWord = '';
+        inWord = false;
+      }
+    } else {
+      currentWord += char;
+      inWord = true;
+    }
+  }
+  if (openQuote) {
+    throw new Error(`Unterminated ${openQuote} quote in --command: ${commandLine}`);
+  }
+  if (inWord) {
+    words.push(currentWord);
+  }
+  if (words.length === 0) {
+    throw new Error('--command must name the program that starts the MCP server');
+  }
+  return words;
+}
+
+/**
+ * The MCP server invocation for a `--command` value. A lone program keeps the
+ * default arguments; a program followed by arguments replaces them.
+ */
+export function applyCommandOverride(commandLine: string, defaultArgs: string[]): McpInvocation {
+  const [command, ...args] = splitCommandLine(commandLine);
+  return { command, args: args.length > 0 ? args : defaultArgs };
+}
+
+/**
+ * The MCP server invocation that starts the running bin again. A bin started
+ * by name from a `PATH` directory is written by that name, so the entry stays
+ * portable; anything else (a `dist/` folder, npx's cache) gets absolute paths.
+ */
+export function resolveSelfInvocation(input: SelfInvocationInput): McpInvocation {
+  const binName = path.basename(input.invokedPath);
+  const pathDirs = (input.pathEnv ?? '')
+    .split(path.delimiter)
+    .filter((dir) => dir.length > 0 && !isNodeModulesBinDir(dir))
+    .map((dir) => path.resolve(dir));
+  const startedByBareName = binName === input.invokedPath;
+  const startedFromPathDir = pathDirs.includes(path.resolve(path.dirname(input.invokedPath)));
+  if (startedByBareName || startedFromPathDir) {
+    return { command: binName, args: input.args };
+  }
+  if (input.scriptPath) {
+    return { command: input.execPath, args: [input.scriptPath, ...input.args] };
+  }
+  return { command: input.execPath, args: input.args };
+}
+
+function isNodeModulesBinDir(dir: string): boolean {
+  return path.basename(dir) === '.bin' && path.basename(path.dirname(dir)) === 'node_modules';
 }
 
 // ============================================================================
@@ -606,27 +704,54 @@ async function safeReaddir(
 
 // ----- Codex TOML -----
 
+const MANAGED_CODEX_BLOCK = /^# frontmcp:codex-start:(\S+)\r?\n([\s\S]*?)^# frontmcp:codex-end:\1\r?$/gm;
+
 function renderCodexBlock(opts: EmitCodexOptions): string {
-  const lines: string[] = [];
-  lines.push(`${CODEX_BLOCK_START}:${opts.name}`);
-  lines.push(`[[mcp_servers]]`);
-  lines.push(`name = ${tomlString(opts.name)}`);
-  lines.push(`command = ${tomlString(opts.command)}`);
-  lines.push(`args = [${opts.args.map(tomlString).join(', ')}]`);
-  if (opts.env && Object.keys(opts.env).length > 0) {
-    const entries = Object.entries(opts.env)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${tomlBareKey(k)} = ${tomlString(v)}`);
-    lines.push(`env = { ${entries.join(', ')} }`);
+  const lines = [
+    `${CODEX_BLOCK_START}:${opts.name}`,
+    `[mcp_servers.${tomlBareKey(opts.name)}]`,
+    `command = ${tomlString(opts.command)}`,
+    `args = [${opts.args.map(tomlString).join(', ')}]`,
+  ];
+  const envVars = [...new Set(opts.envVars ?? [])].sort();
+  if (envVars.length > 0) {
+    lines.push(`env_vars = [${envVars.map(tomlString).join(', ')}]`);
   }
   lines.push(`${CODEX_BLOCK_END}:${opts.name}`);
   return lines.join('\n');
 }
 
+/**
+ * Rewrite blocks written by frontmcp 1.9.4 and earlier, which used the
+ * `[[mcp_servers]]` array shape Codex refuses, into `[mcp_servers.<name>]`.
+ * Only text between frontmcp's own markers is touched.
+ */
+function migrateLegacyCodexBlocks(content: string): string {
+  return content.replace(MANAGED_CODEX_BLOCK, (block: string, name: string, body: string) => {
+    if (!/^\[\[mcp_servers\]\]/m.test(body)) return block;
+    const migratedBody = body
+      .replace(/^\[\[mcp_servers\]\]/m, `[mcp_servers.${tomlBareKey(name)}]`)
+      .replace(/^name = .*\r?\n/m, '');
+    return block.replace(body, () => migratedBody);
+  });
+}
+
+function assertNoUnmanagedCodexTable(content: string, name: string, configPath: string): void {
+  const unmanaged = content.replace(MANAGED_CODEX_BLOCK, '');
+  const key = name.replace(/\./g, '\\.');
+  const tableHeader = new RegExp(`^\\s*\\[\\s*mcp_servers\\s*\\.\\s*(?:${key}|"${key}"|'${key}')\\s*[\\].]`, 'm');
+  if (tableHeader.test(unmanaged)) {
+    throw new Error(
+      `${configPath} already defines [mcp_servers.${tomlBareKey(name)}] outside the frontmcp markers. ` +
+        `Remove that table from ${configPath} (or rename the server in frontmcp.config), then run install again.`,
+    );
+  }
+}
+
 function replaceCodexBlock(existing: string, name: string, newBlock: string): string {
   const start = `${CODEX_BLOCK_START}:${name}`;
   const end = `${CODEX_BLOCK_END}:${name}`;
-  const startIdx = existing.indexOf(start);
+  const startIdx = findMarkerLine(existing, start);
   if (startIdx === -1) {
     // Normalize the existing content to end in exactly one newline before
     // appending the new block, so we don't double-up on first insert.
@@ -634,7 +759,7 @@ function replaceCodexBlock(existing: string, name: string, newBlock: string): st
     const sep = normalized.length === 0 ? '' : '\n';
     return `${normalized}${sep}${newBlock}\n`;
   }
-  const endIdx = existing.indexOf(end, startIdx);
+  const endIdx = findMarkerLine(existing, end, startIdx);
   if (endIdx === -1) {
     // Corrupt block — treat as missing and append fresh.
     return `${existing.replace(/\n*$/, '\n')}\n${newBlock}\n`;
@@ -647,13 +772,21 @@ function replaceCodexBlock(existing: string, name: string, newBlock: string): st
 function stripCodexBlock(existing: string, name: string): string {
   const start = `${CODEX_BLOCK_START}:${name}`;
   const end = `${CODEX_BLOCK_END}:${name}`;
-  const startIdx = existing.indexOf(start);
+  const startIdx = findMarkerLine(existing, start);
   if (startIdx === -1) return existing;
-  const endIdx = existing.indexOf(end, startIdx);
+  const endIdx = findMarkerLine(existing, end, startIdx);
   if (endIdx === -1) return existing;
   const before = existing.slice(0, startIdx).replace(/\n+$/, '\n');
   const after = existing.slice(endIdx + end.length).replace(/^\n+/, '\n');
   return (before + after).replace(/\n{3,}/g, '\n\n');
+}
+
+/** Index of the line that is exactly `marker`, so `help` never matches `help-desk`'s marker. */
+function findMarkerLine(content: string, marker: string, fromIndex = 0): number {
+  const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const markerLine = new RegExp(`^${escapedMarker}\\r?$`, 'gm');
+  markerLine.lastIndex = fromIndex;
+  return markerLine.exec(content)?.index ?? -1;
 }
 
 function extractCodexEntryComment(content: string, name: string): string | undefined {
