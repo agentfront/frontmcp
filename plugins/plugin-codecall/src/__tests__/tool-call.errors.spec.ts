@@ -17,6 +17,7 @@ describe('TOOL_CALL_ERROR_CODES', () => {
     expect(TOOL_CALL_ERROR_CODES.EXECUTION).toBe('EXECUTION');
     expect(TOOL_CALL_ERROR_CODES.TIMEOUT).toBe('TIMEOUT');
     expect(TOOL_CALL_ERROR_CODES.ACCESS_DENIED).toBe('ACCESS_DENIED');
+    expect(TOOL_CALL_ERROR_CODES.RATE_LIMITED).toBe('RATE_LIMITED');
     expect(TOOL_CALL_ERROR_CODES.SELF_REFERENCE).toBe('SELF_REFERENCE');
   });
 });
@@ -120,6 +121,18 @@ describe('createToolCallError', () => {
       const error = createToolCallError('ACCESS_DENIED', 'admin:delete');
       expect(error.code).toBe('ACCESS_DENIED');
       expect(error.message).toBe('Access denied for tool "admin:delete"');
+    });
+  });
+
+  describe('RATE_LIMITED error', () => {
+    it('names the tool and leaves out the limit details', () => {
+      const error = createToolCallError(
+        'RATE_LIMITED',
+        'reports:export',
+        'Rate limit exceeded. Retry after 42 seconds',
+      );
+      expect(error.code).toBe('RATE_LIMITED');
+      expect(error.message).toBe('Tool "reports:export" was rate limited');
     });
   });
 

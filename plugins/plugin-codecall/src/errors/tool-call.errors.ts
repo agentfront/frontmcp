@@ -12,6 +12,7 @@ export const TOOL_CALL_ERROR_CODES = {
   EXECUTION: 'EXECUTION',
   TIMEOUT: 'TIMEOUT',
   ACCESS_DENIED: 'ACCESS_DENIED',
+  RATE_LIMITED: 'RATE_LIMITED',
   SELF_REFERENCE: 'SELF_REFERENCE',
 } as const;
 
@@ -83,6 +84,9 @@ function getSanitizedMessage(code: ToolCallErrorCode, toolName: string, rawMessa
 
     case TOOL_CALL_ERROR_CODES.ACCESS_DENIED:
       return `Access denied for tool "${toolName}"`;
+
+    case TOOL_CALL_ERROR_CODES.RATE_LIMITED:
+      return `Tool "${toolName}" was rate limited`;
 
     case TOOL_CALL_ERROR_CODES.SELF_REFERENCE:
       return `Cannot call CodeCall tools from within AgentScript`;

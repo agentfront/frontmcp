@@ -243,7 +243,7 @@ describe('CodeCall tool descriptions follow the effective config', () => {
       const description = await listedDescription(server(), 'codecall:execute');
 
       expect(lineStartingWith(description, 'LIMITS:')).toBe(
-        'LIMITS: 10000 iterations per loop, 3.5s timeout, 5000 tool calls',
+        'LIMITS: 10000 iterations per loop, 3.5s timeout, 5000 tool calls, 30 calls to one tool per 2s (parallel() included)',
       );
     });
   });
@@ -252,7 +252,7 @@ describe('CodeCall tool descriptions follow the effective config', () => {
     const server = useCodeCallServer({
       mode: 'codecall_only',
       topK: 3,
-      vm: { timeoutMs: 1200, maxSteps: 40, allowLoops: true, disabledGlobals: ['JSON'] },
+      vm: { timeoutMs: 1200, maxSteps: 40, allowLoops: true, disabledGlobals: ['JSON'], rapidEnumerationThreshold: 20 },
     });
 
     it('gives codecall:search the configured topK', async () => {
@@ -263,7 +263,7 @@ describe('CodeCall tool descriptions follow the effective config', () => {
       const description = await listedDescription(server(), 'codecall:execute');
 
       expect(lineStartingWith(description, 'LIMITS:')).toBe(
-        'LIMITS: 10000 iterations per loop, 1.2s timeout, 40 tool calls',
+        'LIMITS: 10000 iterations per loop, 1.2s timeout, 40 tool calls, 20 calls to one tool per 2s (parallel() included)',
       );
       expect(lineStartingWith(description, 'ALLOWED:')).toMatch(/^ALLOWED: for, for-of,/);
       expect(lineStartingWith(description, 'ALLOWED:')).not.toContain('JSON.*');

@@ -54,6 +54,11 @@ const app = new FrontMcp({
 });
 ```
 
+## Limits
+
+- **Calls to one tool**: more than `vm.rapidEnumerationThreshold` calls (default 30) to one tool within about 2 seconds stop the script with `[RAPID_ENUMERATION]`; calls made through `parallel()` count. Set per-tool values with `vm.rapidEnumerationOverrides` (`{ 'users:get': 100 }`). The sandbox's message says "in 5s", but it keeps only the last 2 seconds of calls.
+- **Embedding model**: `embedding.strategy: 'ml'` downloads its model on first use. When the model can't be loaded (offline with nothing cached, or `@huggingface/transformers` missing), CodeCall logs one warning and searches with TF-IDF.
+
 ## Modes
 
 - **codecall_only**: Hide all tools except CodeCall meta-tools

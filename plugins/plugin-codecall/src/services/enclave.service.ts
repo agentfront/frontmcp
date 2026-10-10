@@ -251,6 +251,8 @@ export default class EnclaveService {
       // via enclave's internal console, not to this logs array. Only mcpLog/mcpNotify are captured.
     };
 
+    const { rapidEnumerationThreshold, rapidEnumerationOverrides } = this.vmOptions;
+
     // Create enclave with configuration from CodeCallConfig
     const options: CreateEnclaveOptions = {
       timeout: this.vmOptions.timeoutMs,
@@ -271,6 +273,12 @@ export default class EnclaveService {
       // itself: a method call is exactly `callTool('acme.getUser', args, options)`, with the
       // sandbox's tool-call cap, rate limit, suspicious-sequence checks and `throwOnError`.
       toolNamespaces: toSandboxToolNamespaces(environment.toolNamespaces, Object.keys(globals)),
+      doubleVm: {
+        parentValidation: {
+          ...(rapidEnumerationThreshold !== undefined && { rapidEnumerationThreshold }),
+          ...(rapidEnumerationOverrides !== undefined && { rapidEnumerationOverrides }),
+        },
+      },
     };
 
     const enclave = createEnclave(options);

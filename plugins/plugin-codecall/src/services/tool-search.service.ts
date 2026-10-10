@@ -205,6 +205,13 @@ const STOP_WORDS: ReadonlySet<string> = new Set([
   'ie',
   'eg',
 ]);
+
+const DEFAULT_EMBEDDING_MODEL = 'Xenova/all-MiniLM-L6-v2';
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * Metadata structure for tool documents in the vector database
  */
@@ -315,6 +322,9 @@ export class ToolSearchService implements ToolSearch {
   private scope: ScopeEntry;
   private unsubscribe?: () => void;
   private synonymService: SynonymExpansionService | null = null;
+  private readonly synonymExpansion: ToolSearchServiceConfig['synonymExpansion'];
+  /** The reindex in progress: later tool changes queue behind it and `search()` waits for it. */
+  private indexing?: Promise<void>;
 
   // Subscription tracking for async initialization
   private subscriptionPromise: Promise<void>;
@@ -330,7 +340,7 @@ export class ToolSearchService implements ToolSearch {
     this.scope = scope;
     const embeddingOptions: CodeCallEmbeddingOptions = config.embeddingOptions || {
       strategy: 'tfidf',
-      modelName: 'Xenova/all-MiniLM-L6-v2',
+      modelName: DEFAULT_EMBEDDING_MODEL,
       cacheDir: './.cache/transformers',
       useHNSW: false,
       synonymExpansion: { enabled: true, replaceDefaults: false, maxExpansionsPerTerm: 5 },
@@ -355,23 +365,20 @@ export class ToolSearchService implements ToolSearch {
     // Initialize the appropriate vector database
     if (this.strategy === 'ml') {
       this.vectorDB = new VectoriaDB<ToolMetadata>({
-        modelName: embeddingOptions.modelName || 'Xenova/all-MiniLM-L6-v2',
+        modelName: embeddingOptions.modelName || DEFAULT_EMBEDDING_MODEL,
         cacheDir: embeddingOptions.cacheDir || './.cache/transformers',
         defaultTopK: this.config.defaultTopK,
         defaultSimilarityThreshold: this.config.defaultSimilarityThreshold,
         useHNSW: embeddingOptions.useHNSW || false,
       });
     } else {
-      this.vectorDB = new TFIDFVectoria<ToolMetadata>({
-        defaultTopK: this.config.defaultTopK,
-        defaultSimilarityThreshold: this.config.defaultSimilarityThreshold,
-      });
+      this.vectorDB = this.createTfidfIndex();
     }
 
     // Initialize synonym expansion for TF-IDF strategy (ML already handles semantic similarity)
-    const synonymExpansion = config.synonymExpansion ?? embeddingOptions.synonymExpansion;
-    if (this.strategy === 'tfidf' && synonymExpansion !== false && synonymExpansion?.enabled !== false) {
-      this.synonymService = new SynonymExpansionService(synonymExpansion ?? {});
+    this.synonymExpansion = config.synonymExpansion ?? embeddingOptions.synonymExpansion;
+    if (this.strategy === 'tfidf') {
+      this.synonymService = this.createSynonymService();
     }
 
     // Create subscription promise - resolves when subscribed to tool changes, rejects on disposal
@@ -383,6 +390,19 @@ export class ToolSearchService implements ToolSearch {
     // Initiate subscription setup (non-blocking)
     // During plugin initialization, scope.tools may not exist yet
     this.setupSubscription();
+  }
+
+  private createTfidfIndex(): TFIDFVectoria<ToolMetadata> {
+    return new TFIDFVectoria<ToolMetadata>({
+      defaultTopK: this.config.defaultTopK,
+      defaultSimilarityThreshold: this.config.defaultSimilarityThreshold,
+    });
+  }
+
+  private createSynonymService(): SynonymExpansionService | null {
+    const synonymExpansion = this.synonymExpansion;
+    if (synonymExpansion === false || synonymExpansion?.enabled === false) return null;
+    return new SynonymExpansionService(synonymExpansion ?? {});
   }
 
   /**
@@ -440,9 +460,21 @@ export class ToolSearchService implements ToolSearch {
     // This ensures tools are indexed as they become available, regardless of loading order
     this.unsubscribe = this.scope.tools.subscribe({ immediate: true }, (event) => {
       // Handle tool change event - reindex all tools from the snapshot
-      this.handleToolChange(event.snapshot as unknown as ToolEntry<any, any>[]);
+      this.queueReindex(event.snapshot as unknown as ToolEntry<any, any>[]);
     });
     this.markSubscribed();
+  }
+
+  /** Reindex from `tools` once the reindex in progress (if any) is done; a failure is logged, never thrown. */
+  private queueReindex(tools: ToolEntry<any, any>[]): void {
+    const reindex = () => this.handleToolChange(tools);
+    const run = (this.indexing ? this.indexing.then(reindex) : reindex()).catch((error: unknown) => {
+      this.scope.logger.warn(`CodeCall tool search could not index the tools: ${messageOf(error)}`);
+    });
+    this.indexing = run;
+    void run.then(() => {
+      if (this.indexing === run) this.indexing = undefined;
+    });
   }
 
   /**
@@ -472,8 +504,12 @@ export class ToolSearchService implements ToolSearch {
     // Initialize ML model if needed (first time only, and only when we have tools)
     // Deferred initialization avoids async operations when there's nothing to index
     if (!this.mlInitialized && this.strategy === 'ml' && this.vectorDB instanceof VectoriaDB) {
-      await this.vectorDB.initialize();
-      this.mlInitialized = true;
+      try {
+        await this.vectorDB.initialize();
+        this.mlInitialized = true;
+      } catch (error) {
+        this.fallBackToTfidf(error);
+      }
     }
 
     // Filter tools based on CodeCall config and per-tool metadata
@@ -512,6 +548,17 @@ export class ToolSearchService implements ToolSearch {
     }
 
     this.initialized = true;
+  }
+
+  /** The embedding model could not be loaded: search with TF-IDF for the rest of the process. */
+  private fallBackToTfidf(error: unknown): void {
+    const modelName = this.config.embeddingOptions.modelName || DEFAULT_EMBEDDING_MODEL;
+    this.scope.logger.warn(
+      `CodeCall could not load embedding model "${modelName}" (${messageOf(error)}); tool search uses TF-IDF instead`,
+    );
+    this.strategy = 'tfidf';
+    this.vectorDB = this.createTfidfIndex();
+    this.synonymService = this.createSynonymService();
   }
 
   /**
@@ -658,6 +705,7 @@ export class ToolSearchService implements ToolSearch {
   async search(query: string, options: SymbolToolSearchOptions = {}): Promise<SymbolToolSearchResult[]> {
     // Ensure we're subscribed to tool changes before searching
     await this.ensureSubscribed();
+    await this.indexing;
 
     const { topK = this.config.defaultTopK, appIds, excludeToolNames = [], surface } = options;
     const minScore = this.config.defaultSimilarityThreshold;
