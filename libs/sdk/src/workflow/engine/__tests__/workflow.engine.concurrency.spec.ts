@@ -1,12 +1,17 @@
 /**
  * On Node (and any runtime with native async context) the engine keeps running ready steps in
  * parallel, up to `maxConcurrency`: only a runtime without `AsyncContext` runs them one at a time
- * (see `workflow.engine.browser-context.spec.ts`).
+ * (see `workflow.engine.browser-context.spec.ts`). Each step attempt runs the `jobs:execute-job` flow
+ * (#700), and its job runs on the `'job'` surface.
  */
-import type { JobEntry } from '../../../common/entries/job.entry';
+import 'reflect-metadata';
+
+import { App, Job, JobContext, LogLevel } from '../../../common';
 import type { WorkflowMetadata } from '../../../common/metadata/workflow.metadata';
 import { getCallSurface } from '../../../context/call-surface';
-import type { JobRegistryInterface } from '../../../job/job.registry';
+import { type DirectMcpServer } from '../../../direct/direct.types';
+import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
+import { type Scope } from '../../../scope/scope.instance';
 import { WorkflowEngine } from '../workflow.engine';
 
 const logger = {
@@ -17,35 +22,52 @@ const logger = {
   verbose: jest.fn(),
 } as unknown as ConstructorParameters<typeof WorkflowEngine>[2];
 
+let inFlight = 0;
+let maxInFlight = 0;
+const surfaces: Array<string | undefined> = [];
+
+abstract class SlowFetch extends JobContext {
+  async execute() {
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    surfaces.push(getCallSurface());
+    inFlight--;
+    return {};
+  }
+}
+
+@Job({ name: 'fetch-a', inputSchema: {}, outputSchema: {} })
+class FetchA extends SlowFetch {}
+
+@Job({ name: 'fetch-b', inputSchema: {}, outputSchema: {} })
+class FetchB extends SlowFetch {}
+
+@Job({ name: 'fetch-c', inputSchema: {}, outputSchema: {} })
+class FetchC extends SlowFetch {}
+
+@App({ id: 'fan-out', name: 'Fan out', jobs: [FetchA, FetchB, FetchC] })
+class FanOutApp {}
+
 describe('WorkflowEngine with native async context', () => {
+  let server: DirectMcpServer;
+
+  beforeAll(async () => {
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'workflow-engine-concurrency', version: '1.0.0' },
+      apps: [FanOutApp],
+      logging: { level: LogLevel.Off },
+    });
+  });
+
+  afterAll(async () => {
+    await server.dispose();
+  });
+
   it('runs independent steps in parallel, each on the job surface', async () => {
-    let inFlight = 0;
-    let maxInFlight = 0;
-    const surfaces: Array<string | undefined> = [];
+    const registry = (server as unknown as { scope: Scope }).scope.jobs;
+    if (!registry) throw new Error('jobs are not enabled');
     const names = ['fetch-a', 'fetch-b', 'fetch-c'];
-    const jobs = new Map<string, JobEntry>(
-      names.map((name) => [
-        name,
-        {
-          name,
-          metadata: { name },
-          parseInput: (input: unknown) => input,
-          parseOutput: (output: unknown) => output,
-          create: () => ({
-            loadAuthContext: async () => undefined,
-            execute: async () => {
-              inFlight++;
-              maxInFlight = Math.max(maxInFlight, inFlight);
-              await new Promise((resolve) => setTimeout(resolve, 30));
-              surfaces.push(getCallSurface());
-              inFlight--;
-              return {};
-            },
-          }),
-        } as unknown as JobEntry,
-      ]),
-    );
-    const registry = { findByName: (name: string) => jobs.get(name) } as unknown as JobRegistryInterface;
     const metadata = {
       name: 'fan-out',
       steps: names.map((name) => ({ id: name, jobName: name })),

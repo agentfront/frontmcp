@@ -1,3 +1,4 @@
+import type ProviderRegistry from '../../provider/provider.registry';
 import { type WorkflowMetadata, type WorkflowStep } from '../metadata/workflow.metadata';
 import { WorkflowKind, type WorkflowRecord } from '../records';
 import { BaseEntry, type EntryOwnerRef } from './base.entry';
@@ -6,6 +7,8 @@ export abstract class WorkflowEntry extends BaseEntry<WorkflowRecord, unknown, W
   owner: EntryOwnerRef;
   name: string;
   fullName: string;
+
+  abstract get providers(): ProviderRegistry;
 
   isDynamic(): boolean {
     return this.record.kind === WorkflowKind.DYNAMIC;

@@ -54,6 +54,7 @@ The stage names a decorator accepts are the stages of that flow (`execute`, `val
 | `prompts:list-prompts`              | List prompts                | `ListPromptsHook`           |
 | `completion:complete`               | Argument completion         | `CompletionHook`            |
 | `agents:call-agent`                 | Agent invocation            | `AgentCallHook`             |
+| `jobs:execute-job`                  | One attempt of a job        | `JobHook`                   |
 | `channels:send-notification`        | Channel notification        | `ChannelSendHook`           |
 | `channels:list`                     | Channels a session receives | `ChannelListHook`           |
 | `http:request`                      | HTTP request handling       | `HttpHook`                  |
@@ -275,14 +276,56 @@ class GetTicketTool extends ToolContext {
 }
 ```
 
-Because they run on that instance, they can only hook stages from the one that builds it on: `createToolCallContext`,
-`createResourceContext`, `createPromptContext` or `createAgentContext` (`Did` and `Stage` on that stage, and any hook on
-a later stage). A hook on an earlier stage, `Will` or `Around` on that stage, or a list-flow hook (`ListToolsHook`,
-`ListResourcesHook`, `ListPromptsHook`; listing builds no instance) would never run, so the server refuses to start
-with `InvalidHookFlowError`. Declare those hooks on a provider or a plugin instead.
+Because instance methods run on that instance, they can only hook stages from the one that builds it on:
+`createToolCallContext`, `createResourceContext`, `createPromptContext` or `createAgentContext` (`Did` and `Stage` on
+that stage, and any hook on a later stage).
 
-`@Job` classes cannot declare hooks: jobs do not run through a hookable flow, so a hook on a job class fails startup
-the same way. To act on job runs, hook `tools:call-tool` for the `execute_job` tool from a provider or a plugin.
+#### Static hooks for earlier stages
+
+To hook a stage that runs before the instance exists, such as `parseInput`, `findTool`, `checkToolAuthorization` or
+`checkEntryAuthorities` (and `findResource`, `findPrompt`, `findAgent`, `checkAgentAuthorization`), declare the hook as
+a `static` method. A static hook runs without an instance: `this` is the class, and like every hook it receives the
+running flow as its argument, so it reads and changes the flow's `state`, or throws to refuse the call. It joins a call
+when the call starts, and only a call for its own entry: a static hook on one tool never runs for another.
+
+```typescript
+@Tool({ name: 'transfer', inputSchema: { account: z.string(), amount: z.number() } })
+class TransferTool extends ToolContext {
+  // Runs before the tool is authorized or its instance is built
+  @ToolHook.Will('checkToolAuthorization')
+  static refuseFrozen(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const account = flowCtx.state.input?.arguments?.['account'];
+    if (frozenAccounts.has(String(account))) throw new UnauthorizedError('the account is frozen');
+  }
+
+  // Rewrites the arguments before the tool is looked up
+  @ToolHook.Did('parseInput')
+  static normalize(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const input = flowCtx.state.required.input;
+    const account = String(input.arguments?.['account'] ?? '').trim();
+    flowCtx.state.set('input', { ...input, arguments: { ...input.arguments, account } });
+  }
+
+  async execute({ account, amount }: { account: string; amount: number }) {
+    return { account, amount };
+  }
+}
+```
+
+A static hook may also hook the stage that builds the instance (`Will` and `Around` included) or a later stage; it
+still runs once per call. Among hooks of the same priority, the class's static hooks run after the hooks of plugins and
+providers, as its instance hooks do.
+
+An instance method on an earlier stage, or `Will` or `Around` on the stage that builds the instance, would never run, so
+the server refuses to start with `InvalidHookFlowError`, and the message tells you to declare it `static`. A list-flow
+hook (`ListToolsHook`, `ListResourcesHook`, `ListPromptsHook`) is refused on an entry class whether it is static or not:
+a listing builds no instance and runs for no single entry. Declare list hooks on a provider or a plugin instead. Up to
+1.9.3 static hooks on earlier stages were refused too.
+
+A `@Job` class declares hooks for the `jobs:execute-job` flow its attempts run, with the same rules: instance methods
+from `createJobContext` on, `static` methods from the first stage. A hook it declares for another flow fails startup
+with `InvalidHookFlowError`. See [Jobs: Hooks](/frontmcp/servers/jobs#hooks). Up to 1.9.3 jobs ran outside any flow and
+any hook on a `@Job` class failed startup.
 
 Up to 1.8.7, all of these were accepted and silently never ran.
 

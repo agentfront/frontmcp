@@ -17,6 +17,7 @@ import {
   type PromptContext,
   type PromptEntry,
   type ScopeEntry,
+  type Token,
 } from '../../common';
 import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
 import { runOnSurface } from '../../context/call-surface';
@@ -96,6 +97,15 @@ const { Stage } = FlowHooksOf<'prompts:get-prompt'>(name);
 /** Prompts `resolveHookOwnerId` found, reused by the same run's `findPrompt`. */
 const resolvedPrompts = new ResolvedEntries<PromptEntry>();
 
+/**
+ * The prompt a `prompts/get` names: by its name, or by its app-qualified name (`desk:summarize`),
+ * which prompts/list hands out when names collide. `findPrompt` and the run's hook resolution use it,
+ * so both resolve the same prompt.
+ */
+function findPromptForGet(prompts: ScopeEntry['prompts'], name: string): PromptEntry | undefined {
+  return prompts.findByName(name) ?? prompts.getPrompts(true).find((entry) => entry.fullName === name);
+}
+
 @Flow({
   name,
   plan,
@@ -107,14 +117,21 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
   static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const promptName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
     if (typeof promptName !== 'string') return undefined;
-    let prompt = scope.prompts.findByName(promptName);
+    let prompt = findPromptForGet(scope.prompts, promptName);
     if (!prompt) {
       await loadRemoteAppCapabilities(scope);
-      prompt = scope.prompts.findByName(promptName);
+      prompt = findPromptForGet(scope.prompts, promptName);
     }
     if (!prompt) return undefined;
     resolvedPrompts.remember(rawInput, promptName, prompt);
     return appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner);
+  }
+
+  /** The class of the prompt the request names, whose `static` hooks run from `parseInput` on (#701). */
+  static override resolveHookEntryClass(rawInput: unknown, scope: ScopeEntry): Token | undefined {
+    const promptName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
+    if (typeof promptName !== 'string') return undefined;
+    return (resolvedPrompts.peek(rawInput, promptName) ?? findPromptForGet(scope.prompts, promptName))?.record.provide;
   }
 
   logger = this.scopeLogger.child('GetPromptFlow');
@@ -205,11 +222,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     const { name } = this.state.required.input;
     this.logger.info(`findPrompt: looking for prompt with name "${name}"`);
 
-    // Its name, or its app-qualified name (`desk:summarize`), which prompts/list hands out when names collide
-    const prompt =
-      resolvedPrompts.take(this.rawInput, name) ??
-      this.scope.prompts.findByName(name) ??
-      this.scope.prompts.getPrompts(true).find((entry) => entry.fullName === name);
+    const prompt = resolvedPrompts.take(this.rawInput, name) ?? findPromptForGet(this.scope.prompts, name);
 
     if (!prompt) {
       this.logger.warn(`findPrompt: prompt "${name}" not found`);

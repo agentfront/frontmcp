@@ -75,6 +75,17 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
     scope: ScopeEntry,
   ) => string | undefined | Promise<string | undefined>;
 
+  /**
+   * The class of the entry a run targets (the `@Tool`, `@Resource`, `@Prompt`, `@Agent` or `@Job` class),
+   * read from the raw input before the run starts, after `resolveHookOwnerId`. The hooks that class
+   * declares as `static` methods for this flow join the run from its first stage: they need no
+   * instance, so they can hook the stages that run before the entry's instance is built (#701).
+   */
+  static resolveHookEntryClass?: (
+    rawInput: unknown,
+    scope: ScopeEntry,
+  ) => Token | undefined | Promise<Token | undefined>;
+
   protected input: FlowInputOf<N>;
   state: FlowStateOf<N> = FlowState.create({});
   scopeLogger: FrontMcpLogger;

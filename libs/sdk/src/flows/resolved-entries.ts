@@ -7,11 +7,17 @@ export class ResolvedEntries<Entry> {
     if (typeof rawInput === 'object' && rawInput !== null) this.byInput.set(rawInput, { key, entry });
   }
 
-  /** The entry kept for this run when it was resolved from the same key; undefined otherwise. */
-  take(rawInput: unknown, key: string): Entry | undefined {
+  /** The entry kept for this run when it was resolved from the same key, left for the find stage to take. */
+  peek(rawInput: unknown, key: string): Entry | undefined {
     if (typeof rawInput !== 'object' || rawInput === null) return undefined;
     const resolved = this.byInput.get(rawInput);
-    this.byInput.delete(rawInput);
     return resolved?.key === key ? resolved.entry : undefined;
+  }
+
+  /** The entry kept for this run when it was resolved from the same key; undefined otherwise. */
+  take(rawInput: unknown, key: string): Entry | undefined {
+    const entry = this.peek(rawInput, key);
+    if (typeof rawInput === 'object' && rawInput !== null) this.byInput.delete(rawInput);
+    return entry;
   }
 }

@@ -5,18 +5,15 @@ import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobRetryConfig } from '../../common/metadata/job.metadata';
 import { type WorkflowStep, type WorkflowStepResult } from '../../common/metadata/workflow.metadata';
 import { type FrontMcpContext } from '../../context';
-import { InvalidEntityError, InvalidOutputError } from '../../errors';
-import { JobNotAuthorizedError } from '../../errors/job.errors';
+import { InvalidEntityError } from '../../errors';
 import { WorkflowJobTimeoutError } from '../../errors/workflow.errors';
-import { jobContextProviders } from '../../job/job-context-providers';
-import { JobPermissionGuard } from '../../job/job-permission.guard';
+import { retryDelayMs, runJobAttemptFlow, toJobError, willRetryJobAttempt } from '../../job/job-attempt';
 import { type JobRegistryInterface } from '../../job/job.registry';
-import { runJobAttempt } from '../../job/job.utils';
 
 export interface WorkflowStepExecutorExtra {
   authInfo: Partial<Record<string, unknown>>;
   contextProviders?: unknown;
-  /** The run's request context; each step's job builds its CONTEXT-scoped providers for it (#705). */
+  /** The run's request context; each step's attempts run their `jobs:execute-job` flow in it (#705, #700). */
   context?: FrontMcpContext;
   /**
    * The scope's authorities context builder, so a step's permission check
@@ -24,10 +21,16 @@ export interface WorkflowStepExecutorExtra {
    * second, divergent notion of where roles live.
    */
   authoritiesContextBuilder?: AuthoritiesContextBuilder;
+  /** The workflow the steps belong to, as hooks on `jobs:execute-job` see it in `state.workflow`. */
+  workflowName?: string;
+  /** The workflow run the steps belong to, as hooks on `jobs:execute-job` see it in `state.workflow`. */
+  workflowRunId?: string;
 }
 
 /**
- * Executes a single workflow step by resolving the job and running it.
+ * Executes a single workflow step by resolving the job and running each attempt of it through the
+ * `jobs:execute-job` flow, which checks the STEP JOB's own permissions (GHSA-58v2-gpcc-jmqv) and runs
+ * every hook on that flow (#700).
  */
 export class WorkflowStepExecutor {
   private readonly jobRegistry: JobRegistryInterface;
@@ -47,28 +50,9 @@ export class WorkflowStepExecutor {
       throw new InvalidEntityError('job', step.jobName, `a registered job (referenced by step "${step.id}")`);
     }
 
-    // The step job's OWN permissions, not just the workflow's
-    // (GHSA-58v2-gpcc-jmqv). `JobExecutionManager` authorizes the workflow
-    // once and the engine then runs steps directly, so a workflow that
-    // declares nothing would otherwise launder every job it references.
-    // Checked outside the retry loop: a denial is not transient.
-    const allowed = await JobPermissionGuard.check(
-      job.metadata.permissions,
-      'execute',
-      this.extra.authInfo,
-      this.extra.authoritiesContextBuilder,
-    );
-    if (!allowed) {
-      this.logger.warn(`Step "${step.id}" denied: caller does not satisfy the execute permissions of "${job.name}"`);
-      throw new JobNotAuthorizedError(job.name);
-    }
-
     // Determine retry config (step override or job default)
     const retryConfig: JobRetryConfig = step.retry ?? job.metadata.retry ?? {};
     const maxAttempts = retryConfig.maxAttempts ?? 3;
-    const backoffMs = retryConfig.backoffMs ?? 1000;
-    const backoffMultiplier = retryConfig.backoffMultiplier ?? 2;
-    const maxBackoffMs = retryConfig.maxBackoffMs ?? 60000;
 
     // Determine timeout (step override or job default)
     const timeout = step.timeout ?? job.metadata.timeout ?? 300000;
@@ -77,56 +61,57 @@ export class WorkflowStepExecutor {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const result = await this.executeWithTimeout(job, input, timeout, attempt);
+        const result = await this.executeWithTimeout(job, step, input, timeout, attempt);
         return {
           outputs: (result ?? {}) as Record<string, unknown>,
           state: 'completed',
         };
       } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
+        lastError = toJobError(err);
         this.logger.warn(`Step "${step.id}" attempt ${attempt}/${maxAttempts} failed: ${lastError.message}`);
-        // The job ran to completion, so running it again would repeat its side effects
-        if (lastError instanceof InvalidOutputError) break;
-
-        if (attempt < maxAttempts) {
-          const delay = Math.min(backoffMs * Math.pow(backoffMultiplier, attempt - 1), maxBackoffMs);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
+        // A result that failed outputSchema, or a denial of the step job, is not retried
+        if (!willRetryJobAttempt(lastError, attempt, maxAttempts)) break;
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs(retryConfig, attempt)));
       }
     }
 
     throw lastError ?? new Error(`Step "${step.id}" failed after ${maxAttempts} attempts`);
   }
 
-  private async executeWithTimeout(
+  /**
+   * Run one attempt, racing a timer. The timer does NOT cancel a job that already started; it rejects
+   * the attempt early and aborts its flow, so an attempt still building its providers or loading its
+   * auth when it times out never starts the job.
+   */
+  private executeWithTimeout(
     job: JobEntry,
+    step: WorkflowStep,
     input: Record<string, unknown>,
     timeout: number,
     attempt: number,
   ): Promise<unknown> {
-    const parsedInput = job.parseInput(input);
-    const { context, ...extra } = this.extra;
+    const { context, contextProviders, authInfo, authoritiesContextBuilder, workflowName, workflowRunId } = this.extra;
+    const abandon = new AbortController();
 
-    // Race a timer against the job promise. Note: this does NOT cancel the
-    // underlying job execution — it only rejects the caller early on timeout.
     return new Promise<unknown>((resolve, reject) => {
-      let timedOut = false;
       const timer = setTimeout(() => {
-        timedOut = true;
-        reject(new WorkflowJobTimeoutError(job.name, timeout));
+        const timedOut = new WorkflowJobTimeoutError(job.name, timeout);
+        abandon.abort(timedOut);
+        reject(timedOut);
       }, timeout);
 
-      // CONTEXT providers and async `authorities.pipes` are built within the timed attempt, so a hung one times out like a hung job.
-      Promise.resolve(context ? jobContextProviders(job, context) : extra.contextProviders)
-        .then(async (contextProviders) => {
-          if (timedOut) return undefined;
-          const ctx = job.create(parsedInput, { ...extra, contextProviders, attempt });
-          await ctx.loadAuthContext();
-          // An attempt that timed out while its providers or auth loaded is abandoned, so its job never starts.
-          if (timedOut) return undefined;
-          return runJobAttempt(job, ctx, parsedInput);
-        })
-        .then((result) => {
+      runJobAttemptFlow({
+        job,
+        input,
+        attempt,
+        authInfo,
+        context,
+        contextProviders,
+        authoritiesContextBuilder,
+        workflow: { name: workflowName, stepId: step.id, runId: workflowRunId },
+        signal: abandon.signal,
+      })
+        .then(({ result }) => {
           clearTimeout(timer);
           resolve(result);
         })

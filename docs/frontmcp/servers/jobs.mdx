@@ -245,7 +245,7 @@ A run's result is what `execute()` returns, or the value it passes to `this.resp
 
 A job declared on an `@App` runs with that app's providers (`this.get(TicketStore)`), as the app's tools do, and a job declared on `@FrontMcp` with the server's.
 
-A job started with `execute_job` or `execute_workflow` runs with the caller's request context: `this.context` and CONTEXT-scoped providers, including the `this.remember` and `this.featureFlags` accessors, work inside it as they do in a tool. A background run outlives the request that started it, so it gets a context of its own with the caller's session, auth and trace, a request id of its own, and no transport. Up to 1.9.1 `this.context` threw `RequestContextNotAvailableError` in a job and CONTEXT-scoped providers threw `ProviderScopedAccessError`.
+A job started with `execute_job` or `execute_workflow` runs with the caller's request context: `this.context` and CONTEXT-scoped providers, including the `this.remember` and `this.featureFlags` accessors, work inside it as they do in a tool. A background run outlives the request that started it, so it gets a context of its own with the caller's session, auth and trace, a request id of its own, and no transport; a run a caller without a request context starts in the background (a trigger, other in-process code) gets a fresh context for the auth and session it passed. Up to 1.9.1 `this.context` threw `RequestContextNotAvailableError` in a job and CONTEXT-scoped providers threw `ProviderScopedAccessError`.
 
 Up to 1.9.1 the `outputSchema` was not checked, `this.respond()` replaced the whole `execute_job` response with its value instead of becoming the job's result, and a job on an `@App` saw only the server's providers.
 
@@ -278,12 +278,15 @@ When no permissions are defined, the job is accessible to all authenticated user
 Once a rule targets an action, **every** rule for that action must pass; within a
 single rule, `roles` and `scopes` are any-of.
 
-A directly executed job is checked in `JobExecutionManager` — the choke point the
-`execute_job` tool, triggers and background runs all go through. A job reached as a
-**workflow step** is checked against its own rules too, in `WorkflowStepExecutor`, so
-authorizing the workflow does not launder the jobs it references. `list_jobs` hides a
-job the caller could not run, and a denial is indistinguishable from "not found" so
-the response cannot be used to enumerate restricted job names.
+A directly executed job is checked in `JobExecutionManager` when the run starts, before
+any run record exists — the choke point the `execute_job` tool, triggers and background
+runs all go through. Every attempt then runs the [`jobs:execute-job` flow](#hooks), whose
+`checkJobAuthorization` stage checks the rules again (so a `custom` guard runs at the start
+of the run and on each attempt); a denial there is not retried. A job reached as a
+**workflow step** is checked against its own rules in that stage too, so authorizing the
+workflow does not launder the jobs it references. `list_jobs` hides a job the caller
+could not run, and a denial is indistinguishable from "not found" so the response cannot
+be used to enumerate restricted job names.
 
 Roles and scopes are read from the caller's verified token. When the server
 declares `authorities.claimsMapping`, that mapping is authoritative; otherwise
@@ -296,6 +299,96 @@ scopes.
   `execute_job` could run every job regardless of its declared rules. Servers on
   1.7.1 or earlier should treat every job as reachable by every caller.
 </Warning>
+
+---
+
+## Hooks
+
+Every attempt of a job runs the hookable `jobs:execute-job` flow: a run started with `execute_job`, inline or in the
+background, each retry, each workflow step, and any in-process call of the job execution manager. Hook it like any
+other flow, from a plugin or a provider, with `JobHook` (the same decorators as `FlowHooksOf('jobs:execute-job')`):
+
+```ts
+import { FlowCtxOf, JobHook, Plugin } from '@frontmcp/sdk';
+
+@Plugin({ name: 'job-audit' })
+class JobAuditPlugin {
+  @JobHook.Around('execute')
+  async time(flowCtx: FlowCtxOf<'jobs:execute-job'>, next: () => Promise<void>) {
+    const started = Date.now();
+    try {
+      await next();
+    } finally {
+      const { job, attempt, runId, workflow } = flowCtx.state;
+      audit.record({ job: job?.name, attempt, runId, step: workflow?.stepId, ms: Date.now() - started });
+    }
+  }
+}
+```
+
+| Stage                   | Phase    | What it does                                                                                                                                 |
+| ----------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `parseInput`            | pre      | Puts the job, `attempt`, the run id (`runId`), the workflow step (`workflow`), the caller's `authInfo` and the raw `input` in the flow state |
+| `checkJobAuthorization` | pre      | Checks the job's `execute` permissions; a denial (`JobNotAuthorizedError`) is not retried                                                    |
+| `validateInput`         | pre      | Parses `state.input` with the job's `inputSchema` into `state.parsedInput`                                                                   |
+| `createJobContext`      | pre      | Builds the job instance with the CONTEXT-scoped providers of the run's context, and loads `this.auth`                                        |
+| `execute`               | execute  | Runs `execute()` on the `'job'` surface                                                                                                      |
+| `validateOutput`        | execute  | Parses the result with the job's `outputSchema` into `state.answer` (`{ result, logs }`)                                                     |
+| `updateRunState`        | finalize | Records the attempt on the run record (`completed`, `retrying` or `failed`) and sends its status notification                                |
+| `finalize`              | finalize | Answers with `state.answer`                                                                                                                  |
+
+Each attempt is one run of the flow, so a job with `retry.maxAttempts: 3` can run a hook three times for one
+`execute_job` call; `state.attempt` tells them apart, and a failed attempt reaches the finalize stages with
+`state.flowError` set. A workflow step has no run record of its own (`state.runId` is unset and `state.workflow` names
+the workflow, the step and the workflow run), so `updateRunState` records nothing for it; the workflow run records its
+steps.
+
+- **Throwing in a hook** fails the attempt, and the retry rules apply: a `JobNotAuthorizedError` or an `outputSchema`
+  mismatch is not retried, any other error is.
+- **Answering for the job**: a hook that calls `flowCtx.respond({ result, logs })` (a cache, say) ends the attempt with
+  that result, and the run records it. The result does not go through `validateOutput`.
+- **The run record always gets the outcome**: if a hook keeps `updateRunState` from running, or the run store fails its
+  write, the job execution manager records the attempt itself. A store that fails to record a completed job never runs
+  the job again: if the manager's write fails too, the call fails with the store's error.
+- **Background runs** run their attempts in the run's own context: a copy of the caller's (same session, auth and
+  trace, a request id of its own, no transport), or, for a caller without one, a fresh context for the auth it passed.
+- **Which hooks run**: the hooks of a plugin or provider installed on an app run for that app's jobs only. A job declared
+  on `@FrontMcp` runs every app's hooks, and the plugins and providers registered on the server run for every job.
+
+### On a `@Job` class
+
+A `@Job` class can declare hooks for `jobs:execute-job` itself, and they run only for that job's attempts. Instance
+methods run on the job instance, which `createJobContext` builds, so they can hook `Did` and `Stage` on
+`createJobContext` and any later stage. Declare a hook for an earlier stage (`parseInput`, `checkJobAuthorization`,
+`validateInput`) as a `static` method: it runs without an instance, with the class as `this`. A hook the class declares
+for another flow fails startup with `InvalidHookFlowError`.
+
+```ts
+import { FlowCtxOf, Job, JobContext, JobHook, JobNotAuthorizedError, z } from '@frontmcp/sdk';
+
+@Job({ name: 'export-report', inputSchema: { tenant: z.string() }, outputSchema: { url: z.string() } })
+class ExportReportJob extends JobContext {
+  // Before the job instance exists: refuse a suspended tenant
+  @JobHook.Will('checkJobAuthorization')
+  static refuseSuspended(flowCtx: FlowCtxOf<'jobs:execute-job'>) {
+    const tenant = (flowCtx.state.input as { tenant?: string } | undefined)?.tenant;
+    if (tenant && suspendedTenants.has(tenant)) throw new JobNotAuthorizedError('export-report');
+  }
+
+  // On the instance, after execute()
+  @JobHook.Did('execute')
+  noteAttempt() {
+    this.log(`exported on attempt ${this.attempt}`);
+  }
+
+  async execute({ tenant }: { tenant: string }) {
+    return { url: await exportFor(tenant) };
+  }
+}
+```
+
+Up to 1.9.3 jobs ran outside any flow: a hook on the `execute_job` tool's `tools:call-tool` flow missed retries,
+background attempts and workflow steps, and any hook declared on a `@Job` class failed startup.
 
 ---
 

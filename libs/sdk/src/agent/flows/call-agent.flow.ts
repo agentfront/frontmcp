@@ -18,6 +18,8 @@ import {
   GLOBAL_RATE_LIMIT_CHECKED,
   type FlowPlan,
   type FlowRunOptions,
+  type ScopeEntry,
+  type Token,
 } from '../../common';
 import {
   AgentCallDepthExceededError,
@@ -143,6 +145,18 @@ const name = 'agents:call-agent' as const;
 export const agentClassHooksJoin: EntryClassHooksJoin = { flow: name, plan, contextStage: 'createAgentContext' };
 const { Stage } = FlowHooksOf<'agents:call-agent'>(name);
 
+/**
+ * The agent a `tools/call` names: by id, then by name, then by full name, hidden agents included.
+ * `findAgent` and the run's static-hook resolution use it, so both resolve the same agent.
+ */
+function findAgentForCall(agents: NonNullable<ScopeEntry['agents']>, toolName: string): AgentEntry | undefined {
+  return (
+    agents.findById(toolName) ??
+    agents.findByName(toolName) ??
+    agents.getAgents(true).find((entry) => entry.fullName === toolName || entry.name === toolName)
+  );
+}
+
 // ============================================================================
 // Call Agent Flow
 // ============================================================================
@@ -155,6 +169,13 @@ const { Stage } = FlowHooksOf<'agents:call-agent'>(name);
   access: 'authorized',
 })
 export default class CallAgentFlow extends FlowBase<typeof name> {
+  /** The class of the agent the call names, whose `static` hooks run from `parseInput` on (#701). */
+  static override resolveHookEntryClass(rawInput: unknown, scope: ScopeEntry): Token | undefined {
+    const toolName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
+    if (typeof toolName !== 'string' || !scope.agents) return undefined;
+    return findAgentForCall(scope.agents, toolName)?.record.provide;
+  }
+
   logger = this.scopeLogger.child('CallAgentFlow');
 
   /** Whether the `invoke_<agent>` tool's flow already applied the agent's gates. */
@@ -238,19 +259,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
     // Agent ID is the tool name (agents use standard tool names)
     const agentId = toolName;
-
-    // Try to find by ID first, then by name
-    let agent: AgentEntry | undefined = agents.findById(agentId);
-    if (!agent) {
-      agent = agents.findByName(agentId);
-    }
-
-    // Also check full name matching
-    if (!agent) {
-      agent = activeAgents.find((entry) => {
-        return entry.fullName === toolName || entry.name === toolName;
-      });
-    }
+    const agent = findAgentForCall(agents, toolName);
 
     if (!agent) {
       this.logger.warn(`findAgent: agent "${agentId}" not found`);

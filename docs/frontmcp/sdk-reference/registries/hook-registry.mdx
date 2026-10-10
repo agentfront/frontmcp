@@ -206,7 +206,7 @@ class MyTool extends ToolContext {
 
 Embedded hooks:
 
-- Are scoped to their class, and run on the instance built for each call
+- Are scoped to their class: instance methods run on the instance built for each call; `static` methods run without one, from the first stage of each call for that entry
 - Use `getClsHooks()` for lookup
 - Are registered with `registerHooks(true, ...)`
 
