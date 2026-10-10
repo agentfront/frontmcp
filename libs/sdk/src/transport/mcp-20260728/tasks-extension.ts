@@ -17,6 +17,7 @@
  * and a task-bearing response is discriminated by `resultType: "task"` rather
  * than by a `task` field on a normal result.
  */
+import { TaskAlreadyTerminalError, TaskNotFoundError } from '../../errors';
 import { type Scope } from '../../scope';
 import { type TaskRecord } from '../../task/task.types';
 
@@ -115,6 +116,8 @@ export interface TasksDispatchOptions {
   params: Record<string, unknown>;
   /** Owner key the task is stored under (see {@link resolveTaskOwner}). */
   owner: string;
+  /** The caller's auth info, with `sessionId` set to the owner key, for the task flows this runs. */
+  authInfo: Record<string, unknown>;
   /** Re-runs a resumed task in the background. */
   resume: (record: TaskRecord) => Promise<void>;
 }
@@ -129,7 +132,7 @@ const TASK_NOT_FOUND = { code: -32602, message: 'Task not found' };
  * shape and the method set differ.
  */
 export async function dispatchTasksMethod(options: TasksDispatchOptions): Promise<TasksDispatchOutcome> {
-  const { scope, method, params, owner, resume } = options;
+  const { scope, method, params, owner, authInfo, resume } = options;
 
   const store = scope.taskStore;
   if (!store) {
@@ -151,16 +154,20 @@ export async function dispatchTasksMethod(options: TasksDispatchOptions): Promis
   }
 
   if (method === 'tasks/cancel') {
-    if (TERMINAL_TASK_STATUSES.includes(record.status)) {
-      // Cancellation is cooperative and a terminal task is already done; the
-      // spec asks servers to acknowledge rather than error.
-      return { kind: 'result', result: {} };
+    // Cancellation is cooperative and a terminal task is already done; the
+    // spec asks servers to acknowledge rather than error.
+    if (TERMINAL_TASK_STATUSES.includes(record.status)) return { kind: 'result', result: {} };
+    // The hookable flow a 2025-11-25 cancel runs: it signals the runner (SIGTERM for a CLI worker) and every node.
+    try {
+      await scope.runFlowForOutput('tasks:cancel', {
+        request: { method: 'tasks/cancel', params: { taskId } },
+        ctx: { authInfo },
+      });
+    } catch (error) {
+      if (error instanceof TaskAlreadyTerminalError) return { kind: 'result', result: {} };
+      if (error instanceof TaskNotFoundError) return { kind: 'error', status: 200, error: TASK_NOT_FOUND };
+      throw error;
     }
-    await store.update(taskId, owner, {
-      status: 'cancelled',
-      statusMessage: 'The task was cancelled by the client.',
-    });
-    await store.publishCancel(taskId, owner);
     return { kind: 'result', result: {} };
   }
 
