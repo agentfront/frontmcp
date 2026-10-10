@@ -173,12 +173,12 @@ interface SkillAuditStore {
   /** Read records in sequence order; supports `{ from, limit }` for incremental verification. */
   read(opts?: { from?: number; limit?: number }): Promise<SkillAuditRecord[]>;
 
-  /** Optional: give back a number from nextSequence() whose record was never appended, so the chain has no gap. */
+  /** Optional: give back `sequence` only while it is the latest allocation and its record was never stored. */
   releaseSequence?(sequence: number): Promise<void>;
 }
 ```
 
-When a record fails to sign or append after its sequence was allocated, the writer calls `releaseSequence(sequence)`. `MemoryAuditStore` gives the number back; `StorageAdapterAuditStore` decrements its counter (not transactional across pods). A store without it leaves a gap, which `verifyChain` reports as `sequence gap`.
+When a record fails to sign or append after its sequence was allocated, the writer calls `releaseSequence(sequence)`. A store gives the number back only while it is still the latest allocation and its record was never stored; otherwise it changes nothing. A record that was stored although its append threw (for example, its verification read timed out) keeps its number, and a number another writer has allocated past is never taken back. `StorageAdapterAuditStore` decides with the atomic `decr`'s result (the counter was still `sequence` exactly when `decr` returns `sequence - 1`) and restores the counter with `incr` when it was not. A store without `releaseSequence` leaves a gap, which `verifyChain` reports as `sequence gap`.
 
 See [`custom-store`](../examples/skill-audit-log/custom-store.md) for an S3-backed implementation.
 
