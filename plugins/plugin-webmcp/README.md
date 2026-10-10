@@ -63,10 +63,12 @@ Tools are listed through the `'webmcp'` call surface, so `availableWhen` decides
 - **Annotations.** MCP's `readOnlyHint` maps to `readOnlyHint`. An explicit `destructiveHint: true`
   maps to `consequentialHint`, and an explicit `openWorldHint: true` to `untrustedContentHint`.
 - **Results.** An agent reads the whole result as text, so by default it gets each result once. With
-  `result: 'structured'` (the default) a call resolves to the tool's `structuredContent` alone when it has one and
-  its content is only text (the text copy of it); otherwise to `{ content }`, plus `structuredContent` when there
-  is one, so images and other parts are kept. `'content'` always resolves to `{ content }`, and `'both'` to
-  `{ content, structuredContent }` as an MCP client gets them (the shape up to 1.9.4). `_meta` is never included.
+  `result: 'structured'` (the default) a call resolves to the tool's `structuredContent` alone when its content only
+  repeats it: one text block with the same JSON, or the primitive a `{ content }` wrapper holds, as the server writes
+  it for clients that don't read structured output. Otherwise it resolves to `{ content }`, plus `structuredContent`
+  when there is one, so text that says more and images are kept. `'content'` always resolves to `{ content }`, and
+  `'both'` to `{ content, structuredContent }` as an MCP client gets them (the shape up to 1.9.4). `_meta` is never
+  included.
 - **Errors.** An error result (`isError`), or an error from the server, rejects with its message.
 
 ## Registering tools before the server loads

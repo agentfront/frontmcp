@@ -19,6 +19,15 @@ const chart = tool({ name: 'chart', description: 'A chart and its data', inputSc
   ],
   structuredContent: { points: [1, 2] },
 }));
+const review = tool({ name: 'review', description: 'A status and an instruction', inputSchema: {} })(async () => ({
+  content: [{ type: 'text' as const, text: 'Review required before merging' }],
+  structuredContent: { status: 'pending' },
+}));
+const prettyCopy = tool({ name: 'pretty_copy', description: 'Indented text copy', inputSchema: {} })(async () => ({
+  content: [{ type: 'text' as const, text: JSON.stringify({ total: 3 }, null, 2) }],
+  structuredContent: { total: 3 },
+}));
+const count = tool({ name: 'count', description: 'A number', inputSchema: {}, outputSchema: 'number' })(async () => 3);
 const greet = tool({ name: 'greet', description: 'Greets', inputSchema: {} })(async () => 'hi');
 const echoText = tool({ name: 'echo_text', description: 'Echo', inputSchema: { text: z.string() } })(
   async ({ text }: { text: string }) => ({ content: [{ type: 'text' as const, text }] }),
@@ -32,7 +41,7 @@ describe('what an agent receives from a call', () => {
     modelContext = new FakeModelContext();
     server = await create({
       info: { name: 'result', version: '1.0.0' },
-      tools: [echo, echoObject, echoText, chart, greet],
+      tools: [echo, echoObject, echoText, chart, greet, review, prettyCopy, count],
       plugins: [WebMcpPlugin.init({ modelContext, ...options })],
       logging: { level: LogLevel.Off },
     });
@@ -48,6 +57,22 @@ describe('what an agent receives from a call', () => {
 
     expect(await modelContext.execute('echo_object', { text: 'hello' })).toEqual({ text: 'hello' });
     expect(await modelContext.execute('echo', { text: 'hello' })).toEqual({ content: 'hello' });
+  });
+
+  it('keeps text that says something the structured content does not', async () => {
+    await start();
+
+    expect(await modelContext.execute('review')).toEqual({
+      content: [{ type: 'text', text: 'Review required before merging' }],
+      structuredContent: { status: 'pending' },
+    });
+  });
+
+  it('treats an indented JSON copy, or the text of a primitive output, as a copy', async () => {
+    await start();
+
+    expect(await modelContext.execute('pretty_copy')).toEqual({ total: 3 });
+    expect(await modelContext.execute('count')).toEqual({ content: 3 });
   });
 
   it('wraps a plain value the tool returns, as the server does', async () => {

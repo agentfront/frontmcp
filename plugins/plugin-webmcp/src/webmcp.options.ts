@@ -33,8 +33,8 @@ export const webMcpPluginOptionsSchema = z.object({
     .optional(),
   /**
    * What a call resolves to. The agent reads the whole value as text, so by default it gets each result once:
-   * - `'structured'`: the tool's `structuredContent` alone when it has one and its content is only text (the
-   *   text copy of it); otherwise `{ content }`, plus `structuredContent` when there is one.
+   * - `'structured'`: the tool's `structuredContent` alone when its content only repeats it (one text block with
+   *   the same JSON, as the server writes it); otherwise `{ content }`, plus `structuredContent` when there is one.
    * - `'content'`: `{ content }`.
    * - `'both'`: `{ content, structuredContent }`, as an MCP client gets them.
    */

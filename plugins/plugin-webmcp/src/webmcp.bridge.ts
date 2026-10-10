@@ -92,13 +92,32 @@ function toWebMcpAnnotations(annotations: WebMcpListedTool['annotations']): Mode
   return Object.keys(hints).length > 0 ? hints : undefined;
 }
 
+function isSameJson(text: string, value: unknown): boolean {
+  try {
+    return JSON.stringify(JSON.parse(text)) === JSON.stringify(value);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether `content` only repeats `structuredContent`, as the server writes it for MCP clients that don't read
+ * structured output: one text block holding its JSON, or the primitive a `{ content }` wrapper holds.
+ */
+function isTextCopyOf(content: CallToolResult['content'], structuredContent: Record<string, unknown>): boolean {
+  const [block, ...others] = content;
+  if (block?.type !== 'text' || others.length > 0) return false;
+  if (isSameJson(block.text, structuredContent)) return true;
+  const keys = Object.keys(structuredContent);
+  return keys.length === 1 && keys[0] === 'content' && block.text === String(structuredContent['content'] ?? '');
+}
+
 /** A successful MCP result as the agent gets it, per the `result` option. */
 function toAgentResult(result: CallToolResult, mode: WebMcpResultMode): WebMcpToolResult {
   const content = result.content ?? [];
   const structuredContent = result.structuredContent;
   if (mode === 'content' || structuredContent === undefined) return { content };
-  const contentIsTextCopy = content.every((block) => block.type === 'text');
-  if (mode === 'structured' && contentIsTextCopy) return structuredContent;
+  if (mode === 'structured' && isTextCopyOf(content, structuredContent)) return structuredContent;
   return { content, structuredContent };
 }
 
