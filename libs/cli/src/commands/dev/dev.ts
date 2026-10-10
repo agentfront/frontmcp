@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'child_process';
+import { type ChildProcess } from 'child_process';
 import * as path from 'path';
 
 import { resolveConfig, type ResolvedFrontMcpConfig } from '../../config';
@@ -10,6 +10,7 @@ import { c } from '../../core/colors';
 import { loadDevEnv } from '../../shared/env';
 import { resolveEntry } from '../../shared/fs';
 import { processTreeSpawnOptions, signalProcessTree, stopProcessTree } from '../../shared/process-tree';
+import { projectToolCommand, spawnTool, type ToolCommand } from '../../shared/tool-command';
 import { findNextFreePort, isPortFree, lookupPortOwner } from './port';
 
 const DEFAULT_DEV_PORT = 3000;
@@ -256,25 +257,19 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   );
   console.log(`${c('gray', 'hint:')} press Ctrl+C to stop`);
 
-  // Use --conditions node to ensure proper Node.js module resolution.
-  // This helps with dynamic require() calls in packages like ioredis.
-  // On Windows resolve npx.cmd directly — previously we passed shell:true
-  // for the .cmd suffix, but that triggers Node DEP0190 (#381) every run.
-  // spawn() resolves .cmd via CreateProcessW since Node 16, so no shell is
-  // needed; on Unix spawn() works on 'npx' directly.
-  //
   // #679 — each child leads its own process group (POSIX) so a shutdown
-  // signal reaches the server tsx forks, not just npm. Children outside the
+  // signal reaches the server tsx forks, not just tsx. Children outside the
   // terminal's foreground group must not read the TTY, so the app's stdin is
   // fed from ours (tsx --watch reruns on Return).
   const treeOptions = processTreeSpawnOptions();
-  const app = spawn(npxCmd(), ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
+  const { app: appCommand, checker: checkerCommand } = devWatchCommands(cwd, entry);
+  const app = spawnTool(appCommand, {
     stdio: [treeOptions.detached ? 'pipe' : 'inherit', 'inherit', 'inherit'],
     env: childEnv,
     ...treeOptions,
   });
   forwardStdin(app);
-  const checker = spawn(npxCmd(), ['-y', 'tsc', '--noEmit', '--pretty', '--watch'], {
+  const checker = spawnTool(checkerCommand, {
     stdio: [treeOptions.detached ? 'ignore' : 'inherit', 'inherit', 'inherit'],
     env: childEnv,
     ...treeOptions,
@@ -327,8 +322,32 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   }
 }
 
-function npxCmd(): string {
-  return process.platform === 'win32' ? 'npx.cmd' : 'npx';
+/**
+ * The `tsx --watch` server and the `tsc --noEmit --watch` type-checker that
+ * `frontmcp dev` runs.
+ *
+ * #731 — both run as the project's own `tsx` / `typescript` bin under
+ * `process.execPath`: no npm in between, and no `.cmd` shim, which a shell-less
+ * spawn can no longer start on Windows (EINVAL since Node's CVE-2024-27980 fix)
+ * and `shell: true` only runs with a DEP0190 warning (#381). A project without
+ * them falls back to npx, resolved the same way (`tool-command.ts`). The tsc
+ * fallback names the `typescript` package: `npx -y tsc` would fetch the
+ * unrelated `tsc` package.
+ *
+ * `--conditions node` keeps Node.js module resolution for dynamic `require()`
+ * calls in packages like ioredis.
+ */
+export function devWatchCommands(cwd: string, entry: string): { app: ToolCommand; checker: ToolCommand } {
+  return {
+    app: projectToolCommand({ package: 'tsx', npx: ['-y', 'tsx'] }, ['--conditions', 'node', '--watch', entry], {
+      from: [cwd, __dirname],
+    }),
+    checker: projectToolCommand(
+      { package: 'typescript', bin: 'tsc', npx: ['-y', '--package', 'typescript', 'tsc'] },
+      ['--noEmit', '--pretty', '--watch'],
+      { from: [cwd] },
+    ),
+  };
 }
 
 /** Feed our stdin to a child spawned with a piped stdin. */

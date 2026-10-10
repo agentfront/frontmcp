@@ -52,6 +52,7 @@ function App(providedMetadata: LocalAppMetadata): ClassDecorator
 | `auth`        | `AuthOptionsInput`             | App-level auth. On its own endpoint (`standalone: true`, `splitByApp`) it is the endpoint's auth; on the shared endpoint a `public` or `static` server refuses to start with a protected app, and a `local` or `remote` server checks each tool call against the caller's authorized apps only with `incrementalAuth` |
 | `standalone`  | `boolean \| 'includeInParent'` | If `true`, the app gets its own scope. If `'includeInParent'`, it acts as a separated scope under the app-name prefix.                                                                                                                                                                                                |
 | `output`      | `OutputPolicy`                 | App-level output-validation + output-schema exposure policy (`allowNonFinite`, `schemaMode`, `schemaDescriptionFormat`). Overrides the server policy; overridable per `@Tool` (Tool > App > server). See [Output schema exposure](/frontmcp/servers/tools#output-schema-exposure)                                     |
+| `ui`          | `{ servingMode? }`             | Tool UI defaults for this app's tools: `servingMode` applies to each tool whose `ui` sets none (Tool > App > server `@FrontMcp({ ui })` > `'auto'`). Same values as a tool's `ui.servingMode`. See [Tool UI](/frontmcp/servers/tools#tool-ui)                                                                         |
 
 ### Components
 

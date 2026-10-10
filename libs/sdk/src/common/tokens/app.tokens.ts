@@ -21,6 +21,8 @@ export const FrontMcpLocalAppTokens: RawMetadataShape<LocalAppMetadata> = {
   workflows: tokenFactory.meta('workflows'),
   channels: tokenFactory.meta('channels'),
   output: tokenFactory.meta('output'),
+  // tool UI defaults (`ui.servingMode`) for the app's tools (#720)
+  ui: tokenFactory.meta('ui'),
   standalone: tokenFactory.meta('standalone'),
   // Captured call-site dir (#469) — anchors auth.ui relative paths for splitByApp.
   __sourceDir: tokenFactory.meta('__sourceDir'),

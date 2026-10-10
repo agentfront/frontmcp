@@ -8,25 +8,33 @@
  *   - `--serve`: the server exited 0 during boot (the IPC channel stopped at npx)
  *     and every request answered `dev_server_unreachable` (`degraded`).
  *
- * Each case drives the compiled CLI over stdin/stdout like an MCP client.
+ * Each case drives the compiled CLI over stdin/stdout like an MCP client. The
+ * `windows-latest` CI job runs this file too (#731): restarts and shutdown go
+ * through `taskkill` there.
  */
 
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { readFile, rm, writeFile } from '@frontmcp/utils';
+import { readFile, writeFile } from '@frontmcp/utils';
 
 import {
   createScratchProject,
   freePort,
   helloServerFiles,
   helloToolSource,
+  removeScratchProject,
   StdioBridgeClient,
   toolText,
   waitFor,
 } from './helpers/dev-cli';
 
 const TEST_TIMEOUT = 120_000;
+/**
+ * A server listening on `http.socketPath`. Unix sockets only: on Windows
+ * `listen(path)` needs a `\\.\pipe\` name, so the HTTP loopback case is POSIX-only.
+ */
+const itWithUnixSocketServer = process.platform === 'win32' ? it.skip : it;
 
 describe('frontmcp dev --stdio (#679)', () => {
   let projectDir: string;
@@ -36,7 +44,7 @@ describe('frontmcp dev --stdio (#679)', () => {
     const stdoutNoise = client?.stdoutNoise ?? [];
     await client?.close();
     client = undefined;
-    if (projectDir) await rm(projectDir, { recursive: true, force: true });
+    if (projectDir) await removeScratchProject(projectDir);
     // stdout is the MCP channel: anything but JSON-RPC there breaks the client.
     expect(stdoutNoise).toEqual([]);
   });
@@ -100,7 +108,7 @@ describe('frontmcp dev --stdio (#679)', () => {
   );
 
   // #728 — the loopback forwarded to a port nothing listened on, with no hint at the socket
-  it(
+  itWithUnixSocketServer(
     'HTTP loopback: answers a server on http.socketPath with an error that points to --serve',
     async () => {
       const socketPath = path.join(os.tmpdir(), `frontmcp-dev-${process.pid}-a.sock`);

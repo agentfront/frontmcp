@@ -18,11 +18,13 @@ jest.mock('module', () => {
   return { ...actual, createRequire: jest.fn() };
 });
 
-// Mock child_process for git init tests
+// Mock child_process for git init tests. The factory defers to mockExecSync at
+// call time: child_process is first required while create.ts is imported,
+// before this module's `const` has been initialized.
 const mockExecSync = jest.fn();
 jest.mock('child_process', () => ({
   ...jest.requireActual('child_process'),
-  execSync: mockExecSync,
+  execSync: (...args: unknown[]) => mockExecSync(...args),
 }));
 
 // Capture console output during tests

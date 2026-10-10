@@ -12,7 +12,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import * as net from 'node:net';
 import * as path from 'node:path';
 
-import { mkdir, mkdtemp, writeFile } from '@frontmcp/utils';
+import { mkdir, mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
 export const ROOT_DIR = path.resolve(__dirname, '../../../../..');
 export const FRONTMCP_BIN = path.join(ROOT_DIR, 'libs', 'cli', 'dist', 'src', 'core', 'cli.js');
@@ -27,6 +27,23 @@ export async function createScratchProject(prefix: string, files: Record<string,
     await writeFile(abs, content);
   }
   return dir;
+}
+
+/**
+ * Remove a scratch project. Windows keeps a directory locked for a moment after
+ * the processes that ran in it are killed (`EBUSY`/`EPERM`), so retry briefly.
+ */
+export async function removeScratchProject(dir: string): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await rm(dir, { recursive: true, force: true });
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (attempt >= 10 || (code !== 'EBUSY' && code !== 'EPERM' && code !== 'ENOTEMPTY')) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+    }
+  }
 }
 
 /** A FrontMCP server with one `hello` tool, the decorator in `src/main.ts`. */

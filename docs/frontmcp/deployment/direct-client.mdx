@@ -341,8 +341,14 @@ interface ConnectOptions {
     sampling?: {};
     elicitation?: {};
   };
+
+  // Platform bindings for every request of this client (e.g. a Durable Object's `env`):
+  // tools, resources, prompts, jobs and agents read them as `this.workerEnv`
+  workerEnv?: Readonly<Record<string, unknown>>;
 }
 ```
+
+`workerEnv` lets a client created inside a Cloudflare Worker, Durable Object or queue consumer hand its KV, D1 and R2 bindings to the code it calls. It replaces the server's default (`create({ workerEnv })`), stays in each request's context, and is never copied into `process.env`. Up to 1.9.2 `this.workerEnv` was always `undefined` in process.
 
 ---
 

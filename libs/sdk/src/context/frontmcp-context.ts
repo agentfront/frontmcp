@@ -130,8 +130,8 @@ export interface FrontMcpContextArgs {
   /** Optional configuration */
   config?: FrontMcpContextConfig;
   /**
-   * The hosting platform's per-request bindings object (a Cloudflare Worker's `env`).
-   * Present only when the runtime supplies one.
+   * The hosting platform's per-request bindings object (a Cloudflare Worker's `env`, or the
+   * `workerEnv` a direct call passes). Present only when the runtime or caller supplies one.
    */
   platformEnv?: unknown;
 }
@@ -269,8 +269,8 @@ export class FrontMcpContext {
 
   /**
    * The hosting platform's bindings object for this request: a Cloudflare Worker's `env`
-   * (KV namespaces, D1 databases, R2 buckets, Durable Objects, `[vars]`, secrets).
-   * `undefined` on Node, where bindings do not exist.
+   * (KV namespaces, D1 databases, R2 buckets, Durable Objects, `[vars]`, secrets), or the
+   * `workerEnv` a direct call or client passed. `undefined` otherwise (Node, stdio).
    */
   readonly platformEnv: unknown;
 

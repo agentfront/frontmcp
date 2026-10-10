@@ -19,6 +19,7 @@ export {
   access,
   // Higher-level operations
   fileExists,
+  fileExistsSync,
   readJSON,
   writeJSON,
   ensureDir,

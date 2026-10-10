@@ -76,6 +76,7 @@ import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
 import { hasUIConfig } from '../ui';
+import { toolServingMode } from '../ui/serving-mode-default';
 import { evaluateToolCredentialGate } from './tool-credentials.gate';
 
 /**
@@ -1321,9 +1322,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined) ??
         'unknown';
 
-      // Resolve the effective serving mode based on configuration and client capabilities
-      // Default is 'auto' which selects the best mode for the platform
-      const configuredMode = tool.metadata.ui?.servingMode ?? 'auto';
+      // Resolve the effective serving mode based on configuration and client capabilities.
+      // The tool's own `ui.servingMode` wins, then its app's and the server's `ui.servingMode`
+      // defaults (#720); unset everywhere it is 'auto', which selects the best mode for the platform
+      const configuredMode = toolServingMode(tool, this.scope);
       const resolvedMode = resolveServingMode({
         configuredMode,
         platformType,

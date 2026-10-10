@@ -43,13 +43,17 @@ import {
   type RawZodShape,
   type RedisOptionsInput,
   type ServerInfoOptions,
+  type SessionOptionsInterface,
   type SkillsConfigOptionsInput,
   type SqliteOptionsInput,
   type TransportOptionsInput,
 } from '../types';
+import { legacySessionOptionsSchema } from '../types/options/session/schema';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
+import type { WidgetServingMode } from './tool-ui.metadata';
+import { widgetServingModeSchema } from './ui-serving-mode';
 
 export interface FrontMcpBaseMetadata {
   info: ServerInfoOptions;
@@ -111,6 +115,15 @@ export interface FrontMcpBaseMetadata {
    * @default {} (all transport options use their schema defaults)
    */
   transport?: TransportOptionsInput; // Optional in input, but always defined in output
+
+  /**
+   * The pre-1.0 session options, replaced by `transport` in v1.0.
+   *
+   * @deprecated Ignored: sessions follow `transport.protocol` (`'stateless-api'` serves without
+   * them) and platform detection is `transport.platformDetection`. Accepted only so a config that
+   * still sets it gets a startup warning instead of losing it silently. Removed in the next major.
+   */
+  session?: SessionOptionsInterface;
 
   /**
    * Additional providers that are available to all apps.
@@ -265,8 +278,8 @@ export interface FrontMcpBaseMetadata {
   loader?: PackageLoader;
 
   /**
-   * UI rendering configuration.
-   * Controls CDN overrides for widget import resolution.
+   * UI rendering configuration: CDN overrides for widget import resolution, and server-wide
+   * defaults for the tools' `ui` (`escapeStringResults`, `servingMode`).
    *
    * @example Override @frontmcp/ui to load from local dev server
    * ```typescript
@@ -286,6 +299,17 @@ export interface FrontMcpBaseMetadata {
      * looked like markup); `false` renders strings that look like HTML as markup.
      */
     escapeStringResults?: boolean;
+    /**
+     * Serving mode for every tool whose `ui` does not set `servingMode` (an `@App({ ui })` default
+     * overrides it for that app's tools). Same values as a tool's `ui.servingMode`; unset means
+     * `'auto'`, which renders the widget into every `tools/call` result (`_meta['ui/html']`).
+     *
+     * @example MCP Apps hosts and ChatGPT load widgets from `ui://` — skip the per-call page
+     * ```typescript
+     * ui: { servingMode: 'static' }
+     * ```
+     */
+    servingMode?: WidgetServingMode;
   };
 
   /**
@@ -583,6 +607,8 @@ export const frontMcpBaseSchema = z.object({
   redis: redisOptionsSchema.optional(),
   pubsub: pubsubOptionsSchema.optional(),
   transport: transportOptionsSchema.optional().transform((val) => val ?? transportOptionsSchema.parse({})),
+  // Deprecated and ignored (#702): kept so `warnIfSessionModeIgnored` can warn about it at startup
+  session: legacySessionOptionsSchema.optional(),
   logging: loggingOptionsSchema.optional(),
   pagination: paginationOptionsSchema.optional(),
   fetch: outboundFetchOptionsSchema.optional(),
@@ -594,6 +620,7 @@ export const frontMcpBaseSchema = z.object({
     .object({
       cdnOverrides: z.record(z.string(), z.string()).optional(),
       escapeStringResults: z.boolean().optional(),
+      servingMode: widgetServingModeSchema.optional(),
     })
     .optional(),
   /**

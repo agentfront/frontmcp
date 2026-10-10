@@ -21,20 +21,10 @@ export type { SessionMode, PlatformMappingEntry, PlatformDetectionConfig };
 // ============================================
 
 /**
- * Session mode option - can be a literal or a function for dynamic selection.
+ * The value `transport.sessionMode` accepts: a literal, or a function of the issuer.
  *
- * When a function is provided, it receives the issuer string and can return
- * the mode synchronously or asynchronously.
- *
- * @example Static mode
- * ```typescript
- * sessionMode: 'stateful'
- * ```
- *
- * @example Dynamic mode based on issuer
- * ```typescript
- * sessionMode: (issuer) => issuer.includes('google') ? 'stateless' : 'stateful'
- * ```
+ * @deprecated `transport.sessionMode` is ignored and will be removed in the next major; sessions
+ * follow `transport.protocol` (`'stateless-api'` serves without them).
  */
 export type SessionModeOption = SessionMode | ((issuer: string) => Promise<SessionMode> | SessionMode);
 
@@ -357,9 +347,18 @@ export interface TransportOptionsInterface {
   // ============================================
 
   /**
-   * @deprecated Has no effect since v1.0: whether the server keeps sessions follows
-   * `transport.protocol` (`'stateless-api'` serves without sessions). A value other than
-   * `'stateful'` logs a startup warning. Remove it.
+   * @deprecated Ignored since v1.0, and removed in the next major. Use `transport.protocol`:
+   * whether the server keeps sessions follows it — `'stateless-api'` serves without sessions,
+   * `'legacy'`, `'modern'` and `'full'` keep them. A value other than `'stateful'` logs a startup
+   * warning naming the replacement. Remove the option.
+   *
+   * @example Migration
+   * ```typescript
+   * // Before (ignored)
+   * transport: { sessionMode: 'stateless' }
+   * // After
+   * transport: { protocol: 'stateless-api' }
+   * ```
    *
    * @default 'stateful'
    */

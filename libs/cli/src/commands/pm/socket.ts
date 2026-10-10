@@ -6,6 +6,7 @@ import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
 import { loadDevEnv } from '../../shared/env';
 import { resolveEntry } from '../../shared/fs';
+import { projectToolCommand, spawnTool } from '../../shared/tool-command';
 import { loadShipEnv } from './ship-env';
 
 function ensureDir(dir: string): void {
@@ -111,7 +112,8 @@ export async function runSocket(opts: ParsedArgs): Promise<void> {
 
   writePidFile(socketPath);
 
-  const app = spawn('npx', ['-y', 'tsx', '--conditions', 'node', entry], {
+  // #731 — the project's tsx run with node (npx when it is not installed); no shell, so it starts on Windows too.
+  const app = spawnTool(projectToolCommand({ package: 'tsx', npx: ['-y', 'tsx'] }, ['--conditions', 'node', entry]), {
     stdio: 'inherit',
     env,
   });

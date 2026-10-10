@@ -106,6 +106,9 @@ await server.callTool(
   { a: 1, b: 1, operation: 'add' },
   { metadata: { customHeaders: { 'x-frontmcp-disable-cache': 'true' } } },
 );
+// Platform bindings (a Worker / Durable Object / queue consumer `env`) reach this.workerEnv in the
+// tool, resource, prompt, job or agent the call runs; they replace create({ workerEnv })'s default
+await server.callTool('calculate', { a: 1, b: 1, operation: 'add' }, { workerEnv: env });
 
 // List available tools: every page is read, so this is the whole list (no `nextCursor`).
 // To page yourself: `listTools({ paginate: true })`, then `listTools({ cursor: page.nextCursor })`.
@@ -151,8 +154,9 @@ create({
 
   // create()-specific
   appName?: string,       // defaults to info.name
-  cacheKey?: string,      // same key = reuse server instance
+  cacheKey?: string,      // same key = reuse server instance (it keeps the first call's workerEnv)
   machineId?: string,     // stable session ID across restarts
+  workerEnv?: Readonly<Record<string, unknown>>, // default bindings for this.workerEnv (per call: callTool(..., { workerEnv }))
 })
 ```
 
@@ -214,6 +218,7 @@ const client = await connectOpenAI(config, {
   session: { id: 'session-123', user: { sub: 'user-id', name: 'Alice' }, scopes: ['tickets:write'] },
   authToken: 'jwt-token-here',
   capabilities: { roots: { listChanged: true } },
+  workerEnv: env, // platform bindings this client's calls read as this.workerEnv (never copied into process.env)
 });
 
 // One app of a splitByApp server (or a standalone app's own endpoint): its tools only

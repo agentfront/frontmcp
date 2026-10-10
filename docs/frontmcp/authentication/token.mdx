@@ -7,54 +7,28 @@ description: Token lifecycle, session management, and storage configuration
 keywords: ['frontmcp', 'mcp', 'model context protocol', 'authentication', 'auth', 'oauth', 'security', 'token', 'jwt', 'bearer', 'typescript']
 ---
 
-FrontMCP provides flexible token and session management with support for both stateful and stateless patterns.
+FrontMCP keeps the tokens it manages server-side, in a storage backend you choose (memory, SQLite or Redis).
 
 ## Token Types
 
-| Token                  | Purpose                  | Lifetime          | Storage                 |
-| ---------------------- | ------------------------ | ----------------- | ----------------------- |
-| **Access Token**       | API authorization        | 1 hour (default)  | Client-side (JWT)       |
-| **Refresh Token**      | Obtain new access tokens | 30 days (default) | Server-side             |
-| **Authorization Code** | OAuth flow exchange      | 60 seconds        | Server-side, single-use |
-| **Session Token**      | Track user session       | Configurable      | Depends on mode         |
+| Token                  | Purpose                  | Lifetime          | Storage                                |
+| ---------------------- | ------------------------ | ----------------- | -------------------------------------- |
+| **Access Token**       | API authorization        | 1 hour (default)  | Client-side (JWT)                      |
+| **Refresh Token**      | Obtain new access tokens | 30 days (default) | Server-side                            |
+| **Authorization Code** | OAuth flow exchange      | 60 seconds        | Server-side, single-use                |
+| **Session Token**      | Track user session       | Configurable      | Client holds the ID; state server-side |
 
 ---
 
-## Session Modes
+## Where tokens live
 
-FrontMCP supports two session management strategies:
+There is no session-mode switch. The tokens FrontMCP keeps — authorization codes, refresh tokens and upstream provider tokens — are stored server-side in `tokenStorage`, and the access token a client holds is a signed JWT that never carries provider tokens. Refresh and revocation therefore work in every configuration; what changes with the backend is whether they survive a restart and are shared between instances.
 
-<CardGroup cols={2}>
-  <Card title="Stateful Sessions" icon="database">
-    Tokens stored server-side. Clients hold lightweight references.
+<Note>
+  `transport.sessionMode` and the pre-1.0 `session.sessionMode` once offered a "stateless" mode that embedded provider tokens in the JWT. Nothing reads either option any more: they log a startup warning when set to anything but `'stateful'`, and are removed in the next major. To serve MCP without transport sessions, set `transport: { protocol: 'stateless-api' }` — see [Migrating off `sessionMode`](/frontmcp/servers/server#migrating-off-sessionmode).
+</Note>
 
-    **Pros:**
-    - Silent token refresh
-    - Revocation without client update
-    - Secure token storage
-
-    **Cons:**
-    - Requires shared storage (Redis)
-    - State management complexity
-
-  </Card>
-  <Card title="Stateless Sessions" icon="file-code">
-    All data embedded in JWT. No server-side storage.
-
-    **Pros:**
-    - Horizontally scalable
-    - No shared state
-    - Simple architecture
-
-    **Cons:**
-    - No silent refresh
-    - Larger token size
-    - Can't revoke without expiry
-
-  </Card>
-</CardGroup>
-
-### Stateful Session Configuration
+### Shared storage (multiple instances)
 
 ```typescript
 @FrontMcp({
@@ -73,20 +47,20 @@ FrontMCP supports two session management strategies:
 export class Server {}
 ```
 
-### Stateless Session Configuration
+### In-memory storage (one instance, development)
 
 ```typescript
 @FrontMcp({
   info: { name: 'MyServer', version: '1.0.0' },
   auth: {
-    mode: 'local',
+    mode: 'local', // tokenStorage defaults to 'memory'
   },
 })
 export class Server {}
 ```
 
 <Warning>
-  **Stateful sessions require shared storage** when running multiple server instances. Without Redis, each instance maintains its own session state.
+  **Multiple server instances require shared storage.** Without Redis, each instance keeps its own tokens, and a refresh token issued by one is unknown to the others.
 </Warning>
 
 ---

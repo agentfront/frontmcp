@@ -354,6 +354,53 @@ jobs:
           retention-days: 1
           if-no-files-found: warn
 
+  # `frontmcp dev` on Windows (#731): spawning npm/npx/tsx/tsc and stopping the
+  # child process tree work differently there, and nothing else runs on Windows.
+  # Lean on purpose: it reuses the Linux build's dist artifact (plain JS) and runs
+  # only the two dev specs, without rebuilding their dependencies.
+  windows-cli-dev:
+    name: "Windows: frontmcp dev E2E"
+    needs: [setup, build]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      NX_DAEMON: "false"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # Not ./.github/actions/setup-node-yarn: on Windows its `corepack enable` runs
+      # before setup-node installs the pinned Node, so the shims land in the runner's
+      # Node and setup-node's `cache: yarn` probe finds the preinstalled Yarn 1.22,
+      # which refuses a project pinned to Yarn 4.
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ needs.setup.outputs.node-version }}
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+        env:
+          npm_config_onnxruntime_node_install_cuda: skip
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+
+      - name: Run cli-dev-signals and cli-dev-stdio
+        run: >-
+          npx nx run demo-e2e-cli-exec:test
+          --excludeTaskDependencies
+          --skip-nx-cache
+          --testFile="cli-dev-(signals|stdio)\.e2e\.spec\.ts"
+
   # Coverage report (runs on main branch only, merges artifacts from test jobs)
   coverage:
     name: "Coverage Report"

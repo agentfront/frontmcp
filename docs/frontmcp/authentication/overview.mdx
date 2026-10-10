@@ -111,15 +111,18 @@ The guarantees below apply to FrontMCP's own implementation:
 
 ## Session Management
 
-Sessions determine how tokens are stored and managed:
+The tokens FrontMCP keeps — authorization codes, refresh tokens and upstream provider tokens — are always stored server-side, in `auth.tokenStorage`. The access token a client holds is a signed JWT and never carries provider tokens. What you choose is the storage backend:
 
-| Session Mode  | Token Storage              | Refresh             | Multi-Instance          |
-| ------------- | -------------------------- | ------------------- | ----------------------- |
-| **Stateful**  | Server-side (Redis/memory) | Silent refresh      | Requires shared storage |
-| **Stateless** | Embedded in JWT            | Client must re-auth | Works anywhere          |
+| `tokenStorage`       | Survives restarts | Multi-Instance          |
+| -------------------- | ----------------- | ----------------------- |
+| `'memory'` (default) | No                | One instance only       |
+| `{ sqlite: {...} }`  | Yes               | One instance only       |
+| `{ redis: {...} }`   | Yes               | Shared across instances |
+
+Whether the MCP transport keeps sessions is a separate choice, made by `transport.protocol` (`'stateless-api'` serves without them). The deprecated `sessionMode` options (`transport.sessionMode`, `session.sessionMode`) change neither and are removed in the next major — see [Migrating off `sessionMode`](/frontmcp/servers/server#migrating-off-sessionmode).
 
 <Tip>
-  Use **stateful** sessions when working with short-lived upstream tokens. You'll get automatic refresh without client round-trips.
+  Use persistent shared storage (Redis) when working with short-lived upstream tokens across several instances: refresh then works on whichever instance serves the request.
 </Tip>
 
 ```typescript

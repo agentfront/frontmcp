@@ -970,7 +970,7 @@ Markdown strings are converted on the server (headings, paragraphs, fenced code,
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `template`            | `{ file }` FileSource, HTML function, or HTML / Markdown string (a bare React component reference cannot be bundled — see below)                   |
 | `csp`                 | Content Security Policy (allowed origins: `https://` / `wss://`, `http://` / `ws://` on localhost)                                                 |
-| `servingMode`         | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`                                                                      |
+| `servingMode`         | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`; unset uses the app's or server's `ui.servingMode` default           |
 | `resourceMode`        | `'cdn'` or `'inline'` bundling for `.tsx` widgets (host-detected when unset)                                                                       |
 | `escapeStringResults` | Escape plain string results (unset is the default since 1.9.2 and escapes too); `false` renders them as markup; `html` / `trustedHtml` stay markup |
 
@@ -981,6 +981,22 @@ Markdown strings are converted on the server (headings, paragraphs, fenced code,
 **Serving modes.** `'direct-url'` and `'custom-url'` are not implemented: the widget is served inline, as with `'inline'`, and startup logs a warning. `'hybrid'` pre-compiles the shell at startup and sends only a reference in each call's `_meta['ui/component']` (`{ type, hash, toolName }`) — no component code and no data.
 
 **The page in each result.** With the default `servingMode` (`'auto'` → `'inline'`), every `tools/call` result of a tool with `ui` carries the rendered page in `_meta['ui/html']`. A call the widget makes back to the server gets the data only — the widget is already on screen: one through `ui/callServerTool`, and a `tools/call` that `FrontMcpBridge.callTool()` sends through an MCP Apps host, which marks it with `_meta['frontmcp/widgetCall']: true` (when the host passes the request's `_meta` on). The OpenAI Apps SDK's `window.openai.callTool()` sends no `_meta`, so such a call still gets the page. Up to 1.9.2 every widget call through the host got it. Hosts that load the widget from its `ui://` resource (MCP Apps hosts, ChatGPT) do not read `_meta['ui/html']`; use `servingMode: 'static'` to leave the page out of every result.
+
+**One default for every tool.** Instead of setting `servingMode` on each tool, set it once for the server, or for one app; a tool's own `ui.servingMode` still wins, then the app's, then the server's, then `'auto'`:
+
+```ts
+@App({ name: 'dashboards', tools: [ChartTool, MapTool], ui: { servingMode: 'inline' } }) // this app's tools
+class DashboardsApp {}
+
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [TravelApp, DashboardsApp],
+  ui: { servingMode: 'static' }, // every other tool: no _meta['ui/html'] in tools/call results
+})
+class Server {}
+```
+
+The default takes the same values as the tool option, and a value outside them fails startup. Tools that inherit `'static'` are compiled at startup and served from `ui://widget/{toolName}.html`, exactly as with a tool-level `'static'`; `'direct-url'`, `'custom-url'` and `'hybrid'` defaults log one startup notice for the server or app, not one per tool. `'auto'` still resolves to `'inline'` in 1.9.x, so results do not change until you opt in. Up to 1.9.2 every tool had to set `servingMode` itself.
 
 **A React component reference is not a template.** `template: MyWidget` (a component, not a `{ file }`) cannot be bundled — there is no source file to compile — so the page renders an empty root. Startup logs one warning per tool when it compiles the widget; use `template: { file: './my-widget.tsx' }` instead.
 

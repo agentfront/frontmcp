@@ -375,6 +375,12 @@ Then start the server normally:
 frontmcp dev
 ```
 
+`frontmcp dev` runs the project's own `tsx` (`--watch`) and `typescript`
+(`tsc --noEmit --watch`) with the current `node` — no `npx`, no shell — so it
+behaves the same on macOS, Linux and Windows. Keep both in `devDependencies`
+(`npm i -D tsx typescript`); a missing one falls back to `npx -y tsx` /
+`npx -y --package typescript tsc`.
+
 ### Port conflict handling
 
 `frontmcp dev` performs a pre-flight TCP probe before spawning `tsx --watch`.
@@ -406,7 +412,10 @@ frontmcp dev --show-conflict
 
 Ctrl+C, or `SIGINT` / `SIGTERM` sent to the `frontmcp dev` process alone
 (`kill <pid>`), stops the whole tree — tsx, the server it forks and the type
-checker — and the command returns once the port is free.
+checker — and the command returns once the port is free. On Windows the CLI
+asks each tree to close (`taskkill /T`), forces it (`taskkill /T /F`) when that
+fails or 2 seconds pass, and also stops processes a child that already exited
+left running (found by parent PID).
 
 `frontmcp dev` and `frontmcp build` work from any subfolder: they find
 `frontmcp.config.*` by walking up and run from its folder, so `entry`,
@@ -543,13 +552,14 @@ Run with: `nx serve <projectName>`.
 
 ## Troubleshooting
 
-| Problem                                               | Cause                                                                                  | Solution                                                                                               |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `TypeError: Reflect.getMetadata is not a function`    | `reflect-metadata` is not imported before decorators execute                           | Add `import 'reflect-metadata'` as the first line in `src/main.ts`                                     |
-| Decorators are silently ignored (no tools registered) | `experimentalDecorators` or `emitDecoratorMetadata` is `false` or missing in tsconfig  | Set both to `true` in `compilerOptions` and restart the TypeScript compiler                            |
-| `frontmcp dev` exits with "No apps registered"        | The `apps` array in `@FrontMcp` metadata is empty or the `@App` class was not imported | Import your `@App` class and add it to the `apps` array                                                |
-| Build fails with "Cannot find module '@frontmcp/sdk'" | Dependencies were not installed after scaffolding                                      | Run `yarn install` (or `npm install` / `pnpm install`) in the project root                             |
-| Vercel deploy returns 500 on `/mcp` endpoint          | Transport not set to `modern` or storage not configured for Vercel KV                  | Set `transport: { protocol: 'modern' }` and `redis: { provider: 'vercel-kv' }` in `@FrontMcp` metadata |
+| Problem                                                                                           | Cause                                                                                                           | Solution                                                                                                              |
+| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `TypeError: Reflect.getMetadata is not a function`                                                | `reflect-metadata` is not imported before decorators execute                                                    | Add `import 'reflect-metadata'` as the first line in `src/main.ts`                                                    |
+| Decorators are silently ignored (no tools registered)                                             | `experimentalDecorators` or `emitDecoratorMetadata` is `false` or missing in tsconfig                           | Set both to `true` in `compilerOptions` and restart the TypeScript compiler                                           |
+| `frontmcp dev` exits with "No apps registered"                                                    | The `apps` array in `@FrontMcp` metadata is empty or the `@App` class was not imported                          | Import your `@App` class and add it to the `apps` array                                                               |
+| Build fails with "Cannot find module '@frontmcp/sdk'"                                             | Dependencies were not installed after scaffolding                                                               | Run `yarn install` (or `npm install` / `pnpm install`) in the project root                                            |
+| Vercel deploy returns 500 on `/mcp` endpoint                                                      | Transport not set to `modern` or storage not configured for Vercel KV                                           | Set `transport: { protocol: 'modern' }` and `redis: { provider: 'vercel-kv' }` in `@FrontMcp` metadata                |
+| Windows: `frontmcp dev` fails with `spawn EINVAL`; `frontmcp doctor` says "npm not found in PATH" | CLI before 1.9.3 spawned `npx.cmd` / `npm.cmd` without a shell, which Node rejects since its CVE-2024-27980 fix | Upgrade `frontmcp` to 1.9.3+: npm/npx run as npm's `npm-cli.js` / `npx-cli.js` under `node`, tools via their JS entry |
 
 ## Examples
 

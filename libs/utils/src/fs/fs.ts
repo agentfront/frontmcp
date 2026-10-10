@@ -212,6 +212,24 @@ export async function fileExists(p: string): Promise<boolean> {
 }
 
 /**
+ * Check whether a file or directory exists, synchronously.
+ *
+ * **Node.js only** - throws an error if called in browser.
+ *
+ * Use this only where async is not possible (e.g. resolving a command line
+ * before a synchronous `spawn`). Prefer {@link fileExists} otherwise.
+ *
+ * @param p - Path to check
+ * @returns true if the path exists, false otherwise
+ *
+ * @example
+ * fileExistsSync('/path/to/file.txt') // true or false
+ */
+export function fileExistsSync(p: string): boolean {
+  return getFs().existsSync(p);
+}
+
+/**
  * Read and parse a JSON file.
  *
  * **Node.js only** - throws an error if called in browser.
@@ -480,7 +498,15 @@ export async function access(p: string, mode?: number): Promise<void> {
 export function runCmd(
   cmd: string,
   args: string[],
-  opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+  opts: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+    /**
+     * Pass `args` to the child unquoted (Windows only). Set it when the arguments
+     * are already quoted for `cmd.exe /d /s /c`; ignored on other platforms.
+     */
+    windowsVerbatimArguments?: boolean;
+  } = {},
 ): Promise<void> {
   const spawn = getSpawn();
   return new Promise((resolve, reject) => {

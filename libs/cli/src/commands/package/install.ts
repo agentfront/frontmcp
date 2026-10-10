@@ -6,11 +6,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { copyFile, ensureDir, realpath, runCmd, stat } from '@frontmcp/utils';
+import { copyFile, ensureDir, realpath, stat } from '@frontmcp/utils';
 
 import { CONFIG_FILENAMES } from '../../config/frontmcp-config.loader';
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
+import { packageManagerCommand, runTool } from '../../shared/tool-command';
 import { assertValidPluginName, isPluginContainedPath } from '../build/exec/cli-runtime/plugin-emitter';
 import { type ExecManifest } from '../build/exec/manifest';
 import { appDir, ensurePmDirs } from '../pm/paths';
@@ -70,9 +71,9 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
           !fs.existsSync(path.join(packageDir, 'node_modules'))
         ) {
           console.log(`${c('cyan', '[install]')} installing project dependencies...`);
-          await runCmd('npm', ['install', '--silent'], { cwd: packageDir });
+          await runTool(packageManagerCommand('npm', ['install', '--silent']), { cwd: packageDir });
         }
-        await runCmd('npx', ['frontmcp', 'build', '--target', 'node'], {
+        await runTool(packageManagerCommand('npx', ['frontmcp', 'build', '--target', 'node']), {
           cwd: packageDir,
         });
         manifest = findManifest(packageDir);
@@ -120,9 +121,9 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
     const packagesToInstall = [...runtimePackages.required, ...manifestData.dependencies.nativeAddons];
     console.log(`${c('cyan', '[install]')} installing runtime dependencies...`);
     if (!fs.existsSync(path.join(installDir, 'package.json'))) {
-      await runCmd('npm', ['init', '-y', '--silent'], { cwd: installDir });
+      await runTool(packageManagerCommand('npm', ['init', '-y', '--silent']), { cwd: installDir });
     }
-    await runCmd('npm', ['install', ...packagesToInstall, '--save', '--silent'], {
+    await runTool(packageManagerCommand('npm', ['install', ...packagesToInstall, '--save', '--silent']), {
       cwd: installDir,
     });
     await installOptionalPackages(runtimePackages.optional, installDir);
@@ -177,7 +178,9 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
 async function installOptionalPackages(specs: string[], installDir: string): Promise<void> {
   for (const spec of specs) {
     try {
-      await runCmd('npm', ['install', spec, '--save-optional', '--silent'], { cwd: installDir });
+      await runTool(packageManagerCommand('npm', ['install', spec, '--save-optional', '--silent']), {
+        cwd: installDir,
+      });
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       console.warn(`${c('yellow', '[install]')} skipped optional dependency ${spec}: ${reason}`);
