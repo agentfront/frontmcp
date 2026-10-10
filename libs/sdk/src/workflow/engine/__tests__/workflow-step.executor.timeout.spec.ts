@@ -1,14 +1,23 @@
 /**
- * A workflow step's timeout bounds the whole attempt, including the `authorities.pipes` that load
- * the step's `this.auth`: a hung pipe fails the attempt with `WorkflowJobTimeoutError`, and the
- * retry loop then runs the next attempt.
+ * A workflow step's timeout bounds the whole attempt, including the CONTEXT providers its job is built
+ * with and the `authorities.pipes` that load the step's `this.auth`: a hung one fails the attempt with
+ * `WorkflowJobTimeoutError`, and the retry loop then runs the next attempt. Each attempt runs the
+ * `jobs:execute-job` flow (#700), which the step executor aborts on a timeout, so an attempt whose
+ * providers or auth settle late never starts the job.
  */
-import type { JobEntry } from '../../../common/entries/job.entry';
+import 'reflect-metadata';
+
+import { z } from '@frontmcp/lazy-zod';
+
+import { App, Job, JobContext, LogLevel, ProviderScope } from '../../../common';
 import type { WorkflowStep } from '../../../common/metadata/workflow.metadata';
-import { FrontMcpContext } from '../../../context';
+import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../../context';
+import { type DirectMcpServer } from '../../../direct/direct.types';
 import { InvalidOutputError } from '../../../errors/mcp.error';
 import { WorkflowJobTimeoutError } from '../../../errors/workflow.errors';
+import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
 import type { JobRegistryInterface } from '../../../job/job.registry';
+import { type Scope } from '../../../scope/scope.instance';
 import { WorkflowStepExecutor } from '../workflow-step.executor';
 
 const logger = {
@@ -18,100 +27,178 @@ const logger = {
   debug: jest.fn(),
 } as unknown as ConstructorParameters<typeof WorkflowStepExecutor>[1];
 
-function jobWithAuthLoads(loads: Array<() => Promise<void>>, execute: jest.Mock): JobEntry {
-  let attempt = 0;
-  return {
-    name: 'piped',
-    metadata: { name: 'piped' },
-    parseInput: (input: unknown) => input,
-    parseOutput: (output: unknown) => output,
-    create: () => ({ loadAuthContext: loads[attempt++], execute }),
-  } as unknown as JobEntry;
-}
+/** What each auth-pipe run waits for, in order; an empty list lets it through at once. */
+let pipeLoads: Array<() => Promise<void>> = [];
+/** What building the slow app's CONTEXT provider waits for; undefined lets it through at once. */
+let providerLoad: (() => Promise<void>) | undefined;
 
-function registryWith(job: JobEntry): JobRegistryInterface {
-  return { findByName: (name: string) => (name === job.name ? job : undefined) } as unknown as JobRegistryInterface;
-}
+const executions: string[] = [];
+let slowJobsBuilt = 0;
 
 const hang = () => new Promise<void>(() => undefined);
 
-describe('WorkflowStepExecutor — step timeout', () => {
-  it('times out an attempt whose auth pipes never settle', async () => {
-    const execute = jest.fn();
-    const job = jobWithAuthLoads([hang], execute);
-    const step = { id: 'step-1', jobName: 'piped', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;
-    const executor = new WorkflowStepExecutor(registryWith(job), logger, { authInfo: {} });
+@Job({ name: 'piped', inputSchema: {}, outputSchema: { ok: z.boolean() } })
+class PipedJob extends JobContext {
+  async execute() {
+    executions.push('piped');
+    return { ok: true };
+  }
+}
 
-    await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
-    expect(execute).not.toHaveBeenCalled();
-  });
+@Job({ name: 'charge', inputSchema: {}, outputSchema: { receipt: z.string() } })
+class ChargeJob extends JobContext {
+  async execute() {
+    executions.push('charge');
+    return { receipt: 42 } as unknown as { receipt: string };
+  }
+}
 
-  it('retries after an attempt whose auth pipes timed out', async () => {
-    const execute = jest.fn().mockResolvedValue({ ok: true });
-    const job = jobWithAuthLoads([hang, async () => undefined], execute);
-    const step = {
-      id: 'step-1',
-      jobName: 'piped',
-      timeout: 20,
-      retry: { maxAttempts: 2, backoffMs: 1 },
-    } as WorkflowStep;
-    const executor = new WorkflowStepExecutor(registryWith(job), logger, { authInfo: {} });
+@App({ id: 'piped-app', name: 'Piped', jobs: [PipedJob, ChargeJob] })
+class PipedApp {}
 
-    await expect(executor.executeStep(step, {})).resolves.toEqual({ outputs: { ok: true }, state: 'completed' });
-    expect(execute).toHaveBeenCalledTimes(1);
-  });
+abstract class SlowDependency {}
 
-  it('times out an attempt whose CONTEXT providers never finish building', async () => {
-    const execute = jest.fn();
-    const create = jest.fn(() => ({ loadAuthContext: async () => undefined, execute }));
-    const job = {
-      name: 'slow-providers',
-      metadata: { name: 'slow-providers' },
-      parseInput: (input: unknown) => input,
-      parseOutput: (output: unknown) => output,
-      providers: { buildViews: hang },
-      create,
-    } as unknown as JobEntry;
-    const step = { id: 'step-1', jobName: 'slow-providers', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;
-    const context = new FrontMcpContext({ sessionId: 'session-1', scopeId: 'scope' });
-    const executor = new WorkflowStepExecutor(registryWith(job), logger, { authInfo: {}, context });
+@Job({ name: 'slow-providers', inputSchema: {}, outputSchema: { ok: z.boolean() } })
+class SlowProvidersJob extends JobContext {
+  /** Counts the instances built (a constructor would read as a DI dependency). */
+  readonly built = ++slowJobsBuilt;
 
-    await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
-    expect(create).not.toHaveBeenCalled();
-  }, 2000);
+  async execute() {
+    executions.push('slow-providers');
+    return { ok: true };
+  }
+}
 
-  it('does not start the job when its auth pipes settle after the attempt timed out', async () => {
-    let finishAuthLoad: () => void = () => undefined;
-    const lateLoad = () => new Promise<void>((resolve) => (finishAuthLoad = resolve));
-    const execute = jest.fn();
-    const job = jobWithAuthLoads([lateLoad], execute);
-    const step = { id: 'step-1', jobName: 'piped', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;
-    const executor = new WorkflowStepExecutor(registryWith(job), logger, { authInfo: {} });
-
-    await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
-    finishAuthLoad();
-    await new Promise((resolve) => setImmediate(resolve));
-
-    expect(execute).not.toHaveBeenCalled();
-  });
-});
-
-describe('WorkflowStepExecutor — output check', () => {
-  it('does not retry a step whose job result fails its outputSchema', async () => {
-    const execute = jest.fn().mockResolvedValue({ receipt: 42 });
-    const job = {
-      name: 'charge',
-      metadata: { name: 'charge' },
-      parseInput: (input: unknown) => input,
-      parseOutput: () => {
-        throw new InvalidOutputError();
+@App({
+  id: 'slow-app',
+  name: 'Slow',
+  jobs: [SlowProvidersJob],
+  providers: [
+    {
+      provide: SlowDependency,
+      name: 'SlowDependency',
+      scope: ProviderScope.CONTEXT,
+      inject: () => [FRONTMCP_CONTEXT] as const,
+      useFactory: async (_context: FrontMcpContext) => {
+        if (providerLoad) await providerLoad();
+        return {};
       },
-      create: () => ({ loadAuthContext: async () => undefined, execute }),
-    } as unknown as JobEntry;
-    const step = { id: 'step-1', jobName: 'charge', retry: { maxAttempts: 3, backoffMs: 1 } } as WorkflowStep;
-    const executor = new WorkflowStepExecutor(registryWith(job), logger, { authInfo: {} });
+    },
+  ],
+})
+class SlowApp {}
 
-    await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(InvalidOutputError);
-    expect(execute).toHaveBeenCalledTimes(1);
+describe('WorkflowStepExecutor', () => {
+  let server: DirectMcpServer;
+  let jobs: JobRegistryInterface;
+
+  beforeAll(async () => {
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'workflow-step-timeout', version: '1.0.0' },
+      apps: [PipedApp, SlowApp],
+      logging: { level: LogLevel.Off },
+      authorities: {
+        pipes: [
+          async () => {
+            const load = pipeLoads.shift();
+            if (load) await load();
+            return {};
+          },
+        ],
+      },
+    });
+    const registry = (server as unknown as { scope: Scope }).scope.jobs;
+    if (!registry) throw new Error('jobs are not enabled');
+    jobs = registry;
+  });
+
+  afterAll(async () => {
+    await server.dispose();
+  });
+
+  beforeEach(() => {
+    pipeLoads = [];
+    providerLoad = undefined;
+    executions.length = 0;
+    slowJobsBuilt = 0;
+  });
+
+  describe('step timeout', () => {
+    it('times out an attempt whose auth pipes never settle', async () => {
+      pipeLoads = [hang];
+      const step = { id: 'step-1', jobName: 'piped', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;
+      const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {} });
+
+      await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
+      expect(executions).toEqual([]);
+    });
+
+    it('retries after an attempt whose auth pipes timed out', async () => {
+      pipeLoads = [hang, async () => undefined];
+      const step = {
+        id: 'step-1',
+        jobName: 'piped',
+        timeout: 20,
+        retry: { maxAttempts: 2, backoffMs: 1 },
+      } as WorkflowStep;
+      const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {} });
+
+      await expect(executor.executeStep(step, {})).resolves.toEqual({ outputs: { ok: true }, state: 'completed' });
+      expect(executions).toEqual(['piped']);
+    });
+
+    it('times out an attempt whose CONTEXT providers never finish building', async () => {
+      providerLoad = hang;
+      const step = { id: 'step-1', jobName: 'slow-providers', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;
+      const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {} });
+
+      await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
+      expect(slowJobsBuilt).toBe(0);
+    }, 2000);
+
+    it('does not build the job when its CONTEXT providers finish after the attempt timed out', async () => {
+      let finishProviders: () => void = () => undefined;
+      providerLoad = () => new Promise<void>((resolve) => (finishProviders = resolve));
+      const step = { id: 'step-1', jobName: 'slow-providers', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;
+      const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {} });
+
+      await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
+      finishProviders();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(slowJobsBuilt).toBe(0);
+      expect(executions).toEqual([]);
+    });
+
+    it('does not start the job when its auth pipes settle after the attempt timed out', async () => {
+      let finishAuthLoad: () => void = () => undefined;
+      pipeLoads = [() => new Promise<void>((resolve) => (finishAuthLoad = resolve))];
+      const step = { id: 'step-1', jobName: 'piped', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;
+      const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {} });
+
+      await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
+      finishAuthLoad();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(executions).toEqual([]);
+    });
+  });
+
+  describe('output check', () => {
+    it('does not retry a step whose job result fails its outputSchema', async () => {
+      const step = { id: 'step-1', jobName: 'charge', retry: { maxAttempts: 3, backoffMs: 1 } } as WorkflowStep;
+      const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {} });
+
+      await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(InvalidOutputError);
+      expect(executions).toEqual(['charge']);
+    });
+  });
+
+  it('fails a step that names no registered job', async () => {
+    const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {} });
+
+    await expect(executor.executeStep({ id: 'step-1', jobName: 'missing' } as WorkflowStep, {})).rejects.toThrow(
+      /missing/,
+    );
   });
 });

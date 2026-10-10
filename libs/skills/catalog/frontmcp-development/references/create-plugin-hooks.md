@@ -75,6 +75,7 @@ These are the flow names with pre-built hook decorator exports in `@frontmcp/sdk
 | `prompts:list-prompts`              | Prompt listing            | `ListPromptsHook`           |
 | `completion:complete`               | Argument completion       | `CompletionHook`            |
 | `agents:call-agent`                 | Agent invocation          | `AgentCallHook`             |
+| `jobs:execute-job`                  | One attempt of a job      | `JobHook`                   |
 | `channels:send-notification`        | Channel notification send | `ChannelSendHook`           |
 | `channels:list`                     | Channel listing           | `ChannelListHook`           |
 
@@ -174,6 +175,7 @@ import {
   ChannelSendHook, // FlowHooksOf('channels:send-notification')
   CompletionHook, // FlowHooksOf('completion:complete')
   HttpHook, // FlowHooksOf('http:request')
+  JobHook, // FlowHooksOf('jobs:execute-job')
   ListPromptsHook, // FlowHooksOf('prompts:list-prompts')
   ListResourcesHook, // FlowHooksOf('resources:list-resources')
   ListResourceTemplatesHook, // FlowHooksOf('resources:list-resource-templates')
@@ -462,7 +464,27 @@ parseInput → ensureRemoteCapabilities → findTool → checkToolAuthorization 
   → validateInput → execute → validateOutput → releaseSemaphore → releaseQuota → applyUI → finalize
 ```
 
-A tool-class hook runs on the tool instance, which `createToolCallContext` builds. So it can hook `Did`/`Stage` on `createToolCallContext` and any hook on a later stage. A hook on an earlier stage, `Will`/`Around` on `createToolCallContext`, or a list-flow hook (`ListToolsHook`; listing builds no instance) fails startup with `InvalidHookFlowError` -- put those on a plugin or a provider. The same holds for `@Resource` (`createResourceContext`), `@Prompt` (`createPromptContext`) and `@Agent` (`createAgentContext`) classes. `@Job` classes cannot declare hooks at all (jobs do not run through a hookable flow); hook `tools:call-tool` for the `execute_job` tool instead. Up to 1.8.7 these hooks were accepted and silently never ran.
+A tool-class hook declared as an instance method runs on the tool instance, which `createToolCallContext` builds. So it can hook `Did`/`Stage` on `createToolCallContext` and any hook on a later stage. The same holds for `@Resource` (`createResourceContext`), `@Prompt` (`createPromptContext`) and `@Agent` (`createAgentContext`) classes.
+
+To hook an earlier stage (`parseInput`, `findTool`, `checkToolAuthorization`, `checkEntryAuthorities`, and `findResource`, `findPrompt`, `findAgent`, `checkAgentAuthorization`), declare the hook as a `static` method. It runs without an instance -- `this` is the class, and the flow context is its argument, as for every hook -- and joins only the calls for its own entry, from their first stage:
+
+```typescript
+@Tool({ name: 'transfer', inputSchema: { account: z.string(), amount: z.number() } })
+class TransferTool extends ToolContext {
+  @ToolHook.Will('checkToolAuthorization')
+  static refuseFrozen(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    if (frozenAccounts.has(String(flowCtx.state.input?.arguments?.['account']))) {
+      throw new UnauthorizedError('the account is frozen');
+    }
+  }
+
+  async execute(input: { account: string; amount: number }) {
+    return input;
+  }
+}
+```
+
+An instance method on an earlier stage, or `Will`/`Around` on `createToolCallContext`, fails startup with `InvalidHookFlowError` whose message says to make it `static`. A list-flow hook (`ListToolsHook`; listing builds no instance and runs for no single entry) fails startup whether static or not -- put it on a plugin or a provider. Up to 1.9.3 static hooks on earlier stages were refused too. A `@Job` class declares hooks for the `jobs:execute-job` flow its attempts run (`JobHook`), with the same rules: instance methods from `createJobContext` on, `static` methods for earlier stages; a hook for another flow fails startup (up to 1.9.3 any hook on a job class did). Up to 1.8.7 these hooks were accepted and silently never ran.
 
 ## Common Patterns
 
@@ -493,14 +515,14 @@ A tool-class hook runs on the tool instance, which `createToolCallContext` build
 
 ## Troubleshooting
 
-| Problem                                       | Cause                                               | Solution                                                                           |
-| --------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Hook never fires                              | Plugin not registered in `plugins` array            | Add plugin class to `@App` or `@FrontMcp` `plugins` array                          |
-| `InvalidHookFlowError` at startup             | Entry-class hook that could never run               | Move early-stage, list-flow and `@Job` hooks to a plugin or a provider             |
-| Hook fires for wrong flow                     | Used wrong flow name in `FlowHooksOf`               | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)             |
-| `@Around` skips the stage entirely            | `next()` not called inside the around handler       | Always `await next()` to execute the wrapped stage                                 |
-| Multiple hooks execute in wrong order         | Priorities not set or conflicting                   | Set explicit `priority` values; lower numbers execute first                        |
-| The tool still runs despite a plugin `@Stage` | `@Stage` adds a step; it does not replace the stage | End the flow with `ctx.respond(result)`, or use `@Around` without calling `next()` |
+| Problem                                       | Cause                                               | Solution                                                                                                                                     |
+| --------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hook never fires                              | Plugin not registered in `plugins` array            | Add plugin class to `@App` or `@FrontMcp` `plugins` array                                                                                    |
+| `InvalidHookFlowError` at startup             | Entry-class hook that could never run               | Make early-stage hooks `static`; move list-flow hooks (and a `@Job` hook for a flow other than `jobs:execute-job`) to a plugin or a provider |
+| Hook fires for wrong flow                     | Used wrong flow name in `FlowHooksOf`               | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)                                                                       |
+| `@Around` skips the stage entirely            | `next()` not called inside the around handler       | Always `await next()` to execute the wrapped stage                                                                                           |
+| Multiple hooks execute in wrong order         | Priorities not set or conflicting                   | Set explicit `priority` values; lower numbers execute first                                                                                  |
+| The tool still runs despite a plugin `@Stage` | `@Stage` adds a step; it does not replace the stage | End the flow with `ctx.respond(result)`, or use `@Around` without calling `next()`                                                           |
 
 ## Examples
 

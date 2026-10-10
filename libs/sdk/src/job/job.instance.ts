@@ -18,9 +18,11 @@ import { JobContext, type JobCtorArgs } from '../common/interfaces/job.interface
 import { JobKind, type JobFunctionTokenRecord, type JobRecord } from '../common/records/job.record';
 import { DynamicJobDirectExecutionError, InvalidRegistryKindError, ProviderNotAvailableError } from '../errors';
 import { InvalidHookFlowError, InvalidOutputError } from '../errors/mcp.error';
+import { describeUnreachableEntryClassHooks, unreachableHooksMessage } from '../hooks/entry-class-hooks';
 import type HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
+import { jobClassHooksJoin } from './flows/execute-job.flow';
 
 /**
  * Concrete implementation of a job that can be executed.
@@ -58,18 +60,28 @@ export class JobInstance<
       return; // Dynamic jobs don't have hooks from classes
     }
 
-    // Jobs run through the job runner, not through a hookable flow (there is no `jobs:*` flow), so a
-    // hook declared on a job class would never run. Fail fast instead of accepting it (#678).
-    const hooks = normalizeHooksFromCls(this.record.provide);
-    if (hooks.length > 0) {
-      const className = (this.record.provide as { name?: string } | undefined)?.name ?? 'Unknown';
-      const declared = hooks.map((h) => `${h.metadata.method}() on ${h.metadata.flow}`).join(', ');
+    // A job class's hooks run on its attempts' `jobs:execute-job` flow (#700); hooks for any other flow
+    // would never run on it, so they fail startup, as they do on a tool class.
+    const allHooks = normalizeHooksFromCls(this.record.provide);
+    if (allHooks.length === 0) return;
+    const className = (this.record.provide as { name?: string } | undefined)?.name ?? this.name;
+
+    const invalidHooks = allHooks.filter((hook) => hook.metadata.flow !== jobClassHooksJoin.flow);
+    if (invalidHooks.length > 0) {
+      const declared = invalidHooks.map((h) => `${h.metadata.method}() on ${h.metadata.flow}`).join(', ');
       throw new InvalidHookFlowError(
-        `Job "${className}" declares hooks (${declared}), but jobs do not run through a hookable flow, ` +
-          `so they would never run. To act on job runs, hook the 'tools:call-tool' flow of the ` +
-          `'execute_job' tool from a provider or a plugin.`,
+        `Job "${className}" has hooks for unsupported flows: ${declared}. Only the job flow ` +
+          `(${jobClassHooksJoin.flow}) is supported on job classes; hook other flows from a provider or a plugin.`,
       );
     }
+
+    // Instance methods run on the instance 'createJobContext' builds; static ones from the first stage (#701).
+    const unreachable = describeUnreachableEntryClassHooks(allHooks, jobClassHooksJoin, []);
+    if (unreachable.length > 0) {
+      throw new InvalidHookFlowError(unreachableHooksMessage('Job', className, unreachable));
+    }
+
+    await this.hooks.registerHooks(true, ...allHooks);
   }
 
   getMetadata() {

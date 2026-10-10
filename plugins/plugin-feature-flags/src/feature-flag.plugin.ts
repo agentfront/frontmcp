@@ -67,6 +67,14 @@ function assertCustomAdapter(adapterInstance: unknown): asserts adapterInstance 
   );
 }
 
+/** `gateDefaultValue` decides whether gates fail open, so anything but a boolean (or nothing) fails startup. */
+function assertGateDefaultValue(gateDefaultValue: unknown): void {
+  if (gateDefaultValue === undefined || typeof gateDefaultValue === 'boolean') return;
+  throw new FeatureFlagConfigurationError(
+    `FeatureFlagPlugin.init() option \`gateDefaultValue\` must be a boolean, got ${JSON.stringify(gateDefaultValue)}.`,
+  );
+}
+
 interface AdapterLifecycle {
   ready: Promise<void>;
   registrations: number;
@@ -173,6 +181,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
           `Supported adapters: ${SUPPORTED_ADAPTERS.map((a) => `"${a}"`).join(', ')}.`,
       );
     }
+    assertGateDefaultValue(options.gateDefaultValue);
 
     // ─────────────────────────────────────────────────────────────────────
     // Adapter Provider
@@ -431,6 +440,9 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    *
    * One implementation on purpose: the advisory existed because the tool path had a gate and
    * the other two did not, and three copies would drift apart the same way.
+   *
+   * When the adapter throws, the gate answers {@link gateFallback}: the ref's `defaultValue`, then
+   * the plugin's `gateDefaultValue`, then `false`.
    */
   private async gateEntryExecution(kind: string, entry: { metadata?: unknown } | undefined): Promise<void> {
     if (!entry) return;
@@ -440,18 +452,17 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
     if (!ref) return;
 
     const key = typeof ref === 'string' ? ref : ref.key;
-    const defaultValue = typeof ref === 'object' ? (ref.defaultValue ?? false) : false;
 
     let enabled: boolean;
     try {
       // The same batch call the list hooks make, so the gate and the listing cannot reach
-      // different answers, and so an omitted (unknown) key falls back to `defaultValue`
+      // different answers, and so an omitted (unknown) key falls back to the gate default
       // rather than reading as a disable.
       const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
       const results = await adapter.evaluateFlags([key], this.currentFlagContext());
       enabled = this.isRefEnabled(ref, results);
     } catch {
-      enabled = defaultValue;
+      enabled = this.gateFallback(ref);
     }
 
     if (!enabled) {
@@ -535,19 +546,26 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
   }
 
   /**
-   * Determine if a feature flag ref is enabled given adapter results.
-   * For object-style refs, `defaultValue` acts as a fallback when the adapter
-   * returns false (i.e., the flag is unknown to the adapter).
+   * Whether a gated entry's flag ref is enabled, given the adapter's batch answers.
+   *
+   * An answer from the adapter wins, `false` included: the operator disabled the flag. A key the
+   * adapter left out of its answers is one it does not know, and only then does
+   * {@link gateFallback} apply. Both the list hooks and `gateEntryExecution` go through here, so a
+   * capability cannot be listed and then refused on access.
    */
   private isRefEnabled(ref: FeatureFlagRef, flagResults: Map<string, boolean>): boolean {
     const key = typeof ref === 'string' ? ref : ref.key;
-    const defaultValue = typeof ref === 'object' ? (ref.defaultValue ?? false) : false;
-
-    // An answer from the adapter wins, `false` included: the operator disabled the flag.
-    // An ABSENT key means the adapter has never heard of it, and only then does the ref's
-    // `defaultValue` apply. Both the list hooks and `gateEntryExecution` go through here, so
-    // a capability cannot be listed and then refused on access.
     if (flagResults.has(key)) return flagResults.get(key) === true;
-    return defaultValue;
+    return this.gateFallback(ref);
+  }
+
+  /**
+   * What a gate answers when the adapter throws or does not know the flag: the ref's `defaultValue`,
+   * then the plugin's `gateDefaultValue`, then `false`, so gates fail closed unless one of them opts
+   * in. The plugin's `defaultValue` is for `this.featureFlags.isEnabled()` only (#719).
+   */
+  private gateFallback(ref: FeatureFlagRef): boolean {
+    const refDefault = typeof ref === 'object' ? ref.defaultValue : undefined;
+    return refDefault ?? this.options.gateDefaultValue ?? false;
   }
 }

@@ -29,6 +29,19 @@ describe('ResolvedEntries', () => {
     expect(resolved.take(rawInput, 'list_orders')).toBeUndefined();
   });
 
+  it('lets the run peek at the entry without taking it (#701)', () => {
+    const resolved = new ResolvedEntries<typeof entry>();
+    const rawInput = {};
+    resolved.remember(rawInput, 'list_orders', entry);
+
+    expect(resolved.peek(rawInput, 'get_order')).toBeUndefined();
+    expect(resolved.peek(rawInput, 'list_orders')).toBe(entry);
+    expect(resolved.peek(rawInput, 'list_orders')).toBe(entry);
+    expect(resolved.take(rawInput, 'list_orders')).toBe(entry);
+    expect(resolved.peek(rawInput, 'list_orders')).toBeUndefined();
+    expect(resolved.peek('list_orders', 'list_orders')).toBeUndefined();
+  });
+
   it('keeps nothing for a raw input that is not an object', () => {
     const resolved = new ResolvedEntries<typeof entry>();
 

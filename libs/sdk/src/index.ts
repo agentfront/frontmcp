@@ -361,6 +361,10 @@ export const CompletionHook = FlowHooksOf('completion:complete');
 // Agent hooks
 export const AgentCallHook = FlowHooksOf('agents:call-agent');
 
+// Job hooks: every attempt of a job runs `jobs:execute-job`, inline or in the background, each retry
+// and each workflow step (#700)
+export const JobHook = FlowHooksOf('jobs:execute-job');
+
 // Channel hooks
 export const ChannelSendHook = FlowHooksOf('channels:send-notification');
 export const ChannelListHook = FlowHooksOf('channels:list');
@@ -386,6 +390,8 @@ export type { default as HandleMcp20260728Flow } from './transport/flows/handle.
 export type { default as HandleSseFlow } from './transport/flows/handle.sse.flow';
 export type { default as HandleStatelessHttpFlow } from './transport/flows/handle.stateless-http.flow';
 export type { default as HandleStreamableHttpFlow } from './transport/flows/handle.streamable-http.flow';
+export type { default as ExecuteJobFlow } from './job/flows/execute-job.flow';
+export type { JobAttemptOutcome, JobAttemptWorkflowStep, JobRunRecorder } from './job';
 
 // Whether a plugin's hooks judge an entry, so its list hooks follow its own gate
 export { isEntryGatedBy } from './hooks/hook-coverage';

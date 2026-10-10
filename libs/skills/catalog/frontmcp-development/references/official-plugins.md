@@ -802,8 +802,31 @@ resource URIs and prompt names from earlier sessions, so anything gated only at 
 stays reachable by name. The refusal is a public `FeatureFlagDisabledError` (`FEATURE_FLAG_DISABLED`, 403)
 that names the capability and the flag. `FeatureFlagPlugin.init()` with no (or an unknown) `adapter` throws a
 `FeatureFlagConfigurationError` at startup, and so does `adapter: 'custom'` without an `adapterInstance` that has
-`isEnabled()`, `getVariant()` and `evaluateFlags()` (it used to start and answer every request with a 500). If the adapter is unavailable the gate uses the ref's
-`defaultValue`, and a bare string ref (no default) fails closed.
+`isEnabled()`, `getVariant()` and `evaluateFlags()` (it used to start and answer every request with a 500). If the adapter is unavailable, or does not know the flag, the gate uses the ref's
+`defaultValue`, then the plugin's `gateDefaultValue`, then `false`, so a bare string ref fails closed unless you opt in.
+
+### Gate defaults vs. the accessor default
+
+The plugin has two fallbacks, kept apart on purpose:
+
+- `gateDefaultValue` (default `false`) -- what every gate (`tools/call`, `resources/read`, `prompts/get`,
+  `completion/complete`, and the list and skill filters) answers for an entry whose ref has no `defaultValue`. A ref's
+  own `defaultValue` wins over it. Setting it to `true` makes every such entry available while the flag service is down,
+  so it is an explicit opt-in. A non-boolean value fails startup with `FeatureFlagConfigurationError`.
+- `defaultValue` (default `false`) -- the fallback of `this.featureFlags.isEnabled()` and `resolveRef()` only. Gates
+  never read it, so a plugin-wide `defaultValue: true` does not open gated entries.
+
+```typescript
+FeatureFlagPlugin.init({
+  adapter: 'launchdarkly',
+  config: { sdkKey: 'sdk-xxx' },
+  defaultValue: true, // this.featureFlags.isEnabled() fails open
+  gateDefaultValue: false, // gated entries without a ref default fail closed (the default)
+});
+```
+
+Up to 1.9.3 there was no `gateDefaultValue`; a gate used its ref's `defaultValue`, else `false`, which is still the
+behaviour without the option.
 
 ### Installation
 
@@ -908,7 +931,8 @@ class BetaFeatureTool extends ToolContext {
 
 `isEnabled(key, defaultValue?)` answers `defaultValue` (else the plugin's `defaultValue`, else `false`) when the
 adapter throws or has no answer for the flag -- a key the `static` adapter was not given, or one a custom adapter's
-`evaluateFlags()` omits -- the same rule the gates apply to a ref's `defaultValue`. A flag the adapter answers keeps
+`evaluateFlags()` omits -- the same rule the gates apply with their own fallback (the ref's `defaultValue`, then
+`gateDefaultValue`). A flag the adapter answers keeps
 its answer, `false` included. Split.io, LaunchDarkly and Unleash answer every key with the service's own default. Up to
 1.8.7 the default applied only when the adapter threw, so `isEnabled('unknown-flag', true)` was `false`.
 
@@ -924,6 +948,7 @@ class BetaTool extends ToolContext {
 }
 
 // Object with default value -- if flag evaluation fails or the flag is unknown, use the default
+// (a string ref falls back to the plugin's `gateDefaultValue`, `false` unless set)
 @Tool({
   name: 'experimental_tool',
   featureFlag: { key: 'experimental-flag', defaultValue: false },
