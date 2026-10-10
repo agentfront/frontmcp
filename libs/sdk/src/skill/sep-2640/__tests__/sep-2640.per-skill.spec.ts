@@ -145,14 +145,18 @@ describe('registerPerSkillResources when a skill is replaced at the same path (#
         },
       },
     } as unknown as ScopeEntry;
+    const unregistered: unknown[] = [];
     const resourceRegistry = {
       registerDynamicResource: (record: ResourceFunctionRecord) => records.push(record),
+      unregisterResourceInstance: (token: unknown) => unregistered.push(token),
     } as unknown as ResourceRegistry;
     const logger = { verbose: jest.fn(), warn: jest.fn() } as unknown as FrontMcpLogger;
 
     return {
-      register: () => registerPerSkillResources({ scope, resourceRegistry, skills: served, logger }),
+      register: () => registerPerSkillResources({ scope, skillRegistry: scope.skills, resourceRegistry, logger }),
       metadata: () => (records[0]?.metadata ?? {}) as unknown as Record<string, unknown>,
+      records,
+      unregistered,
       replaceWith: (skill?: SkillEntry) => {
         served = skill ? [skill] : [];
         for (const listener of [...listeners]) listener();
@@ -188,12 +192,15 @@ describe('registerPerSkillResources when a skill is replaced at the same path (#
     expect(harness.metadata()).toMatchObject({ uri: 'skill://report/SKILL.md', description: 'Open report' });
   });
 
-  it('keeps the last policy metadata while no skill serves the path', async () => {
+  it('unregisters the resource while no skill serves the path, and registers a new one when one does', async () => {
     const harness = setup(gated);
     await harness.register();
 
     harness.replaceWith(undefined);
+    expect(harness.unregistered).toEqual([harness.records[0]?.provide]);
 
-    expect(harness.metadata()).toMatchObject({ featureFlag: 'reports', authorities: 'admin' });
+    harness.replaceWith(plain);
+    expect(harness.records).toHaveLength(2);
+    expect(harness.records[1]?.metadata).toMatchObject({ uri: 'skill://report/SKILL.md', description: 'Open report' });
   });
 });

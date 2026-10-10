@@ -133,18 +133,15 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
     // SEP-2640 §Resource Metadata: each `skill://<skill-path>/SKILL.md`
     // SHOULD surface in `resources/list` with frontmatter-derived `name`
     // and `description`. The template alone covers `resources/read` but
-    // doesn't enumerate; per-skill concrete records fill that gap.
-    const scope = providers.getActiveScope();
-    const visibleSkills = skillRegistry.getSkills({ visibility: 'mcp' });
-    if (visibleSkills.length > 0) {
-      await registerPerSkillResources({
-        scope,
-        resourceRegistry,
-        skills: visibleSkills,
-        logger,
-        resolveLastModified: resolveLastModifiedForSkill,
-      });
-    }
+    // doesn't enumerate; per-skill concrete records fill that gap, for
+    // skills registered after startup too.
+    await registerPerSkillResources({
+      scope: providers.getActiveScope(),
+      skillRegistry,
+      resourceRegistry,
+      logger,
+      resolveLastModified: resolveLastModifiedForSkill,
+    });
   } else {
     logger.verbose('SEP-2640 skill:// resources disabled via skillsConfig.mcpResources=false');
   }

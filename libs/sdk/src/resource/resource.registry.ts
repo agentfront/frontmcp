@@ -774,13 +774,16 @@ export default class ResourceRegistry extends RegistryAbstract<
   }
 
   /**
-   * Unregister a resource instance previously added via `registerResourceInstance`.
+   * Unregister a resource previously added via `registerResourceInstance` or `registerDynamicResource`.
    * Returns true if the token was found and removed, false otherwise.
    *
    * Used by remote apps to drop the proxies of a previous capability discovery
-   * before registering the fresh ones.
+   * before registering the fresh ones, and for the `skill://` resource of a removed skill.
    */
   unregisterResourceInstance(token: Token): boolean {
+    this.tokens.delete(token);
+    this.defs.delete(token);
+    this.graph.delete(token);
     const existed = this.instances.delete(token as Token<ResourceInstance>);
     const before = this.localRows.length;
     this.localRows = this.localRows.filter((row) => row.token !== token);

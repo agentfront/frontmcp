@@ -11,8 +11,9 @@
  * > - `description` SHOULD be set from the `description` field.
  *
  * To satisfy that, we additionally register one **concrete** `Resource` per
- * MCP-visible skill at scope startup. These show up in `resources/list`
- * with frontmatter-derived metadata plus `audience`/`priority` annotations.
+ * MCP-visible skill, at scope startup and whenever skills are added or removed.
+ * These show up in `resources/list` with frontmatter-derived metadata plus
+ * `audience`/`priority` annotations.
  *
  * When the skill served at a path is replaced, the resource takes the new
  * skill's description and policy metadata, so `resources/list` gates it by
@@ -32,9 +33,10 @@ import {
 } from '../../common';
 import { ResourceKind } from '../../common/records/resource.record';
 import type ResourceRegistry from '../../resource/resource.registry';
+import type { SkillRegistryInterface } from '../skill.registry';
 import { serializeSkillMd } from './sep-2640.builders';
 import { SEP_2640_META_NAMESPACE, SKILL_MD_MIME_TYPE, SKILL_MD_PRIORITY } from './sep-2640.constants';
-import { findAndLoadSkillByPath, getSepVisibleSkills } from './sep-2640.resource-helpers';
+import { findAndLoadSkillByPath } from './sep-2640.resource-helpers';
 import { buildSkillUri } from './sep-2640.uri';
 
 /**
@@ -135,77 +137,99 @@ export function buildPerSkillResourceRecord(
  * This is in addition to — not a replacement for — the SKILL.md template
  * (`Sep2640SkillMdResource`). Hosts may discover skills either via
  * `resources/list` (concrete) or `skill://index.json` (discovery doc).
+ *
+ * The resources follow the skill registry: a skill registered after startup gets its resource, one
+ * that is removed loses it, and a replaced skill's resource takes the new skill's metadata.
  */
 export async function registerPerSkillResources(options: {
   scope: ScopeEntry;
+  skillRegistry: Pick<SkillRegistryInterface, 'getSkills' | 'subscribe'>;
   resourceRegistry: ResourceRegistry;
-  skills: SkillEntry[];
   logger: FrontMcpLogger;
   resolveLastModified?: (skill: SkillEntry) => Promise<string | undefined>;
 }): Promise<void> {
-  const { scope, resourceRegistry, skills, logger, resolveLastModified } = options;
-  const registered: PerSkillResource[] = [];
+  const { scope, skillRegistry, resourceRegistry, logger, resolveLastModified } = options;
+  const registered = new Map<string, PerSkillResource>();
 
-  for (const skill of skills) {
-    // Resolve `lastModified` in its own try/catch so a flaky stat doesn't
-    // suppress the resource registration itself — `lastModified` is just
-    // a cache hint, not load-bearing.
-    let lastModified: string | undefined;
-    if (resolveLastModified) {
-      try {
-        lastModified = await resolveLastModified(skill);
-      } catch (err) {
-        logger.warn(
-          `Failed to resolve SEP-2640 lastModified for "${skill.name}": ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-      }
-    }
-
+  const register = (skill: SkillEntry): Promise<void> => {
     try {
-      const record = buildPerSkillResourceRecord(scope, skill, { lastModified });
+      const record = buildPerSkillResourceRecord(scope, skill);
       // The resource registry's dynamic-register path accepts a normalised
       // record directly.
       resourceRegistry.registerDynamicResource(record);
-      registered.push({
-        skillPath: skill.getSkillPath(),
+      registered.set(skill.getSkillPath(), {
+        token: record.provide,
         metadata: record.metadata as unknown as Record<string, unknown>,
         extensionKeys: Object.keys(skillExtensionMetadata(skill)),
       });
       logger.verbose(`Registered SEP-2640 per-skill resource: ${record.metadata.uri}`);
+      return resolveLastModified
+        ? addLastModified(record.metadata, skill, resolveLastModified, logger)
+        : Promise.resolve();
     } catch (err) {
       logger.warn(
         `Failed to register SEP-2640 per-skill resource for "${skill.name}": ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
+      return Promise.resolve();
     }
-  }
+  };
 
-  // The resource instance holds this metadata object, so refreshing it in place re-gates the listing.
-  if (registered.length > 0) {
-    scope.skills?.subscribe({ immediate: false }, () => {
-      const served = servedSkillsByPath(scope);
-      for (const resource of registered) {
-        const skill = served.get(resource.skillPath);
-        if (skill) refreshFromSkill(resource, skill);
-      }
-    });
+  // Synchronous, so two registry changes never register one path twice.
+  const reconcile = (): Promise<void>[] => {
+    const served = servedSkillsByPath(skillRegistry);
+    for (const [skillPath, resource] of registered) {
+      if (served.has(skillPath)) continue;
+      resourceRegistry.unregisterResourceInstance(resource.token);
+      registered.delete(skillPath);
+    }
+    const lastModifiedUpdates: Promise<void>[] = [];
+    for (const [skillPath, skill] of served) {
+      const resource = registered.get(skillPath);
+      if (resource) refreshFromSkill(resource, skill);
+      else lastModifiedUpdates.push(register(skill));
+    }
+    return lastModifiedUpdates;
+  };
+
+  await Promise.all(reconcile());
+  skillRegistry.subscribe({ immediate: false }, () => {
+    reconcile();
+  });
+}
+
+/**
+ * Add `annotations.lastModified` to a registered resource's metadata (the instance holds the object).
+ * A failure is only logged: `lastModified` is a cache hint, not load-bearing.
+ */
+async function addLastModified(
+  metadata: ResourceMetadata,
+  skill: SkillEntry,
+  resolveLastModified: (skill: SkillEntry) => Promise<string | undefined>,
+  logger: FrontMcpLogger,
+): Promise<void> {
+  try {
+    const lastModified = await resolveLastModified(skill);
+    if (lastModified && metadata.annotations) metadata.annotations.lastModified = lastModified;
+  } catch (err) {
+    logger.warn(
+      `Failed to resolve SEP-2640 lastModified for "${skill.name}": ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
 /** A registered per-skill resource and the skill metadata it copied. */
 interface PerSkillResource {
-  skillPath: string;
+  token: ResourceFunctionRecord['provide'];
   metadata: Record<string, unknown>;
   extensionKeys: string[];
 }
 
 /** The skill each `<skill-path>` serves, resolved as `findSkillByPath` does (first MCP-visible match). */
-function servedSkillsByPath(scope: ScopeEntry): Map<string, SkillEntry> {
+function servedSkillsByPath(skillRegistry: Pick<SkillRegistryInterface, 'getSkills'>): Map<string, SkillEntry> {
   const served = new Map<string, SkillEntry>();
-  for (const skill of getSepVisibleSkills(scope)) {
+  for (const skill of skillRegistry.getSkills({ visibility: 'mcp' })) {
     const skillPath = skill.getSkillPath();
     if (!served.has(skillPath)) served.set(skillPath, skill);
   }
