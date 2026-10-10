@@ -177,5 +177,5 @@ See [`skill-audit-log`](../../frontmcp-extensibility/references/skill-audit-log.
 
 ## Reference
 
-- [Skills HTTP](https://docs.agentfront.dev/frontmcp/features/skill-based-workflows)
+- [Skills HTTP](https://frontmcp.dev/learn/teaching-the-model-skills)
 - Related skills: `decorators-guide`, `skill-audit-log`, `vendor-integrations`

@@ -3,7 +3,7 @@
   "version": "1.9.4",
   "description": "FrontMCP UI - MUI-based React components, renderers, and MCP bridge for MCP applications",
   "author": "AgentFront <info@agentfront.dev>",
-  "homepage": "https://docs.agentfront.dev",
+  "homepage": "https://frontmcp.dev/reference/ui",
   "license": "Apache-2.0",
   "keywords": [
     "mcp",

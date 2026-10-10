@@ -147,5 +147,5 @@ defaults to stderr when `FRONTMCP_STDIO` is set. Never configure a sink with an 
 
 ## Reference
 
-- [Observability Guide](https://docs.agentfront.dev/frontmcp/guides/observability)
+- [Observability Guide](https://frontmcp.dev/reference/server/observability)
 - Related skills: `frontmcp-observability`, `frontmcp-production-readiness`

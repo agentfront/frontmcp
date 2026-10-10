@@ -16,7 +16,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/fundamentals/overview
+  docs: https://frontmcp.dev/reference
 ---
 
 # FrontMCP Development Router
@@ -284,5 +284,5 @@ when a server has been configured to host this skill.
 
 ## Reference
 
-- [FrontMCP Overview](https://docs.agentfront.dev/frontmcp/fundamentals/overview)
+- [FrontMCP Overview](https://frontmcp.dev/reference)
 - Related skills: [`create-tool`](../create-tool/SKILL.md) (top-level), `create-resource`, `create-prompt`, `create-agent`, `create-provider`, `create-job`, `create-workflow`, `create-skill`, `create-skill-with-tools`, `decorators-guide`, `official-adapters`, `openapi-adapter`, `official-plugins`

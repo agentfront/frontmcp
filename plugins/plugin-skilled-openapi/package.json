@@ -24,7 +24,7 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
-  "homepage": "https://github.com/agentfront/frontmcp/blob/main/plugins/plugin-skilled-openapi/README.md",
+  "homepage": "https://frontmcp.dev/reference/plugins/skilled-openapi",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

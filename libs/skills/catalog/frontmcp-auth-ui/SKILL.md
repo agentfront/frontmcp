@@ -9,7 +9,7 @@ priority: 5
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/authentication/custom-ui
+  docs: https://frontmcp.dev/reference/auth/login-ui
 ---
 
 # FrontMCP Custom Authorization UI (`auth.ui`)
@@ -142,5 +142,5 @@ when a server has been configured to host this skill.
 
 ## Reference
 
-- [Custom Authorization UI (`auth.ui`)](https://docs.agentfront.dev/frontmcp/authentication/custom-ui)
+- [Custom Authorization UI (`auth.ui`)](https://frontmcp.dev/reference/auth/login-ui)
 - Related skills: `frontmcp-config` (→ `configure-auth` for the declarative `login` config), `create-tool` (→ `ui-widgets` for tool widgets)

@@ -3,7 +3,7 @@
   "version": "1.9.4",
   "description": "FrontMCP Auth - Authentication, session management, and credential vault",
   "author": "AgentFront <info@agentfront.dev>",
-  "homepage": "https://docs.agentfront.dev",
+  "homepage": "https://frontmcp.dev/reference/auth",
   "license": "Apache-2.0",
   "keywords": [
     "mcp",

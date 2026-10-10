@@ -759,5 +759,5 @@ class CiServer {}
 
 ## Reference
 
-- [Workflows Documentation](https://docs.agentfront.dev/frontmcp/servers/workflows)
+- [Workflows Documentation](https://frontmcp.dev/reference/sdk/workflow)
 - Related skills: `create-job`, `create-skill-with-tools`, `create-tool`, `multi-app-composition`

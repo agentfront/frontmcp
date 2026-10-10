@@ -242,5 +242,5 @@ ls dist/browser/
 
 ## Reference
 
-- **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/browser-compatibility>
+- **Docs:** <https://frontmcp.dev/reference/deployment/browser>
 - **Related skills:** `build-for-sdk`, `build-for-cli`, `deploy-to-cloudflare`

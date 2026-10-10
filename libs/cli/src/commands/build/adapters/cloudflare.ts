@@ -85,7 +85,7 @@ function resolveManagedFields(main: string, deployment?: CloudflareDeployment): 
  * bindings or `[triggers] crontabs` into `wrangler.toml` — but since #535 it no
  * longer deletes ones you add by hand either. Workers needing the managed
  * auto-update Cron (`scheduled`) should use `@frontmcp/edge` `createEdgeMcp`.
- * See docs/frontmcp/deployment/cloudflare-worker.mdx.
+ * See https://frontmcp.dev/reference/deployment/cloudflare-workers.
  *
  * @see https://developers.cloudflare.com/workers/
  */

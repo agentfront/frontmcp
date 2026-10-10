@@ -674,5 +674,5 @@ plugins/
 
 ## Reference
 
-- [Plugin System Documentation](https://docs.agentfront.dev/frontmcp/plugins/creating-plugins)
+- [Plugin System Documentation](https://frontmcp.dev/reference/sdk/plugin)
 - Related skills: `create-plugin-hooks`, `official-plugins`, `create-adapter`, `create-provider`

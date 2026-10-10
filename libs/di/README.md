@@ -55,4 +55,4 @@ Apache-2.0 — see [LICENSE](../../LICENSE).
 
 <!-- links -->
 
-[docs-providers]: https://docs.agentfront.dev/frontmcp/extensibility/providers
+[docs-providers]: https://frontmcp.dev/reference/sdk/provider

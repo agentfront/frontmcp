@@ -1234,11 +1234,11 @@ npx frontmcp create my-workspace --nx
 \`\`\`
 
 This scaffolds an Nx workspace with generators for tools, resources, prompts, and more.
-See the [FrontMCP Nx Plugin docs](https://docs.agentfront.dev) for details.
+See the [FrontMCP Nx Plugin docs](https://frontmcp.dev/reference/nx) for details.
 
 ## Learn More
 
-- [FrontMCP Documentation](https://docs.agentfront.dev)
+- [FrontMCP Documentation](https://frontmcp.dev)
 - [MCP Specification](https://modelcontextprotocol.io)
 `;
 

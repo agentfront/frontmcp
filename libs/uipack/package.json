@@ -3,7 +3,7 @@
   "version": "1.9.4",
   "description": "FrontMCP UIpack - HTML shell builder, pluggable import resolver, and NPM component loader for MCP UI (React-free core)",
   "author": "AgentFront <info@agentfront.dev>",
-  "homepage": "https://docs.agentfront.dev",
+  "homepage": "https://frontmcp.dev/reference/ui",
   "license": "Apache-2.0",
   "keywords": [
     "mcp",

@@ -702,5 +702,5 @@ class DataServer {}
 
 ## Reference
 
-- [Jobs Documentation](https://docs.agentfront.dev/frontmcp/servers/jobs)
+- [Jobs Documentation](https://frontmcp.dev/reference/sdk/job)
 - Related skills: `create-tool`, `create-provider`, `create-agent`, `create-workflow`
