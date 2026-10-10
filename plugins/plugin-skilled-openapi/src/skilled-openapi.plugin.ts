@@ -25,6 +25,7 @@ import {
   type ToolRegistry,
 } from '@frontmcp/sdk';
 
+import { registerSkillAuditModule } from './audit/skill-audit-module';
 import { MemoryCredentialResolver } from './executor/credential-resolver';
 import { HiddenOpRegistry } from './registry/hidden-op.registry';
 import { AuthorityGuard } from './security/authority-guard';
@@ -187,6 +188,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
     super();
     this.options = skilledOpenApiPluginOptionsSchema.parse(options);
     this.warnIfInsecureConfig();
+    registerSkillAuditModule();
   }
 
   private getLogger(): FrontMcpLogger {
@@ -302,6 +304,12 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
     if (!this.options.requireSignature && !this.options.dev) {
       console.warn(
         '[skilled-openapi] requireSignature=false without dev=true: bundle signing is OFF. This violates the v1.2 security baseline.',
+      );
+    }
+    if (this.options.outbound.allowPrivateNetworks) {
+      console.warn(
+        '[skilled-openapi] outbound.allowPrivateNetworks=true: operations may reach loopback and private-network ' +
+          'addresses (link-local and cloud-metadata addresses stay blocked). Use it only when the API lives on a private network.',
       );
     }
   }

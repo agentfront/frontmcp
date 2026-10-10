@@ -1,15 +1,16 @@
-// file: plugins/plugin-skilled-openapi/src/security/webhook-replay-guard.ts
+// file: libs/adapters/src/skills/security/webhook-replay-guard.ts
 //
-// Replay protection for the SaaS-push webhook channel. Each request must
-// carry a `X-Frontmcp-Push-Nonce` and a `X-Frontmcp-Push-Timestamp` header
-// signed via the inbound JWT (binding signature → nonce). This guard:
+// Replay protection for a host-built bundle-push webhook. Each request must carry a
+// `X-Frontmcp-Push-Nonce` and a `X-Frontmcp-Push-Timestamp` header bound to the inbound JWT
+// (see `BundlePushJwtVerifier`). This guard:
 //
 //   1. Rejects timestamps outside `windowMs` (default ±5min).
 //   2. Tracks nonces in an LRU set so the same nonce can't be replayed within
 //      the window. Set capacity is bounded to prevent unbounded memory growth.
 //
-// The guard does NOT verify the signature itself — that's the JwtVerifier's
-// job — it only enforces freshness and uniqueness.
+// The guard does NOT verify the signature itself — that's the JwtVerifier's job — it only
+// enforces freshness and uniqueness. Nothing in FrontMCP calls it: @frontmcp/plugin-skilled-openapi
+// has no push channel, so it is a building block for a host that serves its own push endpoint.
 
 import { sha256Hex } from '@frontmcp/utils';
 

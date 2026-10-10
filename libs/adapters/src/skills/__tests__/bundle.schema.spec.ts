@@ -138,3 +138,46 @@ describe('bundle.schema', () => {
     });
   });
 });
+
+describe('bundle mapper names', () => {
+  const bundleWithMapper = (mapper: Record<string, unknown>) => ({
+    schemaVersion: 1,
+    bundleId: 'acme:prod',
+    version: '1',
+    generatedAt: '2026-05-01T12:00:00.000Z',
+    sourceDigest: 'a'.repeat(64),
+    services: [{ id: 'billing', baseUrl: 'https://api.example.com' }],
+    authBindings: { default: { kind: 'bearer', vaultRef: 'stripe-key' } },
+    skills: [],
+    operations: {
+      createInvoice: {
+        operationId: 'createInvoice',
+        serviceId: 'billing',
+        httpMethod: 'POST',
+        pathTemplate: '/v1/invoices',
+        inputSchema: { type: 'object' },
+        outputSchema: { type: 'object' },
+        mapper: [mapper],
+        authBindingRef: 'default',
+      },
+    },
+  });
+
+  it.each([
+    ['header', 'X Request Id'],
+    ['header', 'X-Id\r\nInjected'],
+    ['cookie', 'session id'],
+  ])('rejects a %s mapper whose name is not an RFC 7230 token: %j', (type, key) => {
+    const parsed = resolvedBundleSchema.safeParse(bundleWithMapper({ inputKey: 'requestId', type, key }));
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it('accepts a header mapper with a token name', () => {
+    const parsed = resolvedBundleSchema.safeParse(
+      bundleWithMapper({ inputKey: 'requestId', type: 'header', key: 'X-Request-Id' }),
+    );
+
+    expect(parsed.success).toBe(true);
+  });
+});
