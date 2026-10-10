@@ -1,5 +1,6 @@
 import { type Token, type Type } from '@frontmcp/di';
 import { type z } from '@frontmcp/lazy-zod';
+import { brandClass, isBrandedInstance } from '@frontmcp/utils';
 
 import type { FrontMcpContext } from '../../context/frontmcp-context';
 import { FrontMcpContextStorage } from '../../context/frontmcp-context-storage';
@@ -18,6 +19,14 @@ export type FlowExecuteStagesOf<N extends FlowName> = ExtendFlows[N]['executeSta
 export type FlowControlType = 'respond' | 'fail' | 'abort' | 'next' | 'handled';
 
 export class FlowControl extends Error {
+  /**
+   * `instanceof FlowControl` also recognises the signal of another copy of the SDK in the process, such
+   * as the CommonJS copy `@frontmcp/observability` loads in an ES-module project (#802).
+   */
+  static override [Symbol.hasInstance](value: unknown): boolean {
+    return isBrandedInstance(this, value);
+  }
+
   constructor(
     public readonly type: FlowControlType,
     public readonly output: any,
@@ -52,6 +61,8 @@ export class FlowControl extends Error {
     throw new FlowControl('abort', reason);
   }
 }
+
+brandClass(FlowControl, '@frontmcp/sdk:FlowControl');
 
 // 1) The actual abstract class (value)
 export abstract class FlowBase<N extends FlowName = FlowName> {

@@ -98,9 +98,12 @@ transport: {
   persistence: {
     redis: { provider: 'redis', host: 'redis.internal', port: 6379 },
     defaultTtlMs: 3600000,  // 1 hour session TTL
+    sessionCheckTimeoutMs: 500, // default; how long a request waits for the store to confirm a session held in memory
   },
 }
 ```
+
+- `sessionCheckTimeoutMs` (default `500`) bounds the per-request check an instance makes before it serves a session it holds in memory (the stored record still exists; in distributed mode, after a heartbeat gap, this node still owns it). A store that accepts the connection but doesn't answer (paused Redis, network partition) no longer holds the request open: the session is served from memory, `Could not confirm the session is still stored — serving it here` is logged with `The session store did not answer within 500 ms`, and the next request checks again
 
 - `distributedMode: 'auto'` — auto-detect based on whether Redis is configured
 - `distributedMode: true` — force distributed mode (requires Redis)

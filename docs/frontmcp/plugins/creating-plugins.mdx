@@ -76,6 +76,8 @@ import AuditPlugin from './plugins/audit.plugin';
 export default class MyApp {}
 ```
 
+A `DynamicPlugin` listed as its class is built exactly as `AuditPlugin.init()` builds it: its constructor, `static dynamicProviders` and `static dynamicTools` all get `{}`, so `plugins: [AuditPlugin]` installs the same providers and tools as `plugins: [AuditPlugin.init()]`. A plugin that validates required options at runtime fails at startup with its own error (`FeatureFlagPlugin` names the missing `adapter`); TypeScript types alone validate nothing, so a plugin without such a check starts with `{}`. Up to 1.9.3 the class form got none of the providers or tools a plugin derives from its options: `plugins: [CodeCallPlugin]` left the server with no tools, and `plugins: [RememberPlugin]` failed on the first `this.remember`.
+
 ## Adding Hooks
 
 Plugins intercept flow stages using `@ToolHook` and `@ListToolsHook` decorators:
@@ -237,7 +239,7 @@ export default class MemoryPlugin extends DynamicPlugin<MemoryOptions, MemoryOpt
 }
 ```
 
-`dynamicTools`, like `dynamicProviders`, runs on the options the plugin is built with: the ones given to `init(options)`, or, for `init({ inject, useFactory })`, the ones the factory returns at startup. So `RememberPlugin.init({ inject, useFactory: () => ({ type: 'memory', tools: { enabled: true } }) })` registers the memory tools, under the factory's `tools.prefix`.
+`dynamicTools`, like `dynamicProviders`, runs on the options the plugin is built with: the ones given to `init(options)`, or, for `init({ inject, useFactory })`, the ones the factory returns at startup, or `{}` when the plugin is listed as its class (`plugins: [MemoryPlugin]`). So `RememberPlugin.init({ inject, useFactory: () => ({ type: 'memory', tools: { enabled: true } }) })` registers the memory tools, under the factory's `tools.prefix`.
 
 ## Extending Tool Metadata
 

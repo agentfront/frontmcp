@@ -6,11 +6,22 @@
  * as protocol-specific errors if needed.
  */
 
+import { brandClass, isBrandedInstance } from '@frontmcp/utils';
+
 /**
  * Base error class for all guard errors.
  * Carries a machine-readable code and HTTP status code.
  */
 export class GuardError extends Error {
+  /**
+   * `instanceof GuardError` (and `GuardStorageUnavailableError`) also recognises an error from another
+   * copy of this package in the process, so every copy of `@frontmcp/sdk` maps it to the same public
+   * error (#802). Other subclasses keep the plain check.
+   */
+  static override [Symbol.hasInstance](value: unknown): boolean {
+    return isBrandedInstance(this, value);
+  }
+
   readonly code: string;
   readonly statusCode: number;
 
@@ -21,6 +32,8 @@ export class GuardError extends Error {
     this.statusCode = statusCode;
   }
 }
+
+brandClass(GuardError, '@frontmcp/guard:GuardError');
 
 /**
  * Thrown when execution exceeds its configured timeout.
@@ -120,3 +133,5 @@ export class GuardStorageUnavailableError extends GuardError {
     this.cause = cause;
   }
 }
+
+brandClass(GuardStorageUnavailableError, '@frontmcp/guard:GuardStorageUnavailableError');

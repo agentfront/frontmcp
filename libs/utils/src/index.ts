@@ -82,6 +82,9 @@ export type { FileWatcherHandle } from './fs';
 // Escape utilities (HTML, JS, XSS prevention)
 export { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJsonForScript } from './escape';
 
+// Class identity across two copies of a package in one process (`instanceof` by brand)
+export { brandClass, isBrandedInstance } from './class-brand';
+
 // Serialization utilities
 export { safeStringify } from './serialization';
 

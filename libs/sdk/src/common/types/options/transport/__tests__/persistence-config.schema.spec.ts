@@ -63,4 +63,15 @@ describe('persistenceConfigSchema (issue #401)', () => {
       expect(result.data.defaultTtlMs).toBe(60000);
     }
   });
+
+  it('forwards sessionCheckTimeoutMs, and rejects a value that is not a positive integer', () => {
+    const result = persistenceConfigSchema.safeParse({ redis: { host: 'localhost' }, sessionCheckTimeoutMs: 250 });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sessionCheckTimeoutMs).toBe(250);
+    }
+
+    expect(persistenceConfigSchema.safeParse({ sessionCheckTimeoutMs: 0 }).success).toBe(false);
+    expect(persistenceConfigSchema.safeParse({ sessionCheckTimeoutMs: 1.5 }).success).toBe(false);
+  });
 });
