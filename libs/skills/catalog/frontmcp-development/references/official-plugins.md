@@ -99,7 +99,7 @@ import CodeCallPlugin from '@frontmcp/plugin-codecall';
 class MyServer {}
 ```
 
-`embedding.strategy: 'ml'` downloads `embedding.modelName` into `embedding.cacheDir` the first time tools are indexed. When the model can't be loaded (no network and nothing cached, or `@huggingface/transformers` not installed), CodeCall logs one warning and searches with TF-IDF until the server restarts. Up to 1.9.4 that failure ended the process.
+`embedding.strategy: 'ml'` downloads `embedding.modelName` into `embedding.cacheDir` the first time tools are indexed. When the model can't be loaded or used (no network and nothing cached, `@huggingface/transformers` not installed, or embedding the tools fails), CodeCall logs one warning and searches with TF-IDF until the server restarts. A tool whose metadata can't be read is skipped with a warning, and a new index replaces the current one only once it is built, so the other tools stay searchable. Up to 1.9.4 that failure ended the process.
 
 `plugins: [CodeCallPlugin]` (the class, no `init()`) is the same as `CodeCallPlugin.init()`: default options, the six `codecall:*` meta-tools and `CodeCallConfig`. Up to 1.9.3 the class form installed no tools while `codecall_only` still hid the app's own, leaving `tools/list` empty.
 

@@ -224,6 +224,16 @@ interface ToolMetadata extends DocumentMetadata {
   toolInstance: ToolEntry<any, any>;
 }
 
+/** A tool as the search index holds it. */
+interface ToolDocument {
+  id: string;
+  text: string;
+  metadata: ToolMetadata;
+}
+
+/** Where a tool is offered (`availableWhen`), checked against the caller's surface. */
+type ToolAvailability = { surface?: readonly string[] } | undefined;
+
 /**
  * Search result for tool search
  */
@@ -334,7 +344,7 @@ export class ToolSearchService implements ToolSearch {
   private retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   /** `availableWhen` of each indexed tool, by indexed name, for per-caller surface filtering. */
-  private availabilityByTool = new Map<string, { surface?: readonly string[] } | undefined>();
+  private availabilityByTool = new Map<string, ToolAvailability>();
 
   constructor(config: ToolSearchServiceConfig = {}, scope: ScopeEntry) {
     this.scope = scope;
@@ -489,21 +499,14 @@ export class ToolSearchService implements ToolSearch {
   }
 
   /**
-   * Handles tool change events by reindexing all tools from the snapshot
+   * Handles tool change events by reindexing all tools from the snapshot. The new index replaces the
+   * current one only once it is built, and a tool that can't be read is skipped, so the other tools
+   * stay searchable.
    */
   private async handleToolChange(tools: ToolEntry<any, any>[]): Promise<void> {
-    // Clear and rebuild index
-    this.vectorDB.clear();
-    this.availabilityByTool = new Map();
-
-    if (tools.length === 0) {
-      this.initialized = true;
-      return;
-    }
-
     // Initialize ML model if needed (first time only, and only when we have tools)
     // Deferred initialization avoids async operations when there's nothing to index
-    if (!this.mlInitialized && this.strategy === 'ml' && this.vectorDB instanceof VectoriaDB) {
+    if (tools.length > 0 && !this.mlInitialized && this.strategy === 'ml' && this.vectorDB instanceof VectoriaDB) {
       try {
         await this.vectorDB.initialize();
         this.mlInitialized = true;
@@ -512,49 +515,59 @@ export class ToolSearchService implements ToolSearch {
       }
     }
 
-    // Filter tools based on CodeCall config and per-tool metadata
-    const filteredTools = tools.filter((tool) => this.shouldIndexTool(tool));
-
-    if (filteredTools.length === 0) {
-      this.initialized = true;
-      return;
-    }
-
-    const documents = filteredTools.map((tool) => {
-      this.availabilityByTool.set(tool.name, tool.metadata.availableWhen);
-      const searchableText = this.extractSearchableText(tool);
-      const appId = this.extractAppId(tool);
-      const toolName = tool.name;
-      const qualifiedName = tool.fullName || toolName;
-
-      return {
-        id: toolName,
-        text: searchableText,
-        metadata: {
-          id: toolName,
-          toolName,
-          qualifiedName,
-          appId,
-          toolInstance: tool,
-        },
-      };
-    });
-
-    if (this.strategy === 'ml' && this.vectorDB instanceof VectoriaDB) {
-      await this.vectorDB.addMany(documents);
-    } else if (this.vectorDB instanceof TFIDFVectoria) {
-      this.vectorDB.addDocuments(documents);
-      this.vectorDB.reindex();
-    }
-
+    const availabilityByTool = new Map<string, ToolAvailability>();
+    const documents = tools.flatMap((tool) => this.toDocuments(tool, availabilityByTool));
+    await this.replaceIndex(documents);
+    this.availabilityByTool = availabilityByTool;
     this.initialized = true;
   }
 
-  /** The embedding model could not be loaded: search with TF-IDF for the rest of the process. */
+  /** The tool's search document, or none when CodeCall may not execute it or it can't be read. */
+  private toDocuments(tool: ToolEntry<any, any>, availabilityByTool: Map<string, ToolAvailability>): ToolDocument[] {
+    try {
+      if (!this.shouldIndexTool(tool)) return [];
+      const toolName = tool.name;
+      const document: ToolDocument = {
+        id: toolName,
+        text: this.extractSearchableText(tool),
+        metadata: {
+          id: toolName,
+          toolName,
+          qualifiedName: tool.fullName || toolName,
+          appId: this.extractAppId(tool),
+          toolInstance: tool,
+        },
+      };
+      availabilityByTool.set(toolName, tool.metadata.availableWhen);
+      return [document];
+    } catch (error) {
+      this.scope.logger.warn(`CodeCall tool search skipped tool "${tool.name}": ${messageOf(error)}`);
+      return [];
+    }
+  }
+
+  /** Index `documents` in place of the current contents; embeddings that fail fall back to TF-IDF. */
+  private async replaceIndex(documents: ToolDocument[]): Promise<void> {
+    if (this.vectorDB instanceof VectoriaDB) {
+      try {
+        this.vectorDB.clear();
+        if (documents.length > 0) await this.vectorDB.addMany(documents);
+        return;
+      } catch (error) {
+        this.fallBackToTfidf(error);
+      }
+    }
+    const index = this.createTfidfIndex();
+    index.addDocuments(documents);
+    index.reindex();
+    this.vectorDB = index;
+  }
+
+  /** The embedding model could not be loaded or used: search with TF-IDF for the rest of the process. */
   private fallBackToTfidf(error: unknown): void {
     const modelName = this.config.embeddingOptions.modelName || DEFAULT_EMBEDDING_MODEL;
     this.scope.logger.warn(
-      `CodeCall could not load embedding model "${modelName}" (${messageOf(error)}); tool search uses TF-IDF instead`,
+      `CodeCall could not use embedding model "${modelName}" (${messageOf(error)}); tool search uses TF-IDF instead`,
     );
     this.strategy = 'tfidf';
     this.vectorDB = this.createTfidfIndex();

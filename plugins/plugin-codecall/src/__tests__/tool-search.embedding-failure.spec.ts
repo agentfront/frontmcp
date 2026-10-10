@@ -110,23 +110,43 @@ describe('ToolSearchService with the ml strategy when the model cannot be loaded
   });
 });
 
-describe('ToolSearchService when a tool change cannot be indexed', () => {
-  it('logs a warning instead of leaving an unhandled rejection, and keeps serving searches', async () => {
-    const unreadable = {
-      name: 'broken',
-      fullName: 'broken',
-      get metadata(): never {
-        throw new Error('metadata unavailable');
-      },
-    } as unknown as ToolEntry<any, any>;
+describe('ToolSearchService when a tool change cannot be fully indexed', () => {
+  const unreadable = {
+    name: 'broken',
+    fullName: 'broken',
+    get metadata(): never {
+      throw new Error('metadata unavailable');
+    },
+  } as unknown as ToolEntry<any, any>;
+
+  it('skips a tool it cannot read, with a warning, and keeps the other tools searchable', async () => {
     const { scope, warn, changeTools } = createScope([createTool('users_list', 'List all users')]);
     const service = new ToolSearchService({ strategy: 'tfidf' }, scope);
 
-    changeTools([unreadable]);
-    const results = await service.search('list users');
+    changeTools([unreadable, createTool('invoices_create', 'Create an invoice')]);
+    const results = await service.search('create invoice');
 
-    expect(results).toEqual([]);
-    expect(warn).toHaveBeenCalledWith('CodeCall tool search could not index the tools: metadata unavailable');
+    expect(results.map((result) => result.toolName)).toEqual(['invoices_create']);
+    expect(warn).toHaveBeenCalledWith('CodeCall tool search skipped tool "broken": metadata unavailable');
     service.dispose();
+  });
+
+  it('keeps the tools searchable with TF-IDF when the model loads but embedding the tools fails', async () => {
+    EmbeddingService.setTransformersModule({
+      pipeline: async () => async (text: string) => {
+        if (text === 'test') return { data: new Float32Array([1, 0, 0]) };
+        throw new Error('embedding failed');
+      },
+    });
+    const { scope, changeTools } = createScope([createTool('users_list', 'List all users')]);
+    const service = new ToolSearchService({ strategy: 'ml' }, scope);
+
+    changeTools([createTool('users_list', 'List all users'), createTool('invoices_create', 'Create an invoice')]);
+    const results = await service.search('create invoice');
+
+    expect(results.map((result) => result.toolName)).toContain('invoices_create');
+    expect(service.getStrategy()).toBe('tfidf');
+    service.dispose();
+    EmbeddingService.clearTransformersModule();
   });
 });
