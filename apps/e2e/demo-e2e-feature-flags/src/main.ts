@@ -1,11 +1,13 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { FlaggedApp } from './apps/flagged';
+import { GateDefaultsApp } from './apps/gate-defaults';
 
 const port = parseInt(process.env['PORT'] ?? '3115', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E Feature Flags', version: '0.1.0' },
-  apps: [FlaggedApp],
+  apps: [FlaggedApp, GateDefaultsApp],
   logging: { level: LogLevel.Warn },
   http: { port },
   auth: {

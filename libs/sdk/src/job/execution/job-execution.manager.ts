@@ -1,17 +1,26 @@
 import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
+import { type ScopeEntry } from '../../common';
 import { type JobEntry } from '../../common/entries/job.entry';
 import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobPermission } from '../../common/metadata/job.metadata';
 import { resolvePrincipal } from '../../common/utils/principal.utils';
-import { type FrontMcpContext } from '../../context';
-import { InvalidOutputError, JobNotAuthorizedError } from '../../errors';
+import { FrontMcpContext } from '../../context';
+import { JobNotAuthorizedError } from '../../errors';
 import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
-import { detachedRunContext, jobContextProviders } from '../job-context-providers';
+import {
+  retryDelayMs,
+  runJobAttemptFlow,
+  toJobError,
+  willRetryJobAttempt,
+  type JobAttemptOutcome,
+  type JobAttemptResult,
+  type JobRunRecorder,
+} from '../job-attempt';
+import { detachedRunContext } from '../job-context-providers';
 import { JobPermissionGuard } from '../job-permission.guard';
 import { type JobRegistryInterface } from '../job.registry';
-import { runJobAttempt } from '../job.utils';
 import {
   type JobExecutionState,
   type JobRunRecord,
@@ -25,9 +34,9 @@ export interface ExecuteJobOptions {
   authInfo?: Partial<Record<string, unknown>>;
   contextProviders?: unknown;
   /**
-   * The caller's request context. Each job builds its CONTEXT-scoped providers for it, so
+   * The caller's request context. Each attempt runs its `jobs:execute-job` flow in it, so
    * `this.context` and context accessors work inside the job; a background run gets a copy of its
-   * own that outlives the request (#705).
+   * own that outlives the request (#705), or, without one, a fresh context for `authInfo` (#700).
    */
   context?: FrontMcpContext;
   /**
@@ -63,15 +72,22 @@ export class JobExecutionManager {
   private readonly stateStore: JobStateStore;
   private readonly logger: FrontMcpLogger;
   private readonly notifyFn?: (data: Record<string, unknown>) => Promise<void>;
+  private readonly scope?: ScopeEntry;
 
+  /**
+   * @param scope - The scope the manager serves. A background run without a caller context gets a
+   *   fresh context of this scope; without a scope, a job's own scope is used.
+   */
   constructor(
     stateStore: JobStateStore,
     logger: FrontMcpLogger,
     notifyFn?: (data: Record<string, unknown>) => Promise<void>,
+    scope?: ScopeEntry,
   ) {
     this.stateStore = stateStore;
     this.logger = logger;
     this.notifyFn = notifyFn;
+    this.scope = scope;
   }
 
   /**
@@ -86,8 +102,9 @@ export class JobExecutionManager {
     // (GHSA-58v2-gpcc-jmqv) — the execute_job tool, a trigger, any in-process
     // caller. It runs BEFORE any run record is created, so an unauthorized
     // attempt leaves no state behind and background execution has no async
-    // escape hatch. Workflow STEPS do not pass through here; the engine runs
-    // them directly and `WorkflowStepExecutor` applies the same check per step.
+    // escape hatch. Each attempt's `jobs:execute-job` flow checks the
+    // permissions again in its `checkJobAuthorization` stage, which is also
+    // where workflow STEPS are checked (#700).
     await this.assertMayExecute(job.metadata.permissions, job.name, opts);
 
     const runId = randomUUID();
@@ -112,7 +129,7 @@ export class JobExecutionManager {
     await this.stateStore.createRun(runRecord);
 
     if (opts.background) {
-      const runOpts = withDetachedContext(opts);
+      const runOpts = withBackgroundContext(opts, (this.scope ?? job.providers.getActiveScope()).id);
       // Spawn background execution, as its own request (it outlives this one; a no-op on Node)
       runRequestExclusive(() => this.executeJobBackground(job, input, runId, runOpts)).catch(async (err) => {
         this.logger.error(`Background job execution failed: ${err}`);
@@ -165,7 +182,7 @@ export class JobExecutionManager {
     await this.stateStore.createRun(runRecord);
 
     if (opts.background) {
-      const runOpts = withDetachedContext(opts);
+      const runOpts = withBackgroundContext(opts, (this.scope ?? workflow.providers.getActiveScope()).id);
       runRequestExclusive(() => this.executeWorkflowBackground(workflow, jobRegistry, runId, runOpts)).catch(
         async (err) => {
           this.logger.error(`Background workflow execution failed: ${err}`);
@@ -242,63 +259,75 @@ export class JobExecutionManager {
 
     const retryConfig = job.metadata.retry ?? {};
     const maxAttempts = retryConfig.maxAttempts ?? 1;
-    const backoffMs = retryConfig.backoffMs ?? 1000;
-    const backoffMultiplier = retryConfig.backoffMultiplier ?? 2;
-    const maxBackoffMs = retryConfig.maxBackoffMs ?? 60000;
+    const run = new RunRecorder(runId, maxAttempts, (outcome) => this.recordAttempt(job, runId, outcome));
 
-    let lastError: Error | undefined;
-    let failedAttempt = 1;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      failedAttempt = attempt;
+    // Each attempt is one run of the `jobs:execute-job` flow, which records how it ended (#700).
+    // The first attempt always runs; `retry.maxAttempts` is at least 1.
+    for (let attempt = 1; ; attempt++) {
+      let answer: JobAttemptResult;
       try {
-        const parsedInput = job.parseInput(input);
-        const contextProviders = opts.context ? await jobContextProviders(job, opts.context) : opts.contextProviders;
-        const ctx = job.create(parsedInput, {
-          authInfo: opts.authInfo ?? {},
-          contextProviders,
+        answer = await runJobAttemptFlow({
+          job,
+          input,
           attempt,
+          authInfo: opts.authInfo ?? {},
+          context: opts.context,
+          contextProviders: opts.contextProviders,
+          authoritiesContextBuilder: opts.authoritiesContextBuilder,
+          run,
         });
-        // `authorities.pipes` may be async: run them before execute() reads `this.auth`.
-        await ctx.loadAuthContext();
-        const result = await runJobAttempt(job, ctx, parsedInput);
-        const logs = ctx.getLogs();
+      } catch (err) {
+        const error = toJobError(err);
+        const retry = willRetryJobAttempt(error, attempt, maxAttempts);
+        // The flow records a failed attempt, unless it failed before it could
+        await run.ensureRecorded({ state: retry ? 'retrying' : 'failed', attempt, error });
+        if (!retry) throw error;
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs(retryConfig, attempt)));
+        continue;
+      }
+      // A hook may keep the flow from recording, or the run store failed its write; the run record
+      // still gets the outcome. The job ran: a store error from here on is never retried.
+      const { result, logs } = answer;
+      await run.ensureRecorded({ state: 'completed', attempt, result, logs });
+      return { runId, result, state: 'completed', logs: [...logs] };
+    }
+  }
 
+  /** Write how an attempt ended to the run record, and send the run's status notification. */
+  private async recordAttempt(job: JobEntry, runId: string, outcome: JobAttemptOutcome): Promise<void> {
+    switch (outcome.state) {
+      case 'completed':
         await this.updateState(runId, {
           state: 'completed',
-          result,
+          result: outcome.result,
           completedAt: Date.now(),
-          attempt,
-          logs: [...logs],
+          attempt: outcome.attempt,
+          logs: [...outcome.logs],
         });
         await this.notify({ type: 'job:status', runId, state: 'completed', jobName: job.name });
-
-        return { runId, result, state: 'completed', logs: [...logs] };
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        // The job ran to completion, so running it again would repeat its side effects
-        if (lastError instanceof InvalidOutputError) break;
-
-        if (attempt < maxAttempts) {
-          await this.updateState(runId, { state: 'retrying', attempt });
-          await this.notify({ type: 'job:status', runId, state: 'retrying', jobName: job.name, attempt });
-          const delay = Math.min(backoffMs * Math.pow(backoffMultiplier, attempt - 1), maxBackoffMs);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
+        return;
+      case 'retrying':
+        await this.updateState(runId, { state: 'retrying', attempt: outcome.attempt });
+        await this.notify({
+          type: 'job:status',
+          runId,
+          state: 'retrying',
+          jobName: job.name,
+          attempt: outcome.attempt,
+        });
+        return;
+      case 'failed': {
+        const { error } = outcome;
+        await this.updateState(runId, {
+          state: 'failed',
+          error: { message: error.message, name: error.name, stack: error.stack },
+          completedAt: Date.now(),
+          attempt: outcome.attempt,
+        });
+        await this.notify({ type: 'job:status', runId, state: 'failed', jobName: job.name });
+        return;
       }
     }
-
-    const error = lastError ?? new Error('Job execution failed with unknown error');
-
-    await this.updateState(runId, {
-      state: 'failed',
-      error: { message: error.message, name: error.name, stack: error.stack },
-      completedAt: Date.now(),
-      attempt: failedAttempt,
-    });
-    await this.notify({ type: 'job:status', runId, state: 'failed', jobName: job.name });
-
-    throw error;
   }
 
   // ---- Private: background execution ----
@@ -331,6 +360,7 @@ export class JobExecutionManager {
         contextProviders: opts.contextProviders,
         context: opts.context,
         authoritiesContextBuilder: opts.authoritiesContextBuilder,
+        workflowRunId: runId,
       });
 
       const result = await engine.execute(opts.workflowInput);
@@ -391,7 +421,45 @@ export class JobExecutionManager {
   }
 }
 
-/** A background run outlives the request, so it runs with a copy of the caller's context. */
-function withDetachedContext<Options extends ExecuteJobOptions>(opts: Options): Options {
-  return opts.context ? { ...opts, context: detachedRunContext(opts.context) } : opts;
+/**
+ * A background run outlives the request, so it runs with a context of its own: a copy of the caller's
+ * context (same session, auth, trace and context tokens, no transport), or, for a caller without one
+ * (a trigger, in-process code), a fresh context for its auth and session in scope `scopeId`.
+ */
+function withBackgroundContext<Options extends ExecuteJobOptions>(opts: Options, scopeId: string): Options {
+  if (opts.context) return { ...opts, context: detachedRunContext(opts.context) };
+  const sessionFromAuth = opts.authInfo?.['sessionId'];
+  const sessionId =
+    opts.sessionId ?? (typeof sessionFromAuth === 'string' && sessionFromAuth ? sessionFromAuth : undefined);
+  const context = new FrontMcpContext({
+    sessionId: sessionId ?? `anon:${randomUUID()}`,
+    scopeId,
+    // The caller's auth as it handed it to the job execution manager
+    authInfo: opts.authInfo as ConstructorParameters<typeof FrontMcpContext>[0]['authInfo'],
+  });
+  return { ...opts, context };
+}
+
+/**
+ * The run recorder a run's attempts write through, remembering which attempts it recorded, so the
+ * manager records an attempt only when its flow did not (it failed before `updateRunState`, a hook
+ * kept that stage from running, or the run store failed the write).
+ */
+class RunRecorder implements JobRunRecorder {
+  private readonly recorded = new Set<number>();
+
+  constructor(
+    readonly runId: string,
+    readonly maxAttempts: number,
+    private readonly write: (outcome: JobAttemptOutcome) => Promise<void>,
+  ) {}
+
+  async recordAttempt(outcome: JobAttemptOutcome): Promise<void> {
+    await this.write(outcome);
+    this.recorded.add(outcome.attempt);
+  }
+
+  async ensureRecorded(outcome: JobAttemptOutcome): Promise<void> {
+    if (!this.recorded.has(outcome.attempt)) await this.recordAttempt(outcome);
+  }
 }

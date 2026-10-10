@@ -45,7 +45,10 @@ export class WorkflowEngine {
     this.metadata = metadata;
     this.logger = logger;
     this.maxConcurrency = metadata.maxConcurrency ?? 5;
-    this.stepExecutor = new WorkflowStepExecutor(jobRegistry, logger, extra);
+    this.stepExecutor = new WorkflowStepExecutor(jobRegistry, logger, {
+      ...extra,
+      workflowName: extra.workflowName ?? metadata.name,
+    });
   }
 
   async execute(workflowInput?: Record<string, unknown>): Promise<WorkflowExecutionResult> {

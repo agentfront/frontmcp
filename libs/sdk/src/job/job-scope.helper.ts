@@ -9,6 +9,7 @@ import { type EntryOwnerRef } from '../common';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
+import type FlowRegistry from '../flows/flow.registry';
 import type ProviderRegistry from '../provider/provider.registry';
 import ExecuteWorkflowTool from '../workflow/tools/execute-workflow.tool';
 import GetWorkflowStatusTool from '../workflow/tools/get-workflow-status.tool';
@@ -17,6 +18,7 @@ import RegisterWorkflowTool from '../workflow/tools/register-workflow.tool';
 import RemoveWorkflowTool from '../workflow/tools/remove-workflow.tool';
 import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/workflow.registry';
 import { JobExecutionManager } from './execution/job-execution.manager';
+import ExecuteJobFlow from './flows/execute-job.flow';
 import JobRegistry, { type JobRegistryInterface } from './job.registry';
 import { createJobDefinitionStore, type JobDefinitionStoreOptions } from './store/job-definition-store.factory';
 import { type JobDefinitionStore } from './store/job-definition.interface';
@@ -57,6 +59,8 @@ export interface JobsConfig {
 
 export interface RegisterJobCapabilitiesArgs {
   providers: ProviderRegistry;
+  /** The scope's flow registry, where the `jobs:execute-job` flow every job attempt runs through is registered. */
+  flowRegistry: FlowRegistry;
   owner: EntryOwnerRef;
   jobsList: JobType[];
   /** The provider registry of each job declared on an app, by its token (see `appEntryProviders`). */
@@ -81,7 +85,10 @@ export interface JobCapabilitiesResult {
  * Follows the skill-scope.helper.ts pattern.
  */
 export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs): Promise<JobCapabilitiesResult> {
-  const { providers, owner, jobsList, jobProviders, workflowsList, jobsConfig, logger, notifyFn } = args;
+  const { providers, flowRegistry, owner, jobsList, jobProviders, workflowsList, jobsConfig, logger, notifyFn } = args;
+
+  // Every attempt of every job runs through this hookable flow (#700)
+  await flowRegistry.registryFlows([ExecuteJobFlow]);
 
   // 1. Create stores
   const storeOpts: JobStateStoreOptions = {
@@ -123,11 +130,17 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
 
   // 4. Create execution manager. Its status notifications also publish finished job and workflow
   // runs to the scope's completions, which `job-completion` channel sources subscribe to.
-  const completions = completionEventsOf(providers.getActiveScope());
-  const executionManager = new JobExecutionManager(stateStore, logger, async (data) => {
-    await notifyFn?.(data);
-    await publishJobCompletion(data, stateStore, completions);
-  });
+  const scope = providers.getActiveScope();
+  const completions = completionEventsOf(scope);
+  const executionManager = new JobExecutionManager(
+    stateStore,
+    logger,
+    async (data) => {
+      await notifyFn?.(data);
+      await publishJobCompletion(data, stateStore, completions);
+    },
+    scope,
+  );
 
   // 5. Collect management tools. The dynamic-registration pair is omitted
   // unless the operator opted in — an unregistered tool cannot be called at

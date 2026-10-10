@@ -16,6 +16,7 @@ import {
   type ResourceContext,
   type ResourceEntry,
   type ScopeEntry,
+  type Token,
 } from '../../common';
 import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
 import { runOnSurface } from '../../context/call-surface';
@@ -112,6 +113,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     if (!match) return undefined;
     resolvedResources.remember(rawInput, uri, match);
     return appOwnerIdOf(scope.resources.lineageOf(match.instance) ?? [], match.instance.owner);
+  }
+
+  /** The class of the resource the URI matches, whose `static` hooks run from `parseInput` on (#701). */
+  static override resolveHookEntryClass(rawInput: unknown, scope: ScopeEntry): Token | undefined {
+    const uri = (rawInput as { request?: { params?: { uri?: unknown } } } | undefined)?.request?.params?.uri;
+    if (typeof uri !== 'string') return undefined;
+    return (resolvedResources.peek(rawInput, uri) ?? scope.resources.findResourceForUri(uri))?.instance.record.provide;
   }
 
   logger = this.scopeLogger.child('ReadResourceFlow');

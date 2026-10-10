@@ -4,6 +4,7 @@ import {
   FrontMcpFlowHookTokens,
   HookKind,
   type EntryOwnerRef,
+  type FlowName,
   type HookContextRun,
   type HookEntry,
   type HookMetadata,
@@ -120,10 +121,23 @@ export async function bindContextHookTargets<T extends Pick<HookEntry, 'metadata
   return bound;
 }
 
-/** An entry class's hooks aimed at one call's instance, so each call runs them on its own instance. */
+/**
+ * An entry class's instance hooks aimed at one call's instance, so each call runs them on its own
+ * instance. Its `static` hooks are left out: they joined the run when it started (see
+ * {@link staticHooksFor}).
+ */
 export function hooksBoundTo(entries: readonly HookEntry[], instance: object): Array<Pick<HookEntry, 'metadata'>> {
   const target = instance as HookMetadata['target'];
-  return entries.map((entry) => ({
-    metadata: entry.metadata.static ? entry.metadata : { ...entry.metadata, target },
-  }));
+  return entries
+    .filter((entry) => !entry.metadata.static)
+    .map((entry) => ({ metadata: { ...entry.metadata, target } }));
+}
+
+/**
+ * The hooks an entry class declares as `static` methods for `flow`. They need no instance, so they
+ * join a run of that flow for the entry when it starts, and can hook the stages before the entry's
+ * instance exists (#701).
+ */
+export function staticHooksFor(entries: readonly HookEntry[], flow: FlowName): HookEntry[] {
+  return entries.filter((entry) => entry.metadata.static === true && entry.metadata.flow === flow);
 }

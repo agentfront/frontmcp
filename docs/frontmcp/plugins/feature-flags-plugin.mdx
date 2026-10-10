@@ -306,7 +306,9 @@ A skill's `skill://<path>/SKILL.md` entry in `resources/list` is gated by the sk
 
 Use the object form to specify a `defaultValue` — the fallback when the adapter throws or the flag is unknown (the
 adapter has no answer for it: a key the `static` adapter was not given, or one a custom adapter's `evaluateFlags()`
-omits; Split.io, LaunchDarkly and Unleash answer every key with the service's own default):
+omits; Split.io, LaunchDarkly and Unleash answer every key with the service's own default). A ref without one falls
+back to the plugin's `gateDefaultValue` (see [Plugin Options](#plugin-options)), and that defaults to `false`, so gates fail
+closed unless you opt in:
 
 ```ts
 @Tool({
@@ -317,12 +319,17 @@ omits; Split.io, LaunchDarkly and Unleash answer every key with the service's ow
 
 ### FeatureFlagRef Fields
 
-| Field          | Type      | Description                                                                    |
-| -------------- | --------- | ------------------------------------------------------------------------------ |
-| `key`          | `string`  | The flag key to evaluate                                                       |
-| `defaultValue` | `boolean` | Fallback value when evaluation fails or the flag is unknown (default: `false`) |
+| Field          | Type      | Description                                                                                                          |
+| -------------- | --------- | -------------------------------------------------------------------------------------------------------------------- |
+| `key`          | `string`  | The flag key to evaluate                                                                                             |
+| `defaultValue` | `boolean` | Fallback value when evaluation fails or the flag is unknown (default: the plugin's `gateDefaultValue`, else `false`) |
 
-When using the string shorthand (`featureFlag: 'key'`), `defaultValue` is `false`.
+When using the string shorthand (`featureFlag: 'key'`), the gate falls back to the plugin's `gateDefaultValue`, which
+is `false` unless you set it.
+
+The gates never read the plugin's `defaultValue`: that option is the fallback of `this.featureFlags.isEnabled()`. Up
+to 1.9.3 there was no `gateDefaultValue`, and a gate used only its ref's `defaultValue`, else `false`, which is still
+what you get without it.
 
 ---
 
@@ -354,8 +361,30 @@ When using the string shorthand (`featureFlag: 'key'`), `defaultValue` is `false
 
 <ParamField path="defaultValue" type="boolean" default="false">
   Global fallback for `this.featureFlags.isEnabled()` when the adapter throws an error during evaluation or has no
-  answer for the flag, and the call passes no `defaultValue` of its own. The gates on tools, resources and prompts use
-  their ref's `defaultValue` instead (`false` for the string form).
+  answer for the flag, and the call passes no `defaultValue` of its own. The gates on tools, resources and prompts never
+  use it: they use their ref's `defaultValue`, then `gateDefaultValue`.
+</ParamField>
+
+<ParamField path="gateDefaultValue" type="boolean" default="false">
+  What a gate answers for an entry whose `featureFlag` ref has no `defaultValue` of its own, when the adapter throws or
+  has no answer for the flag. It covers every gate: `tools/call`, `resources/read`, `prompts/get` and
+  `completion/complete`, and the filters on `tools/list`, `resources/list`, `resources/templates/list`, `prompts/list`
+  and the skill surfaces. A ref's `defaultValue` wins over it, and a flag the adapter answers keeps its answer, `false`
+  included.
+
+Gates fail closed by default. `gateDefaultValue: true` makes every gated entry without a ref default available while
+the flag service is down or missing a flag, so it is a separate, explicit option rather than following
+`defaultValue`. Anything other than a boolean fails startup with `FeatureFlagConfigurationError`.
+
+```ts
+FeatureFlagPlugin.init({
+  adapter: 'launchdarkly',
+  config: { sdkKey: '...' },
+  defaultValue: true, // this.featureFlags.isEnabled() fails open
+  gateDefaultValue: false, // gated tools, resources and prompts fail closed (the default)
+});
+```
+
 </ParamField>
 
 <ParamField path="cacheStrategy" type="'session' | 'request' | 'none'" default="'none'">
@@ -389,9 +418,10 @@ Access via `this.featureFlags` in any execution context (ToolContext, AgentConte
 
 <ParamField path="isEnabled(flagKey, defaultValue?)" type="Promise<boolean>">
   Check if a feature flag is enabled. Uses caching if configured. `defaultValue` (else the plugin's `defaultValue`, else
-  `false`) is the answer when the adapter throws or has no answer for the flag, the same rule the gates apply; a flag
-  the adapter answers keeps its answer, `false` included. Up to 1.8.7 the default applied only when the adapter threw,
-  so `isEnabled('unknown-flag', true)` was `false`.
+  `false`) is the answer when the adapter throws or has no answer for the flag; a flag the adapter answers keeps its
+  answer, `false` included. The gates apply the same rule with their own fallback: the ref's `defaultValue`, then the
+  plugin's `gateDefaultValue`. Up to 1.8.7 the default applied only when the adapter threw, so
+  `isEnabled('unknown-flag', true)` was `false`.
 
 ```ts
 const enabled = await this.featureFlags.isEnabled('beta-feature');
@@ -425,7 +455,8 @@ if (results.get('flag-a')) {
 </ParamField>
 
 <ParamField path="resolveRef(ref)" type="Promise<boolean>">
-  Resolve a `FeatureFlagRef` (string or object) to a boolean
+  Resolve a `FeatureFlagRef` (string or object) to a boolean, with the rule of `isEnabled()`: the ref's `defaultValue`,
+  then the plugin's `defaultValue`, then `false`. It does not read `gateDefaultValue`.
 
 ```ts
 const ref = { key: 'my-flag', defaultValue: true };
@@ -451,18 +482,18 @@ const enabled = await this.featureFlags.resolveRef(ref);
 
   </Accordion>
 
-  <Accordion title="Set defaultValue to control failure behavior">
-    When the adapter throws (network error, service down), `defaultValue` controls whether the flag is treated as enabled or disabled. Set it globally or per-flag:
+  <Accordion title="Set defaults to control failure behavior">
+    When the adapter throws (network error, service down) or does not know a flag, a default decides whether the flag is treated as enabled or disabled. Gates and `this.featureFlags` have separate defaults, so opening one does not open the other:
 
     ```ts
-    // Global default: treat unknown flags as disabled
     FeatureFlagPlugin.init({
       adapter: 'launchdarkly',
       config: { sdkKey: '...' },
-      defaultValue: false,
+      defaultValue: false, // this.featureFlags.isEnabled() without a call default
+      gateDefaultValue: false, // gated entries without a ref default (fail closed)
     })
 
-    // Per-flag: critical features should fail-open
+    // Per-flag: critical features should fail-open, whatever the plugin defaults are
     @Tool({
       name: 'core-tool',
       featureFlag: { key: 'core-tool', defaultValue: true },

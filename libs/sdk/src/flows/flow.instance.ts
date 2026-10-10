@@ -28,7 +28,7 @@ import { runAsFlow } from '../context/running-flow';
 import { InternalMcpError, PublicMcpError, RequestContextNotAvailableError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
 import type HookRegistry from '../hooks/hook.registry';
-import { bindContextHookTargets } from '../hooks/hooks.utils';
+import { bindContextHookTargets, staticHooksFor } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
 import { writeHttpResponse } from '../server/server.validation';
 import { flowErrorToHttpOutput } from '../transport/flow-error-output';
@@ -367,6 +367,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     let orderBase = Math.max(0, ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0))) + 1;
 
     const hookOwnerId = await (FlowClass as typeof FlowBase).resolveHookOwnerId?.(input, scope);
+    // The entry class's `static` hooks need no instance, so they join from the first stage (#701).
+    const entryClass = await (FlowClass as typeof FlowBase).resolveHookEntryClass?.(input, scope);
+    const entryStaticHooks = entryClass ? staticHooksFor(this.hooks.getClsHooks(entryClass), name) : [];
 
     // A hook declared on a CONTEXT-scoped provider runs on this run's instance of that provider.
     const initialInjectedHooks = await bindContextHookTargets(
@@ -429,6 +432,10 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     // Refresh order base to be after everything currently present
     orderBase = Math.max(0, ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0))) + 1;
+
+    // The target entry's static hooks follow the registry's hooks of the same priority, as its
+    // instance hooks do when the stage that builds the instance appends them.
+    await materializeAndMerge(entryStaticHooks);
 
     let responded: FlowOutputOf<Name> | undefined;
 
