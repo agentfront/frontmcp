@@ -22,7 +22,6 @@ describe('Scope initialization performance', () => {
     // Verify all abstract methods are implemented
     expect(() => server.registerMiddleware('/', () => {})).not.toThrow();
     expect(() => server.registerRoute('GET', '/', () => {})).not.toThrow();
-    expect(server.enhancedHandler((req: unknown, res: unknown) => {})).toBeDefined();
     expect(() => server.prepare()).not.toThrow();
     expect(server.getHandler()).toBeUndefined();
   });

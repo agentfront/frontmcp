@@ -502,7 +502,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       );
     }
 
-    this.logger.info('handlePublicMode: allowing anonymous access (public mode)');
+    this.logger.verbose('handlePublicMode: allowing anonymous access (public mode)');
 
     // Use shared helper for anonymous session creation
     this.createAnonymousSession({
@@ -786,7 +786,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       session,
     } = this.state;
 
-    this.logger.info('Session verified successfully', {
+    this.logger.verbose('Session verified successfully', {
       sub: this.maskSub(user.sub),
       hasSession: !!session,
     });

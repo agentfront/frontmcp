@@ -55,6 +55,35 @@ frontmcp build --target cli -e ./src/main.ts   # Custom entry file
 frontmcp build --target cli --js               # JS bundle only (no SEA)
 ```
 
+### Deployment options (`frontmcp.config`)
+
+```ts
+deployments: [
+  {
+    target: 'cli',
+    cli: {
+      description: 'Help desk CLI',
+      outputDefault: 'text', // or 'json'
+      excludeTools: ['internal_sync'], // not exposed as subcommands
+      authRequired: true, // adds login / logout / sessions / connect
+      oauth: { serverUrl: 'https://auth.example.com', clientId: 'help-desk-cli', defaultScope: 'read' },
+    },
+  },
+],
+```
+
+- `excludeTools` leaves those tools out of the generated subcommands.
+- `oauth` sets the defaults of `<bin> login` (server URL, client ID, scope,
+  callback `portRange`). `login` exists only with `authRequired: true`; the build
+  warns when `oauth` is set without it.
+- With `authRequired: true`, commands that talk to the server (tools,
+  resources, prompts, skills, jobs) refuse to run until the active session has a
+  stored credential: they exit 1 with
+  `Not logged in. Run "<bin> login" or "<bin> connect --token <token>" first.`
+  The stored token is sent on every call: in process it arrives as
+  `this.context.authInfo.token`, and a running daemon receives it as an
+  `Authorization: Bearer` header that the server's auth checks like any HTTP call.
+
 ## Requirements
 
 - **Node.js 24+** required for the SEA path (`frontmcp build --target cli`). The plain JS bundle path (`--target cli --js`) only requires the Node version your entry file supports.
@@ -196,5 +225,5 @@ frontmcp service uninstall my-server
 
 ## Reference
 
-- **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/production-build>
+- **Docs:** <https://frontmcp.dev/reference/deployment/production-build>
 - **Related skills:** `build-for-sdk`, `build-for-browser`, `deploy-to-cloudflare`

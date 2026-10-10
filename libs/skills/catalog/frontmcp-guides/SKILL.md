@@ -9,7 +9,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/guides/your-first-tool
+  docs: https://frontmcp.dev/learn/your-first-tool
 examples:
   - scenario: Build a simple weather API MCP server from scratch
     expected-outcome: Working server with tools, resources, and tests deployed to Node
@@ -471,7 +471,7 @@ when a server has been configured to host this skill.
 
 ## Reference
 
-- [Your First Tool](https://docs.agentfront.dev/frontmcp/guides/your-first-tool)
+- [Your First Tool](https://frontmcp.dev/learn/your-first-tool)
 - Domain routers: `frontmcp-development`, `frontmcp-deployment`, `frontmcp-testing`, `frontmcp-config`
 - Core references: `setup-project`, `create-tool`, `create-resource`, `create-provider`, `create-agent`, `configure-auth`, `setup-testing` (each lives under its parent router's `references/` directory, e.g. `frontmcp-development/references/create-tool.md`)
 - Mandatory boundaries: import MCP protocol types and `McpError` from `@frontmcp/protocol` (never directly from `@modelcontextprotocol/sdk`); use `@frontmcp/utils` for crypto and file-system operations.

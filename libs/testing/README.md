@@ -95,11 +95,11 @@ Apache-2.0 — see [LICENSE](../../LICENSE).
 
 <!-- links -->
 
-[docs-overview]: https://docs.agentfront.dev/frontmcp/testing/overview
-[docs-tools]: https://docs.agentfront.dev/frontmcp/testing/api-reference
-[docs-tool-ui]: https://docs.agentfront.dev/frontmcp/testing/api-reference
-[docs-resources]: https://docs.agentfront.dev/frontmcp/testing/api-reference
-[docs-prompts]: https://docs.agentfront.dev/frontmcp/testing/api-reference
-[docs-auth]: https://docs.agentfront.dev/frontmcp/testing/authentication
-[docs-transports]: https://docs.agentfront.dev/frontmcp/testing/overview
-[docs-mocking]: https://docs.agentfront.dev/frontmcp/testing/http-mocking
+[docs-overview]: https://frontmcp.dev/reference/testing
+[docs-tools]: https://frontmcp.dev/reference/testing
+[docs-tool-ui]: https://frontmcp.dev/reference/testing
+[docs-resources]: https://frontmcp.dev/reference/testing
+[docs-prompts]: https://frontmcp.dev/reference/testing
+[docs-auth]: https://frontmcp.dev/reference/testing/auth
+[docs-transports]: https://frontmcp.dev/reference/testing
+[docs-mocking]: https://frontmcp.dev/reference/testing/interceptors#httpmock

@@ -58,6 +58,8 @@ Not all FrontMCP features are available in browser environments:
 | Direct client (`connect()`) | Yes             | In-memory connection                                                   |
 | `ConfigPlugin`              | Yes             | No `.env` / `config.yml` files: schema defaults and `process.env` only |
 
+In a page the server logs at `warn` unless `logging.level` is set, and it never prints the "No distributed storage backend detected in production" warning (a browser bundle has `NODE_ENV=production`, but there is no Redis to configure). Up to 1.9.4 it logged about 20 INFO lines while starting, an INFO block on every tool call, and that warning once per scope.
+
 ### NODE_ENV in the browser
 
 `runtimeContext.env`, `isProduction()` / `isDevelopment()` and error formatting all read one value:
@@ -259,5 +261,5 @@ ls dist/browser/
 
 ## Reference
 
-- **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/browser-compatibility>
+- **Docs:** <https://frontmcp.dev/reference/deployment/browser>
 - **Related skills:** `build-for-sdk`, `build-for-cli`, `deploy-to-cloudflare`

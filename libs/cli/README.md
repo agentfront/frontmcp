@@ -209,9 +209,12 @@ export default defineConfig({
 
 Fields not declared in the deployment fall back to the project `package.json`
 (name, version, description, author, license, homepage, repository, keywords).
-FrontMCP `setup.steps` are automatically translated to MCPB `user_config` and
-exposed as environment variables at runtime via `${user_config.KEY}`
-substitution in `mcp_config.env`. Conditional visibility / branching steps
+Every `userConfig` entry, and every top-level `setup.steps` question, becomes
+an MCPB `user_config` entry that reaches the server as an environment variable
+through `${user_config.KEY}` substitution in `mcp_config.env`. The variable is
+the entry's `env` (or the step's `env`), else the key in UPPER_SNAKE_CASE
+(`deskApiKey` → `DESK_API_KEY`). The deployment's `env` is merged in too, and a
+user's answer wins over it. Conditional visibility / branching steps
 (`showWhen`, `next`) have no MCPB equivalent — the generator logs a warning
 and renders them unconditionally.
 
@@ -277,7 +280,7 @@ Object-typed parameters accept JSON strings that are automatically parsed.
 
 **Tool name conflict resolution:** if a tool name collides with a built-in command (e.g., `login`, `serve`), the tool subcommand is automatically suffixed with `-tool` (e.g., `login-tool`).
 
-**Auth token injection:** when `cli.authRequired` is `true` in config, an active OAuth token is automatically injected into tool/resource/prompt calls.
+**Auth token injection:** when `cli.authRequired` is `true` in config, the active session's stored token is sent with every tool/resource/prompt call, and those commands refuse to run (exit 1) until `login` or `connect --token` has stored one.
 
 ### `frontmcp.config.js` — CLI Options
 
@@ -434,7 +437,7 @@ Apache-2.0 — see [LICENSE](../../LICENSE).
 
 <!-- links -->
 
-[docs-install]: https://docs.agentfront.dev/frontmcp/getting-started/installation
-[docs-cli-ref]: https://docs.agentfront.dev/frontmcp/getting-started/cli-reference
-[docs-dev]: https://docs.agentfront.dev/frontmcp/deployment/local-dev-server
-[docs-production]: https://docs.agentfront.dev/frontmcp/deployment/production-build
+[docs-install]: https://frontmcp.dev/learn/installation
+[docs-cli-ref]: https://frontmcp.dev/reference/cli
+[docs-dev]: https://frontmcp.dev/reference/cli#frontmcp-dev
+[docs-production]: https://frontmcp.dev/reference/deployment/production-build

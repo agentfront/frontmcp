@@ -10,5 +10,11 @@
     "noEmit": true,
     "types": []
   },
-  "files": ["tool-must-fail.ts", "prompts-must-compile.ts", "hooks-must-compile.ts", "skills-must-compile.ts"]
+  "files": [
+    "tool-must-fail.ts",
+    "prompts-must-compile.ts",
+    "hooks-must-compile.ts",
+    "host-must-compile.ts",
+    "skills-must-compile.ts"
+  ]
 }

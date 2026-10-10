@@ -308,7 +308,12 @@ export default class PluginRegistry
         await targetHookScope.hooks.registerHooks(false, ...hooksWithOwner);
       }
 
-      pluginInstance.get = providers.get.bind(providers);
+      const getFromPluginProviders = providers.get.bind(providers);
+      pluginInstance.get = getFromPluginProviders;
+      // A `Plugin.init()` record outlives the server: leave no reference to this one on its instance.
+      this.scope.onDispose(() => {
+        if (pluginInstance.get === getFromPluginProviders) Reflect.deleteProperty(pluginInstance, 'get');
+      });
 
       // Install context extensions declared by the plugin
       // This adds properties like `this.remember` to ExecutionContextBase

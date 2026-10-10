@@ -23,9 +23,11 @@
 
 import 'reflect-metadata';
 
-import type { FrontMcpConfigInput } from '../common';
+import { setMachineIdOverride } from '@frontmcp/utils';
+
+import { LogLevel, type FrontMcpConfigInput } from '../common';
 import { FrontMcpLocalAppTokens } from '../common/tokens';
-import { importWithRequireFallback } from '../utils/dynamic-import.utils';
+import { logLevelFromEnv } from '../common/types/options/logging/schema';
 import type { CreateConfig } from './create.types';
 import type { DirectMcpServer } from './direct.types';
 
@@ -41,7 +43,8 @@ let instanceCache = new Map<string, Promise<DirectMcpServer>>();
 
 /**
  * Convert a flat `CreateConfig` into a `FrontMcpConfigInput` with a synthetic app. The app-level fields go to the
- * app; every other `@FrontMcp` option is passed on to the server as it is.
+ * app, which joins the server's root scope (`standalone: false`), so the server builds one scope; `auth` and every
+ * other `@FrontMcp` option are passed on to the server as they are.
  * @internal Exported for testing.
  */
 export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
@@ -77,6 +80,7 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
   // Set individual metadata tokens (same as @App() decorator)
   const appMeta: Record<string, unknown> = {
     name,
+    standalone: false,
     tools,
     resources,
     prompts,
@@ -86,7 +90,6 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
     authProviders,
     agents,
     skills,
-    auth,
     jobs: jobDefinitions,
     workflows: workflowDefinitions,
   };
@@ -98,15 +101,9 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
     }
   }
 
-  return { ...serverOptions, apps: [syntheticApp], serve: false };
-}
-
-/** `@frontmcp/utils`, loaded lazily (see `importWithRequireFallback`). */
-function loadUtils(): Promise<typeof import('@frontmcp/utils')> {
-  return importWithRequireFallback(
-    () => import('@frontmcp/utils'),
-    () => require('@frontmcp/utils') as typeof import('@frontmcp/utils'),
-  );
+  // A server embedded with create() is quiet unless asked: `warn`, or the level FRONTMCP_LOG_LEVEL names.
+  const logging = serverOptions.logging ?? { level: logLevelFromEnv() ?? LogLevel.Warn };
+  return { ...serverOptions, ...(auth !== undefined && { auth }), logging, apps: [syntheticApp], serve: false };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -159,7 +156,6 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
     try {
       // Apply machine ID override if provided
       if (machineIdWasSet) {
-        const { setMachineIdOverride } = await loadUtils();
         setMachineIdOverride(config.machineId);
       }
 
@@ -177,7 +173,6 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
             instanceCache.delete(cacheKey);
           }
           if (machineIdWasSet) {
-            const { setMachineIdOverride } = await loadUtils();
             setMachineIdOverride(undefined);
           }
           return originalDispose();
@@ -191,7 +186,6 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
         instanceCache.delete(cacheKey);
       }
       if (machineIdWasSet) {
-        const { setMachineIdOverride } = await loadUtils();
         setMachineIdOverride(undefined);
       }
       throw error;

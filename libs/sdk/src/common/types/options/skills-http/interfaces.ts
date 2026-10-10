@@ -464,6 +464,8 @@ export interface SkillsConfigAuditOptions {
    * @default 'hash'
    */
   subjectMode?: 'plain' | 'hash' | 'omit';
+  /** HMAC key for `subjectMode: 'hash'` (at least 32 bytes); unset, it is derived from the signer's key material. */
+  subjectHashSecret?: string | Uint8Array;
   /**
    * Periodic head-anchor interval (milliseconds). Reserved for v1.3.0
    * tail-truncation detection. Validated only — currently the writer does

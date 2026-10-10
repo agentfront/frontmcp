@@ -198,7 +198,12 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
     // An attempt its caller gave up on while its providers were built never builds the job.
     this.throwIfAborted();
 
-    const jobContext = job.create(parsedInput, { authInfo: this.state.authInfo ?? {}, contextProviders, attempt });
+    const jobContext = job.create(parsedInput, {
+      authInfo: this.state.authInfo ?? {},
+      contextProviders,
+      attempt,
+      signal: ctx.signal,
+    });
     // `authorities.pipes` may be async: run them before any hook or execute() reads `this.auth`.
     await jobContext.loadAuthContext();
     this.throwIfAborted();
@@ -207,7 +212,10 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
     this.state.set('jobContext', jobContext);
   }
 
-  /** Run the job's `execute()` on the `'job'` surface. A value passed to `this.respond()` is its result. */
+  /**
+   * Run the job's `execute()` on the `'job'` surface. A value passed to `this.respond()` is its result.
+   * An attempt its caller gave up on while the job ran fails with the caller's reason, however the job ended.
+   */
   @Stage('execute')
   async execute() {
     const { jobContext, parsedInput } = this.state.required;
@@ -216,15 +224,18 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
     try {
       output = await runOnSurface('job', async () => jobContext.execute(parsedInput));
     } catch (error) {
+      this.throwIfAborted();
       if (!(error instanceof FlowControl && error.type === 'respond')) throw toJobError(error);
       output = error.output;
     }
+    this.throwIfAborted();
     this.state.set('output', output);
   }
 
   /** The result must match the job's `outputSchema`; a mismatch fails the attempt, which is not retried. */
   @Stage('validateOutput')
   async validateOutput() {
+    this.throwIfAborted();
     const { job, jobContext } = this.state.required;
     const result = job.parseOutput(this.state.output);
     this.state.set('answer', { result, logs: [...jobContext.getLogs()] });
@@ -267,11 +278,19 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
     this.respond(answer);
   }
 
-  /** Answer for the job; a hook that answers before `validateOutput` gets its answer recorded as the result. */
+  /**
+   * Answer for the job. A hook's answer is checked against the job's `outputSchema`, as `execute()`'s result
+   * is: undeclared fields are dropped, and a mismatch fails the attempt with `InvalidOutputError`.
+   */
   override respond(output: FlowOutputOf<typeof name>) {
-    const answer = outputSchema.parse(output);
+    const answer = output === this.state.answer ? output : this.checkedAnswer(output);
     this.state.set('answer', answer);
     throw FlowControl.respond(answer);
+  }
+
+  private checkedAnswer(output: FlowOutputOf<typeof name>): FlowOutputOf<typeof name> {
+    const { result, logs } = outputSchema.parse(output);
+    return { result: this.input.job.parseOutput(result as JobOutput), logs };
   }
 
   private throwIfAborted(): void {

@@ -54,9 +54,6 @@ test-output
 
 .codex-docs
 
-# Docs backup (local development only)
-docs/docs.backup.json
-
 .claude/settings.local.json
 
 # FrontMCP development keys (contains private keys - never commit!)

@@ -57,7 +57,7 @@ export async function validateMcpb(archivePath: string): Promise<ValidateResult>
 
   if (archive.size > ARCHIVE_SIZE_ERROR) {
     result.warnings.push(
-      `Archive is ${(archive.size / 1024 / 1024).toFixed(1)} MB — consider tuning esbuild externals or disabling node_modules inclusion`,
+      `Archive is ${(archive.size / 1024 / 1024).toFixed(1)} MB — consider tuning esbuild externals or dropping --sea`,
     );
   } else if (archive.size > ARCHIVE_SIZE_WARN) {
     result.warnings.push(`Archive is ${(archive.size / 1024 / 1024).toFixed(1)} MB`);

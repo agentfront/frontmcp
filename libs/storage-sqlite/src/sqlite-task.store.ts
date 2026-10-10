@@ -28,6 +28,8 @@ import { EventEmitter } from 'node:events';
 
 import type Database from 'better-sqlite3';
 
+import { getHostname } from '@frontmcp/utils';
+
 import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
 import { openDatabase, withBusyRetry } from './open-database';
 import type { SqliteStorageOptions } from './sqlite.options';
@@ -63,6 +65,8 @@ export interface TaskRecord {
     host: 'in-process' | 'cli';
     pid?: number;
     spawnedAt?: string;
+    /** Name of the machine running the CLI worker; its `pid` is probed or signalled only from that machine. */
+    hostname?: string;
   };
 }
 
@@ -76,6 +80,7 @@ export interface TaskListPage {
 
 export interface TaskStoreInterface {
   create(record: TaskRecord): Promise<void>;
+  createWithinLimit(record: TaskRecord, maxActive: number): Promise<boolean>;
   get(taskId: string, sessionId: string): Promise<TaskRecord | null>;
   update(taskId: string, sessionId: string, patch: Partial<TaskRecord>): Promise<TaskRecord | null>;
   delete(taskId: string, sessionId: string): Promise<void>;
@@ -142,6 +147,8 @@ interface TaskRow {
 
 interface Prepared {
   insert: Database.Statement;
+  insertWithinLimit: Database.Statement;
+  unfinishedWithWorker: Database.Statement;
   get: Database.Statement;
   update: Database.Statement;
   del: Database.Statement;
@@ -214,6 +221,16 @@ export class SqliteTaskStore implements TaskStoreInterface {
       insert: this.db.prepare(
         'INSERT INTO mcp_tasks (task_id, session_id, status, expires_at, created_at, updated_at, executor_pid, record_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       ),
+      // One statement, so the count and the insert are atomic across every process sharing the file.
+      insertWithinLimit: this.db.prepare(
+        'INSERT INTO mcp_tasks (task_id, session_id, status, expires_at, created_at, updated_at, executor_pid, record_json) ' +
+          'SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM mcp_tasks WHERE session_id = ? ' +
+          "AND status IN ('working', 'input_required') AND expires_at > ?) < ?",
+      ),
+      unfinishedWithWorker: this.db.prepare(
+        "SELECT * FROM mcp_tasks WHERE session_id = ? AND status IN ('working', 'input_required') " +
+          'AND expires_at > ? AND executor_pid IS NOT NULL',
+      ),
       get: this.db.prepare('SELECT * FROM mcp_tasks WHERE task_id = ? AND session_id = ?'),
       update: this.db.prepare(
         'UPDATE mcp_tasks SET status = ?, expires_at = ?, updated_at = ?, executor_pid = ?, record_json = ? WHERE task_id = ? AND session_id = ?',
@@ -239,16 +256,18 @@ export class SqliteTaskStore implements TaskStoreInterface {
       this.logger?.warn?.('[SqliteTaskStore] create: record already expired', { taskId: record.taskId });
       return;
     }
-    this.prepared().insert.run(
-      record.taskId,
-      record.sessionId,
-      record.status,
-      record.expiresAt,
-      new Date(record.createdAt).getTime(),
-      new Date(record.lastUpdatedAt).getTime(),
-      record.executor?.pid ?? null,
-      this.serializeRecord(record),
-    );
+    this.prepared().insert.run(...this.rowValues(record));
+  }
+
+  /** Insert unless the owner has `maxActive` unfinished rows, after failing the ones whose CLI worker died. */
+  async createWithinLimit(record: TaskRecord, maxActive: number): Promise<boolean> {
+    if (record.expiresAt <= Date.now()) {
+      await this.create(record);
+      return true;
+    }
+    if (this.insertWithinLimit(record, maxActive)) return true;
+    if (!(await this.failOrphanedTasks(record.sessionId))) return false;
+    return this.insertWithinLimit(record, maxActive);
   }
 
   async get(taskId: string, sessionId: string): Promise<TaskRecord | null> {
@@ -259,25 +278,10 @@ export class SqliteTaskStore implements TaskStoreInterface {
       return null;
     }
     const record = this.rowToRecord(row);
-    // Orphan detection: if a CLI executor owns the task and its PID is dead,
-    // auto-transition to failed. Spec §Task Lifecycle: only `working` and
-    // `input_required` are non-terminal — don't touch anything else.
-    if (
-      (record.status === 'working' || record.status === 'input_required') &&
-      record.executor?.host === 'cli' &&
-      typeof record.executor.pid === 'number' &&
-      !this.liveness(record.executor.pid)
-    ) {
-      const patched = await this.update(taskId, sessionId, {
-        status: 'failed',
-        statusMessage: 'Task runner exited before completing the task',
-      });
-      if (patched) {
-        // Publish the synthetic terminal event so `tasks/result` waiters
-        // already blocked on `subscribeTerminal` get unblocked immediately.
-        await this.publishTerminal(patched);
-        return patched;
-      }
+    // Orphan detection: an unfinished task whose CLI worker died is marked failed.
+    if (this.isOrphaned(record)) {
+      const failed = await this.failOrphan(record);
+      if (failed) return failed;
     }
     return record;
   }
@@ -329,24 +333,9 @@ export class SqliteTaskStore implements TaskStoreInterface {
     // plausibly needs it.
     const tasks: TaskRecord[] = [];
     for (const row of rows) {
-      let record = this.rowToRecord(row);
-      if (
-        (record.status === 'working' || record.status === 'input_required') &&
-        record.executor?.host === 'cli' &&
-        typeof record.executor.pid === 'number' &&
-        !this.liveness(record.executor.pid)
-      ) {
-        const patched = await this.update(record.taskId, sessionId, {
-          status: 'failed',
-          statusMessage: 'Task runner exited before completing the task',
-        });
-        if (patched) {
-          // Publish so any blocked `tasks/result` subscriber wakes up now.
-          await this.publishTerminal(patched);
-          record = patched;
-        }
-      }
-      tasks.push(record);
+      const record = this.rowToRecord(row);
+      const failed = this.isOrphaned(record) ? await this.failOrphan(record) : null;
+      tasks.push(failed ?? record);
     }
     const total = (this.prepared().countBySession.get(sessionId, Date.now()) as { n: number }).n;
     const page: TaskListPage = { tasks };
@@ -410,6 +399,61 @@ export class SqliteTaskStore implements TaskStoreInterface {
 
   getDatabase(): Database.Database {
     return this.db;
+  }
+
+  private insertWithinLimit(record: TaskRecord, maxActive: number): boolean {
+    const inserted = this.prepared().insertWithinLimit.run(
+      ...this.rowValues(record),
+      record.sessionId,
+      Date.now(),
+      maxActive,
+    );
+    return inserted.changes === 1;
+  }
+
+  /** Mark the owner's tasks whose CLI worker died as failed. Returns whether any were. */
+  private async failOrphanedTasks(sessionId: string): Promise<boolean> {
+    const rows = this.prepared().unfinishedWithWorker.all(sessionId, Date.now()) as TaskRow[];
+    let failedAny = false;
+    for (const row of rows) {
+      const record = this.rowToRecord(row);
+      if (this.isOrphaned(record) && (await this.failOrphan(record))) failedAny = true;
+    }
+    return failedAny;
+  }
+
+  /** A worker on another host is never probed: its PID means nothing here. A record naming no host is probed. */
+  private isOrphaned(record: TaskRecord): boolean {
+    return (
+      (record.status === 'working' || record.status === 'input_required') &&
+      record.executor?.host === 'cli' &&
+      typeof record.executor.pid === 'number' &&
+      (record.executor.hostname === undefined || record.executor.hostname === getHostname()) &&
+      !this.liveness(record.executor.pid)
+    );
+  }
+
+  /** Publishes the terminal event so `tasks/result` waiters blocked on `subscribeTerminal` wake up now. */
+  private async failOrphan(record: TaskRecord): Promise<TaskRecord | null> {
+    const failed = await this.update(record.taskId, record.sessionId, {
+      status: 'failed',
+      statusMessage: 'Task runner exited before completing the task',
+    });
+    if (failed) await this.publishTerminal(failed);
+    return failed;
+  }
+
+  private rowValues(record: TaskRecord): [string, string, TaskStatus, number, number, number, number | null, string] {
+    return [
+      record.taskId,
+      record.sessionId,
+      record.status,
+      record.expiresAt,
+      new Date(record.createdAt).getTime(),
+      new Date(record.lastUpdatedAt).getTime(),
+      record.executor?.pid ?? null,
+      this.serializeRecord(record),
+    ];
   }
 
   private rowToRecord(row: TaskRow): TaskRecord {

@@ -1,6 +1,6 @@
 # @frontmcp/react
 
-React hooks, components, and AI SDK integration for [FrontMCP](https://docs.agentfront.dev). Build AI-agent-powered UIs with idiomatic React patterns.
+React hooks, components, and AI SDK integration for [FrontMCP](https://frontmcp.dev). Build AI-agent-powered UIs with idiomatic React patterns.
 
 ## Installation
 

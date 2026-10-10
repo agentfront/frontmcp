@@ -16,7 +16,7 @@ import { detectOptionalPeers } from './optional-peers';
 import { resolveEmittedEntry } from '../../shared/emitted-entry';
 import { buildEmittedAliases, readTsPathAliases } from '../../shared/tsconfig-aliases';
 import { shipWidgetSources } from './copy-widgets';
-import type { ServerDefaults } from '../../config/frontmcp-config.types';
+import type { CliTargetConfig, ServerDefaults } from '../../config/frontmcp-config.types';
 import {
   type DeploymentTarget,
   findDeployment,
@@ -241,19 +241,14 @@ async function buildSingleTarget(
     await cleanOutDir(targetOutDir, process.cwd());
   }
 
-  // #370: forward `build.storage` and per-deployment `cli.outputDefault` from
-  // the FrontMcp config into the exec build so the manifest reflects them.
-  // The exec build has its own loader (`loadExecConfig`) that doesn't see
-  // the deployment-level shape; passing these via opts merges them in
-  // `normalizeConfig` before the manifest is generated.
-  //
-  // Only the cli deployment shape carries a `cli` block; map it down to the
-  // narrow exec-config shape (outputDefault / description / authRequired) so
-  // the result is a clean object, never `false`.
-  const cliDeploymentConfig = deployment?.target === 'cli' ? deployment.cli : undefined;
+  // #370: forward `build.storage` and the cli deployment's `cli` block from
+  // the FrontMcp config into the exec build so the manifest and the generated
+  // CLI reflect them. The exec build has its own loader (`loadExecConfig`)
+  // that doesn't see the deployment-level shape; passing these via opts
+  // merges them before the manifest is generated.
   const execOverrides: {
     storage?: { type: 'sqlite' | 'redis' | 'none'; required?: boolean };
-    cli?: { outputDefault?: 'text' | 'json'; description?: string; authRequired?: boolean };
+    cli?: CliTargetConfig;
     // #365 round-3 — without this, top-level `nodeVersion` declared in
     // `frontmcp.config.{ts,js}` was silently dropped because the legacy
     // `loadExecConfig` doesn't read .ts and the new-shape loader's result
@@ -268,15 +263,7 @@ async function buildSingleTarget(
     env?: Record<string, string>;
   } = {
     storage: config?.build?.storage,
-    cli: cliDeploymentConfig
-      ? {
-          ...(cliDeploymentConfig.outputDefault ? { outputDefault: cliDeploymentConfig.outputDefault } : {}),
-          ...(cliDeploymentConfig.description ? { description: cliDeploymentConfig.description } : {}),
-          ...(typeof cliDeploymentConfig.authRequired === 'boolean'
-            ? { authRequired: cliDeploymentConfig.authRequired }
-            : {}),
-        }
-      : undefined,
+    cli: deployment?.target === 'cli' ? deployment.cli : undefined,
     nodeVersion: config?.nodeVersion,
     httpEntryPath: deploymentHttpPath(
       deployment && 'server' in deployment ? deployment.server : undefined,

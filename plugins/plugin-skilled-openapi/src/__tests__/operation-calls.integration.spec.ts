@@ -303,17 +303,20 @@ describe('passthroughCallerToken: true', () => {
     ]);
   });
 
-  it.each([
-    ['resolves above the API', '..', /was not issued for https:\/\/203\.0\.113\.10\/me /],
-    ['hides a ".." segment behind an encoded slash', '../..', /has a "\.\." segment once percent-decoded/],
-  ])('sends nothing when a path parameter %s', async (_case, accountId, reason) => {
-    const result = await runWorkflow(
-      `return await callTool("getAccountProfile", { accountId: ${JSON.stringify(accountId)} })`,
-    );
+  it('sends nothing when a path parameter would resolve above the API', async () => {
+    const result = await runWorkflow('return await callTool("getAccountProfile", { accountId: ".." })');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/request build failed: Path parameter 'accountId' .* cannot be '\.' or '\.\.'/);
+    expect(sent).toEqual([]);
+  });
+
+  it('sends nothing when a path parameter hides a ".." segment behind an encoded slash', async () => {
+    const result = await runWorkflow('return await callTool("getAccountProfile", { accountId: "../.." })');
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/passthrough caller token refused/);
-    expect(result.error).toMatch(reason);
+    expect(result.error).toMatch(/has a "\.\." segment once percent-decoded/);
     expect(sent).toEqual([]);
   });
 

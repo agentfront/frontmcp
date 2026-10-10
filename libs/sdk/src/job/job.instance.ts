@@ -94,7 +94,12 @@ export class JobInstance<
 
   override create(
     input: In,
-    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown; attempt?: number },
+    extra: {
+      authInfo: Partial<Record<string, unknown>>;
+      contextProviders?: unknown;
+      attempt?: number;
+      signal?: AbortSignal;
+    },
   ): JobContext<InSchema, OutSchema, In, Out> {
     const metadata = this.metadata;
     const providers = extra.contextProviders
@@ -111,6 +116,7 @@ export class JobInstance<
       logger,
       authInfo,
       attempt: extra.attempt ?? 1,
+      signal: extra.signal,
     };
 
     switch (this.record.kind) {

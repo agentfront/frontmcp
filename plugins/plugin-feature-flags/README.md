@@ -98,7 +98,7 @@ If the provider is unreachable, `isEnabled` returns the `defaultValue` you pass
 important, so an outage degrades the way you intend rather than silently
 disabling a feature.
 
-Full guide: [Feature Flags](https://docs.agentfront.dev/frontmcp/plugins/feature-flags-plugin)
+Full guide: [Feature Flags](https://frontmcp.dev/reference/plugins/feature-flags)
 
 ## License
 

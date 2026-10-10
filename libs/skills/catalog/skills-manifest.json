@@ -1077,7 +1077,8 @@
                 "Bootstraps the audit subsystem via setSkillAuditFactory(...) before FrontMcp registers",
                 "MemoryAuditStore keeps records in-process — perfect for tests, lost on restart",
                 "A random-key Hs256AuditSigner cannot verify records after a restart: use Rs256AuditSigner in production",
-                "subjectMode: 'hash' redacts user identifiers while keeping them correlatable"
+                "subjectMode: 'hash' redacts user identifiers while keeping them correlatable (keyed from the signer's secret)",
+                "The in-memory store is development-only: with audit enabled in production, the server refuses to start without a `store`"
               ]
             },
             {
@@ -1371,7 +1372,7 @@
               "tags": ["deployment", "mcpb", "bundle", "claude-desktop", "user-config"],
               "features": [
                 "Using `frontmcp build --target mcpb` to produce a single `.mcpb` archive",
-                "Translating `setup.steps` into MCPB `user_config` + `${user_config.KEY}` env bindings",
+                "Passing `setup.steps` and `userConfig` answers to the server as env vars via `${user_config.KEY}`",
                 "Validating the archive round-trip with `frontmcp mcpb validate`"
               ]
             }
@@ -2381,7 +2382,7 @@
                 "Implements the SkillAuditStore interface (nextSequence, appendAtSequence, tail, read)",
                 "One S3 object per sequence keeps individual records immutable and verifiable",
                 "tail() returns the latest record so the writer can chain prevHash deterministically",
-                "read({ from, limit }) supports incremental verifyChain runs in CI"
+                "read({ from, limit }) supports incremental verifyChain runs in CI (pass the record before the window as `previous`)"
               ]
             },
             {
@@ -2393,7 +2394,8 @@
                 "verifyChain returns { ok: true, verified } or { ok: false, breakAt, reason } for the first detected break",
                 "defaultAuditSignatureVerifier dispatches on record.signatureAlg (HS256 or RS256)",
                 "Trusted keys are an AuditTrustedKey[] list; each record's signatureKeyId selects its key",
-                "read() returns the chain in sequence order from any SkillAuditStore implementation"
+                "read() returns the chain in sequence order from any SkillAuditStore implementation",
+                "verifyChain(window, keys, verifier, { previous }) verifies a window read with read({ from }) against the record before it"
               ]
             }
           ]

@@ -85,6 +85,23 @@ describe('createSecureStore', () => {
     await adapter.disconnect();
   });
 
+  it('closes the in-memory storage it opened, and leaves a supplied one to its owner (#821)', async () => {
+    const disconnect = jest.spyOn(MemoryStorageAdapter.prototype, 'disconnect');
+    try {
+      const owned = await createSecureStore({ config: 'memory', pepper: 'p-32-bytes-minimum-aaaaaaaaaaaa' });
+      await owned.close?.();
+      expect(disconnect).toHaveBeenCalledTimes(1);
+
+      const supplied = new MemoryStorageAdapter();
+      await supplied.connect();
+      const borrowed = await createSecureStore({ config: 'memory', storage: supplied });
+      expect(borrowed.close).toBeUndefined();
+      await supplied.disconnect();
+    } finally {
+      disconnect.mockRestore();
+    }
+  });
+
   it('explicit encryption.pepper isolates from the factory pepper', async () => {
     const adapter = new MemoryStorageAdapter();
     await adapter.connect();

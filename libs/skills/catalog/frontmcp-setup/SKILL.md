@@ -9,7 +9,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/getting-started/quickstart
+  docs: https://frontmcp.dev/learn
 ---
 
 # FrontMCP Setup Router
@@ -217,5 +217,5 @@ when a server has been configured to host this skill.
 
 ## Reference
 
-- [Getting Started](https://docs.agentfront.dev/frontmcp/getting-started/quickstart)
+- [Getting Started](https://frontmcp.dev/learn)
 - Domain routers: `frontmcp-development`, `frontmcp-deployment`, `frontmcp-testing`, `frontmcp-config`, `frontmcp-guides`

@@ -31,7 +31,7 @@ import { runTsc } from '../../../shared/tsc';
 import { cleanIntermediateFiles } from './clean-intermediates';
 import { REQUIRED_DECORATOR_FIELDS } from '../../../core/tsconfig';
 import { serverBundleBanner } from '../../../config/deployment-env';
-import type { ServerDefaults } from '../../../config/frontmcp-config.types';
+import type { CliTargetConfig, ServerDefaults } from '../../../config/frontmcp-config.types';
 
 /**
  * Run two banners in order. Each sets a variable only when it is unset, so the first one wins:
@@ -48,7 +48,7 @@ export async function buildExec(
     sea?: boolean;
     execOverrides?: {
       storage?: { type: 'sqlite' | 'redis' | 'none'; required?: boolean };
-      cli?: { outputDefault?: 'text' | 'json'; description?: string; authRequired?: boolean };
+      cli?: CliTargetConfig;
       // #365 round-3 — top-level `nodeVersion` from new-shape frontmcp.config
       // gets forwarded here because the legacy `loadExecConfig` doesn't read
       // it from .ts files (and never read top-level nodeVersion at all in
@@ -269,6 +269,11 @@ export async function buildExec(
     const authRequired = cliConfig.authRequired ?? false;
     const nativeDeps = cliConfig.nativeDeps || {};
     const oauthConfig = cliConfig.oauth;
+    if (oauthConfig && !authRequired) {
+      console.log(
+        `${c('yellow', '[build:exec]')} cli.oauth configures the login command, which is generated only when cli.authRequired is true`,
+      );
+    }
 
     // Write runtime modules to temp files for bundling
     const tempDir = path.join(outDir, '__cli_temp');

@@ -6,7 +6,7 @@ description: 'Produce a .mcpb archive for Claude Desktop with metadata, tools, a
 tags: [deployment, mcpb, bundle, claude-desktop, user-config]
 features:
   - 'Using `frontmcp build --target mcpb` to produce a single `.mcpb` archive'
-  - 'Translating `setup.steps` into MCPB `user_config` + `${user_config.KEY}` env bindings'
+  - 'Passing `setup.steps` and `userConfig` answers to the server as env vars via `${user_config.KEY}`'
   - 'Validating the archive round-trip with `frontmcp mcpb validate`'
 ---
 
@@ -28,8 +28,9 @@ import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 class GreetTool extends ToolContext {
   async execute(input: { name: string }) {
     const apiBase = process.env.API_BASE ?? 'https://api.example.com';
+    const greeting = process.env.GREETING ?? 'Hello';
     return {
-      content: [{ type: 'text' as const, text: `Hello, ${input.name}! (via ${apiBase})` }],
+      content: [{ type: 'text' as const, text: `${greeting}, ${input.name}! (via ${apiBase})` }],
     };
   }
 }
@@ -70,6 +71,12 @@ module.exports = {
         runtimes: { node: '>=22.0.0' },
       },
       sea: { enabled: true },
+      // Each entry reaches the server as an env var: `env`, else the key in UPPER_SNAKE_CASE.
+      userConfig: {
+        greeting: { type: 'string', title: 'Greeting word', default: 'Hello' }, // → GREETING
+      },
+      // Merged into mcp_config.env too; a user_config answer wins over it.
+      env: { LOG_FORMAT: 'json' },
     },
   ],
   // Install-time questions — each step becomes a user_config entry + env var.
@@ -106,10 +113,26 @@ frontmcp mcpb validate dist/mcpb/greeter-mcpb-1.0.0.mcpb
 open dist/mcpb/greeter-mcpb-1.0.0.mcpb
 ```
 
+The generated `manifest.json` wires every answer to the server:
+
+```json
+"mcp_config": {
+  "command": "node",
+  "args": ["${__dirname}/server/index.js"],
+  "env": {
+    "LOG_FORMAT": "json",
+    "API_BASE": "${user_config.apiBase}",
+    "API_TOKEN": "${user_config.apiToken}",
+    "GREETING": "${user_config.greeting}",
+    "FRONTMCP_STDIO": "1"
+  }
+}
+```
+
 ## What This Demonstrates
 
 - Using `frontmcp build --target mcpb` to produce a single `.mcpb` archive
-- Translating `setup.steps` into MCPB `user_config` + `${user_config.KEY}` env bindings
+- Passing `setup.steps` and `userConfig` answers to the server as env vars via `${user_config.KEY}`
 - Validating the archive round-trip with `frontmcp mcpb validate`
 
 ## Related

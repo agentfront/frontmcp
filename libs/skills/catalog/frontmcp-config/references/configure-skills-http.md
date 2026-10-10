@@ -41,6 +41,7 @@ tags: [config, skills, skills-http, llm-txt, instructions, audit, injection]
       store: customStore, // SkillAuditStore — see audit section below
       metrics: createSkillAuditMetrics({ createCounter }), // counts failed and dropped writes
       subjectMode: 'hash', // 'plain' | 'hash' | 'omit'
+      subjectHashSecret: process.env.AUDIT_SUBJECT_HASH_SECRET, // optional HMAC key for 'hash', >= 32 bytes
       headAnchorIntervalMs: 300_000,
     },
   },
@@ -163,11 +164,14 @@ Memory cache is the default; for multi-pod deployments use Redis or another supp
 | `store`                | `SkillAuditStore`             | memory    | Where records are persisted. Use `StorageAdapterAuditStore` for Redis/Vercel KV/SQLite-backed persistence |
 | `metrics`              | `SkillAuditMetrics`           | unset     | Counts failed and dropped writes. Build it with `createSkillAuditMetrics({ createCounter })`              |
 | `subjectMode`          | `'plain' \| 'hash' \| 'omit'` | `'hash'`  | Redaction policy for the subject (e.g., user ID) embedded in each record                                  |
+| `subjectHashSecret`    | `string \| Uint8Array`        | derived   | HMAC key for `'hash'` (at least 32 bytes). Unset: derived from the signer's key material (see below)      |
 | `headAnchorIntervalMs` | `number`                      | unset     | Reserved for out-of-band head anchoring (tail-truncation detection); validated but not read yet           |
 
-The audit module lives in `@frontmcp/adapters/skills`, which the SDK does not import: register it once at boot with `setSkillAuditFactory(() => auditModule)` (see `skill-audit-log`). With `audit.enabled` and no factory, the server runs without the audit log in development and refuses to start when `NODE_ENV` is `production`.
+The audit module lives in `@frontmcp/adapters/skills`, which the SDK does not import. `@frontmcp/plugin-skilled-openapi` registers it when the plugin is installed; without the plugin, register it once at boot with `setSkillAuditFactory(() => auditModule)` (see `skill-audit-log`). With `audit.enabled` and no module registered, the server runs without the audit log in development and refuses to start when `NODE_ENV` is `production`; a `signer` and `store` do not replace the module.
 
-**Production constraint:** without a `signer`, the SDK falls back to an HS256 signer with a random, process-local secret, and refuses to start when `NODE_ENV === 'production'`. A random secret also makes records unverifiable after a restart. The recommended production pattern is `Rs256AuditSigner` reusing the bundle-signing keypair.
+**Subject hashes:** with `subjectMode: 'hash'` and no `subjectHashSecret`, the HMAC key is derived (HKDF) from the signer's key material, so the hashes change when the signing key does. Releases up to 1.9.4 derived it from the public `keyId`, so subject hashes written before an upgrade from them do not match the ones written after, unless `subjectHashSecret` was set. A signer with no key material to derive from (an HSM or KMS signer) records subjects as `'redacted'` and warns at startup; set `subjectHashSecret` to keep hashing.
+
+**Production constraint:** without a `signer`, the SDK falls back to an HS256 signer with a random, process-local secret, and refuses to start when `NODE_ENV === 'production'`. A random secret also makes records unverifiable after a restart. Without a `store` it falls back to the in-memory store, and with audit enabled in production it refuses to start as well; the error names the fix (configure `store`, e.g. a `StorageAdapterAuditStore` over Redis). The recommended production pattern is `Rs256AuditSigner` reusing the bundle-signing keypair plus a `StorageAdapterAuditStore`.
 
 **Multi-pod constraint:** the audit chain is **single-writer**. Pods that share the same `SkillAuditStore` can link records to the same tail, and `verifyChain` then reports a `prevHash` mismatch; nothing warns at write time. Route audit writes to a single elected leader pod or to per-pod chains that you stitch offline.
 
@@ -195,5 +199,5 @@ See [`skill-audit-log`](../../frontmcp-extensibility/references/skill-audit-log.
 
 ## Reference
 
-- [Skills HTTP](https://docs.agentfront.dev/frontmcp/features/skill-based-workflows)
+- [Skills HTTP](https://frontmcp.dev/learn/teaching-the-model-skills)
 - Related skills: `decorators-guide`, `skill-audit-log`, `vendor-integrations`

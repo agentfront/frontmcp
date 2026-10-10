@@ -223,6 +223,39 @@ describe('generateMcpbManifest', () => {
     expect(manifest.user_config?.apiKey.sensitive).toBe(true);
   });
 
+  it('merges the deployment env under the user_config bindings, which win', () => {
+    const manifest = generateMcpbManifest({
+      name: 'demo',
+      version: '1.0.0',
+      cwd: tmp,
+      schema: emptySchema(),
+      deployment: { target: 'mcpb', env: { DESK_REGION: 'eu', API_KEY: 'from-deployment' } },
+      userConfig: { apiKey: { type: 'string', title: 'API Key' } },
+      userConfigEnv: { API_KEY: '${user_config.apiKey}' },
+    });
+
+    expect(manifest.server.mcp_config.env).toEqual({
+      DESK_REGION: 'eu',
+      API_KEY: '${user_config.apiKey}',
+      FRONTMCP_STDIO: '1',
+    });
+    expect(mcpbManifestSchema.safeParse(manifest).success).toBe(true);
+  });
+
+  it('keeps FRONTMCP_STDIO=1 even when the deployment env sets it', () => {
+    const manifest = generateMcpbManifest({
+      name: 'demo',
+      version: '1.0.0',
+      cwd: tmp,
+      schema: emptySchema(),
+      deployment: { target: 'mcpb', env: { FRONTMCP_STDIO: '0' } },
+      userConfig: {},
+      userConfigEnv: {},
+    });
+
+    expect(manifest.server.mcp_config.env).toEqual({ FRONTMCP_STDIO: '1' });
+  });
+
   it('always sets FRONTMCP_STDIO so the server speaks stdio to the MCPB host', () => {
     const manifest = generateMcpbManifest({
       name: 'demo',

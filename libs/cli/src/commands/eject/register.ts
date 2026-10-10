@@ -11,11 +11,11 @@ import * as path from 'path';
 
 import type { Command } from 'commander';
 
-import { ensureDir, fileExists, readFile, writeFile } from '@frontmcp/utils';
+import { ensureDir, fileExists, readFile, readJSON, writeFile } from '@frontmcp/utils';
 
 import { resolveConfig, type McpClientName } from '../../config';
 import { c } from '../../core/colors';
-import { buildClientPayload, emitClientSnippet, mergeClientConfig } from './mcp-client';
+import { buildClientPayload, emitClientSnippet, mergeClientConfig, type ClientPayloadOptions } from './mcp-client';
 
 const SUPPORTED_CLIENTS: McpClientName[] = ['claude-code', 'claude-desktop', 'cursor', 'windsurf', 'vscode'];
 
@@ -45,10 +45,15 @@ export function registerEjectCommands(program: Command): void {
         process.exit(1);
       }
 
+      const payloadOptions = await readPayloadOptions(resolved.configDir ?? process.cwd());
+
       if (opts.out) {
         const target = path.isAbsolute(opts.out) ? opts.out : path.resolve(process.cwd(), opts.out);
         const existing = (await fileExists(target)) ? await readFile(target) : undefined;
-        const merged = mergeClientConfig(existing, buildClientPayload(client as McpClientName, resolved.config));
+        const merged = mergeClientConfig(
+          existing,
+          buildClientPayload(client as McpClientName, resolved.config, payloadOptions),
+        );
         if (opts.dryRun) {
           console.log(c('cyan', `[dry-run] would write ${target}:\n`));
           console.log(merged);
@@ -60,7 +65,12 @@ export function registerEjectCommands(program: Command): void {
         return;
       }
 
-      const snippet = emitClientSnippet(client as McpClientName, resolved.config);
+      const snippet = emitClientSnippet(client as McpClientName, resolved.config, payloadOptions);
       console.log(snippet);
     });
+}
+
+async function readPayloadOptions(projectDir: string): Promise<ClientPayloadOptions> {
+  const packageJson = await readJSON<{ name?: unknown }>(path.join(projectDir, 'package.json'));
+  return typeof packageJson?.name === 'string' ? { packageName: packageJson.name } : {};
 }

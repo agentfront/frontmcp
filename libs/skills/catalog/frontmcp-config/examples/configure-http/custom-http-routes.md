@@ -88,7 +88,8 @@ declare function isValidSecret(secret: string): Promise<boolean>;
 
 ## Gotchas
 
-- Reserved paths fail-fast at startup: the resolved MCP entry path and its `/sse` + `/message` siblings, anything under `/oauth/*` and `/.well-known/*`, and `/health` + `/metrics`.
+- Reserved paths fail-fast at startup: the resolved MCP entry path and its `/sse` + `/message` siblings, anything under `/oauth/*` and `/.well-known/*`, `/health` + `/metrics`, and the health probe paths (`/healthz`, `/readyz`, or the configured `health.healthzPath` / `health.readyzPath`) while health is enabled.
+- `createFetchHandler()` (Workers, Deno, Bun) serves the same routes behind the same `ipFilter` and `session:verify` checks; there a route path takes literal and `:param` segments only.
 - For large payloads, prefer a custom GET route + a `resource_link` over a `@Resource` — a resource rides the JSON-RPC channel and is not out-of-band.
 - A custom `hostFactory` owns its Express app (body limits, CORS, Content-Type defaults); `http.routes` and `bodyLimit` are consumed only by the built-in `ExpressHostAdapter`.
 

@@ -9,6 +9,7 @@ features:
   - 'defaultAuditSignatureVerifier dispatches on record.signatureAlg (HS256 or RS256)'
   - "Trusted keys are an AuditTrustedKey[] list; each record's signatureKeyId selects its key"
   - 'read() returns the chain in sequence order from any SkillAuditStore implementation'
+  - 'verifyChain(window, keys, verifier, { previous }) verifies a window read with read({ from }) against the record before it'
 ---
 
 # Verify Audit Chain
@@ -60,6 +61,14 @@ async function main() {
   }
 
   console.log(`Verified ${result.verified} records, chain intact.`);
+
+  // Incremental: verify only what was appended since the last run, anchored on the record before it.
+  const lastVerified = records[records.length - 1];
+  if (lastVerified) {
+    const [previous, ...appended] = await store.read({ from: lastVerified.sequence });
+    const incremental = verifyChain(appended, trustedKeys, defaultAuditSignatureVerifier, { previous });
+    if (!incremental.ok) process.exit(1);
+  }
 }
 
 main().catch((err) => {
@@ -74,6 +83,7 @@ main().catch((err) => {
 - defaultAuditSignatureVerifier dispatches on record.signatureAlg (HS256 or RS256)
 - Trusted keys are an AuditTrustedKey[] list; each record's signatureKeyId selects its key
 - read() returns the chain in sequence order from any SkillAuditStore implementation
+- verifyChain(window, keys, verifier, { previous }) verifies a window read with read({ from }) against the record before it
 
 ## Related
 

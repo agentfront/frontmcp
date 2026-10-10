@@ -65,6 +65,19 @@ export class TaskAugmentationRequiredError extends PublicMcpError {
   }
 }
 
+/** The caller is at `tasks.maxConcurrentPerSession`; answered like the guard's `CONCURRENCY_LIMIT`. */
+export class TaskConcurrencyLimitError extends PublicMcpError {
+  readonly maxConcurrent: number;
+  constructor(maxConcurrent: number) {
+    super(
+      `Too many tasks in progress for this caller (at most ${maxConcurrent} at once). Wait for one to finish, or cancel one.`,
+      'CONCURRENCY_LIMIT',
+      429,
+    );
+    this.maxConcurrent = maxConcurrent;
+  }
+}
+
 export class TaskStoreNotInitializedError extends InternalMcpError {
   constructor() {
     super('Task store is not initialized', 'TASK_STORE_NOT_INITIALIZED');

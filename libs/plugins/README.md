@@ -74,9 +74,9 @@ Apache-2.0 — see [LICENSE](../../LICENSE).
 
 <!-- links -->
 
-[docs-overview]: https://docs.agentfront.dev/frontmcp/plugins/overview
-[docs-cache]: https://docs.agentfront.dev/frontmcp/plugins/cache-plugin
-[docs-remember]: https://docs.agentfront.dev/frontmcp/plugins/remember-plugin
-[docs-codecall]: https://docs.agentfront.dev/frontmcp/plugins/codecall/overview
-[docs-dashboard]: https://docs.agentfront.dev/frontmcp/plugins/overview
-[docs-creating]: https://docs.agentfront.dev/frontmcp/plugins/creating-plugins
+[docs-overview]: https://frontmcp.dev/reference/plugins
+[docs-cache]: https://frontmcp.dev/reference/plugins/cache
+[docs-remember]: https://frontmcp.dev/reference/plugins/remember
+[docs-codecall]: https://frontmcp.dev/reference/plugins/codecall
+[docs-dashboard]: https://frontmcp.dev/reference/plugins
+[docs-creating]: https://frontmcp.dev/reference/sdk/plugin

@@ -673,5 +673,5 @@ class DevServer {}
 
 ## Reference
 
-- **Docs:** <https://docs.agentfront.dev/frontmcp/servers/skills>
+- **Docs:** <https://frontmcp.dev/reference/sdk/skill>
 - **Related skills:** `create-skill-with-tools` (skills that reference MCP tools), `setup-project` (project scaffolding workflows)
