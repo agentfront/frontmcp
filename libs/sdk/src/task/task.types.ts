@@ -27,6 +27,9 @@ export const TASK_DEFAULTS = {
   maxConcurrentPerSession: 16,
 } as const;
 
+/** Upper bound of `tasks.maxConcurrentPerSession`: a capped task creation reads that many slot keys in one MGET. */
+export const MAX_CONCURRENT_TASKS_PER_SESSION = 1000;
+
 /**
  * The `io.modelcontextprotocol/related-task` _meta key per MCP spec.
  */
@@ -205,7 +208,7 @@ export interface TasksConfig {
   /** Suggested poll interval reported to clients. */
   defaultPollIntervalMs?: number;
 
-  /** Unfinished tasks a caller may have at once (per session, or per subject under 2026-07-28); default 16. */
+  /** Unfinished tasks a caller may have at once (per session, or per subject under 2026-07-28); default 16, at most 1000. */
   maxConcurrentPerSession?: number;
 
   /** Key prefix for the store. Default: 'mcp:task:'. */

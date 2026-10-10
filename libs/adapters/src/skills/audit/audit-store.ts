@@ -60,7 +60,7 @@ export interface SkillAuditStore {
   /** Read records in sequence order. Used by the verifier and by HTTP viewers. */
   read(opts?: SkillAuditReadOptions): Promise<SkillAuditRecord[]>;
 
-  /** Give back a {@link nextSequence} number whose record was never appended, so the chain has no gap (best-effort). */
+  /** Give back `sequence` only while it is the latest allocation and its record was never stored; otherwise change nothing. */
   releaseSequence?(sequence: number): Promise<void>;
 }
 
@@ -95,9 +95,8 @@ export class MemoryAuditStore implements SkillAuditStore {
     return this.records[this.records.length - 1];
   }
 
-  /** Only the latest allocation can be given back; the writer allocates and appends one record at a time. */
   async releaseSequence(sequence: number): Promise<void> {
-    if (sequence === this.seq) this.seq -= 1;
+    if (sequence === this.seq && !this.records.some((record) => record.sequence === sequence)) this.seq -= 1;
   }
 
   async read(opts?: SkillAuditReadOptions): Promise<SkillAuditRecord[]> {
@@ -150,9 +149,10 @@ export class StorageAdapterAuditStore implements SkillAuditStore {
     return this.adapter.incr(this.sequenceKey);
   }
 
-  /** Not transactional across pods: another writer may already have allocated a later number. */
-  async releaseSequence(): Promise<void> {
-    await this.adapter.decr(this.sequenceKey);
+  /** DECR's result tells atomically whether the counter was still `sequence`; when it was not, INCR restores it. */
+  async releaseSequence(sequence: number): Promise<void> {
+    if ((await this.adapter.get(this.recordKey(sequence))) !== null) return;
+    if ((await this.adapter.decr(this.sequenceKey)) !== sequence - 1) await this.adapter.incr(this.sequenceKey);
   }
 
   async appendAtSequence(record: SkillAuditRecord): Promise<void> {
