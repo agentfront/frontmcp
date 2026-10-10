@@ -28,6 +28,8 @@ class NoopTool extends ToolContext {
 @App({ id: 'routes', name: 'Routes', tools: [NoopTool] })
 class RoutesApp {}
 
+let releaseStream: () => void = () => undefined;
+
 const routes: HttpRouteConfig[] = [
   {
     method: 'GET',
@@ -56,6 +58,27 @@ const routes: HttpRouteConfig[] = [
     method: 'GET',
     path: '/passes-on',
     handler: (_req: ServerRequest, _res: ServerResponse, next) => next(),
+  },
+  {
+    method: 'GET',
+    path: '/events',
+    handler: async (_req: ServerRequest, res: ServerResponse) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write('data: first\n\n');
+      await new Promise<void>((resolve) => (releaseStream = resolve));
+      res.write('data: second\n\n');
+      res.end();
+    },
+  },
+  {
+    method: 'GET',
+    path: '/fails-midway',
+    handler: async (_req: ServerRequest, res: ServerResponse) => {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.write('partial');
+      await Promise.resolve();
+      throw new Error('the route failed after it started its response');
+    },
   },
   {
     method: 'GET',
@@ -113,6 +136,37 @@ describe('createFetchHandler() with http.routes (#819)', () => {
 
     expect(response.headers.get('content-type')).toContain('text/html');
     await expect(response.text()).resolves.toBe('<h1>custom page</h1>');
+  });
+
+  it('returns a streaming response once its head is written, while the handler still runs', async () => {
+    const handler = await fetchHandler();
+    const decoder = new TextDecoder();
+    const timedOut = new Promise<'timed out'>((resolve) => setTimeout(() => resolve('timed out'), 1000));
+
+    const response = await Promise.race([handler(new Request('http://localhost/events')), timedOut]);
+    if (response === 'timed out') throw new Error('the response was held until the handler finished');
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('the response has no body');
+    const first = await reader.read();
+    releaseStream();
+    let rest = '';
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) rest += decoder.decode(chunk.value);
+
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    expect(decoder.decode(first.value)).toBe('data: first\n\n');
+    expect(rest).toBe('data: second\n\n');
+  });
+
+  it('errors the body of a response whose handler fails after starting it, not ending it as complete', async () => {
+    const handler = await fetchHandler();
+
+    const response = await handler(new Request('http://localhost/fails-midway'));
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('the response has no body');
+
+    expect(response.status).toBe(200);
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('partial');
+    await expect(reader.read()).rejects.toThrow('the route failed after it started its response');
   });
 
   it('answers 404 when the handler passes the request on, or the method does not match', async () => {

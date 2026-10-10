@@ -361,8 +361,10 @@ with the same handler, behind the same `throttle.ipFilter` check and, for
 `auth: true`, the same `session:verify` flow. There the handler gets the
 normalized request (`method`, `path`, `params`, `query`, `headers`, the parsed
 JSON `body`) and a response with `status`, `json`, `send`, `setHeader`, `write`,
-`end` and `redirect`, streamed as it is written; route paths take literal and
-`:param` segments (compared case-sensitively), not other Express path syntax.
+`end` and `redirect`, returned once its head is written and streamed as it is
+written (a handler that fails after that errors the body, and the error is
+logged); route paths take literal and `:param` segments (compared
+case-sensitively), not other Express path syntax.
 Up to 1.9.4 `createFetchHandler()` logged each route as registered and
 answered 404.
 

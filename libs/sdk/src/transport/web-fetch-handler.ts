@@ -583,7 +583,7 @@ export async function runMatchingHttpFlowWeb(
   const url = new URL(request.url);
   const serverRequest = await toServerRequest(request, url, opts.ctx, undefined, opts.env);
   const flowName = await scope.findHttpFlowName(serverRequest);
-  if (!flowName) return serveHttpRouteWeb(scope.httpRoutes, serverRequest);
+  if (!flowName) return serveHttpRouteWeb(scope.httpRoutes, serverRequest, scope.logger);
   let output: HttpOutput | undefined;
   try {
     output = (await runRequestExclusive(() =>
