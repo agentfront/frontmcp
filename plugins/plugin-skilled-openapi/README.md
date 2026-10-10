@@ -20,7 +20,7 @@ npm install @enclave-vm/core @enclave-vm/ast
 
 ## Usage
 
-Register the plugin with `SkilledOpenApiPlugin.init(...)` and point it at a bundle source. The `dev: true` flag bypasses signature verification (unless `requireSignature` is set explicitly) and allows `http://` upstreams for local iteration — see [Security](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/security) before going to production.
+Register the plugin with `SkilledOpenApiPlugin.init(...)` and point it at a bundle source. The `dev: true` flag bypasses signature verification (unless `requireSignature` is set explicitly) and allows `http://` upstreams for local iteration — see [Security](https://frontmcp.dev/reference/plugins/skilled-openapi#what-the-checks-protect-against) before going to production.
 
 ```typescript
 import * as path from 'node:path';
@@ -56,7 +56,7 @@ With the server running, `tools/list` returns **only** `search_skill`, `load_ski
 // -> { "success": true, "value": { "id": "inv_1", "status": "open" }, "stats": { "durationMs": 12, "toolCalls": 1, "steps": 3 } }
 ```
 
-See the [5-minute quickstart](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/quickstart) for an end-to-end run against a mock upstream.
+See the [5-minute quickstart](https://frontmcp.dev/reference/plugins/skilled-openapi#serving-a-bundle) for an end-to-end run against a mock upstream.
 
 ## How it works
 
@@ -109,15 +109,15 @@ All options are validated by a strict Zod schema (`skilledOpenApiPluginOptionsSc
 
 `outbound` (SSRF + egress):
 
-| Field                     | Default  | Description                                              |
-| ------------------------- | -------- | -------------------------------------------------------- |
-| `allowPrivateNetworks`    | `false`  | Allow connections to private/loopback/link-local IPs.    |
-| `allowHttp`               | `false`  | Allow `http://` upstreams (auto-enabled by `dev: true`). |
-| `maxConcurrencyPerHost`   | `10`     | Per-host concurrency cap.                                |
-| `defaultTimeoutMs`        | `30000`  | Per-request timeout.                                     |
-| `defaultMaxResponseBytes` | `262144` | Per-response size cap.                                   |
+| Field                     | Default  | Description                                                                                               |
+| ------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `allowPrivateNetworks`    | `false`  | Allow connections to private/loopback IPs (link-local and metadata stay blocked); logs a startup warning. |
+| `allowHttp`               | `false`  | Allow `http://` upstreams (auto-enabled by `dev: true`).                                                  |
+| `maxConcurrencyPerHost`   | `10`     | Per-host concurrency cap.                                                                                 |
+| `defaultTimeoutMs`        | `30000`  | Per-request timeout.                                                                                      |
+| `defaultMaxResponseBytes` | `262144` | Per-response size cap.                                                                                    |
 
-Full reference: [Configuration](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/configuration).
+Full reference: [Configuration](https://frontmcp.dev/reference/plugins/skilled-openapi#skilledopenapiplugininitoptions).
 
 ## Security model
 
@@ -127,7 +127,7 @@ Full reference: [Configuration](https://docs.agentfront.dev/frontmcp/plugins/ski
 - **Bundle data treated as adversarial** even after signature verification — WHATWG `URL` only, RFC 7230 header validation, no shell-out, no `eval`, strict JSON Schema with `additionalProperties: false`.
 - **Indirect-prompt-injection mitigations** — `run_workflow` runs in a no-host-access sandbox (upstream data reaches the model only via the script's `return`), output-schema validation is mandatory on each action, and responses are size-capped.
 
-Details: [Security](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/security).
+Details: [Security](https://frontmcp.dev/reference/plugins/skilled-openapi#what-the-checks-protect-against).
 
 ## Standards alignment
 
@@ -137,10 +137,10 @@ Details: [Security](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi
 
 ## Documentation
 
-Full docs: **https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/overview**
+Full docs: **https://frontmcp.dev/reference/plugins/skilled-openapi**
 
-- [Overview](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/overview) · [Quickstart](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/quickstart) · [Sources](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/sources) · [Bundle format](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/bundle-format)
-- [Configuration](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/configuration) · [Meta-tools](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/meta-tools) · [Security](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/security) · [API reference](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/api-reference)
+- [Overview](https://frontmcp.dev/reference/plugins/skilled-openapi) · [Quickstart](https://frontmcp.dev/reference/plugins/skilled-openapi#serving-a-bundle) · [Sources](https://frontmcp.dev/reference/plugins/skilled-openapi#loading-bundles-from-files-packages-and-servers) · [Bundle format](https://frontmcp.dev/reference/plugins/skilled-openapi#the-bundle)
+- [Configuration](https://frontmcp.dev/reference/plugins/skilled-openapi#skilledopenapiplugininitoptions) · [Meta-tools](https://frontmcp.dev/reference/plugins/skilled-openapi#what-the-plugin-adds) · [Security](https://frontmcp.dev/reference/plugins/skilled-openapi#what-the-checks-protect-against) · [API reference](https://frontmcp.dev/reference/plugins/skilled-openapi#reference)
 
 ## License
 

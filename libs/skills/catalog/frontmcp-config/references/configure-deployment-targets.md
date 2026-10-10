@@ -286,7 +286,7 @@ The config is consumed by every `frontmcp` command, not just `build`:
 | `skills install` / `export`       | `skills.provider`, `skills.install` (else `skills.bundle`; `'none'` = nothing), `skills.exportTarget` — flags win   |
 | `eject-mcp-config <client>`       | `clients.<client>`, `name`, `transport`, `env.shared` ⊕ `env.ship` (stdio `env`, under the client's own `env`)      |
 
-See `transport`, `env`, `clients`, `test`, `skills` field reference in [docs/frontmcp/deployment/frontmcp-config](https://docs.agentfront.dev/frontmcp/deployment/frontmcp-config).
+See `transport`, `env`, `clients`, `test`, `skills` field reference in [`frontmcp.config`](https://frontmcp.dev/reference/server/config-files#frontmcpconfig).
 
 ## `transport.http.path` for every build target
 
@@ -357,5 +357,5 @@ For JSON configs, add `$schema` for autocomplete:
 
 ## Reference
 
-- [Documentation](https://docs.agentfront.dev/frontmcp/deployment/frontmcp-config)
+- [Documentation](https://frontmcp.dev/reference/server/config-files#frontmcpconfig)
 - Related skills: `frontmcp-deployment`, `distributed-ha`, `deploy-to-node`, `deploy-to-vercel`

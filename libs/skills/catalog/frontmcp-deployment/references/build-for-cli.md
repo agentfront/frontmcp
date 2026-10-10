@@ -225,5 +225,5 @@ frontmcp service uninstall my-server
 
 ## Reference
 
-- **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/production-build>
+- **Docs:** <https://frontmcp.dev/reference/deployment/production-build>
 - **Related skills:** `build-for-sdk`, `build-for-browser`, `deploy-to-cloudflare`

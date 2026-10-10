@@ -462,6 +462,17 @@ These apply to **both** the spec-URL fetch and external `$ref` resolution (`mcp-
 
 > `followRedirects` (a `loadOptions` field, not `refResolution`) defaults to `false` in FrontMCP.
 
+### Path parameters
+
+A path parameter is percent-encoded into the operation's path template. A value equal to `.` or `..` would
+otherwise be resolved as a dot segment when the URL is parsed (`/tickets/{id}/replies` with an `id` of `..` is
+`/replies`), so the call fails with `INVALID_PATH_PARAMETER` (`Path parameter 'id' of operation '…' cannot be '.' or '..'`)
+and nothing is sent. The built URL must also stay under the base URL's path plus the template's literal prefix;
+one that doesn't (for example two adjacent parameters that together form `..`) fails the same way. Values that
+merely contain dots or encoded dots (`v1.2`, `...`, `%2e%2e`, `..%2Fadmin`) are encoded and sent as before. The
+same request builder runs the operations of `@frontmcp/plugin-skilled-openapi`, where the refusal reads
+`request build failed: Path parameter …`.
+
 ## Load Options
 
 Configure how the OpenAPI spec is loaded:
@@ -547,5 +558,5 @@ Every `mcp-from-openapi` load option reaches the loader; up to 1.9.1 `overlays` 
 
 ## Reference
 
-- [OpenAPI Adapter Documentation](https://docs.agentfront.dev/frontmcp/adapters/openapi-adapter)
+- [OpenAPI Adapter Documentation](https://frontmcp.dev/reference/adapters/openapi)
 - Related skills: `official-adapters`, `create-adapter`, `create-tool`

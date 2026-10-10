@@ -12,6 +12,13 @@
  * @module task/helpers/process-liveness
  */
 
+import { getHostname } from '@frontmcp/utils';
+
+/** Whether a CLI worker's PID may be probed or signalled from here: it runs on this host, or its record names none. */
+export function isLocalWorker(executor: { hostname?: string }): boolean {
+  return executor.hostname === undefined || executor.hostname === getHostname();
+}
+
 /** Returns `true` if a process with the given PID is alive and accessible. */
 export function isAlive(pid: number): boolean {
   if (!Number.isFinite(pid) || pid <= 0) return false;

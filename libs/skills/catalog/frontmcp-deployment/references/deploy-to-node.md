@@ -274,5 +274,5 @@ services:
 
 ## Reference
 
-- **Docs:** https://docs.agentfront.dev/frontmcp/deployment/production-build
+- **Docs:** https://frontmcp.dev/reference/deployment/production-build
 - **Related skills:** `deploy-to-vercel`, `deploy-to-lambda`

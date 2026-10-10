@@ -16,7 +16,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/fundamentals/overview
+  docs: https://frontmcp.dev/reference
 ---
 
 # FrontMCP Configuration Router
@@ -264,5 +264,5 @@ when a server has been configured to host this skill.
 
 ## Reference
 
-- [FrontMCP Overview](https://docs.agentfront.dev/frontmcp/fundamentals/overview)
+- [FrontMCP Overview](https://frontmcp.dev/reference)
 - Related skills: `configure-transport`, `configure-http`, `configure-throttle`, `configure-elicitation`, `configure-auth`, `configure-session`, `setup-redis`, `setup-sqlite`

@@ -49,15 +49,6 @@ export abstract class FrontMcpServer {
   abstract registerRoute(method: HttpMethod, path: string, handler: ServerRequestHandler): Promise<void> | void;
 
   /**
-   * Enhance a request handler with request/response processing and error handling.
-   * This handle will be stored as the first middleware in the chain to align adapter handler
-   * with the gateway's request/response processing.
-   */
-  abstract enhancedHandler(
-    handler: ServerRequestHandler,
-  ): (req: any, res: any, next: () => any) => Promise<void> | void;
-
-  /**
    * Prepares the server routes without starting the HTTP listener.
    * Used for serverless deployments (Vercel, AWS Lambda, etc.)
    */

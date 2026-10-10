@@ -78,7 +78,7 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
 | `transport?`    | Transport preset (`'modern'`, `'legacy'`, `'stateless-api'`, `'full'`) or object                                                                                                                                                                                                                                        |
 | `auth?`         | Authentication mode: `'public'`, `'transparent'`, `'local'`, `'remote'`                                                                                                                                                                                                                                                 |
 | `http?`         | HTTP server options (port, host, cors, socketPath)                                                                                                                                                                                                                                                                      |
-| `logging?`      | Logging configuration (transports and levels); without `level`, the level `FRONTMCP_LOG_LEVEL` names, else `info`                                                                                                                                                                                                       |
+| `logging?`      | Logging configuration (transports and levels); without `level`, the level `FRONTMCP_LOG_LEVEL` names, else `info` (`warn` in a browser); per-request lines are at `verbose`                                                                                                                                             |
 | `elicitation?`  | Enable interactive user input during tool execution                                                                                                                                                                                                                                                                     |
 | `sqlite?`       | SQLite storage for local deployments (sessions, events)                                                                                                                                                                                                                                                                 |
 | `pubsub?`       | Redis pub/sub for distributed resource subscriptions across multiple instances (single-server deployments use in-memory subscriptions; falls back to `redis` config)                                                                                                                                                    |
@@ -625,7 +625,7 @@ class SyncDataJob extends JobContext {
 | `dependsOn?`       | Array of step IDs that must complete first                      |
 | `condition?`       | `(steps) => boolean` — skip step if returns false               |
 | `continueOnError?` | Continue workflow if this step fails (default: `false`)         |
-| `timeout?`         | Per-step timeout in ms                                          |
+| `timeout?`         | Per-step timeout in ms; aborts the job's `this.signal`          |
 | `retry?`           | Per-step retry config (same shape as `@Job.retry`)              |
 
 ```typescript
@@ -808,7 +808,7 @@ A hook declared on a `@Tool`, `@Resource` or `@Prompt` class runs only for that 
 
 ## Reference
 
-- **Official docs:** [FrontMCP Decorators Overview](https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/overview)
+- **Official docs:** [FrontMCP Decorators Overview](https://frontmcp.dev/reference/sdk#decorators)
 - **Related skills:**
   - `create-tool` -- step-by-step guide for building tools with `@Tool` and `ToolContext`
   - `create-resource` -- patterns for `@Resource` and `@ResourceTemplate` usage

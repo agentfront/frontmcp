@@ -28,9 +28,6 @@ jest.mock('../adapters/express.host.adapter', () => {
       }
       registerRoute() {}
       registerMiddleware() {}
-      enhancedHandler(handler: unknown) {
-        return handler;
-      }
       prepare() {}
       getHandler() {
         return {};
@@ -141,7 +138,6 @@ describe('FrontMcpServerInstance', () => {
       const mockHost = {
         registerRoute: jest.fn(),
         registerMiddleware: jest.fn(),
-        enhancedHandler: jest.fn((h: unknown) => h),
         prepare: jest.fn(),
         getHandler: jest.fn(),
         start: jest.fn(),
@@ -167,7 +163,6 @@ describe('FrontMcpServerInstance', () => {
       const mockHost = {
         registerRoute: jest.fn(),
         registerMiddleware: jest.fn(),
-        enhancedHandler: jest.fn((h: unknown) => h),
         prepare: jest.fn(),
         getHandler: jest.fn(),
         start: jest.fn(),

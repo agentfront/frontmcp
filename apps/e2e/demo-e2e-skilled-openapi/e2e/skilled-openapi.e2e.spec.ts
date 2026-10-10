@@ -156,6 +156,17 @@ test.describe('SkilledOpenApi Plugin E2E', () => {
       expect(json.error).toMatch(/input validation failed.*id/i);
     });
 
+    test('a path parameter of .. or . is refused before any request is sent', async ({ mcp }) => {
+      for (const id of ['..', '.']) {
+        const result = await mcp.tools.call('run_workflow', {
+          script: `return await callTool('refundInvoice', { id: '${id}', amount: 1 });`,
+        });
+        const json = result.json<RunWorkflowResponse>();
+        expect(json.success).toBe(false);
+        expect(json.error).toContain("Path parameter 'id' of operation 'refundInvoice' cannot be '.' or '..'");
+      }
+    });
+
     test('ABAC denial — adminPing requires admin role; public sessions are denied', async ({ mcp }) => {
       const result = await mcp.tools.call('run_workflow', { script: "return await callTool('adminPing', {});" });
       const json = result.json<RunWorkflowResponse>();

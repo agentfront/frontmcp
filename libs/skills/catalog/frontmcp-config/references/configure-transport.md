@@ -217,5 +217,5 @@ curl -X POST http://localhost:3000/ -H 'Content-Type: application/json' -d '{"js
 
 ## Reference
 
-- **Docs:** [Runtime Modes and Transport Configuration](https://docs.agentfront.dev/frontmcp/deployment/runtime-modes)
+- **Docs:** [Runtime Modes and Transport Configuration](https://frontmcp.dev/learn/running-frontmcp-anywhere)
 - **Related skills:** `configure-auth`, `create-plugin`

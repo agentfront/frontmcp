@@ -61,15 +61,25 @@ export const skillsConfigCacheOptionsSchema = z.object({
  * of the upward dependency. Validation here just confirms shape; the helper
  * that consumes the config does the structural duck-type check.
  *
- * `subjectMode` and `headAnchorIntervalMs` are surfaced here so the
+ * `subjectMode`, `subjectHashSecret` and `headAnchorIntervalMs` are surfaced here so the
  * normalizer preserves them when forwarding the audit block to the helper.
  */
+const SUBJECT_HASH_SECRET_MIN_BYTES = 32;
+
 export const skillsConfigAuditOptionsSchema = z.object({
   enabled: z.boolean().optional().default(false),
   signer: z.unknown().optional(),
   store: z.unknown().optional(),
   metrics: z.unknown().optional(),
   subjectMode: z.enum(['plain', 'hash', 'omit']).optional(),
+  subjectHashSecret: z
+    .union([
+      z.string().min(SUBJECT_HASH_SECRET_MIN_BYTES),
+      z.custom<Uint8Array>((secret) => secret instanceof Uint8Array && secret.length >= SUBJECT_HASH_SECRET_MIN_BYTES, {
+        message: `subjectHashSecret must be at least ${SUBJECT_HASH_SECRET_MIN_BYTES} bytes`,
+      }),
+    ])
+    .optional(),
   headAnchorIntervalMs: z.number().int().positive().optional(),
 });
 

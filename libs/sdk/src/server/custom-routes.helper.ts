@@ -23,6 +23,7 @@ import {
   ServerRequestTokens,
   type FrontMcpLogger,
   type FrontMcpServer,
+  type HttpMethod,
   type HttpOutput,
   type HttpRouteConfig,
   type ServerRequest,
@@ -47,11 +48,21 @@ export type VerifySessionFn = (request: ServerRequest) => Promise<VerifyResult |
 /** Dispatch the `http:ip-filter` flow; it answers with the rejection, or nothing when the caller may proceed. */
 export type CheckClientIpFn = (request: ServerRequest, response: ServerResponse) => Promise<HttpOutput | undefined>;
 
+/** Where a route is registered: the scope, which records it for the web-fetch adapter and mounts it on the host. */
+export type HttpRouteRegistrar = Pick<FrontMcpServer, 'registerRoute'>;
+
+/** A route a scope registered, with its guards (`http:ip-filter`, `session:verify`) wrapped around its handler. */
+export interface RegisteredHttpRoute {
+  method: HttpMethod;
+  path: string;
+  handler: ServerRequestHandler;
+}
+
 export interface RegisterCustomHttpRoutesArgs {
   /** Custom routes from `http.routes`. */
   routes: HttpRouteConfig[] | undefined;
-  /** Active host server to register routes on. */
-  server: FrontMcpServer;
+  /** Where the routes are registered. */
+  server: HttpRouteRegistrar;
   /** Runs `session:verify` for `auth: true` routes. */
   verifySession: VerifySessionFn;
   /** Runs `http:ip-filter` before every route (GHSA-hwfp-xv2f-fr8g). */
@@ -60,6 +71,8 @@ export interface RegisterCustomHttpRoutesArgs {
   entryPath: string;
   /** Per-app / per-scope route base (e.g. `''` or `'/billing'`). */
   routeBase: string;
+  /** The health probe paths the server answers (`/healthz`, `/readyz` or the configured ones). */
+  healthPaths?: readonly string[];
   logger: FrontMcpLogger;
 }
 
@@ -77,7 +90,8 @@ export class ReservedRouteCollisionError extends Error {
     super(
       `Custom http.route "${method} ${path}" collides with the reserved FrontMCP path "${reserved}". ` +
         `Reserved prefixes are the MCP entry path (and its /sse + /message siblings), ` +
-        `/oauth/*, /.well-known/*, /health, and /metrics. Choose a different path.`,
+        `/oauth/*, /.well-known/*, /health, /metrics, and the health probe paths (/healthz, /readyz ` +
+        `unless health.healthzPath / health.readyzPath move them). Choose a different path.`,
     );
     this.name = 'ReservedRouteCollisionError';
   }
@@ -87,10 +101,14 @@ export class ReservedRouteCollisionError extends Error {
  * Build the exact-match + prefix reserved-path set for the resolved MCP base.
  *
  * - Exact matches: the MCP base itself, `<base>/sse`, `<base>/message`,
- *   `/health`, `/metrics`.
+ *   `/health`, `/metrics`, and the health probe paths the server answers.
  * - Prefix matches: `/oauth`, `/.well-known` (any sub-path is reserved).
  */
-export function computeReservedPaths(entryPath: string, routeBase: string): { exact: Set<string>; prefixes: string[] } {
+export function computeReservedPaths(
+  entryPath: string,
+  routeBase: string,
+  healthPaths: readonly string[] = [],
+): { exact: Set<string>; prefixes: string[] } {
   const prefix = normalizeEntryPrefix(entryPath);
   const base = normalizeScopeBase(routeBase);
   const mcpBase = `${prefix}${base}`; // '' | '/mcp' | '/mcp/billing'
@@ -101,6 +119,7 @@ export function computeReservedPaths(entryPath: string, routeBase: string): { ex
     `${mcpBase}/message`,
     '/health',
     '/metrics',
+    ...healthPaths.map(normalizeForCompare),
   ]);
 
   return { exact, prefixes: ['/oauth', '/.well-known'] };
@@ -207,10 +226,10 @@ export function wrapWithIpFilter(handler: ServerRequestHandler, checkClientIp: C
  * misconfiguration aborts boot instead of silently mis-mounting.
  */
 export function registerCustomHttpRoutes(args: RegisterCustomHttpRoutesArgs): void {
-  const { routes, server, verifySession, checkClientIp, entryPath, routeBase, logger } = args;
+  const { routes, server, verifySession, checkClientIp, entryPath, routeBase, healthPaths, logger } = args;
   if (!routes || routes.length === 0) return;
 
-  const reserved = computeReservedPaths(entryPath, routeBase);
+  const reserved = computeReservedPaths(entryPath, routeBase, healthPaths);
 
   for (const route of routes) {
     assertNotReserved(route.method, route.path, reserved);

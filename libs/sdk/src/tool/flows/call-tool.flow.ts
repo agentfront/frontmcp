@@ -61,6 +61,7 @@ import {
   RateLimitError,
   TaskAugmentationNotSupportedError,
   TaskAugmentationRequiredError,
+  TaskConcurrencyLimitError,
   TaskStoreNotInitializedError,
   ToolCredentialsRequiredError,
   ToolExecutionError,
@@ -380,7 +381,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     this.logger = this.logger.child(`CallToolFlow(${name})`);
     this.state.set('tool', tool);
-    this.logger.info(`findTool: tool "${name}" found`);
+    this.logger.verbose(`findTool: tool "${name}" found`);
     this.logger.verbose('findTool:done');
   }
 
@@ -488,7 +489,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       record.progressToken = this.state.progressToken;
     }
 
-    await store.create(record);
+    const maxActive = config.maxConcurrentPerSession ?? TASK_DEFAULTS.maxConcurrentPerSession;
+    if (!(await store.createWithinLimit(record, maxActive))) {
+      throw new TaskConcurrencyLimitError(maxActive);
+    }
 
     const notifier = new TaskNotifier(this.scope.notifications, this.logger);
     // Emit the initial `working` status notification on the same SSE stream as
@@ -1575,7 +1579,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     // Log the final result being sent
-    this.logger.info('finalize: sending response', {
+    this.logger.verbose('finalize: sending response', {
       tool: tool.metadata.name,
       hasContent: Array.isArray(result.content) && result.content.length > 0,
       contentParts: Array.isArray(result.content) ? result.content.length : 0,

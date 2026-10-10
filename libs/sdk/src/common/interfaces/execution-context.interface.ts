@@ -16,7 +16,8 @@ import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/ut
 import { ConfigService } from '../../builtin/config/providers/config.service';
 import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../context';
 import { workerEnvOf } from '../../context/frontmcp-context-storage';
-import { RequestContextNotAvailableError } from '../../errors/mcp.error';
+import { DependencyNotFoundError, RequestContextNotAvailableError } from '../../errors/mcp.error';
+import { ProviderNotAvailableError } from '../../errors/provider.errors';
 import { type CallSurface } from '../availability';
 import { type ScopeEntry } from '../entries';
 import { type ToolLookupScope } from '../utils/tool-lookup.utils';
@@ -217,13 +218,12 @@ export abstract class ExecutionContextBase<Out = unknown> {
     return this.providers.getScope();
   }
 
-  /**
-   * Try to get a dependency, returning undefined if not found.
-   */
+  /** Try to get a dependency, returning undefined if not found; only a registered provider that fails to resolve warns. */
   tryGet<T>(token: Token<T>): T | undefined {
     try {
       return this.providers.get(token);
     } catch (e) {
+      if (e instanceof ProviderNotAvailableError || e instanceof DependencyNotFoundError) return undefined;
       const msg = e instanceof Error ? e.message : String(e);
       this.logger.warn(`Failed to get provider ${String(token)}: ${msg}`);
       return undefined;

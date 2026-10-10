@@ -223,5 +223,5 @@ upstream mcp_backend {
 
 ## Reference
 
-- [Documentation](https://docs.agentfront.dev/frontmcp/deployment/high-availability)
+- [Documentation](https://frontmcp.dev/reference/deployment/high-availability)
 - Related skills: `frontmcp-deployment`, `frontmcp-config`, `deploy-to-node`

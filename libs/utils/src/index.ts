@@ -361,4 +361,4 @@ export type {
 } from './llm';
 
 // Machine ID (deployment-aware node identity)
-export { getMachineId, setMachineIdOverride } from './machine-id';
+export { getHostname, getMachineId, setMachineIdOverride } from './machine-id';

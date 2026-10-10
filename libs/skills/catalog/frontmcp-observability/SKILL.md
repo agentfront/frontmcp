@@ -9,7 +9,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/guides/observability
+  docs: https://frontmcp.dev/reference/server/observability
 ---
 
 # FrontMCP Observability
@@ -212,6 +212,6 @@ when a server has been configured to host this skill.
 
 ## Reference
 
-- [Observability Guide](https://docs.agentfront.dev/frontmcp/guides/observability)
-- [Telemetry API Reference](https://docs.agentfront.dev/frontmcp/sdk-reference/telemetry)
+- [Observability Guide](https://frontmcp.dev/reference/server/observability)
+- [Telemetry API Reference](https://frontmcp.dev/reference/server/observability#thistelemetry)
 - Related skills: `frontmcp-production-readiness`, `frontmcp-config`, `frontmcp-testing`, `frontmcp-development`

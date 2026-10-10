@@ -31,9 +31,10 @@ import { createStorage } from '@frontmcp/utils';
 
 import { MainApp } from './main.app';
 
-// Register the audit module with the SDK. The SDK constructs the writer as
-// `new SkillAuditWriter(store, signer, logger, metrics, { subjectMode })`,
-// with `metrics` and `subjectMode` taken from `skillsConfig.audit`.
+// Register the audit module with the SDK (not needed when @frontmcp/plugin-skilled-openapi
+// is installed: the plugin registers it). The SDK constructs the writer as
+// `new SkillAuditWriter(store, signer, logger, metrics, options)`, with `metrics`,
+// `subjectMode` and `subjectHashSecret` taken from `skillsConfig.audit`.
 setSkillAuditFactory(() => auditModule);
 
 // createStorage() returns a RootStorage, which is a StorageAdapter. Note this
@@ -71,6 +72,9 @@ const auditSigner = new Rs256AuditSigner(JSON.parse(process.env.BUNDLE_SIGNING_P
       store: new StorageAdapterAuditStore(auditStorage),
       metrics: createSkillAuditMetrics({ createCounter }),
       subjectMode: 'hash',
+      // A stable HMAC key keeps subject hashes joinable across signing-key rotations.
+      // Without it the key is derived from the signer's private key.
+      subjectHashSecret: process.env.AUDIT_SUBJECT_HASH_SECRET,
     },
   },
 })

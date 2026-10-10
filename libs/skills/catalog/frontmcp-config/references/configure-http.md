@@ -298,6 +298,12 @@ affected** by `bodyLimit`/`urlencodedLimit` — those options are consumed only
 by the built-in `ExpressHostAdapter`. Custom-host deployments must configure
 their own body limits.
 
+A custom host extends `HostServerAdapter` (exported from `@frontmcp/sdk`) and
+implements `registerMiddleware`, `registerRoute`, `prepare`, `getHandler` and
+`start` (`stop` is optional). Up to 1.9.4 it also had to implement
+`enhancedHandler()`, which nothing called; that method is gone from the
+contract.
+
 ## Custom HTTP Routes
 
 `http.routes` mounts first-class custom HTTP handlers on the **same listener**
@@ -350,6 +356,16 @@ from `@frontmcp/sdk`, and `ServerRequestHandler` types the handler directly.
 Routes share the configured **CORS policy, body limits, and security
 middleware** with the MCP endpoint — they ride the same Express app.
 
+`createFetchHandler()` (Cloudflare Workers, Deno, Bun) serves the same routes
+with the same handler, behind the same `throttle.ipFilter` check and, for
+`auth: true`, the same `session:verify` flow. There the handler gets the
+normalized request (`method`, `path`, `params`, `query`, `headers`, the parsed
+JSON `body`) and a response with `status`, `json`, `send`, `setHeader`, `write`,
+`end` and `redirect`, streamed as it is written; route paths take literal and
+`:param` segments (compared case-sensitively), not other Express path syntax.
+Up to 1.9.4 `createFetchHandler()` logged each route as registered and
+answered 404.
+
 ### `auth` opt-in
 
 Routes are **public by default**. Set `auth: true` to run the request through
@@ -374,7 +390,10 @@ endpoint. Reserved:
 - the resolved MCP entry path (and its `/sse` + `/message` siblings) — split-by-app
   scope bases are included (e.g. `/mcp/billing`),
 - anything under `/oauth/*` and `/.well-known/*`,
-- `/health` and `/metrics`.
+- `/health` and `/metrics`,
+- the health probe paths, `/healthz` and `/readyz` (or `health.healthzPath` /
+  `health.readyzPath`), while health is enabled. Up to 1.9.4 a route there
+  silently replaced the probe on the Express host.
 
 ```typescript
 // ❌ Throws at startup: collides with the MCP entry path when entryPath: '/mcp'
@@ -401,7 +420,7 @@ set their own content type **before** sending the body:
 ### Large payloads: prefer a custom route over `@Resource`
 
 > **Decision:** When a tool needs to hand the client a **large** payload, return
-> a [`resource_link`](https://docs.agentfront.dev/frontmcp/servers/resources)
+> a [`resource_link`](https://frontmcp.dev/reference/sdk/resource)
 > that points at a custom `http.routes` **GET** handler, and serve the bytes
 > from that handler (it supports stream/binary delivery). A `@Resource` rides
 > the MCP JSON-RPC channel and is **not** out-of-band — large reads block the
@@ -520,5 +539,5 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 
 ## Reference
 
-- [HTTP Server Docs](https://docs.agentfront.dev/frontmcp/deployment/local-dev-server)
+- [HTTP Server Docs](https://frontmcp.dev/reference/cli#frontmcp-dev)
 - Related skills: `configure-throttle`, `configure-transport`, `setup-redis`, `setup-project`

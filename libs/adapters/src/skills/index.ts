@@ -119,6 +119,7 @@ export {
   SkillAuditWriterToken,
   StorageAdapterAuditStore,
   verifyChain,
+  type AuditChainVerifyOptions,
   type AuditChainVerifyResult,
   type AuditSignatureVerifier,
   type AuditTrustedKey,

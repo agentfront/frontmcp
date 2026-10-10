@@ -1,31 +1,31 @@
-# Rule: Skills catalog stays in sync with docs
+# Rule: Skills catalog stays in sync with behavior
 
-When a fix or change touches **`docs/frontmcp/**`**, the corresponding entries
-under **`libs/skills/catalog/**`** MUST be updated in the same change.
+When a fix or change alters what users rely on (a public API, option, default,
+error code or message, CLI flag or output), the corresponding entries under
+`libs/skills/catalog/**` MUST be updated in the same change.
 
-The catalog is the installable form of the docs — divergence means that users
-who run `frontmcp skills install <name>` ship code based on stale guidance
-while the Mintlify site (https://docs.agentfront.dev/frontmcp) shows the new
-behaviour. Keeping both surfaces aligned in one PR is a non-negotiable part
-of the change.
+The catalog is the documentation that ships with FrontMCP — divergence means
+that users who run `frontmcp skills install <name>` ship code based on stale
+guidance. FrontMCP's docs site, https://frontmcp.dev, lives in a separate
+repository and is updated for each release from the PRs' "User-facing change"
+sections, so fill that section in too.
 
 ## How to apply
 
-1. For every edit to a page under `docs/frontmcp/**`, search the catalog for
-   matching topics:
+1. For every behavior change, search the catalog for matching topics:
 
    ```bash
-   grep -rln "<keyword from the doc change>" libs/skills/catalog
+   grep -rln "<keyword from the change>" libs/skills/catalog
    ```
 
 2. Update the matching `SKILL.md` files, any `references/*.md`, and any
    `examples/*.md` so they describe the new behaviour, option, contract,
-   error shape, or migration note that the docs now describe.
+   error shape, or migration note.
 
-3. Catalog directory ↔ doc-theme mapping (rough guide; verify by reading
+3. Catalog directory ↔ theme mapping (rough guide; verify by reading
    `libs/skills/catalog/skills-manifest.json`):
 
-   | Catalog dir                     | Typical docs themes                             |
+   | Catalog dir                     | Typical themes                                  |
    | ------------------------------- | ----------------------------------------------- |
    | `frontmcp-setup`                | install / project bootstrap                     |
    | `frontmcp-deployment`           | transport security, body limits, hosts, ports   |
@@ -50,5 +50,5 @@ of the change.
 
 The skill catalog is shipped through `@frontmcp/skills` and consumed by
 agents via `frontmcp skills install`. The user has surfaced this as a
-non-negotiable expectation — losing sync between docs and the catalog
+non-negotiable expectation — losing sync between behavior and the catalog
 breaks user trust and ships agents with outdated playbooks.

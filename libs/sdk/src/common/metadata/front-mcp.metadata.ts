@@ -558,6 +558,7 @@ export interface FrontMcpBaseMetadata {
     defaultTtlMs?: number;
     maxTtlMs?: number;
     defaultPollIntervalMs?: number;
+    /** Unfinished tasks a caller may have at once (per session, or per subject under 2026-07-28); default 16. */
     maxConcurrentPerSession?: number;
     /**
      * Throw at startup instead of warning when the runtime cannot run tasks

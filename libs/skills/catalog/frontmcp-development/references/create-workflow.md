@@ -59,6 +59,8 @@ Create a class decorated with `@Workflow`. The decorator requires `name` and `st
 | `timeout`         | `number`                                   | No       | Per-step timeout in milliseconds (overrides workflow timeout for this step) |
 | `retry`           | `RetryPolicy`                              | No       | Per-step retry policy (overrides the job's retry policy for this step)      |
 
+When a step's `timeout` passes, the step fails with `WorkflowJobTimeoutError`. An attempt whose job has not started never starts it. A job already in `execute()` is not stopped: its `this.signal` (`ctx.signal` in a `job()` function) is aborted with the timeout as its reason, so pass it to `fetch` and other cancellable work, or check it. Whenever that job returns, its attempt's `jobs:execute-job` flow ends as failed: `Did('execute')` and `Did('validateOutput')` don't run, and the finalize hooks see the `WorkflowJobTimeoutError` as `state.flowError`. Up to 1.9.4 the flow of such an attempt ran on as a success, so audit and metrics hooks recorded a success for a step the workflow reported as failed.
+
 ### Basic Example
 
 ```typescript
@@ -759,5 +761,5 @@ class CiServer {}
 
 ## Reference
 
-- [Workflows Documentation](https://docs.agentfront.dev/frontmcp/servers/workflows)
+- [Workflows Documentation](https://frontmcp.dev/reference/sdk/workflow)
 - Related skills: `create-job`, `create-skill-with-tools`, `create-tool`, `multi-app-composition`

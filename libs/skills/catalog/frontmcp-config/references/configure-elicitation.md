@@ -188,5 +188,5 @@ frontmcp dev
 
 ## Reference
 
-- [Elicitation Docs](https://docs.agentfront.dev/frontmcp/servers/elicitation)
+- [Elicitation Docs](https://frontmcp.dev/reference/sdk/elicit)
 - Related skills: `configure-http`, `configure-transport`, `setup-redis`, `create-tool`

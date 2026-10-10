@@ -167,7 +167,7 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
 
   @Stage('findPrompts')
   async findPrompts() {
-    this.logger.info('findPrompts:start');
+    this.logger.verbose('findPrompts:start');
 
     try {
       const prompts: Array<{ ownerName: string; prompt: PromptEntry }> = [];
@@ -192,7 +192,9 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
         }
       }
 
-      this.logger.info(`findPrompts: total prompts collected=${prompts.length} (deduped from ${scopePrompts.length})`);
+      this.logger.verbose(
+        `findPrompts: total prompts collected=${prompts.length} (deduped from ${scopePrompts.length})`,
+      );
       if (prompts.length === 0) {
         this.logger.warn('findPrompts: no prompts found');
       }
@@ -278,7 +280,7 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
         const extra = conflicts.size > 5 ? `, +${conflicts.size - 5} more` : '';
         this.logger.warn(`resolveConflicts: ${conflicts.size} name conflict(s) detected: ${preview}${extra}`);
       } else {
-        this.logger.info('resolveConflicts: no name conflicts detected');
+        this.logger.verbose('resolveConflicts: no name conflicts detected');
       }
 
       const resolved = found.map(({ ownerName, prompt }) => {
@@ -312,10 +314,10 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
 
       const preview = this.sample(prompts.map((p) => p.name)).join(', ');
       const extra = prompts.length > 5 ? `, +${prompts.length - 5} more` : '';
-      this.logger.info(`parsePrompts: prepared ${prompts.length} prompt descriptor(s): ${preview}${extra}`);
+      this.logger.verbose(`parsePrompts: prepared ${prompts.length} prompt descriptor(s): ${preview}${extra}`);
 
       this.respond({ prompts });
-      this.logger.info('parsePrompts: response sent');
+      this.logger.verbose('parsePrompts: response sent');
       this.logger.verbose('parsePrompts:done');
     } catch (error) {
       if (error instanceof FlowControl) throw error;
