@@ -44,7 +44,7 @@ import { callSurfaceOf, entryUnavailableError, isOfferedOnSurface } from '../../
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
 import { lookupTool, ownerQualifiedName, toolNameCandidates } from '../../common/utils/tool-lookup.utils';
 import { runOnSurface } from '../../context/call-surface';
-import { runAsTool } from '../../context/running-tool';
+import { getRunningTool, runAsTool } from '../../context/running-tool';
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
 import { resolveElicitationOwner } from '../../elicitation/helpers/fallback.helper';
 import {
@@ -72,6 +72,7 @@ import { type EntryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type Scope } from '../../scope';
+import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
 import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
@@ -179,6 +180,8 @@ const stateSchema = z.object({
 const plan = {
   pre: [
     'parseInput',
+    // `?mode=skills_only`: a client's call is answered as for an unknown tool
+    'checkSkillsOnlyMode',
     'ensureRemoteCapabilities',
     'findTool',
     'checkPublicAccess',
@@ -295,6 +298,21 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       taskRequest,
     });
     this.logger.verbose('parseInput:done');
+  }
+
+  /**
+   * A skills-only request (`?mode=skills_only`, or a session opened with it) lists no tools, so a call a
+   * client makes is answered as for an unknown tool, whether or not the tool exists. Calls a tool,
+   * agent or job dispatches in process (`this.callTool()`) still run.
+   */
+  @Stage('checkSkillsOnlyMode')
+  async checkSkillsOnlyMode() {
+    const callerCtx = this.input.ctx as { internalCall?: boolean; agentPrivateCall?: boolean } | undefined;
+    if (callerCtx?.internalCall || callerCtx?.agentPrivateCall || getRunningTool()) return;
+    if (!isSkillsOnlyRequest(this.state.authInfo, this.tryGetContext())) return;
+    const { name } = this.state.required.input;
+    this.logger.verbose(`checkSkillsOnlyMode: refusing tool "${name}" in skills-only mode`);
+    throw new ToolNotFoundError(name);
   }
 
   /**

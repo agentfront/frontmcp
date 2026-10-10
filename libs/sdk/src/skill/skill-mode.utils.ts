@@ -4,9 +4,13 @@
  * Utilities for skills-only mode detection.
  *
  * Skills-only mode is a special operational mode where:
- * - The tools list returns empty (no tools exposed)
- * - Only skill discovery tools and `skill://` resources are available
+ * - The tools list returns empty, and a `tools/call` is answered as for an unknown tool
+ *   (calls a tool, agent or job dispatches in process still run)
+ * - Only skill discovery (`skills/*` methods and `skill://` resources) is available
  * - Used for planner agents that need skills but not execution tools
+ *
+ * A request asks for it with `?mode=skills_only` on the MCP endpoint URL. The `http:request` flow's
+ * `resolveSkillsOnlyMode` stage marks such a request, and a session opened that way keeps the mode.
  *
  * @module skill/skill-mode.utils
  */
@@ -17,6 +21,9 @@
 export interface SkillsOnlySessionPayload {
   skillsOnlyMode?: boolean;
 }
+
+/** Request-context key the `http:request` flow sets on a request that asked for skills-only mode. */
+export const SKILLS_ONLY_REQUEST = Symbol.for('frontmcp:skills:skills-only-request');
 
 /**
  * Detect if skills-only mode is requested from query parameters.
@@ -72,4 +79,18 @@ export function detectSkillsOnlyMode(query: Record<string, string | string[] | u
  */
 export function isSkillsOnlySession(sessionPayload: SkillsOnlySessionPayload | undefined): boolean {
   return sessionPayload?.skillsOnlyMode === true;
+}
+
+/**
+ * Whether the request being served is in skills-only mode: it asked for it (`?mode=skills_only`, marked
+ * on the request context), or it belongs to a session opened in that mode.
+ *
+ * @param authInfo - The request's auth info (its session payload carries the session's mode)
+ * @param context - The request context (`this.tryGetContext()`)
+ */
+export function isSkillsOnlyRequest(
+  authInfo: { sessionIdPayload?: SkillsOnlySessionPayload } | undefined,
+  context: { has(key: symbol): boolean } | undefined,
+): boolean {
+  return isSkillsOnlySession(authInfo?.sessionIdPayload) || context?.has(SKILLS_ONLY_REQUEST) === true;
 }

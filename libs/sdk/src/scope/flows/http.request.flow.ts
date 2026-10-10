@@ -43,6 +43,7 @@ import {
 import { toLegacyProtocolFlags } from '../../common/types/options/transport/schema';
 import { SessionOwnerUnreachableError, SessionVerificationFailedError } from '../../errors';
 import { applyMachineIdHeader } from '../../ha/ha-headers';
+import { detectSkillsOnlyMode, SKILLS_ONLY_REQUEST } from '../../skill/skill-mode.utils';
 import { isProtocol20260728Request } from '../../transport/mcp-20260728';
 import { type PersistentSessionOwnerStore } from '../../transport/persistent-session-owner';
 import { type Scope } from '../scope.instance';
@@ -63,6 +64,8 @@ const plan = {
     'checkAuthorization',
     // rate limits keyed on the caller's verified identity
     'acquireIdentityQuota',
+    // `?mode=skills_only`: the tool flows hide and refuse tools for this request
+    'resolveSkillsOnlyMode',
     'router',
   ],
   execute: [
@@ -424,6 +427,11 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       body: request.body,
       defaultVersion: defaultProtocolVersion,
     });
+  }
+
+  @Stage('resolveSkillsOnlyMode')
+  async resolveSkillsOnlyMode() {
+    if (detectSkillsOnlyMode(this.rawInput.request.query)) this.tryGetContext()?.set(SKILLS_ONLY_REQUEST, true);
   }
 
   @Stage('router')
