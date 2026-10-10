@@ -53,7 +53,7 @@ import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
 import { assertAuthoritiesRules, createAuthoritiesEngine } from '../front-mcp/authorities-rules.check';
 import { HaManager, resolveHaConfigFromEnv } from '../ha';
-import { HealthService } from '../health';
+import { HealthService, servedHealthPaths } from '../health';
 import HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils';
 import { type JobExecutionManager } from '../job/execution/job-execution.manager';
@@ -69,7 +69,11 @@ import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry'
 import PromptRegistry from '../prompt/prompt.registry';
 import ProviderRegistry from '../provider/provider.registry';
 import ResourceRegistry from '../resource/resource.registry';
-import { registerCustomHttpRoutes } from '../server/custom-routes.helper';
+import {
+  registerCustomHttpRoutes,
+  type HttpRouteRegistrar,
+  type RegisteredHttpRoute,
+} from '../server/custom-routes.helper';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
 import { createSkillToolGuardHook } from '../skill/hooks';
 import { createSkillSessionStore, SkillSessionManager } from '../skill/session';
@@ -150,6 +154,17 @@ export class Scope extends ScopeEntry {
   readonly orchestrated: boolean = false;
 
   readonly server: FrontMcpServer;
+
+  /** The HTTP routes this scope registered (`http.routes`, channel webhooks), in order. */
+  private readonly registeredHttpRoutes: RegisteredHttpRoute[] = [];
+
+  /** Records each route for adapters without a route server (the web-fetch handler), and mounts it on the host. */
+  private readonly httpRouteRegistrar: HttpRouteRegistrar = {
+    registerRoute: (method, path, handler) => {
+      this.registeredHttpRoutes.push({ method, path, handler });
+      return this.server.registerRoute(method, path, handler);
+    },
+  };
 
   /** Lazy-initialized elicitation store for distributed elicitation support */
   private _elicitationStore?: ElicitationStore;
@@ -1061,7 +1076,7 @@ export class Scope extends ScopeEntry {
     // aware of split-by-app scope bases (e.g. /mcp/billing).
     registerCustomHttpRoutes({
       routes: this.metadata.http?.routes,
-      server: this.server,
+      server: this.httpRouteRegistrar,
       // `session:verify` input uses a loose passthrough request shape; the
       // ServerRequest class instance satisfies it at runtime.
       verifySession: (request) =>
@@ -1073,6 +1088,7 @@ export class Scope extends ScopeEntry {
         }),
       entryPath: this.entryPath,
       routeBase: this.routeBase,
+      healthPaths: servedHealthPaths(this.metadata.health),
       logger: this.logger,
     });
 
@@ -1098,7 +1114,7 @@ export class Scope extends ScopeEntry {
         flowRegistry: this.scopeFlows,
         toolRegistry: this.scopeTools,
         http: {
-          server: this.server,
+          server: this.httpRouteRegistrar,
           checkClientIp: (request, response) =>
             this.runFlow('http:ip-filter', {
               request: request as unknown as Record<string, unknown>,
@@ -1106,6 +1122,7 @@ export class Scope extends ScopeEntry {
             }),
           entryPath: this.entryPath,
           routeBase: this.routeBase,
+          healthPaths: servedHealthPaths(this.metadata.health),
         },
         logger: this.logger,
       });
@@ -1588,6 +1605,11 @@ export class Scope extends ScopeEntry {
 
   get publicAccessGuard(): GuardManager | undefined {
     return this._rateLimitManager ?? this._publicAccessGuard;
+  }
+
+  /** The HTTP routes this scope registered (`http.routes`, channel webhooks), guards included. */
+  get httpRoutes(): readonly RegisteredHttpRoute[] {
+    return this.registeredHttpRoutes;
   }
 
   /**

@@ -2,7 +2,7 @@
 
 import { type Token } from '@frontmcp/di';
 
-import { type EntryOwnerRef, type FrontMcpLogger, type FrontMcpServer, type ServerRequestHandler } from '../common';
+import { type EntryOwnerRef, type FrontMcpLogger, type ServerRequestHandler } from '../common';
 import { type ChannelType } from '../common/interfaces/channel.interface';
 import {
   type ChannelAgentCompletionSource,
@@ -18,6 +18,7 @@ import {
   computeReservedPaths,
   wrapWithIpFilter,
   type CheckClientIpFn,
+  type HttpRouteRegistrar,
 } from '../server/custom-routes.helper';
 import { loadExternalToolRecords } from '../tool/tool-external.loader';
 import { ToolInstance } from '../tool/tool.instance';
@@ -57,10 +58,11 @@ export interface RegisterChannelCapabilitiesArgs {
    * no route.
    */
   http?: {
-    server: FrontMcpServer;
+    server: HttpRouteRegistrar;
     checkClientIp: CheckClientIpFn;
     entryPath: string;
     routeBase: string;
+    healthPaths?: readonly string[];
   };
   logger: FrontMcpLogger;
 }
@@ -104,7 +106,7 @@ export async function registerChannelCapabilities(
     args.jobEmitterSubscribe ?? ((cb: (event: unknown) => void) => completions.jobs.subscribe(cb));
 
   const unsubscribers: (() => void)[] = [];
-  const reservedPaths = http ? computeReservedPaths(http.entryPath, http.routeBase) : undefined;
+  const reservedPaths = http ? computeReservedPaths(http.entryPath, http.routeBase, http.healthPaths) : undefined;
   const webhookPaths = new Map<string, string>();
 
   // 1. Initialize channel registry
