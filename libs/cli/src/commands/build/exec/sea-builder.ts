@@ -16,6 +16,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { runCmd } from '@frontmcp/utils';
 import { c } from '../../../core/colors';
+import { packageManagerCommand, runTool } from '../../../shared/tool-command';
 
 export interface SeaBuildResult {
   executablePath: string;
@@ -42,7 +43,7 @@ export async function buildSea(
   console.log(`${c('cyan', '[build:sea]')} generated SEA config`);
 
   // 2. Generate the SEA blob
-  await runCmd('node', ['--experimental-sea-config', seaConfigPath]);
+  await runCmd(process.execPath, ['--experimental-sea-config', seaConfigPath]);
   console.log(`${c('cyan', '[build:sea]')} generated SEA blob`);
 
   // 3. Copy current node binary
@@ -62,16 +63,19 @@ export async function buildSea(
   }
 
   // 5. Inject the blob using postject
-  await runCmd('npx', [
-    '-y',
-    'postject',
-    executablePath,
-    'NODE_SEA_BLOB',
-    blobPath,
-    '--sentinel-fuse',
-    'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2',
-    ...(process.platform === 'darwin' ? ['--macho-segment-name', 'NODE_SEA'] : []),
-  ]);
+  // #731 — npx resolved without a shell: `npx` alone does not start on Windows.
+  await runTool(
+    packageManagerCommand('npx', [
+      '-y',
+      'postject',
+      executablePath,
+      'NODE_SEA_BLOB',
+      blobPath,
+      '--sentinel-fuse',
+      'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2',
+      ...(process.platform === 'darwin' ? ['--macho-segment-name', 'NODE_SEA'] : []),
+    ]),
+  );
   console.log(`${c('green', '[build:sea]')} blob injected`);
 
   // 6. Re-sign on macOS with ad-hoc signature

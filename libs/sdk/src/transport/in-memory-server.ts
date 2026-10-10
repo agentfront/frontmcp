@@ -25,6 +25,12 @@ export interface CreateInMemoryServerOptions {
   authInfo?: Partial<AuthInfo>;
   /** Custom session ID (auto-generated if not provided) */
   sessionId?: string;
+  /**
+   * Platform bindings for every request of this connection, read by the code it runs as
+   * `this.workerEnv` (on Cloudflare, the `env` of the Worker or Durable Object holding the client).
+   * Kept in each request's context only — never copied into `process.env`.
+   */
+  workerEnv?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -177,6 +183,8 @@ export async function createInMemoryServer(
           sessionId,
           transport: elicitTransport,
         },
+        // The flow registry puts these in the request context it creates for the call (#706)
+        ...(options?.workerEnv !== undefined ? { platformEnv: options.workerEnv } : {}),
       };
       // One request at a time in a browser build without AsyncContext, so overlapping requests
       // never read each other's request context (a no-op on Node).

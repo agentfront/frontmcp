@@ -400,8 +400,12 @@ export abstract class ExecutionContextBase<Out = unknown> {
   /**
    * The hosting platform's bindings for the current request — on a Cloudflare Worker, the `env`
    * object holding KV namespaces, D1 databases, R2 buckets, Durable Object namespaces, `[vars]`
-   * and secrets. `undefined` where the request carries no such object: Node/Express, stdio, and
-   * `create()`/`connect()` direct servers.
+   * and secrets. `undefined` where the request carries no such object: Node/Express and stdio.
+   *
+   * A direct server (`create()`, `FrontMcpInstance.createDirect()`, `connect()`) has the bindings
+   * its caller passes: `DirectCallOptions.workerEnv` for one call, `ConnectOptions.workerEnv` for a
+   * client, or the server-wide default `create({ workerEnv })` — so a server embedded in a Durable
+   * Object, queue consumer or custom route reaches its KV, D1 and R2. `undefined` when none is passed.
    *
    * The SDK never writes `process.env`. The Worker entry that `frontmcp build --target cloudflare`
    * generates copies string bindings into it on the first request (unless the worker sets

@@ -161,6 +161,7 @@ export class DirectClientImpl implements DirectClient {
     const { clientTransport, close } = await createInMemoryServer(scope, {
       sessionId,
       authInfo: Object.keys(authInfo).length > 0 ? authInfo : undefined,
+      workerEnv: options?.workerEnv,
     });
 
     try {

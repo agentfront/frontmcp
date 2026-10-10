@@ -156,7 +156,8 @@ describe('this.workerEnv on a Worker request (#678)', () => {
 });
 
 describe('this.workerEnv on a direct server (#678)', () => {
-  it('is undefined: a create() server serves no Worker request', async () => {
+  // #706 — a direct call passes bindings with `workerEnv` (see direct-server.worker-env.spec.ts)
+  it('is undefined when the server and the call pass no workerEnv', async () => {
     const server = await create({
       info: { name: 'worker-env-direct', version: '1.0.0' },
       tools: [EnvTool],

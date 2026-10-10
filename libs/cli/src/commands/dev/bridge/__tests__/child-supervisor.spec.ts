@@ -68,6 +68,7 @@ describe('resolveChildCommand', () => {
 
   it('runs a TypeScript entry with the tsx loader in the server process itself', () => {
     expect(resolveChildCommand('/proj/src/main.ts', 'pipe', () => loader)).toEqual({
+      label: 'node',
       command: process.execPath,
       args: ['--conditions', 'node', '--import', loader, '/proj/src/main.ts'],
     });
@@ -75,17 +76,35 @@ describe('resolveChildCommand', () => {
 
   it('runs a JavaScript entry with plain node', () => {
     expect(resolveChildCommand('/proj/dist/main.js', 'http', () => undefined)).toEqual({
+      label: 'node',
       command: process.execPath,
       args: ['--conditions', 'node', '/proj/dist/main.js'],
     });
   });
 
   it('falls back to npx tsx in HTTP mode when the project has no tsx', () => {
-    expect(resolveChildCommand('/proj/src/main.ts', 'http', () => undefined, 'linux')).toEqual({
+    expect(resolveChildCommand('/proj/src/main.ts', 'http', () => undefined, { platform: 'linux' })).toEqual({
+      label: 'npx',
       command: 'npx',
       args: ['-y', 'tsx', '--conditions', 'node', '/proj/src/main.ts'],
     });
-    expect(resolveChildCommand('/proj/src/main.ts', 'http', () => undefined, 'win32').command).toBe('npx.cmd');
+  });
+
+  // #731 — a shell-less spawn of `npx.cmd` throws EINVAL on Windows.
+  it("falls back to npm's npx-cli.js under node on Windows", () => {
+    const npxCli = 'C:\\nodejs\\node_modules\\npm\\bin\\npx-cli.js';
+    expect(
+      resolveChildCommand('C:\\proj\\src\\main.ts', 'http', () => undefined, {
+        platform: 'win32',
+        execPath: 'C:\\nodejs\\node.exe',
+        env: {},
+        isFile: (file) => file === npxCli,
+      }),
+    ).toEqual({
+      label: 'npx',
+      command: 'C:\\nodejs\\node.exe',
+      args: [npxCli, '-y', 'tsx', '--conditions', 'node', 'C:\\proj\\src\\main.ts'],
+    });
   });
 
   it('refuses --serve without tsx: the IPC channel cannot cross npx', () => {

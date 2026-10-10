@@ -9,6 +9,7 @@ import {
   ensureDir,
   ensureDirSync,
   fileExists,
+  fileExistsSync,
   getSpawnFn,
   isDirEmpty,
   mkdir,
@@ -56,6 +57,20 @@ describe('FS Utils', () => {
 
     it('should return true for existing directory', async () => {
       expect(await fileExists(tempDir)).toBe(true);
+    });
+  });
+
+  describe('fileExistsSync', () => {
+    it('reports existing files and directories', async () => {
+      const filePath = path.join(tempDir, 'sync-exists.txt');
+      await fs.promises.writeFile(filePath, 'content');
+
+      expect(fileExistsSync(filePath)).toBe(true);
+      expect(fileExistsSync(tempDir)).toBe(true);
+    });
+
+    it('returns false for a missing path', () => {
+      expect(fileExistsSync(path.join(tempDir, 'missing.txt'))).toBe(false);
     });
   });
 
@@ -185,6 +200,12 @@ describe('FS Utils', () => {
 
     it('should reject for non-existing command', async () => {
       await expect(runCmd('nonexistent-command-xyz', [])).rejects.toThrow();
+    });
+
+    it('accepts windowsVerbatimArguments (a no-op off Windows)', async () => {
+      await expect(
+        runCmd('node', ['-e', 'process.exit(0)'], { cwd: tempDir, windowsVerbatimArguments: true }),
+      ).resolves.toBeUndefined();
     });
 
     it('should use cwd option', async () => {

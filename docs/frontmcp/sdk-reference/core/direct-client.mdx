@@ -111,6 +111,9 @@ interface ConnectOptions {
   authToken?: string;
   capabilities?: Partial<ClientCapabilities>;
   onElicitation?: ElicitationHandler;
+  // Platform bindings (a Worker / Durable Object `env`) the called code reads as `this.workerEnv`;
+  // replaces the server's default `create({ workerEnv })` for this client. Never copied into process.env.
+  workerEnv?: Readonly<Record<string, unknown>>;
 }
 
 interface SessionOptions {

@@ -3,9 +3,10 @@
  * and exponential backoff.
  */
 
-import { spawn, type ChildProcess } from 'child_process';
+import { type ChildProcess } from 'child_process';
 
 import { getSelfVersion } from '../../core/version';
+import { projectToolCommand, spawnTool } from '../../shared/tool-command';
 import { checkHealth } from './health';
 import { createLogStreams } from './log-utils';
 import { socketFilePath } from './paths';
@@ -106,11 +107,15 @@ export class Supervisor {
       env['FRONTMCP_SQLITE_PATH'] = dbPath;
     }
 
-    const child = spawn('npx', ['-y', 'tsx', '--conditions', 'node', entry], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env,
-      detached: false,
-    });
+    // #731 — the project's tsx run with node (npx when it is not installed); no shell, so it starts on Windows too.
+    const child = spawnTool(
+      projectToolCommand({ package: 'tsx', npx: ['-y', 'tsx'] }, ['--conditions', 'node', entry]),
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env,
+        detached: false,
+      },
+    );
 
     this.child = child;
 

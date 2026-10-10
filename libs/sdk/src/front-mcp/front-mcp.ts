@@ -12,7 +12,7 @@ import {
   type ScopeEntry,
 } from '../common';
 import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
-import { DirectMcpServerImpl, type DirectMcpServer } from '../direct';
+import { DirectMcpServerImpl, type DirectMcpServer, type DirectServerOptions } from '../direct';
 import { describeConfigIssues, InternalMcpError, ScopeConfigurationError, ServerNotFoundError } from '../errors';
 import { HealthService } from '../health';
 import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
@@ -519,6 +519,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * It serves the server's main endpoint. `endpoint.app` names an app with an endpoint of its own (each app's with
    * `splitByApp`, a `standalone` app's otherwise) to serve that one instead; see {@link getAppScope}.
    *
+   * `options.workerEnv` sets the platform bindings every call reads as `this.workerEnv` unless the call
+   * (`DirectCallOptions.workerEnv`) or client (`ConnectOptions.workerEnv`) passes its own (#706).
+   *
    * @example
    * ```typescript
    * import { FrontMcpInstance } from '@frontmcp/sdk';
@@ -539,12 +542,14 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * ```
    */
   public static async createDirect(
-    options: FrontMcpConfigInput,
+    options: FrontMcpConfigInput & DirectServerOptions,
     endpoint?: { app?: string },
   ): Promise<DirectMcpServer> {
+    // `workerEnv` is the direct server's default bindings (#706), held by the server, not config
+    const { workerEnv, ...config } = options;
     // Parse config through Zod to apply defaults, then disable HTTP server
     const parsedConfig = frontMcpMetadataSchema.parse({
-      ...options,
+      ...config,
       // Direct access never listens: no HTTP config and no HTTP host (a browser build has no Express)
       http: undefined,
       serve: false,
@@ -561,7 +566,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
       frontMcp.log?.info('FrontMCP direct server created');
       // Disposing the server tears down every scope of the instance, not only the one it serves
-      return new DirectMcpServerImpl(scope as Scope, () => frontMcp.shutdown());
+      return new DirectMcpServerImpl(scope as Scope, () => frontMcp.shutdown(), { workerEnv });
     } catch (error) {
       // shutdown() logs any step that fails; the caller needs the reason no server was created
       await frontMcp.shutdown().catch(() => undefined);

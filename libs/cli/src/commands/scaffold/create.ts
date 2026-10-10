@@ -9,7 +9,6 @@ import {
   isDirEmpty,
   readFile,
   readJSON,
-  runCmd,
   stat,
   writeFile,
   writeJSON,
@@ -19,6 +18,7 @@ import { c } from '../../core/colors';
 import { runInit } from '../../core/tsconfig';
 import { getSelfVersion } from '../../core/version';
 import { clack } from '../../shared/prompts';
+import { packageManagerCommand, runTool, type ToolCommand } from '../../shared/tool-command';
 import { buildVercelJson } from '../build/adapters/vercel-config';
 import { buildSkillsSection } from '../skills/install';
 
@@ -1259,15 +1259,9 @@ function getDefaults(projectArg?: string): CreateOptions {
   };
 }
 
-function getInstallCommand(pm: PackageManager): { cmd: string; args: string[] } {
-  switch (pm) {
-    case 'npm':
-      return { cmd: 'npm', args: ['install'] };
-    case 'yarn':
-      return { cmd: 'yarn', args: ['install'] };
-    case 'pnpm':
-      return { cmd: 'pnpm', args: ['install'] };
-  }
+/** `<pm> install`, resolved to run without a shell on Windows too (#731). */
+function getInstallCommand(pm: PackageManager): ToolCommand {
+  return packageManagerCommand(pm, ['install']);
 }
 
 async function scaffoldNxWorkspace(projectName: string, flags?: CreateFlags): Promise<void> {
@@ -1317,7 +1311,7 @@ async function scaffoldNxWorkspace(projectName: string, flags?: CreateFlags): Pr
     // Step 2: Install nx tooling
     console.log(c('cyan', `\nInstalling Nx tooling in ./${folder}...\n`));
     const install = getInstallCommand(pm);
-    await runCmd(install.cmd, install.args, { cwd: projectDir });
+    await runTool(install, { cwd: projectDir });
 
     // Step 3: Load nx and @frontmcp/nx from the installed location
     const localRequire = createRequire(path.join(projectDir, 'package.json'));
@@ -1343,7 +1337,7 @@ async function scaffoldNxWorkspace(projectName: string, flags?: CreateFlags): Pr
 
     // Step 5: Install full project dependencies
     console.log(c('cyan', '\nInstalling project dependencies...\n'));
-    await runCmd(install.cmd, install.args, { cwd: projectDir });
+    await runTool(install, { cwd: projectDir });
 
     console.log(c('green', `\n✅ Nx monorepo created at ./${folder}\n`));
     console.log(c('dim', 'Next steps:'));
