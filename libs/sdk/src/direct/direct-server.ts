@@ -30,6 +30,8 @@ import {
   type DirectListOptions,
   type DirectMcpServer,
   type DirectRequestMetadata,
+  type DirectServerOptions,
+  type DirectWorkerEnv,
   type RuntimeToolDefinition,
 } from './direct.types';
 import { registerRuntimeTool } from './runtime-tools';
@@ -93,14 +95,17 @@ export class DirectMcpServerImpl implements DirectMcpServer {
   private readonly defaultSessionId: string;
   private errorHandler?: ErrorHandler;
   private readonly disposeOwner?: () => Promise<void>;
+  private readonly defaultWorkerEnv?: DirectWorkerEnv;
 
   /**
    * @param scope - The endpoint this server serves
    * @param disposeOwner - Tears down what owns the scope (the whole server instance) when the server is disposed
+   * @param options - Server-wide defaults: the `workerEnv` a call or client without its own reads
    */
-  constructor(scope: Scope, disposeOwner?: () => Promise<void>) {
+  constructor(scope: Scope, disposeOwner?: () => Promise<void>, options?: DirectServerOptions) {
     this.scope = scope;
     this.disposeOwner = disposeOwner;
+    this.defaultWorkerEnv = options?.workerEnv;
     this.defaultSessionId = `direct:${randomUUID()}`;
     this.ready = Promise.resolve(); // Scope is already initialized
   }
@@ -113,12 +118,17 @@ export class DirectMcpServerImpl implements DirectMcpServer {
   private buildHandlerContext(options?: DirectCallOptions): {
     authInfo?: Partial<AuthInfo>;
     metadata?: DirectRequestMetadata;
+    platformEnv?: DirectWorkerEnv;
     surface: CallSurface;
   } {
     const authInfo = buildAuthInfo(options?.authContext, this.defaultSessionId);
+    // The call's bindings, else the server's (#706): the request context the flow registry creates
+    // for this call holds them as `platformEnv`, which `this.workerEnv` reads.
+    const platformEnv = options?.workerEnv ?? this.defaultWorkerEnv;
     return withMcpSurface(this.scope, {
       authInfo,
       metadata: options?.metadata,
+      ...(platformEnv !== undefined ? { platformEnv } : {}),
     });
   }
 
@@ -307,8 +317,11 @@ export class DirectMcpServerImpl implements DirectMcpServer {
       throw new InternalMcpError('DirectMcpServer has been disposed');
     }
 
-    const options: ConnectOptions | undefined =
+    const given: ConnectOptions | undefined =
       typeof sessionIdOrOptions === 'string' ? { session: { id: sessionIdOrOptions } } : sessionIdOrOptions;
+    // A client without bindings of its own uses the server's (#706)
+    const workerEnv = given?.workerEnv ?? this.defaultWorkerEnv;
+    const options: ConnectOptions | undefined = workerEnv !== undefined ? { ...given, workerEnv } : given;
 
     // No release callback: the scope belongs to this server, so closing a client leaves it to the others
     const { DirectClientImpl } = await import('./direct-client.js');

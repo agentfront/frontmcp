@@ -1,9 +1,9 @@
-import { spawn } from 'child_process';
 import * as path from 'path';
 
 import { c } from '../../core/colors';
 import { checkRequiredTsOptions, readTsconfig } from '../../core/tsconfig';
 import { resolveEntry } from '../../shared/fs';
+import { packageManagerCommand, spawnTool } from '../../shared/tool-command';
 
 function cmpSemver(a: string, b: string): number {
   const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
@@ -32,14 +32,16 @@ export async function runDoctor(): Promise<void> {
 
   try {
     const npmVer = await new Promise<string>((resolve, reject) => {
-      // shell:true triggers Node DEP0190 (deprecated unescaped-arg passing).
-      // Use explicit binary names: npm.cmd on win32, npm elsewhere — args
-      // already in array form, no shell needed.
-      const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-      const child = spawn(npmCmd, ['-v']);
+      // #731 — no shell (DEP0190, #381) and no `npm.cmd`, which a shell-less
+      // spawn cannot start on Windows: on Windows this runs npm's own
+      // npm-cli.js with node (see tool-command.ts).
+      const child = spawnTool(packageManagerCommand('npm', ['-v']));
       let out = '';
       child.stdout?.on('data', (d) => (out += String(d)));
-      child.on('close', () => resolve(out.trim()));
+      child.on('close', (code) => {
+        if (code === 0) resolve(out.trim());
+        else reject(new Error(`npm -v exited with code ${code}`));
+      });
       child.on('error', reject);
     });
     if (cmpSemver(npmVer, MIN_NPM) >= 0) {

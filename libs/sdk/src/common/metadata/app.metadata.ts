@@ -35,6 +35,8 @@ import { type AuthOptionsInput, type RawZodShape } from '../types';
 import { appFilterConfigSchema, type AppFilterConfig } from './app-filter.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import { type EsmOptions, type RemoteOptions } from './remote-primitive.metadata';
+import type { WidgetServingMode } from './tool-ui.metadata';
+import { widgetServingModeSchema } from './ui-serving-mode';
 
 /**
  * Declarative metadata describing what a local mcp app contributes at app scope.
@@ -156,6 +158,23 @@ export interface LocalAppMetadata {
   output?: OutputPolicy;
 
   /**
+   * Tool UI defaults for this app's tools — override the server's `@FrontMcp({ ui })`, overridden
+   * by each tool's own `ui`.
+   */
+  ui?: {
+    /**
+     * Serving mode for every tool of this app whose `ui` does not set `servingMode`. Overrides the
+     * server's `ui.servingMode`. Same values as a tool's `ui.servingMode`.
+     *
+     * @example Serve this app's widgets from their `ui://` resource only (MCP Apps hosts, ChatGPT)
+     * ```typescript
+     * @App({ name: 'dashboards', tools: [...], ui: { servingMode: 'static' } })
+     * ```
+     */
+    servingMode?: WidgetServingMode;
+  };
+
+  /**
    * If true, the app will NOT be included and will act as a separated scope.
    * If false, the app will be included in MultiApp frontmcp server.
    * If 'includeInParent', the app will be included in the gateway's
@@ -195,6 +214,7 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
   channels: z.array(annotatedFrontMcpChannelsSchema).optional(),
   auth: authOptionsSchema.optional(),
   output: outputPolicySchema.optional(),
+  ui: z.object({ servingMode: widgetServingModeSchema.optional() }).optional(),
   standalone: z
     .union([z.literal('includeInParent'), z.boolean()])
     .optional()

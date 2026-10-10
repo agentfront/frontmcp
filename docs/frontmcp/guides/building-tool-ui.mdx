@@ -208,6 +208,9 @@ ui: {
   - `static` - Pre-compiled at startup; client fetches `ui://widget/{toolName}.html` via `resources/read`
   - `hybrid` - Shell pre-compiled at startup; each call carries only a **reference** in `_meta['ui/component']` (`{ type, hash, toolName }`) — no component code and no data. The widget is still rendered from its `ui://` resource
   - `direct-url` / `custom-url` - **Not implemented.** Accepted by the schema, but the widget is served inline, as with `inline`; startup logs a warning
+
+Unset, the tool uses its app's `@App({ ui: { servingMode } })` default, else the server's `@FrontMcp({ ui: { servingMode } })`, else `auto` — so `@FrontMcp({ ui: { servingMode: 'static' } })` drops `_meta['ui/html']` from every tool that does not choose for itself. See [One default for every tool](/frontmcp/servers/tools#tool-ui).
+
 </ParamField>
 
 <Note>

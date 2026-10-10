@@ -25,11 +25,12 @@
  *     over the IPC channel. Readiness = first IPC message.
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { type ChildProcess } from 'node:child_process';
 import * as net from 'node:net';
 import { pathToFileURL } from 'node:url';
 
 import { processTreeSpawnOptions, stopProcessTree } from '../../../shared/process-tree';
+import { packageManagerCommand, spawnTool, type ToolCommand, type ToolHost } from '../../../shared/tool-command';
 import type { BridgeLogger } from './log';
 
 export type SupervisorMode = 'http' | 'pipe';
@@ -112,24 +113,19 @@ export function resolveProjectTsxLoader(cwd: string = process.cwd()): string | u
   return undefined;
 }
 
-export interface ChildCommand {
-  command: string;
-  args: string[];
-}
-
 /** The command line that runs `entry` for the given mode. */
 export function resolveChildCommand(
   entry: string,
   mode: SupervisorMode,
   resolveTsxLoader: () => string | undefined,
-  platform: NodeJS.Platform = process.platform,
-): ChildCommand {
+  host?: Partial<ToolHost>,
+): ToolCommand {
   if (!/\.[cm]?tsx?$/i.test(entry)) {
-    return { command: process.execPath, args: ['--conditions', 'node', entry] };
+    return { label: 'node', command: process.execPath, args: ['--conditions', 'node', entry] };
   }
   const loader = resolveTsxLoader();
   if (loader) {
-    return { command: process.execPath, args: ['--conditions', 'node', '--import', loader, entry] };
+    return { label: 'node', command: process.execPath, args: ['--conditions', 'node', '--import', loader, entry] };
   }
   if (mode === 'pipe') {
     // The IPC channel only reaches a process we spawn directly; through npx it
@@ -139,7 +135,8 @@ export function resolveChildCommand(
         'Install it (`npm i -D tsx`) or drop `--serve` to use the HTTP loopback.',
     );
   }
-  return { command: platform === 'win32' ? 'npx.cmd' : 'npx', args: ['-y', 'tsx', '--conditions', 'node', entry] };
+  // Resolved without a shell on Windows too (#731): `npx.cmd` cannot be spawned directly.
+  return packageManagerCommand('npx', ['-y', 'tsx', '--conditions', 'node', entry], host);
 }
 
 export function createChildSupervisor(options: ChildSupervisorOptions): ChildSupervisor {
@@ -167,12 +164,12 @@ export function createChildSupervisor(options: ChildSupervisorOptions): ChildSup
   }
 
   function spawnChild(): ChildProcess {
-    const { command, args } = resolveChildCommand(entry, mode, resolveTsxLoader);
+    const command = resolveChildCommand(entry, mode, resolveTsxLoader);
     // Pipe mode pairs an IPC channel as FD 3 so the child can read/write
     // JSON frames there. Node sets up the IPC machinery automatically when
     // 'ipc' is the 4th stdio entry. Each child leads its own process group
     // so a restart takes down everything the server started (#679).
-    return spawn(command, args, {
+    return spawnTool(command, {
       stdio: mode === 'http' ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe', 'ipc'],
       env: buildEnv(),
       ...processTreeSpawnOptions(),

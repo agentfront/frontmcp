@@ -92,7 +92,10 @@ The handler is stateless: session-based (2025-06-18) clients get no `Mcp-Session
 Create a DirectMcpServer for programmatic access.
 
 ```typescript
-static async createDirect(options: FrontMcpConfigInput, endpoint?: { app?: string }): Promise<DirectMcpServer>
+static async createDirect(
+  options: FrontMcpConfigInput & { workerEnv?: Readonly<Record<string, unknown>> },
+  endpoint?: { app?: string },
+): Promise<DirectMcpServer>
 ```
 
 It serves the server's main endpoint ([`getPrimaryScope()`](#getprimaryscope)). `{ app }` serves the endpoint an app has of its own instead: each app's with `splitByApp`, a `standalone` app's otherwise ([`getAppScope()`](#getappscopeapp)). `connect(config, { app })` takes the same option. Up to 1.9.2 a `splitByApp` server's other apps couldn't be reached in-process.
@@ -128,6 +131,24 @@ A call can also carry request metadata, which reaches `this.context.metadata` as
 ```typescript
 await server.callTool('list_tickets', {}, { metadata: { clientIp: '10.0.0.7', customHeaders: { 'x-frontmcp-disable-cache': 'true' } } });
 ```
+
+#### Platform bindings (`workerEnv`)
+
+A direct server embedded in a Worker — a Durable Object, a queue consumer, a custom route — hands its platform bindings (KV, D1, R2, Durable Object namespaces, `[vars]`, secrets) to the code it runs with `workerEnv`. Tools, resources, prompts, jobs and agents read them as `this.workerEnv`, as they do on a Worker request:
+
+```typescript
+// Server-wide default: every call and every connect()ed client
+const server = await FrontMcpInstance.createDirect({ ...config, workerEnv: env });
+// or: await create({ info, tools: [CartTool], workerEnv: env });
+
+// One call's own bindings replace the default (they are not merged)
+await server.callTool('ingest', { batch }, { workerEnv: batchEnv });
+
+// A client's own bindings, for every request it sends
+const client = await server.connect({ workerEnv: env });
+```
+
+Each call keeps its bindings in its own request context, so concurrent calls with different bindings never see each other's, and they are never copied into `process.env`. Without any, `this.workerEnv` is `undefined`. A `create()` server reused through `cacheKey` keeps the bindings of the call that created it. Up to 1.9.2 a direct server had no way to pass bindings, and `this.workerEnv` was always `undefined` there.
 
 The list methods (`listTools`, `listResources`, `listResourceTemplates`, `listPrompts`) of this server, and of the one `create()` returns, return the whole list: they read every page (a FrontMCP server pages `tools/list` 40 tools at a time by default), so the result carries no `nextCursor`, as with `DirectClient`. To page yourself, as an MCP client does, ask for one page with `paginate` and follow `nextCursor` with `cursor`:
 

@@ -256,6 +256,11 @@ export const transportOptionsSchema = z.object({
   // Session Lifecycle
   // ============================================
 
+  /**
+   * @deprecated Ignored — sessions follow `protocol` (`'stateless-api'` serves without them). A value
+   * other than `'stateful'` logs a startup warning (`warnIfSessionModeIgnored`). Removed in the next
+   * major (#702).
+   */
   sessionMode: z
     .union([z.literal('stateful'), z.literal('stateless'), z.function()])
     .optional()
@@ -393,6 +398,7 @@ export function shouldCacheProviders(distributedMode?: DistributedEnabled, provi
  * @internal
  */
 export interface ExpandedTransportConfig extends LegacyProtocolFlags {
+  /** @deprecated Ignored (see `TransportOptionsInterface.sessionMode`); removed in the next major. */
   sessionMode: SessionMode | ((issuer: string) => Promise<SessionMode> | SessionMode);
   platformDetection?: PlatformDetectionConfig;
   persistence?: false | TransportPersistenceConfig;

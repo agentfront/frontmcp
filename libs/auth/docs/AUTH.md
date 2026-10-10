@@ -162,7 +162,6 @@ const auth: AuthOptionsInput = {
   allowDefaultPublic: false,
   consent: true,
   tokenStorage: { type: 'memory' },
-  sessionMode: 'stateful',
 };
 ```
 
@@ -981,7 +980,6 @@ type OrchestratedLocalOptions = {
   type: 'local';
   local?: LocalSigningConfig;
   tokenStorage?: TokenStorageConfig; // default: { type: 'memory' }
-  sessionMode?: 'stateful' | 'stateless'; // default: 'stateful'
   allowDefaultPublic?: boolean; // default: false
   anonymousScopes?: string[]; // default: ['anonymous']
   publicAccess?: PublicAccessConfig;
@@ -997,7 +995,6 @@ type OrchestratedRemoteOptions = {
   remote: RemoteProviderConfig; // required
   local?: LocalSigningConfig;
   tokenStorage?: TokenStorageConfig;
-  sessionMode?: 'stateful' | 'stateless';
   allowDefaultPublic?: boolean;
   anonymousScopes?: string[];
   publicAccess?: PublicAccessConfig;

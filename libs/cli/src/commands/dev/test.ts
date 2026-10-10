@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'child_process';
+import { type ChildProcess } from 'child_process';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -8,6 +8,7 @@ import { resolveConfig, type TestConfig } from '../../config';
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
 import { loadCommandEnv } from '../../shared/env';
+import { projectToolCommand, spawnTool } from '../../shared/tool-command';
 
 /**
  * Filenames in cwd that, when present, cause `frontmcp test` to delegate to
@@ -390,11 +391,11 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
 
   console.log(`${c('gray', 'hint:')} press Ctrl+C to stop\n`);
 
-  // Run Jest directly via node_modules/.bin or npx without shell
-  // Using shell: false with explicit args array avoids escaping issues
-  const jest = spawn('npx', jestArgs, {
+  // Run the project's Jest with node, without a shell (npx when it is not
+  // installed). #731 — on Windows `npx` alone does not start shell-less.
+  const [, ...jestCliArgs] = jestArgs;
+  const jest = spawnTool(projectToolCommand({ package: 'jest', npx: ['jest'] }, jestCliArgs, { from: [cwd] }), {
     stdio: 'inherit',
-    shell: false,
     cwd,
     // #540 — without an explicit env the child inherits process.env, which is
     // fine, but the config overlays (`env.shared` / `env.test`) would be lost.

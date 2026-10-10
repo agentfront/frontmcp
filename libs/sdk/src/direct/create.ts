@@ -49,6 +49,7 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
     appName,
     machineId: _machineId,
     cacheKey: _cacheKey,
+    workerEnv: _workerEnv,
     tools,
     resources,
     prompts,
@@ -165,7 +166,8 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
       // Build full config and create direct server
       const fullConfig = buildConfig(config);
       const { FrontMcpInstance } = await import('../front-mcp/front-mcp.js');
-      const server = await FrontMcpInstance.createDirect(fullConfig);
+      // Bindings are a direct-server default, not server config: they never reach the metadata schema
+      const server = await FrontMcpInstance.createDirect({ ...fullConfig, workerEnv: config.workerEnv });
 
       // Wrap dispose to auto-evict from cache and clear machineId override
       if (cacheKey || machineIdWasSet) {

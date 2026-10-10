@@ -6,6 +6,8 @@ import * as path from 'path';
 
 import { runCmd } from '@frontmcp/utils';
 
+import { packageManagerCommand, runTool, type PackageManagerBinary } from './tool-command';
+
 export type DetectedPackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 
 /** Lockfile → package manager, in detection order. First match wins. */
@@ -67,7 +69,7 @@ export function resolveProjectTsc(cwd: string): string | undefined {
 export function packageManagerTscCommand(
   manager: DetectedPackageManager,
   args: string[],
-): { command: string; args: string[] } {
+): { command: PackageManagerBinary; args: string[] } {
   switch (manager) {
     case 'yarn':
       return { command: 'yarn', args: ['tsc', ...args] };
@@ -94,7 +96,8 @@ export function packageManagerTscCommand(
  *     inherits `NODE_OPTIONS` (which is where Yarn puts `--require .pnp.cjs`),
  *     so this is correct for npm, pnpm, Yarn node-modules and Yarn PnP alike.
  *  2. The detected package manager's own runner, which sets up the resolver
- *     itself when the CLI was invoked from outside it.
+ *     itself when the CLI was invoked from outside it. Resolved without a
+ *     shell (`tool-command.ts`), so it starts on Windows too.
  */
 export async function runTsc(args: string[], opts: { cwd?: string } = {}): Promise<void> {
   const cwd = opts.cwd ?? process.cwd();
@@ -108,7 +111,8 @@ export async function runTsc(args: string[], opts: { cwd?: string } = {}): Promi
   const manager = detectPackageManager(cwd);
   const { command, args: commandArgs } = packageManagerTscCommand(manager, args);
   try {
-    await runCmd(command, commandArgs, { cwd });
+    // #731 — on Windows yarn/pnpm/npx are `.cmd` shims a shell-less spawn cannot start.
+    await runTool(packageManagerCommand(command, commandArgs), { cwd });
   } catch (err) {
     throw new Error(
       `Could not run the TypeScript compiler via \`${command}\`.\n` +

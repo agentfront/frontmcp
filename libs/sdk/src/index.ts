@@ -488,6 +488,8 @@ export type {
   DirectCallOptions,
   DirectListOptions,
   DirectRequestMetadata,
+  DirectServerOptions,
+  DirectWorkerEnv,
   RuntimeToolDefinition,
   RuntimeToolExecuteContext,
 } from './direct';
