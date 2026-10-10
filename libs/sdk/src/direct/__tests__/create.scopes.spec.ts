@@ -6,8 +6,6 @@
  */
 import 'reflect-metadata';
 
-import { z } from '@frontmcp/lazy-zod';
-
 import { LocalPrimaryAuth } from '../../auth/instances/instance.local-primary-auth';
 import { RemotePrimaryAuth } from '../../auth/instances/instance.remote-primary-auth';
 import { LogLevel, Plugin, tool, type ScopeEntry } from '../../common';
