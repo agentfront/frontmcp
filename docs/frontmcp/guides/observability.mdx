@@ -332,6 +332,15 @@ off the response path: the response is sent without waiting for it. Up to 1.9.1 
 `status_code` was set only from 400, `authenticated`, `auth_type` and `hooks_triggered` were never filled, and a
 `this.fail()` was logged as `{ type: 'Error', message: '' }`.
 
+ES-module projects (`"type": "module"`) record the same `error` as CommonJS ones. There, `@frontmcp/sdk`'s ES-module
+build loads `@frontmcp/observability` with `require()`, which brings in the SDK's CommonJS build: two copies of every
+SDK class in one process. `McpError`, `PublicMcpError`, `InternalMcpError`, `FlowControl` and `DynamicPlugin` (and
+`GuardError` and `AuthorityDeniedError` from `@frontmcp/guard` and `@frontmcp/auth`) recognise the other copy's
+instances by a process-wide brand, so `instanceof` works across the two, and an error converted to an MCP error keeps
+one error ID whichever copy converts it. In 1.9.3 every failure in an ES-module project was recorded as
+`GenericServerError` with an error ID the client never saw, and after `this.fail()` the span's exception carried the
+stack of the `FlowControl` signal instead of the error.
+
 A tool, resource or prompt that fails ends its spans with an error status, the execution span included, with the
 message the client sees in production and an `exception` event of the error's code (`PUBLIC_ERROR`), the one
 `this.fail()` was given included (a plain `Error` gives the masked message with its error ID and `SERVER_ERROR`); up to 1.9.1 a failed tool's span was left open and never exported, and up to 1.9.2

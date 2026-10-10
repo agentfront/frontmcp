@@ -7,42 +7,16 @@
  * `auth.ui` login page fell back to the built-in one. The server (`fixture/esm-project/server.mjs`)
  * runs with plain `node` in a temporary project that installs the built packages.
  */
-import { tmpdir } from 'node:os';
-import * as path from 'node:path';
-
 import { McpTestClient, TestServer } from '@frontmcp/testing';
-import { cp, mkdir, mkdtemp, realpath, rm, symlink } from '@frontmcp/utils';
+import { rm } from '@frontmcp/utils';
 
-const WORKSPACE = path.resolve(__dirname, '../../../..');
-const FIXTURE_DIR = path.resolve(__dirname, '../fixture/esm-project');
+import { createEsmProject } from './helpers/esm-project';
+
 const FRONTMCP_PACKAGES = ['sdk', 'uipack', 'ui', 'utils', 'protocol', 'di', 'lazy-zod', 'auth', 'guard'];
 const THIRD_PARTY = ['reflect-metadata', 'zod', 'react', 'react-dom'];
-const LINK_TYPE = process.platform === 'win32' ? 'junction' : 'dir';
 const DYNAMIC_REQUIRE = /Dynamic require of/;
 
 let projectDir: string;
-
-/**
- * The fixture copied into a temporary project whose node_modules link each @frontmcp package to
- * its built `dist`, the layout `npm install` produces. Outside the monorepo, nothing (no
- * tsconfig `paths`, no `development` condition) can point a package at its TypeScript sources.
- */
-async function createProject(): Promise<string> {
-  const dir = await realpath(await mkdtemp(path.join(tmpdir(), 'frontmcp-esm-project-')));
-  await cp(FIXTURE_DIR, dir, { recursive: true });
-  await mkdir(path.join(dir, 'node_modules', '@frontmcp'), { recursive: true });
-  for (const name of FRONTMCP_PACKAGES) {
-    await symlink(
-      path.join(WORKSPACE, 'libs', name, 'dist'),
-      path.join(dir, 'node_modules', '@frontmcp', name),
-      LINK_TYPE,
-    );
-  }
-  for (const name of THIRD_PARTY) {
-    await symlink(path.join(WORKSPACE, 'node_modules', name), path.join(dir, 'node_modules', name), LINK_TYPE);
-  }
-  return dir;
-}
 
 async function startServer(env: Record<string, string> = {}): Promise<TestServer> {
   return TestServer.start({
@@ -56,7 +30,7 @@ async function startServer(env: Record<string, string> = {}): Promise<TestServer
 
 describe('ES-module project: .tsx UI on the built packages', () => {
   beforeAll(async () => {
-    projectDir = await createProject();
+    projectDir = await createEsmProject({ frontmcpPackages: FRONTMCP_PACKAGES, thirdParty: THIRD_PARTY });
   });
 
   afterAll(async () => {

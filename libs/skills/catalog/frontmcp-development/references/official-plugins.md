@@ -97,6 +97,8 @@ import CodeCallPlugin from '@frontmcp/plugin-codecall';
 class MyServer {}
 ```
 
+`plugins: [CodeCallPlugin]` (the class, no `init()`) is the same as `CodeCallPlugin.init()`: default options, the six `codecall:*` meta-tools and `CodeCallConfig`. Up to 1.9.3 the class form installed no tools while `codecall_only` still hid the app's own, leaving `tools/list` empty.
+
 ### Modes
 
 - `codecall_only` -- Hides all tools from `list_tools` except CodeCall meta-tools. All other tools are discovered only via `codecall:search` and reached only through CodeCall: a client's direct `tools/call` of a hidden tool is refused. Best when the server has a large number of tools and you want the AI to search-then-execute. When `appIds` is set, only tools from those apps are hidden — tools from other apps remain visible.

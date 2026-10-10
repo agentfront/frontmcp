@@ -40,6 +40,7 @@ const mockCreateMemoryStorage = jest.fn().mockReturnValue(mockStorage);
 const mockIsProduction = jest.fn().mockReturnValue(false);
 
 jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual<typeof import('@frontmcp/utils')>('@frontmcp/utils'),
   createStorage: (...args: unknown[]) => mockCreateStorage(...args),
   createMemoryStorage: (...args: unknown[]) => mockCreateMemoryStorage(...args),
   isProduction: () => mockIsProduction(),

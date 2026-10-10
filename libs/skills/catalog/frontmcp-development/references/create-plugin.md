@@ -391,6 +391,8 @@ Register with `init()`:
 class MyServer {}
 ```
 
+Listing the class itself (`plugins: [MyPlugin]`) is the same as `MyPlugin.init()`: the constructor, `dynamicProviders` and `dynamicTools` all get `{}`, so the plugin installs the providers and tools its default options give. A plugin that validates required options at runtime fails at startup with its own error; TypeScript types alone validate nothing, so a plugin without such a check starts with `{}`. Up to 1.9.3 the class form got none of the option-derived providers or tools (`plugins: [CodeCallPlugin]` served no tools; `plugins: [RememberPlugin]` failed on the first `this.remember`).
+
 ### Option-derived providers are registered before nested plugins
 
 `dynamicProviders(options)` and `init({ providers })` are registered **before** the plugin's nested `plugins` are built, for both `init(options)` and `init({ useFactory, inject? })` (the factory runs first). A nested plugin can inject them:
@@ -431,7 +433,7 @@ export default class MemoryPlugin extends DynamicPlugin<MemoryOptions, MemoryOpt
 }
 ```
 
-`dynamicTools`, like `dynamicProviders`, runs on the options the plugin is built with: those given to `init(options)`, or the ones an `init({ useFactory })` factory returns at startup. `RememberPlugin.init({ useFactory: () => ({ type: 'memory', tools: { enabled: true } }) })`, which needs no `inject` because the factory takes no dependencies, therefore registers the memory tools.
+`dynamicTools`, like `dynamicProviders`, runs on the options the plugin is built with: those given to `init(options)`, the ones an `init({ useFactory })` factory returns at startup, or `{}` when the plugin is listed as its class (`plugins: [MemoryPlugin]`). `RememberPlugin.init({ useFactory: () => ({ type: 'memory', tools: { enabled: true } }) })`, which needs no `inject` because the factory takes no dependencies, therefore registers the memory tools.
 
 ### Installing the same plugin in several apps
 
