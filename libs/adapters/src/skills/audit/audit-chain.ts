@@ -105,6 +105,17 @@ export function linkRecord(
   };
 }
 
+/** Options for {@link verifyChain}. */
+export interface AuditChainVerifyOptions {
+  /**
+   * The record just before `records`, for verifying a window read from the middle of the chain
+   * (`store.read({ from, limit })`): the first record must follow it in sequence and carry its hash
+   * as `prevHash`. Pass a record you verified earlier, or read `from - 1` and verify it too.
+   * Without it, the first record must be the chain's first (`prevHash` is the genesis sentinel).
+   */
+  previous?: SkillAuditRecord;
+}
+
 /**
  * Walk the chain in order, recomputing each prevHash and verifying each
  * signature. Returns the first break or `{ ok: true }` on a clean run.
@@ -117,12 +128,13 @@ export function verifyChain(
   records: ReadonlyArray<SkillAuditRecord>,
   trustedKeys: ReadonlyArray<AuditTrustedKey>,
   verifier: AuditSignatureVerifier,
+  options: AuditChainVerifyOptions = {},
 ): AuditChainVerifyResult {
   if (records.length === 0) {
     return { ok: true, verified: 0 };
   }
 
-  let prev: SkillAuditRecord | undefined;
+  let prev: SkillAuditRecord | undefined = options.previous;
   for (let i = 0; i < records.length; i++) {
     const rec = records[i];
     if (!rec) {

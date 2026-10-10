@@ -81,6 +81,13 @@ export interface SkillAuditConfig {
   subjectMode?: SkillAuditSubjectMode;
 
   /**
+   * Key for the `subjectMode: 'hash'` HMAC: at least 32 bytes (a string is UTF-8 encoded). When
+   * omitted, the key is derived from the signer's key material, so subject hashes change when the
+   * signing key does; a signer that cannot derive one records subjects as `'redacted'` and warns.
+   */
+  subjectHashSecret?: string | Uint8Array;
+
+  /**
    * Optional periodic head-anchor interval (milliseconds). When set, the
    * writer occasionally writes `{ tail: { sequence, hash, timestamp } }` to
    * an external immutable store (when one is configured at the host level)

@@ -8,7 +8,7 @@ features:
   - 'Bootstraps the audit subsystem via setSkillAuditFactory(...) before FrontMcp registers'
   - 'MemoryAuditStore keeps records in-process — perfect for tests, lost on restart'
   - 'A random-key Hs256AuditSigner cannot verify records after a restart: use Rs256AuditSigner in production'
-  - "subjectMode: 'hash' redacts user identifiers while keeping them correlatable"
+  - "subjectMode: 'hash' redacts user identifiers while keeping them correlatable (keyed from the signer's secret)"
 ---
 
 # Audit Log (Basic, Dev-Mode)
@@ -26,11 +26,12 @@ import { randomBytes } from '@frontmcp/utils';
 
 import { MainApp } from './main.app';
 
-// Register the audit module with the SDK at boot. The SDK constructs the
-// writer as `new SkillAuditWriter(store, signer, logger, metrics, { subjectMode })`,
-// with `metrics` and `subjectMode` taken from `skillsConfig.audit`. The SDK does NOT
-// statically depend on @frontmcp/adapters/skills — this keeps the static
-// dependency graph clean and works in Edge / CSP runtimes.
+// Register the audit module with the SDK at boot (not needed when
+// @frontmcp/plugin-skilled-openapi is installed: the plugin registers it). The SDK
+// constructs the writer as `new SkillAuditWriter(store, signer, logger, metrics, options)`,
+// with `metrics`, `subjectMode` and `subjectHashSecret` taken from `skillsConfig.audit`.
+// The SDK does NOT statically depend on @frontmcp/adapters/skills — this keeps the
+// static dependency graph clean and works in Edge / CSP runtimes.
 setSkillAuditFactory(() => auditModule);
 
 @FrontMcp({
@@ -56,7 +57,8 @@ export default class DevServer {}
 - Bootstraps the audit subsystem via setSkillAuditFactory(...) before FrontMcp registers
 - MemoryAuditStore keeps records in-process — perfect for tests, lost on restart
 - A random-key Hs256AuditSigner cannot verify records after a restart: use Rs256AuditSigner in production
-- subjectMode: 'hash' redacts user identifiers while keeping them correlatable
+- subjectMode: 'hash' redacts user identifiers while keeping them correlatable (keyed from the signer's secret)
+- The in-memory store is development-only: with audit enabled in production, the server refuses to start without a `store`
 
 ## Related
 

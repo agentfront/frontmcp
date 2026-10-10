@@ -59,6 +59,13 @@ export interface SkillAuditStore {
 
   /** Read records in sequence order. Used by the verifier and by HTTP viewers. */
   read(opts?: SkillAuditReadOptions): Promise<SkillAuditRecord[]>;
+
+  /**
+   * Give back a sequence number from {@link nextSequence} whose record was never appended (its
+   * signing or append failed), so the chain has no gap the verifier reports. Optional and
+   * best-effort: a store that cannot roll back leaves it out.
+   */
+  releaseSequence?(sequence: number): Promise<void>;
 }
 
 // ─── In-memory implementation ───────────────────────────────────────────────
@@ -90,6 +97,11 @@ export class MemoryAuditStore implements SkillAuditStore {
   async tail(): Promise<SkillAuditRecord | undefined> {
     if (this.records.length === 0) return undefined;
     return this.records[this.records.length - 1];
+  }
+
+  /** Only the latest allocation can be given back; the writer allocates and appends one record at a time. */
+  async releaseSequence(sequence: number): Promise<void> {
+    if (sequence === this.seq) this.seq -= 1;
   }
 
   async read(opts?: SkillAuditReadOptions): Promise<SkillAuditRecord[]> {
@@ -140,6 +152,11 @@ export class StorageAdapterAuditStore implements SkillAuditStore {
 
   async nextSequence(): Promise<number> {
     return this.adapter.incr(this.sequenceKey);
+  }
+
+  /** Not transactional across pods: another writer may already have allocated a later number. */
+  async releaseSequence(): Promise<void> {
+    await this.adapter.decr(this.sequenceKey);
   }
 
   async appendAtSequence(record: SkillAuditRecord): Promise<void> {

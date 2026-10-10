@@ -143,7 +143,7 @@ function isProductionRuntime(): boolean {
  * Defaults (used only when the host doesn't supply explicit signer/store):
  *   - signer: in-memory HS256 with a randomly generated 32-byte secret
  *     (refused in production — host MUST configure an explicit signer).
- *   - store: in-memory append-only log
+ *   - store: in-memory append-only log (refused in production as well)
  *
  * Both defaults are flagged in the logs as dev-only so production hosts
  * don't accidentally rely on them.
@@ -162,9 +162,9 @@ export function registerSkillAuditWriter(options: {
     // security regression because operators expect their audit log to be
     // present when they set `audit.enabled: true`.
     const msg =
-      '[skill-audit] audit.enabled is true but no audit module factory is registered. ' +
-      'Call setSkillAuditFactory(() => require("@frontmcp/adapters/skills")) at boot, ' +
-      'or supply a signer + store explicitly in skillsConfig.audit.';
+      '[skill-audit] audit.enabled is true but no audit module is registered. @frontmcp/plugin-skilled-openapi ' +
+      'registers it when the plugin is installed; otherwise call ' +
+      "setSkillAuditFactory(() => auditModule) at boot, with `import * as auditModule from '@frontmcp/adapters/skills'`.";
     if (isProductionRuntime()) {
       throw new Error(msg);
     }
@@ -182,15 +182,8 @@ export function registerSkillAuditWriter(options: {
   const signer = audit.signer ?? createDefaultSigner(mod, logger);
   const store = audit.store ?? createDefaultStore(mod, logger);
 
-  // Forward only the fields the writer currently consumes. `headAnchorIntervalMs`
-  // is captured by the schema so misconfigurations surface (rather than being
-  // silently dropped at parse time) but the writer doesn't read it yet — see
-  // `SkillAuditConfig.headAnchorIntervalMs` for the v1.3.0 plan.
-  const writerOptions: AuditWriterOptionsShape | undefined =
-    audit.subjectMode !== undefined ? { subjectMode: audit.subjectMode } : undefined;
-
   const AuditWriter = mod.SkillAuditWriter as AuditWriterConstructor;
-  const writer = new AuditWriter(store, signer, logger, audit.metrics, writerOptions);
+  const writer = new AuditWriter(store, signer, logger, audit.metrics, auditWriterOptions(audit));
 
   providers.injectProvider({
     provide: mod.SkillAuditWriterToken,
@@ -233,7 +226,33 @@ function createDefaultSigner(mod: AuditModuleShape, logger: FrontMcpLogger): unk
   return new mod.Hs256AuditSigner(bytes, 'frontmcp-default-hs256');
 }
 
+/**
+ * The writer options from `skillsConfig.audit`: only the fields the writer reads. `headAnchorIntervalMs`
+ * is validated by the schema but not read yet (see `SkillAuditConfig.headAnchorIntervalMs`).
+ */
+function auditWriterOptions(audit: SkillsConfigAuditOptions): AuditWriterOptionsShape | undefined {
+  const options: AuditWriterOptionsShape = {};
+  if (audit.subjectMode !== undefined) options.subjectMode = audit.subjectMode;
+  if (audit.subjectHashSecret !== undefined) {
+    options.subjectHashSecret =
+      typeof audit.subjectHashSecret === 'string'
+        ? new TextEncoder().encode(audit.subjectHashSecret)
+        : audit.subjectHashSecret;
+  }
+  return Object.keys(options).length > 0 ? options : undefined;
+}
+
 function createDefaultStore(mod: AuditModuleShape, logger: FrontMcpLogger): unknown {
+  // An in-memory log in production loses every record on restart and is not shared across pods,
+  // so production refuses it as it refuses the default signer.
+  if (isProductionRuntime()) {
+    throw new Error(
+      '[skill-audit] refusing to use the in-memory audit store in production. Configure ' +
+        'skillsConfig.audit.store with a persistent store, e.g. ' +
+        'new StorageAdapterAuditStore(await createStorage({ type: "redis", redis: { config: { host, port } } })) ' +
+        'from @frontmcp/adapters/skills and @frontmcp/utils.',
+    );
+  }
   logger.warn(
     '[skill-audit] no audit store configured — using in-memory store. ' +
       'Records are lost on restart and not shared across pods. Configure skillsConfig.audit.store for production.',
