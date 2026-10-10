@@ -3,18 +3,19 @@
  */
 
 import 'reflect-metadata';
-import ProviderRegistry from '../provider.registry';
-import { ProviderScope } from '../../common/metadata';
+
 import {
-  TestService,
-  DependentService,
   AsyncService,
-  TEST_TOKEN,
-  FACTORY_TOKEN,
-  createValueProvider,
-  createFactoryProvider,
   createClassProvider,
+  createFactoryProvider,
+  createValueProvider,
+  DependentService,
+  FACTORY_TOKEN,
+  TEST_TOKEN,
+  TestService,
 } from '../../__test-utils__/fixtures/provider.fixtures';
+import { ProviderScope } from '../../common/metadata';
+import ProviderRegistry from '../provider.registry';
 
 describe('ProviderRegistry', () => {
   describe('Basic Registration', () => {
@@ -246,6 +247,24 @@ describe('ProviderRegistry', () => {
       const dependentInstance = childRegistry.get(DependentService);
       expect(dependentInstance).toBeInstanceOf(DependentService);
       expect(dependentInstance.testService).toBeInstanceOf(TestService);
+    });
+
+    it('disposes the registries built below it, each once (#821)', async () => {
+      const parent = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'from parent' })]);
+      const child = new ProviderRegistry([], parent);
+      const grandchild = new ProviderRegistry([], child);
+      const disposedOnItsOwn = new ProviderRegistry([], parent);
+      await Promise.all([parent.ready, child.ready, grandchild.ready, disposedOnItsOwn.ready]);
+      disposedOnItsOwn.dispose();
+      const childDispose = jest.spyOn(child, 'dispose');
+      const grandchildDispose = jest.spyOn(grandchild, 'dispose');
+      const ownDispose = jest.spyOn(disposedOnItsOwn, 'dispose');
+
+      parent.dispose();
+
+      expect(childDispose).toHaveBeenCalledTimes(1);
+      expect(grandchildDispose).toHaveBeenCalledTimes(1);
+      expect(ownDispose).not.toHaveBeenCalled();
     });
 
     it('should throw error if dependency not found in hierarchy', () => {

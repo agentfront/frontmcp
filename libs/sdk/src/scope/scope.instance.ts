@@ -459,7 +459,11 @@ export class Scope extends ScopeEntry {
             }
             this.logger.warn(msg);
           }
-          const { store: taskStore, type: taskType } = await createTaskStore({
+          const {
+            store: taskStore,
+            type: taskType,
+            storage: taskStorage,
+          } = await createTaskStore({
             redis: tasksRedis,
             sqlite: tasksSqlite,
             keyPrefix: tasksConfig?.keyPrefix ?? 'mcp:task:',
@@ -467,6 +471,10 @@ export class Scope extends ScopeEntry {
             isEdgeRuntime: onEdge,
           });
           this._taskStore = taskStore;
+          this.onDispose(async () => {
+            await taskStore.destroy?.();
+            await taskStorage?.disconnect();
+          });
           this.taskBackendType = taskType;
           this._taskRegistry = new TaskRegistry(
             {

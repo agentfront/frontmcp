@@ -226,7 +226,7 @@ const billing = await connect(config, { app: 'billing' });
 const billingServer = await FrontMcpInstance.createDirect(config, { app: 'billing' });
 ```
 
-`server.dispose()` shuts the whole server down (every scope, the endpoints it doesn't serve included), as `FrontMcpInstance.shutdown()` does. An `app` without an endpoint of its own rejects after the server built for it is shut down; `connect()` then also disposes the shared server when no other client uses it, so the next `connect()` builds a new one.
+`server.dispose()` shuts the whole server down (every scope, the endpoints it doesn't serve included), as `FrontMcpInstance.shutdown()` does. It stops every timer the server started (provider session cleanup, the in-memory auth stores, the task store's and the auth layer's storage sweepers), closes the storage the auth layer opened, and leaves no reference to the server on a `Plugin.init()` record, so a process can create and dispose servers repeatedly without keeping the disposed ones in memory (up to 1.9.4 four 60-second intervals and the first server's plugin records kept every disposed server reachable). An `app` without an endpoint of its own rejects after the server built for it is shut down; `connect()` then also disposes the shared server when no other client uses it, so the next `connect()` builds a new one.
 
 ## DirectClient API
 
