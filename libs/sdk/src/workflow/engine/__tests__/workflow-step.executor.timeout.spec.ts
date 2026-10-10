@@ -141,6 +141,13 @@ class StepAuditPlugin {
   }
 }
 
+/** Wait until the started job's trace has `length` entries, polling for at most two seconds. */
+async function waitForTrace(length: number): Promise<void> {
+  for (let poll = 0; poll < 400 && startedTrace.length < length; poll++) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 @App({
   id: 'started-app',
   name: 'Started',
@@ -254,7 +261,7 @@ describe('WorkflowStepExecutor', () => {
 
       await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
       finishStartedJob();
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await waitForTrace(2);
 
       expect(startedTrace).toEqual(['execute returned', 'did:finalize:WorkflowJobTimeoutError']);
     });
@@ -268,6 +275,7 @@ describe('WorkflowStepExecutor', () => {
       expect(startedJobSignal?.aborted).toBe(true);
       expect(startedJobSignal?.reason).toBeInstanceOf(WorkflowJobTimeoutError);
       finishStartedJob();
+      await waitForTrace(2);
     });
 
     it('gives a functional job the signal as ctx.signal', async () => {
@@ -283,6 +291,7 @@ describe('WorkflowStepExecutor', () => {
 
       expect(startedJobSignal?.aborted).toBe(true);
       finishStartedJob();
+      await waitForTrace(1);
     });
 
     it('fails the abandoned attempt with the timeout, not the error the job threw after it', async () => {
@@ -291,7 +300,7 @@ describe('WorkflowStepExecutor', () => {
 
       await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
       finishStartedJob();
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await waitForTrace(2);
 
       expect(startedTrace).toEqual(['execute threw', 'did:finalize:WorkflowJobTimeoutError']);
     });
