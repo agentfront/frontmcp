@@ -75,7 +75,7 @@ export const skillsConfigAuditOptionsSchema = z.object({
   subjectHashSecret: z
     .union([
       z.string().min(SUBJECT_HASH_SECRET_MIN_BYTES),
-      z.instanceof(Uint8Array).refine((secret) => secret.length >= SUBJECT_HASH_SECRET_MIN_BYTES, {
+      z.custom<Uint8Array>((secret) => secret instanceof Uint8Array && secret.length >= SUBJECT_HASH_SECRET_MIN_BYTES, {
         message: `subjectHashSecret must be at least ${SUBJECT_HASH_SECRET_MIN_BYTES} bytes`,
       }),
     ])
