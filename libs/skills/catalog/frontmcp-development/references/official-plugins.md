@@ -1178,5 +1178,5 @@ For other browsers, load a polyfill that installs `document.modelContext` (e.g. 
 
 ## Reference
 
-- [Plugins Overview Documentation](https://docs.agentfront.dev/frontmcp/plugins/overview)
+- [Plugins Overview Documentation](https://frontmcp.dev/reference/plugins)
 - Related skills: `create-plugin`, `create-plugin-hooks`, `create-tool`

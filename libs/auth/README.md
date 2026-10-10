@@ -72,14 +72,14 @@ Apache-2.0 — see [LICENSE](../../LICENSE).
 
 <!-- links -->
 
-[docs-overview]: https://docs.agentfront.dev/frontmcp/authentication/overview
-[docs-remote]: https://docs.agentfront.dev/frontmcp/authentication/remote
-[docs-local]: https://docs.agentfront.dev/frontmcp/authentication/local
-[docs-jwks]: https://docs.agentfront.dev/frontmcp/authentication/local
-[docs-stores]: https://docs.agentfront.dev/frontmcp/authentication/production
-[docs-vault]: https://docs.agentfront.dev/frontmcp/authentication/authorities
-[docs-pkce]: https://docs.agentfront.dev/frontmcp/authentication/local
-[docs-cimd]: https://docs.agentfront.dev/frontmcp/authentication/cimd
-[docs-ui]: https://docs.agentfront.dev/frontmcp/authentication/custom-ui
-[docs-audience]: https://docs.agentfront.dev/frontmcp/authentication/token
-[docs-token-vault]: https://docs.agentfront.dev/frontmcp/authentication/authorities
+[docs-overview]: https://frontmcp.dev/reference/auth
+[docs-remote]: https://frontmcp.dev/reference/auth/remote
+[docs-local]: https://frontmcp.dev/reference/auth/local
+[docs-jwks]: https://frontmcp.dev/reference/auth/local
+[docs-stores]: https://frontmcp.dev/reference/auth/production
+[docs-vault]: https://frontmcp.dev/reference/auth/authorities
+[docs-pkce]: https://frontmcp.dev/reference/auth/local
+[docs-cimd]: https://frontmcp.dev/reference/auth/cimd
+[docs-ui]: https://frontmcp.dev/reference/auth/login-ui
+[docs-audience]: https://frontmcp.dev/reference/auth/tokens
+[docs-token-vault]: https://frontmcp.dev/reference/auth/authorities

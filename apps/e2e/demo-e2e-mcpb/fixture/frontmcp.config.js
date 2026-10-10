@@ -41,7 +41,7 @@ module.exports = {
       longDescription: '# MCPB Demo\n\nE2E fixture for the MCPB build target.',
       author: { name: 'FrontMCP E2E', email: 'e2e@agentfront.dev' },
       license: 'Apache-2.0',
-      homepage: 'https://docs.agentfront.dev',
+      homepage: 'https://frontmcp.dev',
       keywords: ['mcpb', 'e2e'],
       compatibility: {
         platforms: ['darwin', 'linux', 'win32'],

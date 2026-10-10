@@ -399,5 +399,5 @@ frontmcp dev
 
 ## Reference
 
-- [Providers Documentation](https://docs.agentfront.dev/frontmcp/extensibility/providers)
+- [Providers Documentation](https://frontmcp.dev/reference/sdk/provider)
 - Related skills: `create-tool`, `create-resource`, `create-agent`, `create-prompt`

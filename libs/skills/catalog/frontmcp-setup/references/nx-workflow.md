@@ -467,5 +467,5 @@ Complete list of all `@frontmcp/nx` generators from `generators.json`:
 
 ## Reference
 
-- **Docs:** [Nx Plugin Overview](https://docs.agentfront.dev/frontmcp/nx-plugin/overview)
+- **Docs:** [Nx Plugin Overview](https://frontmcp.dev/reference/nx)
 - **Related skills:** `setup-project`, `setup-sqlite`, `setup-redis`

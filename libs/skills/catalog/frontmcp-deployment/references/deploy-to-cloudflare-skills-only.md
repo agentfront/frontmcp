@@ -44,7 +44,7 @@ not count, so a new skill can take the name of a skill the bundle drops or
 renames (`registerSkillContent`'s `supersedes` option, which the bundle sync
 fills in).
 
-For the conceptual picture, see [Skills-Only Deployment](https://docs.agentfront.dev/frontmcp/features/skills-only-deployment).
+For the conceptual picture, see [Skills-Only Deployment](https://frontmcp.dev/reference/sdk/skill#connecting-for-skills-only).
 For the production-ready decorator build, see [`deploy-to-cloudflare.md`](./deploy-to-cloudflare.md).
 
 ## When to Use This Skill
@@ -262,5 +262,5 @@ Action outputs:
 - `references/deploy-manifest-yaml.md` — full `frontmcp.deploy.yaml` schema reference
 - `references/deploy-to-cloudflare.md` — the older Express-to-Workers adapter path
 - `references/wrangler-config.md` — wrangler.toml checklist
-- Docs: https://docs.agentfront.dev/frontmcp/deployment/cloudflare-worker
-- Docs: https://docs.agentfront.dev/frontmcp/features/skills-only-deployment
+- Docs: https://frontmcp.dev/reference/deployment/cloudflare-workers
+- Docs: https://frontmcp.dev/reference/sdk/skill#connecting-for-skills-only

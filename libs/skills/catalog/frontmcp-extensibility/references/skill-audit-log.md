@@ -246,5 +246,5 @@ What it does **not** catch by default:
 
 ## Reference
 
-- [Skill Audit Log](https://docs.agentfront.dev/frontmcp/extensibility/skill-audit-log)
+- [Skill Audit Log](https://frontmcp.dev/reference/plugins/skilled-openapi#audit-log)
 - Related skills: `configure-skills-http`, `create-plugin`

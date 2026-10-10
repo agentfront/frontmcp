@@ -4,7 +4,7 @@
  * Re-exports template helper utilities from @frontmcp/ui.
  * Also provides individual helper functions for backwards compatibility.
  *
- * @see {@link https://docs.agentfront.dev/docs/servers/tools#tool-ui | Tool UI Documentation}
+ * @see {@link https://frontmcp.dev/reference/ui | Tool UI Documentation}
  */
 
 // Import escapeHtml from @frontmcp/uipack/utils - single source of truth (no React needed)

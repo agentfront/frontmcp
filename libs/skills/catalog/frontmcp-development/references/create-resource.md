@@ -601,5 +601,5 @@ When a client requests completions for the `userId` parameter with a partial str
 
 ## Reference
 
-- [Resources Documentation](https://docs.agentfront.dev/frontmcp/servers/resources)
+- [Resources Documentation](https://frontmcp.dev/reference/sdk/resource)
 - Related skills: `create-tool`, `create-prompt`, `create-provider`, `create-agent`

@@ -338,5 +338,5 @@ done
 
 ## Reference
 
-- [Guard Configuration Docs](https://docs.agentfront.dev/frontmcp/servers/guard)
+- [Guard Configuration Docs](https://frontmcp.dev/reference/sdk/guard)
 - Related skills: `configure-http`, `configure-transport`, `setup-redis`, `configure-auth`

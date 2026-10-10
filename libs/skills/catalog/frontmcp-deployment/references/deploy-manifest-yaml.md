@@ -8,7 +8,7 @@ description: The frontmcp.deploy.yaml v1 schema — declarative manifest the Git
 This is the declarative manifest the GitHub Action ingests on every push. It is the source of truth for what your Cloudflare Worker serves. The schema is strict — unknown keys fail validation.
 
 For the runtime that consumes the bundle, see `deploy-to-cloudflare-skills-only.md` in this same folder.
-For the live docs version, see https://docs.agentfront.dev/frontmcp/deployment/deploy-manifest.
+For deploying to Cloudflare Workers, see https://frontmcp.dev/reference/deployment/cloudflare-workers.
 
 ## Minimum Manifest
 
@@ -304,5 +304,5 @@ import {
 ## See Also
 
 - `references/deploy-to-cloudflare-skills-only.md` — the runtime that consumes the manifest
-- Docs: https://docs.agentfront.dev/frontmcp/deployment/deploy-manifest
-- Docs: https://docs.agentfront.dev/frontmcp/features/skills-only-deployment
+- Docs: https://frontmcp.dev/reference/deployment/cloudflare-workers
+- Docs: https://frontmcp.dev/reference/sdk/skill#connecting-for-skills-only

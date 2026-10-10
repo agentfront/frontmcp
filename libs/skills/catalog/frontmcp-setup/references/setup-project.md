@@ -573,5 +573,5 @@ Run with: `nx serve <projectName>`.
 
 ## Reference
 
-- [Getting Started Quickstart](https://docs.agentfront.dev/frontmcp/getting-started/quickstart)
+- [Getting Started Quickstart](https://frontmcp.dev/learn)
 - Related skills: `setup-redis`, `setup-sqlite`, `nx-workflow`, `deploy-to-vercel`, `deploy-to-node`, `create-tool`

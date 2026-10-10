@@ -58,6 +58,6 @@ Apache-2.0 — see [LICENSE](../../LICENSE).
 
 <!-- links -->
 
-[docs-overview]: https://docs.agentfront.dev/frontmcp/adapters/overview
-[docs-openapi]: https://docs.agentfront.dev/frontmcp/adapters/openapi-adapter
-[docs-guide]: https://docs.agentfront.dev/frontmcp/guides/add-openapi-adapter
+[docs-overview]: https://frontmcp.dev/reference/sdk/adapter
+[docs-openapi]: https://frontmcp.dev/reference/adapters/openapi
+[docs-guide]: https://frontmcp.dev/learn/wrapping-an-openapi-service

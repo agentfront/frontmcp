@@ -109,7 +109,7 @@ function buildCspConfig(resolver?: ImportResolver, extra?: RenderToolTemplateOpt
   return { resourceDomains: cspResourceDomains, connectDomains: cspConnectDomains };
 }
 
-const STRING_RESULT_DOCS = 'https://docs.agentfront.dev/frontmcp/guides/building-tool-ui#trusted-markup';
+const STRING_RESULT_DOCS = 'https://frontmcp.dev/learn/your-first-widget';
 
 const noticedStringResultTools = new Set<string>();
 

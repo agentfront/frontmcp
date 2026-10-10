@@ -3,7 +3,7 @@
   "version": "1.9.4",
   "description": "FrontMCP command line interface",
   "author": "AgentFront <info@agentfront.dev>",
-  "homepage": "https://docs.agentfront.dev",
+  "homepage": "https://frontmcp.dev/reference/cli",
   "license": "Apache-2.0",
   "keywords": [
     "cli",
