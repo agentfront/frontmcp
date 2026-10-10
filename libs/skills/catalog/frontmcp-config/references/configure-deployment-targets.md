@@ -300,6 +300,12 @@ See `transport`, `env`, `clients`, `test`, `skills` field reference in [docs/fro
 
 A `@FrontMcp({ http: { entryPath } })` value still wins over the config. When the two differ, `frontmcp build` warns.
 
+## `eject-mcp-config` default stdio entry
+
+A `stdio` client with no `command`/`args` gets `npx -y <package.json name> --stdio` (the config's
+`name` when there is no `package.json` name): it starts the published package's bin over stdio.
+Set `command` and `args` on the client to run something else, e.g. a local build.
+
 ## `eject-mcp-config --out` merges
 
 `--out` merges into an existing client config instead of replacing it: the parent folder is created when missing, other top-level keys and other `mcpServers` entries are kept, and only this server's entry is replaced. A file that is not valid JSON (or not a JSON object) is refused and left untouched. `--dry-run` prints the merged result and writes nothing.

@@ -4,7 +4,7 @@
  * Covers the four branches in `buildServerEntry`:
  *   1. Missing `clients.<name>` entry → throws.
  *   2. `transport: 'stdio'` → emits `command` + `args` (+ env when present),
- *      defaulting to `npx -y <config.name>`.
+ *      defaulting to `npx -y <package name> --stdio`.
  *   3. `transport: 'http' | 'sse'` → emits `url` + `transport`, deriving the
  *      URL from `transport.http.port` or a single deployment HTTP port.
  *   4. Missing URL — both the "no port at all" and "ambiguous (multiple
@@ -36,12 +36,20 @@ describe('emitClientSnippet (issue #400)', () => {
   });
 
   describe('stdio transport', () => {
-    it("defaults to `npx -y <config.name>` when command/args aren't provided", () => {
+    it("defaults to `npx -y <package name> --stdio` when command/args aren't provided", () => {
       const config = baseConfig({
         clients: { 'claude-code': { transport: 'stdio' } },
       } as Partial<FrontMcpConfigParsed>);
-      const snippet = JSON.parse(emitClientSnippet('claude-code', config));
-      expect(snippet.mcpServers.demo).toEqual({ command: 'npx', args: ['-y', 'demo'] });
+      const snippet = JSON.parse(emitClientSnippet('claude-code', config, { packageName: '@acme/help-desk' }));
+      expect(snippet.mcpServers.demo).toEqual({ command: 'npx', args: ['-y', '@acme/help-desk', '--stdio'] });
+    });
+
+    it('falls back to the config name when the project has no package name', () => {
+      const config = baseConfig({
+        clients: { 'claude-code': { transport: 'stdio' } },
+      } as Partial<FrontMcpConfigParsed>);
+      const entry = buildClientPayload('claude-code', config).mcpServers.demo;
+      expect(entry).toEqual({ command: 'npx', args: ['-y', 'demo', '--stdio'] });
     });
 
     it('respects explicit command + args + env', () => {
@@ -163,7 +171,7 @@ describe('emitClientSnippet (issue #400)', () => {
       for (const client of ['claude-code', 'claude-desktop', 'cursor', 'windsurf', 'vscode'] as const) {
         const snippet = JSON.parse(emitClientSnippet(client, config));
         expect(Object.keys(snippet)).toEqual(['mcpServers']);
-        expect(snippet.mcpServers.demo).toEqual({ command: 'npx', args: ['-y', 'demo'] });
+        expect(snippet.mcpServers.demo).toEqual({ command: 'npx', args: ['-y', 'demo', '--stdio'] });
       }
     });
   });
