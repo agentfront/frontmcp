@@ -767,5 +767,5 @@ class DeployServiceSkill extends SkillContext {}
 
 ## Reference
 
-- [Skills Documentation](https://docs.agentfront.dev/frontmcp/servers/skills)
+- [Skills Documentation](https://frontmcp.dev/reference/sdk/skill)
 - Related skills: `create-skill`, `create-tool`, `create-agent`, `create-prompt`

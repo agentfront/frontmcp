@@ -547,5 +547,5 @@ Every `mcp-from-openapi` load option reaches the loader; up to 1.9.1 `overlays` 
 
 ## Reference
 
-- [OpenAPI Adapter Documentation](https://docs.agentfront.dev/frontmcp/adapters/openapi-adapter)
+- [OpenAPI Adapter Documentation](https://frontmcp.dev/reference/adapters/openapi)
 - Related skills: `official-adapters`, `create-adapter`, `create-tool`

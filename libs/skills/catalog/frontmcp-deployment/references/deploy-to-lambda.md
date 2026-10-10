@@ -345,5 +345,5 @@ Lambda cold starts occur when a new execution environment is initialized. Strate
 
 ## Reference
 
-- **Docs:** https://docs.agentfront.dev/frontmcp/deployment/serverless
+- **Docs:** https://frontmcp.dev/reference/deployment#where-it-runs
 - **Related skills:** `deploy-to-node`, `deploy-to-vercel`

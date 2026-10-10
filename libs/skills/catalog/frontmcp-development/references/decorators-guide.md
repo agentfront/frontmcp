@@ -808,7 +808,7 @@ A hook declared on a `@Tool`, `@Resource` or `@Prompt` class runs only for that 
 
 ## Reference
 
-- **Official docs:** [FrontMCP Decorators Overview](https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/overview)
+- **Official docs:** [FrontMCP Decorators Overview](https://frontmcp.dev/reference/sdk#decorators)
 - **Related skills:**
   - `create-tool` -- step-by-step guide for building tools with `@Tool` and `ToolContext`
   - `create-resource` -- patterns for `@Resource` and `@ResourceTemplate` usage

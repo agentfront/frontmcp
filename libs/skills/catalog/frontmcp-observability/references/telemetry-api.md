@@ -271,5 +271,5 @@ See [`vendor-integrations`](./vendor-integrations.md) for the metrics-side wirin
 
 ## Reference
 
-- [Telemetry API Reference](https://docs.agentfront.dev/frontmcp/sdk-reference/telemetry)
+- [Telemetry API Reference](https://frontmcp.dev/reference/server/observability#thistelemetry)
 - Related skills: `frontmcp-development`, `frontmcp-extensibility`

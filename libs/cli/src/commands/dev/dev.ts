@@ -176,7 +176,7 @@ export async function resolveDevLaunch(opts: ParsedArgs, options: ResolveDevLaun
   //      `process.env.PORT` (the SDK's `httpOptionsSchema` default does).
   //      If the user's metadata HARD-CODES `http.port`, the child binds to
   //      that hard-coded value and ignores PORT — the probe is then advisory
-  //      only. Documented in docs/frontmcp/deployment/local-dev-server.mdx.
+  //      only. Documented at https://frontmcp.dev/reference/cli#frontmcp-dev.
   const cliPort = typeof args.port === 'number' ? args.port : args.port ? Number(args.port) : undefined;
   const configPort = cfg?.transport?.http?.port;
   const envPort = process.env['PORT'];

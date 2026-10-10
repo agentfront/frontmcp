@@ -162,7 +162,7 @@ const reportCacheProvider = {
 export class CacheWarmerPlugin {}
 ```
 
-Listing the provider in `exports` too lets the app's tools resolve the cache with `this.get(ReportCache)`; `exports` takes provider definitions, not bare tokens. Inside a tool, resource or prompt, the scope itself is `this.scope`. Inside a flow hook, resolve it with `ctx.get(ScopeEntry)` (for example `ctx.get(ScopeEntry).apps.getApps()` in a server-scoped plugin): the flow's own `scope` is protected. See [Scope lifecycle hooks](https://docs.agentfront.dev/frontmcp/sdk-reference/core/scope#lifecycle-hooks).
+Listing the provider in `exports` too lets the app's tools resolve the cache with `this.get(ReportCache)`; `exports` takes provider definitions, not bare tokens. Inside a tool, resource or prompt, the scope itself is `this.scope`. Inside a flow hook, resolve it with `ctx.get(ScopeEntry)` (for example `ctx.get(ScopeEntry).apps.getApps()` in a server-scoped plugin): the flow's own `scope` is protected. See [Scope lifecycle hooks](https://frontmcp.dev/reference/sdk/scope).
 
 ## Pre-Built Hook Type Exports
 
@@ -536,5 +536,5 @@ An instance method on an earlier stage, or `Will`/`Around` on `createToolCallCon
 
 ## Reference
 
-- [Plugin Hooks Documentation](https://docs.agentfront.dev/frontmcp/plugins/creating-plugins)
+- [Plugin Hooks Documentation](https://frontmcp.dev/reference/sdk/plugin)
 - Related skills: `create-plugin`, `official-plugins`, `create-tool`

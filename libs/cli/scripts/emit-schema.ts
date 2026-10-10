@@ -45,7 +45,7 @@ async function main(): Promise<void> {
   // Stamp a top-level URL the docs page references.
   const stamped = {
     $schema: 'http://json-schema.org/draft-07/schema#',
-    $id: 'https://docs.agentfront.dev/frontmcp/schema/project.json',
+    $id: 'https://frontmcp.dev/schemas/frontmcp.config.json',
     title: 'FrontMCP Project Config',
     description:
       'Validation schema for `frontmcp.config.{ts,js,json,mjs,cjs}` files consumed by every `frontmcp` CLI command (issue #400).',

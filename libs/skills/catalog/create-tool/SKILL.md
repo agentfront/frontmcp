@@ -65,7 +65,7 @@ bundle: [recommended, minimal, full]
 allowed-tools: Read Edit Write Grep Glob Bash
 
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/servers/tools
+  docs: https://frontmcp.dev/reference/sdk/tool
 ---
 
 # Create a FrontMCP Tool

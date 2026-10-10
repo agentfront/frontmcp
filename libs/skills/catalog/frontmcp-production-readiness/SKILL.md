@@ -9,7 +9,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/deployment/production-build
+  docs: https://frontmcp.dev/reference/deployment/production-build
 ---
 
 # FrontMCP Production Readiness Audit
@@ -226,5 +226,5 @@ when a server has been configured to host this skill.
 
 ## Reference
 
-- [Production Build](https://docs.agentfront.dev/frontmcp/deployment/production-build)
+- [Production Build](https://frontmcp.dev/reference/deployment/production-build)
 - Related skills: `frontmcp-config`, `frontmcp-deployment`, `frontmcp-testing`, `frontmcp-setup`, `frontmcp-observability`

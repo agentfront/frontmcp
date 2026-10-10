@@ -689,5 +689,5 @@ class StorytellerAgent extends AgentContext {}
 
 ## Reference
 
-- [Agents Documentation](https://docs.agentfront.dev/frontmcp/servers/agents)
+- [Agents Documentation](https://frontmcp.dev/reference/sdk/agent)
 - Related skills: `create-tool`, `create-provider`, `create-prompt`, `create-resource`

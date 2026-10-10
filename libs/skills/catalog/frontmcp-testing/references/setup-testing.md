@@ -668,5 +668,5 @@ node scripts/fix-unused-imports.mjs feature/my-branch
 
 ## Reference
 
-- [Testing Documentation](https://docs.agentfront.dev/frontmcp/testing/overview)
+- [Testing Documentation](https://frontmcp.dev/reference/testing)
 - Related skills: `create-tool`, `create-resource`, `create-prompt`, `setup-project`, `nx-workflow`

@@ -2,7 +2,7 @@
 
 Curated skills catalog for FrontMCP projects. Skills are SKILL.md-based instructional packages that teach AI agents how to perform multi-step tasks with FrontMCP.
 
-> **v1.2.0 — new manifest fields:** `rating` (0..5), `category` override, and `requires: string[]` (skill dependencies). The Skills HTTP API exposes them as `min-rating`, `category`, and resolves `requires` topologically before registration. See [Skills Adapter](../../docs/frontmcp/adapters/skills-adapter.mdx) for the runtime contract.
+> **v1.2.0 — new manifest fields:** `rating` (0..5), `category` override, and `requires: string[]` (skill dependencies). The Skills HTTP API exposes them as `min-rating`, `category`, and resolves `requires` topologically before registration. See [Serving skills over HTTP](https://frontmcp.dev/reference/sdk/skill#serving-skills-over-http) for the runtime contract.
 
 ## Structure
 

@@ -17,7 +17,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/testing/overview
+  docs: https://frontmcp.dev/reference/testing
 ---
 
 # FrontMCP Testing Router
@@ -236,5 +236,5 @@ when a server has been configured to host this skill.
 
 ## Reference
 
-- [Testing Documentation](https://docs.agentfront.dev/frontmcp/testing/overview)
+- [Testing Documentation](https://frontmcp.dev/reference/testing)
 - Related skills: `setup-testing`, `create-tool`, `create-resource`, `create-prompt`, `configure-auth`

@@ -149,5 +149,5 @@ Each test should:
 
 ## Reference
 
-- [Telemetry API Reference](https://docs.agentfront.dev/frontmcp/sdk-reference/telemetry)
+- [Telemetry API Reference](https://frontmcp.dev/reference/server/observability#thistelemetry)
 - Related skills: `frontmcp-testing`, `frontmcp-observability`
