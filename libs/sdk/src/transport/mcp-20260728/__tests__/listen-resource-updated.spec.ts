@@ -92,10 +92,10 @@ describe('a resource update a tool reports, on a subscriptions/listen stream', (
       info: { name: 'listen-resource-updated', version: '1.0.0' },
       apps: [NotesApp],
     });
+  });
 
-    afterAll(async () => {
-      await server.instance.shutdown();
-    });
+  afterAll(async () => {
+    await server.instance.shutdown();
   });
 
   it('reaches a stream subscribed to the resource', async () => {
