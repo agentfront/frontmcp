@@ -113,6 +113,10 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
     skillRegistry.expectDynamicSkills();
   }
 
+  if (skillsConfig?.externalProvider) {
+    skillRegistry.setExternalProvider(skillsConfig.externalProvider);
+  }
+
   // Early exit if the scope serves no skills
   if (!skillRegistry.servesSkills()) {
     return;

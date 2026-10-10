@@ -120,6 +120,9 @@ class EmptySkillRegistry implements SkillRegistryInterface {
   async syncToExternal() {
     return null;
   }
+  setExternalProvider() {
+    return undefined;
+  }
   getExternalProvider() {
     return undefined;
   }
