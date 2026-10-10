@@ -9,6 +9,7 @@ features:
   - 'MemoryAuditStore keeps records in-process — perfect for tests, lost on restart'
   - 'A random-key Hs256AuditSigner cannot verify records after a restart: use Rs256AuditSigner in production'
   - "subjectMode: 'hash' redacts user identifiers while keeping them correlatable (keyed from the signer's secret)"
+  - 'The in-memory store is development-only: with audit enabled in production, the server refuses to start without a `store`'
 ---
 
 # Audit Log (Basic, Dev-Mode)
