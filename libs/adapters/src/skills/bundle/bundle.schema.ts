@@ -12,6 +12,9 @@ import { z } from '@frontmcp/lazy-zod';
 
 const httpMethodSchema = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD']);
 
+/** RFC 7230 `token`: the grammar of a header field name, and of a cookie name (RFC 6265). */
+const RFC7230_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
 const pathTemplateRegex = /^\/[^\s?#]*$/;
 const FORBIDDEN_PATH_FRAGMENTS = ['..', '\\', '`', '$(', '${'];
 
@@ -45,11 +48,7 @@ const authBindingSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.literal('apiKey'),
       in: z.enum(['header', 'query']),
-      name: z
-        .string()
-        .min(1)
-        .max(128)
-        .regex(/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/, 'apiKey name must match RFC 7230 token grammar'),
+      name: z.string().min(1).max(128).regex(RFC7230_TOKEN, 'apiKey name must match RFC 7230 token grammar'),
       vaultRef: z.string().min(1).max(256),
     })
     .strict(),
@@ -88,7 +87,11 @@ const parameterMapperSchema = z
     serialization: z.record(z.string(), z.unknown()).optional(),
     security: z.record(z.string(), z.unknown()).optional(),
   })
-  .passthrough();
+  .passthrough()
+  .refine((mapper) => (mapper.type !== 'header' && mapper.type !== 'cookie') || RFC7230_TOKEN.test(mapper.key), {
+    message: 'a header or cookie mapper key must match RFC 7230 token grammar',
+    path: ['key'],
+  });
 
 const operationDescriptorSchema = z
   .object({

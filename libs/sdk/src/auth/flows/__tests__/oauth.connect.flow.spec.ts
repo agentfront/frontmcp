@@ -135,6 +135,24 @@ describe('OAuth Connect Flow (Checkpoint 3b)', () => {
     await adapter.disconnect();
   });
 
+  it('POST reports the added credential to callers subscribed to its credential:// resource', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ ok: true, credentials: [{ key: 'acme', secret: 'sk-new' }] });
+    const { scope, adapter } = await makeScope({ seedSub: 'user-1', authenticate });
+    const notifyContentChanged = jest.fn();
+    Object.assign(scope, { resources: { notifyContentChanged } });
+
+    const input = createMockHttpRequest({
+      method: 'POST',
+      path: '/oauth/connect',
+      body: { token: token('user-1', 'acme', 'ctx-1'), apiKey: 'sk-new' },
+    });
+    const flow = new OauthConnectFlow(createConnectMetadata(), input as any, scope, jest.fn(), new Map());
+    await runFlowStages(flow, ['parseInput', 'handleConnect']);
+
+    expect(notifyContentChanged).toHaveBeenCalledWith('credential://acme');
+    await adapter.disconnect();
+  });
+
   it('POST is refused (409) when the subject has NO live vault', async () => {
     const authenticate = jest.fn().mockResolvedValue({ ok: true, credentials: [{ key: 'acme', secret: 'sk-new' }] });
     // No seedSub → the subject has no live vault.

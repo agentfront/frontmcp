@@ -22,7 +22,9 @@ import type { CallToolResult } from '@frontmcp/protocol';
 import { runRequestExclusive } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../../common';
-import { InputRequiredSignal } from '../../errors';
+import { ErrorHandler, InputRequiredSignal } from '../../errors';
+import { toolCallErrorResult } from '../../transport/mcp-handlers/call-tool-error.utils';
+import { toSdkMcpError } from '../../transport/mcp-handlers/mcp-error.utils';
 import type { TaskStore } from '../store';
 import type { TaskRegistry } from '../task.registry';
 import { isTerminal, type TaskJsonRpcError, type TaskRecord } from '../task.types';
@@ -127,7 +129,16 @@ async function executeTask(params: RunTaskParams): Promise<void> {
         if (paused) notifier.sendStatus(paused);
         return;
       }
-      outcomeErr = toJsonRpcError(err);
+      // The same outcome an inline call gets: an `isError` result, or a JSON-RPC error for a protocol-level one.
+      try {
+        outcomeOk = toolCallErrorResult(err, {
+          errorHandler: new ErrorHandler({ logger }),
+          toolName: String(cleanedRequestParams['name'] ?? 'unknown'),
+          logger,
+        });
+      } catch (protocolError) {
+        outcomeErr = toJsonRpcError(protocolError);
+      }
     }
 
     // Check the currently-stored status first: if something else (e.g. a
@@ -179,10 +190,11 @@ async function executeTask(params: RunTaskParams): Promise<void> {
     });
     if (!controller.signal.aborted) controller.abort('task-runner error');
     try {
+      const failure = toJsonRpcError(err);
       const failed = await store.update(taskId, sessionId, {
         status: 'failed',
-        statusMessage: err instanceof Error ? err.message : 'Task runner failed',
-        outcome: { kind: 'error', error: toJsonRpcError(err) },
+        statusMessage: failure.message,
+        outcome: { kind: 'error', error: failure },
       });
       if (failed) {
         try {
@@ -209,34 +221,12 @@ async function executeTask(params: RunTaskParams): Promise<void> {
   }
 }
 
-/**
- * Map any thrown error into a JSON-RPC error shape suitable for the spec-mandated
- * `tasks/result` replay behaviour. We reuse the SDK's `formatMcpErrorResponse`
- * indirectly by pulling `mcpErrorCode`/`toJsonRpcError` when available.
- */
+/** The JSON-RPC error a protocol-level failure answers with; an internal error is masked in production. */
 function toJsonRpcError(err: unknown): TaskJsonRpcError {
-  if (err && typeof err === 'object') {
-    const anyErr = err as {
-      toJsonRpcError?: () => { code: number; message: string; data?: unknown };
-      mcpErrorCode?: number;
-      message?: string;
-      code?: number;
-    };
-    if (typeof anyErr.toJsonRpcError === 'function') {
-      return anyErr.toJsonRpcError();
-    }
-    if (typeof anyErr.mcpErrorCode === 'number') {
-      return {
-        code: anyErr.mcpErrorCode,
-        message: typeof anyErr.message === 'string' ? anyErr.message : 'Task execution error',
-      };
-    }
-    if (typeof anyErr.code === 'number' && typeof anyErr.message === 'string') {
-      return { code: anyErr.code, message: anyErr.message };
-    }
-  }
-  return {
-    code: -32603,
-    message: err instanceof Error ? err.message : 'Internal error',
-  };
+  const sdkError = toSdkMcpError(err);
+  // McpError prefixes its message with "MCP error <code>: "; the code is already in the payload.
+  const message = sdkError.message.replace(/^MCP error -?\d+: /, '');
+  return sdkError.data === undefined
+    ? { code: sdkError.code, message }
+    : { code: sdkError.code, message, data: sdkError.data };
 }

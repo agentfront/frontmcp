@@ -67,6 +67,15 @@ describe('taskToWire20260728', () => {
     expect(JSON.stringify(wire['result'])).toContain('done');
   });
 
+  it('reports a tool result with isError as completed, carrying that result', () => {
+    const toolError = { content: [{ type: 'text' as const, text: 'nothing to export' }], isError: true };
+    const wire = taskToWire20260728({ ...base, status: 'failed', outcome: { kind: 'ok', data: toolError } });
+
+    expect(wire['status']).toBe('completed');
+    expect(wire['result']).toEqual(toolError);
+    expect(wire['error']).toBeUndefined();
+  });
+
   it('carries the error once failed', () => {
     const wire = taskToWire20260728({
       ...base,

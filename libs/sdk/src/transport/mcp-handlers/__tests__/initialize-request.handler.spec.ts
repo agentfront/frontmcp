@@ -8,6 +8,7 @@ import type { InitializeRequest } from '@frontmcp/protocol';
 
 import { type SessionIdPayload } from '../../../common';
 import { UnsupportedClientVersionError } from '../../../errors';
+import { FRONTMCP_SUPPORTED_PROTOCOL_VERSIONS } from '../../mcp-20260728/protocol-20260728.constants';
 // Import after mocking
 import initializeRequestHandler from '../initialize-request.handler';
 import { type McpHandlerOptions } from '../mcp-handlers.types';
@@ -564,6 +565,23 @@ describe('initializeRequestHandler', () => {
       const result = await handler.handler(request, ctx as any);
 
       expect(result.protocolVersion).toBeDefined();
+    });
+
+    it('answers only with a revision server/discover lists as supported', async () => {
+      const handler = initializeRequestHandler(handlerOptions);
+
+      const result = await handler.handler(createRequest({ protocolVersion: '2024-10-07' }), createContext() as any);
+
+      expect(FRONTMCP_SUPPORTED_PROTOCOL_VERSIONS).toContain(result.protocolVersion);
+      expect(result.protocolVersion).not.toBe('2024-10-07');
+    });
+
+    it('does not answer initialize with 2026-07-28, which has no initialize', async () => {
+      const handler = initializeRequestHandler(handlerOptions);
+
+      const result = await handler.handler(createRequest({ protocolVersion: '2026-07-28' }), createContext() as any);
+
+      expect(result.protocolVersion).toBe('2025-11-25');
     });
   });
 

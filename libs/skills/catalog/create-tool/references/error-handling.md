@@ -114,6 +114,8 @@ The `data` payload lets you surface structured info to the client (rate-limit re
 
 In production, raw `Error`s have their messages **redacted** before reaching the client — the framework treats them as potentially-sensitive infrastructure errors. For anything the client should read, use `PublicMcpError` or a subclass.
 
+The same holds for a tool that runs as a task (`execution.taskSupport`): `tasks/get` / `tasks/result` carry exactly the result an inline call returns, so `this.fail()` and a thrown `PublicMcpError` keep their message and code, and a raw `Error` is redacted in the task too.
+
 ## Non-null assertions are forbidden
 
 ```typescript

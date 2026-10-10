@@ -247,3 +247,29 @@ describe('defaultAuditSignatureVerifier', () => {
     expect(ok).toBe(false);
   });
 });
+
+describe('deriveKey', () => {
+  it('derives the same 32-byte key for the same secret and info', () => {
+    const first = new Hs256AuditSigner('derive-secret', 'k1').deriveKey('frontmcp:audit:subject', 32);
+    const second = new Hs256AuditSigner('derive-secret', 'k2').deriveKey('frontmcp:audit:subject', 32);
+
+    expect(first).toHaveLength(32);
+    expect(Array.from(first)).toEqual(Array.from(second));
+  });
+
+  it('derives a different key for another info string or another secret', () => {
+    const subjectKey = new Hs256AuditSigner('derive-secret', 'k1').deriveKey('frontmcp:audit:subject', 32);
+    const otherInfo = new Hs256AuditSigner('derive-secret', 'k1').deriveKey('frontmcp:audit:other', 32);
+    const otherSecret = new Hs256AuditSigner('another-secret', 'k1').deriveKey('frontmcp:audit:subject', 32);
+
+    expect(Array.from(otherInfo)).not.toEqual(Array.from(subjectKey));
+    expect(Array.from(otherSecret)).not.toEqual(Array.from(subjectKey));
+  });
+
+  it('does not hand out the signing key itself', () => {
+    const secret = new TextEncoder().encode('a-32-byte-signing-secret-value!!');
+    const derived = new Hs256AuditSigner(secret, 'k1').deriveKey('frontmcp:audit:subject', 32);
+
+    expect(Array.from(derived)).not.toEqual(Array.from(secret));
+  });
+});

@@ -190,7 +190,7 @@ describe('registerSkillAuditWriter', () => {
         audit: { enabled: true },
         logger: logger as never,
       }),
-    ).toThrow(/audit module factory/);
+    ).toThrow(/no audit module is registered/);
   });
 
   it('refuses to use the default HS256 signer in production', () => {

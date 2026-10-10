@@ -9,6 +9,11 @@ FrontMCP serves **every MCP revision from `2024-11-05` through `2026-07-28`** on
 the same endpoint. The revision is selected per request — there is no
 configuration switch and no server-side flag to flip.
 
+`initialize` answers with the requested revision when it is one of these (other
+than `2026-07-28`, which has no `initialize`), and with `2025-11-25` otherwise, so
+it never names a revision `server/discover`'s `supportedVersions` leaves out (the
+`2024-10-07` draft included).
+
 ## When to Use This Skill
 
 ### Must Use
@@ -162,10 +167,33 @@ no `notifications/message` at all.
 A tool with `execution: { taskSupport: 'optional' }` then returns
 `{ "resultType": "task", "task": { "taskId", "status", "ttlMs", "pollIntervalMs" } }`.
 Poll `tasks/get`; answer `input_required` with `tasks/update`; `tasks/cancel`
-still works. `tasks/list` and `tasks/result` were removed.
+still works, through the same hookable `tasks:cancel` flow a 2025-11-25 cancel
+runs: it aborts an in-process task and sends a CLI-runner worker `SIGTERM`. A
+worker records the host it runs on, and only that host signals it or checks
+whether it died; a cancel that lands on another host still marks the task
+`cancelled`. `tasks/list` and `tasks/result` were removed.
+
+A task's outcome is exactly what the same call returns inline. A tool that throws
+or calls `this.fail()` ends its task with the inline `isError` result: the public
+message and `_meta.code` of a `PublicMcpError`, or, in production, `Internal
+FrontMCP error … error ID` for anything else (the real error only in the server
+log). Under 2026-07-28 that task is **`completed`**, its `result` the `isError`
+`CallToolResult`, because in this revision `failed` means a JSON-RPC error
+(`error` carries it). Check `result.isError`, not `status === 'failed'`, to tell
+a tool error. Up to 1.9.4 such a task was `failed` with an `error` whose message
+was the tool's raw error. Under 2025-11-25 the same task is still `failed` and
+`tasks/result` replays that `isError` result.
 
 Tasks require an **authenticated** caller — without protocol sessions an
 anonymous task cannot be scoped to its creator, so a public server refuses.
+
+A caller may have at most `tasks.maxConcurrentPerSession` (default 16) tasks
+unfinished (`working` or `input_required`) at once: counted per authenticated
+subject (`sub`) under this revision, and per session under earlier ones. A task
+over the cap is refused the way a guard concurrency limit is, with an `isError`
+result whose `_meta.code` is `CONCURRENCY_LIMIT`; the count drops as tasks
+complete, fail, are cancelled or expire. The count is atomic across instances
+sharing a Redis, Upstash or SQLite task store.
 
 ## Connecting as a client
 

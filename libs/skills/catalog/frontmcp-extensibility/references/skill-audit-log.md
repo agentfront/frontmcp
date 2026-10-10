@@ -31,6 +31,8 @@ run_workflow → callTool(action)
 
 The `write*` methods queue the record and never reject: a failed sign or append is logged as a `[skill-audit]` warning and the tool call carries on.
 
+Each record matches the outcome the caller got. An action whose input fails its schema is recorded as `http-call-failure` with `status: 0` (no request is sent), and an answer that fails the operation's `outputSchema` as `http-call-failure` with the upstream status, both with the reason in `errorMessage`. `http-call-success` is written only for an answer the caller receives.
+
 Each `SkillAuditRecord` carries:
 
 | Field            | Description                                                                                             |
@@ -66,6 +68,7 @@ import { randomBytes } from '@frontmcp/utils';
 
 import { MainApp } from './main.app';
 
+// Not needed with @frontmcp/plugin-skilled-openapi installed: the plugin registers the module.
 setSkillAuditFactory(() => auditModule);
 
 @FrontMcp({
@@ -79,17 +82,18 @@ setSkillAuditFactory(() => auditModule);
       store: new MemoryAuditStore(),
       metrics: createSkillAuditMetrics({ createCounter }),
       subjectMode: 'hash', // 'plain' | 'hash' | 'omit'
+      subjectHashSecret: process.env.AUDIT_SUBJECT_HASH_SECRET, // optional, at least 32 bytes
     },
   },
 })
 class Server {}
 ```
 
-`setSkillAuditFactory(factory)` takes a function with no arguments that returns the audit module. The SDK does **not** statically depend on `@frontmcp/adapters/skills` — this keeps the static dependency graph clean and works in Edge / CSP runtimes. From the module it reads `SkillAuditWriterToken`, `SkillAuditWriter`, `Hs256AuditSigner` and `MemoryAuditStore`, builds the writer itself as `new SkillAuditWriter(store, signer, logger, metrics, { subjectMode })`, and registers it under `SkillAuditWriterToken`.
+`setSkillAuditFactory(factory)` takes a function with no arguments that returns the audit module. The SDK does **not** statically depend on `@frontmcp/adapters/skills` — this keeps the static dependency graph clean and works in Edge / CSP runtimes. From the module it reads `SkillAuditWriterToken`, `SkillAuditWriter`, `Hs256AuditSigner` and `MemoryAuditStore`, builds the writer itself as `new SkillAuditWriter(store, signer, logger, metrics, { subjectMode, subjectHashSecret })`, and registers it under `SkillAuditWriterToken`. `@frontmcp/plugin-skilled-openapi`, whose `run_workflow` is what writes the records, registers the module itself when it is constructed (a factory you registered is kept), so with the plugin installed `skillsConfig.audit` works without the call.
 
 `createSkillAuditMetrics({ createCounter })` turns any counter factory into the writer's metrics sink. With `createCounter` from `@frontmcp/observability`, a failed write increments `frontmcp_skills_audit_write_failures_total{reason}` (`sign`, `append`, `unexpected`) and a dropped record increments `frontmcp_skills_audit_dropped_total{reason}` (`queue-overflow`). Without `metrics`, failed and dropped writes surface only as `[skill-audit]` warnings in the server log.
 
-With `audit.enabled` and no factory registered, the server logs a warning and runs without the audit log in development, and refuses to start when `NODE_ENV` is `production`.
+With `audit.enabled` and no module registered (no plugin, no `setSkillAuditFactory`), the server logs a warning and runs without the audit log in development, and refuses to start when `NODE_ENV` is `production`. A `signer` and `store` do not replace the module: the writer class comes from it.
 
 | `skillsConfig.audit` field | Type                          | Default   |
 | -------------------------- | ----------------------------- | --------- |
@@ -98,9 +102,18 @@ With `audit.enabled` and no factory registered, the server logs a warning and ru
 | `store`                    | `SkillAuditStore`             | memory    |
 | `metrics`                  | `SkillAuditMetrics`           | unset     |
 | `subjectMode`              | `'plain' \| 'hash' \| 'omit'` | `'hash'`  |
+| `subjectHashSecret`        | `string \| Uint8Array`        | derived   |
 | `headAnchorIntervalMs`     | `number \| undefined`         | unset     |
 
 `headAnchorIntervalMs` is validated but not read yet: it is reserved for head anchoring (see the threat model below).
+
+### Subject hashes
+
+With `subjectMode: 'hash'` (the default) each record's `subject` is `hashed:<HMAC-SHA256 of the subject, 32 hex chars>`. The HMAC key is `subjectHashSecret` when you set it (at least 32 bytes; a string is UTF-8 encoded). Without it, the key is derived from the signer's key material with HKDF-SHA256 (info `frontmcp:audit:subject`): from the HMAC secret of an `Hs256AuditSigner`, from the private key of an `Rs256AuditSigner`. The key never appears in a record, so the hashes cannot be recomputed from what the log holds.
+
+- A derived key changes with the signing key, and so do the hashes: records signed before and after a key rotation no longer join on `subject`. Set `subjectHashSecret` to keep hashes stable across rotations.
+- Releases up to 1.9.4 derived the default key from the public `keyId`; hashes written by them do not match the ones written now for the same subject, unless `subjectHashSecret` was set.
+- A custom signer joins in by implementing `deriveKey(info, length)` (see below). A signer that has no key material it can derive from (an HSM or KMS signer) leaves it out: the writer then records `subject: 'redacted'`, as `'omit'` does, and logs a `[skill-audit]` warning at startup naming `subjectHashSecret`.
 
 ## Built-in Signers
 
@@ -109,7 +122,9 @@ With `audit.enabled` and no factory registered, the server logs a warning and ru
 | `Hs256AuditSigner` | Symmetric HMAC-SHA-256                              | Dev / tests. Verifying needs the same secret, so it cannot be handed to an external auditor. A random secret makes records unverifiable after restart |
 | `Rs256AuditSigner` | Asymmetric RSA (RS256, RSASSA-PKCS1-v1_5 + SHA-256) | **Production.** Reuse the bundle-signing keypair so the same trust root covers both                                                                   |
 
-Without a `signer`, the SDK builds an HS256 signer with a random, process-local secret and warns; when `NODE_ENV` is `production` it refuses to start instead. Without a `store`, it uses `MemoryAuditStore` and warns.
+Without a `signer`, the SDK builds an HS256 signer with a random, process-local secret and warns; when `NODE_ENV` is `production` it refuses to start instead. Without a `store`, it uses `MemoryAuditStore` and warns; when `NODE_ENV` is `production` and audit is enabled it refuses to start instead, and the error names the fix: configure `skillsConfig.audit.store`, for example a `StorageAdapterAuditStore` over Redis.
+
+A custom signer implements `sign(record)`, `getKeyId()`, `getAlg()` and, optionally, `deriveKey(info, length)`: return an HKDF-derived key from the signer's own key material (never the material itself) so `subjectMode: 'hash'` can key its HMAC without `subjectHashSecret`.
 
 ```typescript
 import { Rs256AuditSigner } from '@frontmcp/adapters/skills';
@@ -157,8 +172,13 @@ interface SkillAuditStore {
 
   /** Read records in sequence order; supports `{ from, limit }` for incremental verification. */
   read(opts?: { from?: number; limit?: number }): Promise<SkillAuditRecord[]>;
+
+  /** Optional: give back a number from nextSequence() whose record was never appended, so the chain has no gap. */
+  releaseSequence?(sequence: number): Promise<void>;
 }
 ```
+
+When a record fails to sign or append after its sequence was allocated, the writer calls `releaseSequence(sequence)`. `MemoryAuditStore` gives the number back; `StorageAdapterAuditStore` decrements its counter (not transactional across pods). A store without it leaves a gap, which `verifyChain` reports as `sequence gap`.
 
 See [`custom-store`](../examples/skill-audit-log/custom-store.md) for an S3-backed implementation.
 
@@ -187,11 +207,20 @@ if (result.ok) {
 }
 ```
 
+To verify a window from the middle of the chain (incremental checks in CI), pass the record just before it as `previous`: the window's first record must follow it and carry its hash as `prevHash`. Use the last record of the previous verified run, or read one record earlier and verify it in the same run:
+
+```typescript
+const [previous, ...window] = await store.read({ from: lastVerifiedSequence, limit: 1001 });
+const windowResult = verifyChain(window, trustedKeys, defaultAuditSignatureVerifier, { previous });
+```
+
+Without `previous`, the first record must be the chain's first (its `prevHash` is the genesis sentinel), so a chain whose first records were removed still fails.
+
 `verifyChain` returns `{ ok: true; verified: number } | { ok: false; breakAt: number; reason: string }`. The `verified` count is the number of records whose signature + prevHash checked out — useful for dashboards and CI assertions. `defaultAuditSignatureVerifier` understands HS256 and RS256 records and dispatches based on `record.signatureAlg`.
 
 ## DI Integration
 
-`SkillAuditWriterToken` is the DI token for the active writer. Plugins that need to emit additional audit records (e.g., a custom authority gate) can resolve it. A hook receives the flow, whose `scope` is protected and whose `get()` throws for a token nothing registered, so resolve the writer through the tool's execution context: `tryGet()` returns `undefined` (and logs a warning) when `skillsConfig.audit` is not enabled.
+`SkillAuditWriterToken` is the DI token for the active writer. Plugins that need to emit additional audit records (e.g., a custom authority gate) can resolve it. A hook receives the flow, whose `scope` is protected and whose `get()` throws for a token nothing registered, so resolve the writer through the tool's execution context: `tryGet()` returns `undefined` when `skillsConfig.audit` is not enabled (no warning is logged for a token nothing registered).
 
 ```typescript
 import { SkillAuditWriterToken } from '@frontmcp/adapters/skills';

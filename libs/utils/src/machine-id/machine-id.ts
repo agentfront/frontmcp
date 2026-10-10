@@ -84,6 +84,16 @@ function saveMachineIdAsync(machineId: string): void {
   })();
 }
 
+/** This host's name (`os.hostname()`), read when called; `undefined` outside Node. */
+export function getHostname(): string | undefined {
+  if (!isNode()) return undefined;
+  try {
+    return (require('os') as typeof import('os')).hostname();
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Resolve machine ID based on deployment mode.
  */
