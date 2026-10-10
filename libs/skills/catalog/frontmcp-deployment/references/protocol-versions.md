@@ -193,7 +193,9 @@ subject (`sub`) under this revision, and per session under earlier ones. A task
 over the cap is refused the way a guard concurrency limit is, with an `isError`
 result whose `_meta.code` is `CONCURRENCY_LIMIT`; the count drops as tasks
 complete, fail, are cancelled or expire. The count is atomic across instances
-sharing a Redis, Upstash or SQLite task store.
+sharing a Redis, Upstash or SQLite task store. The option accepts at most 1000:
+with a Redis or Upstash store, each capped task creation reads one slot key per
+allowed task in a single `MGET`.
 
 ## Connecting as a client
 
