@@ -278,11 +278,19 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
     this.respond(answer);
   }
 
-  /** Answer for the job; a hook that answers before `validateOutput` gets its answer recorded as the result. */
+  /**
+   * Answer for the job. A hook's answer is checked against the job's `outputSchema`, as `execute()`'s result
+   * is: undeclared fields are dropped, and a mismatch fails the attempt with `InvalidOutputError`.
+   */
   override respond(output: FlowOutputOf<typeof name>) {
-    const answer = outputSchema.parse(output);
+    const answer = output === this.state.answer ? output : this.checkedAnswer(output);
     this.state.set('answer', answer);
     throw FlowControl.respond(answer);
+  }
+
+  private checkedAnswer(output: FlowOutputOf<typeof name>): FlowOutputOf<typeof name> {
+    const { result, logs } = outputSchema.parse(output);
+    return { result: this.input.job.parseOutput(result as JobOutput), logs };
   }
 
   private throwIfAborted(): void {
