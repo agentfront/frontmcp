@@ -135,7 +135,9 @@ describe('registerPerSkillResources when a skill is replaced at the same path (#
     let served: SkillEntry[] = [initial];
     const listeners: Array<() => void> = [];
     const records: ResourceFunctionRecord[] = [];
+    const disposers: Array<() => void> = [];
     const scope = {
+      onDispose: (callback: () => void) => disposers.push(callback),
       skills: {
         hasAny: () => true,
         getSkills: () => served,
@@ -157,6 +159,7 @@ describe('registerPerSkillResources when a skill is replaced at the same path (#
       metadata: () => (records[0]?.metadata ?? {}) as unknown as Record<string, unknown>,
       records,
       unregistered,
+      dispose: () => disposers.forEach((callback) => callback()),
       replaceWith: (skill?: SkillEntry) => {
         served = skill ? [skill] : [];
         for (const listener of [...listeners]) listener();
@@ -202,5 +205,15 @@ describe('registerPerSkillResources when a skill is replaced at the same path (#
     harness.replaceWith(plain);
     expect(harness.records).toHaveLength(2);
     expect(harness.records[1]?.metadata).toMatchObject({ uri: 'skill://report/SKILL.md', description: 'Open report' });
+  });
+
+  it('stops following the skill registry once the scope is disposed', async () => {
+    const harness = setup(plain);
+    await harness.register();
+
+    harness.dispose();
+    harness.replaceWith(undefined);
+
+    expect(harness.unregistered).toEqual([]);
   });
 });

@@ -194,9 +194,10 @@ export async function registerPerSkillResources(options: {
   };
 
   await Promise.all(reconcile());
-  skillRegistry.subscribe({ immediate: false }, () => {
+  const unsubscribe = skillRegistry.subscribe({ immediate: false }, () => {
     reconcile();
   });
+  scope.onDispose(unsubscribe);
 }
 
 /**
