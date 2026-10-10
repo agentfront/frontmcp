@@ -86,9 +86,11 @@ import CodeCallPlugin from '@frontmcp/plugin-codecall';
         preset: 'secure', // 'locked_down' | 'secure' | 'balanced' | 'experimental'
         timeoutMs: 5000,
         allowLoops: false, // false: only for-of loops; true: for and for-of
+        rapidEnumerationThreshold: 30, // calls to one tool within about 2 s (default 30)
+        rapidEnumerationOverrides: { 'users:get': 100 }, // per-tool values of the threshold
       },
       embedding: {
-        strategy: 'tfidf', // 'tfidf' | 'ml'
+        strategy: 'tfidf', // 'tfidf' | 'ml' (ml falls back to tfidf when its model can't load)
         synonymExpansion: { enabled: true }, // false turns synonym matching off
       },
     }),
@@ -96,6 +98,8 @@ import CodeCallPlugin from '@frontmcp/plugin-codecall';
 })
 class MyServer {}
 ```
+
+`embedding.strategy: 'ml'` downloads `embedding.modelName` into `embedding.cacheDir` the first time tools are indexed. When the model can't be loaded (no network and nothing cached, or `@huggingface/transformers` not installed), CodeCall logs one warning and searches with TF-IDF until the server restarts. Up to 1.9.4 that failure ended the process.
 
 `plugins: [CodeCallPlugin]` (the class, no `init()`) is the same as `CodeCallPlugin.init()`: default options, the six `codecall:*` meta-tools and `CodeCallConfig`. Up to 1.9.3 the class form installed no tools while `codecall_only` still hid the app's own, leaving `tools/list` empty.
 
@@ -203,6 +207,8 @@ CodeCallPlugin.init({
 - Hiding a tool from search is not the control; the refusal at execution is. Do not rely on search ranking to protect a tool. Hiding it from `list_tools` (`visibleInListTools: false`) does also refuse a client's direct `tools/call` of it, but CodeCall's own surfaces then apply this policy.
 - `includeTools` and `directCalls.filter` receive the same object, with the tool's `annotations` and declared `metadata` (`tool.metadata?.annotations` is the same object as `tool.annotations`). It is a deep read-only copy, so a filter cannot change what the next decision reads.
 - Namespace bindings (`mail.send({...})` for a tool named `mail.send`) are AgentScript wrappers over `callTool()` inside the sandbox: they count toward `vm.maxSteps` and pass the rate limit and suspicious-sequence checks exactly like `callTool('mail.send', {...})`. A binding with no argument sends `{}`.
+- The sandbox's rate checks: more than `vm.rapidEnumerationThreshold` calls (default 30; per tool with `vm.rapidEnumerationOverrides`) to one tool within about 2 seconds stop the script with `Suspicious pattern detected: … [RAPID_ENUMERATION]`, and all tool calls together are capped at 100 per second. Calls made through `parallel()` count, so a `parallel()` of 31 calls to one tool is stopped by default; batch it, or raise the threshold. The sandbox's message says "in 5s", but it keeps only the last 2 seconds of calls. The `codecall:execute` description names the effective limit.
+- A failed `callTool()` carries one of these codes (`error.code` with `{ throwOnError: false }`, the thrown error's `code`, and `tool_error.code` when the script doesn't catch it): `NOT_FOUND`, `VALIDATION` (the input fails the tool's schema; the message is what an MCP client would see), `EXECUTION`, `TIMEOUT`, `ACCESS_DENIED`, `RATE_LIMITED` (a rate limit, quota or concurrency limit refused the call; message `Tool "<name>" was rate limited`). Up to 1.9.4 schema and rate-limit refusals came back as `EXECUTION`.
 - `codecall:execute` results never include a `stack`, in any environment. In `runtime_error`, `syntax_error` and `tool_error` messages, stack frames are dropped and absolute paths (POSIX, Windows, UNC, `file:` URLs, quoted paths) become `[path]`; other URLs are kept.
 - `illegal_access` messages name the script's own lines (`FORBIDDEN_LOOP (line 3): …`), whatever the enclave's transform printed; a line that is none of the script's is left out. `tool_error` results carry no `toolInput` (deprecated in the schema, never set).
 
@@ -1106,6 +1112,7 @@ The plugin is a transport adapter: it lists tools through the `tools:list-tools`
 | `exposedTo`    | —                                                                     | Other origins (e.g. an iframe's parent) the tools are offered to           |
 | `authContext`  | anonymous caller (`sub: 'anon:webmcp'`, `this.auth.isAnonymous` true) | `DirectAuthContext` or a function returning it, resolved per list and call |
 | `modelContext` | `document.modelContext`                                               | A polyfill or test double                                                  |
+| `result`       | `'structured'`                                                        | What a call resolves to: `'structured'`, `'content'` or `'both'` (below)   |
 
 ### Choosing what agents see
 
@@ -1118,10 +1125,50 @@ The plugin is a transport adapter: it lists tools through the `tools:list-tools`
 
 - Names: `prefix + name`, characters outside `[A-Za-z0-9_.-]` become `_` (`app:tool` → `app_tool`), max 128, collisions get `_2`, `_3`, …
 - Annotations: `readOnlyHint` → `readOnlyHint`; explicit `destructiveHint: true` → `consequentialHint`; explicit `openWorldHint: true` → `untrustedContentHint`.
-- Results: `{ content, structuredContent? }` without `_meta`; an `isError` result or server error rejects with its message.
+- Results: the agent reads the whole result as text, so by default (`result: 'structured'`) it gets the tool's `structuredContent` alone when the tool has one and its content is only text (the text copy); otherwise `{ content }`, plus `structuredContent` when there is one, so images and other parts are kept. `result: 'content'` always gives `{ content }`; `result: 'both'` gives `{ content, structuredContent }`, the shape up to 1.9.4. `_meta` is never included. An `isError` result or server error rejects with its message.
 - Tools only — resources and prompts stay MCP-only; elicitation works only through the fallback `sendElicitationResult` tool when `elicitation.enabled` is on (otherwise a tool that elicits fails for WebMCP callers); no sampling.
 
 For other browsers, load a polyfill that installs `document.modelContext` (e.g. `@mcp-b/global`) before `create()`, or pass one as `modelContext`.
+
+### Registering tools before the server loads
+
+The server is a large bundle (about 3 MB minified for `create()` alone) and starting it is one long task, so starting it on page load costs every visit. Compute the list at build time and load the server on an agent's first call:
+
+`server.ts`, one factory for the build script and the page:
+
+```typescript
+export const createShopServer = ({ modelContext }: { modelContext?: ModelContext } = {}) =>
+  create({
+    info: { name: 'shop', version: '1.0.0' },
+    tools: [SearchProducts],
+    plugins: [WebMcpPlugin.init({ prefix: 'shop.', modelContext })],
+  });
+```
+
+The build script (Node):
+
+```typescript
+import { listWebMcpTools } from '@frontmcp/plugin-webmcp';
+
+const tools = await listWebMcpTools((modelContext) => createShopServer({ modelContext }));
+await writeFile('src/webmcp-tools.json', JSON.stringify(tools));
+```
+
+The page entry, a chunk without the SDK:
+
+```typescript
+import { registerWebMcpTools, resolveDocumentModelContext } from '@frontmcp/plugin-webmcp/register';
+
+import tools from './webmcp-tools.json';
+
+void registerWebMcpTools(resolveDocumentModelContext(), tools, (modelContext) =>
+  import('./server').then(({ createShopServer }) => createShopServer({ modelContext })),
+);
+```
+
+- `listWebMcpTools(factory)` returns exactly what the plugin passes to `registerTool()` (names, titles, descriptions, input schemas, hints), then disposes the server. The factory must hand the `modelContext` it gets to `WebMcpPlugin.init()`; otherwise it rejects.
+- `registerWebMcpTools(modelContext, tools, loadServer, { exposedTo? })` registers the list at once. The first call loads the server once (concurrent first calls share the load) and runs through the plugin; a failed load rejects that call and the next call retries. Then the plugin follows the server's tool changes; a listed tool the server lacks is unregistered. No `modelContext` → does nothing.
+- `@frontmcp/plugin-webmcp/register` never imports `@frontmcp/sdk` (a few KB, CJS and ESM).
 
 ## Common Patterns
 

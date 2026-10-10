@@ -165,6 +165,21 @@ const server = await create({
 - Every agent call runs `tools:call-tool` on the `'webmcp'` surface; use `availableWhen: { surface: ['webmcp'] }` for agent-only tools and `['mcp']` to keep a tool away from browser agents.
 - Tools added later (`server.registerTool()`, `useDynamicTool`) are registered automatically; `server.dispose()` unregisters everything.
 - WebMCP is in origin trial (Chrome/Edge 149–162). Develop with `chrome://flags/#enable-webmcp-testing` and inspect with DevTools → Application → WebMCP. Without `document.modelContext` the plugin does nothing; load a polyfill such as `@mcp-b/global` for other browsers.
+- An agent gets each result once: the tool's `structuredContent` alone when it has one and its content is only text, otherwise `{ content }` (plus `structuredContent` when there are images or other parts). `WebMcpPlugin.init({ result: 'both' })` gives `{ content, structuredContent }`, the shape up to 1.9.4.
+- Don't start the server on page load just to offer its tools: `create()` alone is about 3 MB minified and evaluating it is one long task (Lighthouse's Total Blocking Time sees it, since Chrome for Testing has WebMCP on). Generate the list at build time with `listWebMcpTools()` and register it with `registerWebMcpTools()` from `@frontmcp/plugin-webmcp/register`, a chunk without the SDK; the server loads on an agent's first call. See `official-plugins` → WebMCP → "Registering tools before the server loads".
+
+## What a Browser Bundle Leaves Out
+
+FrontMCP's optional integrations are optional peer dependencies. In a browser bundle that doesn't install them, the code that would load them is still there, and it fails only when the feature is used:
+
+| Package                                                                                                                 | Loaded by                                           | In a browser bundle without it                                                 |
+| ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `openai`, `@anthropic-ai/sdk`                                                                                           | Agents' built-in LLM adapters                       | Vite emits a stub chunk; an agent call with that adapter throws                |
+| `@vercel/kv`, `@upstash/redis`                                                                                          | `@frontmcp/utils` storage providers                 | Vite emits a stub chunk; a page uses memory storage anyway                     |
+| `@enclave-vm/core`                                                                                                      | Jobs' sandbox                                       | Vite emits a stub chunk; running a sandboxed job throws                        |
+| `ioredis`, `@frontmcp/storage-sqlite`, `@frontmcp/observability`, `@opentelemetry/api`, `@opentelemetry/sdk-trace-base` | Redis/SQLite stores, metrics, tracing (`require()`) | Not bundled; reached only on server configurations, never by default in a page |
+
+Nothing warns at build time: Vite's stubs for missing optional peers are silent. Install a package only if the page uses that feature.
 
 ## Browser vs Node vs SDK Target
 
@@ -225,6 +240,8 @@ ls dist/browser/
 | `node:crypto` or `@upstash/redis` unresolved from `@frontmcp/utils` | `@frontmcp/utils` 1.9.2                        | Upgrade: its browser build no longer imports `node:crypto`, and Vite stubs its uninstalled optional peers |
 | CORS errors on tool calls                                           | MCP server missing CORS headers                | Configure CORS middleware on the MCP server                                                               |
 | Bundle too large                                                    | All server-side code included                  | Use `--target browser` and a dedicated client entry file                                                  |
+| Long task / Total Blocking Time on load with WebMCP                 | The server starts on page load to offer tools  | Register a build-time list with `registerWebMcpTools()` and load the server on the first agent call       |
+| `__vite-optional-peer-dep` chunk throws                             | An optional peer is not installed              | Install it if the page uses that feature (see What a Browser Bundle Leaves Out)                           |
 | `@frontmcp/utils` fs throws                                         | File system ops called in browser              | Remove fs calls; use API endpoints or in-memory alternatives                                              |
 | `AsyncContextOverlapError`                                          | Concurrent tool calls inside one request       | Await the calls one after another (no `AsyncContext` in browser)                                          |
 | A call never returns                                                | A tool calls its own server via a client       | Call other tools through `this.scope` flows                                                               |

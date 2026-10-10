@@ -15,7 +15,9 @@ import {
 } from '@frontmcp/sdk';
 import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
-import type { WebMcpListedTool, WebMcpPluginOptions } from './webmcp.options';
+import { syncListenerOf } from './webmcp.handoff';
+import { resolveDocumentModelContext } from './webmcp.model-context';
+import type { WebMcpListedTool, WebMcpPluginOptions, WebMcpResultMode } from './webmcp.options';
 import type {
   ModelContext,
   ModelContextTool,
@@ -27,11 +29,14 @@ import type {
 const MAX_WEBMCP_NAME_LENGTH = 128;
 const INVALID_NAME_CHARACTERS = /[^A-Za-z0-9_.-]/g;
 
-/** What a WebMCP call resolves to: the MCP result without its `_meta` (and never `isError`). */
-export interface WebMcpToolResult {
+/** The MCP result without its `_meta` (and never `isError`). */
+export interface WebMcpContentResult {
   content: CallToolResult['content'];
   structuredContent?: CallToolResult['structuredContent'];
 }
+
+/** What a WebMCP call resolves to: the tool's structured content alone, or its content (see the `result` option). */
+export type WebMcpToolResult = WebMcpContentResult | NonNullable<CallToolResult['structuredContent']>;
 
 /** The auth info the flows read from a call's context. */
 interface WebMcpAuthInfo {
@@ -57,21 +62,6 @@ interface DesiredTool {
   mcpName: string;
   descriptor: Omit<ModelContextTool, 'execute'>;
   fingerprint: string;
-}
-
-/** `document.modelContext` in a browser that implements WebMCP (or has a polyfill installed). */
-export function resolveDocumentModelContext(): ModelContext | undefined {
-  const modelContext = (globalThis as { document?: { modelContext?: unknown } }).document?.modelContext;
-  return typeof modelContext === 'object' &&
-    modelContext !== null &&
-    typeof (modelContext as ModelContext).registerTool === 'function'
-    ? (modelContext as ModelContext)
-    : undefined;
-}
-
-/** Whether this page can register WebMCP tools (`document.modelContext.registerTool` exists). */
-export function isWebMcpSupported(): boolean {
-  return resolveDocumentModelContext() !== undefined;
 }
 
 /** Make `name` a valid WebMCP tool name: invalid characters become `_`, cut to 128 characters. */
@@ -100,6 +90,16 @@ function toWebMcpAnnotations(annotations: WebMcpListedTool['annotations']): Mode
   if (annotations?.destructiveHint === true) hints.consequentialHint = true;
   if (annotations?.openWorldHint === true) hints.untrustedContentHint = true;
   return Object.keys(hints).length > 0 ? hints : undefined;
+}
+
+/** A successful MCP result as the agent gets it, per the `result` option. */
+function toAgentResult(result: CallToolResult, mode: WebMcpResultMode): WebMcpToolResult {
+  const content = result.content ?? [];
+  const structuredContent = result.structuredContent;
+  if (mode === 'content' || structuredContent === undefined) return { content };
+  const contentIsTextCopy = content.every((block) => block.type === 'text');
+  if (mode === 'structured' && contentIsTextCopy) return structuredContent;
+  return { content, structuredContent };
 }
 
 function textOf(content: CallToolResult['content'] | undefined): string {
@@ -173,6 +173,7 @@ export class WebMcpBridge {
       return;
     }
     this.modelContext = modelContext;
+    syncListenerOf(modelContext)?.started();
     this.unsubscribe = this.scope.tools.subscribe({ immediate: true }, () => this.refresh());
   }
 
@@ -205,15 +206,19 @@ export class WebMcpBridge {
   /** Sync until no change is pending. Starts a microtask later, so a burst of changes syncs once. */
   private async drain(): Promise<void> {
     await Promise.resolve();
+    let failure: unknown;
     try {
       while (this.pending && !this.stopped) {
         this.pending = false;
         try {
           await this.sync();
+          failure = undefined;
         } catch (error) {
+          failure = error;
           this.logger.warn(`WebMCP sync failed: ${toAgentError(error).message}`);
         }
       }
+      if (!this.stopped) syncListenerOf(this.modelContext)?.synced(failure);
     } finally {
       this.run = undefined;
     }
@@ -316,10 +321,7 @@ export class WebMcpBridge {
       throw toAgentError(error);
     }
     if (result.isError) throw new Error(textOf(result.content) || `Tool "${mcpName}" failed`);
-    return {
-      content: result.content ?? [],
-      ...(result.structuredContent !== undefined && { structuredContent: result.structuredContent }),
-    };
+    return toAgentResult(result, this.options.result);
   }
 
   /**
