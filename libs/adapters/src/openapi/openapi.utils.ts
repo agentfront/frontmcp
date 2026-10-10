@@ -58,6 +58,29 @@ function appendCookie(headers: Headers, name: string, value: unknown): void {
   headers.set('Cookie', combined);
 }
 
+const DOT_SEGMENTS = new Set(['.', '..']);
+
+/**
+ * Refuse a URL whose path parameters moved it off the operation's path: a dot segment the
+ * template does not have, or a parsed path outside the base path plus the template's literal prefix.
+ */
+function assertPathStaysOnOperation(tool: McpOpenAPITool, apiBaseUrl: string, resolvedPath: string, url: string) {
+  const templatePath = tool.metadata.path;
+  const templateSegments = templatePath.split('/');
+  const addsDotSegment = resolvedPath
+    .split('/')
+    .some((segment, index) => DOT_SEGMENTS.has(segment) && segment !== templateSegments[index]);
+  const literalPrefix = templatePath.split('{')[0] ?? '';
+  const expectedPathPrefix = new URL(`${apiBaseUrl}${literalPrefix}`).pathname;
+  if (addsDotSegment || !new URL(url).pathname.startsWith(expectedPathPrefix)) {
+    throw new PublicMcpError(
+      `The path parameters of operation '${tool.name}' do not resolve to its path`,
+      'INVALID_PATH_PARAMETER',
+      400,
+    );
+  }
+}
+
 /** The spec's `default` for an input, which a required parameter the model left out is sent with. */
 function specDefault(tool: McpOpenAPITool, inputKey: string): unknown {
   const property = tool.inputSchema.properties?.[inputKey];
@@ -114,10 +137,20 @@ export function buildRequest(
 
     // Apply parameter to correct location
     switch (mapper.type) {
-      case 'path':
+      case 'path': {
+        const pathValue = coerceToString(value, mapper.key, 'path');
+        // encodeURIComponent leaves dots as they are, and URL parsing resolves a dot segment
+        if (DOT_SEGMENTS.has(pathValue)) {
+          throw new PublicMcpError(
+            `Path parameter '${mapper.key}' of operation '${tool.name}' cannot be '.' or '..'`,
+            'INVALID_PATH_PARAMETER',
+            400,
+          );
+        }
         // Use replaceAll to handle duplicate path parameters (e.g., /users/{id}/posts/{id})
-        path = path.replaceAll(`{${mapper.key}}`, encodeURIComponent(coerceToString(value, mapper.key, 'path')));
+        path = path.replaceAll(`{${mapper.key}}`, encodeURIComponent(pathValue));
         break;
+      }
 
       case 'query':
         queryParams.set(mapper.key, coerceToString(value, mapper.key, 'query'));
@@ -186,6 +219,7 @@ export function buildRequest(
   // Build final URL
   const queryString = queryParams.toString();
   const url = `${apiBaseUrl}${path}${queryString ? `?${queryString}` : ''}`;
+  assertPathStaysOnOperation(tool, apiBaseUrl, path, url);
 
   return { url, headers, body };
 }
