@@ -23,7 +23,7 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
-  "homepage": "https://github.com/agentfront/frontmcp/blob/main/plugins/plugin-dashboard/README.md",
+  "homepage": "https://frontmcp.dev/reference/plugins#the-dashboard",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

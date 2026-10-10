@@ -5,7 +5,7 @@
  * This provides a single source of truth for UI configuration types
  * while maintaining backwards compatibility.
  *
- * @see {@link https://docs.agentfront.dev/docs/servers/tools#tool-ui | Tool UI Documentation}
+ * @see {@link https://frontmcp.dev/reference/ui | Tool UI Documentation}
  */
 
 // Re-export all UI configuration types from @frontmcp/uipack

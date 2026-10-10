@@ -3,7 +3,7 @@
   "version": "1.9.4",
   "description": "Nx plugin for FrontMCP — generators and executors for building MCP servers",
   "author": "AgentFront <info@agentfront.dev>",
-  "homepage": "https://docs.agentfront.dev",
+  "homepage": "https://frontmcp.dev/reference/nx",
   "license": "Apache-2.0",
   "keywords": [
     "nx",

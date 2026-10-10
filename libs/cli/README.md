@@ -434,7 +434,7 @@ Apache-2.0 — see [LICENSE](../../LICENSE).
 
 <!-- links -->
 
-[docs-install]: https://docs.agentfront.dev/frontmcp/getting-started/installation
-[docs-cli-ref]: https://docs.agentfront.dev/frontmcp/getting-started/cli-reference
-[docs-dev]: https://docs.agentfront.dev/frontmcp/deployment/local-dev-server
-[docs-production]: https://docs.agentfront.dev/frontmcp/deployment/production-build
+[docs-install]: https://frontmcp.dev/learn/installation
+[docs-cli-ref]: https://frontmcp.dev/reference/cli
+[docs-dev]: https://frontmcp.dev/reference/cli#frontmcp-dev
+[docs-production]: https://frontmcp.dev/reference/deployment/production-build

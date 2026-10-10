@@ -51,83 +51,6 @@ reviews:
         sibling `breaking-changes.v1.json`); ask for the entry if missing.
 
     # ─────────────────────────────────────────────────────────
-    # MINTLIFY DOCS — FLAT, HUMAN-EDITED
-    # ─────────────────────────────────────────────────────────
-    # Layout reality (no live/draft split, no v/<minor>/ archives):
-    #   docs/
-    #   ├── docs.json                Mintlify navigation
-    #   ├── assets/                  images / static
-    #   └── frontmcp/                section content (mdx)
-    #       ├── adapters/
-    #       ├── authentication/
-    #       ├── deployment/
-    #       ├── extensibility/
-    #       ├── features/
-    #       ├── fundamentals/
-    #       ├── getting-started/
-    #       ├── guides/
-    #       ├── nx-plugin/
-    #       ├── plugins/
-    #       ├── react/
-    #       ├── sdk-reference/
-    #       ├── servers/
-    #       ├── testing/
-    #       └── updates.mdx
-
-    - path: "docs/frontmcp/**"
-      instructions: >
-        Mintlify documentation (MDX). Authors edit these files directly —
-        there is no `draft/` staging area. When reviewing:
-        - When public APIs in libs/** or plugins/** change, ensure the matching
-          docs page under docs/frontmcp/** is updated in the same PR (sdk-reference,
-          adapters, plugins, features, etc.). Flag missing doc updates.
-        - Look for stale `import { ... } from '@frontmcp/...'` snippets,
-          renamed exports, or removed options that no longer exist.
-        - Look for stale URI examples — skills are exposed under the
-          singular SEP-2640 `skill://` scheme (e.g. `skill://index.json`,
-          `skill://{+skillPath}/SKILL.md`). The legacy plural `skills://`
-          scheme has been removed; flag any reintroduced references.
-        - Code examples should match the public surface of the corresponding
-          library (no internal symbols, no removed APIs).
-        - Updates to `docs/frontmcp/updates.mdx` follow the format described
-          in `.github/UPDATES_FORMAT.md`.
-
-    - path: "docs/frontmcp/sdk-reference/**"
-      instructions: >
-        SDK reference pages (organised under `core/`, `decorators/`,
-        `registries/`, `contexts/`, `errors/`, `types/`, `utilities/`,
-        plus standalone pages like `guard.mdx` and `telemetry.mdx`).
-        These should reflect the actual public exports of `@frontmcp/sdk`
-        (see `libs/sdk/src/index.ts`). When new symbols are exported from
-        the SDK barrel, suggest a matching reference page in the right
-        subfolder; when symbols are removed, flag stale entries.
-
-    - path: "docs/docs.json"
-      instructions: >
-        Mintlify navigation. When new docs pages are added under
-        docs/frontmcp/**, the navigation MUST list them or they won't be
-        reachable. Conversely, removed pages MUST be removed from navigation
-        — orphaned entries cause build failures.
-
-    - path: "docs/assets/**"
-      instructions: >
-        Static assets used by the docs (images, diagrams). Flag oversized or
-        non-optimised images (>500KB) and any binary checked in by mistake.
-
-    - path: "docs/**"
-      instructions: >
-        Mintlify documentation root. See more specific rules above.
-        - There is NO docs/live/** or docs/draft/** split in this repo —
-          authors edit `docs/frontmcp/**` and `docs/docs.json` directly.
-        - There is NO docs/v/{minor}/** archive — versioning is handled by
-          the external docs deployment described in
-          `.github/DOCS_VERSION_STRATEGY.md`.
-        - The `frontmcp build` and `frontmcp` CLI is published as `frontmcp`
-          on npm even though the workspace package is named `@frontmcp/cli`.
-          Examples should reflect this (`npx frontmcp ...`, not
-          `npx @frontmcp/cli`).
-
-    # ─────────────────────────────────────────────────────────
     # SDK & SUPPORTING LIBRARIES
     # ─────────────────────────────────────────────────────────
 
@@ -145,8 +68,8 @@ reviews:
         - 95%+ coverage target across statements/branches/functions/lines.
         - Use specific MCP error classes with JSON-RPC codes; avoid
           non-null assertions (`!`).
-        - When public exports in `libs/sdk/src/index.ts` change, ensure
-          `docs/frontmcp/sdk-reference/**` has matching updates.
+        - When public exports in `libs/sdk/src/index.ts` change, ensure the
+          PR description's "User-facing change" section names them.
 
     - path: "libs/protocol/**"
       instructions: >
@@ -185,9 +108,11 @@ reviews:
         Publishable SDK libraries.
         - Review for API correctness, breaking changes, and consistency with
           docs.
-        - When public APIs change, ensure there is a matching update under
-          `docs/frontmcp/**` (this repo edits docs directly — there is no
-          `docs/draft/**`).
+        - When a public API, option, default, error code or message, or CLI
+          flag or output changes, ensure the PR description has a filled-in
+          "User-facing change" section and the matching entries under
+          `libs/skills/catalog/**` are updated in the same PR. FrontMCP's docs
+          live on frontmcp.dev, not in this repo.
         - Internal `@frontmcp/*` dependency versions must stay normalised
           to the exact release line (per #361/#363); flag drift.
         - Resource URI scheme for skills is the singular `skill://`
@@ -202,7 +127,9 @@ reviews:
       instructions: >
         Publishable SDK plugins (each its own package).
         - Review for API correctness, breaking changes, and consistency with
-          `docs/frontmcp/plugins/**`.
+          the plugin's README and `libs/skills/catalog/**`.
+        - A change users see needs the PR description's "User-facing change"
+          section filled in.
         - Plugins extending `ExecutionContextBase` must follow the
           module-augmentation + prototype-extension pattern (see
           `plugin-remember/src/remember.context-extension.ts`).

@@ -324,5 +324,5 @@ node -e "const { create } = require('./dist/my-sdk.cjs.js'); ..."
 
 ## Reference
 
-- **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/direct-client>
+- **Docs:** <https://frontmcp.dev/reference/sdk/connect>
 - **Related skills:** `build-for-cli`, `build-for-browser`, `deploy-to-cloudflare`

@@ -178,15 +178,6 @@ jobs:
             fi
           done
 
-      - name: Create release docs base marker
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Store the current HEAD SHA for future diff calculations
-          SHA=$(git rev-parse HEAD)
-          echo "$SHA" > .release-docs-base
-          echo "Created .release-docs-base marker with SHA: $SHA"
-
       - name: Commit release preparation
         shell: bash
         run: |
@@ -202,7 +193,6 @@ jobs:
           chore(release): initialize $BRANCH at v$VERSION
 
           - Set all synchronized libs to v$VERSION
-          - Create .release-docs-base marker for docs diffing
 
           This is a long-lived release branch for the ${BRANCH#release/} series.
           Hotfixes and patches will be published from this branch.

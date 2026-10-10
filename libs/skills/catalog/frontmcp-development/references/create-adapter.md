@@ -189,5 +189,5 @@ Creates a `DynamicAdapter` subclass in `src/adapters/my-adapter.adapter.ts`.
 
 ## Reference
 
-- [Adapter Documentation](https://docs.agentfront.dev/frontmcp/adapters/overview)
+- [Adapter Documentation](https://frontmcp.dev/reference/sdk/adapter)
 - Related skills: `official-adapters`, `create-plugin`, `create-tool`

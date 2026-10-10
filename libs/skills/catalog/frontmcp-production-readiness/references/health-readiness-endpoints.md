@@ -196,5 +196,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 ## Reference
 
-- [Health Checks Documentation](https://docs.agentfront.dev/frontmcp/deployment/health-checks)
+- [Health Checks Documentation](https://frontmcp.dev/reference/deployment/health-and-metrics)
 - Related skills: `frontmcp-observability`, `frontmcp-deployment`, `frontmcp-config`

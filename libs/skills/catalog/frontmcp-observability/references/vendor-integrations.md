@@ -205,5 +205,5 @@ Without a registered `MeterProvider`, counters still increment in an in-memory s
 
 ## Reference
 
-- [Observability Guide](https://docs.agentfront.dev/frontmcp/guides/observability)
+- [Observability Guide](https://frontmcp.dev/reference/server/observability)
 - Related skills: `frontmcp-deployment`, `frontmcp-production-readiness`

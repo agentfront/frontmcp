@@ -3,7 +3,7 @@
   "version": "1.9.4",
   "description": "FrontMCP plugins meta-package - installs all official plugins",
   "author": "AgentFront <info@agentfront.dev>",
-  "homepage": "https://docs.agentfront.dev",
+  "homepage": "https://frontmcp.dev/reference/plugins",
   "license": "Apache-2.0",
   "keywords": [
     "mcp",

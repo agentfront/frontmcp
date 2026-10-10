@@ -80,7 +80,7 @@ Run `npm run dev` and point any MCP client at it. Full walkthrough → [Quicksta
   Workers, or a serverless bundle.
   &nbsp;([Deployment][docs-deploy])
 
-→ Everything is documented at **[docs.agentfront.dev/frontmcp][docs-home]**.
+→ Everything is documented at **[frontmcp.dev][docs-home]**.
 
 ## Related packages
 
@@ -97,24 +97,24 @@ Run `npm run dev` and point any MCP client at it. Full walkthrough → [Quicksta
 
 <!-- links -->
 
-[docs-home]: https://docs.agentfront.dev/frontmcp 'FrontMCP Docs'
-[docs-install]: https://docs.agentfront.dev/frontmcp/getting-started/installation
-[docs-quickstart]: https://docs.agentfront.dev/frontmcp/getting-started/quickstart
-[docs-sdk-ref]: https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/overview
-[docs-tools]: https://docs.agentfront.dev/frontmcp/servers/tools
-[docs-resources]: https://docs.agentfront.dev/frontmcp/servers/resources
-[docs-prompts]: https://docs.agentfront.dev/frontmcp/servers/prompts
-[docs-agents]: https://docs.agentfront.dev/frontmcp/servers/agents
-[docs-providers]: https://docs.agentfront.dev/frontmcp/extensibility/providers
-[docs-auth]: https://docs.agentfront.dev/frontmcp/authentication/overview
-[docs-transport]: https://docs.agentfront.dev/frontmcp/deployment/transport-security
-[docs-protocol]: https://docs.agentfront.dev/frontmcp/fundamentals/protocol-versions 'Protocol Versions'
-[docs-discovery]: https://docs.agentfront.dev/frontmcp/servers/discovery
-[docs-elicitation]: https://docs.agentfront.dev/frontmcp/servers/elicitation
-[docs-hooks]: https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/hooks
-[docs-skills]: https://docs.agentfront.dev/frontmcp/servers/skills
-[docs-plugins]: https://docs.agentfront.dev/frontmcp/plugins/overview
-[docs-adapters]: https://docs.agentfront.dev/frontmcp/adapters/overview
-[docs-ext-apps]: https://docs.agentfront.dev/frontmcp/guides/building-tool-ui
-[docs-direct]: https://docs.agentfront.dev/frontmcp/deployment/direct-client
-[docs-deploy]: https://docs.agentfront.dev/frontmcp/deployment/local-dev-server
+[docs-home]: https://frontmcp.dev/ 'FrontMCP Docs'
+[docs-install]: https://frontmcp.dev/learn/installation
+[docs-quickstart]: https://frontmcp.dev/learn
+[docs-sdk-ref]: https://frontmcp.dev/reference/sdk#decorators
+[docs-tools]: https://frontmcp.dev/reference/sdk/tool
+[docs-resources]: https://frontmcp.dev/reference/sdk/resource
+[docs-prompts]: https://frontmcp.dev/reference/sdk/prompt
+[docs-agents]: https://frontmcp.dev/reference/sdk/agent
+[docs-providers]: https://frontmcp.dev/reference/sdk/provider
+[docs-auth]: https://frontmcp.dev/reference/auth
+[docs-transport]: https://frontmcp.dev/reference/deployment/security
+[docs-protocol]: https://frontmcp.dev/reference/server/protocol-versions 'Protocol Versions'
+[docs-discovery]: https://frontmcp.dev/reference/server/apps#what-clients-see
+[docs-elicitation]: https://frontmcp.dev/reference/sdk/elicit
+[docs-hooks]: https://frontmcp.dev/reference/sdk/hooks
+[docs-skills]: https://frontmcp.dev/reference/sdk/skill
+[docs-plugins]: https://frontmcp.dev/reference/plugins
+[docs-adapters]: https://frontmcp.dev/reference/sdk/adapter
+[docs-ext-apps]: https://frontmcp.dev/learn/your-first-widget
+[docs-direct]: https://frontmcp.dev/reference/sdk/connect
+[docs-deploy]: https://frontmcp.dev/reference/cli#frontmcp-dev

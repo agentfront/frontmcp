@@ -161,7 +161,7 @@ This skill is available over MCP under `skill://frontmcp-observability/SKILL.md`
 
 ## Reference
 
-- Docs: https://docs.agentfront.dev/frontmcp/deployment/metrics
+- Docs: https://frontmcp.dev/reference/deployment/health-and-metrics#metrics
 - Issue tracker: https://github.com/agentfront/frontmcp/issues/397
 - SDK exports: `MetricsService`, `registerMetricsRoutes`, `MetricsPathConflictError`, `MetricsTokenNotConfiguredError`
 - Observability exports: `renderPrometheusExposition`, `renderJsonExposition`, `ProcessStatsCollector`, `PROMETHEUS_CONTENT_TYPE`

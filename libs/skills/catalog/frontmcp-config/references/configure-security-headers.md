@@ -199,5 +199,5 @@ The CLI converts config to these env vars for `dev` and the serverless/distribut
 
 ## Reference
 
-- [Documentation](https://docs.agentfront.dev/frontmcp/deployment/security-headers)
+- [Documentation](https://frontmcp.dev/reference/deployment/security)
 - Related skills: `configure-deployment-targets`, `configure-http`, `frontmcp-deployment`

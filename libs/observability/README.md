@@ -96,10 +96,10 @@ Protocol revision `2026-07-28` carries OpenTelemetry context in the request
 `_meta` (`traceparent`, `tracestate`, `baggage`) per SEP-414, and FrontMCP echoes
 it back on the result. A client can therefore stitch its span to the server's
 without an out-of-band correlation id — see the
-[protocol versions guide](https://docs.agentfront.dev/frontmcp/fundamentals/protocol-versions).
+[protocol versions guide](https://frontmcp.dev/reference/server/protocol-versions).
 
-Full guide: [Observability](https://docs.agentfront.dev/frontmcp/features/observability)
-&middot; [Metrics](https://docs.agentfront.dev/frontmcp/deployment/metrics)
+Full guide: [Observability](https://frontmcp.dev/reference/server/observability)
+&middot; [Metrics](https://frontmcp.dev/reference/deployment/health-and-metrics#metrics)
 
 ## License
 

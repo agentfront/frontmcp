@@ -3,7 +3,7 @@
   "version": "1.9.4",
   "description": "React hooks, components, and AI SDK integration for FrontMCP",
   "author": "AgentFront <info@agentfront.dev>",
-  "homepage": "https://docs.agentfront.dev",
+  "homepage": "https://frontmcp.dev/reference/react",
   "license": "Apache-2.0",
   "keywords": [
     "mcp",
