@@ -413,8 +413,9 @@ A `@Skill` registered on your server is reachable two ways:
    automatically when they connect to your server. `resources/list` names
    each skill's `skill://<skillPath>/SKILL.md`, including skills registered
    or removed after startup. A client that connects with `?mode=skills_only`
-   gets skill discovery only: no tools listed, and `tools/call` answered as
-   for an unknown tool.
+   gets no tools: `tools/list` is empty and `tools/call` is answered as for
+   an unknown tool. Resources (including `skill://`), prompts and the
+   `skills/*` methods are not affected.
 2. **On the filesystem** — Claude Code's plugin/filesystem loader looks
    for `SKILL.md` files under `.claude/skills/<name>/`. Decorator-only
    registration is **not enough**; the SKILL.md (and any

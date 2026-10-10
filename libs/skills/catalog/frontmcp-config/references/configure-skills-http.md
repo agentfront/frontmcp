@@ -76,11 +76,11 @@ The catalog summary is built by `composeInitializeInstructions(...)` and `buildS
 
 ## Skills-Only Connections (`?mode=skills_only`)
 
-A client that connects to the MCP endpoint with `?mode=skills_only` (for example a planner agent that reads skills and hands execution to sub-agents) gets skill discovery only:
+A client that connects to the MCP endpoint with `?mode=skills_only` (for example a planner agent that reads skills and hands execution to sub-agents) gets no tools. The mode restricts tools only:
 
 - `tools/list` returns no tools.
 - `tools/call` is answered as for an unknown tool (`Tool "<name>" not found`), whether or not the tool exists. Tools a tool, resource, prompt, agent or job calls in process (`this.callTool()`) still run.
-- `skills/search`, `skills/load`, `skills/list` and the `skill://` resources work as usual.
+- `skills/search`, `skills/load`, `skills/list`, resources (`skill://` and the server's own) and prompts work as usual.
 
 It works on every transport and protocol revision (streamable HTTP, legacy SSE, stateless HTTP, MCP 2026-07-28, `createFetchHandler()` and Workers) and in every auth mode. Each request that carries the query is in the mode, and a session opened with it stays in the mode for its later requests (legacy SSE's `/message` endpoint drops the query, the session keeps it). Both decisions are hookable flow stages: `http:request` → `resolveSkillsOnlyMode` marks the request, and `tools:call-tool` → `checkSkillsOnlyMode` refuses the call. Up to 1.9.4 the mode only applied to a session opened with a verified JWT, and `tools/call` still ran the tools.
 
@@ -90,10 +90,12 @@ It works on every transport and protocol revision (streamable HTTP, legacy SSE, 
 
 | Provider mode  | Behavior                                                                                                                                                   |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `'read-only'`  | Skills are searched and loaded through the provider. The server serves the skills methods even when it declares no skill itself.                           |
+| `'read-only'`  | Skills are searched, listed and loaded through the provider. The server serves the skills methods even when it declares no skill itself.                   |
 | `'persistent'` | Local skills stay the source of truth; `await this.scope.skills.syncToExternal()` copies them to the provider (added / updated / unchanged / removed ids). |
 
-The value is checked by shape (`isReadOnly`, `search` and `load` functions), so a provider built against another copy of `@frontmcp/sdk` is accepted. `setExternalProvider()` is declared on `this.scope.skills` (`SkillRegistryInterface`); up to 1.9.4 it was only on the `SkillRegistry` class and nothing installed a provider at startup.
+The provider is initialized (`initialize()`) before the server uses it. The value is checked by shape (`initialize`, `isReadOnly`, `search`, `load`, `list`, `count` and `syncSkills` functions), so a provider built against another copy of `@frontmcp/sdk` is accepted.
+
+A read-only provider's skills are also served over `skill://`: `skill://index.json` lists each one as `skill://<name>/SKILL.md`, and the `skill://{+skillPath}/SKILL.md` template reads it (a registered skill of the same name wins). `resources/list` names a concrete `SKILL.md` resource for registered skills only: an external store sends no change events and may hold many skills, so its skills are discovered through the index and read through the template. `setExternalProvider()` is declared on `this.scope.skills` (`SkillRegistryInterface`); up to 1.9.4 it was only on the `SkillRegistry` class and nothing installed a provider at startup.
 
 ## Skills HTTP Authentication
 
