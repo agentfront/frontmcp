@@ -276,6 +276,16 @@ export class AgentExecutionLoop {
   /**
    * Run the execution loop with streaming.
    *
+   * Yields the model's text as it arrives (`content`), the tool calls it makes and runs
+   * (`tool_call`, `tool_start`, `tool_end`), each iteration and its token usage, and finally a `done`
+   * event with the same result {@link run} returns, which is also the generator's return value. A run
+   * that fails yields `error` and then a `done` event whose result has `success: false`.
+   *
+   * The model is streamed through the adapter's `streamCompletion()` when it has one, and called
+   * through `completion()` otherwise. Tool calls are taken from the completion the stream ends with
+   * (its `done` chunk), which holds their complete arguments; the `tool_call` chunks before it only
+   * announce them. The whole run is bounded by `timeout`, as {@link run} is.
+   *
    * @param userMessage - The user's input message
    * @param toolExecutor - Function to execute tools
    * @param existingMessages - Optional existing conversation history
@@ -285,66 +295,72 @@ export class AgentExecutionLoop {
     userMessage: string,
     toolExecutor: ToolExecutor,
     existingMessages: AgentMessage[] = [],
-  ): AsyncGenerator<AgentStreamEvent> {
+  ): AsyncGenerator<AgentStreamEvent, AgentExecutionResult> {
     const startTime = Date.now();
+    const deadline = startTime + this.config.timeout;
     const messages: AgentMessage[] = [...existingMessages, { role: 'user', content: userMessage }];
 
     let iterations = 0;
     let totalPromptTokens = 0;
     let totalCompletionTokens = 0;
+    const result = (content: string | null, error?: Error): AgentExecutionResult => ({
+      content,
+      messages,
+      iterations,
+      usage: {
+        promptTokens: totalPromptTokens,
+        completionTokens: totalCompletionTokens,
+        totalTokens: totalPromptTokens + totalCompletionTokens,
+      },
+      success: error === undefined,
+      ...(error && { error }),
+      durationMs: Date.now() - startTime,
+    });
 
+    const events = this.executeLoopStreaming(messages, toolExecutor);
     try {
-      for await (const event of this.executeLoopStreaming(messages, toolExecutor)) {
-        if (event.type === 'iteration') {
-          iterations = event.iteration;
+      for (;;) {
+        const step = await this.beforeDeadline(events.next(), deadline);
+        if (step.done) {
+          const done = result(step.value.content);
+          yield { type: 'done', result: done };
+          return done;
         }
+        const event = step.value;
+        if (event.type === 'iteration') iterations = event.iteration;
         if (event.type === 'usage') {
           totalPromptTokens += event.promptTokens;
           totalCompletionTokens += event.completionTokens;
         }
         yield event;
       }
+    } catch (caught) {
+      // A timed-out step keeps running in the background, as in run(); its result is dropped
+      void events.return({ content: null }).catch(() => undefined);
+      const error = caught as Error;
+      const failed = result(null, error);
+      yield { type: 'error', error };
+      yield { type: 'done', result: failed };
+      return failed;
+    }
+  }
 
-      // Yield final result
-      const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant' && m.content);
-
-      yield {
-        type: 'done',
-        result: {
-          content: lastAssistantMessage?.content ?? null,
-          messages,
-          iterations,
-          usage: {
-            promptTokens: totalPromptTokens,
-            completionTokens: totalCompletionTokens,
-            totalTokens: totalPromptTokens + totalCompletionTokens,
-          },
-          success: true,
-          durationMs: Date.now() - startTime,
-        },
-      };
-    } catch (error) {
-      yield {
-        type: 'error',
-        error: error as Error,
-      };
-
-      yield {
-        type: 'done',
-        result: {
-          content: null,
-          messages,
-          iterations,
-          usage: {
-            promptTokens: totalPromptTokens,
-            completionTokens: totalCompletionTokens,
-            totalTokens: totalPromptTokens + totalCompletionTokens,
-          },
-          success: false,
-          error: error as Error,
-          durationMs: Date.now() - startTime,
-        },
-      };
+  /**
+   * `step`, or the run's timeout error when `deadline` passes first. The timer is cleared either way,
+   * so a finished run leaves none behind.
+   */
+  private async beforeDeadline<T>(step: Promise<T>, deadline: number): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`Agent execution timed out after ${this.config.timeout}ms`)),
+        Math.max(0, deadline - Date.now()),
+      );
+    });
+    try {
+      return await Promise.race([step, timeout]);
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -460,9 +476,7 @@ export class AgentExecutionLoop {
   private async *executeLoopStreaming(
     messages: AgentMessage[],
     toolExecutor: ToolExecutor,
-  ): AsyncGenerator<AgentStreamEvent> {
-    const adapter = this.config.adapter;
-
+  ): AsyncGenerator<AgentStreamEvent, { content: string | null }> {
     for (let iteration = 1; iteration <= this.config.maxIterations; iteration++) {
       this.config.logger?.debug(`Agent loop iteration ${iteration}/${this.config.maxIterations}`);
 
@@ -477,187 +491,69 @@ export class AgentExecutionLoop {
         messages,
       };
 
-      // Check if streaming is supported
-      if (supportsStreaming(adapter)) {
-        // Stream the response
-        let content = '';
-        const toolCalls: AgentToolCall[] = [];
-        let finishReason: AgentCompletion['finishReason'] = 'stop';
-        let completionUsage: { promptTokens?: number; completionTokens?: number } | undefined;
+      // Stream the model's reply (or get it in one piece from an adapter that can't stream)
+      const completion = yield* this.streamCompletion(prompt);
 
-        for await (const chunk of adapter.streamCompletion(
-          prompt,
-          this.config.tools.length > 0 ? this.config.tools : undefined,
-          this.config.completionOptions,
-        )) {
-          if (chunk.type === 'content' && chunk.content) {
-            content += chunk.content;
-            yield { type: 'content', content: chunk.content };
-            this.config.onContent?.(chunk.content);
-          }
+      // Notify LLM complete
+      this.config.onLlmComplete?.(iteration, completion.usage);
 
-          if (chunk.type === 'tool_call' && chunk.toolCall) {
-            // Update or add tool call
-            const existing = toolCalls.find((tc) => tc.id === chunk.toolCall!.id);
-            if (existing) {
-              Object.assign(existing, chunk.toolCall);
-            } else {
-              toolCalls.push(chunk.toolCall as AgentToolCall);
-            }
-            yield { type: 'tool_call', toolCall: chunk.toolCall };
-          }
-
-          if (chunk.type === 'done' && chunk.completion) {
-            finishReason = chunk.completion.finishReason;
-            if (chunk.completion.usage) {
-              completionUsage = chunk.completion.usage;
-              yield {
-                type: 'usage',
-                promptTokens: chunk.completion.usage.promptTokens,
-                completionTokens: chunk.completion.usage.completionTokens,
-              };
-            }
-          }
-        }
-
-        // Notify LLM complete
-        this.config.onLlmComplete?.(iteration, completionUsage);
-
-        // Process the accumulated response
-        if (finishReason === 'tool_calls' && toolCalls.length > 0) {
-          // Notify tool calls identified
-          this.config.onToolsIdentified?.(
-            toolCalls.length,
-            toolCalls.map((tc) => tc.name),
-          );
-
-          // Add assistant message with tool calls
-          const assistantMessage: AgentMessage = {
-            role: 'assistant',
-            content: content || null,
-            toolCalls,
-          };
-          messages.push(assistantMessage);
-
-          // Execute tool calls
-          const totalTools = toolCalls.length;
-          for (let toolIndex = 0; toolIndex < totalTools; toolIndex++) {
-            const toolCall = toolCalls[toolIndex];
-            this.config.onToolStart?.(toolCall, toolIndex, totalTools);
-            this.config.onToolCall?.(toolCall);
-            yield { type: 'tool_start', toolCall };
-
-            let result: unknown;
-            let error: Error | undefined;
-
-            try {
-              result = await toolExecutor(toolCall.name, toolCall.arguments);
-            } catch (e) {
-              error = e as Error;
-              result = { error: error.message };
-            }
-
-            this.config.onToolResult?.(toolCall, result, error);
-            yield { type: 'tool_end', toolCall, result, error };
-
-            // Add tool result message
-            const toolMessage: AgentMessage = {
-              role: 'tool',
-              content: typeof result === 'string' ? result : JSON.stringify(result),
-              toolCallId: toolCall.id,
-              name: toolCall.name,
-            };
-            messages.push(toolMessage);
-          }
-        } else {
-          // Final response
-          const assistantMessage: AgentMessage = {
-            role: 'assistant',
-            content: content || null,
-          };
-          messages.push(assistantMessage);
-          this.config.onComplete?.(content || null, undefined);
-          return;
-        }
-      } else {
-        // Non-streaming fallback
-        const completion = await adapter.completion(
-          prompt,
-          this.config.tools.length > 0 ? this.config.tools : undefined,
-          this.config.completionOptions,
+      if (completion.finishReason === 'tool_calls' && completion.toolCalls?.length) {
+        const toolCalls = completion.toolCalls;
+        // Notify tool calls identified
+        this.config.onToolsIdentified?.(
+          toolCalls.length,
+          toolCalls.map((tc) => tc.name),
         );
 
-        // Notify LLM complete
-        this.config.onLlmComplete?.(iteration, completion.usage);
+        // Add assistant message with tool calls
+        const assistantMessage: AgentMessage = {
+          role: 'assistant',
+          content: completion.content,
+          toolCalls,
+        };
+        messages.push(assistantMessage);
+        this.config.onIteration?.(iteration, assistantMessage);
 
-        if (completion.usage) {
-          yield {
-            type: 'usage',
-            promptTokens: completion.usage.promptTokens,
-            completionTokens: completion.usage.completionTokens,
-          };
-        }
+        // Execute tool calls
+        const totalTools = toolCalls.length;
+        for (let toolIndex = 0; toolIndex < totalTools; toolIndex++) {
+          const toolCall = toolCalls[toolIndex];
+          this.config.onToolStart?.(toolCall, toolIndex, totalTools);
+          this.config.onToolCall?.(toolCall);
+          yield { type: 'tool_start', toolCall };
 
-        if (completion.finishReason === 'tool_calls' && completion.toolCalls?.length) {
-          // Notify tool calls identified
-          this.config.onToolsIdentified?.(
-            completion.toolCalls.length,
-            completion.toolCalls.map((tc) => tc.name),
-          );
+          let result: unknown;
+          let error: Error | undefined;
 
-          // Add assistant message with tool calls
-          const assistantMessage: AgentMessage = {
-            role: 'assistant',
-            content: completion.content,
-            toolCalls: completion.toolCalls,
-          };
-          messages.push(assistantMessage);
-
-          // Execute tool calls
-          const totalTools = completion.toolCalls.length;
-          for (let toolIndex = 0; toolIndex < totalTools; toolIndex++) {
-            const toolCall = completion.toolCalls[toolIndex];
-            this.config.onToolStart?.(toolCall, toolIndex, totalTools);
-            this.config.onToolCall?.(toolCall);
-            yield { type: 'tool_start', toolCall };
-
-            let result: unknown;
-            let error: Error | undefined;
-
-            try {
-              result = await toolExecutor(toolCall.name, toolCall.arguments);
-            } catch (e) {
-              error = e as Error;
-              result = { error: error.message };
-            }
-
-            this.config.onToolResult?.(toolCall, result, error);
-            yield { type: 'tool_end', toolCall, result, error };
-
-            // Add tool result message
-            const toolMessage: AgentMessage = {
-              role: 'tool',
-              content: typeof result === 'string' ? result : JSON.stringify(result),
-              toolCallId: toolCall.id,
-              name: toolCall.name,
-            };
-            messages.push(toolMessage);
-          }
-        } else {
-          // Final response
-          if (completion.content) {
-            yield { type: 'content', content: completion.content };
-            this.config.onContent?.(completion.content);
+          try {
+            result = await toolExecutor(toolCall.name, toolCall.arguments);
+          } catch (e) {
+            error = e as Error;
+            result = { error: error.message };
           }
 
-          const assistantMessage: AgentMessage = {
-            role: 'assistant',
-            content: completion.content,
+          this.config.onToolResult?.(toolCall, result, error);
+          yield { type: 'tool_end', toolCall, result, error };
+
+          // Add tool result message
+          const toolMessage: AgentMessage = {
+            role: 'tool',
+            content: typeof result === 'string' ? result : JSON.stringify(result),
+            toolCallId: toolCall.id,
+            name: toolCall.name,
           };
-          messages.push(assistantMessage);
-          this.config.onComplete?.(completion.content, undefined);
-          return;
+          messages.push(toolMessage);
         }
+      } else {
+        // Final response
+        const assistantMessage: AgentMessage = {
+          role: 'assistant',
+          content: completion.content,
+        };
+        messages.push(assistantMessage);
+        this.config.onIteration?.(iteration, assistantMessage);
+        this.config.onComplete?.(completion.content, undefined);
+        return { content: completion.content };
       }
     }
 
@@ -669,6 +565,73 @@ export class AgentExecutionLoop {
     this.config.onComplete?.(null, error);
     throw error;
   }
+
+  /**
+   * One reply of the model, streamed: yields its text as it arrives, the tool calls it announces and its
+   * usage, and returns the whole completion. The completion the adapter's stream ends with (`done`) is
+   * authoritative: it holds the tool calls with their complete arguments, which the `tool_call` chunks
+   * announce before they are known. A reply that arrives in one piece (an adapter without
+   * `streamCompletion()`, or one whose stream only ends with `done`) yields its text as one chunk.
+   */
+  private async *streamCompletion(prompt: AgentPrompt): AsyncGenerator<AgentStreamEvent, AgentCompletion> {
+    const adapter = this.config.adapter;
+    const tools = this.config.tools.length > 0 ? this.config.tools : undefined;
+
+    let streamedText = '';
+    let completion: AgentCompletion;
+    if (supportsStreaming(adapter)) {
+      const announced = new Map<string, Partial<AgentToolCall> & { id: string }>();
+      let done: AgentCompletion | undefined;
+      for await (const chunk of adapter.streamCompletion(prompt, tools, this.config.completionOptions)) {
+        if (chunk.type === 'content' && chunk.content) {
+          streamedText += chunk.content;
+          yield { type: 'content', content: chunk.content };
+          this.config.onContent?.(chunk.content);
+        } else if (chunk.type === 'tool_call' && chunk.toolCall) {
+          announced.set(chunk.toolCall.id, { ...announced.get(chunk.toolCall.id), ...definedFields(chunk.toolCall) });
+          yield { type: 'tool_call', toolCall: chunk.toolCall };
+        } else if (chunk.type === 'done' && chunk.completion) {
+          done = chunk.completion;
+        }
+      }
+      // Without a `done` chunk, the reply is what the stream carried
+      const toolCalls =
+        done?.toolCalls ??
+        [...announced.values()].map((call) => ({
+          id: call.id,
+          name: call.name ?? '',
+          arguments: call.arguments ?? {},
+        }));
+      completion = {
+        content: streamedText || (done?.content ?? null),
+        finishReason: done?.finishReason ?? (toolCalls.length > 0 ? 'tool_calls' : 'stop'),
+        ...(toolCalls.length > 0 && { toolCalls }),
+        ...(done?.usage && { usage: done.usage }),
+      };
+    } else {
+      completion = await adapter.completion(prompt, tools, this.config.completionOptions);
+    }
+
+    if (!streamedText && completion.content) {
+      yield { type: 'content', content: completion.content };
+      this.config.onContent?.(completion.content);
+    }
+    if (completion.usage) {
+      yield {
+        type: 'usage',
+        promptTokens: completion.usage.promptTokens,
+        completionTokens: completion.usage.completionTokens,
+      };
+    }
+    return completion;
+  }
+}
+
+/** The fields of a streamed tool call that the chunk sets: a later chunk adds to an earlier one. */
+function definedFields(toolCall: Partial<AgentToolCall> & { id: string }): Partial<AgentToolCall> & { id: string } {
+  return Object.fromEntries(
+    Object.entries(toolCall).filter(([, value]) => value !== undefined),
+  ) as Partial<AgentToolCall> & { id: string };
 }
 
 // ============================================================================

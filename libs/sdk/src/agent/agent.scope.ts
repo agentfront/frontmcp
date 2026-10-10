@@ -21,8 +21,13 @@ import { FlowExitedWithoutOutputError } from '../errors';
 import FlowRegistry from '../flows/flow.registry';
 import HookRegistry from '../hooks/hook.registry';
 import PluginRegistry from '../plugin/plugin.registry';
+import GetPromptFlow from '../prompt/flows/get-prompt.flow';
+import PromptsListFlow from '../prompt/flows/prompts-list.flow';
 import PromptRegistry from '../prompt/prompt.registry';
 import ProviderRegistry from '../provider/provider.registry';
+import ReadResourceFlow from '../resource/flows/read-resource.flow';
+import ResourceTemplatesListFlow from '../resource/flows/resource-templates-list.flow';
+import ResourcesListFlow from '../resource/flows/resources-list.flow';
 import ResourceRegistry from '../resource/resource.registry';
 import { Scope } from '../scope';
 import CallToolFlow from '../tool/flows/call-tool.flow';
@@ -56,7 +61,9 @@ export interface AgentScopeOptions {
  *    resources, prompts, and nested agents are private.
  *
  * 2. **Flow Integration**: Tool calls route through the standard `tools:call-tool`
- *    flow, enabling hooks, plugins, authorization, and other flow features.
+ *    flow, and the model's reads of the agent's resources and prompts through
+ *    `resources:read-resource` and `prompts:get-prompt` (and their listing flows),
+ *    enabling hooks, plugins, authorization, and other flow features.
  *
  * 3. **Plugin/Adapter Support**: Agent can define its own plugins and adapters
  *    for custom functionality.
@@ -172,8 +179,18 @@ export class AgentScope {
       this.agentHooks.inheritFrom(this.parentScope.hooks, this.options.ownerId);
     }
 
-    // The flows the agent's tools and nested agents (`agents: [...]`) run through
-    this.agentFlows = new FlowRegistry(this.agentProviders, [CallToolFlow, CallAgentFlow]);
+    // The flows the agent's tools and nested agents (`agents: [...]`) run through, and those its model's
+    // built-in tools read its resources and prompts through (`read_resource`, `get_prompt`, and the
+    // listings), so their hooks, authorities and errors apply as for a client's call
+    this.agentFlows = new FlowRegistry(this.agentProviders, [
+      CallToolFlow,
+      CallAgentFlow,
+      ReadResourceFlow,
+      ResourcesListFlow,
+      ResourceTemplatesListFlow,
+      GetPromptFlow,
+      PromptsListFlow,
+    ]);
     await this.agentFlows.ready;
 
     // Initialize plugins (they can register providers, tools, etc.)

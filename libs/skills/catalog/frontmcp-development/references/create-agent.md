@@ -572,7 +572,12 @@ class DatabaseAgent extends AgentContext {}
 
 ## Agent with Resources and Prompts
 
-Agents can include resources and prompts scoped to the agent. The agent's model is sent tools only, so they reach clients only when exported (`exports: { resources, prompts }`, see [Exports](#exports)); the server reports any that are not exported at startup.
+Agents can include resources and prompts scoped to the agent. The agent's model reads all of them, exported or not, with built-in tools: `list_resources` and `read_resource` when the agent declares resources, `list_prompts` and `get_prompt` when it declares prompts (an agent that declares neither gets no extra tool). Clients see them only when exported (`exports: { resources, prompts }`, see [Exports](#exports)).
+
+- The built-in tools run through the agent scope's `resources:list-resources` / `resources:list-resource-templates`, `resources:read-resource`, `prompts:list-prompts` and `prompts:get-prompt` flows on the `agent` surface: the agent's plugin hooks, the entries' `authorities` (for the caller the agent runs for) and `availableWhen.surface` apply, also with `useToolFlow: false`.
+- `read_resource({ uri })` returns the resource's text; several contents are each headed by their URI. `get_prompt({ name, arguments })` returns the prompt's description and its messages headed by role (`[user]`, `[assistant]`). Binary content (blobs, images, audio) is never sent: the model reads a one-line description such as `[binary content omitted: docs://logo (image/png, 512 bytes)]`.
+- An unknown URI or prompt, or a denied authority, reaches the model as the tool's error (`{"error":"Resource not found: docs://missing"}`).
+- None of the agent's own tools may be named after a built-in tool it is offered: startup fails with `AgentConfigurationError`. A same-named tool of the parent scope (`inheritParentTools`) is not offered; the built-in wins.
 
 ```typescript
 @Agent({
@@ -596,19 +601,38 @@ class DocsAgent extends AgentContext {}
 
 ## Execution Options
 
-| Option                           | Default  | Effect                                                                                                                                             |
-| -------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `execution.maxIterations`        | `10`     | Max tool-call rounds of the LLM loop                                                                                                               |
-| `execution.timeout`              | `120000` | Max run time in ms                                                                                                                                 |
-| `execution.inheritParentTools`   | `false`  | Also offer the model the tools of the scope the agent is registered in, other than agents; they run through that scope's `tools:call-tool` flow    |
-| `execution.inheritPlugins`       | `false`  | Also run the app's and server's plugin hooks for the agent's own tools                                                                             |
-| `execution.useToolFlow`          | `true`   | Own tools through its `tools:call-tool` flow (hooks, limits, authorization); `false` runs them directly. Nested agents always use their flow       |
-| `execution.enableNotifications`  | `true`   | Send `Calling tool: <name>` and `Tool <name> failed: <message>` log messages (the failure's public message only); `false` also stops auto progress |
-| `execution.enableAutoProgress`   | `false`  | Send progress notifications during the loop; each value is higher than the last                                                                    |
-| `execution.notificationInterval` | `1000`   | Least ms between two automatic progress updates; sooner ones are skipped, the last one is always sent                                              |
-| `execution.enableStreaming`      | `false`  | Not supported yet: the agent replies once the run completes, and `true` is reported at startup                                                     |
+| Option                           | Default  | Effect                                                                                                                                                                               |
+| -------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `execution.maxIterations`        | `10`     | Max tool-call rounds of the LLM loop                                                                                                                                                 |
+| `execution.timeout`              | `120000` | Max run time in ms                                                                                                                                                                   |
+| `execution.inheritParentTools`   | `false`  | Also offer the model the tools of the scope the agent is registered in, other than agents; they run through that scope's `tools:call-tool` flow                                      |
+| `execution.inheritPlugins`       | `false`  | Also run the app's and server's plugin hooks for the agent's own tools                                                                                                               |
+| `execution.useToolFlow`          | `true`   | Own tools through its `tools:call-tool` flow (hooks, limits, authorization); `false` runs them directly. Nested agents always use their flow                                         |
+| `execution.enableNotifications`  | `true`   | Send `Calling tool: <name>` and `Tool <name> failed: <message>` log messages (the failure's public message only); `false` also stops auto progress                                   |
+| `execution.enableAutoProgress`   | `false`  | Send progress notifications during the loop; each value is higher than the last                                                                                                      |
+| `execution.notificationInterval` | `1000`   | Least ms between two automatic progress updates; sooner ones are skipped, the last one is always sent                                                                                |
+| `execution.enableStreaming`      | `false`  | Stream the model's text: with a request `progressToken`, each chunk is a `notifications/progress` (`progress` = chunk count, `message` = chunk, no `total`); the result is unchanged |
 
 Through that flow the agent's own tools get the `rateLimit`, `concurrency` and `timeout` they declare (else the `throttle` defaults), as the app's tools do; a `rateLimit` or `concurrency` there is enforced without a `throttle` option. The calls an agent makes during its run (its model's tool calls, its nested and swarm agents) run inside the `throttle.globalConcurrency` slot of the call that runs the agent.
+
+### Streaming (`execution.enableStreaming`)
+
+```typescript
+@Agent({
+  name: 'storyteller',
+  description: 'Tells a story as it writes it',
+  llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
+  inputSchema: { topic: z.string() },
+  execution: { enableStreaming: true },
+})
+class StorytellerAgent extends AgentContext {}
+```
+
+- Streams only when the client sends `_meta.progressToken`; without it the agent runs unstreamed and sends nothing extra.
+- Each chunk of the model's text is one `notifications/progress` on that token: `progress` counts chunks across the run (1, 2, 3, ...), `message` is the chunk, `total` is omitted. Text the model writes before calling tools is streamed too; tool calls run as usual (arguments come from the stream's final completion).
+- The tool result is identical to an unstreamed run. An `outputSchema` agent streams text and validates once at the end (`INVALID_OUTPUT` after streaming if it doesn't match).
+- Falls back to an unstreamed run when the adapter has no `streamCompletion()` (the built-in OpenAI/Anthropic adapters have one), or when the class overrides `completion()` but not `streamCompletion()`. A streamed run calls the model through `streamCompletion()`.
+- `enableAutoProgress` sends no progress notifications in a streamed run (the token carries the text); its log messages still go out. Nested and swarm agents the model calls are not streamed.
 
 ## Common Patterns
 
@@ -640,18 +664,18 @@ Through that flow the agent's own tools get the `rateLimit`, `concurrency` and `
 
 ## Troubleshooting
 
-| Problem                                                       | Cause                                                                                                                     | Solution                                                                                                                                                                         |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Agent not appearing in tool listing                           | Not registered in `agents` array                                                                                          | Add agent class to `@App` or `@FrontMcp` `agents` array                                                                                                                          |
-| LLM authentication error                                      | API key not set or incorrect env variable                                                                                 | Verify the environment variable name in `apiKey: { env: '...' }` is set                                                                                                          |
-| Inner tools not being called                                  | Tools not listed in `tools` array of `@Agent`                                                                             | Add tool classes to the `tools` field in the `@Agent` decorator                                                                                                                  |
-| Agent times out                                               | No timeout or rate limit configured                                                                                       | Add `timeout: { executeMs: 120_000 }` and `rateLimit` to `@Agent` options                                                                                                        |
-| Peer agent not callable                                       | Peer has `isVisible: false`, or orchestrator lacks `canSeeOtherAgents: true`, or peer is not in `visibleAgents` whitelist | Set `swarm.isVisible: true` on the peer and `swarm.canSeeOtherAgents: true` (and add the peer to `visibleAgents`) on the orchestrator                                            |
-| `AGENT_CALL_DEPTH_EXCEEDED`                                   | Agents call each other deeper than `swarm.maxCallDepth` (default 3) allows                                                | Stop the loop in `systemInstructions`, or raise `maxCallDepth` (max 10) on every agent in the chain                                                                              |
-| `AGENT_VISIBILITY_DENIED`                                     | `this.invokeAgent()` names an agent this agent doesn't see                                                                | Add it to `swarm.visibleAgents` (with `canSeeOtherAgents: true`), or nest it in `agents`                                                                                         |
-| Startup warning `declares resources [...] that nothing reads` | The agent's resources or prompts aren't exported; its model is sent tools only                                            | Export them (`exports: { resources, prompts }`) or remove them                                                                                                                   |
-| Agent's tool fails with `Provider "X" is not available`       | The provider is registered nowhere the agent's scope reaches                                                              | Register it in the agent's `providers`, its app's, or the server's: the agent's tools see all three                                                                              |
-| Agent call fails with `INVALID_OUTPUT`                        | The model's reply does not match the agent's `outputSchema` (a value outside an enum, or text that is not JSON)           | Tighten the prompt or loosen the schema; the error message names the field, for example `output does not match outputSchema at priority`. The result never carries a stack trace |
+| Problem                                                         | Cause                                                                                                                     | Solution                                                                                                                                                                         |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent not appearing in tool listing                             | Not registered in `agents` array                                                                                          | Add agent class to `@App` or `@FrontMcp` `agents` array                                                                                                                          |
+| LLM authentication error                                        | API key not set or incorrect env variable                                                                                 | Verify the environment variable name in `apiKey: { env: '...' }` is set                                                                                                          |
+| Inner tools not being called                                    | Tools not listed in `tools` array of `@Agent`                                                                             | Add tool classes to the `tools` field in the `@Agent` decorator                                                                                                                  |
+| Agent times out                                                 | No timeout or rate limit configured                                                                                       | Add `timeout: { executeMs: 120_000 }` and `rateLimit` to `@Agent` options                                                                                                        |
+| Peer agent not callable                                         | Peer has `isVisible: false`, or orchestrator lacks `canSeeOtherAgents: true`, or peer is not in `visibleAgents` whitelist | Set `swarm.isVisible: true` on the peer and `swarm.canSeeOtherAgents: true` (and add the peer to `visibleAgents`) on the orchestrator                                            |
+| `AGENT_CALL_DEPTH_EXCEEDED`                                     | Agents call each other deeper than `swarm.maxCallDepth` (default 3) allows                                                | Stop the loop in `systemInstructions`, or raise `maxCallDepth` (max 10) on every agent in the chain                                                                              |
+| `AGENT_VISIBILITY_DENIED`                                       | `this.invokeAgent()` names an agent this agent doesn't see                                                                | Add it to `swarm.visibleAgents` (with `canSeeOtherAgents: true`), or nest it in `agents`                                                                                         |
+| `AgentConfigurationError: ... has a tool named "read_resource"` | One of the agent's own tools takes the name of a built-in tool its model reads resources or prompts with                  | Rename the tool (`list_resources`, `read_resource`, `list_prompts` and `get_prompt` are taken when the agent declares resources or prompts)                                      |
+| Agent's tool fails with `Provider "X" is not available`         | The provider is registered nowhere the agent's scope reaches                                                              | Register it in the agent's `providers`, its app's, or the server's: the agent's tools see all three                                                                              |
+| Agent call fails with `INVALID_OUTPUT`                          | The model's reply does not match the agent's `outputSchema` (a value outside an enum, or text that is not JSON)           | Tighten the prompt or loosen the schema; the error message names the field, for example `output does not match outputSchema at priority`. The result never carries a stack trace |
 
 ## Examples
 

@@ -284,10 +284,18 @@ export interface AgentExecutionConfig {
   maxIterations?: number;
 
   /**
-   * Stream the agent's reply as it is generated.
+   * Stream the model's text to the client as it is generated.
    *
-   * Not supported yet: the agent replies once its run completes, and an agent that sets it `true` is
-   * reported at startup. Use `enableAutoProgress` for progress notifications during the run.
+   * When the request carries a progress token (`_meta.progressToken`), each chunk of the model's text
+   * is sent as a `notifications/progress` on that token as it arrives: `progress` counts the chunks
+   * (1, 2, 3, ...), `message` holds the chunk, and `total` is left out. The text the model writes before
+   * it calls tools is streamed too; tool calls run as in any run. The call's result is the same as
+   * without streaming, and an `outputSchema` validates it once the run completes.
+   *
+   * A request without a progress token runs unstreamed, as does an agent whose LLM adapter has no
+   * `streamCompletion()` (unless the agent class overrides `streamCompletion()`), or whose class
+   * overrides `completion()` but not `streamCompletion()`. In a streamed run, `enableAutoProgress`
+   * sends no progress notifications (its log messages still go out): the progress token carries the text.
    * @default false
    */
   enableStreaming?: boolean;
@@ -339,7 +347,8 @@ export interface AgentExecutionConfig {
    * Whether to automatically send progress notifications during agent execution.
    * When true, the agent sends notifications about LLM calls, tool executions,
    * and completion status via `notifications/progress` and `notifications/message`.
-   * Requires `enableNotifications` to also be true.
+   * Requires `enableNotifications` to also be true. A run that streams its text
+   * (`enableStreaming`) sends no automatic `notifications/progress`, only the log messages.
    * @default false (opt-in feature)
    */
   enableAutoProgress?: boolean;
@@ -477,14 +486,19 @@ export interface AgentMetadata<
   tools?: ToolType[];
 
   /**
-   * Agent-scoped resources. The agent's model is sent tools only, so these reach clients only when
-   * exported (`exports.resources`); one that isn't is reported at startup.
+   * Agent-scoped resources. The agent's model reads them, exported or not, with the built-in
+   * `list_resources` and `read_resource` tools, which run through the agent scope's
+   * `resources:list-resources`, `resources:list-resource-templates` and `resources:read-resource` flows.
+   * Clients see them only when exported (`exports.resources`). None of the agent's own tools may be
+   * named `list_resources` or `read_resource`.
    */
   resources?: ResourceType[];
 
   /**
-   * Agent-scoped prompts. The agent's model is sent tools only, so these reach clients only when
-   * exported (`exports.prompts`); one that isn't is reported at startup.
+   * Agent-scoped prompts. The agent's model gets them, exported or not, with the built-in
+   * `list_prompts` and `get_prompt` tools, which run through the agent scope's `prompts:list-prompts`
+   * and `prompts:get-prompt` flows. Clients see them only when exported (`exports.prompts`). None of the
+   * agent's own tools may be named `list_prompts` or `get_prompt`.
    */
   prompts?: PromptType[];
 

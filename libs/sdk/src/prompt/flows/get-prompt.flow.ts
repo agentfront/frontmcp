@@ -240,15 +240,16 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in prompt metadata.
-   * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
+   * An anonymous caller may get only the prompts `publicAccess` lists, within its rate limit. An agent's
+   * model reading one of the agent's own prompts (`agentPrivateCall`) is not checked: the caller's call
+   * to the agent was.
    */
-  /** An anonymous caller may get only the prompts `publicAccess` lists, within its rate limit. */
   @Stage('checkPublicAccess')
   async checkPublicAccess() {
     const { prompt, authInfo } = this.state;
     const publicAccess = publicAccessFor(this.scope.auth?.options, authInfo);
-    if (!prompt || !publicAccess) return;
+    const callerCtx = this.input.ctx as { agentPrivateCall?: boolean } | undefined;
+    if (!prompt || !publicAccess || callerCtx?.agentPrivateCall) return;
     await enforcePublicAccess(
       publicAccess,
       { kind: 'prompt', names: [prompt.fullName || prompt.name, prompt.name] },
@@ -257,6 +258,10 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     );
   }
 
+  /**
+   * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in prompt metadata.
+   * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
+   */
   @Stage('checkEntryAuthorities')
   async checkEntryAuthorities() {
     this.logger.verbose('checkEntryAuthorities:start');
