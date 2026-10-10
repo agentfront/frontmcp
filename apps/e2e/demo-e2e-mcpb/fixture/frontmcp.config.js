@@ -5,8 +5,8 @@
  * dedicated metadata via `findDeployment(config, 'mcpb')`. Top-level esbuild
  * externals live under `build.esbuild.external` (also part of the v1 schema).
  *
- * Setup-step translation is covered by unit integration tests — kept out of
- * the fixture to stay inside the strict v1 schema.
+ * `setup.steps` and the deployment's `userConfig` both become MCPB `user_config`
+ * entries that reach the server as env vars, merged over the deployment `env`.
  */
 module.exports = {
   name: 'mcpb-demo',
@@ -48,6 +48,14 @@ module.exports = {
         runtimes: { node: '>=22.0.0' },
       },
       deterministic: true,
+      userConfig: {
+        deskApiKey: { type: 'string', title: 'Help desk API key', required: true, sensitive: true },
+        exportFolder: { type: 'directory', title: 'Folder for exported tickets', default: '${HOME}/Documents' },
+      },
+      env: { DESK_REGION: 'eu' },
     },
   ],
+  setup: {
+    steps: [{ id: 'max-items', prompt: 'Max items', jsonSchema: { type: 'number', minimum: 1, default: 25 } }],
+  },
 };

@@ -102,17 +102,65 @@ dist/mcpb/
 | `icon`                                          | deployment.icon → package.json.icon → `icon.png` / `assets/icon.png` in cwd         |
 | `tools`                                         | Schema extraction (system tools like `execute_job` filtered out)                    |
 | `prompts`                                       | Schema extraction; emitted with `prompts_generated: true`                           |
-| `user_config`                                   | Translated from `setup.steps` + deployment.userConfig overrides                     |
+| `user_config`                                   | deployment.userConfig + frontmcp.config `setup.steps` (see below)                   |
 | `compatibility.runtimes.node`                   | deployment.compatibility.runtimes.node → frontmcp.config.nodeVersion → `">=22.0.0"` |
 | `compatibility.platforms`                       | deployment.compatibility.platforms → `["darwin","linux","win32"]`                   |
 
-## Setup Steps → user_config + env
+## user_config → env
 
-If your exec config declares a `setup.steps` questionnaire, each step becomes
-an MCPB `user_config` entry and a matching `mcp_config.env` variable wired via
-`${user_config.KEY}` substitution.
+Every `user_config` entry reaches the server as an environment variable: the
+manifest's `mcp_config.env` maps `ENV_NAME` to `${user_config.KEY}`, and the
+host substitutes the user's answer when it starts the server.
 
-Type resolution:
+```ts
+deployments: [
+  {
+    target: 'mcpb',
+    userConfig: {
+      deskApiKey: { type: 'string', title: 'Help desk API key', required: true, sensitive: true },
+      exportFolder: { type: 'directory', title: 'Export folder', default: '${HOME}/Documents' },
+      region: { type: 'string', title: 'Region', default: 'eu', env: 'HELPDESK_REGION' },
+    },
+    env: { LOG_FORMAT: 'json' },
+  },
+],
+```
+
+produces
+
+```json
+"env": {
+  "LOG_FORMAT": "json",
+  "DESK_API_KEY": "${user_config.deskApiKey}",
+  "EXPORT_FOLDER": "${user_config.exportFolder}",
+  "HELPDESK_REGION": "${user_config.region}",
+  "FRONTMCP_STDIO": "1"
+}
+```
+
+| Source                      | `user_config` key                 | Env var                                            |
+| --------------------------- | --------------------------------- | -------------------------------------------------- |
+| `deployment.userConfig.KEY` | `KEY`                             | `env` on the entry, else `KEY` in UPPER_SNAKE_CASE |
+| `setup.steps[]` (top level) | step `id` in camelCase            | step `env`, else the `id` in UPPER_SNAKE_CASE      |
+| step + `userConfig.KEY`     | same key (entry overrides fields) | `userConfig.KEY.env`, else the step's env name     |
+
+- UPPER*SNAKE_CASE splits camelCase and replaces other characters with `*`:
+`deskApiKey`→`DESK_API_KEY`, `export-folder`→`EXPORT_FOLDER`.
+- `env` must be a valid variable name; it is not copied into `user_config`.
+- Two entries that map to the same variable fail the build. Give one an explicit `env`.
+- The deployment's `env` is merged in first, so a user's answer wins over it.
+- `FRONTMCP_STDIO=1` is always set and cannot be overridden: the server speaks
+  stdio to the host only with it.
+- An optional entry with no `default` that the user leaves blank reaches the
+  server as the literal text `${user_config.KEY}` (the reference MCPB host leaves
+  unresolved placeholders in place). Give optional entries a `default`, or treat
+  that value as unset in your code.
+
+`setup.steps` is a top-level `frontmcp.config` key next to `deployments`; the
+same questionnaire drives `frontmcp install` / `frontmcp configure` for the
+`node` and `cli` targets.
+
+Type resolution for setup steps:
 
 | FrontMCP schema                                      | MCPB `type`           |
 | ---------------------------------------------------- | --------------------- |
@@ -161,6 +209,7 @@ lone macOS or Linux build supplies none.
 | ----------------------- | ------------------------------------------ | ---------------------------- | --------------------------------------------------------------- |
 | Entry path              | `${__dirname}/server/index.js`             | Absolute host path           | Host app extracts to a fresh tmp dir each install               |
 | User config reference   | `${user_config.apiToken}`                  | `$API_TOKEN`                 | MCPB substitution happens at install time, not shell expansion  |
+| Reading a setting       | `process.env.DESK_API_KEY`                 | Reading `manifest.json`      | Each `user_config` entry is passed to the server as an env var  |
 | Sensitive defaults      | Omit `default`                             | Emit the real token          | Manifests ship in plaintext; anything in `default` is committed |
 | External services       | Declare in `privacy_policies`              | Omit                         | Stores/clients surface these during install review              |
 | Multi-platform binaries | CI matrix + `--merge-from`                 | Build on one OS and ship     | SEA binaries are OS/arch-specific                               |
@@ -195,7 +244,10 @@ lone macOS or Linux build supplies none.
 | `@frontmcp/sdk is required for schema extraction`                                 | SDK missing or externalized from bundle                                               | Ensure `@frontmcp/sdk` is installed                                                                                                  |
 | `… requires "@frontmcp/sdk" but the archive has no node_modules`                  | Server entry still `require()`s a runtime package                                     | Rebuild with `frontmcp build --target mcpb` so runtime packages are bundled; `validate` reports archives that are not self-contained |
 | `bin/… requires "reflect-metadata", which a single-executable binary cannot load` | SEA binary built with the runtime left external (dies with `No such built-in module`) | Rebuild with `frontmcp build --target mcpb --sea`                                                                                    |
-| Archive > 100 MB                                                                  | node_modules bundled or node runtime bloated                                          | Tune `build.esbuild.external`, drop `--sea`, or disable `includeNodeModules`                                                         |
+| Archive > 100 MB                                                                  | Large inlined dependencies or SEA binaries                                            | Tune `build.esbuild.external`, or drop `--sea`                                                                                       |
+| `includeNodeModules is deprecated and has no effect`                              | `includeNodeModules: true` in the deployment                                          | Remove it: `server/index.js` inlines its runtime packages, so the archive never ships `node_modules`                                 |
+| `userConfig "a" and "b" both map to the env var X`                                | Two entries derive the same UPPER_SNAKE_CASE name                                     | Set `env` on one of the entries                                                                                                      |
+| Server sees `${user_config.KEY}` as a value                                       | Optional entry with no default left blank by the user                                 | Give the entry a `default`, or treat that value as unset                                                                             |
 | `Unknown substitution variable` on validate                                       | Typo in `mcp_config.args` / `env`                                                     | Only `__dirname`, `HOME`, `DESKTOP`, `DOCUMENTS`, `DOWNLOADS`, `pathSeparator`, and declared `user_config` keys are allowed          |
 | `entry_point is not present in archive`                                           | Custom `--entry` flag or bundler moved the file                                       | Re-run without the override, or update the config's `entry`                                                                          |
 | Two builds produce different SHA-256                                              | `--no-deterministic` set, or inputs embed a changing timestamp                        | Restore deterministic mode; scan your sources for live date/time values                                                              |

@@ -101,12 +101,13 @@ frontmcp build --target vercel
 
 ### Top-Level Fields
 
-| Field         | Type   | Required | Description                    |
-| ------------- | ------ | -------- | ------------------------------ |
-| `name`        | string | Yes      | Server name (kebab-case)       |
-| `version`     | string | No       | Server version                 |
-| `entry`       | string | No       | Custom entry file path         |
-| `deployments` | array  | Yes      | One or more deployment targets |
+| Field         | Type   | Required | Description                                                                                                                         |
+| ------------- | ------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | string | Yes      | Server name (kebab-case)                                                                                                            |
+| `version`     | string | No       | Server version                                                                                                                      |
+| `entry`       | string | No       | Custom entry file path                                                                                                              |
+| `deployments` | array  | Yes      | One or more deployment targets                                                                                                      |
+| `setup`       | object | No       | `{ steps: [...] }` install-time questionnaire: `frontmcp install` / `configure` for `node` and `cli`, MCPB `user_config` for `mcpb` |
 
 ### Available Targets
 
@@ -141,6 +142,8 @@ wins), and an explicit `@FrontMcp()` value wins over both:
 `node` / `cli` / `mcpb` bundles set them in a preamble when run as the program; `vercel` / `lambda` /
 `cloudflare` / `distributed` in the generated setup module. Every artifact also sets
 `globalThis.FRONTMCP_BUILD_TARGET` for `availableWhen: { target }` (first one to run wins).
+An `mcpb` deployment's `env` is also written into the manifest's `mcp_config.env`, next to one
+variable per `userConfig` entry (see `build-for-mcpb`).
 
 ### Server HTTP Options
 

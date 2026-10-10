@@ -10,6 +10,8 @@
  * - Environment variables = secrets/overrides (Redis password, API keys)
  */
 
+import type { SetupDefinition } from '../commands/build/exec/setup';
+
 // ============================================
 // Server Defaults
 // ============================================
@@ -288,6 +290,12 @@ export interface McpbUserConfigEntry {
   max?: number;
 }
 
+/** A `userConfig` entry in `frontmcp.config`: an MCPB `user_config` entry plus the env var it reaches the server in. */
+export interface McpbUserConfigOption extends McpbUserConfigEntry {
+  /** Env var the server receives the value in. @default the key in UPPER_SNAKE_CASE (`deskApiKey` → `DESK_API_KEY`) */
+  env?: string;
+}
+
 export interface McpbCompatibility {
   /** Semver range for Claude Desktop (e.g., ">=1.0.0"). */
   claude_desktop?: string;
@@ -328,8 +336,8 @@ export interface McpbDeployment extends DeploymentBase {
   privacyPolicies?: string[];
   /** Runtime/platform compatibility constraints. */
   compatibility?: McpbCompatibility;
-  /** User-configurable inputs (injected as env vars). */
-  userConfig?: Record<string, McpbUserConfigEntry>;
+  /** User-configurable inputs, each passed to the server as an env var (`mcp_config.env`). */
+  userConfig?: Record<string, McpbUserConfigOption>;
   /** Single-executable binary integration. */
   sea?: {
     /** Build SEA binary for host platform. */
@@ -337,7 +345,7 @@ export interface McpbDeployment extends DeploymentBase {
     /** Directory of pre-built cross-platform SEA binaries to merge. */
     mergeFrom?: string;
   };
-  /** Include node_modules/ in archive (opt-in). */
+  /** @deprecated No effect: the server bundle inlines its runtime packages, so the archive never ships node_modules. */
   includeNodeModules?: boolean;
   /** Deterministic archive output. @default true */
   deterministic?: boolean;
@@ -538,6 +546,8 @@ export interface FrontMcpConfig {
   deployments: DeploymentTarget[];
   /** Build/bundler options. */
   build?: BuildOptions;
+  /** Install-time questionnaire: `frontmcp install` / `configure`, and MCPB `user_config`. */
+  setup?: SetupDefinition;
   /** Project-defined CLI extensions (issue #409). */
   cli?: CliExtensionConfig;
 

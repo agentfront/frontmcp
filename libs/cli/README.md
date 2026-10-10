@@ -209,9 +209,12 @@ export default defineConfig({
 
 Fields not declared in the deployment fall back to the project `package.json`
 (name, version, description, author, license, homepage, repository, keywords).
-FrontMCP `setup.steps` are automatically translated to MCPB `user_config` and
-exposed as environment variables at runtime via `${user_config.KEY}`
-substitution in `mcp_config.env`. Conditional visibility / branching steps
+Every `userConfig` entry, and every top-level `setup.steps` question, becomes
+an MCPB `user_config` entry that reaches the server as an environment variable
+through `${user_config.KEY}` substitution in `mcp_config.env`. The variable is
+the entry's `env` (or the step's `env`), else the key in UPPER_SNAKE_CASE
+(`deskApiKey` → `DESK_API_KEY`). The deployment's `env` is merged in too, and a
+user's answer wins over it. Conditional visibility / branching steps
 (`showWhen`, `next`) have no MCPB equivalent — the generator logs a warning
 and renders them unconditionally.
 

@@ -72,6 +72,12 @@ export const serverDefaultsSchema = z
   })
   .strict();
 
+export const ENV_VAR_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+export const envVarNameSchema = z
+  .string()
+  .regex(ENV_VAR_NAME_PATTERN, 'Must be an environment variable name (letters, digits, _; not starting with a digit)');
+
 // ============================================
 // Build Options
 // ============================================
@@ -238,6 +244,8 @@ export const mcpbUserConfigEntrySchema = z
     sensitive: z.boolean().optional(),
     min: z.number().optional(),
     max: z.number().optional(),
+    /** Env var the server receives the value in. @default the key in UPPER_SNAKE_CASE */
+    env: envVarNameSchema.optional(),
   })
   .strict();
 
@@ -292,7 +300,7 @@ export const mcpbDeploymentSchema = deploymentBaseSchema
     privacyPolicies: z.array(z.string()).optional(),
     /** Runtime/platform/client compatibility constraints. */
     compatibility: mcpbCompatibilitySchema.optional(),
-    /** User-configurable inputs (injected as env vars at runtime). */
+    /** User-configurable inputs, each passed to the server as an env var (`mcp_config.env`). */
     userConfig: z.record(z.string(), mcpbUserConfigEntrySchema).optional(),
     /** Single-executable-application binary integration. */
     sea: z
@@ -304,7 +312,7 @@ export const mcpbDeploymentSchema = deploymentBaseSchema
       })
       .strict()
       .optional(),
-    /** Include node_modules/ in archive (opt-in, defaults off). */
+    /** @deprecated No effect: the server bundle inlines its runtime packages, so the archive never ships node_modules. */
     includeNodeModules: z.boolean().optional(),
     /** Produce byte-identical archives across builds. @default true */
     deterministic: z.boolean().optional(),
@@ -555,6 +563,34 @@ export const skillsCliConfigSchema = z
   .strict();
 
 // ============================================
+// Setup questionnaire
+// ============================================
+//
+// `setup.steps` drive the install-time questionnaire (`frontmcp install` /
+// `frontmcp configure`) and become MCPB `user_config` entries.
+
+export const setupStepSchema = z
+  .object({
+    id: z.string().min(1),
+    prompt: z.string(),
+    description: z.string().optional(),
+    schema: z.unknown().optional(),
+    jsonSchema: z.record(z.string(), z.unknown()).optional(),
+    env: envVarNameSchema.optional(),
+    sensitive: z.boolean().optional(),
+    group: z.string().optional(),
+    next: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
+    showWhen: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
+  })
+  .strict();
+
+export const setupConfigSchema = z
+  .object({
+    steps: z.array(setupStepSchema),
+  })
+  .strict();
+
+// ============================================
 // Top-Level Config
 // ============================================
 
@@ -570,6 +606,7 @@ export const frontmcpConfigSchema = z
     nodeVersion: z.string().optional(),
     deployments: z.array(deploymentTargetSchema).min(1, 'At least one deployment target required'),
     build: buildOptionsSchema.optional(),
+    setup: setupConfigSchema.optional(),
 
     // Issue #409 — project-defined CLI verbs
     cli: cliExtensionConfigSchema.optional(),
