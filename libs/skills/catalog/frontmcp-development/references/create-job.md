@@ -130,6 +130,7 @@ class GenerateReportJob extends JobContext {
 - `this.get(token)` -- a job declared on an `@App` resolves that app's providers, as the app's tools do (up to 1.9.1 it saw only the server's).
 - `this.context`, `this.remember`, `this.featureFlags` and other CONTEXT-scoped providers -- a job started by `execute_job` or `execute_workflow` runs with the caller's request context; a background run gets its own copy (same session, auth and trace, no transport), or a fresh context for the passed auth when the caller had none. Up to 1.9.1 they threw inside a job.
 - `this.input` -- the validated input object.
+- `this.signal` -- an `AbortSignal` aborted when the workflow step running this attempt times out (its reason is the `WorkflowJobTimeoutError`); `undefined` outside a workflow step. `this.fetch()` is aborted with it. The step does not stop `execute()`, so a long job should pass the signal on or check it.
 - `this.metadata` -- job metadata from the decorator.
 - `this.scope` -- the current scope instance.
 
@@ -391,7 +392,7 @@ class ExportReportJob extends JobContext {
 
 ## Function Builder
 
-For simple jobs that do not need a class, use the `job()` function builder. The callback receives `(input, ctx)` where `ctx` is the run's `JobContext`, the object a class job reaches as `this`: `ctx.log()`, `ctx.progress()`, `ctx.get()`, `ctx.tryGet()`, `ctx.attempt` and `ctx.respond()` behave as they do in a class. Up to 1.9.0 `log()` and `progress()` were protected, so only a `JobContext` class could call them.
+For simple jobs that do not need a class, use the `job()` function builder. The callback receives `(input, ctx)` where `ctx` is the run's `JobContext`, the object a class job reaches as `this`: `ctx.log()`, `ctx.progress()`, `ctx.get()`, `ctx.tryGet()`, `ctx.attempt`, `ctx.signal` and `ctx.respond()` behave as they do in a class. Up to 1.9.0 `log()` and `progress()` were protected, so only a `JobContext` class could call them.
 
 ```typescript
 import { job, z } from '@frontmcp/sdk';

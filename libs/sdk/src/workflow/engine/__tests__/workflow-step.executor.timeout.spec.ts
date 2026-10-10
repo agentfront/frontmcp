@@ -9,13 +9,14 @@ import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
 
-import { App, Job, JobContext, LogLevel, ProviderScope } from '../../../common';
+import { App, Job, job, JobContext, LogLevel, Plugin, ProviderScope, type FlowCtxOf } from '../../../common';
 import type { WorkflowStep } from '../../../common/metadata/workflow.metadata';
 import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../../context';
 import { type DirectMcpServer } from '../../../direct/direct.types';
 import { InvalidOutputError } from '../../../errors/mcp.error';
 import { WorkflowJobTimeoutError } from '../../../errors/workflow.errors';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
+import { JobHook } from '../../../index';
 import type { JobRegistryInterface } from '../../../job/job.registry';
 import { type Scope } from '../../../scope/scope.instance';
 import { WorkflowStepExecutor } from '../workflow-step.executor';
@@ -88,6 +89,66 @@ class SlowProvidersJob extends JobContext {
 })
 class SlowApp {}
 
+const startedTrace: string[] = [];
+let finishStartedJob: () => void = () => undefined;
+let startedJobSignal: AbortSignal | undefined;
+
+@Job({ name: 'started', inputSchema: {}, outputSchema: { ok: z.boolean() } })
+class StartedJob extends JobContext {
+  async execute() {
+    startedJobSignal = this.signal;
+    await new Promise<void>((resolve) => (finishStartedJob = resolve));
+    startedTrace.push('execute returned');
+    return { ok: true };
+  }
+}
+
+@Job({ name: 'started-failing', inputSchema: {}, outputSchema: { ok: z.boolean() } })
+class StartedFailingJob extends JobContext {
+  async execute(): Promise<{ ok: boolean }> {
+    await new Promise<void>((resolve) => (finishStartedJob = resolve));
+    startedTrace.push('execute threw');
+    throw new Error('the job failed on its own');
+  }
+}
+
+@Job({ name: 'signal-probe', inputSchema: {}, outputSchema: { signal: z.string() } })
+class SignalProbeJob extends JobContext {
+  async execute() {
+    return { signal: this.signal ? 'present' : 'none' };
+  }
+}
+
+const startedFunctionJob = job({ name: 'started-function', inputSchema: {}, outputSchema: { ok: z.boolean() } })(async (
+  _input,
+  ctx,
+) => {
+  startedJobSignal = ctx.signal;
+  await new Promise<void>((resolve) => (finishStartedJob = resolve));
+  return { ok: true };
+});
+
+@Plugin({ name: 'step-audit' })
+class StepAuditPlugin {
+  @JobHook.Did('execute')
+  executed() {
+    startedTrace.push('did:execute');
+  }
+
+  @JobHook.Did('finalize')
+  finalized(flowCtx: FlowCtxOf<'jobs:execute-job'>) {
+    startedTrace.push(`did:finalize:${flowCtx.state.flowError?.constructor.name ?? 'none'}`);
+  }
+}
+
+@App({
+  id: 'started-app',
+  name: 'Started',
+  jobs: [StartedJob, StartedFailingJob, SignalProbeJob, startedFunctionJob],
+  plugins: [StepAuditPlugin],
+})
+class StartedApp {}
+
 describe('WorkflowStepExecutor', () => {
   let server: DirectMcpServer;
   let jobs: JobRegistryInterface;
@@ -95,7 +156,7 @@ describe('WorkflowStepExecutor', () => {
   beforeAll(async () => {
     server = await FrontMcpInstance.createDirect({
       info: { name: 'workflow-step-timeout', version: '1.0.0' },
-      apps: [PipedApp, SlowApp],
+      apps: [PipedApp, SlowApp, StartedApp],
       logging: { level: LogLevel.Off },
       authorities: {
         pipes: [
@@ -121,6 +182,8 @@ describe('WorkflowStepExecutor', () => {
     providerLoad = undefined;
     executions.length = 0;
     slowJobsBuilt = 0;
+    startedTrace.length = 0;
+    startedJobSignal = undefined;
   });
 
   describe('step timeout', () => {
@@ -181,6 +244,62 @@ describe('WorkflowStepExecutor', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(executions).toEqual([]);
+    });
+  });
+
+  describe('step timeout of a started job (#815)', () => {
+    it("ends the abandoned attempt's flow as failed, so Did(execute) does not run and finalize sees the timeout", async () => {
+      const step = { id: 'step-1', jobName: 'started', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;
+      const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {} });
+
+      await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
+      finishStartedJob();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(startedTrace).toEqual(['execute returned', 'did:finalize:WorkflowJobTimeoutError']);
+    });
+
+    it('aborts the signal the job reads from this.signal when its step gives up', async () => {
+      const step = { id: 'step-1', jobName: 'started', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;
+      const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {} });
+
+      await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
+
+      expect(startedJobSignal?.aborted).toBe(true);
+      expect(startedJobSignal?.reason).toBeInstanceOf(WorkflowJobTimeoutError);
+      finishStartedJob();
+    });
+
+    it('gives a functional job the signal as ctx.signal', async () => {
+      const step = {
+        id: 'step-1',
+        jobName: 'started-function',
+        timeout: 20,
+        retry: { maxAttempts: 1 },
+      } as WorkflowStep;
+      const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {} });
+
+      await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
+
+      expect(startedJobSignal?.aborted).toBe(true);
+      finishStartedJob();
+    });
+
+    it('fails the abandoned attempt with the timeout, not the error the job threw after it', async () => {
+      const step = { id: 'step-1', jobName: 'started-failing', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;
+      const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {} });
+
+      await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
+      finishStartedJob();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(startedTrace).toEqual(['execute threw', 'did:finalize:WorkflowJobTimeoutError']);
+    });
+
+    it('gives a job run outside a workflow step no signal', async () => {
+      const response = await server.callTool('execute_job', { name: 'signal-probe' });
+
+      expect((response.structuredContent as { result?: unknown }).result).toEqual({ signal: 'none' });
     });
   });
 

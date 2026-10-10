@@ -61,7 +61,10 @@ export interface JobAttemptRequest {
   run?: JobRunRecorder;
   /** The workflow step the attempt runs for, if any. */
   workflow?: JobAttemptWorkflowStep;
-  /** Aborted when the caller gave up on the attempt (a workflow step's timeout): the job is not started. */
+  /**
+   * Aborted when the caller gave up on the attempt (a workflow step's timeout): a job not started yet is
+   * not started, and a started one reads it as `this.signal` while its flow ends as failed.
+   */
   signal?: AbortSignal;
 }
 

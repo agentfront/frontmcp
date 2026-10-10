@@ -1,3 +1,4 @@
+import { type FrontMcpFetchInit } from '@frontmcp/auth';
 import { type FuncType, type Type } from '@frontmcp/di';
 
 import { type CallSurface } from '../availability';
@@ -14,6 +15,8 @@ export type JobCtorArgs<In> = ExecutionContextBaseArgs & {
   metadata: JobMetadata;
   input: In;
   attempt: number;
+  /** Aborted when the workflow step running this attempt gives up on it (its `timeout` passed). */
+  signal?: AbortSignal;
 };
 
 export abstract class JobContext<
@@ -31,8 +34,15 @@ export abstract class JobContext<
   private readonly _attempt: number;
   private readonly _logs: string[] = [];
 
+  /**
+   * Aborted when the workflow step running this attempt gives up on it (its `timeout` passed), with
+   * the `WorkflowJobTimeoutError` as its reason; undefined outside a workflow step. The attempt is not
+   * stopped for the job: pass the signal to `fetch` and other cancellable work, or check it.
+   */
+  readonly signal?: AbortSignal;
+
   constructor(args: JobCtorArgs<In>) {
-    const { metadata, input, providers, logger, attempt } = args;
+    const { metadata, input, providers, logger, attempt, signal } = args;
     super({
       providers,
       logger: logger.child(`job:${metadata.id ?? metadata.name}`),
@@ -43,9 +53,17 @@ export abstract class JobContext<
     this.metadata = metadata;
     this._input = input;
     this._attempt = attempt;
+    this.signal = signal;
   }
 
   abstract execute(input: In): Promise<Out>;
+
+  /** Like {@link ExecutionContextBase.fetch}, and also aborted with {@link signal}. */
+  override fetch(input: RequestInfo | URL, init?: FrontMcpFetchInit | RequestInit): Promise<Response> {
+    const context = this.fetchContext(init);
+    if (context && this.signal) return context.fetch(input, init, this.signal);
+    return super.fetch(input, init);
+  }
 
   get input(): In {
     return this._input;

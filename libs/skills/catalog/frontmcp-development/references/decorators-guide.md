@@ -625,7 +625,7 @@ class SyncDataJob extends JobContext {
 | `dependsOn?`       | Array of step IDs that must complete first                      |
 | `condition?`       | `(steps) => boolean` — skip step if returns false               |
 | `continueOnError?` | Continue workflow if this step fails (default: `false`)         |
-| `timeout?`         | Per-step timeout in ms                                          |
+| `timeout?`         | Per-step timeout in ms; aborts the job's `this.signal`          |
 | `retry?`           | Per-step retry config (same shape as `@Job.retry`)              |
 
 ```typescript
