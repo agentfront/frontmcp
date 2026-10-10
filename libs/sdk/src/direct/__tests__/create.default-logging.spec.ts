@@ -1,7 +1,7 @@
 /**
  * A server embedded with `create()` is quiet by default (#824): without `logging` it logs at `warn`
  * (or the level FRONTMCP_LOG_LEVEL names), a tool call writes nothing at `info`, and the
- * no-distributed-storage warning appears at most once however many scopes the server has.
+ * no-distributed-storage warning appears once (the server has one scope, #825).
  */
 import 'reflect-metadata';
 
@@ -58,11 +58,11 @@ describe('create() without logging config (#824)', () => {
     else process.env['FRONTMCP_LOG_LEVEL'] = previousEnv.logLevel;
   });
 
-  it('writes nothing below warn while starting and on each call, and the storage warning at most once', async () => {
+  it('writes nothing below warn while starting and on each call, and the storage warning once', async () => {
     const lines = await serveAndCall();
 
     expect(belowWarn(lines)).toEqual([]);
-    expect(lines.filter((line) => line.text.includes('No distributed storage backend')).length).toBeLessThanOrEqual(1);
+    expect(lines.filter((line) => line.text.includes('No distributed storage backend'))).toHaveLength(1);
   });
 
   it('keeps the per-call lines below info even at the info level', async () => {

@@ -132,7 +132,7 @@ create({
   // Required
   info: { name: string; version: string },
 
-  // App-level (merged into synthetic app)
+  // App-level (merged into one synthetic app, which joins the server's root scope)
   tools?: ToolType[],
   resources?: ResourceType[],
   prompts?: PromptType[],
@@ -141,9 +141,9 @@ create({
   plugins?: PluginType[],
   providers?: ProviderType[],
   adapters?: AdapterType[],
-  auth?: AuthOptionsInput,
 
   // Server-level: every other @FrontMcp option, passed on as it is (except http and splitByApp)
+  auth?: AuthOptionsInput, // the server's auth, as @FrontMcp({ auth })
   redis?: RedisOptionsInput,
   transport?: TransportOptionsInput,
   logging?: LoggingOptionsInput, // without it: `warn`, or the level FRONTMCP_LOG_LEVEL names
@@ -159,6 +159,8 @@ create({
   workerEnv?: Readonly<Record<string, unknown>>, // default bindings for this.workerEnv (per call: callTool(..., { workerEnv }))
 })
 ```
+
+A `create()` server builds one scope, the root scope, which holds the synthetic app (`standalone: false`) and applies `auth` as the server's auth. A server-scoped plugin (`@Plugin({ scope: 'server' })`) in `plugins` installs there. Up to 1.9.4 the synthetic app had a scope of its own and an empty root scope started too, so every `create()` server ran two task stores, two task runners and their timers, and a server-scoped plugin failed with `InvalidPluginScopeError`.
 
 ## Platform-Specific Connections
 

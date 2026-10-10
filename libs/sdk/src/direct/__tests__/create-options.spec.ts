@@ -32,7 +32,7 @@ class PurgeClosedTool extends ToolContext {
 const SET_BY_CREATE = ['apps', 'serve'];
 
 /** `@FrontMcp` options `create()` gives its synthetic app, which serves them to the whole server. */
-const GIVEN_TO_THE_APP = ['tools', 'resources', 'skills', 'plugins', 'adapters', 'providers', 'auth'];
+const GIVEN_TO_THE_APP = ['tools', 'resources', 'skills', 'plugins', 'adapters', 'providers'];
 
 const serverOptionNames = [...Object.keys(frontMcpBaseSchema.shape), 'auth'].filter(
   (name) => name !== 'info' && !SET_BY_CREATE.includes(name),

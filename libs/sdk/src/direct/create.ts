@@ -43,7 +43,8 @@ let instanceCache = new Map<string, Promise<DirectMcpServer>>();
 
 /**
  * Convert a flat `CreateConfig` into a `FrontMcpConfigInput` with a synthetic app. The app-level fields go to the
- * app; every other `@FrontMcp` option is passed on to the server as it is.
+ * app, which joins the server's root scope (`standalone: false`), so the server builds one scope; `auth` and every
+ * other `@FrontMcp` option are passed on to the server as they are.
  * @internal Exported for testing.
  */
 export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
@@ -79,6 +80,7 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
   // Set individual metadata tokens (same as @App() decorator)
   const appMeta: Record<string, unknown> = {
     name,
+    standalone: false,
     tools,
     resources,
     prompts,
@@ -88,7 +90,6 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
     authProviders,
     agents,
     skills,
-    auth,
     jobs: jobDefinitions,
     workflows: workflowDefinitions,
   };
@@ -102,7 +103,7 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
 
   // A server embedded with create() is quiet unless asked: `warn`, or the level FRONTMCP_LOG_LEVEL names.
   const logging = serverOptions.logging ?? { level: logLevelFromEnv() ?? LogLevel.Warn };
-  return { ...serverOptions, logging, apps: [syntheticApp], serve: false };
+  return { ...serverOptions, ...(auth !== undefined && { auth }), logging, apps: [syntheticApp], serve: false };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
