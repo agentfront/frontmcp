@@ -23,10 +23,11 @@
 
 import 'reflect-metadata';
 
+import { setMachineIdOverride } from '@frontmcp/utils';
+
 import { LogLevel, type FrontMcpConfigInput } from '../common';
 import { FrontMcpLocalAppTokens } from '../common/tokens';
 import { logLevelFromEnv } from '../common/types/options/logging/schema';
-import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type { CreateConfig } from './create.types';
 import type { DirectMcpServer } from './direct.types';
 
@@ -104,14 +105,6 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
   return { ...serverOptions, logging, apps: [syntheticApp], serve: false };
 }
 
-/** `@frontmcp/utils`, loaded lazily (see `importWithRequireFallback`). */
-function loadUtils(): Promise<typeof import('@frontmcp/utils')> {
-  return importWithRequireFallback(
-    () => import('@frontmcp/utils'),
-    () => require('@frontmcp/utils') as typeof import('@frontmcp/utils'),
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Factory function
 // ─────────────────────────────────────────────────────────────────────────────
@@ -162,7 +155,6 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
     try {
       // Apply machine ID override if provided
       if (machineIdWasSet) {
-        const { setMachineIdOverride } = await loadUtils();
         setMachineIdOverride(config.machineId);
       }
 
@@ -180,7 +172,6 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
             instanceCache.delete(cacheKey);
           }
           if (machineIdWasSet) {
-            const { setMachineIdOverride } = await loadUtils();
             setMachineIdOverride(undefined);
           }
           return originalDispose();
@@ -194,7 +185,6 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
         instanceCache.delete(cacheKey);
       }
       if (machineIdWasSet) {
-        const { setMachineIdOverride } = await loadUtils();
         setMachineIdOverride(undefined);
       }
       throw error;
