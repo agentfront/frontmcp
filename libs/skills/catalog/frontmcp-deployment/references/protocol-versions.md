@@ -9,6 +9,11 @@ FrontMCP serves **every MCP revision from `2024-11-05` through `2026-07-28`** on
 the same endpoint. The revision is selected per request — there is no
 configuration switch and no server-side flag to flip.
 
+`initialize` answers with the requested revision when it is one of these (other
+than `2026-07-28`, which has no `initialize`), and with `2025-11-25` otherwise, so
+it never names a revision `server/discover`'s `supportedVersions` leaves out (the
+`2024-10-07` draft included).
+
 ## When to Use This Skill
 
 ### Must Use

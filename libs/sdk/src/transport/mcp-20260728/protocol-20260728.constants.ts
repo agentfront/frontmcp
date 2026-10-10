@@ -21,6 +21,14 @@ export const FRONTMCP_SUPPORTED_PROTOCOL_VERSIONS = [
 ] as const;
 
 /**
+ * Revisions `initialize` negotiates: every supported revision except 2026-07-28, which removed
+ * `initialize`. A request for any other revision is answered with the latest of these.
+ */
+export const INITIALIZE_PROTOCOL_VERSIONS: readonly string[] = FRONTMCP_SUPPORTED_PROTOCOL_VERSIONS.filter(
+  (version) => version !== PROTOCOL_2026_07_28,
+);
+
+/**
  * Revisions handled by the pre-existing session/`initialize` pipeline.
  *
  * A request declaring one of these is NOT claimed by the 2026 path, which is

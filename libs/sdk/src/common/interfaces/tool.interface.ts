@@ -241,8 +241,9 @@ export abstract class ToolContext<
    * Notify subscribed clients that a resource's contents changed.
    *
    * Sends `notifications/resources/updated` to every session subscribed to `uri`
-   * (via `resources/subscribe`); a no-op for sessions that aren't subscribed. Call
-   * this when a tool mutates state that backs a `@Resource` so subscribers re-fetch.
+   * (via `resources/subscribe`) and to every MCP 2026-07-28 `subscriptions/listen`
+   * stream subscribed to it; a no-op for callers that aren't subscribed. Call this
+   * when a tool mutates state that backs a `@Resource` so subscribers re-fetch.
    *
    * @param uri - The URI of the resource whose contents changed.
    *
@@ -256,7 +257,7 @@ export abstract class ToolContext<
    * ```
    */
   notifyResourceUpdated(uri: string): void {
-    this.scope.notifications.notifyResourceUpdated(uri);
+    this.scope.resources.notifyContentChanged(uri);
   }
 
   /**
