@@ -23,8 +23,9 @@
 
 import 'reflect-metadata';
 
-import type { FrontMcpConfigInput } from '../common';
+import { LogLevel, type FrontMcpConfigInput } from '../common';
 import { FrontMcpLocalAppTokens } from '../common/tokens';
+import { logLevelFromEnv } from '../common/types/options/logging/schema';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type { CreateConfig } from './create.types';
 import type { DirectMcpServer } from './direct.types';
@@ -98,7 +99,9 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
     }
   }
 
-  return { ...serverOptions, apps: [syntheticApp], serve: false };
+  // A server embedded with create() is quiet unless asked: `warn`, or the level FRONTMCP_LOG_LEVEL names.
+  const logging = serverOptions.logging ?? { level: logLevelFromEnv() ?? LogLevel.Warn };
+  return { ...serverOptions, logging, apps: [syntheticApp], serve: false };
 }
 
 /** `@frontmcp/utils`, loaded lazily (see `importWithRequireFallback`). */

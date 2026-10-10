@@ -146,7 +146,7 @@ create({
   // Server-level: every other @FrontMcp option, passed on as it is (except http and splitByApp)
   redis?: RedisOptionsInput,
   transport?: TransportOptionsInput,
-  logging?: LoggingOptionsInput,
+  logging?: LoggingOptionsInput, // without it: `warn`, or the level FRONTMCP_LOG_LEVEL names
   elicitation?: ElicitationOptionsInput,
   output?: OutputPolicy,  // as @FrontMcp({ output })
   throttle?: GuardConfig, // as @FrontMcp({ throttle })

@@ -274,20 +274,20 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
   @Stage('findTools')
   async findTools() {
-    this.logger.info('findTools:start');
+    this.logger.verbose('findTools:start');
 
     try {
       // Check for skills-only mode - return empty tools array
       const { authInfo } = this.state.required;
       if (authInfo.sessionIdPayload?.skillsOnlyMode) {
-        this.logger.info('findTools: skills-only mode - returning empty tools array');
+        this.logger.verbose('findTools: skills-only mode - returning empty tools array');
         this.state.set('tools', []);
         this.logger.verbose('findTools:done (skills-only mode)');
         return;
       }
 
       const apps = this.scope.apps.getApps();
-      this.logger.info(`findTools: discovered ${apps.length} app(s)`);
+      this.logger.verbose(`findTools: discovered ${apps.length} app(s)`);
 
       const tools: Array<{ appName: string; tool: ToolEntry }> = [];
       const seenToolIds = new Set<string>();
@@ -316,7 +316,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         }
       }
 
-      this.logger.info(`findTools: total tools collected=${tools.length}`);
+      this.logger.verbose(`findTools: total tools collected=${tools.length}`);
       if (tools.length === 0) {
         this.logger.warn('findTools: no tools found across apps');
       }
@@ -399,7 +399,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         const extra = conflicts.size > 5 ? `, +${conflicts.size - 5} more` : '';
         this.logger.warn(`resolveConflicts: ${conflicts.size} name conflict(s) detected: ${preview}${extra}`);
       } else {
-        this.logger.info('resolveConflicts: no name conflicts detected');
+        this.logger.verbose('resolveConflicts: no name conflicts detected');
       }
 
       const resolved = found.map(({ appName, tool }) => {
@@ -679,7 +679,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
       const preview = this.sample(tools.map((t) => t.name)).join(', ');
       const extra = tools.length > 5 ? `, +${tools.length - 5} more` : '';
-      this.logger.info(`parseTools: prepared ${tools.length} tool descriptor(s): ${preview}${extra}`);
+      this.logger.verbose(`parseTools: prepared ${tools.length} tool descriptor(s): ${preview}${extra}`);
 
       // Respond with tools and optional nextCursor for pagination
       if (nextCursor) {
@@ -687,7 +687,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       } else {
         this.respond({ tools });
       }
-      this.logger.info('parseTools: response sent');
+      this.logger.verbose('parseTools: response sent');
       this.logger.verbose('parseTools:done');
     } catch (error) {
       if (error instanceof FlowControl) throw error;

@@ -154,7 +154,7 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
 
   @Stage('findResources')
   async findResources() {
-    this.logger.info('findResources:start');
+    this.logger.verbose('findResources:start');
 
     try {
       const resources: Array<{ ownerName: string; resource: ResourceEntry }> = [];
@@ -181,7 +181,7 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
         }
       }
 
-      this.logger.info(
+      this.logger.verbose(
         `findResources: total resources collected=${resources.length} (deduped from ${scopeResources.length})`,
       );
       if (resources.length === 0) {
@@ -250,7 +250,7 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
         const extra = conflicts.size > 5 ? `, +${conflicts.size - 5} more` : '';
         this.logger.warn(`resolveConflicts: ${conflicts.size} name conflict(s) detected: ${preview}${extra}`);
       } else {
-        this.logger.info('resolveConflicts: no name conflicts detected');
+        this.logger.verbose('resolveConflicts: no name conflicts detected');
       }
 
       const resolved = found.map(({ ownerName, resource }) => {
@@ -335,10 +335,10 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
 
       const preview = this.sample(resources.map((r) => r.name)).join(', ');
       const extra = resources.length > 5 ? `, +${resources.length - 5} more` : '';
-      this.logger.info(`parseResources: prepared ${resources.length} resource descriptor(s): ${preview}${extra}`);
+      this.logger.verbose(`parseResources: prepared ${resources.length} resource descriptor(s): ${preview}${extra}`);
 
       this.respond({ resources });
-      this.logger.info('parseResources: response sent');
+      this.logger.verbose('parseResources: response sent');
       this.logger.verbose('parseResources:done');
     } catch (error) {
       if (error instanceof FlowControl) throw error;

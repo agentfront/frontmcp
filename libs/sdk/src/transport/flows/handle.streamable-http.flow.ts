@@ -367,7 +367,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     this.state.set(stateSchema.parse({ token, session }));
 
-    logger.info('parseInput: session resolved', { sessionId: session.id?.slice(0, 20) });
+    logger.verbose('parseInput: session resolved', { sessionId: session.id?.slice(0, 20) });
   }
 
   @Stage('router')
@@ -389,17 +389,17 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     this.state.set('requestType', classification.requestType);
 
     if (classification.requestType === 'sseListener') {
-      logger.info('router: requestType=sseListener, method=GET');
+      logger.verbose('router: requestType=sseListener, method=GET');
     } else if (classification.requestType === 'initialize') {
-      logger.info('router: requestType=initialize, method=POST');
+      logger.verbose('router: requestType=initialize, method=POST');
     } else if (classification.requestType === 'extApps') {
       const method = (request.body as { method?: string } | undefined)?.method;
-      logger.info(`router: requestType=extApps, method=${method}`);
+      logger.verbose(`router: requestType=extApps, method=${method}`);
     } else if (classification.requestType === 'elicitResult') {
-      logger.info('router: requestType=elicitResult, method=POST');
+      logger.verbose('router: requestType=elicitResult, method=POST');
     } else {
       const method = (request.body as { method?: string } | undefined)?.method;
-      logger.info(`router: requestType=message, method=${method}`);
+      logger.verbose(`router: requestType=message, method=${method}`);
     }
   }
 
@@ -501,7 +501,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
 
-    logger.info('onElicitResult: starting', {
+    logger.verbose('onElicitResult: starting', {
       sessionId: session.id?.slice(0, 20),
       hasToken: !!token,
     });
@@ -573,7 +573,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
 
-    logger.info('onMessage: starting', {
+    logger.verbose('onMessage: starting', {
       sessionId: session.id?.slice(0, 20),
       hasToken: !!token,
     });
@@ -730,7 +730,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       return;
     }
 
-    logger.info('onExtApps: starting', {
+    logger.verbose('onExtApps: starting', {
       sessionId: session.id?.slice(0, 20),
       method: (request.body as { method?: string })?.method,
     });
