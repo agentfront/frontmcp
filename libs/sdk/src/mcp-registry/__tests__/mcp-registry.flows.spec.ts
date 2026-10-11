@@ -1,8 +1,4 @@
-/**
- * MCP Registry support: the domain proof, the SEP-2127 server card and the AI Catalog, driven over
- * the fetch handler (`createFetchHandler`, what a Cloudflare Worker runs) and the Express host
- * (`createHandler`, what Node, Vercel and Lambda run).
- */
+/** The MCP Registry documents over `createFetchHandler` (Workers) and the Express host (Node, Vercel, Lambda). */
 import 'reflect-metadata';
 
 import * as http from 'node:http';
@@ -37,6 +33,7 @@ interface TestHost {
   /** The origin the server card names: the request's own. */
   origin: string;
   get(path: string, headers?: Record<string, string>): Promise<Response>;
+  send(method: string, path: string, headers?: Record<string, string>): Promise<Response>;
 }
 
 const realFetch = globalThis.fetch;
@@ -44,10 +41,9 @@ const nodeServers: http.Server[] = [];
 
 async function createFetchHost(config: FrontMcpConfigInput): Promise<TestHost> {
   const handler = await FrontMcpInstance.createFetchHandler(config);
-  return {
-    origin: `https://${PUBLIC_HOST}`,
-    get: (path, headers) => handler(new Request(`https://${PUBLIC_HOST}${path}`, { headers })),
-  };
+  const send = (method: string, path: string, headers?: Record<string, string>) =>
+    handler(new Request(`https://${PUBLIC_HOST}${path}`, { method, headers }));
+  return { origin: `https://${PUBLIC_HOST}`, send, get: (path, headers) => send('GET', path, headers) };
 }
 
 async function createExpressHost(config: FrontMcpConfigInput): Promise<TestHost> {
@@ -56,7 +52,9 @@ async function createExpressHost(config: FrontMcpConfigInput): Promise<TestHost>
   nodeServers.push(server);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { origin, get: (path, headers) => realFetch(`${origin}${path}`, { headers, redirect: 'manual' }) };
+  const send = (method: string, path: string, headers?: Record<string, string>) =>
+    realFetch(`${origin}${path}`, { method, headers, redirect: 'manual' });
+  return { origin, send, get: (path, headers) => send('GET', path, headers) };
 }
 
 afterAll(async () => {
@@ -157,14 +155,23 @@ describe.each([
       expect((await host.get('/server-card')).status).toBe(404);
     });
 
-    it('sends the card with public CORS, caching and an ETag, whatever http.cors allows', async () => {
+    it('sends the card with public CORS and an ETag, whatever http.cors allows, and no-store without a pinned URL', async () => {
       const response = await host.get('/mcp/server-card', { origin: 'https://inspector.example.com' });
       expect(response.headers.get('access-control-allow-origin')).toBe('*');
       expect(response.headers.get('access-control-allow-methods')).toBe('GET');
       expect(response.headers.get('access-control-allow-headers')).toBe('Content-Type, If-None-Match');
       expect(response.headers.get('access-control-expose-headers')).toBe('ETag');
-      expect(response.headers.get('cache-control')).toBe('public, max-age=3600');
+      expect(response.headers.get('cache-control')).toBe('no-store');
       expect(response.headers.get('etag')).toMatch(/^"[A-Za-z0-9_-]+"$/);
+    });
+
+    it("leaves the preflight to the host's own CORS when http.cors is set", async () => {
+      const response = await host.send('OPTIONS', '/mcp/server-card', {
+        origin: 'https://app.example.com',
+        'access-control-request-method': 'GET',
+      });
+      expect(response.status).toBe(204);
+      expect(response.headers.get('access-control-allow-origin')).toBe('https://app.example.com');
     });
 
     it('answers 304 to an If-None-Match naming the card', async () => {
@@ -194,10 +201,15 @@ describe.each([
       });
     });
 
-    it('names FRONTMCP_PUBLIC_URL in the card and the catalog when it is set', async () => {
+    it('names FRONTMCP_PUBLIC_URL in the card and the catalog, and lets the card be cached, when it is set', async () => {
       restoreEnv.push(withEnv('FRONTMCP_PUBLIC_URL', 'https://public.acme.com/'));
-      const card = await (await host.get('/mcp/server-card')).json();
+      const response = await host.get('/mcp/server-card');
+      expect(response.headers.get('cache-control')).toBe('public, max-age=3600');
+      const card = await response.json();
       expect(card.remotes[0].url).toBe('https://public.acme.com/mcp');
+      const revalidated = await host.get('/mcp/server-card', { 'if-none-match': response.headers.get('etag') ?? '' });
+      expect(revalidated.status).toBe(304);
+      expect(revalidated.headers.get('cache-control')).toBe('public, max-age=3600');
       const catalog = await (await host.get('/.well-known/ai-catalog.json')).json();
       expect(catalog.entries[0].url).toBe('https://public.acme.com/mcp/server-card');
     });
@@ -227,6 +239,19 @@ describe.each([
         identifier: 'urn:air:acme.github.io:mcp:weather',
         url: `${host.origin}/server-card`,
       });
+    });
+
+    it('answers the preflight itself without http.cors', async () => {
+      const response = await host.send('OPTIONS', '/server-card', {
+        origin: 'https://inspector.example.com',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'if-none-match',
+      });
+      expect(response.status).toBe(204);
+      expect(response.headers.get('access-control-allow-origin')).toBe('*');
+      expect(response.headers.get('access-control-allow-methods')).toBe('GET');
+      expect(response.headers.get('access-control-allow-headers')).toBe('Content-Type, If-None-Match');
+      expect(await response.text()).toBe('');
     });
   });
 

@@ -29,11 +29,11 @@ clients discover a listed server through its server card. `@FrontMcp({ registry 
 
 ## What the server serves
 
-| Endpoint                             | Served when                                                       |
-| ------------------------------------ | ----------------------------------------------------------------- |
-| `GET /.well-known/mcp-registry-auth` | `registry` is set and a public key is configured                  |
-| `GET <entryPath>/server-card`        | `registry.name` is set and `serverCard` isn't `false`             |
-| `GET /.well-known/ai-catalog.json`   | the card is served and `aiCatalog` isn't `false`                  |
+| Endpoint                             | Served when                                           |
+| ------------------------------------ | ----------------------------------------------------- |
+| `GET /.well-known/mcp-registry-auth` | `registry` is set and a public key is configured      |
+| `GET <entryPath>/server-card`        | `registry.name` is set and `serverCard` isn't `false` |
+| `GET /.well-known/ai-catalog.json`   | the card is served and `aiCatalog` isn't `false`      |
 
 - The domain proof is `text/plain`, `v=MCPv1; k=ed25519; p=<base64 key>`, always at the root of the
   host whatever `http.entryPath` is (the Registry fetches nothing else). Without a valid key it
@@ -41,8 +41,11 @@ clients discover a listed server through its server card. `@FrontMcp({ registry 
 - The server card (`application/mcp-server-card+json`) names `registry.name` and `description`,
   `info.version`, `info.title`, `info.websiteUrl`, the `https` entries of `info.icons`,
   `registry.repository`, and one `streamable-http` remote: the server's endpoint with the protocol
-  revisions FrontMCP serves. It is sent with `Access-Control-Allow-Origin: *`,
-  `Cache-Control: public, max-age=3600` and an `ETag` (`If-None-Match` gets a 304).
+  revisions FrontMCP serves. It is sent with `Access-Control-Allow-Origin: *` and an `ETag`
+  (`If-None-Match` gets a 304), and answers `OPTIONS` preflights itself (204) unless `http.cors`
+  answers them first. It is `Cache-Control: public, max-age=3600` when `FRONTMCP_PUBLIC_URL` is set,
+  else `no-store`: without a pinned URL the body names the request's own origin, which a shared
+  cache must not reuse.
 - The AI Catalog (`application/ai-catalog+json`) lists the card as `urn:air:<domain>:mcp:<name>`:
   `com.acme/weather` is `urn:air:acme.com:mcp:weather`.
 - `<entryPath>/server-card` is reserved: an `http.routes` entry there fails at startup.
@@ -64,33 +67,36 @@ clients discover a listed server through its server card. `@FrontMcp({ registry 
 export default class WeatherServer {}
 ```
 
-| Field          | Default                   | Notes                                                                       |
-| -------------- | ------------------------- | --------------------------------------------------------------------------- |
-| `name`         | —                         | Enables the card and the catalog                                            |
-| `description`  | —                         | Required when `name` is set                                                 |
-| `repository`   | —                         | `{ url, source: 'github' \| 'gitlab', subfolder? }`                         |
-| `publicKey`    | —                         | Base64 Ed25519 public key, or a whole `v=MCPv1; k=...; p=...` record        |
-| `publicKeyEnv` | `MCP_REGISTRY_PUBLIC_KEY` | Read on each request when `publicKey` isn't set                             |
-| `serverCard`   | `true` with `name`        |                                                                             |
-| `aiCatalog`    | `true` with the card      |                                                                             |
+| Field          | Default                   | Notes                                                                |
+| -------------- | ------------------------- | -------------------------------------------------------------------- |
+| `name`         | —                         | Enables the card and the catalog                                     |
+| `description`  | —                         | Required when `name` is set                                          |
+| `repository`   | —                         | `{ url, source: 'github' \| 'gitlab', subfolder? }`                  |
+| `publicKey`    | —                         | Base64 Ed25519 public key, or a whole `v=MCPv1; k=...; p=...` record |
+| `publicKeyEnv` | `MCP_REGISTRY_PUBLIC_KEY` | Read on each request when `publicKey` isn't set                      |
+| `serverCard`   | `true` with `name`        |                                                                      |
+| `aiCatalog`    | `true` with the card      |                                                                      |
 
 An invalid `name`, `description` or `publicKey` fails at startup. An invalid key in the environment
 is logged once and the proof answers 404.
 
-## Publish
+## Deploy the domain proof
 
-1. `frontmcp registry keygen` creates the Ed25519 key pair: the private key stays in a 0600 file
-   (`~/.frontmcp/keys/mcp-registry.key`), and it prints the `MCP_REGISTRY_PUBLIC_KEY=<base64>` line.
-2. Set `MCP_REGISTRY_PUBLIC_KEY` where the server runs (Cloudflare `[vars]` or a secret, Vercel or
-   Lambda environment variables) and deploy. It is a public key, never the private one.
-3. Set `FRONTMCP_PUBLIC_URL=https://<your domain>` so the card and the catalog name the public
-   `https` URL rather than the address a proxy forwards to.
-4. `frontmcp registry publish` builds `server.json`, checks the domain proof, logs in to the
-   Registry with the private key and publishes.
+1. Put the Ed25519 public key (`frontmcp registry keygen` prints it) in `MCP_REGISTRY_PUBLIC_KEY`
+   where the server runs (Cloudflare `[vars]` or a secret, Vercel or Lambda environment variables),
+   or in `registry.publicKey`. It is the public key, never the private one.
+2. Set `FRONTMCP_PUBLIC_URL=https://<your domain>` so the card and the catalog name the public
+   `https` URL rather than the address a proxy forwards to, and so the card may be cached.
+3. Deploy, then check the proof with the checklist below.
 
 The namespace follows the exact domain the proof is served on: `acme.com` grants `com.acme/*`, and
 `mcp.acme.com` grants `com.acme.mcp/*` (no subdomains). The Registry fetches
 `https://<domain>/.well-known/mcp-registry-auth` on port 443 and does not follow redirects.
+
+## Publish
+
+Publish with `frontmcp registry publish` from the `frontmcp` CLI, which builds `server.json` from
+this option and the domain proof above.
 
 ## Limits
 
@@ -106,12 +112,12 @@ The namespace follows the exact domain the proof is served on: `acme.com` grants
 
 ## Troubleshooting
 
-| Problem                                  | Cause                                                         | Solution                                                               |
-| ---------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| The proof answers 404                    | No `registry` option, no key, or an invalid key in the env    | Set `registry` and `MCP_REGISTRY_PUBLIC_KEY`; check the startup log    |
-| Publishing is refused with a 403         | The name's namespace isn't the domain the proof is served on  | Use `com.acme/...` for `acme.com`, `com.acme.mcp/...` for `mcp.acme.com` |
-| The card names `http://` or an inner host | No `FRONTMCP_PUBLIC_URL` behind a TLS-terminating proxy       | Set `FRONTMCP_PUBLIC_URL`, or `FRONTMCP_TRUST_PROXY` for a trusted proxy |
-| The card answers 404                     | No `registry.name`, `serverCard: false`, or `splitByApp`      | Set `name`; the card describes the server-level endpoint only          |
+| Problem                                   | Cause                                                        | Solution                                                                 |
+| ----------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| The proof answers 404                     | No `registry` option, no key, or an invalid key in the env   | Set `registry` and `MCP_REGISTRY_PUBLIC_KEY`; check the startup log      |
+| Publishing is refused with a 403          | The name's namespace isn't the domain the proof is served on | Use `com.acme/...` for `acme.com`, `com.acme.mcp/...` for `mcp.acme.com` |
+| The card names `http://` or an inner host | No `FRONTMCP_PUBLIC_URL` behind a TLS-terminating proxy      | Set `FRONTMCP_PUBLIC_URL`, or `FRONTMCP_TRUST_PROXY` for a trusted proxy |
+| The card answers 404                      | No `registry.name`, `serverCard: false`, or `splitByApp`     | Set `name`; the card describes the server-level endpoint only            |
 
 ## Reference
 

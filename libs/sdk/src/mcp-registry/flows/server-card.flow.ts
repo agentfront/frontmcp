@@ -14,6 +14,7 @@ import {
   HttpJsonSchema,
   httpRespond,
   HttpTextSchema,
+  isPublicUrlPinned,
   StageHookOf,
   type FlowPlan,
   type FlowRunOptions,
@@ -27,12 +28,11 @@ const SERVER_CARD_SCHEMA_URL = 'https://static.modelcontextprotocol.io/schemas/v
 const MAX_TITLE_LENGTH = 100;
 const MAX_ICON_SRC_LENGTH = 255;
 
-const SERVER_CARD_HEADERS = {
+const SERVER_CARD_CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET',
   'Access-Control-Allow-Headers': 'Content-Type, If-None-Match',
   'Access-Control-Expose-Headers': 'ETag',
-  'Cache-Control': 'public, max-age=3600',
 };
 
 const isHttpsUrl = (url: string): boolean => url.startsWith('https://');
@@ -51,7 +51,7 @@ const stateSchema = z.object({
 const outputSchema = z.union([HttpJsonSchema, HttpEmptySchema, HttpTextSchema]);
 
 const plan = {
-  pre: ['checkIpFilter', 'acquireQuota'],
+  pre: ['checkIpFilter', 'acquireQuota', 'answerPreflight'],
   execute: ['buildCard', 'respondWithCard'],
 } as const satisfies FlowPlan<string>;
 
@@ -76,13 +76,11 @@ const Stage = StageHookOf(name);
   inputSchema,
   outputSchema,
   access: 'public',
-  middleware: {
-    method: 'GET',
-  },
+  middleware: {},
 })
 export default class ServerCardFlow extends FlowBase<typeof name> {
   static canActivate(request: ServerRequest, scope: ScopeEntry): boolean {
-    return request.path === serverCardPath(scope);
+    return (request.method === 'GET' || request.method === 'OPTIONS') && request.path === serverCardPath(scope);
   }
 
   @Stage('checkIpFilter')
@@ -93,6 +91,13 @@ export default class ServerCardFlow extends FlowBase<typeof name> {
   @Stage('acquireQuota')
   async acquireQuota() {
     await enforceGlobalRateLimit(this.scope, this.tryGetContext());
+  }
+
+  @Stage('answerPreflight')
+  async answerPreflight() {
+    if (this.rawInput.request.method === 'OPTIONS') {
+      this.respond({ kind: 'empty', status: 204, headers: SERVER_CARD_CORS_HEADERS });
+    }
   }
 
   @Stage('buildCard')
@@ -129,7 +134,9 @@ export default class ServerCardFlow extends FlowBase<typeof name> {
   async respondWithCard() {
     const { card } = this.state.required;
     const etag = `"${sha256Base64url(JSON.stringify(card))}"`;
-    const headers = { ...SERVER_CARD_HEADERS, ETag: etag };
+    // The card embeds a request-derived origin, so only a pinned FRONTMCP_PUBLIC_URL makes it safe to cache.
+    const cacheControl = isPublicUrlPinned() ? 'public, max-age=3600' : 'no-store';
+    const headers = { ...SERVER_CARD_CORS_HEADERS, 'Cache-Control': cacheControl, ETag: etag };
     this.respond(
       ifNoneMatchIncludes(this.rawInput.request.headers['if-none-match'], etag)
         ? { kind: 'empty', status: 304, headers }

@@ -1,7 +1,4 @@
-/**
- * E2E: `@FrontMcp({ registry })` on a spawned Node server with a standalone app, the key in
- * MCP_REGISTRY_PUBLIC_KEY and the MCP endpoint at `/mcp`.
- */
+/** E2E: `@FrontMcp({ registry })` on a spawned Node server with a standalone app and the key in the env. */
 import * as path from 'node:path';
 
 import { TestServer } from '@frontmcp/testing';

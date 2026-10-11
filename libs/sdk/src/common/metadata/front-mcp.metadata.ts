@@ -450,19 +450,7 @@ export interface FrontMcpBaseMetadata {
    */
   metrics?: MetricsOptionsInput;
 
-  /**
-   * MCP Registry support: the domain proof `frontmcp registry publish --auth http` relies on
-   * (`/.well-known/mcp-registry-auth`), the SEP-2127 server card (`<entryPath>/server-card`) and the
-   * AI Catalog (`/.well-known/ai-catalog.json`). See `McpRegistryOptionsInterface`.
-   *
-   * @example
-   * ```typescript
-   * registry: {
-   *   name: 'com.acme/weather',
-   *   description: 'Forecasts and alerts for any city',
-   * }
-   * ```
-   */
+  /** MCP Registry domain proof, SEP-2127 server card and AI Catalog. See `McpRegistryOptionsInterface`. */
   registry?: McpRegistryOptionsInput;
 
   /**
