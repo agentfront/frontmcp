@@ -24,14 +24,7 @@ import { ScopeRegistry } from '../scope/scope.registry';
 import { type FrontMcpServerInstance } from '../server/server.instance';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task';
-import { IpcServerTransport, isIpcStdioRequested } from '../transport/ipc-server.transport';
-import {
-  createDeferredServerBuild,
-  createServerFetchHandler,
-  startupFailureResponse,
-  type FetchHandlerCtx,
-  type WebFetchHandler,
-} from '../transport/web-fetch-handler';
+import type { FetchHandlerCtx, WebFetchHandler } from '../transport/web-fetch-handler';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 import { exitOnShutdownSignals } from './shutdown-signals';
@@ -379,6 +372,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * export default { fetch: (request) => handler(request) };
    */
   public static async createFetchHandler(options: FrontMcpConfigInput | FrontMcpConfigType): Promise<WebFetchHandler> {
+    const { createDeferredServerBuild, createServerFetchHandler, startupFailureResponse } = await import(
+      '../transport/web-fetch-handler.js'
+    );
     const build = async (deferred: boolean): Promise<WebFetchHandler> => {
       let frontMcp: FrontMcpInstance | undefined;
       try {
@@ -860,6 +856,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // Create stdio transport and connect
       // `frontmcp dev --stdio --serve` forks us with an IPC channel instead of
       // giving us the real stdin/stdout.
+      const { IpcServerTransport, isIpcStdioRequested } = await import('../transport/ipc-server.transport.js');
       const transport = isIpcStdioRequested() ? new IpcServerTransport() : new StdioServerTransport();
       startupCleanups.push(() => transport.close());
       await mcpServer.connect(transport);

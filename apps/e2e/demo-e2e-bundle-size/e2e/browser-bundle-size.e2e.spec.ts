@@ -22,8 +22,8 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 2_850_000 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 2_865_000 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 2_690_000 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 2_700_000 },
 ];
 
 const VITE_INITIAL_CHUNK_MAX_BYTES = 1_180_000;
@@ -61,11 +61,7 @@ const KNOWN_LEAKS: string[] = [
   'elicitation',
   'health',
   'http transport',
-  'ipc transport',
-  'jobs',
-  'mcp registry',
   'metrics',
-  'observability',
   'remote and esm entries',
   'skills',
   'tasks',
