@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugins",
-  "version": "1.9.5",
+  "version": "1.9.6",
   "description": "FrontMCP plugins meta-package - installs all official plugins",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/plugins",
@@ -48,9 +48,9 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@frontmcp/plugin-cache": "1.9.5",
-    "@frontmcp/plugin-codecall": "1.9.5",
-    "@frontmcp/plugin-dashboard": "1.9.5",
-    "@frontmcp/plugin-remember": "1.9.5"
+    "@frontmcp/plugin-cache": "1.9.6",
+    "@frontmcp/plugin-codecall": "1.9.6",
+    "@frontmcp/plugin-dashboard": "1.9.6",
+    "@frontmcp/plugin-remember": "1.9.6"
   }
 }

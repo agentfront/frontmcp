@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/uipack",
-  "version": "1.9.5",
+  "version": "1.9.6",
   "description": "FrontMCP UIpack - HTML shell builder, pluggable import resolver, and NPM component loader for MCP UI (React-free core)",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/ui",
@@ -63,7 +63,7 @@
     "typescript": "^5.9.3"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.9.5",
+    "@frontmcp/lazy-zod": "1.9.6",
     "esbuild": ">=0.27.0 <1"
   },
   "peerDependenciesMeta": {
