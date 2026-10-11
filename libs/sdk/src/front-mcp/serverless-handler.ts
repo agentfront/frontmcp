@@ -1,4 +1,4 @@
-import { ServerlessHandlerNotInitializedError } from '../errors';
+import { ServerlessHandlerNotInitializedError } from '../errors/sdk.errors';
 
 /**
  * Global handler registry for serverless deployments.

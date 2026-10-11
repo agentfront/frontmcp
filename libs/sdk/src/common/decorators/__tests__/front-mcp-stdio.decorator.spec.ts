@@ -14,10 +14,8 @@ const runStdioMock = jest.fn().mockResolvedValue(undefined);
 const bootstrapMock = jest.fn().mockResolvedValue(undefined);
 const createHandlerMock = jest.fn().mockResolvedValue(undefined);
 
-// Mock the lazily-required front-mcp barrel so we can observe which entry point
-// the decorator routes to without booting a real server. Resolves to the same
-// module the decorator's `require('../../front-mcp')` targets.
-jest.mock('../../../front-mcp', () => ({
+// Mock the module the decorator loads on demand, to observe which entry point it routes to without booting a server
+jest.mock('../../../front-mcp/front-mcp', () => ({
   FrontMcpInstance: {
     runStdio: runStdioMock,
     bootstrap: bootstrapMock,
@@ -49,45 +47,50 @@ describe('FrontMcp decorator — stdio auto-serve (FRONTMCP_STDIO)', () => {
   });
 
   const config = { info: { name: 'stdio-dec-test', version: '1.0.0' }, apps: [] };
+  const serverLoaded = () => new Promise((resolve) => setImmediate(resolve));
 
-  it('serves over stdio (not HTTP) when FRONTMCP_STDIO=1', () => {
+  it('serves over stdio (not HTTP) when FRONTMCP_STDIO=1', async () => {
     process.env[STDIO] = '1';
 
     @FrontMcp(config as never)
     class S {}
     void S;
+    await serverLoaded();
 
     expect(runStdioMock).toHaveBeenCalledTimes(1);
     expect(bootstrapMock).not.toHaveBeenCalled();
   });
 
-  it('bootstraps the HTTP server when FRONTMCP_STDIO is unset', () => {
+  it('bootstraps the HTTP server when FRONTMCP_STDIO is unset', async () => {
     @FrontMcp(config as never)
     class S {}
     void S;
+    await serverLoaded();
 
     expect(bootstrapMock).toHaveBeenCalledTimes(1);
     expect(runStdioMock).not.toHaveBeenCalled();
   });
 
-  it('does not auto-serve at all when serve:false, even with FRONTMCP_STDIO=1', () => {
+  it('does not auto-serve at all when serve:false, even with FRONTMCP_STDIO=1', async () => {
     process.env[STDIO] = '1';
 
     @FrontMcp({ ...config, serve: false } as never)
     class S {}
     void S;
+    await serverLoaded();
 
     expect(runStdioMock).not.toHaveBeenCalled();
     expect(bootstrapMock).not.toHaveBeenCalled();
   });
 
-  it('lets schema-extract take precedence over stdio (metadata only, no serve)', () => {
+  it('lets schema-extract take precedence over stdio (metadata only, no serve)', async () => {
     process.env[STDIO] = '1';
     process.env[SCHEMA_EXTRACT] = '1';
 
     @FrontMcp(config as never)
     class S {}
     void S;
+    await serverLoaded();
 
     expect(runStdioMock).not.toHaveBeenCalled();
     expect(bootstrapMock).not.toHaveBeenCalled();

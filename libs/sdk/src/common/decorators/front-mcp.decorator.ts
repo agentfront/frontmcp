@@ -4,6 +4,11 @@ import { getEnvFlag } from '@frontmcp/utils';
 
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 import { InternalMcpError } from '../../errors/mcp.error';
+import {
+  setServerlessHandler,
+  setServerlessHandlerError,
+  setServerlessHandlerPromise,
+} from '../../front-mcp/serverless-handler';
 import { frontMcpMetadataSchema, type FrontMcpMetadata } from '../metadata';
 import { FrontMcpTokens } from '../tokens';
 import { captureCallerDir } from '../utils/caller-dir.utils';
@@ -39,37 +44,9 @@ export function getDecoratorConfig(target: unknown): FrontMcpMetadata | undefine
   return (config ?? undefined) as FrontMcpMetadata | undefined;
 }
 
-// Lazy imports to avoid circular dependency with @frontmcp/sdk package entry point.
-// Uses direct relative paths instead of require('@frontmcp/sdk') which would create
-// a circular dependency since index.ts exports this decorator.
-
-let _FrontMcpInstance: typeof import('../../front-mcp').FrontMcpInstance | null = null;
-function getFrontMcpInstance() {
-  if (!_FrontMcpInstance) {
-    _FrontMcpInstance = require('../../front-mcp').FrontMcpInstance;
-  }
-  if (!_FrontMcpInstance) {
-    throw new InternalMcpError('FrontMcpInstance not found in module', 'MODULE_LOAD_FAILED');
-  }
-  return _FrontMcpInstance;
-}
-
-// Lazy import for serverless handler functions
-type ServerlessHandlerFns = {
-  setServerlessHandler: (handler: unknown) => void;
-  setServerlessHandlerPromise: (promise: Promise<unknown>) => void;
-  setServerlessHandlerError: (error: Error) => void;
-};
-let _serverlessHandlerFns: ServerlessHandlerFns | null = null;
-
-function getServerlessHandlerFns(): ServerlessHandlerFns {
-  if (!_serverlessHandlerFns) {
-    _serverlessHandlerFns = require('../../front-mcp/serverless-handler');
-  }
-  if (!_serverlessHandlerFns) {
-    throw new InternalMcpError('Serverless handler functions not found', 'MODULE_LOAD_FAILED');
-  }
-  return _serverlessHandlerFns;
+// Loaded on demand: `front-mcp` imports this module through `../common`
+function loadFrontMcpInstance() {
+  return import('../../front-mcp/front-mcp.js').then(({ FrontMcpInstance }) => FrontMcpInstance);
 }
 
 /**
@@ -149,8 +126,8 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       // over stdio and never binds a TCP port (#448, #451). `serve: false` opts
       // out of auto-serving entirely, matching the HTTP branch below.
       if (metadata.serve) {
-        getFrontMcpInstance()
-          .runStdio(metadata)
+        loadFrontMcpInstance()
+          .then((FrontMcpInstance) => FrontMcpInstance.runStdio(metadata))
           .catch((err: unknown) => {
             console.error('[FrontMCP] stdio server failed:', err);
             process.exit(1);
@@ -158,20 +135,15 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       }
     } else if (isServerless) {
       // Serverless mode: bootstrap, prepare (no listen), store handler globally
-      // Uses direct relative imports to avoid circular dependency with @frontmcp/sdk
-      const ServerlessInstance = getFrontMcpInstance();
-      const { setServerlessHandler, setServerlessHandlerPromise, setServerlessHandlerError } =
-        getServerlessHandlerFns();
-
       // FRONTMCP_WORKER=1 (set by the Cloudflare build adapter's entry) selects
       // the Web-standard `fetch` handler — `(Request) => Promise<Response>` —
       // instead of the Express app, so V8-isolate runtimes never touch Node
       // `req`/`res`. The same global registry stores it; the worker entry
       // invokes the stored value as `handler(request)`.
       const isWorker = getEnvFlag('FRONTMCP_WORKER');
-      const handlerPromise = isWorker
-        ? ServerlessInstance.createFetchHandler(metadata)
-        : ServerlessInstance.createHandler(metadata);
+      const handlerPromise: Promise<unknown> = loadFrontMcpInstance().then((FrontMcpInstance) =>
+        isWorker ? FrontMcpInstance.createFetchHandler(metadata) : FrontMcpInstance.createHandler(metadata),
+      );
       setServerlessHandlerPromise(handlerPromise);
       handlerPromise.then(setServerlessHandler).catch((err: unknown) => {
         const e = err instanceof Error ? err : new InternalMcpError(String(err), 'SERVERLESS_INIT_FAILED');
@@ -180,8 +152,7 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       });
     } else if (metadata.serve) {
       // Normal mode: bootstrap and start server
-      // Use lazy require to avoid circular dependency and dual-package hazard
-      getFrontMcpInstance().bootstrap(metadata);
+      void loadFrontMcpInstance().then((FrontMcpInstance) => FrontMcpInstance.bootstrap(metadata));
     }
   };
 }

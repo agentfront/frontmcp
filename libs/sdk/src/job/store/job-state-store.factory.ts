@@ -3,6 +3,7 @@ import { createRedisClient, StorageConfigError } from '@frontmcp/utils';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobStateStore } from './job-state.interface';
 import { MemoryJobStateStore } from './memory-job-state.store';
+import { RedisJobStateStore, type RedisStateStoreLike } from './redis-job-state.store';
 
 export interface JobStateStoreOptions {
   redis?: {
@@ -34,11 +35,10 @@ export function createJobStateStore(options?: JobStateStoreOptions, logger?: Fro
 
   if (options?.redis) {
     try {
-      const { RedisJobStateStore } = require('./redis-job-state.store');
       const { url, host, port, password, db, tls } = options.redis;
       const client = createRedisClient({ url, host, port, password, db, tls, label: 'JobStateStore', logger });
       return {
-        store: new RedisJobStateStore(client, logger, keyPrefix, ttlSeconds),
+        store: new RedisJobStateStore(client as unknown as RedisStateStoreLike, logger, keyPrefix, ttlSeconds),
         type: 'redis',
       };
     } catch (err) {

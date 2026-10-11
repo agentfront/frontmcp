@@ -62,6 +62,7 @@ import type JobRegistry from '../job/job.registry';
 import { normalizeJob } from '../job/job.utils';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
+import LoggerRegistry from '../logger/logger.registry';
 import SetLevelFlow from '../logging/flows/set-level.flow';
 import { registerMcpRegistryFlows } from '../mcp-registry/mcp-registry-scope.helper';
 import { NotificationService } from '../notification';
@@ -658,10 +659,9 @@ export class Scope extends ScopeEntry {
           if (loggingEnabled) {
             try {
               const { StructuredLogTransport, createSinks } = ObservabilityPluginModule;
-              const LoggerRegistryCls = require('../logger/logger.registry').default;
               let loggerRegistry: any;
               try {
-                loggerRegistry = this.globalProviders.get(LoggerRegistryCls);
+                loggerRegistry = this.globalProviders.get(LoggerRegistry);
               } catch {
                 /* not available */
               }
@@ -674,10 +674,9 @@ export class Scope extends ScopeEntry {
                 const loggingOpts: Record<string, unknown> =
                   rawLogging === true ? {} : typeof rawLogging === 'object' ? rawLogging : {};
                 const sinks = createSinks(loggingOpts['sinks'] as any);
-                const { FrontMcpContextStorage: CtxStorage } = require('../context/frontmcp-context-storage');
                 let contextStorage: any;
                 try {
-                  contextStorage = this.globalProviders.get(CtxStorage);
+                  contextStorage = this.globalProviders.get(FrontMcpContextStorage);
                 } catch {
                   /* not available */
                 }
