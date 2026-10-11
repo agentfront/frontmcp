@@ -16,6 +16,7 @@ const APP_NAME = 'build-options-demo';
 const FLAVOR = 'configured-flavor';
 // A line only semver's own source contains, so its presence means semver was inlined.
 const SEMVER_SOURCE_MARKER = 'SEMVER_SPEC_VERSION';
+const BUILD_TIMEOUT_MS = 150_000;
 
 describe('build.esbuild reaches --target node and --target cli bundles', () => {
   let projectDir: string;
@@ -73,7 +74,7 @@ export default class Server {}
   }
 
   it('applies external and define to the --target node bundle', async () => {
-    const { exitCode, stderr } = runFrontmcpCli(['build', '--target', 'node'], undefined, projectDir);
+    const { exitCode, stderr } = runFrontmcpCli(['build', '--target', 'node'], undefined, projectDir, BUILD_TIMEOUT_MS);
     expect({ exitCode, errors: stderr.split('\n').filter((line) => /error/i.test(line)) }).toEqual({
       exitCode: 0,
       errors: [],
@@ -82,7 +83,12 @@ export default class Server {}
   }, 180_000);
 
   it('applies them to the --target cli bundles, and the CLI runs with semver loaded at runtime', async () => {
-    const { exitCode, stderr } = runFrontmcpCli(['build', '--target', 'cli', '--js'], undefined, projectDir);
+    const { exitCode, stderr } = runFrontmcpCli(
+      ['build', '--target', 'cli', '--js'],
+      undefined,
+      projectDir,
+      BUILD_TIMEOUT_MS,
+    );
     expect({ exitCode, errors: stderr.split('\n').filter((line) => /error/i.test(line)) }).toEqual({
       exitCode: 0,
       errors: [],

@@ -108,6 +108,10 @@ export function extractArchive(archivePath: string, destDir: string): Promise<vo
       }
       zip.readEntry();
       zip.on('entry', (entry: Entry) => {
+        if (entry.fileName.endsWith('/')) {
+          zip.readEntry();
+          return;
+        }
         const target = path.join(destDir, entry.fileName);
         zip.openReadStream(entry, (streamErr, stream) => {
           if (streamErr || !stream) {
