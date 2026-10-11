@@ -22,7 +22,7 @@ import { resolveEntry } from '../../../shared/fs';
 import { REQUIRED_DECORATOR_FIELDS } from '../../../core/tsconfig';
 import { findDeployment, type FrontMcpConfigParsed } from '../../../config';
 import type { McpbDeployment } from '../../../config/frontmcp-config.types';
-import { loadExecConfig, normalizeConfig } from '../exec/config';
+import { assertNoNativeAddonsInSea, loadExecConfig, normalizeConfig } from '../exec/config';
 import { serverBundleBanner } from '../../../config/deployment-env';
 import { bundleWithEsbuild, formatSize } from '../exec/esbuild-bundler';
 import {
@@ -78,11 +78,8 @@ export async function buildMcpb(
   const seaRequested = !!(opts.sea || mcpbDeployment?.sea?.enabled);
   const mergeFrom = opts.mergeFrom ?? mcpbDeployment?.sea?.mergeFrom;
   const nativeAddons = execConfig.dependencies?.nativeAddons ?? [];
-  if (nativeAddons.length > 0 && (seaRequested || mergeFrom)) {
-    throw new Error(
-      `An SEA binary can only load Node built-ins, so it cannot load the native addon(s) ${nativeAddons.join(', ')} ` +
-        `(build.dependencies.nativeAddons). Build the mcpb without --sea, sea.enabled and sea.mergeFrom.`,
-    );
+  if (seaRequested || mergeFrom) {
+    assertNoNativeAddonsInSea(nativeAddons, 'Build the mcpb without --sea, sea.enabled and sea.mergeFrom.');
   }
   if (mcpbDeployment?.includeNodeModules) {
     console.log(

@@ -18,7 +18,7 @@ import * as fs from 'fs';
 import { type ParsedArgs } from '../../../core/args';
 import { c } from '../../../core/colors';
 import { resolveEntry } from '../../../shared/fs';
-import { loadExecConfig, normalizeConfig } from './config';
+import { assertNoNativeAddonsInSea, loadExecConfig, normalizeConfig } from './config';
 import { bundleWithEsbuild, formatSize } from './esbuild-bundler';
 import { generateManifest } from './manifest';
 import { generateRunnerScript } from './runner-script';
@@ -94,6 +94,12 @@ export async function buildExec(
   const config = normalizeConfig(rawConfig);
   const cliEnabled = opts.cli || config.cli?.enabled;
   const seaEnabled = opts.sea || config.sea?.enabled;
+  if (seaEnabled) {
+    assertNoNativeAddonsInSea(
+      config.dependencies?.nativeAddons ?? [],
+      'Build without SEA: --target cli --js, or sea.enabled: false for --target node.',
+    );
+  }
 
   console.log(`${c('cyan', '[build:exec]')} name: ${config.name}`);
   console.log(`${c('cyan', '[build:exec]')} version: ${config.version}`);

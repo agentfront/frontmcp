@@ -494,6 +494,30 @@ describe('buildExec() integration', () => {
     });
   });
 
+  describe('native addons with a single executable (SEA) build', () => {
+    it.each([
+      ['--target cli', { cli: true, sea: true }],
+      ['--target node with sea.enabled', { cli: false, sea: true }],
+    ])('%s refuses before compiling anything', async (_label, flags) => {
+      mockLoadExecConfig.mockResolvedValue({
+        name: 'test-app',
+        version: '2.0.0',
+        build: { dependencies: { nativeAddons: ['better-sqlite3'] } },
+      });
+
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+      try {
+        await expect(buildExec({ outDir, ...flags } as any)).rejects.toThrow(
+          'An SEA binary can only load Node built-ins, so it cannot load the native addon(s) better-sqlite3 (build.dependencies.nativeAddons).',
+        );
+        expect(mockBundleWithEsbuild).not.toHaveBeenCalled();
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  });
+
   describe('compilation step', () => {
     it('should call runCmd for TypeScript compilation', async () => {
       const originalCwd = process.cwd();

@@ -176,6 +176,15 @@ export async function loadExecConfig(cwd: string, source: ExecConfigSource = {})
   };
 }
 
+/** An SEA binary resolves a bare `require()` against Node built-ins only, so it cannot load a native addon. */
+export function assertNoNativeAddonsInSea(nativeAddons: string[], howToBuildWithoutSea: string): void {
+  if (nativeAddons.length === 0) return;
+  throw new Error(
+    `An SEA binary can only load Node built-ins, so it cannot load the native addon(s) ${nativeAddons.join(', ')} ` +
+      `(build.dependencies.nativeAddons). ${howToBuildWithoutSea}`,
+  );
+}
+
 /** Validate config and return normalized version, mapping the `build` block onto the exec fields (`build` wins key by key). */
 export function normalizeConfig(config: FrontmcpExecConfig): Required<
   Pick<FrontmcpExecConfig, 'name' | 'version' | 'nodeVersion'>
