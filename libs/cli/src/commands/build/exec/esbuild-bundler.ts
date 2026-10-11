@@ -48,14 +48,7 @@ export const RUNTIME_PACKAGE_EXTERNALS = [
 // installed, and inlining the SDK (SEA / mcpb) made esbuild fail with
 // `Could not resolve "@frontmcp/observability"`. They are bundled when installed
 // and left as a guarded runtime `require()` when they are not.
-const OPTIONAL_PEER_PACKAGES = ['@frontmcp/observability', '@opentelemetry/sdk-trace-base'];
-
-/** Packages FrontMCP keeps external even when self-contained and loads behind a guard, so a server needn't ship them. */
-export const GUARDED_OPTIONAL_PACKAGES = [
-  ...DEFAULT_EXTERNALS.filter((pkg) => !RUNTIME_PACKAGE_EXTERNALS.includes(pkg)),
-  '@enclave-vm/core',
-  ...OPTIONAL_PEER_PACKAGES,
-];
+export const OPTIONAL_PEER_PACKAGES = ['@frontmcp/observability', '@opentelemetry/sdk-trace-base'];
 
 export function missingOptionalPeers(
   cwd: string = process.cwd(),

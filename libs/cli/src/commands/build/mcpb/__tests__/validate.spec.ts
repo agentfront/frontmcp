@@ -140,8 +140,8 @@ describe('validateMcpb', () => {
     expect(result.errors).toEqual([]);
   });
 
-  it("accepts the packages FrontMCP leaves external and loads only when configured, like storage-sqlite's better-sqlite3", async () => {
-    const archive = path.join(tmp, 'guarded.mcpb');
+  it('warns, without failing, about packages FrontMCP loads only when a feature is configured', async () => {
+    const archive = path.join(tmp, 'lazy.mcpb');
     await makeArchive(
       {
         'manifest.json': JSON.stringify(baseManifest()),
@@ -155,6 +155,111 @@ describe('validateMcpb', () => {
     );
     const result = await validateMcpb(archive);
     expect(result.errors).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(result.warnings).toContainEqual(
+      'server/index.js requires "better-sqlite3", which FrontMCP loads only when SQLite storage is configured; list it in build.dependencies.nativeAddons if your server uses it',
+    );
+    expect(result.warnings.some((w) => w.includes('"@enclave-vm/core"') && w.includes('dynamic jobs'))).toBe(true);
+  });
+
+  it('passes a server whose FrontMCP observability peers are not installed (CI), with at most warnings', async () => {
+    const archive = path.join(tmp, 'observability-missing.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(baseManifest()),
+        'server/index.js': [
+          'function requireOptionalModule(name, load) { try { return load(); } catch { return undefined; } }',
+          'const observability = requireOptionalModule("@frontmcp/observability", () => require("@frontmcp/observability"));',
+          'function consoleExporter() { return require("@opentelemetry/sdk-trace-base").ConsoleSpanExporter; }',
+          'try { require("@opentelemetry/exporter-trace-otlp-http"); } catch { throw new Error("install it"); }',
+          'try { require("@opentelemetry/sdk-node"); } catch {}',
+        ].join('\n'),
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.errors).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts a bundle of ws and node-fetch, whose optional peers stay as guarded requires', async () => {
+    const esbuild = require('esbuild') as typeof import('esbuild');
+    const repoRoot = path.resolve(__dirname, '..', '..', '..', '..', '..', '..', '..');
+    const bundle = esbuild.buildSync({
+      stdin: { contents: 'module.exports = { ws: require("ws"), fetch: require("node-fetch") };', resolveDir: repoRoot, loader: 'js' },
+      bundle: true,
+      write: false,
+      platform: 'node',
+      format: 'cjs',
+      logLevel: 'silent',
+    }).outputFiles[0].text;
+    expect(bundle).toMatch(/require\("bufferutil"\)/);
+    expect(bundle).toMatch(/require\("encoding"\)/);
+    const archive = path.join(tmp, 'ws-node-fetch.mcpb');
+    await makeArchive({ 'manifest.json': JSON.stringify(baseManifest()), 'server/index.js': bundle }, archive);
+    const result = await validateMcpb(archive);
+    expect(result.errors).toEqual([]);
+  });
+
+  it.each([
+    ['server/node_modules (FrontMCP layout)', 'server/node_modules/shipped-dep/package.json'],
+    ['node_modules at the archive root (MCPB layout)', 'node_modules/shipped-dep/package.json'],
+  ])('accepts a package shipped in %s', async (_layout, shippedFile) => {
+    const archive = path.join(tmp, 'layout.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(baseManifest()),
+        'server/index.js': 'const dep = require("shipped-dep/lib/index.js");',
+        [shippedFile]: '{"name":"shipped-dep"}',
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('does not count a package shipped outside the entry point folder chain', async () => {
+    const archive = path.join(tmp, 'elsewhere.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(baseManifest()),
+        'server/index.js': 'const dep = require("shipped-dep");',
+        'other/node_modules/shipped-dep/package.json': '{"name":"shipped-dep"}',
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.errors.some((e) => e.includes('"shipped-dep"'))).toBe(true);
+  });
+
+  it('parses an ESM server entry with top-level await', async () => {
+    const archive = path.join(tmp, 'esm.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(baseManifest()),
+        'server/index.js': 'import { Server } from "shipped-sdk";\nawait new Server().connect();\nconst missing = await import("not-shipped");',
+        'server/node_modules/shipped-sdk/package.json': '{"name":"shipped-sdk"}',
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.errors.some((e) => e.includes('could not be parsed'))).toBe(false);
+    expect(result.errors.some((e) => e.includes('"not-shipped"'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('"shipped-sdk"'))).toBe(false);
+  });
+
+  it('does not warn about node_modules in an archive that ships native addons', async () => {
+    const archive = path.join(tmp, 'addon-shipped.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(baseManifest()),
+        'server/index.js': 'const addon = require("my-addon");',
+        'server/node_modules/my-addon/package.json': '{"name":"my-addon"}',
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.warnings.some((w) => w.includes('node_modules'))).toBe(false);
   });
 
   it('reports a server entry that is not valid JavaScript', async () => {
