@@ -241,13 +241,10 @@ async function buildSingleTarget(
     await cleanOutDir(targetOutDir, process.cwd());
   }
 
-  // #370: forward `build.storage` and the cli deployment's `cli` block from
-  // the FrontMcp config into the exec build so the manifest and the generated
-  // CLI reflect them. The exec build has its own loader (`loadExecConfig`)
-  // that doesn't see the deployment-level shape; passing these via opts
-  // merges them before the manifest is generated.
+  // #370: forward the cli deployment's `cli` block from the FrontMcp config
+  // into the exec build so the manifest and the generated CLI reflect it. The
+  // top-level `build` block reaches the exec build through `normalizeConfig`.
   const execOverrides: {
-    storage?: { type: 'sqlite' | 'redis' | 'none'; required?: boolean };
     cli?: CliTargetConfig;
     // #365 round-3 — without this, top-level `nodeVersion` declared in
     // `frontmcp.config.{ts,js}` was silently dropped because the legacy
@@ -262,7 +259,6 @@ async function buildSingleTarget(
     // #680 — `deployments[].env`, carried as defaults by the artifact.
     env?: Record<string, string>;
   } = {
-    storage: config?.build?.storage,
     cli: deployment?.target === 'cli' ? deployment.cli : undefined,
     nodeVersion: config?.nodeVersion,
     httpEntryPath: deploymentHttpPath(

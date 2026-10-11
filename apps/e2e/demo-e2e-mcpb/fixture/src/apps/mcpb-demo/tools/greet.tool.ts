@@ -12,6 +12,6 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 export default class GreetTool extends ToolContext {
   async execute(input: { name: string }) {
     const apiBase = process.env['API_BASE'] ?? 'https://api.example.com';
-    return { message: `Hello, ${input.name}! (via ${apiBase})` };
+    return { message: `Hello, ${input.name}! (via ${apiBase})`, buildFlavor: process.env.MCPB_BUILD_FLAVOR };
   }
 }

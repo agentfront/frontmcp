@@ -44,6 +44,9 @@ Use frontmcp.config.json with JSON Schema for VS Code and WebStorm autocomplete
 }
 ```
 
+The schema ships in the `frontmcp` package (`node_modules/frontmcp/frontmcp.schema.json`) and is also published at
+`https://frontmcp.dev/schemas/frontmcp.config.json`.
+
 ### Verify
 
 ```bash

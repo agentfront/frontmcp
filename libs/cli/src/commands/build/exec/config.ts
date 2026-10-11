@@ -4,6 +4,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import type { BuildOptions } from '../../../config/frontmcp-config.types';
 import type { SetupDefinition } from './setup';
 
 export interface OAuthConfig {
@@ -63,6 +64,8 @@ export interface FrontmcpExecConfig {
   sea?: {
     enabled?: boolean;
   };
+  /** `build` block of the `deployments[]` config shape; `normalizeConfig` maps it onto the fields above. */
+  build?: BuildOptions;
 }
 
 const CONFIG_FILENAMES = [
@@ -173,9 +176,16 @@ export async function loadExecConfig(cwd: string, source: ExecConfigSource = {})
   };
 }
 
-/**
- * Validate config and return normalized version.
- */
+/** An SEA binary resolves a bare `require()` against Node built-ins only, so it cannot load a native addon. */
+export function assertNoNativeAddonsInSea(nativeAddons: string[], howToBuildWithoutSea: string): void {
+  if (nativeAddons.length === 0) return;
+  throw new Error(
+    `An SEA binary can only load Node built-ins, so it cannot load the native addon(s) ${nativeAddons.join(', ')} ` +
+      `(build.dependencies.nativeAddons). ${howToBuildWithoutSea}`,
+  );
+}
+
+/** Validate config and return normalized version, mapping the `build` block onto the exec fields (`build` wins key by key). */
 export function normalizeConfig(config: FrontmcpExecConfig): Required<
   Pick<FrontmcpExecConfig, 'name' | 'version' | 'nodeVersion'>
 > &
@@ -186,10 +196,15 @@ export function normalizeConfig(config: FrontmcpExecConfig): Required<
     );
   }
 
+  const build = config.build;
   return {
     ...config,
     name: config.name,
     version: config.version || '1.0.0',
     nodeVersion: config.nodeVersion || '>=22.0.0',
+    esbuild: build?.esbuild ? { ...config.esbuild, ...build.esbuild } : config.esbuild,
+    dependencies: build?.dependencies ? { ...config.dependencies, ...build.dependencies } : config.dependencies,
+    storage: build?.storage ?? config.storage,
+    network: build?.network ? { ...config.network, ...build.network } : config.network,
   };
 }
