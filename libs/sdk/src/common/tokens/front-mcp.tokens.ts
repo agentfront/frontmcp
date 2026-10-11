@@ -58,6 +58,8 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   health: tokenFactory.meta('health'),
   // /metrics endpoint (issue #397)
   metrics: tokenFactory.meta('metrics'),
+  // MCP Registry domain proof, server card and AI Catalog
+  registry: tokenFactory.meta('registry'),
   // channels configuration (Claude Code notifications)
   channels: tokenFactory.meta('channels'),
   // authorities configuration (RBAC/ABAC/ReBAC)

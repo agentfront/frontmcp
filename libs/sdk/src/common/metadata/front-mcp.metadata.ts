@@ -19,6 +19,7 @@ import {
   healthOptionsSchema,
   httpOptionsSchema,
   loggingOptionsSchema,
+  mcpRegistryOptionsSchema,
   metricsOptionsSchema,
   observabilityOptionsSchema,
   outboundFetchOptionsSchema,
@@ -36,6 +37,7 @@ import {
   type HealthOptionsInput,
   type HttpOptionsInput,
   type LoggingOptionsInput,
+  type McpRegistryOptionsInput,
   type MetricsOptionsInput,
   type ObservabilityOptionsInterface,
   type OutboundFetchOptionsInput,
@@ -449,6 +451,21 @@ export interface FrontMcpBaseMetadata {
   metrics?: MetricsOptionsInput;
 
   /**
+   * MCP Registry support: the domain proof `frontmcp registry publish --auth http` relies on
+   * (`/.well-known/mcp-registry-auth`), the SEP-2127 server card (`<entryPath>/server-card`) and the
+   * AI Catalog (`/.well-known/ai-catalog.json`). See `McpRegistryOptionsInterface`.
+   *
+   * @example
+   * ```typescript
+   * registry: {
+   *   name: 'com.acme/weather',
+   *   description: 'Forecasts and alerts for any city',
+   * }
+   * ```
+   */
+  registry?: McpRegistryOptionsInput;
+
+  /**
    * Observability configuration — OpenTelemetry tracing, structured logging,
    * and per-request log collection.
    *
@@ -652,6 +669,7 @@ export const frontMcpBaseSchema = z.object({
   observability: observabilityOptionsSchema,
   health: healthOptionsSchema.optional(),
   metrics: metricsOptionsSchema.optional(),
+  registry: mcpRegistryOptionsSchema.optional(),
   channels: channelsConfigSchema.optional(),
   authorities: z
     .object({
