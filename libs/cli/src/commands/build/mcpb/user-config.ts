@@ -1,5 +1,8 @@
 /**
- * Translate FrontMCP `setup.steps` into MCPB `user_config` + `mcp_config.env`.
+ * Translate FrontMCP `setup.steps` and the deployment's `userConfig` into MCPB
+ * `user_config` + `mcp_config.env`. Every entry reaches the server as an env var:
+ * a step's `env` (else its id in UPPER_SNAKE_CASE), a `userConfig` entry's `env`
+ * (else its key in UPPER_SNAKE_CASE).
  *
  * MCPB's user_config is a flat key/value form. FrontMCP's setup graph supports
  * branching (`step.next`) and conditional visibility (`step.showWhen`). Those
@@ -13,6 +16,7 @@ import type {
   McpbUserConfigEntry,
   McpbUserConfigType,
 } from '../../../config/frontmcp-config.types';
+import { ENV_VAR_NAME_PATTERN } from '../../../config/frontmcp-config.schema';
 import { USER_CONFIG_PREFIX } from './constants';
 
 export interface UserConfigTranslationResult {
@@ -32,6 +36,15 @@ export function idToCamelKey(id: string): string {
   return parts
     .map((part, idx) => (idx === 0 ? part : part[0].toUpperCase() + part.slice(1)))
     .join('');
+}
+
+/** Default env var for a `userConfig` key: `deskApiKey` → `DESK_API_KEY`, `export-folder` → `EXPORT_FOLDER`. */
+export function userConfigKeyToEnvName(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase();
 }
 
 /** Resolve the user_config.type for a setup step. */
@@ -74,20 +87,10 @@ export function setupStepsToUserConfig(
   deployment?: McpbDeployment,
 ): UserConfigTranslationResult {
   const userConfig: Record<string, McpbUserConfigEntry> = {};
-  const env: Record<string, string> = {};
+  const envNameByKey: Record<string, string> = {};
   const warnings: string[] = [];
 
-  if (!steps || steps.length === 0) {
-    // Allow deployment.userConfig to stand alone (no setup graph).
-    if (deployment?.userConfig) {
-      for (const [key, entry] of Object.entries(deployment.userConfig)) {
-        userConfig[key] = entry;
-      }
-    }
-    return { userConfig, env, warnings };
-  }
-
-  for (const step of steps) {
+  for (const step of steps ?? []) {
     if (step.showWhen || step.next) {
       warnings.push(
         `Step "${step.id}" uses showWhen/next — MCPB has no equivalent; rendered unconditionally`,
@@ -143,21 +146,39 @@ export function setupStepsToUserConfig(
     }
 
     userConfig[key] = entry;
+    envNameByKey[key] = override?.env ?? step.env ?? idToEnvName(step.id);
+  }
 
-    const envName = step.env ?? idToEnvName(step.id);
+  for (const [key, option] of Object.entries(deployment?.userConfig ?? {})) {
+    if (userConfig[key]) continue;
+    const { env: explicitEnvName, ...entry } = option;
+    userConfig[key] = entry;
+    envNameByKey[key] = explicitEnvName ?? userConfigKeyToEnvName(key);
+  }
+
+  return { userConfig, env: bindEnvToUserConfig(envNameByKey), warnings };
+}
+
+/** `ENV_NAME → ${user_config.key}` for each entry; two entries may not share an env var. */
+function bindEnvToUserConfig(envNameByKey: Record<string, string>): Record<string, string> {
+  const env: Record<string, string> = {};
+  const keyByEnvName: Record<string, string> = {};
+  for (const [key, envName] of Object.entries(envNameByKey)) {
+    if (!ENV_VAR_NAME_PATTERN.test(envName)) {
+      throw new Error(
+        `userConfig "${key}" maps to "${envName}", which is not an environment variable name. Set userConfig.${key}.env.`,
+      );
+    }
+    const otherKey = keyByEnvName[envName];
+    if (otherKey) {
+      throw new Error(
+        `userConfig "${otherKey}" and "${key}" both map to the env var ${envName}. Give one of them its own env name (userConfig.<key>.env).`,
+      );
+    }
+    keyByEnvName[envName] = key;
     env[envName] = `\${${USER_CONFIG_PREFIX}${key}}`;
   }
-
-  // Any deployment.userConfig entries not derived from a setup step are merged verbatim.
-  if (deployment?.userConfig) {
-    for (const [key, entry] of Object.entries(deployment.userConfig)) {
-      if (!userConfig[key]) {
-        userConfig[key] = entry;
-      }
-    }
-  }
-
-  return { userConfig, env, warnings };
+  return env;
 }
 
 function inferRequired(jsonSchema: Record<string, unknown>, override?: boolean): boolean {

@@ -270,7 +270,7 @@ export interface GenerateMcpbManifestInput {
   deployment?: McpbDeployment;
   /** Schema extracted from the compiled server bundle. */
   schema: ExtractedSchema;
-  /** env → user_config reference map built by user-config.ts. */
+  /** env → user_config reference map built by user-config.ts (merged over `deployment.env`). */
   userConfigEnv: Record<string, string>;
   /** user_config entries built by user-config.ts. */
   userConfig: Record<string, McpbUserConfigEntry>;
@@ -349,9 +349,8 @@ export function generateMcpbManifest(input: GenerateMcpbManifestInput): McpbMani
   const mcpConfig: McpbMcpConfig = {
     command: 'node',
     args: ['${__dirname}/server/index.js'],
-    // MCPB hosts talk to the server over stdio; the @FrontMcp decorator serves
-    // stdio only when this is set.
-    env: { FRONTMCP_STDIO: '1', ...userConfigEnv },
+    // User answers win over the deployment env; FRONTMCP_STDIO (stdio to the host) can't be overridden.
+    env: { ...deployment?.env, ...userConfigEnv, FRONTMCP_STDIO: '1' },
     ...(platformOverrides && Object.keys(platformOverrides).length > 0
       ? { platform_overrides: platformOverrides }
       : {}),

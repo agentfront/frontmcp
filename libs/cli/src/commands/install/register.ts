@@ -29,7 +29,10 @@ function withSharedPluginFlags(cmd: Command, scopeDescription: string): Command 
     .option('--no-skills', 'Skip the skills/ subtree')
     .option('--no-commands', 'Skip the commands/ subtree')
     .option('--only-mcp', 'Skip the plugin folder; just register the MCP server')
-    .option('--command <cmd>', 'Override the MCP server invocation in the plugin manifest')
+    .option(
+      '--command <cmd>',
+      'MCP server invocation: a program, optionally with its arguments (quoted as in a shell); a lone program keeps "serve --stdio"',
+    )
     .option(
       '--env <name>',
       'Env-var placeholder to surface on the plugin (repeatable)',
@@ -48,9 +51,9 @@ export function registerInstallCommands(program: Command): void {
   withSharedPluginFlags(
     plugin
       .command('install')
-      .description('Emit a Claude Code plugin folder and/or Codex mcp_servers entry from the current project')
+      .description('Emit a Claude Code plugin folder and/or Codex [mcp_servers.<name>] entry from the current project')
       .option('--claude', 'Emit a Claude Code plugin into <scope>/.claude/plugins/<name>/')
-      .option('--codex', 'Emit a Codex mcp_servers entry into ~/.codex/config.toml'),
+      .option('--codex', 'Emit a Codex [mcp_servers.<name>] entry into ~/.codex/config.toml'),
     'project | user (default: project)',
   ).action(async (opts: Record<string, unknown>) => {
     // Map flag name to the legacy internal option name expected by the runner.

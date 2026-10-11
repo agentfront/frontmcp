@@ -2835,6 +2835,7 @@ __metadata:
     rehype-highlight: "npm:^7.0.2"
     rehype-raw: "npm:^7.0.0"
     remark-gfm: "npm:^4.0.1"
+    smol-toml: "npm:1.6.1"
     tailwindcss: "npm:^4.3.1"
     testcontainers: "npm:^11.14.0"
     ts-jest: "npm:^29.4.0"

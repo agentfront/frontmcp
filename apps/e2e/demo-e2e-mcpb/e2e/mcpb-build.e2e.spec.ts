@@ -71,6 +71,23 @@ describe('frontmcp build --target mcpb', () => {
     expect(server.mcp_config.env?.['FRONTMCP_STDIO']).toBe('1');
   });
 
+  it('passes every user_config entry and the deployment env to the server', async () => {
+    const { manifest } = await readArchive(getArchivePath());
+    const server = manifest['server'] as { mcp_config: { env?: Record<string, string> } };
+    expect(Object.keys(manifest['user_config'] as Record<string, unknown>).sort()).toEqual([
+      'deskApiKey',
+      'exportFolder',
+      'maxItems',
+    ]);
+    expect(server.mcp_config.env).toEqual({
+      DESK_REGION: 'eu',
+      MAX_ITEMS: '${user_config.maxItems}',
+      DESK_API_KEY: '${user_config.deskApiKey}',
+      EXPORT_FOLDER: '${user_config.exportFolder}',
+      FRONTMCP_STDIO: '1',
+    });
+  });
+
   it('ships a self-contained server (runtime packages inlined, no node_modules needed)', async () => {
     const source = await readArchiveEntry(getArchivePath(), 'server/index.js');
     expect(source).not.toMatch(/require\((["'])@frontmcp\/sdk\1\)/);

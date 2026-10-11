@@ -7,6 +7,7 @@
  * {
  *   "name": "<bin>",
  *   "version": "<bin-version>",
+ *   "frontmcpVersion": "<version of the frontmcp CLI that built the bin>",
  *   "description": "<from cliConfig or package.json>",
  *   "mcpDefault": { "command": "<bin>", "args": ["serve", "--stdio"] },
  *   "prompts": [{ "name", "description", "arguments": [...] }],
@@ -18,6 +19,7 @@ import * as path from 'path';
 
 import { writeJSON } from '@frontmcp/utils';
 
+import { getSelfVersion } from '../../../core/version';
 import type { FrontmcpExecConfig } from './config';
 import type { ExtractedSchema } from './cli-runtime/schema-extractor';
 import { stagedInstructionsName } from './skill-assets';
@@ -25,6 +27,7 @@ import { stagedInstructionsName } from './skill-assets';
 export interface BinMeta {
   name: string;
   version: string;
+  frontmcpVersion: string;
   description: string;
   mcpDefault: { command: string; args: string[] };
   prompts: Array<{
@@ -50,6 +53,7 @@ export async function writeBinMeta(
   const meta: BinMeta = {
     name: config.name,
     version: config.version ?? '0.0.0',
+    frontmcpVersion: getSelfVersion(),
     description: config.cli?.description ?? `${config.name} (FrontMCP server)`,
     mcpDefault: { command: config.name, args: ['serve', '--stdio'] },
     prompts: schema.prompts.map((p) => ({

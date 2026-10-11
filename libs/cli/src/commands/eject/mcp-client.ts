@@ -19,6 +19,11 @@
 
 import { envOverlayFor, type FrontMcpConfigParsed, type McpClientName } from '../../config';
 
+export interface ClientPayloadOptions {
+  /** The project's npm package name (`package.json` `name`), started by the default stdio entry. */
+  packageName?: string;
+}
+
 interface ServerEntry {
   command?: string;
   args?: string[];
@@ -27,7 +32,11 @@ interface ServerEntry {
   transport?: 'http' | 'sse' | 'stdio';
 }
 
-function buildServerEntry(client: McpClientName, config: FrontMcpConfigParsed): ServerEntry {
+function buildServerEntry(
+  client: McpClientName,
+  config: FrontMcpConfigParsed,
+  options: ClientPayloadOptions,
+): ServerEntry {
   const connection = config.clients?.[client];
   if (!connection) {
     throw new Error(
@@ -38,9 +47,10 @@ function buildServerEntry(client: McpClientName, config: FrontMcpConfigParsed): 
 
   // Stdio: spawn `command` with `args` + `env`. Most MCP clients omit the
   // `transport` field when stdio (it's the default), so we follow suit.
+  // The default runs the published package's bin with `--stdio`.
   if (connection.transport === 'stdio') {
     const command = connection.command ?? 'npx';
-    const args = connection.args ?? ['-y', config.name];
+    const args = connection.args ?? ['-y', options.packageName ?? config.name, '--stdio'];
     const entry: ServerEntry = { command, args };
     // The client spawns the shipped server: `env.shared` ⊕ `env.ship`, then the client's own `env` (#680)
     const env = { ...envOverlayFor(config, 'build:ship'), ...connection.env };
@@ -84,14 +94,19 @@ function buildServerEntry(client: McpClientName, config: FrontMcpConfigParsed): 
 export function buildClientPayload(
   client: McpClientName,
   config: FrontMcpConfigParsed,
+  options: ClientPayloadOptions = {},
 ): { mcpServers: Record<string, ServerEntry> } {
   const connection = config.clients?.[client];
   const serverKey = connection?.name ?? config.name;
-  return { mcpServers: { [serverKey]: buildServerEntry(client, config) } };
+  return { mcpServers: { [serverKey]: buildServerEntry(client, config, options) } };
 }
 
-export function emitClientSnippet(client: McpClientName, config: FrontMcpConfigParsed): string {
-  return JSON.stringify(buildClientPayload(client, config), null, 2);
+export function emitClientSnippet(
+  client: McpClientName,
+  config: FrontMcpConfigParsed,
+  options: ClientPayloadOptions = {},
+): string {
+  return JSON.stringify(buildClientPayload(client, config, options), null, 2);
 }
 
 /**
