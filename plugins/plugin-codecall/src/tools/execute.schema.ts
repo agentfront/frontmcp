@@ -2,7 +2,12 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import type { ResolvedCodeCallVmOptions } from '../codecall.symbol';
-import { MAX_ITERATIONS_PER_LOOP, maxToolCallsOf, resolveVmOptions } from '../providers/code-call.config';
+import {
+  MAX_ITERATIONS_PER_LOOP,
+  maxToolCallsOf,
+  rapidEnumerationThresholdOf,
+  resolveVmOptions,
+} from '../providers/code-call.config';
 
 /** Minimum script length - at least a simple callTool invocation */
 const MIN_EXECUTE_SCRIPT_LENGTH = 'return callTool("a",{})'.length;
@@ -18,6 +23,7 @@ export function buildExecuteToolDescription(vmOptions: ResolvedCodeCallVmOptions
   const namespaces = ['Math', 'JSON'].filter((name) => !blockedNames.has(name)).map((name) => `${name}.*, `);
   const timeoutSeconds = vmOptions.timeoutMs / 1000;
   const maxToolCalls = maxToolCallsOf(vmOptions);
+  const callsPerTool = rapidEnumerationThresholdOf(vmOptions);
   return `Execute AgentScript (safe JS subset) for multi-tool orchestration.
 
 API: await callTool(name, args, opts?)
@@ -36,9 +42,9 @@ return results;
 ALLOWED: ${loops}, arrow fn, map/filter/reduce/find, ${namespaces.join('')}if/else, destructuring, spread, template literals
 BLOCKED: ${blockedLoops}, console (use mcpLog), function decl, ${[...blockedNames].join(', ')}
 
-ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED
+ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED | RATE_LIMITED
 STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout
-LIMITS: ${MAX_ITERATIONS_PER_LOOP} iterations per loop, ${timeoutSeconds}s timeout, ${maxToolCalls} tool calls`;
+LIMITS: ${MAX_ITERATIONS_PER_LOOP} iterations per loop, ${timeoutSeconds}s timeout, ${maxToolCalls} tool calls, ${callsPerTool} calls to one tool per 2s (parallel() included)`;
 }
 
 export const executeToolDescription = buildExecuteToolDescription(resolveVmOptions());

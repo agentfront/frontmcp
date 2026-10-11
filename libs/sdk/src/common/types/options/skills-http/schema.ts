@@ -3,6 +3,7 @@
 
 import { z } from '@frontmcp/lazy-zod';
 
+import type { ExternalSkillProviderBase } from '../../../../skill/providers/external-skill.provider';
 import type { RawZodShape } from '../../common.types';
 import type { SkillsConfigAuthMode, SkillsConfigOptions as SkillsConfigOptionsInterface } from './interfaces';
 
@@ -83,6 +84,24 @@ export const skillsConfigAuditOptionsSchema = z.object({
   headAnchorIntervalMs: z.number().int().positive().optional(),
 });
 
+/** The provider methods the skill registry calls. */
+const EXTERNAL_SKILL_PROVIDER_METHODS = [
+  'initialize',
+  'isReadOnly',
+  'search',
+  'load',
+  'list',
+  'count',
+  'syncSkills',
+] as const;
+
+/** Duck-typed, since `instanceof` fails across copies of the SDK. */
+function isExternalSkillProvider(value: unknown): value is ExternalSkillProviderBase {
+  if (typeof value !== 'object' || value === null) return false;
+  const provider = value as Partial<Record<(typeof EXTERNAL_SKILL_PROVIDER_METHODS)[number], unknown>>;
+  return EXTERNAL_SKILL_PROVIDER_METHODS.every((method) => typeof provider[method] === 'function');
+}
+
 /**
  * Skills HTTP options Zod schema.
  * Auth is configured at the top level and applies to all HTTP endpoints.
@@ -103,6 +122,11 @@ export const skillsConfigOptionsSchema = z.object({
   injectInstructions: z.enum(['off', 'append', 'prepend', 'replace']).optional().default('append'),
   scoring: z.enum(['cosine', 'bm25']).optional(),
   failOnInvalidSkills: z.boolean().optional(),
+  externalProvider: z
+    .custom<ExternalSkillProviderBase>(isExternalSkillProvider, {
+      message: `externalProvider must be an ExternalSkillProviderBase (${EXTERNAL_SKILL_PROVIDER_METHODS.join(', ')} functions)`,
+    })
+    .optional(),
 } satisfies RawZodShape<SkillsConfigOptionsInterface>);
 
 /**

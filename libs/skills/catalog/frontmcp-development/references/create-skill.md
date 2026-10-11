@@ -50,7 +50,7 @@ Create a class extending `SkillContext` and decorate it with `@Skill`. The decor
 | `license`           | `string`                                        | No       | License identifier per Agent Skills spec (e.g., `'MIT'`)       |
 | `compatibility`     | `string`                                        | No       | Environment requirements (max 500 chars)                       |
 | `specMetadata`      | `Record<string, string>`                        | No       | Arbitrary key-value map (Agent Skills spec `metadata` field)   |
-| `allowedTools`      | `string`                                        | No       | Space-delimited pre-approved tool names (Agent Skills spec)    |
+| `allowedTools`      | `string`                                        | No       | Client agent tools to pre-approve; the server ignores it       |
 | `resources`         | `SkillResources`                                | No       | Bundled dirs: `{ scripts?, references?, assets? }`             |
 
 With `toolValidation: 'strict'`, the server refuses to start when a referenced tool isn't registered (`SkillValidationError`), unless `@FrontMcp({ skillsConfig: { failOnInvalidSkills: false } })` is set, which logs such skills as errors instead.
@@ -196,7 +196,7 @@ interface SkillContent {
   license?: string;
   compatibility?: string;
   specMetadata?: Record<string, string>;
-  allowedTools?: string; // space-delimited pre-approved tools
+  allowedTools?: string; // client agent tools to pre-approve (SKILL.md `allowed-tools`); the server does not enforce it
   resources?: SkillResources; // bundled scripts/, references/, assets/
 }
 ```
@@ -276,6 +276,8 @@ import { skillDir } from '@frontmcp/sdk';
 
 const CodingStandards = await skillDir('./skills/coding-standards');
 ```
+
+A relative path resolves against the directory of the file that calls `skillDir()` (here, `skills/` next to it), then the working directory; an absolute path is used as is. Up to 1.9.4 a relative path was not found at all.
 
 The `SKILL.md` file uses YAML frontmatter for metadata, followed by the instructions body:
 
@@ -408,7 +410,12 @@ A `@Skill` registered on your server is reachable two ways:
 
 1. **Over MCP** — clients that speak the SEP-2640 `skill://` URI scheme
    (Claude Desktop, custom MCP clients) discover registered skills
-   automatically when they connect to your server.
+   automatically when they connect to your server. `resources/list` names
+   each skill's `skill://<skillPath>/SKILL.md`, including skills registered
+   or removed after startup. A client that connects with `?mode=skills_only`
+   gets no tools: `tools/list` is empty and `tools/call` is answered as for
+   an unknown tool. Resources (including `skill://`), prompts and the
+   `skills/*` methods are not affected.
 2. **On the filesystem** — Claude Code's plugin/filesystem loader looks
    for `SKILL.md` files under `.claude/skills/<name>/`. Decorator-only
    registration is **not enough**; the SKILL.md (and any

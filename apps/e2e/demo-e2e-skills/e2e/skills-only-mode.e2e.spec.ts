@@ -2,13 +2,13 @@
  * E2E Tests for MCP Skills-Only Mode
  *
  * Tests the `?mode=skills_only` query parameter for MCP connections:
- * - tools/list returns empty array (tools hidden from discovery)
+ * - tools/list returns an empty array
+ * - tools/call is answered as for an unknown tool (`Tool "<name>" not found`)
  * - skills/search and skills/load work normally
- * - Tool execution still works (not blocked, just hidden)
  *
  * This mode is useful for planner agents that:
  * - Fetch skills to create execution plans
- * - Delegate tool execution to sub-agents
+ * - Delegate tool execution to sub-agents, which connect without the mode
  */
 import { expect, test } from '@frontmcp/testing';
 
@@ -62,9 +62,7 @@ test.describe('MCP Skills-Only Mode E2E', () => {
     });
   });
 
-  // TODO: Skills-only mode requires transport-level implementation
-  // See plan: MCP connections with ?mode=skills_only should hide tools from discovery
-  test.describe.skip('Skills-Only Mode', () => {
+  test.describe('Skills-Only Mode', () => {
     test('should return empty tools list in skills-only mode', async ({ server }) => {
       // Create a client that connects with skills_only mode
       const builder = server.createClientBuilder();
@@ -131,7 +129,7 @@ test.describe('MCP Skills-Only Mode E2E', () => {
       }
     });
 
-    test('should still allow tool execution in skills-only mode', async ({ server }) => {
+    test('should refuse tool execution in skills-only mode', async ({ server }) => {
       const builder = server.createClientBuilder();
       const client = await builder
         .withTransport('streamable-http')
@@ -139,21 +137,20 @@ test.describe('MCP Skills-Only Mode E2E', () => {
         .buildAndConnect();
 
       try {
-        // Even though tools aren't listed, they can still be executed
-        // (the planner delegated the tool name to a sub-agent which knows it)
         const result = await client.tools.call('github_get_pr', {
           pr_url: 'https://github.com/owner/repo/pull/123',
         });
 
-        expect(result).toBeSuccessful();
+        expect(result).toBeError();
+        expect(result).toHaveTextContent('Tool "github_get_pr" not found');
       } finally {
         await client.disconnect();
       }
     });
   });
 
-  // Note: SSE transport tests are skipped because SSE transport is not yet implemented
-  // in the test client. Uncomment these tests when SSE transport is available.
+  // Skipped: the test client has no SSE transport yet. Legacy SSE sessions are covered by
+  // libs/sdk/src/skill/__tests__/skills-only-mode.spec.ts.
   test.describe.skip('SSE Transport with Skills-Only Mode', () => {
     test('should return empty tools list via SSE in skills-only mode', async ({ server }) => {
       const builder = server.createClientBuilder();
@@ -186,8 +183,7 @@ test.describe('MCP Skills-Only Mode E2E', () => {
     });
   });
 
-  // TODO: Skills-only mode requires transport-level implementation
-  test.describe.skip('Mixed Mode Clients', () => {
+  test.describe('Mixed Mode Clients', () => {
     test('normal client and skills-only client can coexist', async ({ mcp, server }) => {
       // Normal client should see tools
       const normalTools = await mcp.tools.list();

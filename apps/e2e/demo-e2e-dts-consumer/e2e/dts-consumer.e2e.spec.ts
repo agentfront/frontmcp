@@ -29,6 +29,7 @@ const fixtureFiles = [
   'prompts-must-compile.ts',
   'hooks-must-compile.ts',
   'host-must-compile.ts',
+  'skills-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -95,6 +96,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types a custom host without enhancedHandler, and names Scope for the web-fetch helpers (#819)', () => {
     expect(describeEach(inFixtureFile('host-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types this.scope.skills.setExternalProvider() and skillsConfig.externalProvider', () => {
+    expect(describeEach(inFixtureFile('skills-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

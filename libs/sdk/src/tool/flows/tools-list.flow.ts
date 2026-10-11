@@ -26,6 +26,7 @@ import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { DEFAULT_TOOL_PAGINATION, type ToolPaginationOptions } from '../../common/types/options/pagination';
 import { InternalMcpError, InvalidInputError, InvalidMethodError } from '../../errors';
 import { type Scope } from '../../scope/scope.instance';
+import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
 import { buildStaticWidgetUri, hasUIConfig } from '../ui';
 
 const inputSchema = z.object({
@@ -279,7 +280,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     try {
       // Check for skills-only mode - return empty tools array
       const { authInfo } = this.state.required;
-      if (authInfo.sessionIdPayload?.skillsOnlyMode) {
+      if (isSkillsOnlyRequest(authInfo, this.tryGetContext())) {
         this.logger.verbose('findTools: skills-only mode - returning empty tools array');
         this.state.set('tools', []);
         this.logger.verbose('findTools:done (skills-only mode)');

@@ -340,6 +340,16 @@ export interface CodeCallOptions {
     disabledBuiltins?: string[];
     disabledGlobals?: string[];
     allowConsole?: boolean;
+
+    /**
+     * Calls to one tool a script may make within about 2 seconds (`parallel()` calls count);
+     * one more stops the script with `[RAPID_ENUMERATION]`. The sandbox's message says "in 5s",
+     * but it keeps only the last 2 seconds of calls.
+     * @default 30
+     */
+    rapidEnumerationThreshold?: number;
+    /** Per-tool values of `rapidEnumerationThreshold`, by tool name. */
+    rapidEnumerationOverrides?: Record<string, number>;
   };
 
   /**
@@ -823,7 +833,7 @@ These are **thin wrappers** over core logging/notification APIs and must not byp
 
 The LLM can also wrap `callTool` in `try/catch` inside the plan. If it doesn’t, CodeCall surfaces failures as `tool_error` with enough context for retries.
 
-Unknown tool / permission issues should typically surface as `tool_error` with a `code` such as `ACCESS_DENIED`.
+A failed `callTool` carries one of these codes: `NOT_FOUND` (unknown tool), `VALIDATION` (the input fails the tool's schema; the message is what an MCP client would see), `EXECUTION`, `TIMEOUT`, `ACCESS_DENIED` (the CodeCall policy or the script's `allowedTools` refuses the tool), and `RATE_LIMITED` (a rate limit, quota or concurrency limit refused the call). The code is on `error.code` with `{ throwOnError: false }`, on the thrown error, and on `tool_error` when the script doesn't catch it.
 
 ---
 

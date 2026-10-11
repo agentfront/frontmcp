@@ -140,6 +140,19 @@ export const codeCallVmOptionsSchema = z
      * @default varies by preset (secure: 2000)
      */
     maxSanitizeProperties: z.number().positive().optional(),
+
+    /**
+     * Calls a script may make to one tool within about 2 seconds; one more stops the script with
+     * `[RAPID_ENUMERATION]`. Calls made through `parallel()` count. The sandbox's message says "in 5s",
+     * but it keeps only the last 2 seconds of calls.
+     * @default 30
+     */
+    rapidEnumerationThreshold: z.number().int().positive().optional(),
+
+    /**
+     * Per-tool values of `rapidEnumerationThreshold`, by tool name, e.g. `{ 'users:get': 100 }`.
+     */
+    rapidEnumerationOverrides: z.record(z.string(), z.number().int().positive()).optional(),
   })
   .default(() => DEFAULT_VM_OPTIONS);
 

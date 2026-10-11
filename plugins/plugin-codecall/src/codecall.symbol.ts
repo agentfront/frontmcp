@@ -40,6 +40,8 @@ export interface ResolvedCodeCallVmOptions {
   allowConsole: boolean;
   maxSanitizeDepth: number;
   maxSanitizeProperties: number;
+  rapidEnumerationThreshold?: number;
+  rapidEnumerationOverrides?: Record<string, number>;
 }
 
 /**

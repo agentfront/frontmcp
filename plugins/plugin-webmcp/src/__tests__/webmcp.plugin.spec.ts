@@ -301,15 +301,12 @@ describe('WebMcpPlugin', () => {
   });
 
   describe("an agent's call", () => {
-    it('runs the tool through the server and returns its content and structured content', async () => {
+    it('runs the tool through the server and returns its structured content', async () => {
       await start();
 
       const result = await modelContext.execute('search_products', { query: 'mug' });
 
-      expect(result).toEqual({
-        content: [expect.objectContaining({ type: 'text' })],
-        structuredContent: { results: ['mug-1', 'mug-2'] },
-      });
+      expect(result).toEqual({ results: ['mug-1', 'mug-2'] });
     });
 
     it("leaves out the result's _meta", async () => {

@@ -243,6 +243,8 @@ import { skillDir } from '@frontmcp/sdk';
 const DeployServiceSkill = await skillDir('./skills/deploy-service');
 ```
 
+A relative path resolves against the directory of the file that calls `skillDir()` (here, `skills/` next to it), then the working directory; an absolute path is used as is. Up to 1.9.4 a relative path was not found at all.
+
 The `SKILL.md` file uses YAML frontmatter for metadata, followed by the instructions body:
 
 ```markdown
@@ -365,7 +367,7 @@ Skills support additional metadata fields from the Anthropic Agent Skills specif
   priority: 10, // Higher = earlier in search results
   license: 'MIT', // License identifier
   compatibility: 'Node.js 24+, Docker', // Environment requirements (max 500 chars)
-  allowedTools: 'Read Edit Bash(git status)', // Pre-approved tools (space-delimited)
+  allowedTools: 'Read Edit Bash(git status)', // Client agent tools to pre-approve (space-delimited)
   specMetadata: {
     // Arbitrary key-value metadata
     author: 'platform-team',
@@ -386,7 +388,7 @@ class DeployToProdSkill extends SkillContext {}
 | `priority`      | Search ranking weight; higher = earlier (default: `0`)           |
 | `license`       | License identifier (e.g., `'MIT'`, `'Apache-2.0'`)               |
 | `compatibility` | Environment requirements (max 500 chars)                         |
-| `allowedTools`  | Space-delimited pre-approved tool names for the skill            |
+| `allowedTools`  | Client agent tools the skill pre-approves; the server ignores it |
 | `specMetadata`  | Arbitrary `Record<string, string>` map (Agent Skills `metadata`) |
 | `resources`     | Bundled dirs: `{ scripts?, references?, assets? }` paths         |
 

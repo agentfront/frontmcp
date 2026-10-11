@@ -479,6 +479,23 @@ describe('ResourceRegistry', () => {
 
       expect(registry.hasAny()).toBe(false);
     });
+
+    it('should return false once a resource registered at runtime is unregistered again', async () => {
+      @Resource({ name: 'runtime', uri: 'runtime://uri' })
+      class Runtime {
+        async execute() {
+          return { text: 'runtime' };
+        }
+      }
+      const registry = new ResourceRegistry(createMockProviderRegistry(), [], createMockOwner());
+      await registry.ready;
+      registry.registerDynamicResource(Runtime);
+
+      expect(registry.unregisterResourceInstance(Runtime)).toBe(true);
+
+      expect(registry.hasAny()).toBe(false);
+      expect(registry.findByUri('runtime://uri')).toBeUndefined();
+    });
   });
 
   describe('getInlineResources', () => {

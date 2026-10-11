@@ -12,6 +12,7 @@
       "options": {
         "outputPath": "plugins/plugin-webmcp/dist",
         "main": "plugins/plugin-webmcp/src/index.ts",
+        "additionalEntryPoints": ["plugins/plugin-webmcp/src/register.ts"],
         "tsConfig": "plugins/plugin-webmcp/tsconfig.lib.json",
         "format": ["cjs"],
         "declaration": true,
@@ -48,6 +49,7 @@
       "options": {
         "outputPath": "plugins/plugin-webmcp/dist/esm",
         "main": "plugins/plugin-webmcp/src/index.ts",
+        "additionalEntryPoints": ["plugins/plugin-webmcp/src/register.ts"],
         "tsConfig": "plugins/plugin-webmcp/tsconfig.lib.json",
         "format": ["esm"],
         "declaration": false,
