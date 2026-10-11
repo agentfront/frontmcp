@@ -18,13 +18,19 @@ function getArgs(cmd: Command): CommanderArgument[] {
 
 /**
  * Command groups in display order, mapped to the command names they contain.
- * The `skills` group is handled separately to show subcommands inline.
+ * The `SUBCOMMAND_GROUPS` commands are handled separately to show subcommands inline.
  */
 const GROUPS: [label: string, commands: string[]][] = [
   ['Getting Started', ['create', 'init', 'doctor']],
   ['Development', ['dev', 'build', 'test', 'inspector']],
   ['Process Manager', ['start', 'stop', 'restart', 'status', 'list', 'logs', 'socket', 'service']],
   ['Package Manager', ['install', 'uninstall', 'configure']],
+];
+
+/** Commands whose subcommands are listed inline under their own header, e.g. "skills search <query>". */
+const SUBCOMMAND_GROUPS: [label: string, command: string][] = [
+  ['Skills', 'skills'],
+  ['MCP Registry', 'registry'],
 ];
 
 const EXAMPLES: string[] = [
@@ -34,6 +40,7 @@ const EXAMPLES: string[] = [
   'frontmcp start my-app --port 3005        # Start managed server',
   'frontmcp install @company/my-mcp         # Install from npm registry',
   'frontmcp skills search "openapi"         # Find skills in catalog',
+  'frontmcp registry publish --dry-run      # Preview the MCP Registry listing',
 ];
 
 /** Format a top-level command line with cyan name and dim arg placeholders. */
@@ -51,14 +58,20 @@ function formatCommandLine(sub: Command, padWidth: number): string {
   return `  ${term}${padding}${sub.description()}`;
 }
 
-/** Format a skills subcommand as "skills <subname> <args>". */
-function formatSkillsLine(sub: Command, padWidth: number): string {
-  const argsList = getArgs(sub);
-  const rawPrefix = `skills ${sub.name()}`;
-  const rawArgs = argsList.map((a) => (a.required ? `<${a.name()}>` : `[${a.name()}]`)).join(' ');
-  const rawTerm = rawArgs ? `${rawPrefix} ${rawArgs}` : rawPrefix;
+/** The "<parent> <subname> <args>" term of an inline subcommand, without colors. */
+function subcommandTerm(parent: Command, sub: Command): string {
+  const rawArgs = getArgs(sub)
+    .map((a) => (a.required ? `<${a.name()}>` : `[${a.name()}]`))
+    .join(' ');
+  return rawArgs ? `${parent.name()} ${sub.name()} ${rawArgs}` : `${parent.name()} ${sub.name()}`;
+}
 
-  const prefix = c('cyan', rawPrefix);
+/** Format an inline subcommand as "<parent> <subname> <args>". */
+function formatSubcommandLine(parent: Command, sub: Command, padWidth: number): string {
+  const argsList = getArgs(sub);
+  const rawTerm = subcommandTerm(parent, sub);
+
+  const prefix = c('cyan', `${parent.name()} ${sub.name()}`);
   const args = argsList.map((a) => c('dim', a.required ? `<${a.name()}>` : `[${a.name()}]`)).join(' ');
   const term = args ? `${prefix} ${args}` : prefix;
 
@@ -77,17 +90,15 @@ export function customizeHelp(program: Command): void {
       let termWidth = helper.padWidth(cmd, helper);
       const lines: string[] = [];
 
-      // Adjust padWidth to account for skills subcommand terms (e.g. "skills search <query>")
+      // Adjust padWidth to account for inline subcommand terms (e.g. "skills search <query>")
       const allCommands = helper.visibleCommands(cmd);
-      const skillsCmd = allCommands.find((c) => c.name() === 'skills');
-      const skillsSubs = skillsCmd ? helper.visibleCommands(skillsCmd) : [];
-      if (skillsCmd) {
-        for (const sub of skillsSubs) {
-          const rawArgs = getArgs(sub)
-            .map((a) => (a.required ? `<${a.name()}>` : `[${a.name()}]`))
-            .join(' ');
-          const rawTerm = rawArgs ? `skills ${sub.name()} ${rawArgs}` : `skills ${sub.name()}`;
-          termWidth = Math.max(termWidth, rawTerm.length);
+      const subcommandGroups = SUBCOMMAND_GROUPS.flatMap(([label, name]) => {
+        const parent = allCommands.find((c) => c.name() === name);
+        return parent ? [{ label, parent, subs: helper.visibleCommands(parent) }] : [];
+      });
+      for (const { parent, subs } of subcommandGroups) {
+        for (const sub of subs) {
+          termWidth = Math.max(termWidth, subcommandTerm(parent, sub).length);
         }
       }
 
@@ -111,11 +122,12 @@ export function customizeHelp(program: Command): void {
         lines.push('');
       }
 
-      // Skills — show subcommands inline
-      if (skillsCmd && skillsSubs.length > 0) {
-        lines.push(c('bold', 'Skills'));
-        for (const sub of skillsSubs) {
-          lines.push(formatSkillsLine(sub, termWidth));
+      // Skills, MCP Registry — show subcommands inline
+      for (const { label, parent, subs } of subcommandGroups) {
+        if (subs.length === 0) continue;
+        lines.push(c('bold', label));
+        for (const sub of subs) {
+          lines.push(formatSubcommandLine(parent, sub, termWidth));
         }
         lines.push('');
       }
@@ -132,7 +144,10 @@ export function customizeHelp(program: Command): void {
       }
 
       // Other commands not in any group
-      const renderedNames = new Set([...GROUPS.flatMap(([, names]) => names), 'skills']);
+      const renderedNames = new Set([
+        ...GROUPS.flatMap(([, names]) => names),
+        ...SUBCOMMAND_GROUPS.map(([, name]) => name),
+      ]);
       const other = allCommands.filter((sc) => !renderedNames.has(sc.name()) && !isProjectCommand(sc));
       if (other.length > 0) {
         lines.push(c('bold', 'Other'));

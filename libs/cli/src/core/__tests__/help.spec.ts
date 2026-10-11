@@ -44,6 +44,16 @@ describe('customizeHelp', () => {
     expect(socketIdx).toBeGreaterThan(pmIdx);
   });
 
+  it('should show the MCP Registry subcommands inline under their own header', async () => {
+    const help = await getHelpOutput();
+    const registryIdx = help.indexOf('MCP Registry');
+    expect(registryIdx).toBeGreaterThan(-1);
+    expect(help.indexOf('registry keygen')).toBeGreaterThan(registryIdx);
+    expect(help).toContain('registry publish');
+    expect(help).toContain('registry status');
+    expect(help).toContain('frontmcp registry publish --dry-run');
+  });
+
   it('should show skills subcommands inline', async () => {
     const help = await getHelpOutput();
     expect(help).toContain('skills search');
@@ -85,6 +95,9 @@ describe('customizeHelp', () => {
       'skills list',
       'skills install',
       'skills read',
+      'registry keygen',
+      'registry publish',
+      'registry status',
     ];
 
     for (const cmd of expectedCommands) {

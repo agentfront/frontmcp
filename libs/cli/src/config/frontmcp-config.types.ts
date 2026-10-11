@@ -528,6 +528,23 @@ export interface SkillsCliConfig {
 }
 
 // ============================================
+// MCP Registry publishing
+// ============================================
+
+/**
+ * `frontmcp registry publish` defaults. The server's name and description come
+ * from `@FrontMcp({ registry })`; `--url` and `--registry` override these.
+ */
+export interface RegistryCliConfig {
+  /** Public Streamable HTTP URL of the deployed server (`remotes[0]` in server.json). */
+  url?: string;
+  /** Packages listed in server.json: `'npm'` lists package.json's name and version. */
+  packages?: Array<'npm'>;
+  /** MCP Registry base URL. @default 'https://registry.modelcontextprotocol.io' */
+  registryUrl?: string;
+}
+
+// ============================================
 // Top-level config
 // ============================================
 
@@ -562,4 +579,6 @@ export interface FrontMcpConfig {
   test?: TestConfig;
   /** `frontmcp skills install` / `export` defaults. */
   skills?: SkillsCliConfig;
+  /** `frontmcp registry publish` defaults. */
+  registry?: RegistryCliConfig;
 }

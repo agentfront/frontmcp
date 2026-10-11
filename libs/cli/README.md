@@ -58,6 +58,34 @@ npx frontmcp create my-app
 | `frontmcp build --target mcpb`  | Package the server into a `.mcpb` archive (MCPB v0.3 spec)             |
 | `frontmcp mcpb validate <path>` | Verify an existing `.mcpb` archive against the MCPB v0.3 specification |
 
+### MCP Registry
+
+Publish the server to the [MCP Registry](https://registry.modelcontextprotocol.io). The CLI speaks the Registry's API
+itself: no `mcp-publisher` binary is needed.
+
+| Command                               | Description                                                                                                    |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `frontmcp registry keygen`            | Create the Ed25519 key that proves your domain; print `MCP_REGISTRY_PUBLIC_KEY` and the DNS record             |
+| `frontmcp registry publish --dry-run` | Build `server.json`, validate it, and print it alone on stdout (diagnostics go to stderr)                      |
+| `frontmcp registry publish`           | Validate, log in (HTTP proof by default), and publish this version                                             |
+| `frontmcp registry status <status>`   | Mark one version (`--server-version`) or every version (`--all-versions`) `active`, `deprecated`, or `deleted` |
+
+`server.json` comes from `@FrontMcp({ info, registry })` (name, description, title, version, website, icons),
+`package.json` (description and repository fallbacks, the npm package), and the `registry` block of
+`frontmcp.config`:
+
+```ts
+export default defineConfig({
+  name: 'weather',
+  deployments: [{ target: 'node' }],
+  registry: {
+    url: 'https://mcp.example.com/mcp', // remotes[0]; --url overrides it
+    packages: ['npm'], // list package.json's name and version; needs "mcpName" in package.json
+    registryUrl: 'https://staging.registry.modelcontextprotocol.io', // --registry overrides it
+  },
+});
+```
+
 ## Options Reference
 
 ### General
@@ -136,6 +164,25 @@ npx frontmcp create my-app
 | `-v, --verbose`      | Show verbose test output                     | `false` |
 | `-t, --timeout <ms>` | Set test timeout                             | `60000` |
 | `-c, --coverage`     | Collect test coverage                        | `false` |
+
+### Registry
+
+| Flag                         | Commands        | Description                                                                                                      |
+| ---------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `-o, --out <file>`           | keygen          | Key file (default `~/.frontmcp/keys/mcp-registry.key`, written with mode 0600)                                   |
+| `--force`                    | keygen          | Replace an existing key file                                                                                     |
+| `--auth <method>`            | publish, status | `http` (default), `dns`, or `github-oidc` (GitHub Actions, `io.github.*` names)                                  |
+| `--domain <domain>`          | publish, status | Domain that serves the proof (default: the name's namespace reversed)                                            |
+| `--key-file <path>`          | publish, status | Private key, hex seed or PEM (default: env `MCP_REGISTRY_PRIVATE_KEY`, else `~/.frontmcp/keys/mcp-registry.key`) |
+| `--registry <url>`           | publish, status | Registry base URL (default: `registry.registryUrl`, else the official Registry)                                  |
+| `-e, --entry <path>`         | publish, status | Entry file with the `@FrontMcp()` class                                                                          |
+| `--file <path>`              | publish         | Publish this `server.json` as is                                                                                 |
+| `--url <url>`                | publish         | Streamable HTTP URL of the deployed server (`remotes[0]`)                                                        |
+| `--dry-run`                  | publish         | Print `server.json` on stdout and the validation result on stderr; don't log in or publish                       |
+| `--server-version <version>` | status          | The version to change                                                                                            |
+| `--all-versions`             | status          | Change every version (one of the two is required)                                                                |
+| `--message <text>`           | status          | Reason shown with `deprecated` or `deleted` (at most 500 characters)                                             |
+| `--name <name>`              | status          | Server name (default: `registry.name` in `@FrontMcp()`)                                                          |
 
 ## Examples
 
@@ -394,6 +441,7 @@ libs/cli/src/
 │   ├── dev/            # dev, test, init, doctor, inspector
 │   ├── pm/             # start, stop, restart, status, list, logs, service, socket
 │   ├── package/        # install, uninstall, configure
+│   ├── registry/       # registry keygen, publish, status (MCP Registry)
 │   └── scaffold/       # create
 ├── shared/             # env loading, fs utils, prompts
 └── index.ts            # Public API exports

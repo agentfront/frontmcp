@@ -62,6 +62,11 @@ describe('cliExtensionConfigSchema', () => {
       }
     });
 
+    it('reserves "registry" for frontmcp registry', () => {
+      const result = cliExtensionConfigSchema.safeParse({ commands: { registry: { entry: './scripts/x.ts' } } });
+      expect(result.success).toBe(false);
+    });
+
     it('rejects "dev" specifically with a helpful collision message', () => {
       const result = cliExtensionConfigSchema.safeParse({
         commands: { dev: { entry: './scripts/dev.ts' } },

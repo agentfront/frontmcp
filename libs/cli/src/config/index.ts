@@ -17,6 +17,7 @@ export type {
   DeploymentTargetType,
   FrontMcpConfig,
   McpClientName,
+  RegistryCliConfig,
   ServerDefaults,
   SkillsCliConfig,
   TestConfig,

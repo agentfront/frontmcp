@@ -7,6 +7,7 @@ import { registerInstallCommands } from '../commands/install/register';
 import { registerMcpbCommands } from '../commands/mcpb/register';
 import { registerPackageCommands } from '../commands/package/register';
 import { registerPmCommands } from '../commands/pm/register';
+import { registerRegistryCommands } from '../commands/registry/register';
 import { registerScaffoldCommands } from '../commands/scaffold/register';
 import { registerSkillsCommands } from '../commands/skills/register';
 import { customizeHelp } from './help';
@@ -61,6 +62,7 @@ export async function createProgram(cwd: string = process.cwd(), argv: string[] 
   registerPackageCommands(program);
   registerSkillsCommands(program);
   registerMcpbCommands(program);
+  registerRegistryCommands(program);
   registerEjectCommands(program);
   registerInstallCommands(program);
 

@@ -42,7 +42,8 @@ export type ResolveMode =
   | 'inspector'
   | 'pm:start'
   | 'pm:socket'
-  | 'skills';
+  | 'skills'
+  | 'registry';
 
 export interface ResolveConfigOptions {
   /** Working directory the command was invoked from. */
@@ -97,6 +98,7 @@ function modeToEnvKey(mode: ResolveMode): 'dev' | 'test' | 'ship' | undefined {
       return 'ship';
     case 'build:cli':
     case 'skills':
+    case 'registry':
       return undefined;
   }
 }
