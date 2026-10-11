@@ -65,6 +65,6 @@ npx nx run-many -t test
 
 ## Learn More
 
-- [FrontMCP Documentation](https://docs.agentfront.dev)
+- [FrontMCP Documentation](https://frontmcp.dev)
 - [MCP Specification](https://modelcontextprotocol.io)
 - AI coding agents can use the `frontmcp-docs` MCP server configured in `.mcp.json`

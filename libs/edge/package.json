@@ -24,7 +24,7 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
-  "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/edge/README.md",
+  "homepage": "https://frontmcp.dev/reference/deployment/edge",
   "type": "commonjs",
   "main": "./dist/index.js",
   "module": "./dist/esm/index.mjs",

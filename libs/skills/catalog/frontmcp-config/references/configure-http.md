@@ -422,7 +422,7 @@ set their own content type **before** sending the body:
 ### Large payloads: prefer a custom route over `@Resource`
 
 > **Decision:** When a tool needs to hand the client a **large** payload, return
-> a [`resource_link`](https://docs.agentfront.dev/frontmcp/servers/resources)
+> a [`resource_link`](https://frontmcp.dev/reference/sdk/resource)
 > that points at a custom `http.routes` **GET** handler, and serve the bytes
 > from that handler (it supports stream/binary delivery). A `@Resource` rides
 > the MCP JSON-RPC channel and is **not** out-of-band — large reads block the
@@ -541,5 +541,5 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 
 ## Reference
 
-- [HTTP Server Docs](https://docs.agentfront.dev/frontmcp/deployment/local-dev-server)
+- [HTTP Server Docs](https://frontmcp.dev/reference/cli#frontmcp-dev)
 - Related skills: `configure-throttle`, `configure-transport`, `setup-redis`, `setup-project`

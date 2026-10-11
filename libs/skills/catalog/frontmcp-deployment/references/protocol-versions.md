@@ -262,5 +262,5 @@ Skills over MCP (`skill://` resources plus `skills/search` / `skills/load` /
 
 ## Related
 
-- Docs: https://docs.agentfront.dev/frontmcp/fundamentals/protocol-versions
+- Docs: https://frontmcp.dev/reference/server/protocol-versions
 - Spec: https://modelcontextprotocol.io/specification/2026-07-28/changelog

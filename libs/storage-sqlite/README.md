@@ -84,7 +84,7 @@ await store.set('session-id', { userId: 'u1' }, { ttlSeconds: 3600 });
 - **One writer.** Multiple processes can read; concurrent writers serialize. The
   CLI task runner relies on WAL for exactly this.
 
-Full guide: [SQLite Setup](https://docs.agentfront.dev/frontmcp/deployment/sqlite-setup)
+Full guide: [SQLite Setup](https://frontmcp.dev/reference/deployment/sqlite)
 
 ## License
 

@@ -1225,5 +1225,5 @@ void registerWebMcpTools(resolveDocumentModelContext(), tools, (modelContext) =>
 
 ## Reference
 
-- [Plugins Overview Documentation](https://docs.agentfront.dev/frontmcp/plugins/overview)
+- [Plugins Overview Documentation](https://frontmcp.dev/reference/plugins)
 - Related skills: `create-plugin`, `create-plugin-hooks`, `create-tool`

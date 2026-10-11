@@ -373,5 +373,5 @@ OAuth sign-in works on the worker too, including `/oauth/provider/:providerId/ca
 
 ## Reference
 
-- **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/serverless>
+- **Docs:** <https://frontmcp.dev/reference/deployment#where-it-runs>
 - **Related skills:** `build-for-cli`, `build-for-browser`, `build-for-sdk`

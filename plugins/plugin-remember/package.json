@@ -25,7 +25,7 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
-  "homepage": "https://github.com/agentfront/frontmcp/blob/main/plugins/plugin-remember/README.md",
+  "homepage": "https://frontmcp.dev/reference/plugins/remember",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

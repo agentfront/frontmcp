@@ -8,7 +8,7 @@
  * - `ui/mimeType`: MIME type for the HTML content
  * - `ui`: Nested UI object with resourceUri, csp, etc.
  *
- * @see {@link https://docs.agentfront.dev/docs/servers/tools#tool-ui | Tool UI Documentation}
+ * @see {@link https://frontmcp.dev/reference/ui | Tool UI Documentation}
  *
  * @example
  * ```typescript
@@ -21,9 +21,13 @@
  * ```
  */
 
-import type { ToolResultWrapper } from '../client/mcp-test-client.types';
-import type { TestPlatformType } from '../platform/platform-types';
-import { getForbiddenMetaPrefixes, getToolCallMetaPrefixes, getPlatformMimeType } from '../platform/platform-types';
+import { type ToolResultWrapper } from '../client/mcp-test-client.types';
+import {
+  getForbiddenMetaPrefixes,
+  getPlatformMimeType,
+  getToolCallMetaPrefixes,
+  type TestPlatformType,
+} from '../platform/platform-types';
 
 // Type-only reference: Metadata keys used below align with UIMetadata from @frontmcp/ui/adapters
 // This is an optional peer dependency, so we don't import it directly

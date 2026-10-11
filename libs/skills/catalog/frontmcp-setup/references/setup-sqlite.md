@@ -431,5 +431,5 @@ The change in `src/main.ts`:
 
 ## Reference
 
-- **Docs:** [SQLite Setup Guide](https://docs.agentfront.dev/frontmcp/deployment/sqlite-setup)
+- **Docs:** [SQLite Setup Guide](https://frontmcp.dev/reference/deployment/sqlite)
 - **Related skills:** `setup-redis`, `setup-project`, `nx-workflow`
