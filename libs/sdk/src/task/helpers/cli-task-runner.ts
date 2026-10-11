@@ -18,12 +18,12 @@
 // Deno Deploy) without their bundlers eagerly pulling in `node:child_process`.
 // The runner can only execute on Node runtimes — calling `spawn` outside Node
 // throws via `assertNode` inside utils.
-import { getSpawnFn } from '@frontmcp/utils';
+import { getHostname, getSpawnFn } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../../common';
 import type { TaskStore } from '../store';
 import type { TaskRecord } from '../task.types';
-import { isAlive } from './process-liveness';
+import { isAlive, isLocalWorker } from './process-liveness';
 import type { SpawnContext, TaskRunner } from './task-runner.types';
 
 export interface CliTaskRunnerCommand {
@@ -89,6 +89,7 @@ export class CliTaskRunner implements TaskRunner {
         host: 'cli',
         pid: child.pid,
         spawnedAt: new Date().toISOString(),
+        hostname: getHostname(),
       },
     });
   }
@@ -121,7 +122,16 @@ export class CliTaskRunner implements TaskRunner {
   }
 
   async cancel(record: TaskRecord): Promise<void> {
-    const pid = record.executor?.pid;
+    const executor = record.executor;
+    const pid = executor?.pid;
+    if (executor && !isLocalWorker(executor)) {
+      this.deps.logger?.debug?.('[CliTaskRunner] cancel: the worker runs on another host; not signalling it', {
+        taskId: record.taskId,
+        pid,
+        hostname: executor.hostname,
+      });
+      return;
+    }
     if (!pid || !isAlive(pid)) {
       this.deps.logger?.debug?.('[CliTaskRunner] cancel: worker already dead', {
         taskId: record.taskId,

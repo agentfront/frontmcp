@@ -7,6 +7,7 @@ import 'reflect-metadata';
 
 import { createTestFetchServer, type TestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { disposeServers } from '../../__test-utils__/helpers/oauth-flow.helpers';
+import { useMidRateLimitWindow } from '../../__test-utils__/helpers/rate-limit-window.helpers';
 import { App, Tool, ToolContext } from '../../common';
 
 @Tool({ name: 'ping', inputSchema: {} })
@@ -27,6 +28,8 @@ afterAll(async () => {
 });
 
 describe('throttle.global on OAuth and discovery routes', () => {
+  useMidRateLimitWindow(60_000);
+
   it.each([
     '/.well-known/oauth-authorization-server',
     '/.well-known/oauth-protected-resource',

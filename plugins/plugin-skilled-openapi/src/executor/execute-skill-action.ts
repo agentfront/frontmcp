@@ -105,7 +105,9 @@ export async function executeSkillAction(args: {
   });
   const inputParse = schemas.input.safeParse(input ?? {});
   if (!inputParse.success) {
-    return { ok: false, status: 0, error: `input validation failed: ${formatZodIssues(inputParse.error.issues)}` };
+    const error = `input validation failed: ${formatZodIssues(inputParse.error.issues)}`;
+    detach(audit?.writer.writeHttpCallFailure(auditCtx, { status: 0, error }), 'http-call-failure');
+    return { ok: false, status: 0, error };
   }
 
   // 3) Allowed hosts: ONLY the single service this op is bound to (B3).
@@ -143,12 +145,7 @@ export async function executeSkillAction(args: {
     detach(audit?.writer.writeHttpCallFailure(auditCtx, { status: 0, error: e }), 'http-call-failure');
     throw e;
   }
-  if (result.ok) {
-    detach(
-      audit?.writer.writeHttpCallSuccess(auditCtx, { status: result.status, output: result.data ?? null }),
-      'http-call-success',
-    );
-  } else {
+  if (!result.ok) {
     detach(
       audit?.writer.writeHttpCallFailure(auditCtx, {
         status: result.status,
@@ -158,18 +155,26 @@ export async function executeSkillAction(args: {
     );
   }
 
-  // 5) Validate JSON response against the op's output schema (errors pass through).
+  // 5) Validate JSON response against the op's output schema; the audit records the outcome the caller gets.
   const isJsonResponse = (result.contentType ?? '').toLowerCase().includes('application/json');
   if (result.ok && isJsonResponse && result.data !== undefined && result.data !== null) {
     const outputParse = schemas.output.safeParse(result.data);
     if (!outputParse.success) {
+      const error = `upstream response failed output schema: ${formatZodIssues(outputParse.error.issues)}`;
+      detach(audit?.writer.writeHttpCallFailure(auditCtx, { status: result.status, error }), 'http-call-failure');
       return {
         ok: false,
         status: result.status,
         ...(result.contentType ? { contentType: result.contentType } : {}),
-        error: `upstream response failed output schema: ${formatZodIssues(outputParse.error.issues)}`,
+        error,
       };
     }
+  }
+  if (result.ok) {
+    detach(
+      audit?.writer.writeHttpCallSuccess(auditCtx, { status: result.status, output: result.data ?? null }),
+      'http-call-success',
+    );
   }
 
   return {

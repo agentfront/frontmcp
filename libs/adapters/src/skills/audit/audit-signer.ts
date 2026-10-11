@@ -12,6 +12,7 @@
 import {
   base64urlDecode,
   base64urlEncode,
+  hkdfSha256,
   hmacSha256,
   pemToPublicJwk,
   rsaSignBase64Url,
@@ -44,6 +45,13 @@ export interface SkillAuditSigner {
   getKeyId(): string;
   /** Algorithm this signer uses. */
   getAlg(): SkillAuditSignatureAlg;
+  /** HKDF-SHA256 key derived from the signer's key material, never the material itself; keyless (HSM/KMS) signers leave it out. */
+  deriveKey?(info: string, length: number): Uint8Array;
+}
+
+/** HKDF-SHA256 with an empty salt: `ikm` is already secret key material. */
+function deriveFromKeyMaterial(ikm: Uint8Array, info: string, length: number): Uint8Array {
+  return hkdfSha256(ikm, new Uint8Array(0), new TextEncoder().encode(info), length);
 }
 
 /**
@@ -106,6 +114,10 @@ export class Hs256AuditSigner implements SkillAuditSigner {
   getAlg(): SkillAuditSignatureAlg {
     return 'HS256';
   }
+
+  deriveKey(info: string, length: number): Uint8Array {
+    return deriveFromKeyMaterial(this.key, info, length);
+  }
 }
 
 /**
@@ -122,6 +134,7 @@ export class Hs256AuditSigner implements SkillAuditSigner {
  */
 export class Rs256AuditSigner implements SkillAuditSigner {
   private readonly privateJwk: JsonWebKey;
+  private readonly privateExponent: string;
   private readonly keyId: string;
 
   constructor(privateJwk: JsonWebKey, keyId: string) {
@@ -146,6 +159,7 @@ export class Rs256AuditSigner implements SkillAuditSigner {
     // a spread is sufficient. Prevents the caller from mutating the JWK they
     // handed us (e.g. rotating `n`/`d` in place) after construction.
     this.privateJwk = { ...privateJwk };
+    this.privateExponent = privateJwk.d;
     this.keyId = keyId;
   }
 
@@ -172,6 +186,11 @@ export class Rs256AuditSigner implements SkillAuditSigner {
 
   getAlg(): SkillAuditSignatureAlg {
     return 'RS256';
+  }
+
+  /** Derived from the private exponent `d`, which only the holder of the private key has. */
+  deriveKey(info: string, length: number): Uint8Array {
+    return deriveFromKeyMaterial(base64urlDecode(this.privateExponent), info, length);
   }
 }
 

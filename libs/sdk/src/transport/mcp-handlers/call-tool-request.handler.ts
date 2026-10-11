@@ -1,22 +1,7 @@
-import {
-  CallToolRequestSchema,
-  CallToolResultSchema,
-  type CallToolRequest,
-  type CallToolResult,
-} from '@frontmcp/protocol';
+import { CallToolRequestSchema, type CallToolRequest, type CallToolResult } from '@frontmcp/protocol';
 
-import { FlowControl } from '../../common';
-import {
-  ErrorHandler,
-  formatMcpErrorResponse,
-  InputRequiredSignal,
-  InternalMcpError,
-  MissingClientCapabilityError,
-  TaskAugmentationNotSupportedError,
-  TaskAugmentationRequiredError,
-  ToolCredentialsRequiredError,
-} from '../../errors';
-import { toSdkMcpError } from './mcp-error.utils';
+import { ErrorHandler } from '../../errors';
+import { toolCallErrorResult } from './call-tool-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import { withMcpSurface } from './mcp-surface';
 
@@ -43,60 +28,7 @@ export default function callToolRequestHandler({
         logger.verbose('tools/call completed', { tool: toolName, durationMs: Date.now() - start });
         return result;
       } catch (e) {
-        // FlowControl is a control flow mechanism, not an error - handle silently
-        if (e instanceof FlowControl) {
-          if (e.type === 'respond') {
-            // Validate output using MCP schema
-            const parseResult = CallToolResultSchema.safeParse(e.output);
-            if (parseResult.success) {
-              return parseResult.data;
-            }
-            logger.error('FlowControl.respond has invalid output', {
-              tool: toolName,
-              validationErrors: parseResult.error.issues,
-            });
-            return formatMcpErrorResponse(new InternalMcpError('FlowControl output is not a valid CallToolResult'));
-          }
-          // #369 — for `fail`, propagate the original error (set by FlowControl.fail)
-          // so PublicMcpError.message/code reach the client intact instead of being
-          // flattened to the "Flow ended with: fail" sentinel. Mirrors the unwrap
-          // already in `direct-server.ts:125-128` so both transport paths agree.
-          if (e.type === 'fail') {
-            const original = (e as { originalError?: unknown }).originalError;
-            if (original !== undefined) {
-              return errorHandler.handle(original, { toolName });
-            }
-          }
-          // For handled, next, abort (and `fail` with no original error) — return appropriate response
-          logger.warn(`FlowControl ended with type: ${e.type}`, { tool: toolName, type: e.type, output: e.output });
-          return formatMcpErrorResponse(new InternalMcpError(`Flow ended with: ${e.type}`));
-        }
-
-        // MRTR signals (protocol 2026-07-28) are protocol-level control flow, not
-        // tool failures: the tool is asking the client for input, or telling it
-        // which capability it must declare. Flattening them into a CallToolResult
-        // with `isError` would hide the `input_required` round trip from the
-        // dispatcher and strand the exchange. Re-throw so it can shape the
-        // `InputRequiredResult` / `-32021` response.
-        if (e instanceof InputRequiredSignal || e instanceof MissingClientCapabilityError) {
-          throw e;
-        }
-
-        // Task augmentation rejections are protocol-level errors per MCP spec §Tool-Level
-        // Negotiation — emit them as JSON-RPC errors (not CallToolResult with isError).
-        if (e instanceof TaskAugmentationNotSupportedError || e instanceof TaskAugmentationRequiredError) {
-          throw toSdkMcpError(e);
-        }
-
-        // The tool-level credential gate is an authorization failure: emit it as a
-        // JSON-RPC -32001 (MCP UNAUTHORIZED) error carrying { tool, providers,
-        // authUrl } in `data` (not a CallToolResult with isError), so clients can
-        // react structurally and surface the connect/authorize URL.
-        if (e instanceof ToolCredentialsRequiredError) {
-          throw toSdkMcpError(e);
-        }
-
-        return errorHandler.handle(e, { toolName });
+        return toolCallErrorResult(e, { errorHandler, toolName, logger });
       }
     },
   } satisfies McpHandler<CallToolRequest, CallToolResult>;

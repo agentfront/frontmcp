@@ -88,7 +88,7 @@ Order of effects per call:
 
 ## Timeout and abort signals
 
-`this.signal` is aborted when the call is cancelled (including `tasks/cancel` for a task-augmented call) and when its `timeout` passes. `FrontMcpContext` has no `abortSignal` property, so don't reach for `this.context.abortSignal`.
+`this.signal` is aborted when the call is cancelled (including `tasks/cancel` for a task-augmented call) and when its `timeout` passes. Separately from a tool's `concurrency`, `@FrontMcp({ tasks: { maxConcurrentPerSession } })` (default 16, at most 1000) caps how many tasks one caller may have unfinished at once; a task over it is refused with `CONCURRENCY_LIMIT`. `FrontMcpContext` has no `abortSignal` property, so don't reach for `this.context.abortSignal`.
 
 `this.fetch()` is aborted with `this.signal` on its own, on top of its per-request timeout (default 30s). Pass `this.signal` to any other cancellable work, so a timed-out call stops instead of running on:
 

@@ -8,7 +8,7 @@ features:
   - 'Implements the SkillAuditStore interface (nextSequence, appendAtSequence, tail, read)'
   - 'One S3 object per sequence keeps individual records immutable and verifiable'
   - 'tail() returns the latest record so the writer can chain prevHash deterministically'
-  - 'read({ from, limit }) supports incremental verifyChain runs in CI'
+  - 'read({ from, limit }) supports incremental verifyChain runs in CI (pass the record before the window as `previous`)'
 ---
 
 # Custom S3-Backed Audit Store
@@ -30,6 +30,8 @@ Implement a custom SkillAuditStore that streams records to S3 with one object pe
 //     after a partial failure doesn't overwrite the record.
 //   - tail(): return the most recent record for prevHash chaining.
 //   - read({ from, limit }): walk records in order for verifyChain.
+//   - releaseSequence(n) is optional and not needed here: the default allocator
+//     derives the next number from the stored records, so a failed write leaves no gap.
 import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 import type { SkillAuditRecord, SkillAuditStore } from '@frontmcp/adapters/skills';
@@ -177,7 +179,7 @@ export default class Server {}
 - Implements the SkillAuditStore interface (nextSequence, appendAtSequence, tail, read)
 - One S3 object per sequence keeps individual records immutable and verifiable
 - tail() returns the latest record so the writer can chain prevHash deterministically
-- read({ from, limit }) supports incremental verifyChain runs in CI
+- read({ from, limit }) supports incremental verifyChain runs in CI (pass the record before the window as `previous`)
 
 ## Related
 

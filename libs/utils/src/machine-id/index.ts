@@ -1,1 +1,1 @@
-export { getMachineId, setMachineIdOverride } from './machine-id';
+export { getHostname, getMachineId, setMachineIdOverride } from './machine-id';
