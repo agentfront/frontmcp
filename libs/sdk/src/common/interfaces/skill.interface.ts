@@ -164,7 +164,8 @@ export interface SkillContent {
   specMetadata?: Record<string, string>;
 
   /**
-   * Space-delimited pre-approved tools (maps to spec `allowed-tools` field).
+   * Space-delimited client agent tools the skill pre-approves (maps to spec `allowed-tools` field).
+   * Handed to the client unchanged; the server neither enforces nor uses it.
    */
   allowedTools?: string;
 

@@ -34,6 +34,7 @@ tags: [config, skills, skills-http, llm-txt, instructions, audit, injection]
     },
     injectInstructions: 'append', // 'off' | 'append' | 'prepend' | 'replace'
     failOnInvalidSkills: true, // false: a 'strict' skill with a missing tool is logged, not fatal
+    externalProvider: new RestSkillProvider({ mode: 'read-only' }), // external skill storage, see below
     audit: {
       enabled: true,
       signer: customSigner, // SkillAuditSigner — see audit section below
@@ -69,9 +70,32 @@ The new top-level `instructions?: string` field on `@FrontMcp` is forwarded verb
 
 The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer. Its header and footer point clients at `skill://index.json` (SEP-2640 — singular scheme), which lists each skill's `skill://<skillPath>/SKILL.md` URI. With `mcpResources: false` no `skill://` resource is served, so they point at the `skills/load` and `skills/search` methods instead, and `sep2640InInstructions` is ignored.
 
-> **Dynamic skills:** because the composer recomputes the summary on every `initialize` request, skills registered after server boot **are** picked up automatically.
+> **Dynamic skills:** because the composer recomputes the summary on every `initialize` request, skills registered after server boot **are** picked up automatically. Their `skill://<skillPath>/SKILL.md` resources follow too: a skill registered or removed after boot (`this.scope.skills.registerSkillContent()` / `unregisterSkill()`, a skill-bundle plugin) is added to or dropped from `resources/list`, and clients get `notifications/resources/list_changed`. Up to 1.9.4 `resources/list` named only the skills present at startup.
 
 > **Per caller:** the summary (and the SEP-2640 `skill://` hints under `sep2640InInstructions`) is composed for the client that initializes, like `skills/list`: it only names skills whose `authorities` that caller satisfies and that the hookable `skills:filter` flow keeps, so a flag-disabled skill's name and description are left out. With nothing gating a skill the instructions are unchanged. Transports use `composeCallerInstructions(scope, { ctx })`, exported from `@frontmcp/sdk` for custom transports.
+
+## Skills-Only Connections (`?mode=skills_only`)
+
+A client that connects to the MCP endpoint with `?mode=skills_only` (for example a planner agent that reads skills and hands execution to sub-agents) gets no tools. The mode restricts tools only:
+
+- `tools/list` returns no tools.
+- `tools/call` is answered as for an unknown tool (`Tool "<name>" not found`), whether or not the tool exists. Tools a tool, resource, prompt, agent or job calls in process (`this.callTool()`) still run.
+- `skills/search`, `skills/load`, `skills/list`, resources (`skill://` and the server's own) and prompts work as usual.
+
+It works on every transport and protocol revision (streamable HTTP, legacy SSE, stateless HTTP, MCP 2026-07-28, `createFetchHandler()` and Workers) and in every auth mode. Each request that carries the query is in the mode, and a session opened with it stays in the mode for its later requests (legacy SSE's `/message` endpoint drops the query, the session keeps it). Both decisions are hookable flow stages: `http:request` → `resolveSkillsOnlyMode` marks the request, and `tools:call-tool` → `checkSkillsOnlyMode` refuses the call. Up to 1.9.4 the mode only applied to a session opened with a verified JWT, and `tools/call` still ran the tools.
+
+## External Skill Storage
+
+`skillsConfig.externalProvider` installs an `ExternalSkillProviderBase` subclass while the server starts, as `this.scope.skills.setExternalProvider()` does at runtime:
+
+| Provider mode  | Behavior                                                                                                                                                   |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'read-only'`  | Skills are searched, listed and loaded through the provider. The server serves the skills methods even when it declares no skill itself.                   |
+| `'persistent'` | Local skills stay the source of truth; `await this.scope.skills.syncToExternal()` copies them to the provider (added / updated / unchanged / removed ids). |
+
+The provider is initialized (`initialize()`) before the server uses it. The value is checked by shape (`initialize`, `isReadOnly`, `search`, `load`, `list`, `count` and `syncSkills` functions), so a provider built against another copy of `@frontmcp/sdk` is accepted.
+
+A read-only provider's skills are also served over `skill://`: `skill://index.json` lists each one as `skill://<name>/SKILL.md`, and the `skill://{+skillPath}/SKILL.md` template reads it (a registered skill of the same name wins). `resources/list` names a concrete `SKILL.md` resource for registered skills only: an external store sends no change events and may hold many skills, so its skills are discovered through the index and read through the template. `setExternalProvider()` is declared on `this.scope.skills` (`SkillRegistryInterface`); up to 1.9.4 it was only on the `SkillRegistry` class and nothing installed a provider at startup.
 
 ## Skills HTTP Authentication
 

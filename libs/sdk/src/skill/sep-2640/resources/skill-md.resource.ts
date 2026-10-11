@@ -3,12 +3,17 @@
 import { type ReadResourceResult } from '@frontmcp/protocol';
 
 import { ResourceTemplate } from '../../../common';
-import { ResourceContext, type ResourceCompletionResult } from '../../../common/interfaces';
+import { ResourceContext, type ResourceCompletionResult, type SkillContent } from '../../../common/interfaces';
 import { assertSkillAuthorized, filterSkillsByAuthorities } from '../../skill-authorities.helper';
 import { filterServableSkills } from '../../skill-filter.helper';
 import { serializeSkillMd } from '../sep-2640.builders';
 import { SKILL_MD_MIME_TYPE } from '../sep-2640.constants';
-import { findAndLoadSkillByPath, getSepVisibleSkills } from '../sep-2640.resource-helpers';
+import {
+  findAndLoadSkillByPath,
+  findSkillByPath,
+  getSepVisibleSkills,
+  loadExternalProviderSkill,
+} from '../sep-2640.resource-helpers';
 
 type Params = { skillPath: string };
 
@@ -47,12 +52,7 @@ export class Sep2640SkillMdResource extends ResourceContext<Params> {
   }
 
   async execute(uri: string, params: Params): Promise<ReadResourceResult> {
-    const { loadResult, instance } = await findAndLoadSkillByPath(this.scope, params.skillPath);
-    // Deny direct reads of authority-gated skills (mirrors a denied tool call:
-    // AuthorityDeniedError, MCP code -32003). No-op when the skill has no
-    // `authorities` or no engine is configured.
-    await assertSkillAuthorized(this.scope, instance, this.getAuthInfo() as Record<string, unknown>);
-    const raw = serializeSkillMd(loadResult.skill);
+    const raw = serializeSkillMd(await this.readSkill(params.skillPath));
 
     return {
       contents: [
@@ -63,5 +63,19 @@ export class Sep2640SkillMdResource extends ResourceContext<Params> {
         },
       ],
     };
+  }
+
+  /** A registered skill at `skillPath`, or else one a read-only external provider serves there. */
+  private async readSkill(skillPath: string): Promise<SkillContent> {
+    if (!findSkillByPath(this.scope, skillPath)) {
+      const providerSkill = await loadExternalProviderSkill(this.scope, skillPath);
+      if (providerSkill) return providerSkill;
+    }
+    const { loadResult, instance } = await findAndLoadSkillByPath(this.scope, skillPath);
+    // Deny direct reads of authority-gated skills (mirrors a denied tool call:
+    // AuthorityDeniedError, MCP code -32003). No-op when the skill has no
+    // `authorities` or no engine is configured.
+    await assertSkillAuthorized(this.scope, instance, this.getAuthInfo() as Record<string, unknown>);
+    return loadResult.skill;
   }
 }

@@ -1,6 +1,7 @@
 // file: libs/plugins/src/codecall/__tests__/codecall-options.spec.ts
 
 import { codeCallPluginOptionsSchema } from '../codecall.types';
+import { rapidEnumerationThresholdOf, resolveVmOptions } from '../providers/code-call.config';
 
 describe('CodeCallPluginOptions Zod Schema', () => {
   describe('default values', () => {
@@ -61,6 +62,35 @@ describe('CodeCallPluginOptions Zod Schema', () => {
         vm: { preset: 'locked_down' },
       });
       expect(parsedLockedDown.vm.preset).toBe('locked_down');
+    });
+  });
+
+  describe('vm rapid-enumeration limits', () => {
+    it("leave the sandbox's default of 30 calls to one tool when unset", () => {
+      const resolved = resolveVmOptions(codeCallPluginOptionsSchema.parse({}).vm);
+
+      expect(resolved.rapidEnumerationThreshold).toBeUndefined();
+      expect(resolved.rapidEnumerationOverrides).toBeUndefined();
+      expect(rapidEnumerationThresholdOf(resolved)).toBe(30);
+    });
+
+    it('carry a configured threshold and per-tool overrides through', () => {
+      const parsed = codeCallPluginOptionsSchema.parse({
+        vm: { rapidEnumerationThreshold: 50, rapidEnumerationOverrides: { 'users:get': 100 } },
+      });
+      const resolved = resolveVmOptions(parsed.vm);
+
+      expect(resolved.rapidEnumerationThreshold).toBe(50);
+      expect(resolved.rapidEnumerationOverrides).toEqual({ 'users:get': 100 });
+      expect(rapidEnumerationThresholdOf(resolved)).toBe(50);
+    });
+
+    it('refuse a fractional or non-positive threshold', () => {
+      expect(codeCallPluginOptionsSchema.safeParse({ vm: { rapidEnumerationThreshold: 0 } }).success).toBe(false);
+      expect(codeCallPluginOptionsSchema.safeParse({ vm: { rapidEnumerationThreshold: 2.5 } }).success).toBe(false);
+      expect(
+        codeCallPluginOptionsSchema.safeParse({ vm: { rapidEnumerationOverrides: { 'users:get': -1 } } }).success,
+      ).toBe(false);
     });
   });
 

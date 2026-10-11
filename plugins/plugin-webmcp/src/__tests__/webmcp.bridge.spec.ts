@@ -12,7 +12,8 @@ import {
   type ScopeEntry,
 } from '@frontmcp/sdk';
 
-import { isWebMcpSupported, toWebMcpToolName, WebMcpBridge } from '../webmcp.bridge';
+import { toWebMcpToolName, WebMcpBridge } from '../webmcp.bridge';
+import { isWebMcpSupported } from '../webmcp.model-context';
 import { webMcpPluginOptionsSchema, type WebMcpPluginOptionsInput } from '../webmcp.options';
 import WebMcpPlugin from '../webmcp.plugin';
 import type { ModelContext, ModelContextTool } from '../webmcp.types';
@@ -419,7 +420,7 @@ describe('WebMcpBridge', () => {
 
 describe('WebMcpPlugin', () => {
   it('parses its options when constructed', () => {
-    expect(new WebMcpPlugin().options).toEqual({ prefix: '' });
+    expect(new WebMcpPlugin().options).toEqual({ prefix: '', result: 'structured' });
     expect(new WebMcpPlugin({ prefix: 'shop.' }).options.prefix).toBe('shop.');
   });
 

@@ -2,8 +2,10 @@
  * Skill Directory Loader Tests
  */
 
-import { loadSkillDirectory, scanSkillResources, skillDir } from '../skill-directory-loader';
+import { fileExists, readFile, stat } from '@frontmcp/utils';
+
 import { SkillKind } from '../../common/records/skill.record';
+import { loadSkillDirectory, scanSkillResources, skillDir } from '../skill-directory-loader';
 
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => ({
@@ -11,20 +13,12 @@ jest.mock('@frontmcp/utils', () => ({
   readFile: jest.fn(),
   fileExists: jest.fn(),
   stat: jest.fn(),
-  joinPath: (...parts: string[]) =>
-    parts
-      .map((p) => p.replace(/^\/+|\/+$/g, ''))
-      .filter(Boolean)
-      .join('/')
-      .replace(/^/, '/'),
   randomBytes: (n: number) => new Uint8Array(n),
   bytesToHex: (bytes: Uint8Array) =>
     Array.from(bytes)
       .map((b) => b.toString(16).padStart(2, '0'))
       .join(''),
 }));
-
-import { readFile, fileExists, stat } from '@frontmcp/utils';
 
 const mockReadFile = readFile as jest.MockedFunction<typeof readFile>;
 const mockFileExists = fileExists as jest.MockedFunction<typeof fileExists>;

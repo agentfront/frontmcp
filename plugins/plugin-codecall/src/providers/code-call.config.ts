@@ -58,6 +58,14 @@ export function maxToolCallsOf(vmOptions: ResolvedCodeCallVmOptions): number {
   return vmOptions.maxSteps || 100;
 }
 
+/** The sandbox's own limit on calls to one tool within about 2 seconds. */
+const SANDBOX_RAPID_ENUMERATION_THRESHOLD = 30;
+
+/** Calls to one tool a script may make within about 2 seconds: `vm.rapidEnumerationThreshold`, else 30. */
+export function rapidEnumerationThresholdOf(vmOptions: ResolvedCodeCallVmOptions): number {
+  return vmOptions.rapidEnumerationThreshold ?? SANDBOX_RAPID_ENUMERATION_THRESHOLD;
+}
+
 // ---- VM Options Resolution ----
 
 export function resolveVmOptions(vmOptions?: CodeCallVmOptions): ResolvedCodeCallVmOptions {

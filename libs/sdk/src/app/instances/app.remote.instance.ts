@@ -116,6 +116,9 @@ class EmptySkillRegistry implements SkillRegistryInterface {
     // Empty registry - no skills to sync
     return null;
   }
+  setExternalProvider() {
+    return undefined;
+  }
   getExternalProvider() {
     return undefined;
   }

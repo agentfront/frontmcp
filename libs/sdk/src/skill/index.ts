@@ -254,7 +254,7 @@ export { registerSkillAuditWriter, setSkillAuditFactory, hasSkillAuditFactory } 
 export type { AuditModuleShape, SkillAuditFactory } from './skill-audit.helper';
 
 // Mode Utilities
-export { detectSkillsOnlyMode, isSkillsOnlySession } from './skill-mode.utils';
+export { detectSkillsOnlyMode, isSkillsOnlyRequest, isSkillsOnlySession } from './skill-mode.utils';
 export type { SkillsOnlySessionPayload } from './skill-mode.utils';
 
 // Initialize-instructions composition (used by stdio + HTTP transports;
