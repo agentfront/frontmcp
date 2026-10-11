@@ -372,5 +372,5 @@ the planned tree before writing.
 
 ## Reference
 
-- **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/mcp-clients>
+- **Docs:** <https://frontmcp.dev/reference/deployment/mcp-clients>
 - **Related skills:** `build-for-cli`, `deploy-to-node`, `frontmcp-config`

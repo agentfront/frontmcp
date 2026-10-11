@@ -24,7 +24,7 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
-  "homepage": "https://github.com/agentfront/frontmcp/blob/main/plugins/plugin-codecall/README.md",
+  "homepage": "https://frontmcp.dev/reference/plugins/codecall",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

@@ -435,5 +435,5 @@ export default class Server {}
 
 ## Reference
 
-- [Multi-App Composition Documentation](https://docs.agentfront.dev/frontmcp/features/multi-app-composition)
+- [Multi-App Composition Documentation](https://frontmcp.dev/learn/grouping-capabilities-into-apps)
 - Related skills: `project-structure-standalone`, `project-structure-nx`, `configure-auth`, `create-tool`

@@ -1274,7 +1274,7 @@ re-validates every redirect hop. FrontMCP's secure defaults:
 governs **both** the spec URL and `$ref`s. For local/internal specs (e.g.
 `http://localhost:3000/openapi.json`) set `refResolution.allowInternalIPs: true`
 (trusted environments only). See the
-[OpenAPI adapter docs](https://docs.agentfront.dev/frontmcp/adapters/openapi-adapter#spec-loading--ref-resolution-security-ssrf)
+[OpenAPI adapter docs](https://frontmcp.dev/reference/adapters/openapi)
 for the full reference.
 
 ## Supported Authentication Types

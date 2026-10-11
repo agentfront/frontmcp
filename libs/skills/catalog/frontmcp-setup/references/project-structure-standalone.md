@@ -226,5 +226,5 @@ Skills inside `src/skills/` are `@Skill` classes that are part of your applicati
 
 ## Reference
 
-- [Quickstart Documentation](https://docs.agentfront.dev/frontmcp/getting-started/quickstart)
+- [Quickstart Documentation](https://frontmcp.dev/learn)
 - Related skills: `project-structure-nx`, `multi-app-composition`, `setup-project`, `create-tool`

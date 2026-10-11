@@ -9,7 +9,7 @@ priority: 9
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/authentication/authorities
+  docs: https://frontmcp.dev/reference/auth/authorities
 ---
 
 # FrontMCP Authorities
@@ -437,7 +437,7 @@ when a server has been configured to host this skill.
 
 ## Reference
 
-- [Auth Architecture](https://docs.agentfront.dev/frontmcp/authentication/architecture) — Full three-layer model: server auth, auth providers, authorities, vault, scope challenges
-- [Authorities Documentation](https://docs.agentfront.dev/frontmcp/authentication/authorities) — RBAC/ABAC/ReBAC details, profiles, combinators, hooking
+- [Auth Architecture](https://frontmcp.dev/reference/auth) — Full three-layer model: server auth, auth providers, authorities, vault, scope challenges
+- [Authorities Documentation](https://frontmcp.dev/reference/auth/authorities) — RBAC/ABAC/ReBAC details, profiles, combinators, hooking
 - Source: `libs/auth/src/authorities/` (engine, types, evaluators), flow stages in `libs/sdk/src/tool/flows/`, `libs/sdk/src/resource/flows/`, `libs/sdk/src/prompt/flows/`, `libs/sdk/src/agent/flows/`
 - Related skills: `frontmcp-config`, `frontmcp-development`, `frontmcp-extensibility`

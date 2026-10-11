@@ -514,5 +514,5 @@ If the vault is not configured, accessing `this.authProviders` throws (`AuthProv
 
 ## Reference
 
-- Docs: [Authentication Overview](https://docs.agentfront.dev/frontmcp/authentication/overview)
+- Docs: [Authentication Overview](https://frontmcp.dev/reference/auth)
 - Related skills: `configure-session`, `create-plugin`
