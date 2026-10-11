@@ -5,7 +5,7 @@ import { base64Decode } from '@frontmcp/utils';
 export const DEFAULT_REGISTRY_PUBLIC_KEY_ENV = 'MCP_REGISTRY_PUBLIC_KEY';
 
 export const REGISTRY_SERVER_NAME_PATTERN =
-  /^[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\/[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?$/;
+  /^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]\/[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$/;
 
 const REGISTRY_AUTH_RECORD_PATTERN = /^v=MCPv1;\s*k=([^;]+);\s*p=([A-Za-z0-9+/=]+)$/;
 const PADDED_BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;

@@ -28,7 +28,7 @@ describe('mcpRegistryOptionsSchema', () => {
     expect(mcpRegistryOptionsSchema.parse({})).toEqual({});
   });
 
-  it.each(['com.acme/weather', 'io.github.octo-cat/my_server.v2', 'acme/w1', 'a/b'])('accepts the name %s', (name) => {
+  it.each(['com.acme/weather', 'io.github.octo-cat/my_server.v2', 'acme/w1'])('accepts the name %s', (name) => {
     expect(mcpRegistryOptionsSchema.safeParse({ name, description: 'd' }).success).toBe(true);
   });
 
@@ -39,6 +39,8 @@ describe('mcpRegistryOptionsSchema', () => {
     ['with a server part ending with a dash', 'com.acme/weather-'],
     ['with two slashes', 'com.acme/weather/extra'],
     ['with a space', 'com acme/weather'],
+    ['with one-character parts', 'a/b'],
+    ['with a one-character server part', 'com.acme/w'],
     ['over 200 characters', `com.acme/${'w'.repeat(200)}`],
   ])('rejects a name %s', (_case, name) => {
     expect(mcpRegistryOptionsSchema.safeParse({ name, description: 'd' }).success).toBe(false);
