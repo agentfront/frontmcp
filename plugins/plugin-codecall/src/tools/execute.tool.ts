@@ -42,7 +42,15 @@ function getErrorCode(error: unknown): ToolCallErrorCode {
     return TOOL_CALL_ERROR_CODES.EXECUTION;
   }
 
-  // Check for specific error types
+  const { code, statusCode } = error as { code?: unknown; statusCode?: unknown };
+  if (code === 'INVALID_INPUT') {
+    return TOOL_CALL_ERROR_CODES.VALIDATION;
+  }
+
+  if (statusCode === 429) {
+    return TOOL_CALL_ERROR_CODES.RATE_LIMITED;
+  }
+
   if (error.name === 'ZodError' || error.message?.includes('validation')) {
     return TOOL_CALL_ERROR_CODES.VALIDATION;
   }
@@ -56,6 +64,12 @@ function getErrorCode(error: unknown): ToolCallErrorCode {
   }
 
   return TOOL_CALL_ERROR_CODES.EXECUTION;
+}
+
+/** What an MCP client would be told about the error: its public message, else its message. */
+function publicMessageOf(error: Error): string {
+  const { getPublicMessage } = error as { getPublicMessage?: () => string };
+  return typeof getPublicMessage === 'function' ? getPublicMessage.call(error) : error.message;
 }
 
 @Tool({
@@ -221,7 +235,7 @@ export default class ExecuteTool extends ToolContext {
 
           // Determine error code from the error type
           const errorCode = getErrorCode(error);
-          const rawMessage = error instanceof Error ? error.message : undefined;
+          const rawMessage = error instanceof Error ? publicMessageOf(error) : undefined;
 
           audit?.logToolCallFailure(executionId, name, callDepth, Date.now() - toolCallStartedAt, errorCode);
 

@@ -37,7 +37,7 @@ test.describe('WebMCP', () => {
 
     const result = await executeWebMcpTool(page, 'shop.search_products', { query: 'red' });
 
-    expect(result).toEqual(expect.objectContaining({ structuredContent: { results: ['red shoes', 'red hat'] } }));
+    expect(result).toEqual({ results: ['red shoes', 'red hat'] });
     expect(await hookCalls(page)).toEqual(['search_products']);
   });
 

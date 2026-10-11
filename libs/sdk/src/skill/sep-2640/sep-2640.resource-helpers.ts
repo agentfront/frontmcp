@@ -12,6 +12,8 @@ import { isAbsolute, joinPath, pathResolve, readFileBuffer } from '@frontmcp/uti
 
 import type { ScopeEntry, SkillEntry } from '../../common';
 import type { SkillLoadResult } from '../../common/entries/skill.entry';
+import type { SkillContent } from '../../common/interfaces';
+import type { SkillMetadata } from '../../common/metadata/skill.metadata';
 import { PublicMcpError, ResourceNotFoundError } from '../../errors';
 import { isSkillServable } from '../skill-filter.helper';
 import { parseSkillMdFrontmatter } from '../skill-md-parser';
@@ -25,6 +27,28 @@ export function getSepVisibleSkills(scope: ScopeEntry): SkillEntry[] {
   const registry = scope.skills;
   if (!registry || !registry.hasAny()) return [];
   return registry.getSkills({ visibility: 'mcp' });
+}
+
+/**
+ * Skills a read-only external provider (`skillsConfig.externalProvider`) serves that no registered skill
+ * shadows. They have no directory or nested path, so each is addressed by its name.
+ */
+export async function getExternalProviderSkills(scope: ScopeEntry): Promise<SkillMetadata[]> {
+  const registry = scope.skills;
+  if (registry?.getExternalProvider()?.isReadOnly() !== true) return [];
+  const { skills } = await registry.listSkills({ limit: Number.MAX_SAFE_INTEGER });
+  return skills.filter((metadata) => !registry.findByName(metadata.name));
+}
+
+/** The skill a read-only external provider serves at a single-segment `skillPath`, unless a registered skill owns it. */
+export async function loadExternalProviderSkill(
+  scope: ScopeEntry,
+  skillPath: string,
+): Promise<SkillContent | undefined> {
+  const registry = scope.skills;
+  if (registry?.getExternalProvider()?.isReadOnly() !== true) return undefined;
+  if (skillPath.includes('/') || registry.findByName(skillPath)) return undefined;
+  return (await registry.loadSkill(skillPath))?.skill;
 }
 
 /**

@@ -47,6 +47,17 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/esm/index.mjs"
       }
+    },
+    "./register": {
+      "development": "./src/register.ts",
+      "require": {
+        "types": "./dist/register.d.ts",
+        "default": "./dist/register.js"
+      },
+      "import": {
+        "types": "./dist/register.d.ts",
+        "default": "./dist/esm/register.mjs"
+      }
     }
   },
   "dependencies": {

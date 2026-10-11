@@ -1,5 +1,7 @@
 // common/types/options/skills-http/interfaces.ts
 
+import type { ExternalSkillProviderBase } from '../../../../skill/providers/external-skill.provider';
+
 /**
  * @module skillsConfig
  *
@@ -404,6 +406,21 @@ export interface SkillsConfigOptions {
    * @default true
    */
   failOnInvalidSkills?: boolean;
+
+  /**
+   * External skill storage, installed while the server starts (as `this.scope.skills.setExternalProvider()`
+   * would). In `'read-only'` mode skills are searched and loaded through it, and the server serves skills
+   * even when it declares none itself; in `'persistent'` mode local skills stay the source and
+   * `this.scope.skills.syncToExternal()` copies them to it.
+   *
+   * @example
+   * ```typescript
+   * @FrontMcp({
+   *   skillsConfig: { externalProvider: new RestSkillProvider({ mode: 'read-only' }) },
+   * })
+   * ```
+   */
+  externalProvider?: ExternalSkillProviderBase;
 }
 
 /**

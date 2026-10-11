@@ -345,6 +345,15 @@ export interface SkillRegistryInterface {
   syncToExternal(): Promise<SyncResult | null>;
 
   /**
+   * Set an external provider for skill storage. In `'read-only'` mode skills are searched and loaded
+   * through it; in `'persistent'` mode local skills stay the source and {@link syncToExternal} copies
+   * them to it. `skillsConfig.externalProvider` installs one while the server starts.
+   *
+   * @param provider - External provider instance extending ExternalSkillProviderBase
+   */
+  setExternalProvider(provider: ExternalSkillProviderBase): void;
+
+  /**
    * Get the external provider if one is configured.
    */
   getExternalProvider(): ExternalSkillProviderBase | undefined;
@@ -1042,9 +1051,12 @@ export default class SkillRegistry
     this.dynamicSkillsExpected = true;
   }
 
-  /** Whether the scope serves skills: it has some, or a plugin registers them at runtime. */
+  /**
+   * Whether the scope serves skills: it has some, a plugin registers them at runtime, or a read-only
+   * external provider serves them.
+   */
   servesSkills(): boolean {
-    return this.dynamicSkillsExpected || this.hasAny();
+    return this.dynamicSkillsExpected || this.hasAny() || this.externalProvider?.isReadOnly() === true;
   }
 
   /**

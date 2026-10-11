@@ -31,7 +31,18 @@ export const webMcpPluginOptionsSchema = z.object({
   modelContext: z
     .custom<ModelContext>(isModelContext, { message: 'modelContext must have a registerTool function' })
     .optional(),
+  /**
+   * What a call resolves to. The agent reads the whole value as text, so by default it gets each result once:
+   * - `'structured'`: the tool's `structuredContent` alone when its content only repeats it (one text block with
+   *   the same JSON, as the server writes it); otherwise `{ content }`, plus `structuredContent` when there is one.
+   * - `'content'`: `{ content }`.
+   * - `'both'`: `{ content, structuredContent }`, as an MCP client gets them.
+   */
+  result: z.enum(['structured', 'content', 'both']).default('structured'),
 });
+
+/** What an agent's call resolves to (see the `result` option). */
+export type WebMcpResultMode = z.output<typeof webMcpPluginOptionsSchema>['result'];
 
 /** Options of `WebMcpPlugin.init()`, as the plugin holds them (defaults applied). */
 export type WebMcpPluginOptions = z.output<typeof webMcpPluginOptionsSchema>;

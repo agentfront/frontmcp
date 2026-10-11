@@ -13,6 +13,7 @@ Target-specific checklist for publishing FrontMCP as a browser-compatible SDK.
 
 - [ ] `frontmcp build --target browser` produces a correct ESM/UMD bundle
 - [ ] Bundle size is acceptable (check with `npx bundlesize` or similar)
+- [ ] A page that offers WebMCP tools registers a build-time list (`registerWebMcpTools()` from `@frontmcp/plugin-webmcp/register`) and loads the server on the first agent call, instead of starting it on page load
 - [ ] Tree-shaking works (no unnecessary code in final bundle)
 - [ ] Source maps are generated for debugging (but not shipped to production CDN)
 

@@ -44,6 +44,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { getMachineId, randomUUID, sha256, sha256Hex, timingSafeEqual } from '@frontmcp/utils';
 
 import { detectPlatformFromUserAgent } from '../../notification/notification.service';
+import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 import { decryptPublicSession, parseSessionHeader } from '../session/utils/session-id.utils';
 
@@ -310,6 +311,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       isPublic: authMode === 'public',
       authMode,
       ...(platformType !== 'unknown' && { platformType }),
+      ...(detectSkillsOnlyMode(this.rawInput.request.query) && { skillsOnlyMode: true }),
     };
 
     const sessionId = encryptJson(payload);

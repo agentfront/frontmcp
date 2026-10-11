@@ -8,7 +8,7 @@ import { filterSkillsByAuthorities } from '../../skill-authorities.helper';
 import { filterServableSkills } from '../../skill-filter.helper';
 import { buildResourceTemplateIndexEntry, buildSkillIndex, buildSkillMdIndexEntry } from '../sep-2640.builders';
 import { SKILL_INDEX_MIME_TYPE, SKILL_INDEX_URI } from '../sep-2640.constants';
-import { getSepVisibleSkills } from '../sep-2640.resource-helpers';
+import { getExternalProviderSkills, getSepVisibleSkills } from '../sep-2640.resource-helpers';
 
 /**
  * `skill://index.json` — the SEP-2640 well-known discovery resource.
@@ -63,13 +63,16 @@ export class Sep2640SkillIndexResource extends ResourceContext {
         skillPathSegments: skill.getSkillPathSegments(),
       }),
     );
+    for (const metadata of await getExternalProviderSkills(this.scope)) {
+      entries.push(buildSkillMdIndexEntry({ name: metadata.name, description: metadata.description }));
+    }
 
     // SEP-2640 §Discovery: when concrete `skill-md` entries exist we also
     // surface the SKILL.md template itself as an `mcp-resource-template`
     // entry. This lets hosts that prefer the template + completion-API
     // discovery path (rather than enumerating every concrete entry) wire
     // their UI to the same URI shape we serve.
-    if (skills.length > 0) {
+    if (entries.length > 0) {
       entries.push(
         buildResourceTemplateIndexEntry(
           'Read the raw SKILL.md (frontmatter + body) for any skill served by this MCP server.',
