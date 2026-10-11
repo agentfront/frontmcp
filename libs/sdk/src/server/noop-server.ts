@@ -14,10 +14,6 @@ export class NoopFrontMcpServer extends FrontMcpServer {
     // noop
   }
 
-  override enhancedHandler(handler: ServerRequestHandler): ServerRequestHandler {
-    return handler;
-  }
-
   prepare(): void {
     // noop
   }

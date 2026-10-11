@@ -381,7 +381,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     this.logger = this.logger.child(`CallToolFlow(${name})`);
     this.state.set('tool', tool);
-    this.logger.info(`findTool: tool "${name}" found`);
+    this.logger.verbose(`findTool: tool "${name}" found`);
     this.logger.verbose('findTool:done');
   }
 
@@ -1579,7 +1579,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     // Log the final result being sent
-    this.logger.info('finalize: sending response', {
+    this.logger.verbose('finalize: sending response', {
       tool: tool.metadata.name,
       hasContent: Array.isArray(result.content) && result.content.length > 0,
       contentParts: Array.isArray(result.content) ? result.content.length : 0,

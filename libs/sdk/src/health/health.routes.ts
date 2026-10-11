@@ -4,6 +4,7 @@
  */
 
 import { getRuntimeContext } from '@frontmcp/utils';
+
 import type { HealthOptionsInterface } from '../common';
 import type { HealthService } from './health.service';
 
@@ -17,6 +18,12 @@ export interface HealthRouteServer {
     path: string,
     handler: (req: unknown, res: { status(code: number): { json(payload: unknown): void } }) => Promise<void> | void,
   ): void;
+}
+
+/** The liveness and readiness paths the server answers; none when health is off. */
+export function servedHealthPaths(config: HealthOptionsInterface = {}): string[] {
+  if (config.enabled === false) return [];
+  return [config.healthzPath ?? '/healthz', config.readyzPath ?? '/readyz'];
 }
 
 /**

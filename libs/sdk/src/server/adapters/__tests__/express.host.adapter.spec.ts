@@ -11,9 +11,6 @@ jest.mock('../base.host.adapter', () => {
   class HostServerAdapter {
     registerRoute(..._args: unknown[]) {}
     registerMiddleware(..._args: unknown[]) {}
-    enhancedHandler(handler: unknown) {
-      return handler;
-    }
     prepare() {}
     getHandler() {
       return {};

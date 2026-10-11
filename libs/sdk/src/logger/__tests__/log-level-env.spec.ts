@@ -31,3 +31,27 @@ describe('FRONTMCP_LOG_LEVEL', () => {
     expect(loggingOptionsSchema.parse({}).level).toBe(LogLevel.Info);
   });
 });
+
+describe('default log level in a browser (#824)', () => {
+  function browserSchema(): typeof import('../../common') {
+    let schemaModule: typeof import('../../common') | undefined;
+    jest.isolateModules(() => {
+      jest.doMock('@frontmcp/utils', () => ({
+        ...jest.requireActual('@frontmcp/utils'),
+        getRuntimeContext: () => ({ runtime: 'browser' }),
+      }));
+      schemaModule = require('../../common');
+    });
+    jest.dontMock('@frontmcp/utils');
+    if (!schemaModule) throw new Error('the logging schema did not load');
+    return schemaModule;
+  }
+
+  it('is warn when no level is configured', () => {
+    expect(browserSchema().loggingOptionsSchema.parse({}).level).toBe(LogLevel.Warn);
+  });
+
+  it('leaves a configured level alone', () => {
+    expect(browserSchema().loggingOptionsSchema.parse({ level: LogLevel.Info }).level).toBe(LogLevel.Info);
+  });
+});

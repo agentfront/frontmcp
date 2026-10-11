@@ -158,7 +158,7 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
 
   @Stage('findTemplates')
   async findTemplates() {
-    this.logger.info('findTemplates:start');
+    this.logger.verbose('findTemplates:start');
 
     try {
       const templates: Array<{ ownerName: string; template: ResourceEntry }> = [];
@@ -177,7 +177,7 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
         templates.push({ ownerName: template.owner.id, template });
       }
 
-      this.logger.info(`findTemplates: total templates collected=${templates.length}`);
+      this.logger.verbose(`findTemplates: total templates collected=${templates.length}`);
       if (templates.length === 0) {
         this.logger.warn('findTemplates: no resource templates found');
       }
@@ -247,7 +247,7 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
         const extra = conflicts.size > 5 ? `, +${conflicts.size - 5} more` : '';
         this.logger.warn(`resolveConflicts: ${conflicts.size} name conflict(s) detected: ${preview}${extra}`);
       } else {
-        this.logger.info('resolveConflicts: no name conflicts detected');
+        this.logger.verbose('resolveConflicts: no name conflicts detected');
       }
 
       const resolved = found.map(({ ownerName, template }) => {
@@ -300,12 +300,12 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
 
       const preview = this.sample(resourceTemplates.map((t) => t.name)).join(', ');
       const extra = resourceTemplates.length > 5 ? `, +${resourceTemplates.length - 5} more` : '';
-      this.logger.info(
+      this.logger.verbose(
         `parseTemplates: prepared ${resourceTemplates.length} template descriptor(s): ${preview}${extra}`,
       );
 
       this.respond({ resourceTemplates });
-      this.logger.info('parseTemplates: response sent');
+      this.logger.verbose('parseTemplates: response sent');
       this.logger.verbose('parseTemplates:done');
     } catch (error) {
       if (error instanceof FlowControl) throw error;

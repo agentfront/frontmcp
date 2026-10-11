@@ -63,6 +63,10 @@ class JobAuditPlugin {
     trace.push(at('will', 'execute', flowCtx));
     // A hook may answer for the job, as a cache would
     if (flowCtx.state.job?.name === 'cached_job') flowCtx.respond({ result: { cached: true }, logs: [] });
+    if (flowCtx.state.job?.name === 'stale_cache_job') flowCtx.respond({ result: { open: 'twelve' }, logs: [] });
+    if (flowCtx.state.job?.name === 'padded_cache_job') {
+      flowCtx.respond({ result: { open: 12, internal: 'not in the schema' }, logs: [] });
+    }
   }
 
   @JobHook.Did('execute')
@@ -124,6 +128,28 @@ class GuardedJob extends JobContext {
 class CachedJob extends JobContext {
   async execute(): Promise<{ cached: boolean }> {
     throw new Error('the hook answers for this job');
+  }
+}
+
+let staleCacheRuns = 0;
+
+@Job({
+  name: 'stale_cache_job',
+  inputSchema: {},
+  outputSchema: { open: z.number() },
+  retry: { maxAttempts: 3, backoffMs: 1 },
+})
+class StaleCacheJob extends JobContext {
+  async execute() {
+    staleCacheRuns++;
+    return { open: 12 };
+  }
+}
+
+@Job({ name: 'padded_cache_job', inputSchema: {}, outputSchema: { open: z.number() } })
+class PaddedCacheJob extends JobContext {
+  async execute() {
+    return { open: 12 };
   }
 }
 
@@ -252,6 +278,8 @@ class WhoAmIFlow {}
     FlakyJob,
     GuardedJob,
     CachedJob,
+    StaleCacheJob,
+    PaddedCacheJob,
     UnrecordedJob,
     UnrecordedFailingJob,
     ThrowerJob,
@@ -448,6 +476,21 @@ describe('jobs:execute-job flow (#700)', () => {
     await expect(manager.getStatus(run.runId)).resolves.toEqual(
       expect.objectContaining({ state: 'completed', result: { cached: true } }),
     );
+  });
+
+  it("fails, without retrying, an attempt a hook answered with a result that does not match the job's outputSchema (#816)", async () => {
+    staleCacheRuns = 0;
+    await expect(manager.executeJob(jobNamed('stale_cache_job'), {})).rejects.toBeInstanceOf(InvalidOutputError);
+
+    expect(staleCacheRuns).toBe(0);
+    const [run] = await manager.listRuns({ jobId: 'stale_cache_job' });
+    expect(run).toEqual(expect.objectContaining({ state: 'failed', attempt: 1 }));
+  });
+
+  it("drops the fields the job's outputSchema does not declare from a hook's answer (#816)", async () => {
+    const run = await runJob('padded_cache_job');
+
+    expect(run).toEqual(expect.objectContaining({ state: 'completed', result: { open: 12 } }));
   });
 
   it('records the outcome even when a hook keeps the stage from recording it', async () => {

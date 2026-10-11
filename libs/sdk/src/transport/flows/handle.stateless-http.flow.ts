@@ -91,10 +91,10 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
     // The actual schema validation happens in the MCP SDK's transport layer
     if (method === 'initialize') {
       this.state.set('requestType', 'initialize');
-      logger.info('router: requestType=initialize, method=POST');
+      logger.verbose('router: requestType=initialize, method=POST');
     } else if (method && RequestSchema.safeParse(request.body).success) {
       this.state.set('requestType', 'message');
-      logger.info(`router: requestType=message, method=${method}`);
+      logger.verbose(`router: requestType=message, method=${method}`);
     } else {
       logger.warn('router: invalid request, no valid method');
       this.respond(httpRespond.rpcError('Invalid Request'));
@@ -111,7 +111,7 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
     const { request, response } = this.rawInput;
     const { token, isAuthenticated, requestType } = this.state;
 
-    logger.info(`handleRequest: using ${isAuthenticated ? 'authenticated' : 'anonymous'} stateless transport`);
+    logger.verbose(`handleRequest: using ${isAuthenticated ? 'authenticated' : 'anonymous'} stateless transport`);
 
     // Get or create the stateless transport
     // For anonymous: shared singleton transport

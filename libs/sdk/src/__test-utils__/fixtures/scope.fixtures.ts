@@ -4,9 +4,11 @@
  */
 
 import 'reflect-metadata';
-import { Scope } from '../../scope';
-import ProviderRegistry from '../../provider/provider.registry';
+
 import { ProviderScope } from '@frontmcp/sdk';
+
+import ProviderRegistry from '../../provider/provider.registry';
+import { Scope } from '../../scope';
 
 /**
  * Creates a mock Scope for testing
@@ -45,6 +47,7 @@ export function createMockScope() {
     hooks: mockHookRegistry,
     providers: mockProviders,
     registryFlows: jest.fn().mockResolvedValue(undefined),
+    onDispose: jest.fn().mockReturnValue(() => undefined),
     metadata: {
       id: 'test-scope',
       http: { port: 3001 },

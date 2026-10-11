@@ -639,7 +639,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           // Safely access payload.protocol with null check
           const protocol = authorization.session?.payload?.protocol;
           if (protocol) {
-            this.logger.info(`[${this.requestId}] decision from session: ${protocol}`);
+            this.logger.verbose(`[${this.requestId}] decision from session: ${protocol}`);
             this.state.set('intent', protocol);
             return;
           }

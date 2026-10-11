@@ -32,6 +32,7 @@ import { resolveHttpCors } from '../server/middleware/cors-env';
 import { resolveSecurityHeaders } from '../server/middleware/csp.middleware';
 import { compileHostValidation, validateHostHeaders } from '../server/security/host-validation';
 import { flowErrorToHttpOutput } from './flow-error-output';
+import { serveHttpRouteWeb } from './web-http-route';
 import { renderHttpOutputToWebResponse } from './web-response.renderer';
 import { type WebStandardMcpPair } from './web-standard-mcp';
 
@@ -563,10 +564,11 @@ export async function runHttpRequestFlowWeb(
 
 /**
  * Dispatch a non-entry-path request through the FrontMCP flow that claims it
- * (auth / well-known / oauth flows match by `middleware.path` + `canActivate`).
- * Mirrors the Express host's route dispatch for runtimes with no middleware
- * server (Cloudflare Worker / web-fetch). Returns the rendered Web `Response`,
- * or `undefined` when no flow matches (caller 404s).
+ * (auth / well-known / oauth flows match by `middleware.path` + `canActivate`),
+ * else through the HTTP route the scope registered for it (`http.routes`,
+ * channel webhooks), guards included. Mirrors the Express host's dispatch for
+ * runtimes with no middleware server (Cloudflare Worker / web-fetch). Returns
+ * the rendered Web `Response`, or `undefined` when nothing matches (caller 404s).
  *
  * Carries the worker `ctx` and `env` for the same reason `http:request` does:
  * an auth or OAuth flow on a Worker reaches its bindings only through
@@ -581,7 +583,7 @@ export async function runMatchingHttpFlowWeb(
   const url = new URL(request.url);
   const serverRequest = await toServerRequest(request, url, opts.ctx, undefined, opts.env);
   const flowName = await scope.findHttpFlowName(serverRequest);
-  if (!flowName) return undefined;
+  if (!flowName) return serveHttpRouteWeb(scope.httpRoutes, serverRequest, scope.logger);
   let output: HttpOutput | undefined;
   try {
     output = (await runRequestExclusive(() =>

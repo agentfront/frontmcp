@@ -210,7 +210,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
       allowedPrompts: (publicAccess?.['prompts'] as string[] | 'all' | undefined) ?? 'all',
     });
 
-    this.logger.info(`Created anonymous authorization: ${authorization.id}`);
+    this.logger.verbose(`Created anonymous authorization: ${authorization.id}`);
 
     this.respond({
       kind: 'authorized',
@@ -243,7 +243,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
       allowedPrompts: (publicAccess?.['prompts'] as string[] | 'all' | undefined) ?? 'all',
     });
 
-    this.logger.info(`Created anonymous authorization (allowAnonymous fallback): ${authorization.id}`);
+    this.logger.verbose(`Created anonymous authorization (allowAnonymous fallback): ${authorization.id}`);
 
     this.respond({
       kind: 'authorized',
@@ -486,7 +486,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
       });
     }
 
-    this.logger.info(`Authorization created: ${authorization.id} (mode: ${authMode})`);
+    this.logger.verbose(`Authorization created: ${authorization.id} (mode: ${authMode})`);
 
     this.respond({
       kind: 'authorized',
