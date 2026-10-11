@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url';
 
 const MODEL = 'gpt-4o';
 const PROMPT_LIMIT = 100_000;
+const PULL_REQUESTS_LIMIT = 60_000;
 const PULL_REQUEST_LIMIT = 8_000;
-const DIFF_EXCLUDES = ['**/yarn.lock', '**/package-lock.json', '**/*.spec.ts', '**/*.test.ts', '**/*.snap'].map(
+const FILES_LIMIT = 10_000;
+const DIFF_EXCLUDES = ['**/yarn.lock', '**/package-lock.json', '**/*.spec.*', '**/*.test.*', '**/*.snap'].map(
   (pattern) => `:(exclude,glob)${pattern}`,
 );
 const RELEASE_MECHANICS = /^(chore\(release\)|Merge branch |Merge remote-tracking branch )/;
@@ -20,7 +22,8 @@ const KINDS = {
   docs: { section: 'Documentation', one: 'documentation update', many: 'documentation updates', rank: 4 },
 };
 const OTHER_KIND = { section: 'Improvements', one: 'improvement', many: 'improvements', rank: 3 };
-const SECTION_ORDER = ['Features', 'Improvements', 'Bug Fixes', 'Documentation'];
+const BREAKING_KIND = { section: 'Breaking Changes', one: 'breaking change', many: 'breaking changes', rank: -1 };
+const SECTION_ORDER = ['Breaking Changes', 'Features', 'Improvements', 'Bug Fixes', 'Documentation'];
 
 const instructions = (
   version,
@@ -64,13 +67,11 @@ export function parseNotes(answer, version) {
   const parts = answer.split(/^[ \t]*---CARD_MDX---[ \t]*$/m);
   if (parts.length !== 2) return undefined;
   const changelog = parts[0].trim();
-  const escapedVersion = version.replaceAll('.', '\\.');
-  const card = parts[1].match(
-    new RegExp(`<Card\\b[^>]*\\btitle="FrontMCP v${escapedVersion}: [^"]+"[^>]*>[\\s\\S]*?</Card>`),
-  )?.[0];
+  const card = parts[1].match(/<Card\b[^>]*>[\s\S]*?<\/Card>/)?.[0];
+  const cardVersion = card?.match(/\btitle="FrontMCP v([^":]+): [^"]+"/)?.[1];
   const hasBullet = /^\s*[-*]\s+\S/m.test(changelog);
   const hasHighlight = /^[^\w*`\n]*\*\*[^*\n]+\*\*\s*[–—:-]/mu.test(card ?? '');
-  if (!hasBullet || !hasHighlight) return undefined;
+  if (cardVersion !== version || !hasBullet || !hasHighlight) return undefined;
   return { changelog, card: card.replace(/\n(?=[^\w*`\n]*\*\*)/g, '\n\n').replace(/\n{3,}/g, '\n\n') };
 }
 
@@ -78,11 +79,16 @@ const capitalize = (text) => text.replace(/^\p{Ll}/u, (letter) => letter.toUpper
 const listOf = (items) => new Intl.ListFormat('en').format(items);
 
 function describeChange(change) {
-  const [, type = '', scope = '', summary = change.title] =
-    change.title.match(/^(\w+)(?:\(([^)]*)\))?!?:\s*(.+)$/) ?? [];
-  if (LEFT_OUT_TYPES.has(type)) return undefined;
+  const [, type = '', scope = '', breaking = '', summary = change.title] =
+    change.title.match(/^(\w+)(?:\(([^)]*)\))?(!?):\s*(.+)$/) ?? [];
+  if (!change.title || (LEFT_OUT_TYPES.has(type) && !breaking)) return undefined;
   const text = capitalize(summary.replace(/\s*\(#\d+\)$/, ''));
-  return { ...(KINDS[type] ?? OTHER_KIND), scope, text, number: change.number };
+  return { ...(breaking ? BREAKING_KIND : (KINDS[type] ?? OTHER_KIND)), scope, text, number: change.number };
+}
+
+function highlightName(item) {
+  if (item.section !== BREAKING_KIND.section) return item.scope || item.section;
+  return item.scope ? `Breaking change (${item.scope})` : 'Breaking change';
 }
 
 export function fallbackNotes(version, changes) {
@@ -112,7 +118,7 @@ export function fallbackNotes(version, changes) {
   const highlights = [...described]
     .sort((first, second) => first.rank - second.rank)
     .slice(0, 4)
-    .map((item) => `  **${item.scope || item.section}** – ${item.text.replace(/[.!]?$/, '.')}`);
+    .map((item) => `  **${highlightName(item)}** – ${item.text.replace(/[.!]?$/, '.')}`);
   const card = [
     '<Card',
     `  title="FrontMCP v${version}: ${headline}"`,
@@ -130,41 +136,51 @@ function git(...args) {
   return execFileSync('git', args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
 }
 
-function pullRequest(number, subject) {
+function pullRequest(number) {
   const repository = process.env.GITHUB_REPOSITORY ?? 'agentfront/frontmcp';
   try {
     const json = execFileSync('gh', ['pr', 'view', String(number), '--repo', repository, '--json', 'title,body'], {
       encoding: 'utf8',
     });
     const { title, body } = JSON.parse(json);
-    return { number, title, body: body.replace(/<!--[\s\S]*?-->/g, '').trim() };
+    return { number, title, body: body.trim() };
   } catch (error) {
     console.log(`::warning::Couldn't read pull request #${number}: ${error.message}`);
-    return { number, title: subject, body: '' };
+    return undefined;
   }
 }
 
+function mergedTitles(hash, subject) {
+  if (!subject.startsWith('Merge pull request ')) return [subject];
+  return git('log', '--no-merges', '--format=%s', `${hash}^1..${hash}^2`).split('\n').filter(Boolean);
+}
+
 function collectChanges(previousTag) {
-  const subjects = git('log', '--first-parent', '--format=%s', `${previousTag}..HEAD`).split('\n').filter(Boolean);
-  return subjects
-    .filter((subject) => !RELEASE_MECHANICS.test(subject))
-    .map((subject) => {
+  const log = git('log', '--first-parent', '--format=%H%x1f%s', `${previousTag}..HEAD`);
+  return log
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => line.split('\x1f'))
+    .filter(([, subject]) => !RELEASE_MECHANICS.test(subject))
+    .flatMap(([hash, subject]) => {
       const number = pullRequestNumber(subject);
-      return number ? pullRequest(number, subject) : { title: subject, body: '' };
+      if (!number) return [{ title: subject, body: '' }];
+      return pullRequest(number) ?? mergedTitles(hash, subject).map((title) => ({ number, title, body: '' }));
     });
 }
 
 function describeRelease(version, previousTag, changes) {
+  const bodyLimit = Math.min(PULL_REQUEST_LIMIT, Math.floor(PULL_REQUESTS_LIMIT / Math.max(changes.length, 1)));
   const pullRequests = changes
     .map(
       (change) =>
-        `### ${change.number ? `#${change.number} ` : ''}${change.title}\n\n${change.body.slice(0, PULL_REQUEST_LIMIT)}`,
+        `### ${change.number ? `#${change.number} ` : ''}${change.title}\n\n${change.body.slice(0, bodyLimit)}`,
     )
     .join('\n\n');
-  const files = git('diff', '--stat=200', `${previousTag}..HEAD`, '--', '.', ...DIFF_EXCLUDES);
+  const files = git('diff', '--stat=200', `${previousTag}..HEAD`, '--', '.', ...DIFF_EXCLUDES).slice(0, FILES_LIMIT);
   const diff = git('diff', `${previousTag}..HEAD`, '--', '.', ...DIFF_EXCLUDES);
-  const release = `FrontMCP ${version} (previous release: ${previousTag}).\n\n## Pull requests\n\n${pullRequests}\n\n## Files changed\n\n${files}\n## Diff\n\n${diff}`;
-  return release.slice(0, PROMPT_LIMIT);
+  const header = `FrontMCP ${version} (previous release: ${previousTag}).\n\n## Pull requests\n\n${pullRequests}\n\n## Files changed\n\n${files}\n## Diff\n\n`;
+  return header + diff.slice(0, Math.max(PROMPT_LIMIT - header.length, 0));
 }
 
 async function askModel(version, release) {

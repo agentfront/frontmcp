@@ -74,6 +74,28 @@ test('builds the notes from pull request titles, leaving out chores', () => {
   });
 });
 
+test('puts breaking changes first, even a breaking chore, and leaves out changes with no title', () => {
+  const changes = [
+    { number: 852, title: 'fix(cli): quieter output', body: '' },
+    { number: 853, title: 'feat(sdk)!: remove the legacy API', body: '' },
+    { number: 854, title: 'chore!: drop Node 20', body: '' },
+    { number: 855, title: '', body: '' },
+  ];
+
+  const { changelog, card: fallbackCard } = fallbackNotes('2.0.0', changes);
+
+  assert.match(
+    changelog,
+    /^\*\*Breaking Changes\*\*\n\n- \*\*sdk:\*\* Remove the legacy API \(#853\)\n- Drop Node 20 \(#854\)/,
+  );
+  assert.doesNotMatch(changelog, /#855/);
+  assert.match(fallbackCard, /title="FrontMCP v2\.0\.0: Breaking changes and bug fixes"/);
+  assert.match(
+    fallbackCard,
+    /\*\*Breaking change \(sdk\)\*\* – Remove the legacy API\.\n\n {2}\*\*Breaking change\*\* – Drop/,
+  );
+});
+
 test('says so when a release has only chores', () => {
   const { changelog, card: fallbackCard } = fallbackNotes('1.9.7', [{ number: 851, title: 'ci: cache Nx', body: '' }]);
 
