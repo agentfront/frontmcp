@@ -331,7 +331,9 @@ Set `command` and `args` on the client to run something else, e.g. a local build
 
 ## JSON Schema for IDE Support
 
-For JSON configs, add `$schema` for autocomplete:
+For JSON configs, add `$schema` for autocomplete and hover docs. The schema ships in the `frontmcp` package and is
+published at `https://frontmcp.dev/schemas/frontmcp.config.json`; it is generated from the CLI's own config
+validation, so it covers every key the CLI accepts:
 
 ```json
 {
@@ -340,6 +342,8 @@ For JSON configs, add `$schema` for autocomplete:
   "deployments": [{ "target": "node" }]
 }
 ```
+
+Use `"$schema": "https://frontmcp.dev/schemas/frontmcp.config.json"` when the project does not install `frontmcp` locally.
 
 ## Common Patterns
 
