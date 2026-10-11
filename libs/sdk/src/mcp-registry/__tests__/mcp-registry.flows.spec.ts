@@ -30,6 +30,9 @@ class WeatherApp {}
 @App({ id: 'alerts', name: 'Alerts', tools: [ForecastTool] })
 class AlertsApp {}
 
+@App({ id: 'isolated', name: 'Isolated', standalone: true, tools: [ForecastTool] })
+class IsolatedApp {}
+
 interface TestHost {
   /** The origin the server card names: the request's own. */
   origin: string;
@@ -305,6 +308,19 @@ describe.each([
     );
     expect((await host.get('/mcp/server-card')).status).toBe(200);
     expect((await host.get('/.well-known/ai-catalog.json')).status).toBe(404);
+  });
+
+  it("describes the server's endpoint, not a standalone app's", async () => {
+    const host = await createHost(
+      serverConfig({
+        apps: [IsolatedApp, WeatherApp],
+        registry: { name: 'com.acme/weather', description: 'Forecasts', publicKey: ED25519_PUBLIC_KEY },
+      }),
+    );
+    expect((await host.get('/.well-known/mcp-registry-auth')).status).toBe(200);
+    expect((await (await host.get('/mcp/server-card')).json()).remotes[0].url).toBe(`${host.origin}/mcp`);
+    expect((await host.get('/mcp/isolated/server-card')).status).toBe(404);
+    expect((await (await host.get('/.well-known/ai-catalog.json')).json()).entries).toHaveLength(1);
   });
 
   it('serves only the domain proof with splitByApp', async () => {
