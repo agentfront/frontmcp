@@ -42,8 +42,8 @@ clients discover a listed server through its server card. `@FrontMcp({ registry 
   `info.version`, `info.title`, `info.websiteUrl`, the `https` entries of `info.icons`,
   `registry.repository`, and one `streamable-http` remote: the server's endpoint with the protocol
   revisions FrontMCP serves. It is sent with `Access-Control-Allow-Origin: *` and an `ETag`
-  (`If-None-Match` gets a 304), and answers `OPTIONS` preflights itself (204) unless `http.cors`
-  answers them first. It is `Cache-Control: public, max-age=3600` when `FRONTMCP_PUBLIC_URL` is set,
+  (`If-None-Match` gets a 304), and answers its `OPTIONS` preflight with the same public CORS (204),
+  even when `http.cors` restricts every other endpoint's origin. It is `Cache-Control: public, max-age=3600` when `FRONTMCP_PUBLIC_URL` is set,
   else `no-store`: without a pinned URL the body names the request's own origin, which a shared
   cache must not reuse.
 - The AI Catalog (`application/ai-catalog+json`) lists the card as `urn:air:<domain>:mcp:<name>`:

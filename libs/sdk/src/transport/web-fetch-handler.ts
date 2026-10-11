@@ -24,6 +24,7 @@ import { PayloadTooLargeError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
 import { machineIdHeader } from '../ha/ha-headers';
 import { isReadyzEnabled } from '../health/health.routes';
+import { serverCardPath } from '../mcp-registry/mcp-registry.utils';
 import { MetricsPathConflictError } from '../metrics/metrics.errors';
 import { metricsPath, renderMetricsScrape, type MetricsHttpResult } from '../metrics/metrics.routes';
 import { type MetricsService } from '../metrics/metrics.service';
@@ -330,8 +331,8 @@ function buildWebFetchHandler(
     if (limited instanceof Response) return withCors(limited, request);
     request = limited;
 
-    // CORS preflight — answer OPTIONS directly (transport-adapter concern).
-    if (corsEnabled && request.method === 'OPTIONS') {
+    // CORS preflight — answer OPTIONS directly (transport-adapter concern), except the public server card's.
+    if (corsEnabled && request.method === 'OPTIONS' && url.pathname !== serverCardPath(scope)) {
       return new Response(null, { status: 204, headers: corsHeadersFor(request) });
     }
 

@@ -110,7 +110,7 @@ describe.each([
     beforeAll(async () => {
       host = await createHost(
         serverConfig({
-          http: { entryPath: '/mcp', cors: { origin: 'https://app.example.com' } },
+          http: { entryPath: '/mcp', cors: { origin: ['https://app.example.com'] } },
           registry: {
             name: 'com.acme/weather',
             description: 'Forecasts and alerts for any city',
@@ -165,13 +165,22 @@ describe.each([
       expect(response.headers.get('etag')).toMatch(/^"[A-Za-z0-9_-]+"$/);
     });
 
-    it("leaves the preflight to the host's own CORS when http.cors is set", async () => {
+    it('answers the card preflight with public CORS under a restricted http.cors', async () => {
+      const preflight = { 'access-control-request-method': 'GET', 'access-control-request-headers': 'if-none-match' };
       const response = await host.send('OPTIONS', '/mcp/server-card', {
-        origin: 'https://app.example.com',
-        'access-control-request-method': 'GET',
+        ...preflight,
+        origin: 'https://inspector.example.com',
       });
       expect(response.status).toBe(204);
-      expect(response.headers.get('access-control-allow-origin')).toBe('https://app.example.com');
+      expect(response.headers.get('access-control-allow-origin')).toBe('*');
+      expect(response.headers.get('access-control-allow-methods')).toBe('GET');
+      expect(response.headers.get('access-control-allow-headers')).toBe('Content-Type, If-None-Match');
+      expect(response.headers.get('access-control-expose-headers')).toBe('ETag');
+
+      const outsider = await host.send('OPTIONS', '/mcp', { ...preflight, origin: 'https://inspector.example.com' });
+      expect(outsider.headers.get('access-control-allow-origin')).toBeNull();
+      const allowed = await host.send('OPTIONS', '/mcp', { ...preflight, origin: 'https://app.example.com' });
+      expect(allowed.headers.get('access-control-allow-origin')).toBe('https://app.example.com');
     });
 
     it('answers 304 to an If-None-Match naming the card', async () => {
