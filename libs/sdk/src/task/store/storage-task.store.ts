@@ -6,6 +6,7 @@
  *
  * Key layout (under the store's NamespacedStorage):
  *  - `records:{sessionId}:{taskId}` — the TaskRecord JSON
+ *  - `slots:{sessionId}:{n}` — the taskId holding the owner's concurrency slot `n`; expires with its record
  *  - Pub/sub channels:
  *      - `terminal:{taskId}` — fires when a task reaches terminal status
  *      - `cancel:{taskId}`   — fires when a task is asked to cancel
@@ -23,12 +24,14 @@ import {
 } from '@frontmcp/utils';
 
 import { type FrontMcpLogger } from '../../common';
-import { type TaskRecord } from '../task.types';
+import { isAlive, isLocalWorker } from '../helpers/process-liveness';
+import { isTerminal, type TaskRecord } from '../task.types';
 import type { TaskCancelCallback, TaskListPage, TaskStore, TaskTerminalCallback, TaskUnsubscribe } from './task.store';
 
 const TERMINAL_CHANNEL_PREFIX = 'terminal:';
 const CANCEL_CHANNEL_PREFIX = 'cancel:';
 const RECORDS_NAMESPACE = 'records';
+const SLOTS_NAMESPACE = 'slots';
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -36,9 +39,14 @@ function recordKey(sessionId: string, taskId: string): string {
   return `${sessionId}:${taskId}`;
 }
 
+function slotKey(sessionId: string, slot: number): string {
+  return `${sessionId}:${slot}`;
+}
+
 export class StorageTaskStore implements TaskStore {
   private readonly storage: NamespacedStorage;
   private readonly records: TypedStorage<TaskRecord>;
+  private readonly slots: NamespacedStorage;
   private readonly logger?: FrontMcpLogger;
 
   private readonly terminalCallbacks = new Map<string, Set<TaskTerminalCallback>>();
@@ -50,6 +58,7 @@ export class StorageTaskStore implements TaskStore {
     this.storage = storage;
     this.logger = logger;
     this.records = new TypedStorage(storage.namespace(RECORDS_NAMESPACE));
+    this.slots = storage.namespace(SLOTS_NAMESPACE);
   }
 
   async create(record: TaskRecord): Promise<void> {
@@ -63,6 +72,25 @@ export class StorageTaskStore implements TaskStore {
     const key = recordKey(record.sessionId, record.taskId);
     await this.records.set(key, record, { ttlSeconds });
     this.logger?.debug('[StorageTaskStore] created', { taskId: record.taskId, ttlSeconds });
+  }
+
+  /** A task holds one of its owner's `maxActive` slot keys, claimed by a write-if-absent, until it finishes. */
+  async createWithinLimit(record: TaskRecord, maxActive: number): Promise<boolean> {
+    const ttlSeconds = expiresAtToTTL(record.expiresAt);
+    if (ttlSeconds <= 0) {
+      await this.create(record);
+      return true;
+    }
+    const slot = await this.acquireSlot(record, maxActive, ttlSeconds);
+    if (slot === undefined) return false;
+    const slotted: TaskRecord = { ...record, concurrencySlot: slot };
+    try {
+      await this.create(slotted);
+    } catch (err) {
+      await this.releaseSlot(slotted);
+      throw err;
+    }
+    return true;
   }
 
   async get(taskId: string, sessionId: string): Promise<TaskRecord | null> {
@@ -96,11 +124,76 @@ export class StorageTaskStore implements TaskStore {
       return null;
     }
     await this.records.set(recordKey(sessionId, taskId), merged, { ttlSeconds });
+    if (isTerminal(merged.status)) await this.releaseSlot(merged);
     return merged;
   }
 
   async delete(taskId: string, sessionId: string): Promise<void> {
+    const existing = await this.records.get(recordKey(sessionId, taskId));
     await this.records.delete(recordKey(sessionId, taskId));
+    if (existing) await this.releaseSlot(existing);
+  }
+
+  private async acquireSlot(record: TaskRecord, maxActive: number, ttlSeconds: number): Promise<number | undefined> {
+    const owner = record.sessionId;
+    const slotKeys = Array.from({ length: maxActive }, (_, slot) => slotKey(owner, slot));
+    const holders = await this.slots.mget(slotKeys);
+    const claimed = await this.claimFreeSlot(owner, holders, record.taskId, ttlSeconds);
+    if (claimed !== undefined || !(await this.reclaimSlots(owner, holders))) return claimed;
+    return this.claimFreeSlot(owner, await this.slots.mget(slotKeys), record.taskId, ttlSeconds);
+  }
+
+  private async claimFreeSlot(
+    owner: string,
+    holders: ReadonlyArray<string | null>,
+    taskId: string,
+    ttlSeconds: number,
+  ): Promise<number | undefined> {
+    for (const [slot, holder] of holders.entries()) {
+      if (holder !== null) continue;
+      const key = slotKey(owner, slot);
+      await this.slots.set(key, taskId, { ttlSeconds, ifNotExists: true });
+      if ((await this.slots.get(key)) === taskId) return slot;
+    }
+    return undefined;
+  }
+
+  /** Free slots held by finished tasks or by tasks whose CLI worker died on this host (marked failed); others stay. */
+  private async reclaimSlots(owner: string, holders: ReadonlyArray<string | null>): Promise<boolean> {
+    let reclaimed = false;
+    for (const holderTaskId of holders) {
+      if (holderTaskId === null) continue;
+      const holder = await this.records.get(recordKey(owner, holderTaskId));
+      if (!holder) continue;
+      if (isTerminal(holder.status)) {
+        await this.releaseSlot(holder);
+        reclaimed = true;
+        continue;
+      }
+      const workerPid =
+        holder.executor?.host === 'cli' && isLocalWorker(holder.executor) ? holder.executor.pid : undefined;
+      if (workerPid === undefined || isAlive(workerPid)) continue;
+      const failed = await this.update(holderTaskId, owner, {
+        status: 'failed',
+        statusMessage: 'Task runner exited before completing the task',
+      });
+      if (failed) await this.publishTerminal(failed);
+      reclaimed = true;
+    }
+    return reclaimed;
+  }
+
+  /** Best-effort: a slot left behind is reclaimed the next time its owner reaches the cap. */
+  private async releaseSlot(record: TaskRecord): Promise<void> {
+    if (record.concurrencySlot === undefined) return;
+    try {
+      await this.slots.deleteIfEquals(slotKey(record.sessionId, record.concurrencySlot), record.taskId);
+    } catch (err) {
+      this.logger?.warn('[StorageTaskStore] failed to release a concurrency slot', {
+        taskId: record.taskId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   async list(sessionId: string, opts: { cursor?: string; pageSize?: number } = {}): Promise<TaskListPage> {

@@ -17,6 +17,7 @@ export {
   linkRecord,
   nextPrevHash,
   verifyChain,
+  type AuditChainVerifyOptions,
   type AuditChainVerifyResult,
   type AuditSignatureVerifier,
   type AuditTrustedKey,

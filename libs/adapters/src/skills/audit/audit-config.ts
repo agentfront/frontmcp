@@ -80,6 +80,9 @@ export interface SkillAuditConfig {
    */
   subjectMode?: SkillAuditSubjectMode;
 
+  /** HMAC key for `subjectMode: 'hash'` (at least 32 bytes); unset, it is derived from the signer's key material. */
+  subjectHashSecret?: string | Uint8Array;
+
   /**
    * Optional periodic head-anchor interval (milliseconds). When set, the
    * writer occasionally writes `{ tail: { sequence, hash, timestamp } }` to

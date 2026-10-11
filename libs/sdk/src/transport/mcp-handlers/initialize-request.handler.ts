@@ -2,7 +2,6 @@ import { type SessionIdPayload } from '@frontmcp/auth';
 import {
   InitializeRequestSchema,
   LATEST_PROTOCOL_VERSION,
-  SUPPORTED_PROTOCOL_VERSIONS,
   type InitializeRequest,
   type InitializeResult,
 } from '@frontmcp/protocol';
@@ -16,6 +15,7 @@ import {
   type ClientCapabilities,
 } from '../../notification';
 import { type SdkAuthInfo } from '../../server/server.types';
+import { INITIALIZE_PROTOCOL_VERSIONS } from '../mcp-20260728/protocol-20260728.constants';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 /**
@@ -186,7 +186,7 @@ export default function initializeRequestHandler({
       // "If the server supports the requested protocol version, it MUST respond with the same version.
       //  Otherwise, the server MUST respond with another protocol version it supports."
       const requestedVersion = request.params.protocolVersion;
-      const protocolVersion = SUPPORTED_PROTOCOL_VERSIONS.includes(requestedVersion)
+      const protocolVersion = INITIALIZE_PROTOCOL_VERSIONS.includes(requestedVersion)
         ? requestedVersion
         : LATEST_PROTOCOL_VERSION;
 

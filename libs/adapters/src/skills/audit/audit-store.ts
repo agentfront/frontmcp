@@ -59,6 +59,9 @@ export interface SkillAuditStore {
 
   /** Read records in sequence order. Used by the verifier and by HTTP viewers. */
   read(opts?: SkillAuditReadOptions): Promise<SkillAuditRecord[]>;
+
+  /** Give back `sequence` only while it is the latest allocation and its record was never stored; otherwise change nothing. */
+  releaseSequence?(sequence: number): Promise<void>;
 }
 
 // ─── In-memory implementation ───────────────────────────────────────────────
@@ -90,6 +93,10 @@ export class MemoryAuditStore implements SkillAuditStore {
   async tail(): Promise<SkillAuditRecord | undefined> {
     if (this.records.length === 0) return undefined;
     return this.records[this.records.length - 1];
+  }
+
+  async releaseSequence(sequence: number): Promise<void> {
+    if (sequence === this.seq && !this.records.some((record) => record.sequence === sequence)) this.seq -= 1;
   }
 
   async read(opts?: SkillAuditReadOptions): Promise<SkillAuditRecord[]> {
@@ -140,6 +147,12 @@ export class StorageAdapterAuditStore implements SkillAuditStore {
 
   async nextSequence(): Promise<number> {
     return this.adapter.incr(this.sequenceKey);
+  }
+
+  /** DECR's result tells atomically whether the counter was still `sequence`; when it was not, INCR restores it. */
+  async releaseSequence(sequence: number): Promise<void> {
+    if ((await this.adapter.get(this.recordKey(sequence))) !== null) return;
+    if ((await this.adapter.decr(this.sequenceKey)) !== sequence - 1) await this.adapter.incr(this.sequenceKey);
   }
 
   async appendAtSequence(record: SkillAuditRecord): Promise<void> {

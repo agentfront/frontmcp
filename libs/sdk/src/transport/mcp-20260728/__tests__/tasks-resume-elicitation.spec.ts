@@ -129,7 +129,9 @@ describe('a task resumed by an unversioned tasks/update', () => {
 
     // The MRTR missing-capability answer ("requires the `elicitation` client capability", -32021) is
     // the 2026-only one; a caller that never declared the revision is refused as a legacy caller is.
-    expect(settled.status).toBe('failed');
+    // The tool's error is the `isError` result an inline call returns, so the task is `completed`.
+    expect(settled.status).toBe('completed');
+    expect((settled.result as { isError?: boolean } | undefined)?.isError).toBe(true);
     expect(report).toMatch(/does not support elicitation/);
     expect(report).not.toContain('requires the `elicitation` client capability');
   });

@@ -1,6 +1,7 @@
 import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 
+import { MAX_CONCURRENT_TASKS_PER_SESSION } from '../../task/task.types';
 import type { AdapterType, AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
 import {
   annotatedFrontMcpAdaptersSchema,
@@ -558,6 +559,7 @@ export interface FrontMcpBaseMetadata {
     defaultTtlMs?: number;
     maxTtlMs?: number;
     defaultPollIntervalMs?: number;
+    /** Unfinished tasks a caller may have at once (per session, or per subject under 2026-07-28); default 16, at most 1000. */
     maxConcurrentPerSession?: number;
     /**
      * Throw at startup instead of warning when the runtime cannot run tasks
@@ -676,7 +678,7 @@ export const frontMcpBaseSchema = z.object({
       defaultTtlMs: z.number().int().positive().optional(),
       maxTtlMs: z.number().int().positive().optional(),
       defaultPollIntervalMs: z.number().int().positive().optional(),
-      maxConcurrentPerSession: z.number().int().positive().optional(),
+      maxConcurrentPerSession: z.number().int().positive().max(MAX_CONCURRENT_TASKS_PER_SESSION).optional(),
       strict: z.boolean().optional(),
       runner: z.enum(['in-process', 'cli']).optional(),
       sqlite: z

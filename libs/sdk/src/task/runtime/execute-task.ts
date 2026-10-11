@@ -13,6 +13,8 @@
  * @module task/runtime/execute-task
  */
 
+import { getHostname } from '@frontmcp/utils';
+
 import { frontMcpMetadataSchema, type FrontMcpConfigInput, type FrontMcpLogger } from '../../common';
 import { MCP_ERROR_CODES } from '../../errors/mcp.error';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
@@ -137,6 +139,7 @@ export async function executeTaskWorker(options: FrontMcpConfigInput, taskId: st
       host: 'cli',
       pid: process.pid,
       spawnedAt: new Date().toISOString(),
+      hostname: getHostname(),
     },
   });
 

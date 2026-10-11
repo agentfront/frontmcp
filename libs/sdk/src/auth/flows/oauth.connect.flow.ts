@@ -325,19 +325,10 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
     return fetch(input, init);
   }
 
-  /** Fire a `notifications/resources/updated` to connected sessions (best-effort). */
+  /** Fire a `notifications/resources/updated` to callers subscribed to the credential (best-effort). */
   private notifyResourcesUpdated(key: string): void {
     try {
-      const scope = this.scope as unknown as {
-        notifyResourcesUpdated?: (uri: string) => void;
-        resources?: { notifyUpdated?: (uri: string) => void };
-      };
-      const uri = `credential://${encodeURIComponent(key)}`;
-      if (typeof scope.notifyResourcesUpdated === 'function') {
-        scope.notifyResourcesUpdated(uri);
-      } else if (typeof scope.resources?.notifyUpdated === 'function') {
-        scope.resources.notifyUpdated(uri);
-      }
+      this.scope.resources.notifyContentChanged(`credential://${encodeURIComponent(key)}`);
     } catch {
       // Best-effort only — never fail the connect on a notification error.
     }

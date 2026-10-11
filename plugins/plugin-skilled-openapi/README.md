@@ -109,13 +109,13 @@ All options are validated by a strict Zod schema (`skilledOpenApiPluginOptionsSc
 
 `outbound` (SSRF + egress):
 
-| Field                     | Default  | Description                                              |
-| ------------------------- | -------- | -------------------------------------------------------- |
-| `allowPrivateNetworks`    | `false`  | Allow connections to private/loopback/link-local IPs.    |
-| `allowHttp`               | `false`  | Allow `http://` upstreams (auto-enabled by `dev: true`). |
-| `maxConcurrencyPerHost`   | `10`     | Per-host concurrency cap.                                |
-| `defaultTimeoutMs`        | `30000`  | Per-request timeout.                                     |
-| `defaultMaxResponseBytes` | `262144` | Per-response size cap.                                   |
+| Field                     | Default  | Description                                                                                               |
+| ------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `allowPrivateNetworks`    | `false`  | Allow connections to private/loopback IPs (link-local and metadata stay blocked); logs a startup warning. |
+| `allowHttp`               | `false`  | Allow `http://` upstreams (auto-enabled by `dev: true`).                                                  |
+| `maxConcurrencyPerHost`   | `10`     | Per-host concurrency cap.                                                                                 |
+| `defaultTimeoutMs`        | `30000`  | Per-request timeout.                                                                                      |
+| `defaultMaxResponseBytes` | `262144` | Per-response size cap.                                                                                    |
 
 Full reference: [Configuration](https://frontmcp.dev/reference/plugins/skilled-openapi#skilledopenapiplugininitoptions).
 

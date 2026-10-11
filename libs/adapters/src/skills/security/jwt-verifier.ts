@@ -1,16 +1,6 @@
-// file: plugins/plugin-skilled-openapi/src/security/jwt-verifier.ts
+// file: libs/adapters/src/skills/security/jwt-verifier.ts
 //
-// Bundle-push channel JWT verifier. Wraps libs/auth's JwksService and adds
-// the RFC 8707 / 2026-03-15 MCP-spec checks the spec mandates:
-//
-//   - `aud` must match the configured bundleId / audience
-//   - `resource` claim (RFC 8707) must match the configured FrontMCP resource
-//   - issuer must match `expectedIssuer`
-//   - optional role claim must include `frontmcp:cloud:push` (or whatever
-//     scope the customer's deployment requires)
-//
-// Verification produces a structured result; callers (the SaaS-pull source
-// and the future webhook route) MUST refuse on `ok: false`.
+// Bundle-push JWT checks (signature, iss, aud, RFC 8707 resource, roles) for a host-built push endpoint; FrontMCP calls none.
 
 import { JwksService, type ProviderVerifyRef, type VerifyResult } from '@frontmcp/auth';
 import type { FrontMcpLogger } from '@frontmcp/sdk';
@@ -41,6 +31,7 @@ export interface PushJwtVerifyResult {
 
 const DEFAULT_REQUIRED_ROLES = ['frontmcp:cloud:push'];
 
+/** Not wired to any route: a host serving its own push endpoint calls `verify` and refuses on `ok: false`. */
 export class BundlePushJwtVerifier {
   private readonly providerRef: ProviderVerifyRef;
   private readonly jwks: JwksService;
