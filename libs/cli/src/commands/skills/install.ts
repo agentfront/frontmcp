@@ -1,3 +1,4 @@
+import * as os from 'os';
 import * as path from 'path';
 
 import { cp, ensureDir, fileExists, readdir, readFile, writeFile } from '@frontmcp/utils';
@@ -158,11 +159,12 @@ export async function ensureClaudeMdSkillsInstructions(cwd: string): Promise<voi
   }
 }
 
-/** The project whose CLAUDE.md lists the skills in `skillsDir`: two levels above a `.claude/skills` folder. */
+/** The project whose CLAUDE.md lists the skills in `skillsDir`: two levels above a `.claude/skills` folder, never the home folder. */
 function claudeMdProjectFor(skillsDir: string): string | undefined {
   const resolved = path.resolve(skillsDir);
   const isClaudeSkillsDir = path.basename(resolved) === 'skills' && path.basename(path.dirname(resolved)) === '.claude';
-  return isClaudeSkillsDir ? path.dirname(path.dirname(resolved)) : undefined;
+  const projectDir = path.dirname(path.dirname(resolved));
+  return isClaudeSkillsDir && projectDir !== path.resolve(os.homedir()) ? projectDir : undefined;
 }
 
 /** Update the owning project's CLAUDE.md for a `.claude/skills` folder; for any other folder, print the block instead. */
@@ -173,10 +175,10 @@ async function reportSkillsToClaudeMd(skillsDir: string, options: InstallOptions
     await ensureClaudeMdSkillsInstructions(projectDir);
     return;
   }
-  const label = options.dir ?? skillsDir;
-  const section = buildSkillsSection(getSelfVersion(), await scanInstalledSkills(skillsDir), label);
+  const resolvedDir = path.resolve(skillsDir);
+  const section = buildSkillsSection(getSelfVersion(), await scanInstalledSkills(resolvedDir), resolvedDir);
   console.log(
-    `\n${c('yellow', 'CLAUDE.md not changed:')} ${label} is not a project's .claude/skills folder. ` +
+    `\n${c('yellow', 'CLAUDE.md not changed:')} ${options.dir ?? resolvedDir} is not a project's .claude/skills folder. ` +
       `Add this block to the CLAUDE.md that should use these skills:\n\n${section}`,
   );
 }

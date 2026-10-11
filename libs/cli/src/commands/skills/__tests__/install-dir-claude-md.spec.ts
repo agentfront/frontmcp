@@ -4,6 +4,12 @@ import * as path from 'path';
 
 import { installSkill } from '../install';
 
+let mockHomeDir: string | undefined;
+jest.mock('os', () => {
+  const actualOs = jest.requireActual<typeof import('os')>('os');
+  return { ...actualOs, homedir: () => mockHomeDir ?? actualOs.homedir() };
+});
+
 describe('skills install --dir and CLAUDE.md', () => {
   let workDir: string;
   let currentProject: string;
@@ -53,6 +59,29 @@ describe('skills install --dir and CLAUDE.md', () => {
     expect(stdout).toContain('<!-- frontmcp:skills-start');
     expect(stdout).toContain(`installed in \`${customDir}\``);
     expect(stdout).toContain('**frontmcp-setup**');
+  });
+
+  it('leaves ~/CLAUDE.md alone for --dir ~/.claude/skills (user-level skills) and prints the block', async () => {
+    const fakeHome = path.join(workDir, 'home');
+    fs.mkdirSync(fakeHome, { recursive: true });
+    mockHomeDir = fakeHome;
+    try {
+      await installSkill('frontmcp-setup', { dir: path.join(fakeHome, '.claude', 'skills') });
+    } finally {
+      mockHomeDir = undefined;
+    }
+
+    expect(fs.existsSync(path.join(fakeHome, 'CLAUDE.md'))).toBe(false);
+    expect(fs.existsSync(path.join(fakeHome, '.claude', 'skills', 'frontmcp-setup', 'SKILL.md'))).toBe(true);
+    expect(stdout).toContain('<!-- frontmcp:skills-start');
+    expect(stdout).toContain('**frontmcp-setup**');
+  });
+
+  it('names the resolved folder in the printed block and the path as typed in the message', async () => {
+    await installSkill('frontmcp-setup', { dir: '../custom-skills' });
+
+    expect(stdout).toContain("../custom-skills is not a project's .claude/skills folder");
+    expect(stdout).toContain(`installed in \`${path.resolve('../custom-skills')}\``);
   });
 
   it("still updates the current directory's CLAUDE.md without --dir", async () => {
