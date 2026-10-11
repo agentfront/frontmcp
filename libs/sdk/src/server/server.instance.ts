@@ -78,10 +78,6 @@ export class FrontMcpServerInstance extends FrontMcpServer {
     return this.host.registerRoute(method, path, handler);
   }
 
-  override enhancedHandler(handler: ServerRequestHandler): ServerRequestHandler {
-    return this.host.enhancedHandler(handler);
-  }
-
   /**
    * Set the health service and config for route registration.
    * Must be called before prepare() to enable enriched health endpoints.

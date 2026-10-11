@@ -79,9 +79,9 @@ export class WorkflowStepExecutor {
   }
 
   /**
-   * Run one attempt, racing a timer. The timer does NOT cancel a job that already started; it rejects
-   * the attempt early and aborts its flow, so an attempt still building its providers or loading its
-   * auth when it times out never starts the job.
+   * Run one attempt, racing a timer. On a timeout the attempt is rejected and its flow aborted: a job
+   * not started yet never starts, and a started one sees `this.signal` aborted while its flow ends as
+   * failed (its `Did('execute')` hooks don't run). The timer does not stop `execute()` itself.
    */
   private executeWithTimeout(
     job: JobEntry,

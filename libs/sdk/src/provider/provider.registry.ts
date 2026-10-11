@@ -115,12 +115,16 @@ export default class ProviderRegistry
   /** Whether session caching is enabled (disabled in distributed/serverless mode) */
   private readonly sessionCacheEnabled: boolean;
 
+  /** The registries built below this one (an app's, a plugin's, an agent's), disposed with it. */
+  private readonly childRegistries = new Set<ProviderRegistry>();
+
   constructor(
     list: ProviderType[],
     private readonly parentProviders?: ProviderRegistry,
     options?: ProviderRegistryOptions,
   ) {
     super('ProviderRegistry', parentProviders, list, false);
+    parentProviders?.childRegistries.add(this);
 
     this.providedBy = new Map();
     // A registry below another (an app's, a plugin's, an agent's) follows its parent unless configured itself
@@ -913,7 +917,7 @@ export default class ProviderRegistry
   }
 
   /**
-   * Dispose of the registry, cleaning up all resources.
+   * Dispose of the registry and every registry built below it, cleaning up all resources.
    * Call this when the registry/scope is being destroyed to prevent:
    * - Memory leaks from retained interval handles
    * - Orphaned session cleanup timers
@@ -925,6 +929,8 @@ export default class ProviderRegistry
    * ```
    */
   dispose(): void {
+    for (const child of [...this.childRegistries]) child.dispose();
+    this.parentProviders?.childRegistries.delete(this);
     this.stopSessionCleanup();
     // Clear all session stores to help garbage collection
     this.sessionStores.clear();

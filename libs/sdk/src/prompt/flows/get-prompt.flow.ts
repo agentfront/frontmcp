@@ -220,7 +220,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     this.logger.verbose('findPrompt:start');
 
     const { name } = this.state.required.input;
-    this.logger.info(`findPrompt: looking for prompt with name "${name}"`);
+    this.logger.verbose(`findPrompt: looking for prompt with name "${name}"`);
 
     const prompt = resolvedPrompts.take(this.rawInput, name) ?? findPromptForGet(this.scope.prompts, name);
 
@@ -248,7 +248,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
 
     this.logger = this.logger.child(`GetPromptFlow(${name})`);
     this.state.set('prompt', prompt);
-    this.logger.info(`findPrompt: prompt "${prompt.name}" found`);
+    this.logger.verbose(`findPrompt: prompt "${prompt.name}" found`);
     this.logger.verbose('findPrompt:done');
   }
 

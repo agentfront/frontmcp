@@ -253,7 +253,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     }
 
     const activeAgents = agents.getAgents(true);
-    this.logger.info(`findAgent: discovered ${activeAgents.length} active agent(s) (including hidden)`);
+    this.logger.verbose(`findAgent: discovered ${activeAgents.length} active agent(s) (including hidden)`);
 
     const { name: toolName } = this.state.required.input;
 
@@ -268,7 +268,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
     this.logger = this.logger.child(`CallAgentFlow(${agent.name})`);
     this.state.set('agent', agent);
-    this.logger.info(`findAgent: agent "${agent.name}" found`);
+    this.logger.verbose(`findAgent: agent "${agent.name}" found`);
     this.logger.verbose('findAgent:done');
   }
 
@@ -745,7 +745,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     }
 
     // Log the final result being sent
-    this.logger.info('finalize: sending response', {
+    this.logger.verbose('finalize: sending response', {
       agent: agent.metadata.name,
       hasContent: Array.isArray(result.content) && result.content.length > 0,
       contentParts: Array.isArray(result.content) ? result.content.length : 0,

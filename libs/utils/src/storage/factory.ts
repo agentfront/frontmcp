@@ -4,11 +4,26 @@
  * Factory function to create storage adapters with auto-detection.
  */
 
-import type { StorageConfig, StorageType, RootStorage, StorageAdapter } from './types';
-import { StorageConfigError } from './errors';
-import { createRootStorage, createNamespacedStorage } from './namespace';
-import { MemoryStorageAdapter } from './adapters/memory';
 import { getEnv, isProduction } from '#env';
+import { getRuntimeContext } from '#runtime-context';
+
+import { MemoryStorageAdapter } from './adapters/memory';
+import { StorageConfigError } from './errors';
+import { createNamespacedStorage, createRootStorage } from './namespace';
+import type { RootStorage, StorageAdapter, StorageConfig, StorageType } from './types';
+
+/** Whether this process already printed the no-distributed-storage warning. */
+let noDistributedStorageWarned = false;
+
+/** Warn once per process that production runs on in-memory storage; a page has no backend to configure. */
+function warnNoDistributedStorage(): void {
+  if (noDistributedStorageWarned || getRuntimeContext().runtime === 'browser') return;
+  noDistributedStorageWarned = true;
+  console.warn(
+    '[storage] Warning: No distributed storage backend detected in production. ' +
+      'Using in-memory storage. Set REDIS_URL, UPSTASH_REDIS_REST_URL, or KV_REST_API_URL.',
+  );
+}
 
 /**
  * Detect the best available storage type based on environment.
@@ -129,13 +144,7 @@ export async function createStorage(config: StorageConfig = {}): Promise<RootSto
   if (type === 'auto') {
     type = detectStorageType();
 
-    // Warn in production if falling back to memory
-    if (type === 'memory' && isProduction()) {
-      console.warn(
-        '[storage] Warning: No distributed storage backend detected in production. ' +
-          'Using in-memory storage. Set REDIS_URL, UPSTASH_REDIS_REST_URL, or KV_REST_API_URL.',
-      );
-    }
+    if (type === 'memory' && isProduction()) warnNoDistributedStorage();
   }
 
   let adapter: StorageAdapter;

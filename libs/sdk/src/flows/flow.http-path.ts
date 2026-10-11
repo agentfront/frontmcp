@@ -27,7 +27,29 @@ export function matchMountedPath(pattern: string, path: string): Record<string, 
   const expected = mount.split('/');
   const actual = path.split('/');
   if (actual.length < expected.length) return undefined;
+  return captureSegments(expected, actual);
+}
 
+/**
+ * Match a request path against a route's path the way Express's `router.get(path)` does for literal
+ * and `:name` segments: the whole path, a trailing slash ignored. Other Express path syntax (`*`,
+ * optional segments, regular expressions) does not match.
+ *
+ * @returns the captured parameters, or `undefined` when the path does not match
+ */
+export function matchRoutePath(pattern: string, path: string): Record<string, string> | undefined {
+  const expected = withoutTrailingSlash(pattern).split('/');
+  const actual = withoutTrailingSlash(path).split('/');
+  if (actual.length !== expected.length) return undefined;
+  return captureSegments(expected, actual);
+}
+
+function withoutTrailingSlash(path: string): string {
+  return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+}
+
+/** The `:name` segments of `expected` captured from `actual`, or `undefined` when a literal segment differs. */
+function captureSegments(expected: string[], actual: string[]): Record<string, string> | undefined {
   const params: Record<string, string> = {};
   for (let i = 0; i < expected.length; i++) {
     const segment = expected[i];

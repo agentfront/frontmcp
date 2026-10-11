@@ -209,11 +209,11 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     this.logger.verbose('findResource:start');
 
     const { uri } = this.state.required.input;
-    this.logger.info(`findResource: looking for resource with URI "${uri}"`);
+    this.logger.verbose(`findResource: looking for resource with URI "${uri}"`);
 
     // Check for UI resource URIs (ui://...) first
     if (isUIResourceUri(uri)) {
-      this.logger.info(`findResource: detected UI resource URI "${uri}"`);
+      this.logger.verbose(`findResource: detected UI resource URI "${uri}"`);
 
       // Get platform type: first check sessionIdPayload (detected from user-agent),
       // then fall back to notification service (detected from MCP clientInfo)
@@ -241,7 +241,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
         // Store the UI resource result and mark as UI resource
         this.state.set('isUIResource', true);
         this.state.set('uiResourceResult', uiResult.result);
-        this.logger.info(`findResource: UI resource "${uri}" resolved from cache`);
+        this.logger.verbose(`findResource: UI resource "${uri}" resolved from cache`);
         this.logger.verbose('findResource:done');
         return;
       }
@@ -283,7 +283,9 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     this.logger = this.logger.child(`ReadResourceFlow(${uri})`);
     this.state.set('resource', match.instance);
     this.state.set('params', match.params);
-    this.logger.info(`findResource: resource "${match.instance.name}" found (template: ${match.instance.isTemplate})`);
+    this.logger.verbose(
+      `findResource: resource "${match.instance.name}" found (template: ${match.instance.isTemplate})`,
+    );
     this.logger.verbose('findResource:done');
   }
 

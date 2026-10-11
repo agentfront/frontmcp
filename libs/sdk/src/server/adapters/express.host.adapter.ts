@@ -288,7 +288,7 @@ export class ExpressHostAdapter extends HostServerAdapter {
     this.router.use(entryPath, handler as any);
   }
 
-  enhancedHandler(handler: ServerRequestHandler) {
+  private enhancedHandler(handler: ServerRequestHandler) {
     return (req: express.Request, res: express.Response, next: express.NextFunction) => {
       // TODO: add request/response enhancements here if needed
       const request = req as ServerRequest;
