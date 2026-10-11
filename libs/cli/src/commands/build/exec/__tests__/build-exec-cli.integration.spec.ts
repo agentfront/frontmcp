@@ -462,6 +462,62 @@ describe('buildExec() integration', () => {
     });
   });
 
+  describe('build block of the deployments[] config shape', () => {
+    it('reaches the server bundle and the manifest', async () => {
+      mockLoadExecConfig.mockResolvedValue({
+        name: 'test-app',
+        version: '2.0.0',
+        build: {
+          esbuild: { external: ['left-external'], define: { 'process.env.FLAVOR': '"v1"' } },
+          dependencies: { nativeAddons: ['better-sqlite3'], system: ['ffmpeg'] },
+          storage: { type: 'sqlite', required: true },
+          network: { defaultPort: 8080 },
+        },
+      });
+
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        await buildExec({ outDir, cli: false } as any);
+
+        const bundledConfig = mockBundleWithEsbuild.mock.calls[0][2];
+        expect(bundledConfig.esbuild).toEqual({ external: ['left-external'], define: { 'process.env.FLAVOR': '"v1"' } });
+        expect(bundledConfig.dependencies?.nativeAddons).toEqual(['better-sqlite3']);
+        const manifest = JSON.parse(fs.readFileSync(path.join(outDir, 'test-app.manifest.json'), 'utf-8'));
+        expect(manifest.dependencies).toEqual({ system: ['ffmpeg'], nativeAddons: ['better-sqlite3'] });
+        expect(manifest.storage).toEqual({ type: 'sqlite', required: true });
+        expect(manifest.network.defaultPort).toBe(8080);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  });
+
+  describe('native addons with a single executable (SEA) build', () => {
+    it.each([
+      ['--target cli', { cli: true, sea: true }],
+      ['--target node with sea.enabled', { cli: false, sea: true }],
+    ])('%s refuses before compiling anything', async (_label, flags) => {
+      mockLoadExecConfig.mockResolvedValue({
+        name: 'test-app',
+        version: '2.0.0',
+        build: { dependencies: { nativeAddons: ['better-sqlite3'] } },
+      });
+
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+      try {
+        await expect(buildExec({ outDir, ...flags } as any)).rejects.toThrow(
+          'An SEA binary can only load Node built-ins, so it cannot load the native addon(s) better-sqlite3 (build.dependencies.nativeAddons).',
+        );
+        expect(mockBundleWithEsbuild).not.toHaveBeenCalled();
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  });
+
   describe('compilation step', () => {
     it('should call runCmd for TypeScript compilation', async () => {
       const originalCwd = process.cwd();

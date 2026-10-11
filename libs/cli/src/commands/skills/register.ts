@@ -53,6 +53,7 @@ export function registerSkillsCommands(program: Command): void {
       '--from-package <pkg>',
       "Install @Skill entries from a published package's main entry instead of the framework catalog",
     )
+    .option('--no-claude-md', 'Leave CLAUDE.md alone (claude provider): neither update it nor print the skills block')
     .action(
       async (
         name: string | undefined,
@@ -64,6 +65,7 @@ export function registerSkillsCommands(program: Command): void {
           category?: string;
           fromEntry?: string;
           fromPackage?: string;
+          claudeMd?: boolean;
         },
       ) => {
         const validProviders = ['claude', 'codex'] as const;
@@ -90,6 +92,7 @@ export function registerSkillsCommands(program: Command): void {
           fromPackage: options.fromPackage,
           names: configured,
           bundle: noSelector && !configured ? defaults.bundle : undefined,
+          claudeMd: options.claudeMd,
         });
       },
     );

@@ -32,6 +32,7 @@ module.exports = {
         '@modelcontextprotocol/sdk',
         '@modelcontextprotocol/sdk/*',
       ],
+      define: { 'process.env.MCPB_BUILD_FLAVOR': '"mcpb-define"' },
     },
   },
   deployments: [

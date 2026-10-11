@@ -155,12 +155,14 @@ those flags select skills in bulk.
 | `-c, --category <c>`        | Install every skill in a category (catalog only)                                                       | —                                                     |
 | `--from-entry <path>`       | Install `@Skill` entries discovered in a **local project entry file** instead of the framework catalog | —                                                     |
 | `--from-package <pkg>`      | Install `@Skill` entries discovered in a **published package's** main entry                            | —                                                     |
+| `--no-claude-md`            | Leave `CLAUDE.md` alone (claude provider): neither update it nor print the skills block                | —                                                     |
 
 ```bash
 # Single-skill install (positional name)
 frontmcp skills install frontmcp-development --provider claude   # → .claude/skills/<name>/SKILL.md
 frontmcp skills install frontmcp-setup --provider codex          # → .codex/skills/<name>/SKILL.md
-frontmcp skills install frontmcp-guides --dir ./my-skills        # custom destination
+frontmcp skills install frontmcp-guides --dir ./my-skills        # custom destination: prints the CLAUDE.md block to add
+frontmcp skills install frontmcp-guides --dir ../app/.claude/skills  # another project: updates ../app/CLAUDE.md
 
 # Bulk install — see "Bulk install patterns" below for the full decision matrix
 frontmcp skills install --all --provider claude
@@ -307,6 +309,12 @@ Selectors and constraints:
 - The CLAUDE.md auto-generated `<!-- frontmcp:skills -->` block lists
   every installed skill in `.claude/skills/`, catalog **and**
   project-defined together. Re-running install keeps the block coherent.
+- Which CLAUDE.md is updated (claude provider): without `--dir`, the one in the
+  current directory. With a `--dir` that ends in `.claude/skills`, the one of the
+  project that folder belongs to (two levels up), listing the skills in `--dir`.
+  For any other `--dir`, including `~/.claude/skills` (user-level skills), no
+  CLAUDE.md is touched: the command prints the block to add by hand, naming the
+  resolved folder. `--no-claude-md` skips both.
 
 > **Tip:** This is the lightest path for shipping a project's own skills.
 > If you also want to ship slash commands, environment hints, and a

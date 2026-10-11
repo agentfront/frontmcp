@@ -52,8 +52,11 @@ frontmcp skills install frontmcp-config --provider claude
 # Install for Codex
 frontmcp skills install frontmcp-development --provider codex
 
-# Install to a custom directory
+# Install to a custom directory: CLAUDE.md is left alone, and the command prints the block to add to it
 frontmcp skills install frontmcp-guides --dir ./my-skills
+
+# Install into another project: updates ../app/CLAUDE.md
+frontmcp skills install frontmcp-guides --dir ../app/.claude/skills
 
 # Bulk install — every skill in a category in one command
 frontmcp skills install --category development --provider claude

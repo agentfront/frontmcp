@@ -1,7 +1,8 @@
-import { execFileSync, spawn, ChildProcess } from 'child_process';
-import * as path from 'path';
-import { fileExists } from '@frontmcp/utils';
+import { execFileSync, spawn, type ChildProcess } from 'child_process';
 import type { StdioOptions } from 'node:child_process';
+import * as path from 'path';
+
+import { fileExists } from '@frontmcp/utils';
 
 const APP_NAME = 'cli-exec-demo';
 const FIXTURE_DIR = path.resolve(__dirname, '../../fixture');
@@ -93,11 +94,16 @@ const FRONTMCP_BIN = path.join(ROOT_DIR, 'libs', 'cli', 'dist', 'src', 'core', '
  * Used for testing CLI-level commands like `skills search`, `skills list`, etc.
  * Resolves @frontmcp/skills via monorepo workspace symlinks.
  */
-export function runFrontmcpCli(args: string[], extraEnv?: Record<string, string>, cwd = ROOT_DIR): CliResult {
+export function runFrontmcpCli(
+  args: string[],
+  extraEnv?: Record<string, string>,
+  cwd = ROOT_DIR,
+  timeoutMs = 30000,
+): CliResult {
   try {
     const stdout = execFileSync('node', [FRONTMCP_BIN, ...args], {
       cwd,
-      timeout: 30000,
+      timeout: timeoutMs,
       encoding: 'utf-8',
       env: { ...process.env, NODE_ENV: 'test', ...extraEnv },
     });

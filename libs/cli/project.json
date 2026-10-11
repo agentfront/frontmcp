@@ -27,7 +27,7 @@
         "outputPath": "libs/cli/dist",
         "main": "libs/cli/src/index.ts",
         "tsConfig": "libs/cli/tsconfig.lib.json",
-        "assets": ["README.md", "LICENSE"]
+        "assets": ["README.md", "LICENSE", "libs/cli/frontmcp.schema.json"]
       }
     },
     "build": {

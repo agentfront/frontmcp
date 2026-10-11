@@ -2,387 +2,1222 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://frontmcp.dev/schemas/frontmcp.config.json",
   "title": "FrontMCP Configuration",
-  "description": "Configuration for FrontMCP deployment targets, server defaults, and build settings.",
+  "description": "frontmcp.config.{ts,js,json,mjs,cjs}: deployment targets, build options, and the defaults every frontmcp command reads.",
   "type": "object",
-  "required": ["name", "deployments"],
-  "additionalProperties": false,
   "properties": {
-    "$schema": {
-      "type": "string",
-      "description": "JSON Schema pointer for IDE autocomplete."
-    },
+    "$schema": { "description": "JSON Schema pointer for IDE autocomplete.", "type": "string" },
     "name": {
       "type": "string",
+      "minLength": 1,
       "pattern": "^[a-zA-Z0-9._-]+$",
       "description": "Server name (alphanumeric with .-_ only)."
     },
-    "version": {
-      "type": "string",
-      "description": "Server version (semver).",
-      "default": "1.0.0"
-    },
-    "entry": {
-      "type": "string",
-      "description": "Entry point file path."
-    },
-    "nodeVersion": {
-      "type": "string",
-      "description": "Node.js version requirement.",
-      "default": ">=22.0.0"
-    },
+    "version": { "description": "Server version (semver). Defaults to package.json version.", "type": "string" },
+    "entry": { "description": "Entry point file path.", "type": "string" },
+    "nodeVersion": { "description": "Node.js version requirement (default >=22.0.0).", "type": "string" },
     "deployments": {
-      "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/definitions/DeploymentTarget" },
-      "description": "Build targets — each can override server defaults."
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outDir": { "description": "Output directory override (default dist/<target>).", "type": "string" },
+              "env": {
+                "description": "Environment variable defaults the built artifact carries.",
+                "type": "object",
+                "propertyNames": { "type": "string" },
+                "additionalProperties": { "type": "string" }
+              },
+              "target": { "type": "string", "const": "node" },
+              "server": {
+                "description": "Server defaults (http, csp, cookies, headers).",
+                "type": "object",
+                "properties": {
+                  "http": {
+                    "description": "HTTP options, aligned with @FrontMcp({ http }).",
+                    "type": "object",
+                    "properties": {
+                      "port": {
+                        "description": "HTTP port (PORT default). Only for node/distributed targets.",
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "socketPath": {
+                        "description": "Unix socket path (alternative to port). Only for node/distributed targets.",
+                        "type": "string"
+                      },
+                      "entryPath": {
+                        "description": "MCP entry path ('' or '/mcp'); wins over transport.http.path for this deployment.",
+                        "type": "string"
+                      },
+                      "cors": {
+                        "description": "CORS configuration.",
+                        "type": "object",
+                        "properties": {
+                          "origins": {
+                            "description": "Allowed origins (`['*']` = any origin). Omitted or empty = no CORS headers.",
+                            "type": "array",
+                            "items": { "type": "string" }
+                          },
+                          "credentials": {
+                            "description": "Allow credentials (cookies, authorization headers).",
+                            "type": "boolean"
+                          },
+                          "maxAge": {
+                            "description": "Preflight cache max age in seconds.",
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "csp": {
+                    "description": "Content-Security-Policy headers.",
+                    "type": "object",
+                    "properties": {
+                      "enabled": { "description": "Enable CSP headers.", "type": "boolean" },
+                      "directives": {
+                        "description": "CSP directives (e.g. 'default-src': \"'self'\").",
+                        "type": "object",
+                        "propertyNames": { "type": "string" },
+                        "additionalProperties": {
+                          "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                        }
+                      },
+                      "reportUri": { "description": "Report URI for CSP violations.", "type": "string" },
+                      "reportOnly": { "description": "Use Content-Security-Policy-Report-Only.", "type": "boolean" }
+                    },
+                    "additionalProperties": false
+                  },
+                  "cookies": {
+                    "description": "Load-balancer affinity cookie (distributed target).",
+                    "type": "object",
+                    "properties": {
+                      "affinity": { "description": "LB affinity cookie name (distributed target).", "type": "string" },
+                      "domain": { "description": "Cookie domain.", "type": "string" },
+                      "sameSite": {
+                        "description": "SameSite policy.",
+                        "type": "string",
+                        "enum": ["Strict", "Lax", "None"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "headers": {
+                    "description": "Security response headers.",
+                    "type": "object",
+                    "properties": {
+                      "hsts": {
+                        "description": "Strict-Transport-Security. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "contentTypeOptions": {
+                        "description": "X-Content-Type-Options. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "frameOptions": {
+                        "description": "X-Frame-Options. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "custom": {
+                        "description": "Custom response headers.",
+                        "type": "object",
+                        "propertyNames": { "type": "string" },
+                        "additionalProperties": { "type": "string" }
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["target"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outDir": { "description": "Output directory override (default dist/<target>).", "type": "string" },
+              "env": {
+                "description": "Environment variable defaults the built artifact carries.",
+                "type": "object",
+                "propertyNames": { "type": "string" },
+                "additionalProperties": { "type": "string" }
+              },
+              "target": { "type": "string", "const": "distributed" },
+              "server": {
+                "description": "Server defaults (http, csp, cookies, headers).",
+                "type": "object",
+                "properties": {
+                  "http": {
+                    "description": "HTTP options, aligned with @FrontMcp({ http }).",
+                    "type": "object",
+                    "properties": {
+                      "port": {
+                        "description": "HTTP port (PORT default). Only for node/distributed targets.",
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "socketPath": {
+                        "description": "Unix socket path (alternative to port). Only for node/distributed targets.",
+                        "type": "string"
+                      },
+                      "entryPath": {
+                        "description": "MCP entry path ('' or '/mcp'); wins over transport.http.path for this deployment.",
+                        "type": "string"
+                      },
+                      "cors": {
+                        "description": "CORS configuration.",
+                        "type": "object",
+                        "properties": {
+                          "origins": {
+                            "description": "Allowed origins (`['*']` = any origin). Omitted or empty = no CORS headers.",
+                            "type": "array",
+                            "items": { "type": "string" }
+                          },
+                          "credentials": {
+                            "description": "Allow credentials (cookies, authorization headers).",
+                            "type": "boolean"
+                          },
+                          "maxAge": {
+                            "description": "Preflight cache max age in seconds.",
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "csp": {
+                    "description": "Content-Security-Policy headers.",
+                    "type": "object",
+                    "properties": {
+                      "enabled": { "description": "Enable CSP headers.", "type": "boolean" },
+                      "directives": {
+                        "description": "CSP directives (e.g. 'default-src': \"'self'\").",
+                        "type": "object",
+                        "propertyNames": { "type": "string" },
+                        "additionalProperties": {
+                          "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                        }
+                      },
+                      "reportUri": { "description": "Report URI for CSP violations.", "type": "string" },
+                      "reportOnly": { "description": "Use Content-Security-Policy-Report-Only.", "type": "boolean" }
+                    },
+                    "additionalProperties": false
+                  },
+                  "cookies": {
+                    "description": "Load-balancer affinity cookie (distributed target).",
+                    "type": "object",
+                    "properties": {
+                      "affinity": { "description": "LB affinity cookie name (distributed target).", "type": "string" },
+                      "domain": { "description": "Cookie domain.", "type": "string" },
+                      "sameSite": {
+                        "description": "SameSite policy.",
+                        "type": "string",
+                        "enum": ["Strict", "Lax", "None"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "headers": {
+                    "description": "Security response headers.",
+                    "type": "object",
+                    "properties": {
+                      "hsts": {
+                        "description": "Strict-Transport-Security. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "contentTypeOptions": {
+                        "description": "X-Content-Type-Options. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "frameOptions": {
+                        "description": "X-Frame-Options. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "custom": {
+                        "description": "Custom response headers.",
+                        "type": "object",
+                        "propertyNames": { "type": "string" },
+                        "additionalProperties": { "type": "string" }
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "ha": {
+                "description": "High-availability settings.",
+                "type": "object",
+                "properties": {
+                  "heartbeatIntervalMs": {
+                    "description": "Heartbeat interval in milliseconds.",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "heartbeatTtlMs": {
+                    "description": "Heartbeat TTL in milliseconds (should be 2-3x the interval).",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "takeoverGracePeriodMs": {
+                    "description": "Grace period before claiming orphaned sessions.",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "redisKeyPrefix": { "description": "Redis key prefix for HA keys.", "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["target"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outDir": { "description": "Output directory override (default dist/<target>).", "type": "string" },
+              "env": {
+                "description": "Environment variable defaults the built artifact carries.",
+                "type": "object",
+                "propertyNames": { "type": "string" },
+                "additionalProperties": { "type": "string" }
+              },
+              "target": { "type": "string", "const": "cli" },
+              "js": { "description": "Output a JS bundle instead of a native (SEA) binary.", "type": "boolean" },
+              "cli": {
+                "description": "Generated CLI options.",
+                "type": "object",
+                "properties": {
+                  "description": { "description": "CLI description shown in --help.", "type": "string" },
+                  "outputDefault": {
+                    "description": "Default output format.",
+                    "type": "string",
+                    "enum": ["text", "json"]
+                  },
+                  "authRequired": {
+                    "description": "Generate login/logout/sessions/connect and refuse server calls until a credential is stored.",
+                    "type": "boolean"
+                  },
+                  "excludeTools": {
+                    "description": "Tools left out of the generated subcommands.",
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "oauth": {
+                    "description": "Defaults for the generated login command (needs authRequired).",
+                    "type": "object",
+                    "properties": {
+                      "serverUrl": { "type": "string" },
+                      "clientId": { "type": "string" },
+                      "defaultScope": { "type": "string" },
+                      "portRange": {
+                        "type": "array",
+                        "items": [{ "type": "number" }, { "type": "number" }],
+                        "additionalItems": false,
+                        "minItems": 2,
+                        "maxItems": 2
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "sea": {
+                "description": "Single executable application settings.",
+                "type": "object",
+                "properties": { "enabled": { "type": "boolean" } },
+                "additionalProperties": false
+              }
+            },
+            "required": ["target"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outDir": { "description": "Output directory override (default dist/<target>).", "type": "string" },
+              "env": {
+                "description": "Environment variable defaults the built artifact carries.",
+                "type": "object",
+                "propertyNames": { "type": "string" },
+                "additionalProperties": { "type": "string" }
+              },
+              "target": { "type": "string", "const": "vercel" },
+              "server": {
+                "description": "Server defaults (cors, csp, headers).",
+                "type": "object",
+                "properties": {
+                  "http": {
+                    "description": "HTTP options, aligned with @FrontMcp({ http }).",
+                    "type": "object",
+                    "properties": {
+                      "port": {
+                        "description": "HTTP port (PORT default). Only for node/distributed targets.",
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "socketPath": {
+                        "description": "Unix socket path (alternative to port). Only for node/distributed targets.",
+                        "type": "string"
+                      },
+                      "entryPath": {
+                        "description": "MCP entry path ('' or '/mcp'); wins over transport.http.path for this deployment.",
+                        "type": "string"
+                      },
+                      "cors": {
+                        "description": "CORS configuration.",
+                        "type": "object",
+                        "properties": {
+                          "origins": {
+                            "description": "Allowed origins (`['*']` = any origin). Omitted or empty = no CORS headers.",
+                            "type": "array",
+                            "items": { "type": "string" }
+                          },
+                          "credentials": {
+                            "description": "Allow credentials (cookies, authorization headers).",
+                            "type": "boolean"
+                          },
+                          "maxAge": {
+                            "description": "Preflight cache max age in seconds.",
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "csp": {
+                    "description": "Content-Security-Policy headers.",
+                    "type": "object",
+                    "properties": {
+                      "enabled": { "description": "Enable CSP headers.", "type": "boolean" },
+                      "directives": {
+                        "description": "CSP directives (e.g. 'default-src': \"'self'\").",
+                        "type": "object",
+                        "propertyNames": { "type": "string" },
+                        "additionalProperties": {
+                          "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                        }
+                      },
+                      "reportUri": { "description": "Report URI for CSP violations.", "type": "string" },
+                      "reportOnly": { "description": "Use Content-Security-Policy-Report-Only.", "type": "boolean" }
+                    },
+                    "additionalProperties": false
+                  },
+                  "cookies": {
+                    "description": "Load-balancer affinity cookie (distributed target).",
+                    "type": "object",
+                    "properties": {
+                      "affinity": { "description": "LB affinity cookie name (distributed target).", "type": "string" },
+                      "domain": { "description": "Cookie domain.", "type": "string" },
+                      "sameSite": {
+                        "description": "SameSite policy.",
+                        "type": "string",
+                        "enum": ["Strict", "Lax", "None"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "headers": {
+                    "description": "Security response headers.",
+                    "type": "object",
+                    "properties": {
+                      "hsts": {
+                        "description": "Strict-Transport-Security. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "contentTypeOptions": {
+                        "description": "X-Content-Type-Options. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "frameOptions": {
+                        "description": "X-Frame-Options. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "custom": {
+                        "description": "Custom response headers.",
+                        "type": "object",
+                        "propertyNames": { "type": "string" },
+                        "additionalProperties": { "type": "string" }
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["target"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outDir": { "description": "Output directory override (default dist/<target>).", "type": "string" },
+              "env": {
+                "description": "Environment variable defaults the built artifact carries.",
+                "type": "object",
+                "propertyNames": { "type": "string" },
+                "additionalProperties": { "type": "string" }
+              },
+              "target": { "type": "string", "const": "lambda" },
+              "server": {
+                "description": "Server defaults (cors, csp, headers).",
+                "type": "object",
+                "properties": {
+                  "http": {
+                    "description": "HTTP options, aligned with @FrontMcp({ http }).",
+                    "type": "object",
+                    "properties": {
+                      "port": {
+                        "description": "HTTP port (PORT default). Only for node/distributed targets.",
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "socketPath": {
+                        "description": "Unix socket path (alternative to port). Only for node/distributed targets.",
+                        "type": "string"
+                      },
+                      "entryPath": {
+                        "description": "MCP entry path ('' or '/mcp'); wins over transport.http.path for this deployment.",
+                        "type": "string"
+                      },
+                      "cors": {
+                        "description": "CORS configuration.",
+                        "type": "object",
+                        "properties": {
+                          "origins": {
+                            "description": "Allowed origins (`['*']` = any origin). Omitted or empty = no CORS headers.",
+                            "type": "array",
+                            "items": { "type": "string" }
+                          },
+                          "credentials": {
+                            "description": "Allow credentials (cookies, authorization headers).",
+                            "type": "boolean"
+                          },
+                          "maxAge": {
+                            "description": "Preflight cache max age in seconds.",
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "csp": {
+                    "description": "Content-Security-Policy headers.",
+                    "type": "object",
+                    "properties": {
+                      "enabled": { "description": "Enable CSP headers.", "type": "boolean" },
+                      "directives": {
+                        "description": "CSP directives (e.g. 'default-src': \"'self'\").",
+                        "type": "object",
+                        "propertyNames": { "type": "string" },
+                        "additionalProperties": {
+                          "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                        }
+                      },
+                      "reportUri": { "description": "Report URI for CSP violations.", "type": "string" },
+                      "reportOnly": { "description": "Use Content-Security-Policy-Report-Only.", "type": "boolean" }
+                    },
+                    "additionalProperties": false
+                  },
+                  "cookies": {
+                    "description": "Load-balancer affinity cookie (distributed target).",
+                    "type": "object",
+                    "properties": {
+                      "affinity": { "description": "LB affinity cookie name (distributed target).", "type": "string" },
+                      "domain": { "description": "Cookie domain.", "type": "string" },
+                      "sameSite": {
+                        "description": "SameSite policy.",
+                        "type": "string",
+                        "enum": ["Strict", "Lax", "None"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "headers": {
+                    "description": "Security response headers.",
+                    "type": "object",
+                    "properties": {
+                      "hsts": {
+                        "description": "Strict-Transport-Security. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "contentTypeOptions": {
+                        "description": "X-Content-Type-Options. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "frameOptions": {
+                        "description": "X-Frame-Options. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "custom": {
+                        "description": "Custom response headers.",
+                        "type": "object",
+                        "propertyNames": { "type": "string" },
+                        "additionalProperties": { "type": "string" }
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["target"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outDir": { "description": "Output directory override (default dist/<target>).", "type": "string" },
+              "env": {
+                "description": "Environment variable defaults the built artifact carries.",
+                "type": "object",
+                "propertyNames": { "type": "string" },
+                "additionalProperties": { "type": "string" }
+              },
+              "target": { "type": "string", "const": "cloudflare" },
+              "server": {
+                "description": "Server defaults (cors, csp, headers).",
+                "type": "object",
+                "properties": {
+                  "http": {
+                    "description": "HTTP options, aligned with @FrontMcp({ http }).",
+                    "type": "object",
+                    "properties": {
+                      "port": {
+                        "description": "HTTP port (PORT default). Only for node/distributed targets.",
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "socketPath": {
+                        "description": "Unix socket path (alternative to port). Only for node/distributed targets.",
+                        "type": "string"
+                      },
+                      "entryPath": {
+                        "description": "MCP entry path ('' or '/mcp'); wins over transport.http.path for this deployment.",
+                        "type": "string"
+                      },
+                      "cors": {
+                        "description": "CORS configuration.",
+                        "type": "object",
+                        "properties": {
+                          "origins": {
+                            "description": "Allowed origins (`['*']` = any origin). Omitted or empty = no CORS headers.",
+                            "type": "array",
+                            "items": { "type": "string" }
+                          },
+                          "credentials": {
+                            "description": "Allow credentials (cookies, authorization headers).",
+                            "type": "boolean"
+                          },
+                          "maxAge": {
+                            "description": "Preflight cache max age in seconds.",
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "csp": {
+                    "description": "Content-Security-Policy headers.",
+                    "type": "object",
+                    "properties": {
+                      "enabled": { "description": "Enable CSP headers.", "type": "boolean" },
+                      "directives": {
+                        "description": "CSP directives (e.g. 'default-src': \"'self'\").",
+                        "type": "object",
+                        "propertyNames": { "type": "string" },
+                        "additionalProperties": {
+                          "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                        }
+                      },
+                      "reportUri": { "description": "Report URI for CSP violations.", "type": "string" },
+                      "reportOnly": { "description": "Use Content-Security-Policy-Report-Only.", "type": "boolean" }
+                    },
+                    "additionalProperties": false
+                  },
+                  "cookies": {
+                    "description": "Load-balancer affinity cookie (distributed target).",
+                    "type": "object",
+                    "properties": {
+                      "affinity": { "description": "LB affinity cookie name (distributed target).", "type": "string" },
+                      "domain": { "description": "Cookie domain.", "type": "string" },
+                      "sameSite": {
+                        "description": "SameSite policy.",
+                        "type": "string",
+                        "enum": ["Strict", "Lax", "None"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "headers": {
+                    "description": "Security response headers.",
+                    "type": "object",
+                    "properties": {
+                      "hsts": {
+                        "description": "Strict-Transport-Security. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "contentTypeOptions": {
+                        "description": "X-Content-Type-Options. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "frameOptions": {
+                        "description": "X-Frame-Options. Set to false to disable.",
+                        "anyOf": [{ "type": "string" }, { "type": "boolean", "const": false }]
+                      },
+                      "custom": {
+                        "description": "Custom response headers.",
+                        "type": "object",
+                        "propertyNames": { "type": "string" },
+                        "additionalProperties": { "type": "string" }
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "wrangler": {
+                "description": "wrangler.toml settings.",
+                "type": "object",
+                "properties": {
+                  "name": { "description": "Worker name.", "type": "string" },
+                  "compatibilityDate": {
+                    "description": "Compatibility date. Defaults to 2024-11-11: nodejs_compat turns on nodejs_compat_v2 from 2024-09-23, and Vercel KV / Upstash need 2024-11-11.",
+                    "type": "string"
+                  },
+                  "compatibilityFlags": {
+                    "description": "Extra Cloudflare compatibility flags. nodejs_compat is always emitted; list only additions.",
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["target"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outDir": { "description": "Output directory override (default dist/<target>).", "type": "string" },
+              "env": {
+                "description": "Environment variable defaults the built artifact carries.",
+                "type": "object",
+                "propertyNames": { "type": "string" },
+                "additionalProperties": { "type": "string" }
+              },
+              "target": { "type": "string", "const": "browser" }
+            },
+            "required": ["target"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outDir": { "description": "Output directory override (default dist/<target>).", "type": "string" },
+              "env": {
+                "description": "Environment variable defaults the built artifact carries.",
+                "type": "object",
+                "propertyNames": { "type": "string" },
+                "additionalProperties": { "type": "string" }
+              },
+              "target": { "type": "string", "const": "sdk" }
+            },
+            "required": ["target"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outDir": { "description": "Output directory override (default dist/<target>).", "type": "string" },
+              "env": {
+                "description": "Environment variable defaults the built artifact carries.",
+                "type": "object",
+                "propertyNames": { "type": "string" },
+                "additionalProperties": { "type": "string" }
+              },
+              "target": { "type": "string", "const": "mcpb" },
+              "displayName": {
+                "description": "Human-friendly display name shown in installer dialog.",
+                "type": "string"
+              },
+              "longDescription": {
+                "description": "Long markdown description shown in extension details.",
+                "type": "string"
+              },
+              "author": {
+                "description": "Author object (name/email/url). Overrides parsed package.json.author.",
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string", "description": "Author name." },
+                  "email": {
+                    "description": "Author email.",
+                    "type": "string",
+                    "format": "email",
+                    "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  },
+                  "url": { "description": "Author URL.", "type": "string", "format": "uri" }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              },
+              "license": {
+                "description": "SPDX license identifier. Overrides package.json.license.",
+                "type": "string"
+              },
+              "homepage": { "description": "Project homepage URL.", "type": "string", "format": "uri" },
+              "repository": {
+                "description": "Source repository (string URL or {type, url}).",
+                "anyOf": [
+                  { "type": "string" },
+                  {
+                    "type": "object",
+                    "properties": { "type": { "type": "string" }, "url": { "type": "string" } },
+                    "required": ["type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "documentation": { "description": "Documentation URL.", "type": "string", "format": "uri" },
+              "support": { "description": "Support URL (issues/contact).", "type": "string" },
+              "icon": { "description": "Path to icon (PNG) relative to project root.", "type": "string" },
+              "keywords": { "description": "Keywords for search.", "type": "array", "items": { "type": "string" } },
+              "privacyPolicies": {
+                "description": "Privacy policy URLs for external services this bundle talks to.",
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "compatibility": {
+                "description": "Runtime/platform/client compatibility constraints.",
+                "type": "object",
+                "properties": {
+                  "claude_desktop": { "description": "Semver range of Claude Desktop versions.", "type": "string" },
+                  "platforms": {
+                    "description": "Supported OSes (process.platform values). Defaults to the build OS when native addons are shipped, else all three.",
+                    "type": "array",
+                    "items": { "type": "string", "enum": ["darwin", "win32", "linux"] }
+                  },
+                  "runtimes": {
+                    "description": "Runtime version ranges.",
+                    "type": "object",
+                    "properties": { "node": { "type": "string" }, "python": { "type": "string" } },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "userConfig": {
+                "description": "User-configurable inputs, each passed to the server as an env var (`mcp_config.env`).",
+                "type": "object",
+                "propertyNames": { "type": "string" },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["string", "number", "boolean", "directory", "file"],
+                      "description": "Input type shown in the install dialog."
+                    },
+                    "title": { "type": "string", "description": "Label shown in the install dialog." },
+                    "description": { "description": "Help text shown in the install dialog.", "type": "string" },
+                    "required": { "description": "The user must provide a value.", "type": "boolean" },
+                    "default": {
+                      "description": "Default value (omit for sensitive entries).",
+                      "type": ["string", "number", "boolean"]
+                    },
+                    "multiple": { "description": "Accept several values.", "type": "boolean" },
+                    "sensitive": {
+                      "description": "Mask the input and keep it out of plain-text storage.",
+                      "type": "boolean"
+                    },
+                    "min": { "description": "Minimum (number type).", "type": "number" },
+                    "max": { "description": "Maximum (number type).", "type": "number" },
+                    "env": {
+                      "description": "Env var the server receives the value in (default: the key in UPPER_SNAKE_CASE).",
+                      "type": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                    }
+                  },
+                  "required": ["type", "title"],
+                  "additionalProperties": false
+                }
+              },
+              "sea": {
+                "description": "Single executable application binaries (not allowed with native addons).",
+                "type": "object",
+                "properties": { "enabled": { "type": "boolean" }, "mergeFrom": { "type": "string" } },
+                "additionalProperties": false
+              },
+              "includeNodeModules": {
+                "deprecated": true,
+                "description": "No effect: server/index.js inlines its dependencies, and native addons listed in build.dependencies.nativeAddons ship in server/node_modules/.",
+                "type": "boolean"
+              },
+              "deterministic": {
+                "description": "Produce byte-identical archives across builds (default true).",
+                "type": "boolean"
+              }
+            },
+            "required": ["target"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "description": "Build targets; each carries its own server and target settings."
     },
     "build": {
-      "$ref": "#/definitions/BuildOptions",
-      "description": "Build/bundler options."
-    }
-  },
-  "definitions": {
-    "HttpConfig": {
+      "description": "Build and bundler options for every target that bundles with esbuild.",
       "type": "object",
-      "additionalProperties": false,
-      "description": "HTTP configuration — aligns with @FrontMcp({ http }).",
-      "properties": {
-        "port": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 65535,
-          "default": 3000,
-          "description": "HTTP port. Only for node/distributed targets."
-        },
-        "socketPath": {
-          "type": "string",
-          "description": "Unix socket path (alternative to port). Only for node/distributed."
-        },
-        "entryPath": {
-          "type": "string",
-          "description": "MCP entry path ('' or '/mcp')."
-        },
-        "cors": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "origins": { "type": "array", "items": { "type": "string" }, "description": "Allowed origins." },
-            "credentials": { "type": "boolean", "description": "Allow credentials." },
-            "maxAge": { "type": "integer", "description": "Preflight cache (seconds)." }
-          }
-        }
-      }
-    },
-    "ServerDefaults": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Server-level config for HTTP-capable targets.",
-      "properties": {
-        "http": {
-          "$ref": "#/definitions/HttpConfig"
-        },
-        "csp": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "enabled": {
-              "type": "boolean",
-              "description": "Enable CSP headers."
-            },
-            "directives": {
-              "type": "object",
-              "additionalProperties": {
-                "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
-              },
-              "description": "CSP directives (e.g., 'default-src': \"'self'\")."
-            },
-            "reportUri": {
-              "type": "string",
-              "description": "Report URI for CSP violations."
-            },
-            "reportOnly": {
-              "type": "boolean",
-              "description": "Use Content-Security-Policy-Report-Only."
-            }
-          }
-        },
-        "cookies": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "affinity": {
-              "type": "string",
-              "default": "__frontmcp_node",
-              "description": "LB affinity cookie name."
-            },
-            "domain": {
-              "type": "string",
-              "description": "Cookie domain."
-            },
-            "sameSite": {
-              "type": "string",
-              "enum": ["Strict", "Lax", "None"],
-              "default": "Strict",
-              "description": "SameSite policy."
-            }
-          }
-        },
-        "headers": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "hsts": {
-              "oneOf": [{ "type": "string" }, { "const": false }],
-              "description": "Strict-Transport-Security. Set to false to disable."
-            },
-            "contentTypeOptions": {
-              "oneOf": [{ "type": "string" }, { "const": false }],
-              "description": "X-Content-Type-Options. Set to false to disable."
-            },
-            "frameOptions": {
-              "oneOf": [{ "type": "string" }, { "const": false }],
-              "description": "X-Frame-Options. Set to false to disable."
-            },
-            "custom": {
-              "type": "object",
-              "additionalProperties": { "type": "string" },
-              "description": "Custom response headers."
-            }
-          }
-        }
-      }
-    },
-    "DeploymentBase": {
-      "type": "object",
-      "properties": {
-        "outDir": {
-          "type": "string",
-          "description": "Output directory override."
-        },
-        "env": {
-          "type": "object",
-          "additionalProperties": { "type": "string" },
-          "description": "Environment variables injected at build time."
-        }
-      }
-    },
-    "DeploymentTarget": {
-      "oneOf": [
-        { "$ref": "#/definitions/NodeDeployment" },
-        { "$ref": "#/definitions/DistributedDeployment" },
-        { "$ref": "#/definitions/CliDeployment" },
-        { "$ref": "#/definitions/VercelDeployment" },
-        { "$ref": "#/definitions/LambdaDeployment" },
-        { "$ref": "#/definitions/CloudflareDeployment" },
-        { "$ref": "#/definitions/BrowserDeployment" },
-        { "$ref": "#/definitions/SdkDeployment" }
-      ]
-    },
-    "NodeDeployment": {
-      "type": "object",
-      "required": ["target"],
-      "additionalProperties": false,
-      "properties": {
-        "target": { "const": "node" },
-        "outDir": { "type": "string" },
-        "env": { "type": "object", "additionalProperties": { "type": "string" } },
-        "server": { "$ref": "#/definitions/ServerDefaults" }
-      }
-    },
-    "DistributedDeployment": {
-      "type": "object",
-      "required": ["target"],
-      "additionalProperties": false,
-      "properties": {
-        "target": { "const": "distributed" },
-        "outDir": { "type": "string" },
-        "env": { "type": "object", "additionalProperties": { "type": "string" } },
-        "server": { "$ref": "#/definitions/ServerDefaults" },
-        "ha": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "heartbeatIntervalMs": {
-              "type": "integer",
-              "minimum": 1000,
-              "default": 10000,
-              "description": "Heartbeat interval in milliseconds."
-            },
-            "heartbeatTtlMs": {
-              "type": "integer",
-              "minimum": 2000,
-              "default": 30000,
-              "description": "Heartbeat TTL in milliseconds (should be 2-3x interval)."
-            },
-            "takeoverGracePeriodMs": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 5000,
-              "description": "Grace period before claiming orphaned sessions."
-            },
-            "redisKeyPrefix": {
-              "type": "string",
-              "default": "mcp:ha:",
-              "description": "Redis key prefix for HA keys."
-            }
-          }
-        }
-      }
-    },
-    "CliDeployment": {
-      "type": "object",
-      "required": ["target"],
-      "additionalProperties": false,
-      "properties": {
-        "target": { "const": "cli" },
-        "outDir": { "type": "string" },
-        "env": { "type": "object", "additionalProperties": { "type": "string" } },
-        "js": {
-          "type": "boolean",
-          "description": "Output JS bundle instead of native binary."
-        },
-        "cli": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "description": { "type": "string" },
-            "outputDefault": { "type": "string", "enum": ["text", "json"] },
-            "authRequired": { "type": "boolean" },
-            "excludeTools": { "type": "array", "items": { "type": "string" } },
-            "oauth": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "serverUrl": { "type": "string" },
-                "clientId": { "type": "string" },
-                "defaultScope": { "type": "string" },
-                "portRange": {
-                  "type": "array",
-                  "items": { "type": "number" },
-                  "minItems": 2,
-                  "maxItems": 2
-                }
-              }
-            }
-          }
-        },
-        "sea": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "enabled": { "type": "boolean" }
-          }
-        }
-      }
-    },
-    "VercelDeployment": {
-      "type": "object",
-      "required": ["target"],
-      "additionalProperties": false,
-      "properties": {
-        "target": { "const": "vercel" },
-        "outDir": { "type": "string" },
-        "env": { "type": "object", "additionalProperties": { "type": "string" } },
-        "server": { "$ref": "#/definitions/ServerDefaults" }
-      }
-    },
-    "LambdaDeployment": {
-      "type": "object",
-      "required": ["target"],
-      "additionalProperties": false,
-      "properties": {
-        "target": { "const": "lambda" },
-        "outDir": { "type": "string" },
-        "env": { "type": "object", "additionalProperties": { "type": "string" } },
-        "server": { "$ref": "#/definitions/ServerDefaults" }
-      }
-    },
-    "CloudflareDeployment": {
-      "type": "object",
-      "required": ["target"],
-      "additionalProperties": false,
-      "properties": {
-        "target": { "const": "cloudflare" },
-        "outDir": { "type": "string" },
-        "env": { "type": "object", "additionalProperties": { "type": "string" } },
-        "server": { "$ref": "#/definitions/ServerDefaults" },
-        "wrangler": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "name": { "type": "string", "description": "Worker name." },
-            "compatibilityDate": {
-              "type": "string",
-              "description": "Compatibility date. Defaults to 2024-11-11: nodejs_compat turns on nodejs_compat_v2 from 2024-09-23, and Vercel KV / Upstash need 2024-11-11."
-            },
-            "compatibilityFlags": {
-              "type": "array",
-              "items": { "type": "string" },
-              "description": "Extra Cloudflare compatibility flags. nodejs_compat is always emitted; list only additions."
-            }
-          }
-        }
-      }
-    },
-    "BrowserDeployment": {
-      "type": "object",
-      "required": ["target"],
-      "additionalProperties": false,
-      "properties": {
-        "target": { "const": "browser" },
-        "outDir": { "type": "string" },
-        "env": { "type": "object", "additionalProperties": { "type": "string" } }
-      }
-    },
-    "SdkDeployment": {
-      "type": "object",
-      "required": ["target"],
-      "additionalProperties": false,
-      "properties": {
-        "target": { "const": "sdk" },
-        "outDir": { "type": "string" },
-        "env": { "type": "object", "additionalProperties": { "type": "string" } }
-      }
-    },
-    "BuildOptions": {
-      "type": "object",
-      "additionalProperties": false,
       "properties": {
         "esbuild": {
+          "description": "esbuild options for every target that bundles with esbuild.",
           "type": "object",
-          "additionalProperties": false,
           "properties": {
-            "external": { "type": "array", "items": { "type": "string" } },
-            "define": { "type": "object", "additionalProperties": { "type": "string" } },
-            "target": { "type": "string" },
-            "minify": { "type": "boolean" }
-          }
+            "external": {
+              "description": "Packages esbuild leaves out of the bundle (not applied to self-contained bundles: SEA binaries, the mcpb server).",
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "define": {
+              "description": "Global identifier replacements (esbuild define).",
+              "type": "object",
+              "propertyNames": { "type": "string" },
+              "additionalProperties": { "type": "string" }
+            },
+            "target": { "description": "esbuild target (default node22).", "type": "string" },
+            "minify": { "description": "Minify the bundle.", "type": "boolean" }
+          },
+          "additionalProperties": false
         },
         "dependencies": {
+          "description": "System packages and native addons the app needs.",
           "type": "object",
-          "additionalProperties": false,
           "properties": {
-            "system": { "type": "array", "items": { "type": "string" } },
-            "nativeAddons": { "type": "array", "items": { "type": "string" } }
-          }
+            "system": {
+              "description": "System packages the installed app needs.",
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "nativeAddons": {
+              "description": "Native addon packages: kept external; an mcpb archive ships them in server/node_modules.",
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "additionalProperties": false
         },
         "storage": {
+          "description": "Storage the installed app needs.",
           "type": "object",
-          "additionalProperties": false,
           "properties": {
             "type": { "type": "string", "enum": ["sqlite", "redis", "none"] },
             "required": { "type": "boolean" }
-          }
+          },
+          "required": ["type"],
+          "additionalProperties": false
         },
         "network": {
+          "description": "Network defaults recorded in the build manifest.",
           "type": "object",
-          "additionalProperties": false,
           "properties": {
-            "defaultPort": { "type": "integer" },
+            "defaultPort": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
             "supportsSocket": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "setup": {
+      "description": "Install-time questionnaire: frontmcp install / configure for node and cli, MCPB user_config for mcpb.",
+      "type": "object",
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "minLength": 1, "description": "Step identifier." },
+              "prompt": { "type": "string", "description": "Question shown to the user." },
+              "description": { "description": "Help text.", "type": "string" },
+              "schema": { "description": "Zod schema for the answer (config files written in JS/TS)." },
+              "jsonSchema": {
+                "description": "JSON Schema for the answer.",
+                "type": "object",
+                "propertyNames": { "type": "string" },
+                "additionalProperties": {}
+              },
+              "env": {
+                "description": "Env var that receives the answer (default: the id in UPPER_SNAKE_CASE).",
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "sensitive": { "description": "Mask the input.", "type": "boolean" },
+              "group": { "description": "Visual grouping label.", "type": "string" },
+              "next": {
+                "description": "Next step id, or a map from answer to step id.",
+                "anyOf": [
+                  { "type": "string" },
+                  {
+                    "type": "object",
+                    "propertyNames": { "type": "string" },
+                    "additionalProperties": { "type": "string" }
+                  }
+                ]
+              },
+              "showWhen": {
+                "description": "Show the step only when earlier answers match.",
+                "type": "object",
+                "propertyNames": { "type": "string" },
+                "additionalProperties": {
+                  "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                }
+              }
+            },
+            "required": ["id", "prompt"],
+            "additionalProperties": false
+          },
+          "description": "Questions, in order."
+        }
+      },
+      "required": ["steps"],
+      "additionalProperties": false
+    },
+    "cli": {
+      "description": "Project-defined frontmcp CLI commands.",
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "object",
+          "propertyNames": { "type": "string" },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "entry": { "type": "string", "minLength": 1 },
+              "description": { "type": "string" },
+              "arguments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string", "minLength": 1 },
+                    "required": { "type": "boolean" },
+                    "description": { "type": "string" },
+                    "variadic": { "type": "boolean" }
+                  },
+                  "required": ["name"],
+                  "additionalProperties": false
+                }
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "flags": { "type": "string", "minLength": 1 },
+                    "description": { "type": "string" },
+                    "default": { "type": ["string", "number", "boolean"] }
+                  },
+                  "required": ["flags"],
+                  "additionalProperties": false
+                }
+              },
+              "hidden": { "type": "boolean" }
+            },
+            "required": ["entry"],
+            "additionalProperties": false
           }
         }
+      },
+      "additionalProperties": false
+    },
+    "transport": {
+      "description": "Transport defaults for dev / inspector / pm start / pm socket.",
+      "type": "object",
+      "properties": {
+        "default": {
+          "description": "Transport used by dev / inspector / pm start.",
+          "type": "string",
+          "enum": ["http", "sse", "stdio"]
+        },
+        "http": {
+          "description": "HTTP transport defaults.",
+          "type": "object",
+          "properties": {
+            "port": { "description": "HTTP port.", "type": "integer", "minimum": 0, "maximum": 65535 },
+            "path": { "description": "MCP mount path.", "type": "string" },
+            "host": { "description": "Bind host.", "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "stdio": {
+          "description": "stdio transport defaults.",
+          "type": "object",
+          "properties": {
+            "command": { "description": "Command that starts the server over stdio.", "type": "string" },
+            "args": {
+              "description": "Arguments for the stdio command.",
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "env": {
+      "description": "Env overlays merged per command (in addition to .env / .env.local).",
+      "type": "object",
+      "properties": {
+        "shared": {
+          "description": "Env vars for every command.",
+          "type": "object",
+          "propertyNames": { "type": "string" },
+          "additionalProperties": { "type": "string" }
+        },
+        "dev": {
+          "description": "Env vars for frontmcp dev / inspector.",
+          "type": "object",
+          "propertyNames": { "type": "string" },
+          "additionalProperties": { "type": "string" }
+        },
+        "test": {
+          "description": "Env vars for frontmcp test.",
+          "type": "object",
+          "propertyNames": { "type": "string" },
+          "additionalProperties": { "type": "string" }
+        },
+        "ship": {
+          "description": "Env vars for built artifacts (pm start, eject-mcp-config).",
+          "type": "object",
+          "propertyNames": { "type": "string" },
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "clients": {
+      "description": "MCP client snippets emitted by frontmcp eject-mcp-config <client>.",
+      "type": "object",
+      "propertyNames": { "type": "string", "enum": ["claude-code", "claude-desktop", "cursor", "windsurf", "vscode"] },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "name": { "description": "Server key in the client config (default: the config name).", "type": "string" },
+          "transport": {
+            "type": "string",
+            "enum": ["http", "sse", "stdio"],
+            "description": "Transport the client uses."
+          },
+          "command": {
+            "description": "Spawn command (stdio). Default: npx -y <package name> --stdio.",
+            "type": "string"
+          },
+          "args": { "description": "Spawn arguments (stdio).", "type": "array", "items": { "type": "string" } },
+          "env": {
+            "description": "Env vars for the spawned server.",
+            "type": "object",
+            "propertyNames": { "type": "string" },
+            "additionalProperties": { "type": "string" }
+          },
+          "url": {
+            "description": "Server URL (http/sse). Derived from transport.http when omitted.",
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": ["transport"],
+        "additionalProperties": false
       }
+    },
+    "test": {
+      "description": "frontmcp test defaults.",
+      "type": "object",
+      "properties": {
+        "timeoutMs": {
+          "description": "Test timeout in milliseconds.",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "runInBand": { "description": "Run tests serially.", "type": "boolean" },
+        "testMatch": { "description": "Test file patterns.", "type": "array", "items": { "type": "string" } },
+        "coverage": { "description": "Collect coverage.", "type": "boolean" },
+        "esmPackages": {
+          "description": "Extra ESM-only packages Jest must transpile.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "skills": {
+      "description": "frontmcp skills install / export defaults.",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "description": "Default provider for frontmcp skills install.",
+          "type": "string",
+          "enum": ["claude", "codex"]
+        },
+        "bundle": {
+          "description": "Catalog bundle installed when no skill is named.",
+          "type": "string",
+          "enum": ["recommended", "minimal", "full", "none"]
+        },
+        "install": {
+          "description": "Catalog skills installed when no skill is named.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "exportTarget": {
+          "description": "Default target for frontmcp skills export.",
+          "type": "string",
+          "enum": ["cursor", "windsurf", "copilot"]
+        }
+      },
+      "additionalProperties": false
     }
-  }
+  },
+  "required": ["name", "deployments"],
+  "additionalProperties": false
 }

@@ -83,6 +83,9 @@ deployments: [
   The stored token is sent on every call: in process it arrives as
   `this.context.authInfo.token`, and a running daemon receives it as an
   `Authorization: Bearer` header that the server's auth checks like any HTTP call.
+- The top-level `build` block applies to the cli bundles too: `build.esbuild` (`external`, `define`, `target`,
+  `minify`) and `build.dependencies.nativeAddons` (kept external). A `--target cli` SEA binary is self-contained, so
+  `external` doesn't apply to it (see `configure-deployment-targets`, "Build Options").
 
 ## Requirements
 

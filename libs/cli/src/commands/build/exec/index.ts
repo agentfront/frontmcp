@@ -18,7 +18,7 @@ import * as fs from 'fs';
 import { type ParsedArgs } from '../../../core/args';
 import { c } from '../../../core/colors';
 import { resolveEntry } from '../../../shared/fs';
-import { loadExecConfig, normalizeConfig } from './config';
+import { assertNoNativeAddonsInSea, loadExecConfig, normalizeConfig } from './config';
 import { bundleWithEsbuild, formatSize } from './esbuild-bundler';
 import { generateManifest } from './manifest';
 import { generateRunnerScript } from './runner-script';
@@ -47,7 +47,6 @@ export async function buildExec(
     cli?: boolean;
     sea?: boolean;
     execOverrides?: {
-      storage?: { type: 'sqlite' | 'redis' | 'none'; required?: boolean };
       cli?: CliTargetConfig;
       // #365 round-3 — top-level `nodeVersion` from new-shape frontmcp.config
       // gets forwarded here because the legacy `loadExecConfig` doesn't read
@@ -69,12 +68,9 @@ export async function buildExec(
   console.log(`${c('cyan', '[build:exec]')} Building executable bundle...`);
 
   // 1. Load config (and merge in overrides forwarded from frontmcp.config —
-  //    `build.storage`, `deployments[].cli.outputDefault`, etc.)
+  //    `deployments[].cli`, `nodeVersion`, etc.; `build` is mapped by normalizeConfig)
   const rawConfig = await loadExecConfig(cwd, { configPath: opts.config, configDir: opts.configDir });
   if (opts.execOverrides) {
-    if (opts.execOverrides.storage && !rawConfig.storage) {
-      rawConfig.storage = opts.execOverrides.storage;
-    }
     if (opts.execOverrides.cli) {
       const existing = rawConfig.cli;
       // CliConfig requires `enabled: boolean`; preserve any existing value or
@@ -98,6 +94,12 @@ export async function buildExec(
   const config = normalizeConfig(rawConfig);
   const cliEnabled = opts.cli || config.cli?.enabled;
   const seaEnabled = opts.sea || config.sea?.enabled;
+  if (seaEnabled) {
+    assertNoNativeAddonsInSea(
+      config.dependencies?.nativeAddons ?? [],
+      'Build without SEA: --target cli --js, or sea.enabled: false for --target node.',
+    );
+  }
 
   console.log(`${c('cyan', '[build:exec]')} name: ${config.name}`);
   console.log(`${c('cyan', '[build:exec]')} version: ${config.version}`);

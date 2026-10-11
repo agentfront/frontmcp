@@ -434,6 +434,34 @@ describe('FS Utils', () => {
       expect(await fileExists(path.join(destDir, 'file1.txt'))).toBe(true);
       expect(await fileExists(path.join(destDir, 'subdir', 'file2.txt'))).toBe(true);
     });
+
+    it('copies symlinks as links by default and as the files they point to with dereference', async () => {
+      const srcDir = path.join(tempDir, 'cp-link-src');
+      await fs.promises.mkdir(srcDir);
+      await fs.promises.writeFile(path.join(tempDir, 'cp-link-target.txt'), 'target content');
+      await fs.promises.symlink(path.join(tempDir, 'cp-link-target.txt'), path.join(srcDir, 'link.txt'));
+
+      await cp(srcDir, path.join(tempDir, 'cp-link-kept'), { recursive: true });
+      await cp(srcDir, path.join(tempDir, 'cp-link-resolved'), { recursive: true, dereference: true });
+
+      expect((await fs.promises.lstat(path.join(tempDir, 'cp-link-kept', 'link.txt'))).isSymbolicLink()).toBe(true);
+      const resolved = path.join(tempDir, 'cp-link-resolved', 'link.txt');
+      expect((await fs.promises.lstat(resolved)).isFile()).toBe(true);
+      expect(await fs.promises.readFile(resolved, 'utf8')).toBe('target content');
+    });
+
+    it('leaves out the paths filter rejects, with the contents of a rejected folder', async () => {
+      const srcDir = path.join(tempDir, 'cp-filter-src');
+      await fs.promises.mkdir(path.join(srcDir, '.git'), { recursive: true });
+      await fs.promises.writeFile(path.join(srcDir, '.git', 'config'), '[core]');
+      await fs.promises.writeFile(path.join(srcDir, 'kept.txt'), 'kept');
+
+      const destDir = path.join(tempDir, 'cp-filter-dest');
+      await cp(srcDir, destDir, { recursive: true, filter: (source) => path.basename(source) !== '.git' });
+
+      expect(await fileExists(path.join(destDir, 'kept.txt'))).toBe(true);
+      expect(await fileExists(path.join(destDir, '.git'))).toBe(false);
+    });
   });
 
   describe('readdir', () => {
