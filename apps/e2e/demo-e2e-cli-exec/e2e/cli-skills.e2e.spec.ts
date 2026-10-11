@@ -107,7 +107,7 @@ describe('CLI Skills Commands', () => {
     });
 
     it('should install a skill to a custom directory', () => {
-      // `skills install` (provider claude) updates CLAUDE.md in the cwd: run in tmpDir, never the repo root.
+      // Runs in tmpDir so a regression in the CLAUDE.md rule never touches the repo's own CLAUDE.md.
       const { stdout, exitCode } = runFrontmcpCli(
         ['skills', 'install', 'frontmcp-setup', '--dir', tmpDir],
         undefined,
@@ -168,6 +168,46 @@ describe('CLI Skills Commands', () => {
       // Should exist under the base dir
       const skillMd = path.join(baseDir, 'frontmcp-setup', 'SKILL.md');
       expect(fs.existsSync(skillMd)).toBe(true);
+    });
+
+    it('updates the CLAUDE.md of the project that owns a --dir ending in .claude/skills', () => {
+      const cwd = path.join(tmpDir, 'current');
+      const otherProject = path.join(tmpDir, 'other-project');
+      fs.mkdirSync(cwd, { recursive: true });
+
+      const { exitCode } = runFrontmcpCli(
+        ['skills', 'install', 'frontmcp-setup', '--dir', path.join(otherProject, '.claude', 'skills')],
+        undefined,
+        cwd,
+      );
+      expect(exitCode).toBe(0);
+      expect(fs.existsSync(path.join(cwd, 'CLAUDE.md'))).toBe(false);
+      expect(fs.readFileSync(path.join(otherProject, 'CLAUDE.md'), 'utf-8')).toContain('**frontmcp-setup**');
+    });
+
+    it('leaves CLAUDE.md alone for any other --dir and prints the block to add', () => {
+      const customDir = path.join(tmpDir, 'custom-skills');
+      const { stdout, exitCode } = runFrontmcpCli(
+        ['skills', 'install', 'frontmcp-setup', '--dir', customDir],
+        undefined,
+        tmpDir,
+      );
+      expect(exitCode).toBe(0);
+      expect(fs.existsSync(path.join(tmpDir, 'CLAUDE.md'))).toBe(false);
+      expect(stdout).toContain("is not a project's .claude/skills folder");
+      expect(stdout).toContain('<!-- frontmcp:skills-start');
+    });
+
+    it('--no-claude-md neither writes a CLAUDE.md nor prints the block', () => {
+      const { stdout, exitCode } = runFrontmcpCli(
+        ['skills', 'install', 'frontmcp-setup', '--no-claude-md'],
+        undefined,
+        tmpDir,
+      );
+      expect(exitCode).toBe(0);
+      expect(fs.existsSync(path.join(tmpDir, '.claude', 'skills', 'frontmcp-setup', 'SKILL.md'))).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, 'CLAUDE.md'))).toBe(false);
+      expect(stdout).not.toContain('<!-- frontmcp:skills-start');
     });
   });
 });
