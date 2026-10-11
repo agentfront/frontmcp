@@ -397,94 +397,15 @@ jobs:
           echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
           echo "Previous version tag: $PREV_TAG"
 
-      - name: Generate diff for AI changelog
-        id: diff
-        if: ${{ needs.prepare.outputs.is_prerelease != 'true' }}
-        run: |
-          PREV_TAG="${{ steps.prev_version.outputs.prev_tag }}"
-
-          if [ -n "$PREV_TAG" ]; then
-            # Generate diff of source files for AI analysis (limit to 50KB)
-            git diff "$PREV_TAG"..HEAD -- '**/*.ts' '**/*.tsx' '**/*.js' '**/*.json' \
-              ':!**/package-lock.json' ':!**/yarn.lock' ':!**/*.spec.ts' ':!**/*.test.ts' \
-              | head -c 50000 > /tmp/changes.diff
-
-            echo "Generated diff from $PREV_TAG to HEAD"
-            echo "Diff size: $(wc -c < /tmp/changes.diff) bytes"
-          else
-            echo "No previous tag found, skipping diff generation"
-            touch /tmp/changes.diff
-          fi
-
-      - name: Generate AI changelog and Card MDX
-        id: ai_changelog
+      # The changelog, and the Card that frontmcp.dev's releases page reads, from the release's pull requests and diff
+      - name: Write the release notes
         if: ${{ needs.prepare.outputs.is_prerelease != 'true' && steps.prev_version.outputs.prev_tag != '' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          PREV_TAG="${{ steps.prev_version.outputs.prev_tag }}"
-
-          # Skip if no OpenAI key configured
-          if [ -z "$OPENAI_API_KEY" ]; then
-            echo "OpenAI API key not configured, skipping AI changelog"
-            exit 0
-          fi
-
-          # Build user message content
-          USER_CONTENT="Generate release notes for FrontMCP version $VERSION (previous: $PREV_TAG).
-
-          Code diff:
-          $(cat /tmp/changes.diff | head -c 40000)"
-
-          # Use jq to safely construct JSON with proper escaping
-          jq -n \
-            --arg user_content "$USER_CONTENT" \
-            '{
-              "model": "gpt-4o",
-              "messages": [
-                {
-                  "role": "system",
-                  "content": "You are a technical writer creating professional release notes for FrontMCP, a TypeScript SDK for building Model Context Protocol (MCP) servers. Write in a clear, professional, benefit-focused tone.\n\nOutput TWO sections separated by '\''---CARD_MDX---'\'':\n\n1. CHANGELOG: A markdown changelog with categorized sections:\n   - **Features** (new capabilities)\n   - **Improvements** (enhancements to existing features)\n   - **Bug Fixes** (if any)\n   - **Breaking Changes** (if any, highlight clearly)\n\n   Rules for CHANGELOG:\n   - Only include sections that have actual content. Do NOT include empty sections (e.g., never write '\''No bug fixes in this release'\'' or '\''No breaking changes'\''). Simply omit the section entirely.\n   - Use bullet points. Be specific but concise — one to two sentences per bullet.\n   - Focus on what users gain, not just what changed internally. Describe benefits and practical impact.\n   - If a security fix is included, write with appropriate gravity and credit the reporter if known from the diff.\n\n2. CARD_MDX: A Card component with the release highlights, which the frontmcp.dev releases page reads. Format exactly like this:\n\n<Card\n  title=\"FrontMCP vX.Y.Z: [2-5 word headline]\"\n  href=\"https://github.com/agentfront/frontmcp/releases/tag/vX.Y.Z\"\n  cta=\"View full changelog\"\n>\n  [One paragraph (2-3 sentences) summarizing what this release is about and its main theme.]\n\n  🔌 **Feature Name** – Short description of what it does.\n\n  🔄 **Feature Name** – Short description of what it does.\n\n  📋 **Feature Name** – Short description of what it does.\n\n  ⚡ **Feature Name** – Short description of what it does.\n\n</Card>\n\nRules for CARD_MDX:\n- Use relevant emojis for each bullet (🔌🔄📋⚡💾🔐🎨☁️🌐📦🔧🪝🔑🚀🛡️ etc.)\n- Max 4 bullet points, focus on most impactful changes\n- Each bullet: emoji + **Bold Name** + en dash (–) + short description\n- CRITICAL: Each bullet MUST be separated by a blank line (double newline) for proper MDX rendering. Do NOT put bullets on consecutive lines.\n- Replace X.Y.Z with actual version number in title and href"
-                },
-                {
-                  "role": "user",
-                  "content": $user_content
-                }
-              ],
-              "max_tokens": 2000,
-              "temperature": 0.3
-            }' > /tmp/prompt.json
-
-          # Call OpenAI API with HTTP status capture
-          HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/openai_response.json -X POST https://api.openai.com/v1/chat/completions \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $OPENAI_API_KEY" \
-            -d @/tmp/prompt.json)
-
-          RESPONSE=$(cat /tmp/openai_response.json)
-
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "::warning::OpenAI API returned HTTP $HTTP_CODE"
-            echo "Response: $RESPONSE"
-            echo "has_changelog=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Extract content
-          CONTENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
-
-          if [ -n "$CONTENT" ]; then
-            # Split changelog and card MDX
-            echo "$CONTENT" | awk '/---CARD_MDX---/{found=1; next} !found' > /tmp/changelog.md
-            echo "$CONTENT" | awk '/---CARD_MDX---/{found=1; next} found' > /tmp/card-mdx.txt
-
-            echo "AI changelog generated successfully"
-            echo "has_changelog=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Failed to generate AI changelog"
-            echo "has_changelog=false" >> "$GITHUB_OUTPUT"
-          fi
+          GH_TOKEN: ${{ secrets.DOCS_SYNC_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PREVIOUS_TAG: ${{ steps.prev_version.outputs.prev_tag }}
+        run: node scripts/release-notes.mjs "$VERSION" "$PREVIOUS_TAG" /tmp
 
       - name: Prepare release body
         id: release_body
@@ -527,16 +448,6 @@ jobs:
 
           # Add Card MDX as a hidden comment: frontmcp.dev's releases page reads it
           if [ -f /tmp/card-mdx.txt ] && [ -s /tmp/card-mdx.txt ]; then
-            # Ensure double newlines between emoji bullet lines for proper MDX rendering
-            awk '
-              /^[[:space:]]*(🔌|🔄|📋|⚡|💾|🔐|🎨|☁️|🌐|📦|🔧|🪝|🔑|🚀|🛡️|✨|🔍|🧩|🔒|🔥|🎯|⚙️|📝)/ {
-                if (prev_was_bullet) print ""
-                prev_was_bullet = 1
-                print; next
-              }
-              { prev_was_bullet = 0; print }
-            ' /tmp/card-mdx.txt > /tmp/card-mdx-fixed.txt && mv /tmp/card-mdx-fixed.txt /tmp/card-mdx.txt
-
             echo "" >> /tmp/release-body.md
             echo "<!--" >> /tmp/release-body.md
             echo "CARD_MDX_START" >> /tmp/release-body.md
