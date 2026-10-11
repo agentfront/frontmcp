@@ -449,6 +449,19 @@ describe('FS Utils', () => {
       expect((await fs.promises.lstat(resolved)).isFile()).toBe(true);
       expect(await fs.promises.readFile(resolved, 'utf8')).toBe('target content');
     });
+
+    it('leaves out the paths filter rejects, with the contents of a rejected folder', async () => {
+      const srcDir = path.join(tempDir, 'cp-filter-src');
+      await fs.promises.mkdir(path.join(srcDir, '.git'), { recursive: true });
+      await fs.promises.writeFile(path.join(srcDir, '.git', 'config'), '[core]');
+      await fs.promises.writeFile(path.join(srcDir, 'kept.txt'), 'kept');
+
+      const destDir = path.join(tempDir, 'cp-filter-dest');
+      await cp(srcDir, destDir, { recursive: true, filter: (source) => path.basename(source) !== '.git' });
+
+      expect(await fileExists(path.join(destDir, 'kept.txt'))).toBe(true);
+      expect(await fileExists(path.join(destDir, '.git'))).toBe(false);
+    });
   });
 
   describe('readdir', () => {
