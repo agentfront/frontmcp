@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { fsp } from '../../../shared/fs';
 import { RegistryError } from '../errors';
 import { generateRegistryKey } from '../keygen';
 import { formatProofRecord, parsePrivateKey, publicKeyBase64 } from '../keys';
@@ -49,5 +50,19 @@ describe('generateRegistryKey', () => {
     await generateRegistryKey({ out: keyPath, force: true });
     expect(fs.readFileSync(keyPath, 'utf8').trim()).toMatch(/^[0-9a-f]{64}$/);
     expect(fs.statSync(keyPath).mode & 0o777).toBe(0o600);
+    expect(fs.readdirSync(tempDir)).toEqual(['registry.key']);
+  });
+
+  it('keeps the old key when writing the new one fails', async () => {
+    const keyPath = path.join(tempDir, 'registry.key');
+    fs.writeFileSync(keyPath, 'existing', { mode: 0o600 });
+    const writeSpy = jest.spyOn(fsp, 'writeFile').mockRejectedValueOnce(new Error('ENOSPC: no space left on device'));
+    try {
+      await expect(generateRegistryKey({ out: keyPath, force: true })).rejects.toThrow('ENOSPC');
+    } finally {
+      writeSpy.mockRestore();
+    }
+    expect(fs.readFileSync(keyPath, 'utf8')).toBe('existing');
+    expect(fs.readdirSync(tempDir)).toEqual(['registry.key']);
   });
 });

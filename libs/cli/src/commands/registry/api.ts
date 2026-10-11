@@ -49,11 +49,20 @@ export async function fetchWithTimeout<T>(
   }
 }
 
-export function requestJson(url: string, init: RequestInit): Promise<JsonResponse> {
-  return fetchWithTimeout(url, init, async (response) => ({
-    status: response.status,
-    body: parseJson(await response.text()),
+export async function requestJson(url: string, init: RequestInit): Promise<JsonResponse> {
+  const response = await fetchWithTimeout(url, { ...init, redirect: 'manual' }, async (answer) => ({
+    status: answer.status,
+    location: answer.headers.get('location'),
+    body: parseJson(await answer.text()),
   }));
+  if (response.status >= 300 && response.status < 400) {
+    throw new RegistryError(
+      `${init.method ?? 'GET'} ${url} was redirected (${response.status}) to ${response.location ?? 'an unnamed location'}. ` +
+        'The CLI never follows redirects on these requests, so nothing was sent there; ' +
+        'if that is the registry you mean, pass its URL with --registry.',
+    );
+  }
+  return { status: response.status, body: response.body };
 }
 
 export async function validateOnRegistry(registryUrl: string, serverJson: unknown): Promise<RemoteValidation> {

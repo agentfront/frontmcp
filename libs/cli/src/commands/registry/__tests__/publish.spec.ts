@@ -239,6 +239,23 @@ describe('frontmcp registry publish / status against a fake Registry', () => {
     await expect(publish()).rejects.toThrow(/add "mcpName": "com.acme\/weather" to package.json/);
   });
 
+  it('never follows a redirect from the registry, and names where it pointed', async () => {
+    overrides.push((request) =>
+      request.url.endsWith('/v0.1/publish')
+        ? new Response(null, { status: 308, headers: { location: 'http://registry.test/v0.1/publish' } })
+        : undefined,
+    );
+
+    await expect(publish()).rejects.toThrow(
+      `POST ${REGISTRY_URL}/v0.1/publish was redirected (308) to http://registry.test/v0.1/publish. ` +
+        'The CLI never follows redirects on these requests',
+    );
+
+    const registryCalls = fetchMock.mock.calls.filter(([url]) => String(url).startsWith(REGISTRY_URL));
+    expect(registryCalls.map(([, init]) => (init as RequestInit).redirect)).toEqual(['manual', 'manual', 'manual']);
+    expect(requests.some((request) => request.url.startsWith('http://'))).toBe(false);
+  });
+
   it('explains a 422 validation rejection', async () => {
     overrides.push((request) =>
       request.url.endsWith('/v0.1/publish')

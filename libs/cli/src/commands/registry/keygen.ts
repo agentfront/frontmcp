@@ -1,8 +1,9 @@
 import * as path from 'path';
 
-import { fileExists, mkdir, rm, writeFile } from '@frontmcp/utils';
+import { fileExists, mkdir, randomUUID, rename, rm } from '@frontmcp/utils';
 
 import { c } from '../../core/colors';
+import { fsp } from '../../shared/fs';
 import { RegistryError } from './errors';
 import { defaultKeyPath, formatProofRecord, generateRegistryKeyPair } from './keys';
 import { proofUrl } from './proof';
@@ -21,8 +22,14 @@ export async function generateRegistryKey(options: KeygenOptions): Promise<void>
   }
   const { privateKeySeedHex, publicKeyBase64 } = generateRegistryKeyPair();
   await mkdir(path.dirname(keyPath), { recursive: true, mode: 0o700 });
-  await rm(keyPath, { force: true });
-  await writeFile(keyPath, `${privateKeySeedHex}\n`, { mode: 0o600 });
+  const temporaryPath = path.join(path.dirname(keyPath), `.${path.basename(keyPath)}.${randomUUID()}.tmp`);
+  try {
+    await fsp.writeFile(temporaryPath, `${privateKeySeedHex}\n`, { mode: 0o600, flag: 'wx' });
+    await rename(temporaryPath, keyPath);
+  } catch (error) {
+    await rm(temporaryPath, { force: true });
+    throw error;
+  }
 
   console.log(c('green', `Wrote the private key to ${keyPath} (mode 0600).`));
   console.log(

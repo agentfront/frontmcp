@@ -8,6 +8,7 @@ import { RegistryError } from './errors';
 import type { PackageJsonFields } from './server-json';
 
 export const DEFAULT_REGISTRY_URL = 'https://registry.modelcontextprotocol.io';
+const LOOPBACK_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]'];
 
 export interface RegistryProject {
   /** The folder holding the frontmcp.config found above the cwd, else the cwd. */
@@ -25,6 +26,11 @@ export async function loadRegistryProject(cwd: string, configPath?: string): Pro
 export function resolveRegistryUrl(flag: string | undefined, project: RegistryProject): string {
   const registryUrl = flag ?? project.registry.registryUrl ?? DEFAULT_REGISTRY_URL;
   if (!URL.canParse(registryUrl)) throw new RegistryError(`The registry URL is not a URL: ${registryUrl}`);
+  const { protocol, hostname } = new URL(registryUrl);
+  const isLocalHttp = protocol === 'http:' && LOOPBACK_HOSTNAMES.includes(hostname);
+  if (protocol !== 'https:' && !isLocalHttp) {
+    throw new RegistryError(`The registry URL must be HTTPS (http only for localhost): ${registryUrl}`);
+  }
   return registryUrl.replace(/\/+$/, '');
 }
 

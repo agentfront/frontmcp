@@ -131,7 +131,7 @@ export default defineConfig({
   registry: {
     url: 'https://acme.com/mcp', // remotes[0] (streamable-http); --url overrides it
     packages: ['npm'], // list package.json's name and version as an npm package (stdio)
-    registryUrl: 'https://staging.registry.modelcontextprotocol.io', // optional; --registry overrides it
+    registryUrl: 'https://staging.registry.modelcontextprotocol.io', // optional, HTTPS; --registry overrides it
   },
 });
 ```

@@ -174,7 +174,7 @@ export default defineConfig({
 | `--auth <method>`            | publish, status | `http` (default), `dns`, or `github-oidc` (GitHub Actions, `io.github.*` names)                                  |
 | `--domain <domain>`          | publish, status | Domain that serves the proof (default: the name's namespace reversed)                                            |
 | `--key-file <path>`          | publish, status | Private key, hex seed or PEM (default: env `MCP_REGISTRY_PRIVATE_KEY`, else `~/.frontmcp/keys/mcp-registry.key`) |
-| `--registry <url>`           | publish, status | Registry base URL (default: `registry.registryUrl`, else the official Registry)                                  |
+| `--registry <url>`           | publish, status | Registry base URL, HTTPS or `http://localhost` (default: `registry.registryUrl`, else the official Registry)     |
 | `-e, --entry <path>`         | publish, status | Entry file with the `@FrontMcp()` class                                                                          |
 | `--file <path>`              | publish         | Publish this `server.json` as is                                                                                 |
 | `--url <url>`                | publish         | Streamable HTTP URL of the deployed server (`remotes[0]`)                                                        |
