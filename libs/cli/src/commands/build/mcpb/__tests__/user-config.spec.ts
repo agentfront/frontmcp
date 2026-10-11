@@ -1,4 +1,4 @@
-import { idToCamelKey, setupStepsToUserConfig } from '../user-config';
+import { idToCamelKey, setupStepsToUserConfig, userConfigKeyToEnvName } from '../user-config';
 
 describe('idToCamelKey', () => {
   it('handles kebab case', () => {
@@ -12,6 +12,19 @@ describe('idToCamelKey', () => {
   });
   it('falls back to "value" when input is empty', () => {
     expect(idToCamelKey('')).toBe('value');
+  });
+});
+
+describe('userConfigKeyToEnvName', () => {
+  it.each([
+    ['deskApiKey', 'DESK_API_KEY'],
+    ['exportFolder', 'EXPORT_FOLDER'],
+    ['export-folder', 'EXPORT_FOLDER'],
+    ['api_token', 'API_TOKEN'],
+    ['apiV2Url', 'API_V2_URL'],
+    ['token', 'TOKEN'],
+  ])('%s → %s', (key, envName) => {
+    expect(userConfigKeyToEnvName(key)).toBe(envName);
   });
 });
 
@@ -120,6 +133,60 @@ describe('setupStepsToUserConfig', () => {
       },
     });
     expect(result.userConfig.extra.title).toBe('Extra');
+    expect(result.env).toEqual({ EXTRA: '${user_config.extra}' });
+  });
+
+  it('passes every deployment-only userConfig entry to the server under its UPPER_SNAKE_CASE name', () => {
+    const result = setupStepsToUserConfig(undefined, {
+      target: 'mcpb',
+      userConfig: {
+        deskApiKey: { type: 'string', title: 'Help desk API key', required: true, sensitive: true },
+        exportFolder: { type: 'directory', title: 'Export folder', default: '${HOME}/Documents' },
+      },
+    });
+    expect(result.env).toEqual({
+      DESK_API_KEY: '${user_config.deskApiKey}',
+      EXPORT_FOLDER: '${user_config.exportFolder}',
+    });
+    expect(Object.keys(result.userConfig)).toEqual(['deskApiKey', 'exportFolder']);
+  });
+
+  it('uses an entry\'s explicit env name and leaves it out of user_config', () => {
+    const result = setupStepsToUserConfig(undefined, {
+      target: 'mcpb',
+      userConfig: { deskApiKey: { type: 'string', title: 'Key', sensitive: true, env: 'HELPDESK_TOKEN' } },
+    });
+    expect(result.env).toEqual({ HELPDESK_TOKEN: '${user_config.deskApiKey}' });
+    expect(result.userConfig.deskApiKey).toEqual({ type: 'string', title: 'Key', sensitive: true });
+  });
+
+  it('lets a userConfig override rename the env var of a setup step', () => {
+    const result = setupStepsToUserConfig(
+      [{ id: 'api-token', prompt: 'Token', env: 'API_TOKEN', jsonSchema: { type: 'string' } }],
+      { target: 'mcpb', userConfig: { apiToken: { type: 'string', title: 'Token', env: 'SERVICE_TOKEN' } } },
+    );
+    expect(result.env).toEqual({ SERVICE_TOKEN: '${user_config.apiToken}' });
+    expect(result.userConfig.apiToken).not.toHaveProperty('env');
+  });
+
+  it('refuses two entries that map to the same env var', () => {
+    expect(() =>
+      setupStepsToUserConfig(undefined, {
+        target: 'mcpb',
+        userConfig: {
+          apiKey: { type: 'string', title: 'A' },
+          'api-key': { type: 'string', title: 'B' },
+        },
+      }),
+    ).toThrow(
+      'userConfig "apiKey" and "api-key" both map to the env var API_KEY. Give one of them its own env name (userConfig.<key>.env).',
+    );
+  });
+
+  it('refuses a key whose derived name is not an env var name', () => {
+    expect(() =>
+      setupStepsToUserConfig(undefined, { target: 'mcpb', userConfig: { '2fa': { type: 'string', title: '2FA' } } }),
+    ).toThrow('userConfig "2fa" maps to "2FA", which is not an environment variable name. Set userConfig.2fa.env.');
   });
 
   it('uses step.env for env key when provided', () => {

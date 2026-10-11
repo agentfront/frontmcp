@@ -184,6 +184,52 @@ describe('buildMcpb integration', () => {
     expect(fs.existsSync(path.join(stageDir, 'server', 'index.js'))).toBe(true);
   });
 
+  it('passes each deployment userConfig entry and the deployment env to the server', async () => {
+    mockLoadExecConfig.mockResolvedValue({ name: 'demo-app', version: '1.2.3', nodeVersion: '>=22.0.0' });
+    const configParsed = {
+      name: 'demo-app',
+      deployments: [
+        {
+          target: 'mcpb' as const,
+          userConfig: {
+            deskApiKey: { type: 'string' as const, title: 'Help desk API key', required: true, sensitive: true },
+            exportFolder: { type: 'directory' as const, title: 'Export folder', default: '${HOME}/Documents' },
+          },
+          env: { DESK_REGION: 'eu' },
+        },
+      ],
+    };
+
+    await buildMcpb({ _: [], outDir: 'dist/mcpb' }, configParsed);
+
+    const validation = await validateMcpb(path.join(projectRoot, 'dist', 'mcpb', 'demo-app-1.2.3.mcpb'));
+    expect(validation.errors).toEqual([]);
+    expect(Object.keys(validation.manifest?.user_config ?? {})).toEqual(['deskApiKey', 'exportFolder']);
+    expect(validation.manifest?.server.mcp_config.env).toEqual({
+      DESK_REGION: 'eu',
+      DESK_API_KEY: '${user_config.deskApiKey}',
+      EXPORT_FOLDER: '${user_config.exportFolder}',
+      FRONTMCP_STDIO: '1',
+    });
+  });
+
+  it('warns that includeNodeModules has no effect and ships no node_modules', async () => {
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      await buildMcpb(
+        { _: [], outDir: 'dist/mcpb' },
+        { name: 'demo-app', deployments: [{ target: 'mcpb', includeNodeModules: true }] },
+      );
+      const loggedLines = logSpy.mock.calls.map((call) => String(call[0]));
+      expect(loggedLines).toContainEqual(expect.stringContaining('includeNodeModules is deprecated and has no effect'));
+    } finally {
+      logSpy.mockRestore();
+    }
+    const validation = await validateMcpb(path.join(projectRoot, 'dist', 'mcpb', 'demo-app-1.2.3.mcpb'));
+    expect(validation.errors).toEqual([]);
+    expect(validation.entries?.some((entry) => entry.includes('node_modules'))).toBe(false);
+  });
+
   it('produces deterministic archives across back-to-back builds', async () => {
     await buildMcpb({ _: [], outDir: 'dist/mcpb' });
     const archivePath = path.join(projectRoot, 'dist', 'mcpb', 'demo-app-1.2.3.mcpb');

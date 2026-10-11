@@ -7,6 +7,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+
 import { runFrontmcpCli } from './helpers/exec-cli';
 
 describe('CLI Skills Commands', () => {
@@ -106,7 +107,12 @@ describe('CLI Skills Commands', () => {
     });
 
     it('should install a skill to a custom directory', () => {
-      const { stdout, exitCode } = runFrontmcpCli(['skills', 'install', 'frontmcp-setup', '--dir', tmpDir]);
+      // `skills install` (provider claude) updates CLAUDE.md in the cwd: run in tmpDir, never the repo root.
+      const { stdout, exitCode } = runFrontmcpCli(
+        ['skills', 'install', 'frontmcp-setup', '--dir', tmpDir],
+        undefined,
+        tmpDir,
+      );
       expect(exitCode).toBe(0);
       expect(stdout).toContain('Installed');
       expect(stdout).toContain('frontmcp-setup');
@@ -122,7 +128,11 @@ describe('CLI Skills Commands', () => {
     });
 
     it('should install a skill that has resources', () => {
-      const { stdout, exitCode } = runFrontmcpCli(['skills', 'install', 'frontmcp-deployment', '--dir', tmpDir]);
+      const { stdout, exitCode } = runFrontmcpCli(
+        ['skills', 'install', 'frontmcp-deployment', '--dir', tmpDir],
+        undefined,
+        tmpDir,
+      );
       expect(exitCode).toBe(0);
       expect(stdout).toContain('Installed');
 
@@ -134,13 +144,11 @@ describe('CLI Skills Commands', () => {
     });
 
     it('should error on unknown skill name', () => {
-      const { stdout, stderr, exitCode } = runFrontmcpCli([
-        'skills',
-        'install',
-        'nonexistent-skill-xyz',
-        '--dir',
+      const { stdout, stderr, exitCode } = runFrontmcpCli(
+        ['skills', 'install', 'nonexistent-skill-xyz', '--dir', tmpDir],
+        undefined,
         tmpDir,
-      ]);
+      );
       expect(exitCode).not.toBe(0);
       const output = stdout + stderr;
       expect(output.toLowerCase()).toContain('not found');
@@ -150,15 +158,11 @@ describe('CLI Skills Commands', () => {
       const baseDir = path.join(tmpDir, 'project');
       fs.mkdirSync(baseDir, { recursive: true });
 
-      const { exitCode } = runFrontmcpCli([
-        'skills',
-        'install',
-        'frontmcp-setup',
-        '--provider',
-        'claude',
-        '--dir',
-        baseDir,
-      ]);
+      const { exitCode } = runFrontmcpCli(
+        ['skills', 'install', 'frontmcp-setup', '--provider', 'claude', '--dir', baseDir],
+        undefined,
+        tmpDir,
+      );
       expect(exitCode).toBe(0);
 
       // Should exist under the base dir

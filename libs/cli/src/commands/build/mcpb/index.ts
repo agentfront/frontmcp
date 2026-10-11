@@ -91,6 +91,11 @@ export async function buildMcpb(
 
   console.log(`${c('cyan', '[build:mcpb]')} name: ${execConfig.name}`);
   console.log(`${c('cyan', '[build:mcpb]')} version: ${execConfig.version}`);
+  if (mcpbDeployment?.includeNodeModules) {
+    console.log(
+      `${c('yellow', '[build:mcpb]')} includeNodeModules is deprecated and has no effect: server/index.js inlines its runtime packages, so the archive never ships node_modules`,
+    );
+  }
 
   // 2. Resolve entry
   const entry = await resolveEntry(cwd, opts.entry || execConfig.entry);
@@ -191,7 +196,7 @@ export async function buildMcpb(
     }
   }
 
-  // 7. Translate setup steps → user_config + env
+  // 7. Translate setup steps + deployment.userConfig → user_config + env
   const { userConfig, env: userConfigEnv, warnings } = setupStepsToUserConfig(
     execConfig.setup?.steps,
     mcpbDeployment,

@@ -75,3 +75,35 @@ describe('CLI eject-mcp-config -o (#642)', () => {
     expect(await fileExists(out)).toBe(false);
   });
 });
+
+describe('CLI eject-mcp-config default stdio entry', () => {
+  let projectDir: string;
+
+  beforeAll(async () => {
+    projectDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-eject-default-'));
+    await writeFile(
+      path.join(projectDir, 'package.json'),
+      JSON.stringify({ name: '@acme/help-desk', version: '1.0.0' }),
+    );
+    await writeFile(
+      path.join(projectDir, 'frontmcp.config.js'),
+      `module.exports = {
+  name: 'help-desk',
+  deployments: [{ target: 'node' }],
+  clients: { 'claude-desktop': { transport: 'stdio' } },
+};\n`,
+    );
+  });
+
+  afterAll(async () => {
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  it('starts the published package over stdio', () => {
+    const { exitCode, stdout } = runFrontmcpCli(['eject-mcp-config', 'claude-desktop'], undefined, projectDir);
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toEqual({
+      mcpServers: { 'help-desk': { command: 'npx', args: ['-y', '@acme/help-desk', '--stdio'] } },
+    });
+  });
+});

@@ -1,4 +1,20 @@
+import * as http from 'http';
+import * as os from 'os';
+import * as path from 'path';
+
+import { mkdtemp, rm } from '@frontmcp/utils';
+
 import { generateDaemonClientSource } from '../cli-runtime/daemon-client';
+
+interface DaemonClientModule {
+  createDaemonClient(socketPath: string, options?: { authToken?: string }): { ping(): Promise<unknown> };
+}
+
+function loadDaemonClient(): DaemonClientModule {
+  const loadedModule = { exports: {} as DaemonClientModule };
+  new Function('require', 'exports', 'module', generateDaemonClientSource())(require, loadedModule.exports, loadedModule);
+  return loadedModule.exports;
+}
 
 describe('generateDaemonClientSource', () => {
   let source: string;
@@ -24,7 +40,7 @@ describe('generateDaemonClientSource', () => {
   });
 
   it('should implement rpcCall function', () => {
-    expect(source).toContain('function rpcCall(socketPath, method, params)');
+    expect(source).toContain('function rpcCall(socketPath, method, params, authToken)');
     expect(source).toContain("path: '/mcp'");
     expect(source).toContain("method: 'POST'");
     expect(source).toContain("'Content-Type': 'application/json'");
@@ -45,7 +61,7 @@ describe('generateDaemonClientSource', () => {
   });
 
   it('should implement createDaemonClient factory', () => {
-    expect(source).toContain('function createDaemonClient(socketPath)');
+    expect(source).toContain('function createDaemonClient(socketPath, options)');
   });
 
   describe('client methods', () => {
@@ -168,5 +184,29 @@ describe('generateDaemonClientSource', () => {
 
       new Function(source);
     }).not.toThrow();
+  });
+
+  it('sends the auth token as a bearer Authorization header, and none without one', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-daemon-'));
+    const socketPath = path.join(dir, 'daemon.sock');
+    const authorizationHeaders: Array<string | undefined> = [];
+    const server = http.createServer((req, res) => {
+      authorizationHeaders.push(req.headers.authorization);
+      req.resume();
+      req.on('end', () => {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ jsonrpc: '2.0', id: 1, result: {} }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    try {
+      const { createDaemonClient } = loadDaemonClient();
+      await createDaemonClient(socketPath, { authToken: 'tok-123' }).ping();
+      await createDaemonClient(socketPath).ping();
+      expect(authorizationHeaders).toEqual(['Bearer tok-123', undefined]);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -175,6 +175,38 @@ describe('frontmcpConfigSchema', () => {
       expect(result.success).toBe(true);
     });
 
+    it('accepts an explicit env name on an mcpb userConfig entry', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'my-server',
+        deployments: [
+          { target: 'mcpb', userConfig: { deskApiKey: { type: 'string', title: 'Key', env: 'HELPDESK_TOKEN' } } },
+        ],
+      });
+      expect(result.error?.issues ?? []).toEqual([]);
+    });
+
+    it('accepts a setup questionnaire next to deployments', () => {
+      const tokenSchema = { parse: (value: unknown) => value };
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'my-server',
+        deployments: [{ target: 'mcpb' }],
+        setup: {
+          steps: [
+            { id: 'api-token', prompt: 'API token', env: 'API_TOKEN', sensitive: true, schema: tokenSchema },
+            {
+              id: 'region',
+              prompt: 'Region',
+              jsonSchema: { type: 'string', enum: ['eu', 'us'] },
+              next: { eu: 'eu-host' },
+            },
+            { id: 'eu-host', prompt: 'EU host', showWhen: { region: 'eu' }, group: 'Network' },
+          ],
+        },
+      });
+      expect(result.error?.issues ?? []).toEqual([]);
+      expect(result.data?.setup?.steps[0].schema).toBe(tokenSchema);
+    });
+
     it('should accept CSP with array directives inside deployment', () => {
       const result = frontmcpConfigSchema.safeParse({
         name: 'csp-server',
@@ -198,6 +230,29 @@ describe('frontmcpConfigSchema', () => {
   });
 
   describe('invalid configs', () => {
+    it('rejects a setup step with an unknown key', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'my-server',
+        deployments: [{ target: 'node' }],
+        setup: { steps: [{ id: 'a', prompt: 'A', question: 'typo' }] },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an env name that is not an environment variable name', () => {
+      const setupResult = frontmcpConfigSchema.safeParse({
+        name: 'my-server',
+        deployments: [{ target: 'node' }],
+        setup: { steps: [{ id: 'a', prompt: 'A', env: 'API-TOKEN' }] },
+      });
+      const userConfigResult = frontmcpConfigSchema.safeParse({
+        name: 'my-server',
+        deployments: [{ target: 'mcpb', userConfig: { key: { type: 'string', title: 'Key', env: '1KEY' } } }],
+      });
+      expect(setupResult.error?.issues[0]?.message).toMatch(/environment variable name/);
+      expect(userConfigResult.error?.issues[0]?.message).toMatch(/environment variable name/);
+    });
+
     it('should reject missing name', () => {
       const result = frontmcpConfigSchema.safeParse({
         deployments: [{ target: 'node' }],

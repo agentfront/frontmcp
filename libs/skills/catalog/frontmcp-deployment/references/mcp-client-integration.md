@@ -280,8 +280,11 @@ frontmcp plugin install --claude
 # Inspect the plan without writing
 frontmcp plugin install --claude --dry-run
 
-# Also drop a Codex mcp_servers entry into ~/.codex/config.toml
+# Also add a Codex [mcp_servers.<name>] table to ~/.codex/config.toml
 frontmcp plugin install --claude --codex
+
+# The MCP server command: a program, optionally with its arguments
+frontmcp plugin install --claude --command "npx -y my-server --stdio"
 
 # Report install state
 frontmcp plugin status --claude
@@ -302,6 +305,44 @@ my-bin install -p claude -p codex     # both providers in one call
 my-bin install --status               # report state per provider
 my-bin uninstall -p claude            # remove only managed files
 ```
+
+The MCP server entry restarts the bin that ran `install`:
+
+- Started by name from a `PATH` directory (a global npm install, or the
+  symlink `my-bin install` creates): the entry is that name, e.g.
+  `{ "command": "my-bin", "args": ["serve", "--stdio"] }`, whatever the bin is
+  called in `package.json`.
+- Anywhere else (`./dist/cli/my-bin`, npx's cache): absolute paths, i.e.
+  `node /abs/dist/cli/my-bin-cli.bundle.js serve --stdio`, or the single
+  executable's own path. The command is printed on install.
+- `--command "<program> [args…]"` overrides it. A lone program keeps
+  `serve --stdio`; a program followed by arguments replaces them. Quote words
+  that contain spaces, as in a shell.
+
+`_meta.frontmcp.installedBy` in `plugin.json` names the frontmcp version that
+built the bin.
+
+### Codex entry
+
+`-p codex` / `--codex` adds a table to `~/.codex/config.toml`, between markers
+so uninstall removes exactly what install wrote:
+
+```toml
+# frontmcp:codex-start:my-bin
+[mcp_servers.my-bin]
+command = "my-bin"
+args = ["serve", "--stdio"]
+env_vars = ["MY_TOKEN"]          # one per --env; Codex forwards them from its environment
+# frontmcp:codex-end:my-bin
+```
+
+- A name that is not a bare TOML key is quoted: `[mcp_servers."my.server"]`.
+- Install and uninstall also rewrite entries written by frontmcp 1.9.4 and
+  earlier, whose `[[mcp_servers]]` array shape made Codex refuse the whole
+  config. Nothing outside frontmcp's markers is changed.
+- If `config.toml` already defines `[mcp_servers.<name>]` outside the markers,
+  install stops and changes nothing: remove that table (or rename the server)
+  and run install again.
 
 ### What gets written
 
@@ -351,14 +392,15 @@ the planned tree before writing.
 
 ## Troubleshooting
 
-| Problem                        | Cause                     | Solution                                               |
-| ------------------------------ | ------------------------- | ------------------------------------------------------ |
-| "Connection failed" with stdio | Server crashes on startup | Check `~/.frontmcp/logs/` for stack traces             |
-| Garbled protocol in stdio      | Logs leaking to stdout    | Ensure `--stdio` flag is passed (auto-redirects logs)  |
-| `ENOENT` for command           | Binary not found          | Use absolute path or ensure it's in PATH               |
-| `ECONNREFUSED` for HTTP        | Server not running        | Start server first: `my-server serve -p PORT`          |
-| Socket not found               | Daemon not started        | Run `my-server daemon start`                           |
-| npx timeout                    | Package download slow     | Run `npx -y my-server --stdio` manually first to cache |
+| Problem                                                                    | Cause                                    | Solution                                                                                  |
+| -------------------------------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
+| "Connection failed" with stdio                                             | Server crashes on startup                | Check `~/.frontmcp/logs/` for stack traces                                                |
+| Garbled protocol in stdio                                                  | Logs leaking to stdout                   | Ensure `--stdio` flag is passed (auto-redirects logs)                                     |
+| `ENOENT` for command                                                       | Binary not found                         | Use absolute path or ensure it's in PATH                                                  |
+| Codex: `already defines [mcp_servers.<name>] outside the frontmcp markers` | A hand-written table for the same server | Remove that table from `~/.codex/config.toml` (or rename the server), then re-run install |
+| `ECONNREFUSED` for HTTP                                                    | Server not running                       | Start server first: `my-server serve -p PORT`                                             |
+| Socket not found                                                           | Daemon not started                       | Run `my-server daemon start`                                                              |
+| npx timeout                                                                | Package download slow                    | Run `npx -y my-server --stdio` manually first to cache                                    |
 
 ## Examples
 
