@@ -22,7 +22,7 @@ import { resolveEntry } from '../../../shared/fs';
 import { REQUIRED_DECORATOR_FIELDS } from '../../../core/tsconfig';
 import { findDeployment, type FrontMcpConfigParsed } from '../../../config';
 import type { McpbDeployment } from '../../../config/frontmcp-config.types';
-import { loadExecConfig, normalizeConfig } from '../exec/config';
+import { assertNoNativeAddonsInSea, loadExecConfig, normalizeConfig } from '../exec/config';
 import { serverBundleBanner } from '../../../config/deployment-env';
 import { bundleWithEsbuild, formatSize } from '../exec/esbuild-bundler';
 import {
@@ -34,6 +34,7 @@ import {
   type BinaryEntry,
 } from './binary';
 import { generateMcpbManifest, loadPackageJsonMeta, resolveIconPath } from './manifest';
+import { buildMachinePlatform, copyNativeAddons } from './native-addons';
 import { setupStepsToUserConfig } from './user-config';
 import { stageMcpbDirectory, writeManifest } from './stage';
 import { createDeterministicZip } from './zip';
@@ -64,23 +65,6 @@ export async function buildMcpb(
   const rawConfig = await loadExecConfig(cwd, { configPath: opts.config, configDir: opts.configDir });
   const execConfig = normalizeConfig(rawConfig);
 
-  // When a v1 frontmcp.config is present, its build.esbuild / build.dependencies
-  // win — the legacy loader returns the raw file without merging these.
-  if (configParsed?.build?.esbuild) {
-    execConfig.esbuild = {
-      ...(execConfig.esbuild ?? {}),
-      ...configParsed.build.esbuild,
-    };
-  }
-  if (configParsed?.build?.dependencies?.nativeAddons) {
-    execConfig.dependencies = {
-      ...(execConfig.dependencies ?? {}),
-      nativeAddons: [
-        ...(execConfig.dependencies?.nativeAddons ?? []),
-        ...configParsed.build.dependencies.nativeAddons,
-      ],
-    };
-  }
   if (configParsed?.nodeVersion) {
     execConfig.nodeVersion = configParsed.nodeVersion;
   }
@@ -91,9 +75,15 @@ export async function buildMcpb(
 
   console.log(`${c('cyan', '[build:mcpb]')} name: ${execConfig.name}`);
   console.log(`${c('cyan', '[build:mcpb]')} version: ${execConfig.version}`);
+  const seaRequested = !!(opts.sea || mcpbDeployment?.sea?.enabled);
+  const mergeFrom = opts.mergeFrom ?? mcpbDeployment?.sea?.mergeFrom;
+  const nativeAddons = execConfig.dependencies?.nativeAddons ?? [];
+  if (seaRequested || mergeFrom) {
+    assertNoNativeAddonsInSea(nativeAddons, 'Build the mcpb without --sea, sea.enabled and sea.mergeFrom.');
+  }
   if (mcpbDeployment?.includeNodeModules) {
     console.log(
-      `${c('yellow', '[build:mcpb]')} includeNodeModules is deprecated and has no effect: server/index.js inlines its runtime packages, so the archive never ships node_modules`,
+      `${c('yellow', '[build:mcpb]')} includeNodeModules is deprecated and has no effect: server/index.js inlines its dependencies, and native addons listed in build.dependencies.nativeAddons ship in server/node_modules/`,
     );
   }
 
@@ -146,8 +136,6 @@ export async function buildMcpb(
   );
 
   // 6. SEA binaries (optional)
-  const seaRequested = !!(opts.sea || mcpbDeployment?.sea?.enabled);
-  const mergeFrom = opts.mergeFrom ?? mcpbDeployment?.sea?.mergeFrom;
   const binaries: BinaryEntry[] = [];
 
   if (seaRequested) {
@@ -231,6 +219,26 @@ export async function buildMcpb(
   if (stageResult.hasIcon) {
     console.log(`${c('green', '[build:mcpb]')} icon: ${iconAbs}`);
   }
+  const copiedPackages = await copyNativeAddons({
+    addons: nativeAddons,
+    projectDir: cwd,
+    serverDir: path.join(stageDir, 'server'),
+  });
+  if (copiedPackages.length > 0) {
+    const builtFor = `${process.platform}-${process.arch}`;
+    console.log(
+      `${c('green', '[build:mcpb]')} copied ${copiedPackages.length} package(s) for native addon(s) ${nativeAddons.join(', ')} to server/node_modules/`,
+    );
+    console.log(
+      `${c('yellow', '[build:mcpb]')} native addon binaries are built for ${builtFor}: this archive runs only on ${builtFor} (build once per OS and CPU architecture)`,
+    );
+    const otherPlatforms = (mcpbDeployment?.compatibility?.platforms ?? []).filter((os) => os !== process.platform);
+    if (otherPlatforms.length > 0) {
+      console.log(
+        `${c('yellow', '[build:mcpb]')} compatibility.platforms lists ${otherPlatforms.join(', ')}, but the native addon binaries only load on ${builtFor}`,
+      );
+    }
+  }
 
   // 9. Manifest
   const platformOverrides = buildPlatformOverrides(binaries);
@@ -250,6 +258,7 @@ export async function buildMcpb(
     userConfig,
     userConfigEnv,
     platformOverrides,
+    nativeAddonPlatform: copiedPackages.length > 0 ? buildMachinePlatform() : undefined,
     hasIcon: stageResult.hasIcon,
     cliVersion: getSelfVersion(),
   });

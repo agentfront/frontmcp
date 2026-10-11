@@ -11,16 +11,22 @@
  *   6. Only allow-listed variables appear in substitutions
  *   7. `manifest.icon` file exists when referenced
  *   8. No zip-slip (normalized entry names escaping the archive root)
- *   9. Warnings on large archives, absolute-path args, node_modules presence
- *  10. The server entry does not `require()` runtime packages that the archive
- *      does not ship (the archive has no node_modules, so it could not start)
+ *   9. Warnings on large archives and absolute-path args
+ *  10. Every package the server entry requires outside a try/catch is a Node
+ *      built-in or shipped in a node_modules/ folder above the entry (else it
+ *      fails at that require()); packages FrontMCP loads only when a feature is
+ *      configured are warnings
  *  11. Neither does any SEA binary under `bin/` — an SEA binary resolves a bare
  *      `require()` against Node's built-in modules only (#679)
  */
 
 import * as fs from 'fs';
+import { isBuiltin } from 'module';
+import * as os from 'os';
 import * as path from 'path';
 import type { Entry, ZipFile } from 'yauzl';
+import { mkdtemp, rm } from '@frontmcp/utils';
+import { OPTIONAL_PEER_PACKAGES } from '../exec/esbuild-bundler';
 import { mcpbManifestSchema, type McpbManifest, type McpbMcpConfig } from './manifest';
 import {
   ALLOWED_SUBSTITUTION_VARS,
@@ -57,7 +63,7 @@ export async function validateMcpb(archivePath: string): Promise<ValidateResult>
 
   if (archive.size > ARCHIVE_SIZE_ERROR) {
     result.warnings.push(
-      `Archive is ${(archive.size / 1024 / 1024).toFixed(1)} MB — consider tuning esbuild externals or dropping --sea`,
+      `Archive is ${(archive.size / 1024 / 1024).toFixed(1)} MB — consider trimming the server's dependencies or native addons, or dropping --sea`,
     );
   } else if (archive.size > ARCHIVE_SIZE_WARN) {
     result.warnings.push(`Archive is ${(archive.size / 1024 / 1024).toFixed(1)} MB`);
@@ -70,10 +76,6 @@ export async function validateMcpb(archivePath: string): Promise<ValidateResult>
     if (isUnsafeArchivePath(entry)) {
       result.errors.push(`Zip-slip risk: entry "${entry}"`);
     }
-  }
-
-  if (archive.entries.some((e) => e.startsWith('server/node_modules/'))) {
-    result.warnings.push('Archive contains server/node_modules/ — opt-in only; verify this was intentional');
   }
 
   if (!archive.manifestRaw) {
@@ -108,7 +110,7 @@ export async function validateMcpb(archivePath: string): Promise<ValidateResult>
     );
   }
 
-  checkServerRuntime(manifest.server.entry_point, archive, result);
+  await checkServerRuntime(manifest.server.entry_point, archive, result);
 
   // Variable substitution + user_config cross-check
   checkMcpConfig(manifest.server.mcp_config, manifest.user_config, result);
@@ -181,13 +183,107 @@ export function createRuntimeRequireScanner(): { push(chunk: Buffer): void; foun
   };
 }
 
-function checkServerRuntime(entryPoint: string, archive: RawArchive, result: ValidateResult): void {
+/** Optional packages FrontMCP's runtime requires only when a feature is configured, and that feature. */
+const FRONTMCP_LAZY_FEATURES: Record<string, string> = {
+  'better-sqlite3': 'SQLite storage',
+  '@frontmcp/storage-sqlite': 'SQLite storage',
+  '@vercel/kv': 'Vercel KV storage',
+  '@frontmcp/observability': 'observability',
+  '@enclave-vm/core': 'dynamic jobs',
+  esbuild: 'UI component transpiling',
+};
+
+function frontmcpLazyFeature(pkg: string): string | undefined {
+  if (pkg.startsWith('@opentelemetry/')) return 'OpenTelemetry tracing';
+  if (pkg in FRONTMCP_LAZY_FEATURES) return FRONTMCP_LAZY_FEATURES[pkg];
+  return OPTIONAL_PEER_PACKAGES.includes(pkg) ? 'an optional FrontMCP feature' : undefined;
+}
+
+function packageNameOf(specifier: string): string {
+  const segments = specifier.split('/');
+  return specifier.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0];
+}
+
+/** `<dir>/node_modules/` for the entry point's folder and each folder above it, up to the archive root. */
+function nodeModulesDirsAbove(entryPoint: string): string[] {
+  const dirs = ['node_modules/'];
+  for (let dir = path.posix.dirname(entryPoint); dir !== '.' && dir !== '/'; dir = path.posix.dirname(dir)) {
+    dirs.push(`${dir}/node_modules/`);
+  }
+  return dirs;
+}
+
+export interface ServerRequires {
+  /** Packages required outside a try/catch that the archive doesn't ship and Node doesn't provide. */
+  missing: string[];
+  /** Packages FrontMCP requires only when a feature is configured, not shipped in the archive. */
+  lazy: string[];
+}
+
+/** What `source` requires that the archive can't satisfy; esbuild ignores requires inside a try/catch. */
+export async function findUnresolvedRequires(source: string, entries: string[], entryPoint: string): Promise<ServerRequires> {
+  const esbuild = require('esbuild') as typeof import('esbuild');
+  const shippedDirs = nodeModulesDirsAbove(entryPoint);
+  const isShipped = (pkg: string) => entries.some((entry) => shippedDirs.some((dir) => entry.startsWith(`${dir}${pkg}/`)));
+  const lazy = new Set<string>();
+  const emptyResolveDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-mcpb-validate-'));
+  try {
+    await esbuild.build({
+      stdin: { contents: source, loader: 'js', resolveDir: emptyResolveDir },
+      bundle: true,
+      write: false,
+      platform: 'node',
+      format: 'esm',
+      logLevel: 'silent',
+      plugins: [
+        {
+          name: 'frontmcp-mcpb-archive-packages',
+          setup(build) {
+            build.onResolve({ filter: /^[^./]/ }, ({ path: specifier }) => {
+              if (isBuiltin(specifier)) return { path: specifier, external: true };
+              const pkg = packageNameOf(specifier);
+              if (isShipped(pkg)) return { path: specifier, external: true };
+              if (frontmcpLazyFeature(pkg) === undefined) return undefined;
+              lazy.add(pkg);
+              return { path: specifier, external: true };
+            });
+          },
+        },
+      ],
+    });
+    return { missing: [], lazy: [...lazy] };
+  } catch (err) {
+    const failures = (err as { errors?: Array<{ text: string }> }).errors ?? [];
+    const unresolvedSpecifiers = failures
+      .map((failure) => /^Could not resolve "([^"]+)"/.exec(failure.text)?.[1])
+      .filter((specifier): specifier is string => specifier !== undefined);
+    if (unresolvedSpecifiers.length === 0 || unresolvedSpecifiers.length < failures.length) throw err;
+    return { missing: [...new Set(unresolvedSpecifiers.map(packageNameOf))], lazy: [...lazy] };
+  } finally {
+    await rm(emptyResolveDir, { recursive: true, force: true });
+  }
+}
+
+async function checkServerRuntime(entryPoint: string, archive: RawArchive, result: ValidateResult): Promise<void> {
   const source = archive.serverFiles?.[entryPoint];
   if (source === undefined) return;
-  if (archive.entries.some((e) => e.startsWith('server/node_modules/'))) return;
-  for (const pkg of findRuntimeRequires(source)) {
+  let requires: ServerRequires;
+  try {
+    requires = await findUnresolvedRequires(source, archive.entries, entryPoint);
+  } catch (err) {
+    result.errors.push(`${entryPoint} could not be parsed: ${(err as Error).message}`);
+    return;
+  }
+  for (const pkg of requires.missing) {
     result.errors.push(
-      `${entryPoint} requires "${pkg}" but the archive has no node_modules — the server cannot start. Rebuild with \`frontmcp build --target mcpb\` so runtime packages are bundled`,
+      REQUIRED_INLINE_PACKAGES.includes(pkg)
+        ? `${entryPoint} requires "${pkg}" but the archive does not ship it — the server cannot start. Rebuild with \`frontmcp build --target mcpb\` so runtime packages are bundled`
+        : `${entryPoint} requires "${pkg}", which the archive does not ship and Node does not provide, so the server fails when it loads it. If it is a native addon, list it in build.dependencies.nativeAddons`,
+    );
+  }
+  for (const pkg of requires.lazy) {
+    result.warnings.push(
+      `${entryPoint} requires "${pkg}", which FrontMCP loads only when ${frontmcpLazyFeature(pkg)} is configured; list it in build.dependencies.nativeAddons if your server uses it`,
     );
   }
 }

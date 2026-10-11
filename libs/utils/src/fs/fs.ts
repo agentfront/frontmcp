@@ -365,12 +365,21 @@ export async function copyFile(src: string, dest: string): Promise<void> {
  *
  * @param src - Source path
  * @param dest - Destination path
- * @param options - Copy options
+ * @param options - Copy options; `dereference` copies the files symlinks point to instead of the links,
+ *   and `filter` returns false for a path to leave it (and, for a folder, its contents) out
  *
  * @example
  * await cp('/path/to/src', '/path/to/dest', { recursive: true });
  */
-export async function cp(src: string, dest: string, options?: { recursive?: boolean }): Promise<void> {
+export async function cp(
+  src: string,
+  dest: string,
+  options?: {
+    recursive?: boolean;
+    dereference?: boolean;
+    filter?: (source: string, destination: string) => boolean | Promise<boolean>;
+  },
+): Promise<void> {
   const fsp = getFsp();
   await fsp.cp(src, dest, options);
 }

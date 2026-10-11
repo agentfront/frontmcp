@@ -88,6 +88,12 @@ describe('frontmcp build --target mcpb', () => {
     });
   });
 
+  it('applies build.esbuild.define to the shipped server', async () => {
+    const source = await readArchiveEntry(getArchivePath(), 'server/index.js');
+    expect(source).toContain('"mcpb-define"');
+    expect(source).not.toContain('process.env.MCPB_BUILD_FLAVOR');
+  });
+
   it('ships a self-contained server (runtime packages inlined, no node_modules needed)', async () => {
     const source = await readArchiveEntry(getArchivePath(), 'server/index.js');
     expect(source).not.toMatch(/require\((["'])@frontmcp\/sdk\1\)/);
