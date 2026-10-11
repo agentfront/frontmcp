@@ -192,12 +192,12 @@ Nx caches build and test results. Subsequent runs for unchanged projects are ins
 
 FrontMCP auto-generates AI configuration files at the workspace root:
 
-| File           | Purpose                                  |
-| -------------- | ---------------------------------------- |
-| `CLAUDE.md`    | Instructions for Claude Code / Claude AI |
-| `AGENTS.md`    | Instructions for agent-based AI tools    |
-| `.mcp.json`    | MCP server configuration for AI IDEs     |
-| `.cursorrules` | Rules for Cursor AI editor               |
+| File           | Purpose                                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------------------------- |
+| `CLAUDE.md`    | Instructions for Claude Code / Claude AI                                                                   |
+| `AGENTS.md`    | Instructions for agent-based AI tools                                                                      |
+| `.mcp.json`    | MCP servers for AI IDEs: `frontmcp-docs`, FrontMCP's docs at `https://frontmcp.dev/mcp` (`"type": "http"`) |
+| `.cursorrules` | Rules for Cursor AI editor                                                                                 |
 
 These files are regenerated when you run generators or modify your workspace structure. They help AI tools understand your project layout and coding conventions.
 

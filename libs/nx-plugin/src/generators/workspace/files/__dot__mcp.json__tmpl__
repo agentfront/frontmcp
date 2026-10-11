@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "frontmcp-docs": {
-      "type": "url",
-      "url": "https://docs.agentfront.dev/mcp"
+      "type": "http",
+      "url": "https://frontmcp.dev/mcp"
     }
   }
 }
