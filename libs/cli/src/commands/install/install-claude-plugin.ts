@@ -16,12 +16,14 @@ import * as path from 'path';
 import { tryLoadFrontMcpConfig } from '../../config/frontmcp-config.loader';
 import { c } from '../../core/colors';
 import {
+  applyCommandOverride,
   emitClaudePlugin,
   emitCodexEntry,
   readInstalledPluginVersion,
   removeClaudePlugin,
   removeCodexEntry,
   type EmitClaudePluginOptions,
+  type McpInvocation,
   type PluginEmitterCommandInput,
   type PluginEmitterSkillInput,
 } from '../build/exec/cli-runtime/plugin-emitter';
@@ -188,6 +190,13 @@ async function getCliVersion(): Promise<string> {
   }
 }
 
+function resolveInvocation(projectMeta: ProjectMeta, opts: InstallOptions): McpInvocation {
+  const defaultArgs = ['serve', '--stdio'];
+  return opts.command
+    ? applyCommandOverride(opts.command, defaultArgs)
+    : { command: projectMeta.name, args: defaultArgs };
+}
+
 async function runClaudeInstall(args: {
   projectMeta: ProjectMeta;
   opts: InstallOptions;
@@ -196,13 +205,14 @@ async function runClaudeInstall(args: {
   commands: PluginEmitterCommandInput[];
 }): Promise<void> {
   const destRoot = resolveDestRoot(args.opts);
+  const invocation = resolveInvocation(args.projectMeta, args.opts);
   const emitOpts: EmitClaudePluginOptions = {
     destRoot,
     name: args.projectMeta.name,
     version: args.projectMeta.version,
     description: args.projectMeta.description,
-    mcpCommand: args.opts.command ?? args.projectMeta.name,
-    mcpArgs: ['serve', '--stdio'],
+    mcpCommand: invocation.command,
+    mcpArgs: invocation.args,
     envHints: args.opts.env ?? [],
     skills: args.skills,
     commands: args.commands,
@@ -263,14 +273,13 @@ async function runCodexInstall(args: {
 }): Promise<void> {
   void args.cliVersion;
   const configPath = path.join(os.homedir(), '.codex', 'config.toml');
-  const env: Record<string, string> = {};
-  for (const name of args.opts.env ?? []) env[name] = `\${${name}}`;
+  const invocation = resolveInvocation(args.projectMeta, args.opts);
   const result = await emitCodexEntry({
     configPath,
     name: args.projectMeta.name,
-    command: args.opts.command ?? args.projectMeta.name,
-    args: ['serve', '--stdio'],
-    env,
+    command: invocation.command,
+    args: invocation.args,
+    envVars: args.opts.env ?? [],
     dryRun: args.opts.dryRun,
   });
 
@@ -281,7 +290,7 @@ async function runCodexInstall(args: {
     return;
   }
 
-  process.stdout.write(c('green', `✓ Updated ${configPath} with [[mcp_servers]] entry for ${args.projectMeta.name}\n`));
+  process.stdout.write(c('green', `✓ Updated ${configPath} with [mcp_servers.${args.projectMeta.name}]\n`));
 }
 
 async function printStatus(projectMeta: ProjectMeta, opts: InstallOptions): Promise<void> {
@@ -343,7 +352,7 @@ export async function runUninstallCurrentProject(rawOpts: Record<string, unknown
     const configPath = path.join(os.homedir(), '.codex', 'config.toml');
     const result = await removeCodexEntry({ configPath, name: projectMeta.name });
     if (result.removed) {
-      process.stdout.write(c('green', `✓ Removed [[mcp_servers]] entry for ${projectMeta.name} from ${configPath}\n`));
+      process.stdout.write(c('green', `✓ Removed [mcp_servers.${projectMeta.name}] from ${configPath}\n`));
     } else {
       process.stdout.write(c('dim', `  codex: no entry for ${projectMeta.name} in ${configPath}\n`));
     }

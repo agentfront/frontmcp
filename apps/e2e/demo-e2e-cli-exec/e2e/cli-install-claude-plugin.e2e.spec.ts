@@ -9,11 +9,35 @@
  * from its sibling `bin-meta.json` + `_skills/` tree.
  */
 
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { ensureBuild, getDistDir, runCli } from './helpers/exec-cli';
+import { parse as parseToml } from 'smol-toml';
+
+import { McpClient, McpStdioClientTransport } from '@frontmcp/testing';
+
+import { ensureBuild, getCliBundlePath, getDistDir, runCli } from './helpers/exec-cli';
+
+interface InstalledPluginManifest {
+  name: string;
+  mcpServers: Record<string, { command: string; args: string[] }>;
+  skills: string[];
+  _meta: { frontmcp: { installedBy: string; binVersion: string; managedFiles: string[] } };
+}
+
+const FRONTMCP_CLI_VERSION = (
+  JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../../libs/cli/package.json'), 'utf8')) as {
+    version: string;
+  }
+).version;
+
+function readPluginManifest(destRoot: string, appName: string): InstalledPluginManifest {
+  return JSON.parse(
+    fs.readFileSync(path.join(destRoot, appName, '.claude-plugin', 'plugin.json'), 'utf8'),
+  ) as InstalledPluginManifest;
+}
 
 describe('cli-exec-demo install -p claude / -p codex (issue #411 follow-up)', () => {
   let claudeScope: string;
@@ -43,6 +67,7 @@ describe('cli-exec-demo install -p claude / -p codex (issue #411 follow-up)', ()
     const meta = JSON.parse(fs.readFileSync(path.join(getDistDir(), 'bin-meta.json'), 'utf8')) as {
       name: string;
       version: string;
+      frontmcpVersion: string;
       skills: Array<{
         name: string;
         description?: string;
@@ -53,6 +78,7 @@ describe('cli-exec-demo install -p claude / -p codex (issue #411 follow-up)', ()
     };
     expect(meta.name).toBe(appName);
     expect(typeof meta.version).toBe('string');
+    expect(meta.frontmcpVersion).toBe(FRONTMCP_CLI_VERSION);
     const skillNames = meta.skills.map((s) => s.name).sort();
     expect(skillNames).toEqual(expect.arrayContaining(['greeting-helper', 'math-helper']));
 
@@ -81,16 +107,13 @@ describe('cli-exec-demo install -p claude / -p codex (issue #411 follow-up)', ()
     expect(fs.existsSync(path.join(pluginDir, 'skills', 'greeting-helper', 'SKILL.md'))).toBe(true);
     expect(fs.existsSync(path.join(pluginDir, 'skills', 'math-helper', 'SKILL.md'))).toBe(true);
 
-    const manifest = JSON.parse(fs.readFileSync(path.join(pluginDir, '.claude-plugin', 'plugin.json'), 'utf8')) as {
-      name: string;
-      mcpServers: Record<string, { command: string; args: string[] }>;
-      skills: string[];
-      _meta: { frontmcp: { binVersion: string; managedFiles: string[] } };
-    };
+    const manifest = readPluginManifest(claudeScope, appName);
     expect(manifest.name).toBe(appName);
     expect(manifest.skills.sort()).toEqual(['greeting-helper', 'math-helper']);
-    expect(manifest.mcpServers[appName].command).toBe(appName);
-    expect(manifest.mcpServers[appName].args).toEqual(['serve', '--stdio']);
+    // Run as `node <bundle>` from dist/, so the entry restarts that same bundle by absolute path.
+    expect(path.isAbsolute(manifest.mcpServers[appName].command)).toBe(true);
+    expect(manifest.mcpServers[appName].args).toEqual([getCliBundlePath(), 'serve', '--stdio']);
+    expect(manifest._meta.frontmcp.installedBy).toBe(`frontmcp@${FRONTMCP_CLI_VERSION}`);
     expect(manifest._meta.frontmcp.managedFiles).toEqual(
       expect.arrayContaining(['skills/greeting-helper/SKILL.md', 'skills/math-helper/SKILL.md']),
     );
@@ -109,6 +132,63 @@ describe('cli-exec-demo install -p claude / -p codex (issue #411 follow-up)', ()
     expect(mathMd).toContain('name: math-helper');
     expect(mathMd).toContain('## Math Helper');
     expect(mathMd).toContain('Use the add tool to perform addition operations.');
+  });
+
+  it('the MCP entry written into plugin.json starts the server over stdio', async () => {
+    const { command, args } = readPluginManifest(claudeScope, appName).mcpServers[appName];
+    const transport = new McpStdioClientTransport({ command, args, env: { ...process.env } as Record<string, string> });
+    const client = new McpClient({ name: 'plugin-entry-check', version: '1.0.0' }, { capabilities: {} });
+    try {
+      await client.connect(transport);
+      const tools = await client.listTools();
+      expect(tools.tools.map((tool) => tool.name)).toContain('add');
+    } finally {
+      await client.close().catch(() => undefined);
+      await transport.close().catch(() => undefined);
+    }
+  }, 60000);
+
+  it('writes the bin name when the bin was started from a PATH directory', () => {
+    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-plugin-bin-'));
+    const destRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-plugin-path-'));
+    try {
+      fs.chmodSync(getCliBundlePath(), 0o755);
+      fs.symlinkSync(getCliBundlePath(), path.join(binDir, 'hd'));
+      execFileSync('hd', ['install', '-p', 'claude', '--dir', destRoot, '--only-mcp'], {
+        cwd: getDistDir(),
+        encoding: 'utf-8',
+        env: { ...process.env, NODE_ENV: 'test', PATH: `${binDir}${path.delimiter}${process.env['PATH'] ?? ''}` },
+      });
+      expect(readPluginManifest(destRoot, appName).mcpServers[appName]).toEqual(
+        expect.objectContaining({ command: 'hd', args: ['serve', '--stdio'] }),
+      );
+    } finally {
+      fs.rmSync(binDir, { recursive: true, force: true });
+      fs.rmSync(destRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('--command takes a program with its arguments', () => {
+    const destRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-plugin-command-'));
+    try {
+      const commandLine = `node "${getCliBundlePath()}" --stdio`;
+      const { exitCode } = runCli([
+        'install',
+        '-p',
+        'claude',
+        '--dir',
+        destRoot,
+        '--only-mcp',
+        '--command',
+        commandLine,
+      ]);
+      expect(exitCode).toBe(0);
+      expect(readPluginManifest(destRoot, appName).mcpServers[appName]).toEqual(
+        expect.objectContaining({ command: 'node', args: [getCliBundlePath(), '--stdio'] }),
+      );
+    } finally {
+      fs.rmSync(destRoot, { recursive: true, force: true });
+    }
   });
 
   it('install --status reports the plugin as installed for the matching scope', () => {
@@ -145,13 +225,70 @@ describe('cli-exec-demo install -p claude / -p codex (issue #411 follow-up)', ()
     expect(second.exitCode).toBe(0);
   });
 
-  it('install -p codex writes an [[mcp_servers]] block into HOME/.codex/config.toml', () => {
+  it('install -p codex --dry-run plans an [mcp_servers.<name>] table', () => {
     const { stdout, exitCode } = runCli(['install', '-p', 'codex', '--dry-run'], {
       HOME: codexHome,
     });
     expect(exitCode).toBe(0);
     expect(stdout).toContain('dry-run plan');
-    expect(stdout).toContain(`[[mcp_servers]]`);
-    expect(stdout).toContain(`name = "${appName}"`);
+    expect(stdout).toContain(`[mcp_servers.${appName}]`);
+    expect(stdout).not.toContain('[[mcp_servers]]');
+    expect(fs.existsSync(path.join(codexHome, '.codex', 'config.toml'))).toBe(false);
+  });
+
+  it('install -p codex repairs an older [[mcp_servers]] block and keeps the user servers; uninstall removes only its table', () => {
+    const codexConfig = path.join(codexHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(codexConfig), { recursive: true });
+    const userSettings = 'model = "o3"\n\n[mcp_servers.other]\ncommand = "other-server"\n';
+    const legacyBlock = [
+      `# frontmcp:codex-start:${appName}`,
+      '[[mcp_servers]]',
+      `name = "${appName}"`,
+      `command = "${appName}"`,
+      'args = ["serve", "--stdio"]',
+      `# frontmcp:codex-end:${appName}`,
+    ].join('\n');
+    fs.writeFileSync(codexConfig, `${userSettings}\n${legacyBlock}\n`);
+
+    const install = runCli(['install', '-p', 'codex', '--env', 'DESK_TOKEN'], { HOME: codexHome });
+    expect(install.exitCode).toBe(0);
+    expect(install.stdout).toContain(`[mcp_servers.${appName}]`);
+    const installed = parseToml(fs.readFileSync(codexConfig, 'utf8'));
+    expect(installed['model']).toBe('o3');
+    expect(installed['mcp_servers']).toEqual({
+      other: { command: 'other-server' },
+      [appName]: {
+        command: expect.any(String),
+        args: [getCliBundlePath(), 'serve', '--stdio'],
+        env_vars: ['DESK_TOKEN'],
+      },
+    });
+
+    const reinstall = runCli(['install', '-p', 'codex', '--env', 'DESK_TOKEN'], { HOME: codexHome });
+    expect(reinstall.exitCode).toBe(0);
+    expect(parseToml(fs.readFileSync(codexConfig, 'utf8'))['mcp_servers']).toEqual(installed['mcp_servers']);
+
+    const uninstall = runCli(['uninstall', '-p', 'codex'], { HOME: codexHome });
+    expect(uninstall.exitCode).toBe(0);
+    const remaining = fs.readFileSync(codexConfig, 'utf8');
+    expect(remaining.startsWith(userSettings)).toBe(true);
+    expect(parseToml(remaining)['mcp_servers']).toEqual({ other: { command: 'other-server' } });
+  });
+
+  it('install -p codex refuses to add a second table for a server configured by hand', () => {
+    const handHome = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-codex-hand-'));
+    try {
+      const codexConfig = path.join(handHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(codexConfig), { recursive: true });
+      const handWritten = `[mcp_servers.${appName}]\ncommand = "hand-written"\n`;
+      fs.writeFileSync(codexConfig, handWritten);
+
+      const { exitCode, stderr } = runCli(['install', '-p', 'codex'], { HOME: handHome });
+      expect(exitCode).toBe(1);
+      expect(stderr).toContain(`already defines [mcp_servers.${appName}] outside the frontmcp markers`);
+      expect(fs.readFileSync(codexConfig, 'utf8')).toBe(handWritten);
+    } finally {
+      fs.rmSync(handHome, { recursive: true, force: true });
+    }
   });
 });

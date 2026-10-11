@@ -567,6 +567,25 @@ describe('generateCliEntry', () => {
       const source = generateCliEntry(makeOptions({ authRequired: false }));
       expect(source).not.toContain('credBlob');
       expect(source).not.toContain('authToken');
+      expect(source).not.toContain('Not logged in');
+    });
+
+    it('refuses to connect without a stored credential, before trying the daemon', () => {
+      const source = generateCliEntry(makeOptions({ authRequired: true }));
+      const getClient = source.slice(source.indexOf('async function getClient()'), source.indexOf('async function closeClient()'));
+      const guardIdx = getClient.indexOf('if (!credBlob || !credBlob.token)');
+      expect(guardIdx).toBeGreaterThan(-1);
+      expect(getClient).toContain(
+        `throw new Error('Not logged in. Run "' + APP_NAME + ' login" or "' + APP_NAME + ' connect --token <token>" first.');`,
+      );
+      expect(guardIdx).toBeLessThan(getClient.indexOf("require('./daemon-client')"));
+    });
+
+    it('sends the stored token on the daemon path and the in-process path alike', () => {
+      const source = generateCliEntry(makeOptions({ authRequired: true }));
+      expect(source).toContain('daemonClient.createDaemonClient(socketPath, { authToken: credBlob.token })');
+      expect(source).toContain("var connectOpts = { authToken: credBlob.token, mode: 'cli' };");
+      expect(source).toContain('_client = await connect(configOrClass, connectOpts);');
     });
   });
 
@@ -1360,10 +1379,39 @@ describe('generateCliEntry — install -p claude|codex (issue #411)', () => {
     expect(source).toMatch(/Unknown provider/);
   });
 
-  it('emits a runtime placeholder like ${NAME} for --env entries', () => {
+  it('forwards --env names to Codex as env_vars instead of literal ${NAME} values', () => {
     const source = generateCliEntry(makeOptions());
-    // The GENERATION-time concat produces a runtime string literal `${NAME}`.
-    expect(source).toContain("'${' + envList[ei] + '}'");
+    expect(source).toContain('envVars: Array.isArray(opts.env) ? opts.env : []');
+    expect(source).not.toContain("'${' + envList[ei] + '}'");
+  });
+
+  it('records the frontmcp version from bin-meta.json as installedBy, not the bin package version', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain("var cliVersion = meta.frontmcpVersion || '0.0.0';");
+    expect(source).not.toContain("pathMod.join(__dirname, '..', '..', 'package.json')");
+  });
+
+  it('resolves the MCP server command from how the bin was started, or from --command', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain('emitter.applyCommandOverride(opts.command, meta.mcpDefault.args)');
+    expect(source).toContain('emitter.resolveSelfInvocation({');
+    expect(source).toContain('invokedPath: process.argv[1]');
+    expect(source).toContain('scriptPath: __filename,');
+    expect(source).toContain('mcpCommand: invocation.command,');
+    expect(source).toContain('command: invocation.command,');
+    expect(source).not.toContain('meta.mcpDefault.command');
+  });
+
+  it('passes no script path for a single executable, which re-runs itself', () => {
+    const source = generateCliEntry(makeOptions({ selfContained: true }));
+    expect(source).toContain('scriptPath: undefined,');
+  });
+
+  it('names the Codex table it writes and removes', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain("'✓ Updated ' + codexConfig + ' with [mcp_servers.' + meta.name + ']'");
+    expect(source).toContain("'✓ Removed [mcp_servers.' + meta.name + '] from ' + codexConfig");
+    expect(source).not.toContain('[[mcp_servers]]');
   });
 
   it('emits --status output that branches on installed/outdated/not installed', () => {

@@ -26,9 +26,10 @@ var http = require('http');
  * @param {string} socketPath - Path to the Unix socket file.
  * @param {string} method - JSON-RPC method name.
  * @param {object} [params] - Method parameters.
+ * @param {string} [authToken] - Bearer token sent as the Authorization header.
  * @returns {Promise<object>} Parsed JSON-RPC result.
  */
-function rpcCall(socketPath, method, params) {
+function rpcCall(socketPath, method, params, authToken) {
   return new Promise(function(resolve, reject) {
     var body = JSON.stringify({
       jsonrpc: '2.0',
@@ -37,14 +38,17 @@ function rpcCall(socketPath, method, params) {
       params: params || {}
     });
 
+    var headers = {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body)
+    };
+    if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+
     var req = http.request({
       socketPath: socketPath,
       path: '/mcp',
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body)
-      },
+      headers: headers,
       timeout: 10000
     }, function(res) {
       var chunks = [];
@@ -83,11 +87,13 @@ function rpcCall(socketPath, method, params) {
 /**
  * Create a daemon client that implements the same interface as DirectClient.
  * @param {string} socketPath - Path to the Unix socket file.
+ * @param {{ authToken?: string }} [options] - authToken is sent with every request.
  * @returns {object} Client object with MCP methods.
  */
-function createDaemonClient(socketPath) {
+function createDaemonClient(socketPath, options) {
+  var authToken = options && options.authToken;
   function call(method, params) {
-    return rpcCall(socketPath, method, params);
+    return rpcCall(socketPath, method, params, authToken);
   }
 
   return {
