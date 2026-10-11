@@ -135,6 +135,35 @@ describe('createEdgeMcp', () => {
     });
   });
 
+  it('serves the MCP Registry domain proof, server card and AI Catalog', async () => {
+    const publicKey = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=';
+    const listed = createEdgeMcp({
+      info: { name: 'worker-registry', version: '1.0.0' },
+      apps: [WorkerApp],
+      tasks: { enabled: false },
+      http: { entryPath: '/mcp' },
+      registry: { name: 'com.example/worker', description: 'A listed worker', publicKey },
+    });
+    const get = (path: string) => listed.fetch(new Request(`https://worker.example.com${path}`));
+
+    const proof = await get('/.well-known/mcp-registry-auth');
+    expect(proof.status).toBe(200);
+    expect(await proof.text()).toBe(`v=MCPv1; k=ed25519; p=${publicKey}`);
+
+    const card = await get('/mcp/server-card');
+    expect(card.headers.get('content-type')).toBe('application/mcp-server-card+json');
+    expect((await card.json()).remotes[0].url).toBe('https://worker.example.com/mcp');
+
+    const catalog = await (await get('/.well-known/ai-catalog.json')).json();
+    expect(catalog.entries).toEqual([
+      {
+        identifier: 'urn:air:example.com:mcp:worker',
+        type: 'application/mcp-server-card+json',
+        url: 'https://worker.example.com/mcp/server-card',
+      },
+    ]);
+  });
+
   it('exposes a Cron `scheduled` handler only in managed mode', () => {
     // Plain edge — no auto-update source, so no scheduled entrypoint.
     expect(worker.scheduled).toBeUndefined();

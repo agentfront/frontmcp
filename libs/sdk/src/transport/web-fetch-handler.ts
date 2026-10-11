@@ -275,9 +275,12 @@ function buildWebFetchHandler(
     return h;
   };
 
-  /** Reconstruct a Response with CORS headers merged in (preserves a streaming body). */
+  /**
+   * Reconstruct a Response with CORS headers merged in (preserves a streaming body). A response
+   * whose flow set its own CORS (the server card) keeps it, as on the Express host.
+   */
   const withCors = (response: Response, request: Request): Response => {
-    if (!corsEnabled) return response;
+    if (!corsEnabled || response.headers.has('access-control-allow-origin')) return response;
     const headers = new Headers(response.headers);
     for (const [k, v] of Object.entries(corsHeadersFor(request))) headers.set(k, v);
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });

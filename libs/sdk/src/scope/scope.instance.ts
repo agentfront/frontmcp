@@ -63,6 +63,7 @@ import { normalizeJob } from '../job/job.utils';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
+import { registerMcpRegistryFlows } from '../mcp-registry/mcp-registry-scope.helper';
 import { NotificationService } from '../notification';
 import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
@@ -1051,6 +1052,12 @@ export class Scope extends ScopeEntry {
       TasksCancelFlow,
       TasksListFlow,
     ]);
+
+    await registerMcpRegistryFlows({
+      flowRegistry: this.scopeFlows,
+      registryOptions: this.metadata.registry,
+      servesServerEndpoint: this.routeBase === '' && this.metadata.apps.length > 0,
+    });
 
     await this.auth.ready;
     await this.transportService.ready;

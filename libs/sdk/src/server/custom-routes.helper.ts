@@ -89,7 +89,7 @@ export class ReservedRouteCollisionError extends Error {
   ) {
     super(
       `Custom http.route "${method} ${path}" collides with the reserved FrontMCP path "${reserved}". ` +
-        `Reserved prefixes are the MCP entry path (and its /sse + /message siblings), ` +
+        `Reserved prefixes are the MCP entry path (and its /sse, /message and /server-card siblings), ` +
         `/oauth/*, /.well-known/*, /health, /metrics, and the health probe paths (/healthz, /readyz ` +
         `unless health.healthzPath / health.readyzPath move them). Choose a different path.`,
     );
@@ -101,7 +101,7 @@ export class ReservedRouteCollisionError extends Error {
  * Build the exact-match + prefix reserved-path set for the resolved MCP base.
  *
  * - Exact matches: the MCP base itself, `<base>/sse`, `<base>/message`,
- *   `/health`, `/metrics`, and the health probe paths the server answers.
+ *   `<base>/server-card`, `/health`, `/metrics`, and the health probe paths the server answers.
  * - Prefix matches: `/oauth`, `/.well-known` (any sub-path is reserved).
  */
 export function computeReservedPaths(
@@ -117,6 +117,7 @@ export function computeReservedPaths(
     mcpBase === '' ? '/' : mcpBase,
     `${mcpBase}/sse`,
     `${mcpBase}/message`,
+    `${mcpBase}/server-card`,
     '/health',
     '/metrics',
     ...healthPaths.map(normalizeForCompare),

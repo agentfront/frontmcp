@@ -82,6 +82,11 @@ describe('custom-routes.helper', () => {
       expect(exact.has('/mcp/message')).toBe(true);
     });
 
+    it('reserves the server card path next to the MCP endpoint', () => {
+      expect(computeReservedPaths('', '').exact.has('/server-card')).toBe(true);
+      expect(computeReservedPaths('/mcp', '').exact.has('/mcp/server-card')).toBe(true);
+    });
+
     it('reserves the health probe paths it is given (#819)', () => {
       const { exact } = computeReservedPaths('', '', ['/healthz', '/ready/']);
       expect(exact.has('/healthz')).toBe(true);
