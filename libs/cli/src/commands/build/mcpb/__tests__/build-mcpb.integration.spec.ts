@@ -221,7 +221,11 @@ describe('buildMcpb integration', () => {
         { name: 'demo-app', deployments: [{ target: 'mcpb', includeNodeModules: true }] },
       );
       const loggedLines = logSpy.mock.calls.map((call) => String(call[0]));
-      expect(loggedLines).toContainEqual(expect.stringContaining('includeNodeModules is deprecated and has no effect'));
+      expect(loggedLines).toContainEqual(
+        expect.stringContaining(
+          'includeNodeModules is deprecated and has no effect: server/index.js inlines its dependencies, and native addons listed in build.dependencies.nativeAddons ship in server/node_modules/',
+        ),
+      );
     } finally {
       logSpy.mockRestore();
     }

@@ -312,8 +312,9 @@ Selectors and constraints:
 - Which CLAUDE.md is updated (claude provider): without `--dir`, the one in the
   current directory. With a `--dir` that ends in `.claude/skills`, the one of the
   project that folder belongs to (two levels up), listing the skills in `--dir`.
-  For any other `--dir`, no CLAUDE.md is touched: the command prints the block to
-  add by hand. `--no-claude-md` skips both.
+  For any other `--dir`, including `~/.claude/skills` (user-level skills), no
+  CLAUDE.md is touched: the command prints the block to add by hand, naming the
+  resolved folder. `--no-claude-md` skips both.
 
 > **Tip:** This is the lightest path for shipping a project's own skills.
 > If you also want to ship slash commands, environment hints, and a

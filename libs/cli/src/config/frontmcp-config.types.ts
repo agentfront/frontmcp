@@ -345,7 +345,7 @@ export interface McpbDeployment extends DeploymentBase {
     /** Directory of pre-built cross-platform SEA binaries to merge. */
     mergeFrom?: string;
   };
-  /** @deprecated No effect: the server bundle inlines its runtime packages, so the archive never ships node_modules. */
+  /** @deprecated No effect: server/index.js inlines its dependencies, and native addons listed in build.dependencies.nativeAddons ship in server/node_modules/. */
   includeNodeModules?: boolean;
   /** Deterministic archive output. @default true */
   deterministic?: boolean;

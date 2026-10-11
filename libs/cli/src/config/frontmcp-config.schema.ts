@@ -390,7 +390,7 @@ export const mcpbDeploymentSchema = deploymentBaseSchema
     includeNodeModules: z.boolean().optional().meta({
       deprecated: true,
       description:
-        'No effect: the server bundle inlines its runtime packages, so the archive never ships node_modules.',
+        'No effect: server/index.js inlines its dependencies, and native addons listed in build.dependencies.nativeAddons ship in server/node_modules/.',
     }),
     deterministic: z.boolean().optional().describe('Produce byte-identical archives across builds (default true).'),
   })

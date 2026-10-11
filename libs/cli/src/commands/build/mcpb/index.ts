@@ -83,7 +83,7 @@ export async function buildMcpb(
   }
   if (mcpbDeployment?.includeNodeModules) {
     console.log(
-      `${c('yellow', '[build:mcpb]')} includeNodeModules is deprecated and has no effect: server/index.js inlines its runtime packages, so the archive never ships node_modules`,
+      `${c('yellow', '[build:mcpb]')} includeNodeModules is deprecated and has no effect: server/index.js inlines its dependencies, and native addons listed in build.dependencies.nativeAddons ship in server/node_modules/`,
     );
   }
 

@@ -77,6 +77,7 @@ describe('libs/cli/frontmcp.schema.json', () => {
     const userConfigEntry = mcpb.properties?.['userConfig']?.additionalProperties as JsonSchemaNode;
     expect(userConfigEntry.properties?.['env']?.['description']).toMatch(/UPPER_SNAKE_CASE/);
     expect(mcpb.properties?.['includeNodeModules']?.['deprecated']).toBe(true);
+    expect(mcpb.properties?.['includeNodeModules']?.['description']).toContain('native addons');
     expect(committed.properties?.['setup']?.properties?.['steps']).toBeDefined();
   });
 });
