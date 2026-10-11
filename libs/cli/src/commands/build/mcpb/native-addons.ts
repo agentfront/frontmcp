@@ -5,8 +5,8 @@
  *
  * Packages are resolved the way Node resolves them (the nearest
  * `node_modules/<name>` walking up), from their real path so pnpm and yarn
- * layouts find their dependencies too. A second version of a name already
- * placed at the top is nested under the package that needs it.
+ * layouts find their dependencies too. Listed addons take the top-level slots
+ * first; a second version of a name is nested under the package that needs it.
  */
 
 import * as path from 'path';
@@ -24,12 +24,17 @@ export interface CopiedPackage {
 interface PackageManifest {
   dependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
 }
 
 interface PlacedPackage {
+  addon: string;
   sourceDir: string;
   destDir: string;
 }
+
+const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/i;
 
 /** Real path of the package `name` as Node resolves it from `fromDir`, or undefined when it is not installed. */
 export async function resolvePackageDir(name: string, fromDir: string): Promise<string | undefined> {
@@ -43,57 +48,99 @@ export async function resolvePackageDir(name: string, fromDir: string): Promise<
   }
 }
 
+function dependenciesOf(manifest: PackageManifest | null): Array<{ name: string; required: boolean }> {
+  const optional = manifest?.optionalDependencies ?? {};
+  const optionalPeers = manifest?.peerDependenciesMeta ?? {};
+  return [
+    ...Object.keys(manifest?.dependencies ?? {})
+      .filter((name) => !(name in optional))
+      .map((name) => ({ name, required: true })),
+    ...Object.keys(manifest?.peerDependencies ?? {})
+      .filter((name) => !optionalPeers[name]?.optional)
+      .map((name) => ({ name, required: true })),
+    ...Object.keys(optional).map((name) => ({ name, required: false })),
+  ];
+}
+
 export async function copyNativeAddons(options: {
   addons: string[];
   projectDir: string;
   serverDir: string;
 }): Promise<CopiedPackage[]> {
   const topNodeModules = path.join(options.serverDir, 'node_modules');
-  const sourceByDest = new Map<string, string>();
-  const walkedDests = new Set<string>();
+  const destBySource = new Map<string, string>();
+  const occupiedDests = new Set<string>();
+  const walkedSources = new Set<string>();
   const copied: CopiedPackage[] = [];
 
-  async function copyOnce(name: string, sourceDir: string, dependent: PlacedPackage | undefined): Promise<string | undefined> {
-    const topDest = path.join(topNodeModules, name);
-    const placedAtTop = sourceByDest.get(topDest);
-    if (placedAtTop === sourceDir) return undefined;
-    const destDir = placedAtTop === undefined ? topDest : path.join(dependent?.destDir ?? options.serverDir, 'node_modules', name);
-    if (sourceByDest.get(destDir) === sourceDir) return undefined;
-    await cp(sourceDir, destDir, { recursive: true, dereference: true });
-    sourceByDest.set(destDir, sourceDir);
-    copied.push({ name, sourceDir, destDir });
-    return destDir;
+  function copiedLocation(sourceDir: string): string | undefined {
+    for (const [copiedSource, copiedDest] of destBySource) {
+      if (sourceDir === copiedSource) return copiedDest;
+      if (sourceDir.startsWith(copiedSource + path.sep)) {
+        return path.join(copiedDest, path.relative(copiedSource, sourceDir));
+      }
+    }
+    return undefined;
   }
 
-  async function place(name: string, addon: string, dependent: PlacedPackage | undefined, required: boolean): Promise<void> {
-    const sourceDir = await resolvePackageDir(name, dependent?.sourceDir ?? options.projectDir);
+  async function copyPackage(name: string, sourceDir: string, destDir: string): Promise<void> {
+    const relative = path.relative(topNodeModules, destDir);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error(`Refusing to copy "${name}" outside ${topNodeModules}.`);
+    }
+    await cp(sourceDir, destDir, {
+      recursive: true,
+      dereference: true,
+      filter: (source) => path.basename(source) !== '.git',
+    });
+    destBySource.set(sourceDir, destDir);
+    occupiedDests.add(destDir);
+    copied.push({ name, sourceDir, destDir });
+  }
+
+  async function walkDependencies(placed: PlacedPackage): Promise<void> {
+    if (walkedSources.has(placed.sourceDir)) return;
+    walkedSources.add(placed.sourceDir);
+    const manifest = await readJSON<PackageManifest>(path.join(placed.sourceDir, 'package.json'));
+    for (const { name, required } of dependenciesOf(manifest)) {
+      if (!PACKAGE_NAME_PATTERN.test(name)) {
+        throw new Error(`Native addon "${placed.addon}" depends on "${name}", which is not a valid package name.`);
+      }
+      const sourceDir = await resolvePackageDir(name, placed.sourceDir);
+      if (!sourceDir) {
+        if (!required) continue;
+        throw new Error(
+          `Native addon "${placed.addon}" depends on "${name}", which is not installed. Reinstall the project's dependencies.`,
+        );
+      }
+      let destDir = copiedLocation(sourceDir);
+      if (destDir === undefined) {
+        const topDest = path.join(topNodeModules, name);
+        destDir = occupiedDests.has(topDest) ? path.join(placed.destDir, 'node_modules', name) : topDest;
+        await copyPackage(name, sourceDir, destDir);
+      }
+      await walkDependencies({ addon: placed.addon, sourceDir, destDir });
+    }
+  }
+
+  const listed: PlacedPackage[] = [];
+  for (const addon of options.addons) {
+    if (!PACKAGE_NAME_PATTERN.test(addon)) {
+      throw new Error(`"${addon}" in build.dependencies.nativeAddons is not a valid package name.`);
+    }
+    const sourceDir = await resolvePackageDir(addon, options.projectDir);
     if (!sourceDir) {
-      if (!required) return;
       throw new Error(
-        dependent
-          ? `Native addon "${addon}" depends on "${name}", which is not installed. Reinstall the project's dependencies.`
-          : `Native addon "${name}" (build.dependencies.nativeAddons) is not installed under ${options.projectDir}/node_modules. Install it, or remove it from nativeAddons.`,
+        `Native addon "${addon}" (build.dependencies.nativeAddons) is not installed under ${options.projectDir}/node_modules. Install it, or remove it from nativeAddons.`,
       );
     }
-    const nestedInDependent = dependent !== undefined && sourceDir.startsWith(dependent.sourceDir + path.sep);
-    const destDir = nestedInDependent
-      ? path.join(dependent.destDir, path.relative(dependent.sourceDir, sourceDir))
-      : await copyOnce(name, sourceDir, dependent);
-    if (destDir === undefined || walkedDests.has(destDir)) return;
-    walkedDests.add(destDir);
-
-    const manifest = await readJSON<PackageManifest>(path.join(sourceDir, 'package.json'));
-    const placed = { sourceDir, destDir };
-    for (const dependency of Object.keys(manifest?.dependencies ?? {})) {
-      await place(dependency, addon, placed, true);
-    }
-    for (const dependency of Object.keys(manifest?.optionalDependencies ?? {})) {
-      await place(dependency, addon, placed, false);
-    }
+    const alreadyCopiedAt = copiedLocation(sourceDir);
+    const destDir = alreadyCopiedAt ?? path.join(topNodeModules, addon);
+    if (alreadyCopiedAt === undefined) await copyPackage(addon, sourceDir, destDir);
+    listed.push({ addon, sourceDir, destDir });
   }
-
-  for (const addon of options.addons) {
-    await place(addon, addon, undefined, true);
+  for (const placed of listed) {
+    await walkDependencies(placed);
   }
   return copied;
 }

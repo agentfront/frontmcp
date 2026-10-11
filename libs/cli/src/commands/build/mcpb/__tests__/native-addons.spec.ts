@@ -134,6 +134,64 @@ describe('native addons in an mcpb archive', () => {
     );
   });
 
+  it('copies required peer dependencies and skips optional ones that are not installed', async () => {
+    writePackage(path.join(projectDir, 'node_modules', 'addon'), {
+      name: 'addon',
+      peerDependencies: { 'peer-lib': '*', 'optional-peer': '*' },
+      peerDependenciesMeta: { 'optional-peer': { optional: true } },
+    });
+    writePackage(path.join(projectDir, 'node_modules', 'peer-lib'), { name: 'peer-lib' });
+
+    const copied = await copyNativeAddons({ addons: ['addon'], projectDir, serverDir });
+
+    expect(relativeDests(copied)).toEqual(['node_modules/addon', 'node_modules/peer-lib']);
+  });
+
+  it('keeps a listed addon at the top when another one carries a different version of it nested', async () => {
+    writePackage(path.join(projectDir, 'node_modules', 'x'), { name: 'x', dependencies: { d: '*' } });
+    writePackage(path.join(projectDir, 'node_modules', 'x', 'node_modules', 'd'), { name: 'd', dependencies: { e: '2' } });
+    writePackage(
+      path.join(projectDir, 'node_modules', 'x', 'node_modules', 'e'),
+      { name: 'e', version: '2.0.0' },
+      { 'only-in-e2.js': '' },
+    );
+    writePackage(path.join(projectDir, 'node_modules', 'e'), { name: 'e', version: '1.0.0' });
+
+    const copied = await copyNativeAddons({ addons: ['x', 'e'], projectDir, serverDir });
+
+    expect(relativeDests(copied)).toEqual(['node_modules/e', 'node_modules/x']);
+    const versionAt = (rel: string) =>
+      (JSON.parse(fs.readFileSync(path.join(serverDir, rel, 'package.json'), 'utf8')) as { version: string }).version;
+    expect(versionAt('node_modules/e')).toBe('1.0.0');
+    expect(fs.existsSync(path.join(serverDir, 'node_modules/e/only-in-e2.js'))).toBe(false);
+    expect(versionAt('node_modules/x/node_modules/e')).toBe('2.0.0');
+  });
+
+  it('refuses a dependency name that is not a package name, and writes nothing outside server/node_modules', async () => {
+    writePackage(path.join(projectDir, 'node_modules', 'addon'), { name: 'addon', dependencies: { '../../../escape': '*' } });
+    writePackage(path.join(projectDir, 'escape'), { name: 'escape' }, { 'secret.txt': 'x' });
+
+    await expect(copyNativeAddons({ addons: ['addon'], projectDir, serverDir })).rejects.toThrow(
+      'Native addon "addon" depends on "../../../escape", which is not a valid package name.',
+    );
+    expect(fs.existsSync(path.resolve(serverDir, 'node_modules', '../../../escape'))).toBe(false);
+  });
+
+  it('refuses a listed addon whose name is not a package name', async () => {
+    await expect(copyNativeAddons({ addons: ['../outside'], projectDir, serverDir })).rejects.toThrow(
+      '"../outside" in build.dependencies.nativeAddons is not a valid package name.',
+    );
+  });
+
+  it('leaves .git folders out of the copy', async () => {
+    writePackage(path.join(projectDir, 'node_modules', 'addon'), { name: 'addon' }, { '.git/config': '[core]', 'addon.node': 'binary' });
+
+    await copyNativeAddons({ addons: ['addon'], projectDir, serverDir });
+
+    expect(fs.existsSync(path.join(serverDir, 'node_modules/addon/addon.node'))).toBe(true);
+    expect(fs.existsSync(path.join(serverDir, 'node_modules/addon/.git'))).toBe(false);
+  });
+
   it('copies nothing when no addon is listed', async () => {
     expect(await copyNativeAddons({ addons: [], projectDir, serverDir })).toEqual([]);
     expect(fs.existsSync(path.join(serverDir, 'node_modules'))).toBe(false);
