@@ -462,6 +462,38 @@ describe('buildExec() integration', () => {
     });
   });
 
+  describe('build block of the deployments[] config shape', () => {
+    it('reaches the server bundle and the manifest', async () => {
+      mockLoadExecConfig.mockResolvedValue({
+        name: 'test-app',
+        version: '2.0.0',
+        build: {
+          esbuild: { external: ['left-external'], define: { 'process.env.FLAVOR': '"v1"' } },
+          dependencies: { nativeAddons: ['better-sqlite3'], system: ['ffmpeg'] },
+          storage: { type: 'sqlite', required: true },
+          network: { defaultPort: 8080 },
+        },
+      });
+
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        await buildExec({ outDir, cli: false } as any);
+
+        const bundledConfig = mockBundleWithEsbuild.mock.calls[0][2];
+        expect(bundledConfig.esbuild).toEqual({ external: ['left-external'], define: { 'process.env.FLAVOR': '"v1"' } });
+        expect(bundledConfig.dependencies?.nativeAddons).toEqual(['better-sqlite3']);
+        const manifest = JSON.parse(fs.readFileSync(path.join(outDir, 'test-app.manifest.json'), 'utf-8'));
+        expect(manifest.dependencies).toEqual({ system: ['ffmpeg'], nativeAddons: ['better-sqlite3'] });
+        expect(manifest.storage).toEqual({ type: 'sqlite', required: true });
+        expect(manifest.network.defaultPort).toBe(8080);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  });
+
   describe('compilation step', () => {
     it('should call runCmd for TypeScript compilation', async () => {
       const originalCwd = process.cwd();

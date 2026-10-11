@@ -108,6 +108,7 @@ frontmcp build --target vercel
 | `entry`       | string | No       | Custom entry file path                                                                                                              |
 | `deployments` | array  | Yes      | One or more deployment targets                                                                                                      |
 | `setup`       | object | No       | `{ steps: [...] }` install-time questionnaire: `frontmcp install` / `configure` for `node` and `cli`, MCPB `user_config` for `mcpb` |
+| `build`       | object | No       | Bundler and packaging options for every target that bundles with esbuild (see [Build Options](#build-options-build))                |
 
 ### Available Targets
 
@@ -144,6 +145,24 @@ wins), and an explicit `@FrontMcp()` value wins over both:
 `globalThis.FRONTMCP_BUILD_TARGET` for `availableWhen: { target }` (first one to run wins).
 An `mcpb` deployment's `env` is also written into the manifest's `mcp_config.env`, next to one
 variable per `userConfig` entry (see `build-for-mcpb`).
+
+### Build Options (`build`)
+
+The top-level `build` block applies to `node`, `cli` and `mcpb` (every target bundled with esbuild):
+
+| Field                       | Effect                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `esbuild.external`          | Packages left out of the bundle and `require()`d at run time                                                  |
+| `esbuild.define`            | Identifier replacements, e.g. `{ 'process.env.FLAVOR': '"prod"' }`                                            |
+| `esbuild.target`            | esbuild target (default `node22`)                                                                             |
+| `esbuild.minify`            | Minify the bundle                                                                                             |
+| `dependencies.nativeAddons` | Native addon packages (`.node` binaries): always kept external; the installer and `frontmcp install` add them |
+| `dependencies.system`       | System packages the installed app needs (recorded in the build manifest)                                      |
+| `storage`, `network`        | Storage type and network defaults recorded in the build manifest                                              |
+
+A self-contained bundle (an SEA binary, or the `mcpb` server) has nothing beside it to load packages from, so
+`esbuild.external` does not apply there; `define`, `target` and `minify` do. An `mcpb` archive ships each
+`nativeAddons` package with its dependencies in `server/node_modules/` (see `build-for-mcpb`).
 
 ### Server HTTP Options
 

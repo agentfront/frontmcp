@@ -64,23 +64,6 @@ export async function buildMcpb(
   const rawConfig = await loadExecConfig(cwd, { configPath: opts.config, configDir: opts.configDir });
   const execConfig = normalizeConfig(rawConfig);
 
-  // When a v1 frontmcp.config is present, its build.esbuild / build.dependencies
-  // win — the legacy loader returns the raw file without merging these.
-  if (configParsed?.build?.esbuild) {
-    execConfig.esbuild = {
-      ...(execConfig.esbuild ?? {}),
-      ...configParsed.build.esbuild,
-    };
-  }
-  if (configParsed?.build?.dependencies?.nativeAddons) {
-    execConfig.dependencies = {
-      ...(execConfig.dependencies ?? {}),
-      nativeAddons: [
-        ...(execConfig.dependencies?.nativeAddons ?? []),
-        ...configParsed.build.dependencies.nativeAddons,
-      ],
-    };
-  }
   if (configParsed?.nodeVersion) {
     execConfig.nodeVersion = configParsed.nodeVersion;
   }

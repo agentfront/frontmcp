@@ -47,7 +47,6 @@ export async function buildExec(
     cli?: boolean;
     sea?: boolean;
     execOverrides?: {
-      storage?: { type: 'sqlite' | 'redis' | 'none'; required?: boolean };
       cli?: CliTargetConfig;
       // #365 round-3 — top-level `nodeVersion` from new-shape frontmcp.config
       // gets forwarded here because the legacy `loadExecConfig` doesn't read
@@ -69,12 +68,9 @@ export async function buildExec(
   console.log(`${c('cyan', '[build:exec]')} Building executable bundle...`);
 
   // 1. Load config (and merge in overrides forwarded from frontmcp.config —
-  //    `build.storage`, `deployments[].cli.outputDefault`, etc.)
+  //    `deployments[].cli`, `nodeVersion`, etc.; `build` is mapped by normalizeConfig)
   const rawConfig = await loadExecConfig(cwd, { configPath: opts.config, configDir: opts.configDir });
   if (opts.execOverrides) {
-    if (opts.execOverrides.storage && !rawConfig.storage) {
-      rawConfig.storage = opts.execOverrides.storage;
-    }
     if (opts.execOverrides.cli) {
       const existing = rawConfig.cli;
       // CliConfig requires `enabled: boolean`; preserve any existing value or
