@@ -1,7 +1,7 @@
 /**
  * Storage Factory Tests
  */
-import { createStorage, createMemoryStorage, getDetectedStorageType } from '../factory';
+import { createMemoryStorage, createStorage, getDetectedStorageType } from '../factory';
 
 jest.mock('../adapters/redis', () => ({
   RedisStorageAdapter: class {
@@ -10,6 +10,18 @@ jest.mock('../adapters/redis', () => ({
     }
   },
 }));
+
+/** The factory as a newly started process loads it, optionally in another runtime. */
+function freshFactory(runtimeContext?: { runtime: string }): typeof import('../factory') {
+  let factory: typeof import('../factory') | undefined;
+  jest.isolateModules(() => {
+    if (runtimeContext) jest.doMock('#runtime-context', () => ({ getRuntimeContext: () => runtimeContext }));
+    else jest.dontMock('#runtime-context');
+    factory = require('../factory');
+  });
+  if (!factory) throw new Error('the storage factory did not load');
+  return factory;
+}
 
 describe('Storage Factory', () => {
   // Store original env vars
@@ -209,12 +221,33 @@ describe('Storage Factory', () => {
       it('should warn in production when falling back to memory with auto detection', async () => {
         process.env['NODE_ENV'] = 'production';
 
-        const storage = await createStorage({ type: 'auto' });
+        const storage = await freshFactory().createStorage({ type: 'auto' });
 
         expect(consoleWarnSpy).toHaveBeenCalledWith(
           expect.stringContaining('Warning: No distributed storage backend detected in production'),
         );
 
+        await storage.disconnect();
+      });
+
+      it('warns once per process, not once per storage it creates', async () => {
+        process.env['NODE_ENV'] = 'production';
+        const factory = freshFactory();
+
+        const first = await factory.createStorage({ type: 'auto' });
+        const second = await factory.createStorage({ type: 'auto' });
+
+        expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+        await first.disconnect();
+        await second.disconnect();
+      });
+
+      it('does not warn in a browser, where no backend can be configured', async () => {
+        process.env['NODE_ENV'] = 'production';
+
+        const storage = await freshFactory({ runtime: 'browser' }).createStorage({ type: 'auto' });
+
+        expect(consoleWarnSpy).not.toHaveBeenCalled();
         await storage.disconnect();
       });
 
@@ -289,7 +322,7 @@ describe('Storage Factory', () => {
       process.env['NODE_ENV'] = 'production';
 
       // Production with no backend should warn but still work (uses memory)
-      const storage = await createStorage({ type: 'auto' });
+      const storage = await freshFactory().createStorage({ type: 'auto' });
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining('No distributed storage backend detected in production'),

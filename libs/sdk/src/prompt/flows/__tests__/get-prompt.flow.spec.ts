@@ -793,7 +793,7 @@ describe('GetPromptFlow', () => {
   });
 
   describe('logging behavior', () => {
-    it('should log when prompt is found', async () => {
+    it('logs a found prompt at verbose, not info (#824)', async () => {
       const promptRegistry = createMockPromptRegistry();
       const promptEntry = createMockPromptEntry('log-test', {
         name: 'log-test',
@@ -830,7 +830,8 @@ describe('GetPromptFlow', () => {
 
       await runFlow(input, deps);
 
-      expect(deps.mockLogger.info).toHaveBeenCalled();
+      expect(deps.mockLogger.verbose).toHaveBeenCalledWith('findPrompt: prompt "log-test" found');
+      expect(deps.mockLogger.info).not.toHaveBeenCalled();
     });
 
     it('should log warning when prompt not found', async () => {

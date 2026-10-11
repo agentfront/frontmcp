@@ -7,6 +7,7 @@ import {
   type ServerRequest,
   type ServerResponse,
 } from '../../common';
+import { servedHealthPaths } from '../../health/health.routes';
 import {
   assertNotReserved,
   computeReservedPaths,
@@ -79,6 +80,18 @@ describe('custom-routes.helper', () => {
       expect(exact.has('/mcp')).toBe(true);
       expect(exact.has('/mcp/sse')).toBe(true);
       expect(exact.has('/mcp/message')).toBe(true);
+    });
+
+    it('reserves the health probe paths it is given (#819)', () => {
+      const { exact } = computeReservedPaths('', '', ['/healthz', '/ready/']);
+      expect(exact.has('/healthz')).toBe(true);
+      expect(exact.has('/ready')).toBe(true);
+    });
+
+    it('reserves the probe paths the server answers, configured or default, only while health is on (#819)', () => {
+      expect(servedHealthPaths()).toEqual(['/healthz', '/readyz']);
+      expect(servedHealthPaths({ healthzPath: '/live', readyzPath: '/ready' })).toEqual(['/live', '/ready']);
+      expect(servedHealthPaths({ enabled: false })).toEqual([]);
     });
 
     it('reserves the split-by-app scope base (entryPath + routeBase)', () => {
@@ -229,7 +242,6 @@ describe('custom-routes.helper', () => {
       return {
         registerRoute: jest.fn(),
         registerMiddleware: jest.fn(),
-        enhancedHandler: jest.fn((h: unknown) => h),
         prepare: jest.fn(),
         getHandler: jest.fn(),
         start: jest.fn(),
@@ -350,6 +362,24 @@ describe('custom-routes.helper', () => {
           logger,
         }),
       ).toThrow(ReservedRouteCollisionError);
+    });
+
+    it('refuses a route on a health probe path before registering it (#819)', () => {
+      const server = makeServer();
+
+      expect(() =>
+        registerCustomHttpRoutes({
+          routes: [{ method: 'GET', path: '/healthz', handler: jest.fn() }],
+          server: server as never,
+          verifySession,
+          checkClientIp,
+          entryPath: '',
+          routeBase: '',
+          healthPaths: ['/healthz', '/readyz'],
+          logger,
+        }),
+      ).toThrow(ReservedRouteCollisionError);
+      expect(server.registerRoute).not.toHaveBeenCalled();
     });
   });
 });

@@ -38,6 +38,8 @@ export interface ResolvedSecureStore {
   scope: SecureStoreScope;
   ttlMs?: number;
   kind: SecureStoreBackendKind;
+  /** Closes the storage the factory opened for the backing; absent for a custom backend or a passed `storage`. */
+  close?: () => Promise<void>;
 }
 
 /**
@@ -156,5 +158,5 @@ export async function createSecureStore(options: CreateSecureStoreOptions): Prom
     logger,
   });
 
-  return { backend, scope, ttlMs, kind };
+  return { backend, scope, ttlMs, kind, ...(storage ? {} : { close: () => adapter.disconnect() }) };
 }

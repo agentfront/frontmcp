@@ -356,6 +356,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   /** Storage adapter backing the persistent stores (kept for disposal). */
   private storageAdapter?: StorageAdapter;
 
+  /** Closes each storage this instance opened (persistent, vault, replay guard, secure store), on scope dispose. */
+  private readonly storageClosers: Array<() => Promise<void>> = [];
+
   /**
    * Replay guard for incremental-authorization tickets (GHSA-2c4g-9c8x-6m8g).
    * Shares the persistent adapter when one is configured so the guard holds
@@ -546,6 +549,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       refreshSkewMs: this.providerRefreshSkewMs(),
     });
     this.consentStoreImpl = new InMemoryConsentStore();
+    this.scope.onDispose(() => this.releaseResources());
 
     // Local-AS DCR registry (#462). Seed any declarative `dcr.clients` so the
     // authorize/token flows accept those trusted clients without a DCR
@@ -677,6 +681,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     try {
       const adapter = await createTokenStorageAdapter(this.tokenStorage);
       this.storageAdapter = adapter;
+      this.storageClosers.push(() => adapter.disconnect());
+      this.disposeInMemoryStores();
 
       this.authorizationStoreImpl = new StorageAuthorizationStore(adapter);
       this.federatedSessionStoreImpl = new StorageFederatedAuthSessionStore(adapter);
@@ -796,6 +802,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     const pending = (async () => {
       const memory = new MemoryStorageAdapter();
       await memory.connect();
+      this.storageClosers.push(() => memory.disconnect());
       return memory;
     })();
     this.ticketReplayStorage = pending;
@@ -816,6 +823,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       // Memory default — a dedicated in-memory adapter for the vault.
       const memory = new MemoryStorageAdapter();
       await memory.connect();
+      this.storageClosers.push(() => memory.disconnect());
       storage = memory;
     }
 
@@ -903,6 +911,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       logger: this.logger.child('SecureStore'),
     });
     this.secureStoreBackendImpl = resolved.backend;
+    if (resolved.close) this.storageClosers.push(resolved.close);
 
     await this.providers.addDynamicProviders(
       createSecureStoreProviders({
@@ -918,6 +927,22 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     this.logger.debug(
       `SecureStore initialized (backing: ${resolved.kind}, scope: ${resolved.scope}); this.secureStore enabled`,
     );
+  }
+
+  /** Stop the in-memory stores' cleanup timers (they are replaced by persistent stores, or the scope is disposed). */
+  private disposeInMemoryStores(): void {
+    if (this.federatedSessionStoreImpl instanceof InMemoryFederatedAuthSessionStore) {
+      this.federatedSessionStoreImpl.dispose();
+    }
+    if (this.orchestratedTokenStoreImpl instanceof InMemoryOrchestratedTokenStore) {
+      this.orchestratedTokenStoreImpl.dispose();
+    }
+  }
+
+  /** Release what this instance started: the in-memory stores' timers and the storage it opened. */
+  private async releaseResources(): Promise<void> {
+    this.disposeInMemoryStores();
+    await Promise.allSettled(this.storageClosers.splice(0).map((close) => close()));
   }
 
   /**

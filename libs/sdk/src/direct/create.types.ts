@@ -93,7 +93,7 @@ export interface CreateConfig extends Omit<ServerConfigInput, CreateOwnedServerO
   /** Skills for multi-step task workflows */
   skills?: SkillType[];
 
-  /** Authentication configuration for the app */
+  /** Authentication configuration for the server (`@FrontMcp({ auth })`) */
   auth?: AuthOptionsInput;
 
   /** Job definitions for the app */

@@ -77,7 +77,12 @@ export abstract class JobEntry<
 
   abstract create(
     input: In,
-    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown; attempt?: number },
+    extra: {
+      authInfo: Partial<Record<string, unknown>>;
+      contextProviders?: unknown;
+      attempt?: number;
+      signal?: AbortSignal;
+    },
   ): JobContext<InSchema, OutSchema, In, Out>;
 
   abstract parseInput(input: unknown): In;

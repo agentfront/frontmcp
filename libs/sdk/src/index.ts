@@ -504,6 +504,10 @@ export type {
 export { create, clearCreateCache } from './direct';
 export type { CreateConfig } from './direct';
 
+// A custom HTTP host (`http.hostFactory`) extends HostServerAdapter; the web-fetch helpers take a Scope
+export { HostServerAdapter } from './server/adapters/base.host.adapter';
+export type { Scope } from './scope/scope.instance';
+
 // In-memory server for MCP SDK Client integration
 export { createInMemoryServer } from './transport';
 export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transport';

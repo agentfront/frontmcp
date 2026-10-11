@@ -21,5 +21,5 @@ export type { HealthScopeView } from './health.service';
 // ============================================
 // ROUTES
 // ============================================
-export { registerHealthRoutes, isReadyzEnabled } from './health.routes';
+export { registerHealthRoutes, isReadyzEnabled, servedHealthPaths } from './health.routes';
 export type { HealthRouteServer } from './health.routes';

@@ -5,7 +5,7 @@
  * segments included, or a flow such as `/oauth/provider/:providerId/callback`
  * is unreachable there.
  */
-import { matchMountedPath } from '../flow.http-path';
+import { matchMountedPath, matchRoutePath } from '../flow.http-path';
 
 describe('matchMountedPath', () => {
   describe('literal paths (unchanged from the prefix match)', () => {
@@ -67,5 +67,32 @@ describe('matchMountedPath', () => {
     it('captures several parameters', () => {
       expect(matchMountedPath('/a/:first/b/:second', '/a/1/b/2')).toEqual({ first: '1', second: '2' });
     });
+  });
+});
+
+describe('matchRoutePath (#819)', () => {
+  it('matches the whole path, not a prefix', () => {
+    expect(matchRoutePath('/files', '/files')).toEqual({});
+    expect(matchRoutePath('/files', '/files/report.pdf')).toBeUndefined();
+    expect(matchRoutePath('/files/report.pdf', '/files')).toBeUndefined();
+  });
+
+  it('ignores a trailing slash on either side', () => {
+    expect(matchRoutePath('/files/', '/files')).toEqual({});
+    expect(matchRoutePath('/files', '/files/')).toEqual({});
+    expect(matchRoutePath('/', '/')).toEqual({});
+  });
+
+  it('captures and percent-decodes :name segments', () => {
+    expect(matchRoutePath('/files/:id/versions/:version', '/files/a%20b/versions/2')).toEqual({
+      id: 'a b',
+      version: '2',
+    });
+  });
+
+  it('does not match an empty parameter, malformed percent-encoding or another literal', () => {
+    expect(matchRoutePath('/files/:id', '/files/')).toBeUndefined();
+    expect(matchRoutePath('/files/:id', '/files/%E0%A4%A')).toBeUndefined();
+    expect(matchRoutePath('/files/:id', '/folders/1')).toBeUndefined();
   });
 });
