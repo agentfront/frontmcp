@@ -55,6 +55,9 @@ function injectInto(file) {
   if (original.includes(MARKER)) {
     return false; // already injected
   }
+  if (!original.includes('__require')) {
+    return false; // no require() to back, so the module stays free of top-level side effects
+  }
   fs.writeFileSync(file, BANNER + original, 'utf8');
   return true;
 }

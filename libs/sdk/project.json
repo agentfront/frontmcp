@@ -99,14 +99,14 @@
         "outputPath": "libs/sdk/dist/browser",
         "main": "libs/sdk/src/index.ts",
         "tsConfig": "libs/sdk/tsconfig.lib.json",
-        "format": ["esm", "cjs"],
+        "format": ["cjs"],
         "declaration": false,
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
         "skipTypeCheck": true,
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
+          "outExtension": { ".js": ".cjs" },
           "conditions": ["browser"],
           "external": [
             "@frontmcp/sdk",
@@ -134,9 +134,19 @@
         }
       }
     },
+    "build-browser-esm": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-browser"],
+      "cache": true,
+      "inputs": ["production", "^production", "{workspaceRoot}/scripts/build-browser-modules.mjs"],
+      "outputs": ["{projectRoot}/dist/browser/**/*.mjs"],
+      "options": {
+        "command": "node scripts/build-browser-modules.mjs libs/sdk/src/index.ts libs/sdk/dist/browser libs/sdk/tsconfig.lib.json"
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-cjs", "build-esm", "build-browser"],
+      "dependsOn": ["build-cjs", "build-esm", "build-browser", "build-browser-esm"],
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/sdk/dist/package.json",
