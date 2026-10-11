@@ -1,7 +1,8 @@
 ---
 name: frontmcp-deployment
 description: 'Use when deploying, building for production, packaging, or shipping a FrontMCP server. Covers build targets (node, cli SEA binary, browser, embeddable SDK, mcpb archive for Claude Desktop, serverless) and deploying to Vercel (with Vercel KV), AWS Lambda (API Gateway, SAM, CDK), Cloudflare Workers (KV, D1, Durable Objects, v1.3 skills-only), and Node (multi-stage Docker, docker-compose, PM2, nginx). Also the frontmcp.deploy.yaml manifest plus GitHub Action push-resync, MCP client integration / .mcp.json for Claude Desktop, Claude Code, Cursor, and VS Code over stdio or HTTP, MCP protocol revisions (serving 2026-07-28 alongside 2024-11-05 through 2025-11-25), and listing a server in the MCP Registry (domain proof, SEP-2127 server card, AI Catalog). Triggers: deploy, build for production, dockerize, containerize, serverless, edge runtime, go live, ship it.'
-tags: [router, deployment, node, vercel, lambda, cloudflare, cli, browser, sdk, guide, protocol, mcp-20260728, mcp-registry]
+tags:
+  [router, deployment, node, vercel, lambda, cloudflare, cli, browser, sdk, guide, protocol, mcp-20260728, mcp-registry]
 category: deployment
 targets: [all]
 bundle: [recommended, minimal, full]
@@ -68,7 +69,7 @@ Entry point for deploying and building FrontMCP servers. This skill helps you ch
 | Configure Vercel-specific settings (vercel.json)  | `deploy-to-vercel-config`          | Vercel-specific configuration (vercel.json)                                                                                                      |
 | Connect MCP clients (Claude, Cursor, VS Code)     | `mcp-client-integration`           | Configure .mcp.json for stdio, HTTP, or Unix socket transport                                                                                    |
 | Serve or consume MCP protocol `2026-07-28`        | `protocol-versions`                | Stateless requests, `server/discover`, mirrored headers, MRTR, tasks extension, and the `McpStatelessClient`                                     |
-| List the server in the MCP Registry               | `list-in-mcp-registry`             | `@FrontMcp({ registry })`: domain proof, SEP-2127 server card and AI Catalog; `frontmcp registry keygen` / `publish` |
+| List the server in the MCP Registry               | `list-in-mcp-registry`             | `@FrontMcp({ registry })`: domain proof, SEP-2127 server card and AI Catalog; `frontmcp registry keygen` / `publish` / `status`                  |
 
 ### CLI Commands for Deployment and Operations
 
@@ -93,6 +94,9 @@ Beyond `frontmcp build`, the CLI provides commands for the full deployment lifec
 | `frontmcp doctor`            | Check Node.js/npm versions and tsconfig requirements                                                                                                                                                                                                                                                                                                                                                                 |
 | `frontmcp inspector`         | Launch MCP Inspector for debugging                                                                                                                                                                                                                                                                                                                                                                                   |
 | `frontmcp init`              | Create or fix tsconfig.json for FrontMCP (edits in place, keeps comments; never overwrites a file it cannot parse or that declares a required option twice)                                                                                                                                                                                                                                                          |
+| `frontmcp registry keygen`   | Create the Ed25519 key for the MCP Registry's domain proof; prints `MCP_REGISTRY_PUBLIC_KEY` and the DNS TXT value                                                                                                                                                                                                                                                                                                   |
+| `frontmcp registry publish`  | Build and validate server.json, then log in and publish it to the MCP Registry (`--dry-run` previews)                                                                                                                                                                                                                                                                                                                |
+| `frontmcp registry status`   | Mark one version (`--server-version`) or every version (`--all-versions`) `active`, `deprecated` or `deleted`                                                                                                                                                                                                                                                                                                        |
 
 ## Target Comparison
 
