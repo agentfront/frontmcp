@@ -107,3 +107,12 @@ describe('machine-id deployment awareness', () => {
     expect(getMachineId()).toBe('explicit-wins');
   });
 });
+
+describe('getHostname', () => {
+  it("returns this host's name on Node", async () => {
+    const { getHostname } = await import('../machine-id');
+    const os = await import('node:os');
+
+    expect(getHostname()).toBe(os.hostname());
+  });
+});

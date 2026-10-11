@@ -32,6 +32,9 @@ export interface TaskStore {
    */
   create(record: TaskRecord): Promise<void>;
 
+  /** Atomically persist the record unless its owner already has `maxActive` unfinished tasks; `false` writes nothing. */
+  createWithinLimit(record: TaskRecord, maxActive: number): Promise<boolean>;
+
   /**
    * Fetch a task record. Returns `null` if:
    *  - the task does not exist

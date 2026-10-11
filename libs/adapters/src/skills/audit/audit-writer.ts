@@ -135,6 +135,10 @@ export const SKILL_AUDIT_ERROR_MESSAGE_MAX = 500;
  */
 export const SKILL_AUDIT_QUEUE_MAX = 1000;
 
+/** HKDF info and length of the subject-hash key a signer derives. */
+const SUBJECT_HASH_KEY_INFO = 'frontmcp:audit:subject';
+const SUBJECT_HASH_KEY_LENGTH = 32;
+
 /**
  * Options accepted by {@link SkillAuditWriter}. All fields optional — sane
  * defaults match the previous behavior except for `subjectMode`, which
@@ -143,14 +147,7 @@ export const SKILL_AUDIT_QUEUE_MAX = 1000;
 export interface SkillAuditWriterOptions {
   /** See {@link SkillAuditSubjectMode}. Default: `'hash'`. */
   subjectMode?: SkillAuditSubjectMode;
-  /**
-   * Secret used for the subject HMAC when `subjectMode: 'hash'`. Hosts
-   * SHOULD pass a stable, host-managed key (typically the same audit
-   * secret you use for HS256 signing). When omitted, a deterministic key
-   * is derived from the signer's keyId so subject hashes are stable
-   * within the process — but NOT across restarts unless the signer keyId
-   * is also stable.
-   */
+  /** HMAC key for `subjectMode: 'hash'`; unset, it is {@link SkillAuditSigner.deriveKey}'s, or subjects are `'redacted'`. */
   subjectHashSecret?: Uint8Array;
   /** See {@link SKILL_AUDIT_QUEUE_MAX}. Default: 1000. */
   maxQueueDepth?: number;
@@ -175,7 +172,7 @@ export class SkillAuditWriter {
   private queueDepth = 0;
 
   private readonly subjectMode: SkillAuditSubjectMode;
-  private readonly subjectHashSecret: Uint8Array;
+  private readonly subjectHashKey?: Uint8Array;
   private readonly maxQueueDepth: number;
 
   constructor(
@@ -186,7 +183,17 @@ export class SkillAuditWriter {
     options: SkillAuditWriterOptions = {},
   ) {
     this.subjectMode = options.subjectMode ?? 'hash';
-    this.subjectHashSecret = options.subjectHashSecret ?? this.deriveDefaultSubjectSecret();
+    if (this.subjectMode === 'hash') {
+      this.subjectHashKey =
+        options.subjectHashSecret ?? signer.deriveKey?.(SUBJECT_HASH_KEY_INFO, SUBJECT_HASH_KEY_LENGTH);
+      if (!this.subjectHashKey) {
+        logger.warn(
+          `[skill-audit] subjectMode 'hash' needs a key, and the signer (keyId "${signer.getKeyId()}") has no key ` +
+            "material to derive one from, so subjects are recorded as 'redacted'. Set " +
+            'skillsConfig.audit.subjectHashSecret to record subject hashes.',
+        );
+      }
+    }
     this.maxQueueDepth = options.maxQueueDepth ?? SKILL_AUDIT_QUEUE_MAX;
   }
 
@@ -366,7 +373,7 @@ export class SkillAuditWriter {
     // Sign. A signer failure is treated as audit-write failure — we do NOT
     // append an unsigned record because that would be undetectable later.
     // We try to roll back the sequence counter so we don't leave a permanent
-    // gap — see `tryDecrementSequence` for the best-effort caveats.
+    // gap — see `releaseUnusedSequence` for the best-effort caveats.
     let signed: SkillAuditRecord;
     try {
       const sig = this.signer.sign(linked);
@@ -379,7 +386,7 @@ export class SkillAuditWriter {
     } catch (e) {
       this.logger.warn(`[skill-audit] failed to sign record at seq=${sequence}: ${(e as Error).message}`);
       this.metrics?.incrementWriteFailure('sign');
-      await this.tryDecrementSequence(sequence);
+      await this.releaseUnusedSequence(sequence);
       return;
     }
 
@@ -390,65 +397,31 @@ export class SkillAuditWriter {
     } catch (e) {
       this.logger.warn(`[skill-audit] failed to append record at seq=${sequence}: ${(e as Error).message}`);
       this.metrics?.incrementWriteFailure('append');
-      await this.tryDecrementSequence(sequence);
+      await this.releaseUnusedSequence(sequence);
     }
   }
 
-  /**
-   * Best-effort sequence rollback. Storage adapters that support `decr` will
-   * close the gap; ones that don't are no-ops. We never throw out of this
-   * helper — a failed rollback is strictly worse than a permanent gap.
-   *
-   * Detection is duck-typed (we look at `.adapter.decr` and `.options.sequenceKey`)
-   * because the SkillAuditStore interface intentionally doesn't expose
-   * sequence-mutation methods — those are storage-specific implementation
-   * detail, and forcing every implementation to expose them would push the
-   * complexity onto every adapter even when the underlying store can't
-   * support transactional rollback.
-   */
-  private async tryDecrementSequence(allocated: number): Promise<void> {
-    const storeAny = this.store as unknown as {
-      adapter?: { decr?: (key: string) => Promise<number> };
-      options?: { sequenceKey?: string };
-    };
-    if (!storeAny.adapter || typeof storeAny.adapter.decr !== 'function') return;
-    const sequenceKey = storeAny.options?.sequenceKey ?? 'audit:skills:sequence';
+  /** Best-effort {@link SkillAuditStore.releaseSequence}; never throws, so a failed rollback leaves the gap. */
+  private async releaseUnusedSequence(allocated: number): Promise<void> {
+    if (!this.store.releaseSequence) return;
     try {
-      await storeAny.adapter.decr(sequenceKey);
+      await this.store.releaseSequence(allocated);
       this.logger.debug?.(`[skill-audit] rolled back unused sequence ${allocated}`);
     } catch {
-      // Swallow — not transactional, gap is acceptable.
+      // Not transactional: the gap stays.
     }
   }
 
   /** Apply the configured subject-mode redaction. */
   private applySubjectMode(subject: string): string {
     if (this.subjectMode === 'plain') return subject;
-    if (this.subjectMode === 'omit') return 'redacted';
+    if (this.subjectMode === 'omit' || !this.subjectHashKey) return 'redacted';
     // 'hash' — deterministic per-secret HMAC. Truncate to 32 hex chars
     // (16 bytes) so the on-disk footprint stays compact while keeping
     // collision probability negligible at any audit-log scale.
-    const mac = hmacSha256(this.subjectHashSecret, new TextEncoder().encode(subject));
+    const mac = hmacSha256(this.subjectHashKey, new TextEncoder().encode(subject));
     const hex = bytesToHex(mac);
     return `hashed:${hex.slice(0, 32)}`;
-  }
-
-  /**
-   * Default subject-hash secret derivation when the host doesn't supply one.
-   * Returns a deterministic 32-byte key seeded from the signer's keyId so
-   * two SkillAuditWriter instances configured against the same signer
-   * produce stable subject hashes — useful for joining records across
-   * writer reconfigurations within the same logical deployment. NOT a
-   * cryptographic key in its own right — the host SHOULD override via
-   * constructor options for production deployments.
-   */
-  private deriveDefaultSubjectSecret(): Uint8Array {
-    const key = new Uint8Array(32);
-    const seed = new TextEncoder().encode(`frontmcp:audit:subject:${this.signer.getKeyId()}`);
-    for (let i = 0; i < key.length; i++) {
-      key[i] = seed[i % seed.length] ?? 0;
-    }
-    return key;
   }
 
   /**

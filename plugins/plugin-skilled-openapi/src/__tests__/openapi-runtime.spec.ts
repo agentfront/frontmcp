@@ -436,15 +436,14 @@ describe('executeOperation — a passthrough caller token and the URL the reques
     expect(sent[0]?.headers?.get('Authorization')).toBe(`Bearer ${callerJwt}`);
   });
 
-  it('sends nothing when an id of ".." takes the request above the API the token was issued for', async () => {
-    // `/v1/../me` is `/me` once the URL is parsed, and `/me` is what fetch would request.
+  it('sends nothing when an id of ".." would take the request above the API the token was issued for', async () => {
+    // `/v1/../me` is `/me` once the URL is parsed, so the request builder refuses it before the token is checked.
     const { result, fetchImpl } = await call(passthroughEntry('/{id}/me'), '..');
 
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(result.ok).toBe(false);
     expect(result.error).toBe(
-      'auth resolution failed: passthrough caller token refused: the caller token was not issued for ' +
-        'http://localhost:9999/me (no resource or aud claim names it)',
+      "request build failed: Path parameter 'id' of operation 'createInvoice' cannot be '.' or '..'",
     );
   });
 

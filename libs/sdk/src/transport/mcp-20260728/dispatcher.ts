@@ -319,16 +319,18 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
       return { kind: 'error', status: 200, error: { code: -32602, message: ownership.reason } };
     }
 
+    const ownerAuthInfo = { ...(authInfo ?? {}), sessionId: ownership.owner };
     const outcome = await dispatchTasksMethod({
       scope,
       method,
       params,
       owner: ownership.owner,
+      authInfo: ownerAuthInfo,
       resume: (record) =>
         resumeTask({
           scope,
           record,
-          authInfo: { ...(authInfo ?? {}), sessionId: ownership.owner },
+          authInfo: ownerAuthInfo,
           clientCapabilities,
           frontmcpContext,
           clientDeclaredRevision,
