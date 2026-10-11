@@ -1,6 +1,10 @@
+// Streamed binary entries (`.node` files) — @frontmcp/utils only writes text.
+import { createWriteStream } from 'fs';
+import * as path from 'path';
+
 import type { Entry, ZipFile } from 'yauzl';
 
-import { readFileBuffer, sha256Hex } from '@frontmcp/utils';
+import { ensureDir, readFileBuffer, sha256Hex } from '@frontmcp/utils';
 
 const yauzl = require('yauzl') as typeof import('yauzl');
 
@@ -89,6 +93,38 @@ export function readArchiveEntry(archivePath: string, entryName: string): Promis
         });
       });
       zip.on('end', () => reject(new Error(`${entryName} not found in archive`)));
+      zip.on('error', reject);
+    });
+  });
+}
+
+/** Extract every file of a .mcpb archive into `destDir`, as an MCPB host does. */
+export function extractArchive(archivePath: string, destDir: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    yauzl.open(archivePath, { lazyEntries: true }, (err: Error | null, zip: ZipFile | undefined) => {
+      if (err || !zip) {
+        reject(err || new Error('yauzl returned no handle'));
+        return;
+      }
+      zip.readEntry();
+      zip.on('entry', (entry: Entry) => {
+        const target = path.join(destDir, entry.fileName);
+        zip.openReadStream(entry, (streamErr, stream) => {
+          if (streamErr || !stream) {
+            reject(streamErr || new Error(`Failed to open ${entry.fileName}`));
+            return;
+          }
+          ensureDir(path.dirname(target))
+            .then(() => {
+              const output = createWriteStream(target);
+              output.on('finish', () => zip.readEntry());
+              output.on('error', reject);
+              stream.pipe(output);
+            })
+            .catch(reject);
+        });
+      });
+      zip.on('end', () => resolve());
       zip.on('error', reject);
     });
   });

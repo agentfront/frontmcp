@@ -106,6 +106,71 @@ describe('validateMcpb', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('reports a bare require the archive cannot satisfy, such as an external native addon', async () => {
+    const archive = path.join(tmp, 'native-addon.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(baseManifest()),
+        'server/index.js': 'const Database = require("better-sqlite3-multiple-ciphers");',
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes('"better-sqlite3-multiple-ciphers"'))).toBe(true);
+  });
+
+  it('accepts built-ins, packages the archive ships, guarded optional peers, and require text inside strings', async () => {
+    const archive = path.join(tmp, 'resolvable.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(baseManifest()),
+        'server/index.js': [
+          'const fs = require("fs");',
+          'const path = require("node:path");',
+          'const addon = require("better-sqlite3-multiple-ciphers");',
+          'function loadObservability() { try { return require("@frontmcp/observability"); } catch { return undefined; } }',
+          `equal.code = 'require("ajv/dist/runtime/equal").default';`,
+        ].join('\n'),
+        'server/node_modules/better-sqlite3-multiple-ciphers/package.json': '{"name":"better-sqlite3-multiple-ciphers"}',
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("accepts the packages FrontMCP leaves external and loads only when configured, like storage-sqlite's better-sqlite3", async () => {
+    const archive = path.join(tmp, 'guarded.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(baseManifest()),
+        'server/index.js': [
+          'function loadBetterSqlite3() { return require("better-sqlite3"); }',
+          'function loadSqliteStorage() { return require("@frontmcp/storage-sqlite"); }',
+          'async function loadEnclave() { return import("@enclave-vm/core"); }',
+        ].join('\n'),
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('reports a server entry that is not valid JavaScript', async () => {
+    const archive = path.join(tmp, 'broken-entry.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(baseManifest()),
+        'server/index.js': 'const = require("x");',
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.startsWith('server/index.js could not be parsed'))).toBe(true);
+  });
+
   it('fails when manifest.json is missing', async () => {
     const archive = path.join(tmp, 'no-manifest.mcpb');
     await makeArchive({ 'server/index.js': 'hi' }, archive);

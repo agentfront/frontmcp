@@ -82,6 +82,7 @@ dist/mcpb/
       index.js                      # esbuild single-file CJS bundle
       package.json                  # minimal { type: "commonjs" } marker
       _skills/                      # when capabilities.skills
+      node_modules/                 # only build.dependencies.nativeAddons and their dependencies
     bin/                            # when --sea or --merge-from
       darwin/launch                 # picks darwin-arm64 or darwin-x64 by `uname -m`
       darwin-arm64/my-server
@@ -177,6 +178,34 @@ in the manifest.
 Unsupported: `showWhen` / `next` branching — MCPB forms are flat; the
 generator logs a warning and renders every step unconditionally.
 
+## Native Addons
+
+`server/index.js` inlines every package except native addons: a `.node` binary cannot be bundled. List each one in
+`build.dependencies.nativeAddons`, and the build copies it, with its binary and its dependencies, into
+`server/node_modules/`:
+
+```ts
+export default defineConfig({
+  name: 'my-server',
+  build: { dependencies: { nativeAddons: ['better-sqlite3'] } },
+  deployments: [{ target: 'mcpb' }],
+});
+```
+
+- Packages resolve the way Node resolves them (the nearest `node_modules`, following symlinks to their real location),
+  so npm, pnpm and yarn `node-modules` layouts all work. An addon that isn't installed fails the build and names it.
+- A native addon's `.node` binary is built for one OS **and** CPU architecture: an archive with native addons runs only
+  on the OS and architecture it was built on. The build prints both (`built for darwin-arm64`). MCPB's
+  `compatibility.platforms` can only express the OS, so the build sets it to the build OS when you haven't set it, and
+  warns when you list others. Build once per target (one archive per OS and architecture) to support more.
+- Native addons cannot be combined with `--sea`, `sea.enabled` or `sea.mergeFrom`: an SEA binary only loads Node
+  built-ins, so the build refuses the combination.
+- `build.esbuild.external` does not apply to the shipped server: anything left external would have nothing to load
+  from. Only `nativeAddons` are kept external, and the archive carries them.
+
+`frontmcp mcpb validate` checks the other side: every package `server/index.js` loads must be a Node built-in, an
+optional package FrontMCP loads behind a guard, or present under `server/node_modules/`.
+
 ## Cross-Platform Binaries
 
 Node SEA builds for the host OS/arch only. To ship a `.mcpb` that runs
@@ -230,6 +259,8 @@ lone macOS or Linux build supplies none.
 - [ ] `server.entry_point` matches the file present in the archive
 - [ ] Every `${user_config.KEY}` reference has a matching `user_config[KEY]`
 - [ ] No `${…}` substitutions outside the allow-list
+- [ ] With native addons: `compatibility.platforms` names the OS the archive was built on, and the archive is used on
+      that OS and architecture only
 
 **Install**
 
@@ -239,20 +270,24 @@ lone macOS or Linux build supplies none.
 
 ## Troubleshooting
 
-| Problem                                                                           | Cause                                                                                 | Solution                                                                                                                             |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `@frontmcp/sdk is required for schema extraction`                                 | SDK missing or externalized from bundle                                               | Ensure `@frontmcp/sdk` is installed                                                                                                  |
-| `… requires "@frontmcp/sdk" but the archive has no node_modules`                  | Server entry still `require()`s a runtime package                                     | Rebuild with `frontmcp build --target mcpb` so runtime packages are bundled; `validate` reports archives that are not self-contained |
-| `bin/… requires "reflect-metadata", which a single-executable binary cannot load` | SEA binary built with the runtime left external (dies with `No such built-in module`) | Rebuild with `frontmcp build --target mcpb --sea`                                                                                    |
-| Archive > 100 MB                                                                  | Large inlined dependencies or SEA binaries                                            | Tune `build.esbuild.external`, or drop `--sea`                                                                                       |
-| `includeNodeModules is deprecated and has no effect`                              | `includeNodeModules: true` in the deployment                                          | Remove it: `server/index.js` inlines its runtime packages, so the archive never ships `node_modules`                                 |
-| `userConfig "a" and "b" both map to the env var X`                                | Two entries derive the same UPPER_SNAKE_CASE name                                     | Set `env` on one of the entries                                                                                                      |
-| Server sees `${user_config.KEY}` as a value                                       | Optional entry with no default left blank by the user                                 | Give the entry a `default`, or treat that value as unset                                                                             |
-| `Unknown substitution variable` on validate                                       | Typo in `mcp_config.args` / `env`                                                     | Only `__dirname`, `HOME`, `DESKTOP`, `DOCUMENTS`, `DOWNLOADS`, `pathSeparator`, and declared `user_config` keys are allowed          |
-| `entry_point is not present in archive`                                           | Custom `--entry` flag or bundler moved the file                                       | Re-run without the override, or update the config's `entry`                                                                          |
-| Two builds produce different SHA-256                                              | `--no-deterministic` set, or inputs embed a changing timestamp                        | Restore deterministic mode; scan your sources for live date/time values                                                              |
-| `platform_overrides.{platform}.command` missing binary                            | `--merge-from` folders don't match MCPB platform keys                                 | See the expected layout below                                                                                                        |
-| `platform_overrides["darwin-arm64"] is never used`                                | Archive built before 1.9.2 keyed overrides by OS/arch, which hosts never match        | Rebuild; overrides are now keyed by OS                                                                                               |
+| Problem                                                                             | Cause                                                                                 | Solution                                                                                                                             |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `@frontmcp/sdk is required for schema extraction`                                   | SDK missing or externalized from bundle                                               | Ensure `@frontmcp/sdk` is installed                                                                                                  |
+| `… requires "@frontmcp/sdk" but the archive has no node_modules`                    | Server entry still `require()`s a runtime package                                     | Rebuild with `frontmcp build --target mcpb` so runtime packages are bundled; `validate` reports archives that are not self-contained |
+| `bin/… requires "reflect-metadata", which a single-executable binary cannot load`   | SEA binary built with the runtime left external (dies with `No such built-in module`) | Rebuild with `frontmcp build --target mcpb --sea`                                                                                    |
+| Archive > 100 MB                                                                    | Large inlined dependencies, native addons, or SEA binaries                            | Trim dependencies the server imports, or drop `--sea` (`build.esbuild.external` does not apply to the mcpb server)                   |
+| `Native addon "<name>" … is not installed`                                          | A `build.dependencies.nativeAddons` entry isn't in the project's `node_modules`       | Install it, or remove it from `nativeAddons` (Yarn PnP projects need `nodeLinker: node-modules`)                                     |
+| `An SEA binary can only load Node built-ins, so it cannot load the native addon(s)` | Native addons combined with `--sea` / `sea.enabled` / `sea.mergeFrom`                 | Build the mcpb without SEA binaries; hosts run the Node bundle with the shipped addons                                               |
+| `server/index.js requires "<pkg>", which the archive does not ship`                 | The server loads a package that is neither inlined nor in `server/node_modules/`      | If it is a native addon, list it in `build.dependencies.nativeAddons` and rebuild                                                    |
+| Addon fails to load on another machine (`invalid ELF header`, `wrong architecture`) | The archive was built on a different OS or CPU architecture                           | Build the archive on (or for) each target OS and architecture                                                                        |
+| `includeNodeModules is deprecated and has no effect`                                | `includeNodeModules: true` in the deployment                                          | Remove it: `server/index.js` inlines its runtime packages, so the archive never ships `node_modules`                                 |
+| `userConfig "a" and "b" both map to the env var X`                                  | Two entries derive the same UPPER_SNAKE_CASE name                                     | Set `env` on one of the entries                                                                                                      |
+| Server sees `${user_config.KEY}` as a value                                         | Optional entry with no default left blank by the user                                 | Give the entry a `default`, or treat that value as unset                                                                             |
+| `Unknown substitution variable` on validate                                         | Typo in `mcp_config.args` / `env`                                                     | Only `__dirname`, `HOME`, `DESKTOP`, `DOCUMENTS`, `DOWNLOADS`, `pathSeparator`, and declared `user_config` keys are allowed          |
+| `entry_point is not present in archive`                                             | Custom `--entry` flag or bundler moved the file                                       | Re-run without the override, or update the config's `entry`                                                                          |
+| Two builds produce different SHA-256                                                | `--no-deterministic` set, or inputs embed a changing timestamp                        | Restore deterministic mode; scan your sources for live date/time values                                                              |
+| `platform_overrides.{platform}.command` missing binary                              | `--merge-from` folders don't match MCPB platform keys                                 | See the expected layout below                                                                                                        |
+| `platform_overrides["darwin-arm64"] is never used`                                  | Archive built before 1.9.2 keyed overrides by OS/arch, which hosts never match        | Rebuild; overrides are now keyed by OS                                                                                               |
 
 Expected `--merge-from` layout (platform dirs must match MCPB platform keys):
 

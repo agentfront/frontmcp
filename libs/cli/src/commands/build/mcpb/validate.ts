@@ -12,15 +12,18 @@
  *   7. `manifest.icon` file exists when referenced
  *   8. No zip-slip (normalized entry names escaping the archive root)
  *   9. Warnings on large archives, absolute-path args, node_modules presence
- *  10. The server entry does not `require()` runtime packages that the archive
- *      does not ship (the archive has no node_modules, so it could not start)
+ *  10. Every package the server entry loads is a Node built-in, a guarded
+ *      optional package, or shipped under server/node_modules/ (else it fails
+ *      at that require())
  *  11. Neither does any SEA binary under `bin/` — an SEA binary resolves a bare
  *      `require()` against Node's built-in modules only (#679)
  */
 
 import * as fs from 'fs';
+import { isBuiltin } from 'module';
 import * as path from 'path';
 import type { Entry, ZipFile } from 'yauzl';
+import { GUARDED_OPTIONAL_PACKAGES } from '../exec/esbuild-bundler';
 import { mcpbManifestSchema, type McpbManifest, type McpbMcpConfig } from './manifest';
 import {
   ALLOWED_SUBSTITUTION_VARS,
@@ -181,13 +184,53 @@ export function createRuntimeRequireScanner(): { push(chunk: Buffer): void; foun
   };
 }
 
+const LOADING_IMPORT_KINDS = new Set(['require-call', 'dynamic-import', 'import-statement']);
+
+function packageNameOf(specifier: string): string {
+  const segments = specifier.split('/');
+  return specifier.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0];
+}
+
+/** Packages `source` loads that aren't Node built-ins, guarded optionals, or shipped under `server/node_modules/`. */
+export function findUnresolvedRequires(source: string, entries: string[]): string[] {
+  const esbuild = require('esbuild') as typeof import('esbuild');
+  const { metafile } = esbuild.buildSync({
+    stdin: { contents: source, loader: 'js' },
+    bundle: true,
+    write: false,
+    metafile: true,
+    platform: 'node',
+    format: 'cjs',
+    external: ['*'],
+    logLevel: 'silent',
+  });
+  const unresolved = new Set<string>();
+  for (const { path: specifier, kind } of metafile?.inputs['<stdin>']?.imports ?? []) {
+    if (!LOADING_IMPORT_KINDS.has(kind) || specifier.startsWith('.') || specifier.startsWith('/')) continue;
+    if (isBuiltin(specifier)) continue;
+    const pkg = packageNameOf(specifier);
+    if (GUARDED_OPTIONAL_PACKAGES.includes(pkg)) continue;
+    if (entries.some((entry) => entry.startsWith(`server/node_modules/${pkg}/`))) continue;
+    unresolved.add(pkg);
+  }
+  return [...unresolved];
+}
+
 function checkServerRuntime(entryPoint: string, archive: RawArchive, result: ValidateResult): void {
   const source = archive.serverFiles?.[entryPoint];
   if (source === undefined) return;
-  if (archive.entries.some((e) => e.startsWith('server/node_modules/'))) return;
-  for (const pkg of findRuntimeRequires(source)) {
+  let unresolved: string[];
+  try {
+    unresolved = findUnresolvedRequires(source, archive.entries);
+  } catch (err) {
+    result.errors.push(`${entryPoint} could not be parsed: ${(err as Error).message}`);
+    return;
+  }
+  for (const pkg of unresolved) {
     result.errors.push(
-      `${entryPoint} requires "${pkg}" but the archive has no node_modules — the server cannot start. Rebuild with \`frontmcp build --target mcpb\` so runtime packages are bundled`,
+      REQUIRED_INLINE_PACKAGES.includes(pkg)
+        ? `${entryPoint} requires "${pkg}" but the archive does not ship it — the server cannot start. Rebuild with \`frontmcp build --target mcpb\` so runtime packages are bundled`
+        : `${entryPoint} requires "${pkg}", which the archive does not ship and Node does not provide, so the server fails when it loads it. If it is a native addon, list it in build.dependencies.nativeAddons`,
     );
   }
 }

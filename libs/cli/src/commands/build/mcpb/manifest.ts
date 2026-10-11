@@ -22,6 +22,7 @@ import {
   DEFAULT_NODE_COMPAT,
   DEFAULT_PLATFORMS,
   MCPB_MANIFEST_VERSION,
+  type McpbOsKey,
 } from './constants';
 
 // ============================================
@@ -276,6 +277,8 @@ export interface GenerateMcpbManifestInput {
   userConfig: Record<string, McpbUserConfigEntry>;
   /** platform_overrides from binary.ts (may be empty). */
   platformOverrides?: Record<string, McpbMcpConfig>;
+  /** OS the copied native addon binaries were built for; the default for compatibility.platforms. */
+  nativeAddonPlatform?: McpbOsKey;
   /** Whether an icon was copied into the staged archive root. */
   hasIcon?: boolean;
   /** Tool name of the CLI version emitting this manifest (for _meta). */
@@ -293,6 +296,7 @@ export function generateMcpbManifest(input: GenerateMcpbManifestInput): McpbMani
     userConfig,
     userConfigEnv,
     platformOverrides,
+    nativeAddonPlatform,
     hasIcon,
     cliVersion,
   } = input;
@@ -318,7 +322,8 @@ export function generateMcpbManifest(input: GenerateMcpbManifestInput): McpbMani
     ...(deployment?.compatibility?.claude_desktop
       ? { claude_desktop: deployment.compatibility.claude_desktop }
       : {}),
-    platforms: deployment?.compatibility?.platforms ?? [...DEFAULT_PLATFORMS],
+    platforms:
+      deployment?.compatibility?.platforms ?? (nativeAddonPlatform ? [nativeAddonPlatform] : [...DEFAULT_PLATFORMS]),
     runtimes: {
       ...(deployment?.compatibility?.runtimes?.python
         ? { python: deployment.compatibility.runtimes.python }

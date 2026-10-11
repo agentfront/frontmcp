@@ -11,8 +11,8 @@ import * as os from 'os';
 import * as path from 'path';
 
 jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
   ensureDir: jest.fn().mockResolvedValue(undefined),
-  fileExists: jest.fn().mockResolvedValue(false),
   runCmd: jest.fn().mockResolvedValue(undefined),
 }));
 
@@ -228,6 +228,90 @@ describe('buildMcpb integration', () => {
     const validation = await validateMcpb(path.join(projectRoot, 'dist', 'mcpb', 'demo-app-1.2.3.mcpb'));
     expect(validation.errors).toEqual([]);
     expect(validation.entries?.some((entry) => entry.includes('node_modules'))).toBe(false);
+  });
+
+  describe('native addons listed in build.dependencies.nativeAddons', () => {
+    function writePackage(dir: string, manifest: Record<string, unknown>, files: Record<string, string> = {}): void {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(manifest));
+      for (const [rel, content] of Object.entries(files)) {
+        fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+        fs.writeFileSync(path.join(dir, rel), content);
+      }
+    }
+
+    function nativeAddonConfig(nativeAddons: string[]) {
+      return {
+        name: 'demo-app',
+        version: '1.2.3',
+        nodeVersion: '>=22.0.0',
+        deployments: [{ target: 'mcpb' as const }],
+        build: { dependencies: { nativeAddons } },
+      };
+    }
+
+    it('ships each addon with its .node binary and dependencies, built for this platform', async () => {
+      writePackage(
+        path.join(projectRoot, 'node_modules', 'fake-native-addon'),
+        { name: 'fake-native-addon', version: '1.0.0', dependencies: { 'fake-bindings': '^1.0.0' } },
+        { 'index.js': 'module.exports = require("fake-bindings")("addon");', 'build/Release/addon.node': 'binary' },
+      );
+      writePackage(path.join(projectRoot, 'node_modules', 'fake-bindings'), { name: 'fake-bindings', version: '1.0.0' }, { 'index.js': '' });
+      const config = nativeAddonConfig(['fake-native-addon']);
+      mockLoadExecConfig.mockResolvedValue(config);
+
+      await buildMcpb({ _: [], outDir: 'dist/mcpb' }, config);
+
+      const validation = await validateMcpb(path.join(projectRoot, 'dist', 'mcpb', 'demo-app-1.2.3.mcpb'));
+      expect(validation.errors).toEqual([]);
+      expect(validation.entries).toEqual(
+        expect.arrayContaining([
+          'server/node_modules/fake-native-addon/build/Release/addon.node',
+          'server/node_modules/fake-native-addon/index.js',
+          'server/node_modules/fake-bindings/package.json',
+        ]),
+      );
+      expect(validation.manifest?.compatibility?.platforms).toEqual([process.platform]);
+    });
+
+    it('refuses native addons together with an SEA build, before building anything', async () => {
+      const config = nativeAddonConfig(['fake-native-addon']);
+      mockLoadExecConfig.mockResolvedValue(config);
+      await expect(buildMcpb({ _: [], outDir: 'dist/mcpb', sea: true }, config)).rejects.toThrow(
+        'An SEA binary can only load Node built-ins, so it cannot load the native addon(s) fake-native-addon (build.dependencies.nativeAddons). Build the mcpb without --sea, sea.enabled and sea.mergeFrom.',
+      );
+      expect(mockBundleWithEsbuild).not.toHaveBeenCalled();
+    });
+
+    it('keeps platforms the deployment declares, warns about other OSes, and names the build platform and arch', async () => {
+      writePackage(path.join(projectRoot, 'node_modules', 'fake-native-addon'), { name: 'fake-native-addon' }, { 'addon.node': 'binary' });
+      const otherOs = process.platform === 'linux' ? 'win32' : 'linux';
+      const config = {
+        ...nativeAddonConfig(['fake-native-addon']),
+        deployments: [{ target: 'mcpb' as const, compatibility: { platforms: [otherOs] as Array<'darwin' | 'linux' | 'win32'> } }],
+      };
+      mockLoadExecConfig.mockResolvedValue(config);
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+      try {
+        await buildMcpb({ _: [], outDir: 'dist/mcpb' }, config);
+        const loggedLines = logSpy.mock.calls.map((call) => String(call[0]));
+        const builtFor = `${process.platform}-${process.arch}`;
+        expect(loggedLines).toContainEqual(expect.stringContaining(`this archive runs only on ${builtFor}`));
+        expect(loggedLines).toContainEqual(
+          expect.stringContaining(`compatibility.platforms lists ${otherOs}, but the native addon binaries only load on ${builtFor}`),
+        );
+      } finally {
+        logSpy.mockRestore();
+      }
+      const validation = await validateMcpb(path.join(projectRoot, 'dist', 'mcpb', 'demo-app-1.2.3.mcpb'));
+      expect(validation.manifest?.compatibility?.platforms).toEqual([otherOs]);
+    });
+
+    it('fails the build, naming the addon, when it is not installed', async () => {
+      const config = nativeAddonConfig(['not-installed-addon']);
+      mockLoadExecConfig.mockResolvedValue(config);
+      await expect(buildMcpb({ _: [], outDir: 'dist/mcpb' }, config)).rejects.toThrow(/not-installed-addon/);
+    });
   });
 
   it('produces deterministic archives across back-to-back builds', async () => {

@@ -34,6 +34,7 @@ import {
   type BinaryEntry,
 } from './binary';
 import { generateMcpbManifest, loadPackageJsonMeta, resolveIconPath } from './manifest';
+import { buildMachinePlatform, copyNativeAddons } from './native-addons';
 import { setupStepsToUserConfig } from './user-config';
 import { stageMcpbDirectory, writeManifest } from './stage';
 import { createDeterministicZip } from './zip';
@@ -74,6 +75,15 @@ export async function buildMcpb(
 
   console.log(`${c('cyan', '[build:mcpb]')} name: ${execConfig.name}`);
   console.log(`${c('cyan', '[build:mcpb]')} version: ${execConfig.version}`);
+  const seaRequested = !!(opts.sea || mcpbDeployment?.sea?.enabled);
+  const mergeFrom = opts.mergeFrom ?? mcpbDeployment?.sea?.mergeFrom;
+  const nativeAddons = execConfig.dependencies?.nativeAddons ?? [];
+  if (nativeAddons.length > 0 && (seaRequested || mergeFrom)) {
+    throw new Error(
+      `An SEA binary can only load Node built-ins, so it cannot load the native addon(s) ${nativeAddons.join(', ')} ` +
+        `(build.dependencies.nativeAddons). Build the mcpb without --sea, sea.enabled and sea.mergeFrom.`,
+    );
+  }
   if (mcpbDeployment?.includeNodeModules) {
     console.log(
       `${c('yellow', '[build:mcpb]')} includeNodeModules is deprecated and has no effect: server/index.js inlines its runtime packages, so the archive never ships node_modules`,
@@ -129,8 +139,6 @@ export async function buildMcpb(
   );
 
   // 6. SEA binaries (optional)
-  const seaRequested = !!(opts.sea || mcpbDeployment?.sea?.enabled);
-  const mergeFrom = opts.mergeFrom ?? mcpbDeployment?.sea?.mergeFrom;
   const binaries: BinaryEntry[] = [];
 
   if (seaRequested) {
@@ -214,6 +222,26 @@ export async function buildMcpb(
   if (stageResult.hasIcon) {
     console.log(`${c('green', '[build:mcpb]')} icon: ${iconAbs}`);
   }
+  const copiedPackages = await copyNativeAddons({
+    addons: nativeAddons,
+    projectDir: cwd,
+    serverDir: path.join(stageDir, 'server'),
+  });
+  if (copiedPackages.length > 0) {
+    const builtFor = `${process.platform}-${process.arch}`;
+    console.log(
+      `${c('green', '[build:mcpb]')} copied ${copiedPackages.length} package(s) for native addon(s) ${nativeAddons.join(', ')} to server/node_modules/`,
+    );
+    console.log(
+      `${c('yellow', '[build:mcpb]')} native addon binaries are built for ${builtFor}: this archive runs only on ${builtFor} (build once per OS and CPU architecture)`,
+    );
+    const otherPlatforms = (mcpbDeployment?.compatibility?.platforms ?? []).filter((os) => os !== process.platform);
+    if (otherPlatforms.length > 0) {
+      console.log(
+        `${c('yellow', '[build:mcpb]')} compatibility.platforms lists ${otherPlatforms.join(', ')}, but the native addon binaries only load on ${builtFor}`,
+      );
+    }
+  }
 
   // 9. Manifest
   const platformOverrides = buildPlatformOverrides(binaries);
@@ -233,6 +261,7 @@ export async function buildMcpb(
     userConfig,
     userConfigEnv,
     platformOverrides,
+    nativeAddonPlatform: copiedPackages.length > 0 ? buildMachinePlatform() : undefined,
     hasIcon: stageResult.hasIcon,
     cliVersion: getSelfVersion(),
   });
