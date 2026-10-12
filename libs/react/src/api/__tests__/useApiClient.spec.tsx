@@ -1,6 +1,8 @@
 import { act, render, renderHook } from '@testing-library/react';
 import React from 'react';
 
+import type { TextContent } from '@frontmcp/sdk';
+
 import { ComponentRegistry } from '../../components/ComponentRegistry';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
@@ -67,7 +69,7 @@ describe('useApiClient', () => {
         headers: { 'Content-Type': 'application/json' },
       });
 
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse((result.content[0] as TextContent).text);
       expect(parsed.status).toBe(200);
       expect(parsed.data).toEqual({ name: 'Alice' });
       expect(result.isError).toBe(false);

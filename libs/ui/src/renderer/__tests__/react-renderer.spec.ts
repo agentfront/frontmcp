@@ -2,7 +2,7 @@
  * React JSX Renderer Tests
  */
 
-import { ReactJsxRenderer, isReactJsx, parseImports, stripImports, rewriteExportDefault } from '../react';
+import { isReactJsx, parseImports, ReactJsxRenderer, rewriteExportDefault, stripImports } from '../react';
 
 describe('ReactJsxRenderer', () => {
   const renderer = new ReactJsxRenderer();
@@ -234,19 +234,19 @@ const App = () => <div />;`;
     it('should use default className', () => {
       const code = `function App() { return <div>Hello</div>; }\nexport default App;`;
       const element = renderer.render(code);
-      expect(element.props.className).toBe('fmcp-jsx-content');
+      expect((element.props as { className: string }).className).toBe('fmcp-jsx-content');
     });
 
     it('should use custom className', () => {
       const code = `function App() { return <div>Hello</div>; }\nexport default App;`;
       const element = renderer.render(code, { className: 'custom' });
-      expect(element.props.className).toBe('custom');
+      expect((element.props as { className: string }).className).toBe('custom');
     });
 
     it('should pass source as prop', () => {
       const code = `function App() { return <div>Hello</div>; }\nexport default App;`;
       const element = renderer.render(code);
-      expect(element.props.source).toBe(code);
+      expect((element.props as { source: string }).source).toBe(code);
     });
   });
 

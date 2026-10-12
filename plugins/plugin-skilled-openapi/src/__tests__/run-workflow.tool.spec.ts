@@ -322,7 +322,9 @@ describe('run_workflow — enclave sandbox unavailable', () => {
     // `@enclave-vm/core/worker` factory, which now throws (peer absent).
     jest.resetModules();
     mockEnclaveCoreThrows = true;
-    const { default: IsolatedTool } = await import('../tools/run-workflow.tool');
+    const { default: IsolatedTool } = (await import('../tools/run-workflow.tool.js')) as unknown as {
+      default: typeof RunWorkflowTool;
+    };
     // Re-importing gives the tool fresh DI token identities, so a key-matched
     // map would miss. The tool returns at the enclave-import catch BEFORE it
     // uses any of these singletons, so a permissive `get()` is enough — it just

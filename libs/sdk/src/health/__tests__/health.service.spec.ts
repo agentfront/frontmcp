@@ -69,7 +69,7 @@ describe('HealthService', () => {
     });
 
     it('should use "unknown" for missing server info', () => {
-      const service = new HealthService(defaultConfig, {});
+      const service = new HealthService(defaultConfig, {} as ConstructorParameters<typeof HealthService>[1]);
 
       const result = service.getHealthz();
 

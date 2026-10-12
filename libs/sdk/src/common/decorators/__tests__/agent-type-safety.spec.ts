@@ -47,7 +47,6 @@ class ValidAgentWithGuards extends AgentContext {
 // ── Invalid: concurrency typo ───────────────────────────────
 
 function _testInvalidConcurrency() {
-  // @ts-expect-error - decorator fails: invalid concurrency property cascades to unresolvable signature
   @Agent({
     name: 'bad-concurrency-agent',
     inputSchema: { topic: z.string() },

@@ -27,7 +27,7 @@ const CODECALL_TOOLS = [
   inputSchema: { status: z.string().optional() },
 })
 class SearchTickets extends ToolContext {
-  async execute() {
+  async execute(_input: { status?: string }) {
     return { tickets: [] as string[] };
   }
 }

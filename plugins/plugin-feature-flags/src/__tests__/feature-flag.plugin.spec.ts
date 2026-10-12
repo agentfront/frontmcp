@@ -36,7 +36,7 @@ describe('FeatureFlagPlugin', () => {
       const providers = FeatureFlagPlugin.dynamicProviders({
         adapter: 'static',
         flags: { 'flag-a': true, 'flag-b': false },
-      });
+      }) as ProviderEntry[];
 
       expect(providers.length).toBe(3); // adapter + config + accessor
       expect(await buildAdapter(providers)).toBeInstanceOf(StaticFeatureFlagAdapter);
@@ -46,7 +46,7 @@ describe('FeatureFlagPlugin', () => {
       const providers = FeatureFlagPlugin.dynamicProviders({
         adapter: 'static',
         flags: { 'flag-a': true },
-      });
+      }) as ProviderEntry[];
 
       const configProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagConfigToken);
       expect(configProvider).toBeDefined();
@@ -59,7 +59,7 @@ describe('FeatureFlagPlugin', () => {
       const providers = FeatureFlagPlugin.dynamicProviders({
         adapter: 'static',
         flags: {},
-      });
+      }) as ProviderEntry[];
 
       const accessorProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAccessorToken);
       expect(accessorProvider).toBeDefined();
@@ -70,7 +70,7 @@ describe('FeatureFlagPlugin', () => {
       const providers = FeatureFlagPlugin.dynamicProviders({
         adapter: 'splitio',
         config: { apiKey: 'test-key' },
-      });
+      }) as ProviderEntry[];
 
       const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
       expect(adapterProvider).toBeDefined();
@@ -82,7 +82,7 @@ describe('FeatureFlagPlugin', () => {
       const providers = FeatureFlagPlugin.dynamicProviders({
         adapter: 'launchdarkly',
         config: { sdkKey: 'sdk-test' },
-      });
+      }) as ProviderEntry[];
 
       const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
       expect(adapterProvider).toBeDefined();
@@ -93,7 +93,7 @@ describe('FeatureFlagPlugin', () => {
       const providers = FeatureFlagPlugin.dynamicProviders({
         adapter: 'unleash',
         config: { url: 'https://unleash.test', appName: 'test' },
-      });
+      }) as ProviderEntry[];
 
       const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
       expect(adapterProvider).toBeDefined();
@@ -112,7 +112,7 @@ describe('FeatureFlagPlugin', () => {
       const providers = FeatureFlagPlugin.dynamicProviders({
         adapter: 'custom',
         adapterInstance: customAdapter,
-      });
+      }) as ProviderEntry[];
 
       const scope = { onDispose: jest.fn() };
       const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
@@ -380,7 +380,7 @@ describe('FeatureFlagPlugin', () => {
       const providers = FeatureFlagPlugin.dynamicProviders({
         adapter: 'splitio',
         config: { apiKey: 'test' },
-      });
+      }) as ProviderEntry[];
       const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
       const adapter = await adapterProvider!.useFactory!(fakeScope);
       expect(adapter).toBeDefined();
@@ -403,7 +403,7 @@ describe('FeatureFlagPlugin', () => {
       const providers = FeatureFlagPlugin.dynamicProviders({
         adapter: 'launchdarkly',
         config: { sdkKey: 'test' },
-      });
+      }) as ProviderEntry[];
       const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
       const adapter = await adapterProvider!.useFactory!(fakeScope);
       expect(adapter).toBeDefined();
@@ -426,7 +426,7 @@ describe('FeatureFlagPlugin', () => {
       const providers = FeatureFlagPlugin.dynamicProviders({
         adapter: 'unleash',
         config: { url: 'https://test.com', appName: 'test' },
-      });
+      }) as ProviderEntry[];
       const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
       const adapter = await adapterProvider!.useFactory!(fakeScope);
       expect(adapter).toBeDefined();

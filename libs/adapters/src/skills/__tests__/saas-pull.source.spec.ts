@@ -2,6 +2,8 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import type { FrontMcpLogger } from '@frontmcp/sdk';
+
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import type { SaasSourceOptions } from '../source-options';
 import { SaasPullSource } from '../sources/saas-pull.source';
@@ -26,7 +28,7 @@ const fakeLogger = {
   debug: jest.fn(),
   verbose: jest.fn(),
   child: jest.fn().mockReturnThis(),
-} as unknown as never;
+} as unknown as FrontMcpLogger;
 
 // The pull token is verified against the SaaS's JWKS before every pull, so these
 // sources serve the issuer's JWKS and pull with a token it signed.

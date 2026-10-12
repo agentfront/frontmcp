@@ -1,15 +1,20 @@
 import 'reflect-metadata';
+
+import {
+  FrontMcpResource as Resource,
+  resource,
+  FrontMcpResourceTemplate as ResourceTemplate,
+} from '../../common/decorators/resource.decorator';
+import { ResourceKind, ResourceTemplateKind } from '../../common/records';
+import { FrontMcpResourceTemplateTokens, FrontMcpResourceTokens } from '../../common/tokens';
 import {
   collectResourceMetadata,
   collectResourceTemplateMetadata,
+  isResourceTemplate,
   normalizeResource,
   normalizeResourceTemplate,
-  isResourceTemplate,
   resourceDiscoveryDeps,
 } from '../resource.utils';
-import { Resource, ResourceTemplate, resource } from '../../common/decorators/resource.decorator';
-import { FrontMcpResourceTokens, FrontMcpResourceTemplateTokens } from '../../common/tokens';
-import { ResourceKind, ResourceTemplateKind } from '../../common/records';
 
 describe('Resource Utils', () => {
   describe('collectResourceMetadata', () => {

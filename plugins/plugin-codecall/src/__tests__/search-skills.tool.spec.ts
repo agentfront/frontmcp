@@ -1,6 +1,8 @@
 // file: libs/plugins/src/codecall/__tests__/search-skills.tool.spec.ts
 
-import type { SearchSkillsToolOutput } from '../tools/search-skills.schema';
+import type { z } from '@frontmcp/lazy-zod';
+
+import type { searchSkillsToolInputSchema, SearchSkillsToolOutput } from '../tools/search-skills.schema';
 import SearchSkillsTool from '../tools/search-skills.tool';
 
 // Mock the SDK — mirrors the pattern in search.tool.spec.ts.
@@ -66,10 +68,13 @@ function describeExecutable(): MockSearchResult['metadata'] {
   };
 }
 
+type SearchSkillsCallInput = z.input<z.ZodObject<typeof searchSkillsToolInputSchema>>;
+
 describe('SearchSkillsTool', () => {
-  let tool: SearchSkillsTool & {
+  let tool: Omit<SearchSkillsTool, 'scope' | 'execute'> & {
     setService: (token: unknown, service: unknown) => void;
     scope: { skills: { getExecutableSkills: jest.Mock; search: jest.Mock } };
+    execute(input: SearchSkillsCallInput): Promise<SearchSkillsToolOutput>;
   };
   let mockRegistry: { getExecutableSkills: jest.Mock; search: jest.Mock };
 
@@ -84,8 +89,8 @@ describe('SearchSkillsTool', () => {
     // Mirror search-knowledge.tool.spec.ts: the mocked ToolContext takes
     // no required args, so we can cast to a parameterless constructor and
     // avoid `any`. `scope` is injected matching the typed local.
-    type SearchSkillsToolCtor = new () => SearchSkillsTool;
-    tool = new (SearchSkillsTool as unknown as SearchSkillsToolCtor)() as typeof tool;
+    type SearchSkillsToolCtor = new () => typeof tool;
+    tool = new (SearchSkillsTool as unknown as SearchSkillsToolCtor)();
     tool.scope = { skills: mockRegistry };
   });
 

@@ -17,6 +17,7 @@ import {
   InMemoryAuthorizationStore,
   type DcrRegistryConfig,
   type InMemoryFederatedAuthSessionStore,
+  type LoginRenderContext,
 } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
@@ -43,6 +44,7 @@ import {
   HttpTextSchema,
   type FlowMetadata,
 } from '../../../common';
+import type { LocalPrimaryAuth } from '../../instances/instance.local-primary-auth';
 import OauthAuthorizeFlow from '../oauth.authorize.flow';
 
 // ============================================
@@ -736,7 +738,7 @@ describe('OAuth Authorize Flow', () => {
     });
 
     it('uses a full login.render override when provided', async () => {
-      const render = jest.fn(() => '<html><body>FULLY-CUSTOM-LOGIN</body></html>');
+      const render = jest.fn<string, [LoginRenderContext]>(() => '<html><body>FULLY-CUSTOM-LOGIN</body></html>');
       const scope = createMockScopeEntry({
         auth: { mode: 'local', login: { render } } as never,
       });
@@ -1108,7 +1110,7 @@ describe('OAuth Authorize Flow', () => {
       const state = flow.state.snapshot();
       expect(state.requiresFederatedLogin).toBe(true);
       // The pending record carries the real provider ids (not __parent__).
-      const store = scope.auth.authorizationStore as InMemoryAuthorizationStore;
+      const store = (scope.auth as LocalPrimaryAuth).authorizationStore as InMemoryAuthorizationStore;
       const pending = await store.getPendingAuthorization(state.pendingAuthId as string);
       expect(pending?.federatedLogin?.providerIds).toEqual(['github', 'slack']);
     });

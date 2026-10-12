@@ -135,7 +135,6 @@ describe('loadConfig — YAML with prototype keys', () => {
         '    polluted: true',
         '  value: kept',
       ].join('\n'),
-      'utf8',
     );
 
     // Capture the merged object BEFORE the schema sees it. `z.object` strips

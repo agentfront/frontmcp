@@ -5,7 +5,7 @@
  * advanced features, and error scenarios.
  */
 import { MemoryStorageAdapter } from '../adapters/memory';
-import { StorageNotConnectedError, StorageOperationError, StorageTTLError, StoragePatternError } from '../errors';
+import { StorageNotConnectedError, StorageOperationError, StoragePatternError, StorageTTLError } from '../errors';
 import { createNamespacedStorage, createRootStorage } from '../namespace';
 import type { NamespacedStorage } from '../types';
 
@@ -528,7 +528,7 @@ describe('Advanced Storage Tests', () => {
     });
 
     it('should handle concurrent set operations', async () => {
-      const operations = [];
+      const operations: Promise<void>[] = [];
       for (let i = 0; i < 100; i++) {
         operations.push(adapter.set(`key${i}`, `value${i}`));
       }
@@ -545,7 +545,7 @@ describe('Advanced Storage Tests', () => {
         await adapter.set(`key${i}`, `value${i}`);
       }
 
-      const operations = [];
+      const operations: Array<Promise<string | null | void>> = [];
 
       // Concurrent gets
       for (let i = 0; i < 50; i++) {
@@ -570,7 +570,7 @@ describe('Advanced Storage Tests', () => {
     it('should handle concurrent increment operations', async () => {
       await adapter.set('counter', '0');
 
-      const operations = [];
+      const operations: Promise<number>[] = [];
       for (let i = 0; i < 100; i++) {
         operations.push(adapter.incr('counter'));
       }

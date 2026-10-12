@@ -14,6 +14,8 @@
 import { ServerRequestTokens } from '../../../common';
 import { resolveStreamableHttpSession, syncStreamableHttpAuthorizationSession } from '../handle.streamable-http.flow';
 
+type StreamableHttpSession = Parameters<typeof syncStreamableHttpAuthorizationSession>[1];
+
 describe('HandleStreamableHttpFlow - parseInput session resolution', () => {
   describe('fresh initialize (no header, no auth session)', () => {
     it('should create new session when neither header nor auth session exist', () => {
@@ -56,7 +58,10 @@ describe('HandleStreamableHttpFlow - parseInput session resolution', () => {
     it('should respond 404 when the header differs from the verified session', () => {
       // An anonymous mode mints a fresh session when the presented id does not
       // decrypt under this deployment's secret; the raw header must not win.
-      const authSession = { id: 'freshly-minted', payload: { protocol: 'streamable-http' as const } };
+      const authSession = {
+        id: 'freshly-minted',
+        payload: { protocol: 'streamable-http' as const },
+      } as StreamableHttpSession;
       const createSession = jest.fn(() => ({ id: 'unused' }));
 
       const result = resolveStreamableHttpSession({
@@ -88,7 +93,10 @@ describe('HandleStreamableHttpFlow - parseInput session resolution', () => {
 
   describe('auth session without header', () => {
     it('should use auth session when no header is provided', () => {
-      const authSession = { id: 'auth-session', payload: { protocol: 'streamable-http' as const } };
+      const authSession = {
+        id: 'auth-session',
+        payload: { protocol: 'streamable-http' as const },
+      } as StreamableHttpSession;
 
       const result = resolveStreamableHttpSession({
         rawHeader: undefined,
@@ -138,7 +146,10 @@ describe('HandleStreamableHttpFlow - parseInput session resolution', () => {
 
   describe('onInitialize session sync', () => {
     it('should sync flow session when authorization.session is undefined (reconnect)', () => {
-      const flowSession = { id: 'new-encrypted-id', payload: { protocol: 'streamable-http' as const } };
+      const flowSession = {
+        id: 'new-encrypted-id',
+        payload: { protocol: 'streamable-http' as const },
+      } as StreamableHttpSession;
       const authorization: { session?: typeof flowSession } = {};
 
       syncStreamableHttpAuthorizationSession(authorization, flowSession);

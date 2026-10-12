@@ -4,9 +4,19 @@
  */
 import 'reflect-metadata';
 
-import { App, LogLevel, LogTransport, LogTransportInterface, type EsmAppOptions, type LogRecord } from '../../common';
+import {
+  App,
+  LogLevel,
+  LogTransport,
+  LogTransportInterface,
+  type EsmAppOptions,
+  type FrontMcpConfigInput,
+  type LogRecord,
+} from '../../common';
 import type { DirectMcpServer } from '../../direct/direct.types';
 import { EsmModuleLoader, type EsmLoadResult } from '../../esm-loader/esm-module-loader';
+
+type ConfigApps = FrontMcpConfigInput['apps'];
 
 const loadResult: EsmLoadResult = {
   manifest: {
@@ -52,7 +62,7 @@ describe('App.esm()', () => {
     const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
     server = await FrontMcpInstance.createDirect({
       info: { name: 'esm-gateway', version: '1.0.0' },
-      apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme', ...options })],
+      apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme', ...options })] as unknown as ConfigApps,
     });
     return server;
   }
@@ -70,7 +80,7 @@ describe('App.esm()', () => {
     const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
     server = await FrontMcpInstance.createDirect({
       info: { name: 'esm-gateway', version: '1.0.0' },
-      apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme' })],
+      apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme' })] as unknown as ConfigApps,
       logging: { transports: [WarningCapture] },
     });
 
@@ -93,7 +103,7 @@ describe('App.esm()', () => {
     await expect(
       FrontMcpInstance.createDirect({
         info: { name: 'esm-gateway', version: '1.0.0' },
-        apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme' })],
+        apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme' })] as unknown as ConfigApps,
         logging: { transports: [WarningCapture] },
       }),
     ).rejects.toThrow('tool needs the package provider');
@@ -131,7 +141,10 @@ describe('App.esm() of one package more than once', () => {
 
   async function createGateway(...apps: ReturnType<typeof App.esm>[]): Promise<DirectMcpServer> {
     const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
-    server = await FrontMcpInstance.createDirect({ info: { name: 'esm-gateway', version: '1.0.0' }, apps });
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'esm-gateway', version: '1.0.0' },
+      apps: apps as unknown as ConfigApps,
+    });
     return server;
   }
 

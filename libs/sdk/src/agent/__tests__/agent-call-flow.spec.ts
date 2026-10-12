@@ -150,7 +150,10 @@ describe('the agents:call-agent flow keeps the tools/call request correlation', 
   @Agent({ name: 'correlated_helper', inputSchema: {}, llm: { adapter: answeringAdapter } })
   class CorrelatedHelperAgent extends AgentContext {
     override async execute(_input: Record<string, never>) {
-      await this.tryGetContext()?.transport?.elicit('Continue?', { type: 'object', properties: {} });
+      await this.tryGetContext()?.transport?.elicit('Continue?', {
+        type: 'object',
+        properties: {},
+      } as unknown as z.ZodType);
       await this.progress(1, 2, 'half way');
       return 'correlated';
     }

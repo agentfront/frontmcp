@@ -1,5 +1,5 @@
 import { diffBundles, formatDiffSummary } from '../bundle/bundle-diff';
-import type { ResolvedBundle } from '../bundle/bundle.types';
+import type { OperationDescriptor, ResolvedBundle } from '../bundle/bundle.types';
 
 const buildBundle = (overrides: Partial<ResolvedBundle> = {}): ResolvedBundle => ({
   schemaVersion: 1,
@@ -89,7 +89,7 @@ describe('diffBundles', () => {
           inputSchema: {},
           outputSchema: {},
           authBindingRef: 'def',
-        },
+        } as OperationDescriptor,
       },
     });
     const diff = diffBundles(a, b);

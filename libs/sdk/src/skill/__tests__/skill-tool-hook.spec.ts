@@ -12,7 +12,7 @@
 
 import type { SkillContent } from '../../common/interfaces';
 import { ToolApprovalRequiredError, ToolNotAllowedError } from '../errors/tool-not-allowed.error';
-import { createSkillToolGuardHook } from '../hooks/skill-tool.hook';
+import { createSkillToolGuardHook, type SkillToolHookContext } from '../hooks/skill-tool.hook';
 import { MemorySkillSessionStore } from '../session/skill-session-store.interface';
 import { SkillSessionManager } from '../session/skill-session.manager';
 import type { SkillLoadResult } from '../skill-storage.interface';
@@ -119,7 +119,7 @@ describe('SkillToolGuardHook', () => {
             tool: { metadata: {}, fullName: 'my-app:wrong_tool' },
             input: { name: 'allowed_tool' },
           },
-        };
+        } as SkillToolHookContext;
 
         // Should fall back to input.name which is 'allowed_tool'
         await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
@@ -140,7 +140,7 @@ describe('SkillToolGuardHook', () => {
           state: {
             tool: { fullName: 'scope:app:allowed_tool' },
           },
-        };
+        } as SkillToolHookContext;
 
         // Should extract base name after last colon
         await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
@@ -159,7 +159,7 @@ describe('SkillToolGuardHook', () => {
           state: {
             tool: { fullName: 'my-app:allowed_tool' },
           },
-        };
+        } as SkillToolHookContext;
 
         // Should extract base name from fullName
         await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();

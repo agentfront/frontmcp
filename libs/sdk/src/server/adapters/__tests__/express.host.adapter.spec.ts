@@ -149,7 +149,7 @@ describe('ExpressHostAdapter', () => {
         expect(exposeHeaders).toContain('Mcp-Session-Id');
         expect(exposeHeaders).toContain('WWW-Authenticate');
       } finally {
-        await new Promise<void>((resolve) => server.close(resolve));
+        await new Promise<void>((resolve) => server.close(() => resolve()));
       }
     });
 
@@ -206,7 +206,7 @@ describe('ExpressHostAdapter', () => {
         const exposeHeaders = response.headers['access-control-expose-headers'];
         expect(exposeHeaders).toBeUndefined();
       } finally {
-        await new Promise<void>((resolve) => server.close(resolve));
+        await new Promise<void>((resolve) => server.close(() => resolve()));
       }
     });
   });

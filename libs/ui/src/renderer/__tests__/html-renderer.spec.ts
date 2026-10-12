@@ -2,7 +2,7 @@
  * HTML Renderer Tests
  */
 
-import { HtmlRenderer, escapeHtml } from '../html';
+import { escapeHtml, HtmlRenderer } from '../html';
 
 describe('HtmlRenderer', () => {
   const renderer = new HtmlRenderer();
@@ -37,12 +37,12 @@ describe('HtmlRenderer', () => {
 
     it('should use default className', () => {
       const element = renderer.render('<div>Hello</div>');
-      expect(element.props.className).toBe('fmcp-html-content');
+      expect((element.props as { className: string }).className).toBe('fmcp-html-content');
     });
 
     it('should use custom className', () => {
       const element = renderer.render('<div>Hello</div>', { className: 'custom' });
-      expect(element.props.className).toBe('custom');
+      expect((element.props as { className: string }).className).toBe('custom');
     });
   });
 

@@ -480,7 +480,7 @@ describe('initializeRequestHandler', () => {
     });
 
     it('should await updateStoredSessionCapabilities before returning', async () => {
-      let release: (() => void) | null = null;
+      let release = null as (() => void) | null;
       const persistencePromise = new Promise<void>((resolve) => {
         release = resolve;
       });
@@ -491,7 +491,7 @@ describe('initializeRequestHandler', () => {
       const ctx = createContext();
 
       // Start the handler — it should be blocked awaiting the persistence promise
-      const handlerPromise = handler.handler(request, ctx as any);
+      const handlerPromise = handler.handler(request, ctx as any) as Promise<unknown>;
 
       // Yield microtask queue so the handler can run up to the await point
       await Promise.resolve();

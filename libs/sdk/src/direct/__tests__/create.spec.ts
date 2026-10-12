@@ -140,11 +140,11 @@ describe('create() factory', () => {
     });
 
     it('should pass server-level fields through', () => {
-      const config: CreateConfig = {
+      const config = {
         info: { name: 'test', version: '1.0.0' },
         logging: { level: 'debug' },
         pagination: { defaultPageSize: 50 },
-      };
+      } as unknown as CreateConfig;
 
       const result = buildConfig(config);
 
@@ -166,11 +166,11 @@ describe('create() factory', () => {
     });
 
     it('should attach metadata tokens to synthetic app class', () => {
-      const config: CreateConfig = {
+      const config = {
         info: { name: 'test', version: '1.0.0' },
         tools: [class T {}],
         resources: [class R {}],
-      };
+      } as CreateConfig;
 
       const result = buildConfig(config);
       const app = result.apps[0];

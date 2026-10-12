@@ -1,7 +1,8 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true,
+    "outDir": "./out-tsc/e2e",
+    "declaration": true,
     "types": ["node", "jest"]
   },
   "include": ["e2e/**/*.ts"]

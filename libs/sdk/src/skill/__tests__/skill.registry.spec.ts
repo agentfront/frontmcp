@@ -13,11 +13,11 @@ import SkillRegistry from '../skill.registry';
 
 // Mock SkillContext for class-based skills
 class MockSkillContext extends SkillContext {
-  async loadInstructions(): Promise<string> {
+  override async loadInstructions(): Promise<string> {
     return this.metadata.instructions as string;
   }
 
-  async build(): Promise<SkillContent> {
+  override async build(): Promise<SkillContent> {
     return {
       id: this.skillId,
       name: this.skillName,

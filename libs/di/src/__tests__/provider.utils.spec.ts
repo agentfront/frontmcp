@@ -3,15 +3,16 @@
  */
 
 import 'reflect-metadata';
+
+import type { Type } from '../interfaces/base.interface.js';
+import { ProviderScope } from '../metadata/provider.metadata.js';
+import { ProviderKind, type ProviderInjectedRecord } from '../records/provider.record.js';
 import {
   createProviderNormalizer,
   providerDiscoveryDeps,
   providerInvocationTokens,
   type ProviderTokens,
 } from '../utils/provider.utils.js';
-import { ProviderKind } from '../records/provider.record.js';
-import { ProviderScope } from '../metadata/provider.metadata.js';
-import type { Type } from '../interfaces/base.interface.js';
 
 describe('provider utils', () => {
   // Test tokens
@@ -273,7 +274,7 @@ describe('provider utils', () => {
     it('should return empty for INJECTED providers', () => {
       class Injected {}
       const deps = providerDiscoveryDeps(
-        { kind: ProviderKind.INJECTED, provide: Injected, metadata: { name: 'I' } },
+        { kind: ProviderKind.INJECTED, provide: Injected, metadata: { name: 'I' } } as ProviderInjectedRecord,
         new Set(),
         mockDepsOfClass,
       );
@@ -371,7 +372,7 @@ describe('provider utils', () => {
     it('should return empty for INJECTED providers', () => {
       class Injected {}
       const tokens = providerInvocationTokens(
-        { kind: ProviderKind.INJECTED, provide: Injected, metadata: { name: 'I' } },
+        { kind: ProviderKind.INJECTED, provide: Injected, metadata: { name: 'I' } } as ProviderInjectedRecord,
         mockDepsOfClass,
       );
       expect(tokens).toEqual([]);

@@ -119,7 +119,7 @@ describe('SearchSkillsFlow', () => {
 
   describe('output format', () => {
     it('should transform search results to correct output format', () => {
-      const mockResult: SkillSearchResult = {
+      const mockResult: Omit<SkillSearchResult, 'missingTools'> = {
         metadata: {
           id: 'review-pr',
           name: 'Review PR',
@@ -168,7 +168,7 @@ describe('SearchSkillsFlow', () => {
     });
 
     it('should handle missing id by using name', () => {
-      const mockResult: SkillSearchResult = {
+      const mockResult: Omit<SkillSearchResult, 'missingTools'> = {
         metadata: {
           // No id specified
           name: 'Deploy App',
@@ -186,7 +186,7 @@ describe('SearchSkillsFlow', () => {
     });
 
     it('should mark tools as unavailable when not in availableTools', () => {
-      const mockResult: SkillSearchResult = {
+      const mockResult: Omit<SkillSearchResult, 'missingTools'> = {
         metadata: {
           id: 'test-skill',
           name: 'Test Skill',
@@ -214,7 +214,7 @@ describe('SearchSkillsFlow', () => {
     });
 
     it('should handle empty tools array gracefully', () => {
-      const mockResult: SkillSearchResult = {
+      const mockResult: Omit<SkillSearchResult, 'missingTools'> = {
         metadata: {
           id: 'no-tools',
           name: 'No Tools Skill',
@@ -239,7 +239,7 @@ describe('SearchSkillsFlow', () => {
     });
 
     it('should handle undefined tools gracefully', () => {
-      const mockResult: SkillSearchResult = {
+      const mockResult: Omit<SkillSearchResult, 'missingTools'> = {
         metadata: {
           id: 'undefined-tools',
           name: 'Undefined Tools Skill',

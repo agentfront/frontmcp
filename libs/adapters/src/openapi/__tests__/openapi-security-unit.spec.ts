@@ -31,7 +31,7 @@ jest.mock('mcp-from-openapi', () => ({
 }));
 
 describe('OpenapiAdapter - Security Unit Tests', () => {
-  const mockAuthInfo: AuthInfo = {
+  const mockAuthInfo: Partial<AuthInfo> = {
     token: 'test-token',
     clientId: 'test-client',
     scopes: [],
@@ -871,7 +871,7 @@ describe('extractSecuritySchemes', () => {
 });
 
 describe('resolveToolSecurity', () => {
-  const mockAuthInfo: AuthInfo = {
+  const mockAuthInfo: Partial<AuthInfo> = {
     token: 'test-token',
     clientId: 'test-client',
     scopes: [],

@@ -7,8 +7,10 @@ import { publishDashboardOptions, resetDashboardOptions } from '../dashboard.con
 import { DashboardConfigToken } from '../dashboard.symbol';
 import { dashboardPluginOptionsSchema, type DashboardPluginOptions } from '../dashboard.types';
 
+type DynamicProvider = { name?: string; provide?: unknown; inject?: unknown; useFactory?: unknown };
+
 /** Run the config provider's factory — the config is resolved lazily. */
-function resolveConfig(providers: Array<{ provide?: unknown; useFactory?: unknown }>): DashboardPluginOptions {
+function resolveConfig(providers: DynamicProvider[]): DashboardPluginOptions {
   const provider = providers.find((p) => p.provide === DashboardConfigToken);
   return (provider as { useFactory: () => DashboardPluginOptions }).useFactory();
 }
@@ -80,7 +82,7 @@ describe('DashboardHttpPlugin', () => {
     });
 
     it('should include config provider', () => {
-      const providers = DashboardHttpPlugin.dynamicProviders({});
+      const providers: DynamicProvider[] = DashboardHttpPlugin.dynamicProviders({});
 
       const configProvider = providers.find((p) => p.provide === DashboardConfigToken);
       expect(configProvider).toBeDefined();
@@ -93,7 +95,7 @@ describe('DashboardHttpPlugin', () => {
     // evaluated — so an eagerly-parsed value would always be the defaults, which
     // is how the operator's `auth` and `basePath` came to be discarded.
     it('resolves the config lazily, in a factory', () => {
-      const providers = DashboardHttpPlugin.dynamicProviders({
+      const providers: DynamicProvider[] = DashboardHttpPlugin.dynamicProviders({
         basePath: '/admin',
         auth: { enabled: true, token: 'test' },
       });
@@ -211,7 +213,7 @@ describe('Dashboard middleware', () => {
 
   describe('middleware provider factory', () => {
     it('should have inject function that requests FrontMcpServer and the scope', () => {
-      const providers = DashboardHttpPlugin.dynamicProviders({});
+      const providers: DynamicProvider[] = DashboardHttpPlugin.dynamicProviders({});
       const middlewareProvider = providers.find((p) => p.name === 'dashboard:middleware');
 
       expect(middlewareProvider?.inject).toBeDefined();
@@ -219,7 +221,7 @@ describe('Dashboard middleware', () => {
     });
 
     it('should have useFactory function', () => {
-      const providers = DashboardHttpPlugin.dynamicProviders({});
+      const providers: DynamicProvider[] = DashboardHttpPlugin.dynamicProviders({});
       const middlewareProvider = providers.find((p) => p.name === 'dashboard:middleware');
 
       expect(middlewareProvider?.useFactory).toBeDefined();

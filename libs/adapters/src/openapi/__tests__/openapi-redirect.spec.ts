@@ -60,14 +60,16 @@ function createMockTool(): McpOpenAPITool {
   } as McpOpenAPITool;
 }
 
-function createExecutor() {
+type ToolExecutor = (input: unknown, toolCtx: ReturnType<typeof createToolContext>) => Promise<unknown>;
+
+function createExecutor(): ToolExecutor {
   const logger = createMockLogger();
   const tool = createOpenApiTool(
     createMockTool(),
     { name: 'test-api', baseUrl: 'https://api.example.com', spec: basicOpenApiSpec, logger },
     logger,
   );
-  return tool();
+  return tool() as unknown as ToolExecutor;
 }
 
 function createToolContext() {

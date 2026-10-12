@@ -1,6 +1,7 @@
-import { ToolSearchService, IncludeToolsFilter } from '../services/tool-search.service';
-import { ToolEntry, ScopeEntry } from '@frontmcp/sdk';
-import type { CodeCallToolMetadata } from '../codecall.types';
+import { ScopeEntry, ToolEntry } from '@frontmcp/sdk';
+
+import type { CodeCallEmbeddingOptions, CodeCallToolMetadata } from '../codecall.types';
+import { IncludeToolsFilter, ToolSearchService } from '../services/tool-search.service';
 
 /**
  * Creates a mock ScopeEntry with tools that support subscription.
@@ -465,7 +466,7 @@ describe('ToolSearchService', () => {
             modelName: 'Xenova/all-MiniLM-L6-v2',
             cacheDir: './.cache/transformers',
             useHNSW: false,
-          },
+          } as CodeCallEmbeddingOptions,
         },
         scope,
       );

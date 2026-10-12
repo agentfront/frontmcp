@@ -16,6 +16,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { createMockHttpRequest, createMockScopeEntry, runFlowStages } from '../../../__test-utils__';
 import { bindSignin, signinCookie } from '../../../__test-utils__/helpers/oauth-flow.helpers';
 import { HttpHtmlSchema, httpInputSchema, HttpRedirectSchema, type FlowMetadata } from '../../../common';
+import type { LocalPrimaryAuth } from '../../instances/instance.local-primary-auth';
 import OauthCallbackFlow from '../oauth.callback.flow';
 
 function createCallbackMetadata(): FlowMetadata<'oauth:callback'> {
@@ -34,7 +35,7 @@ function createCallbackMetadata(): FlowMetadata<'oauth:callback'> {
 }
 
 async function seedPendingAuth(scope: ReturnType<typeof createMockScopeEntry>): Promise<string> {
-  const store = scope.auth.authorizationStore;
+  const store = (scope.auth as LocalPrimaryAuth).authorizationStore;
   const pkce = generatePkceChallenge('a'.repeat(64));
   const pending = store.createPendingRecord({
     clientId: 'local-client',

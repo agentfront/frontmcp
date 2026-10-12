@@ -1,10 +1,15 @@
+import { act, renderHook } from '@testing-library/react';
 import React from 'react';
-import { renderHook, act } from '@testing-library/react';
-import { useValtioResource } from '../useValtioResource';
+
+import type { ReadResourceResult } from '@frontmcp/sdk';
+
+import { ComponentRegistry } from '../../components/ComponentRegistry';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
-import { ComponentRegistry } from '../../components/ComponentRegistry';
 import type { FrontMcpContextValue } from '../../types';
+import { useValtioResource } from '../useValtioResource';
+
+type TextResourceContents = Extract<ReadResourceResult['contents'][number], { text: string }>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -106,7 +111,7 @@ describe('useValtioResource', () => {
 
       const resource = dynamicRegistry.findResource('state://valtio')!;
       const result = await resource.read();
-      const parsed = JSON.parse(result.contents[0].text as string);
+      const parsed = JSON.parse((result.contents[0] as TextResourceContents).text);
 
       expect(parsed).toEqual({ count: 0, nested: { value: 'hello' } });
 
@@ -129,7 +134,7 @@ describe('useValtioResource', () => {
 
       const resource = dynamicRegistry.findResource('state://valtio')!;
       const result = await resource.read();
-      const parsed = JSON.parse(result.contents[0].text as string);
+      const parsed = JSON.parse((result.contents[0] as TextResourceContents).text);
       expect(parsed.count).toBe(42);
     });
   });

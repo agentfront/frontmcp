@@ -1,8 +1,9 @@
 import 'reflect-metadata';
 
 import { Provider } from '../../common/decorators';
+import type { HookEntry } from '../../common/entries';
 import { type ProviderType } from '../../common/interfaces';
-import { ProviderScope, type HookContextRun, type HookEntry, type HookMetadata } from '../../common/metadata';
+import { ProviderScope, type HookContextRun, type HookMetadata } from '../../common/metadata';
 import { ToolHook } from '../../index';
 import ProviderRegistry from '../../provider/provider.registry';
 import { bindContextHookTargets, normalizeHooksFromProviders, serverProviderHooks } from '../hooks.utils';

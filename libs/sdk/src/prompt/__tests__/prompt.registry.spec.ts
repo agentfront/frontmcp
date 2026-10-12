@@ -1,8 +1,9 @@
 import 'reflect-metadata';
-import PromptRegistry from '../prompt.registry';
-import { Prompt } from '../../common/decorators/prompt.decorator';
+
+import { createMockOwner, createMockProviderRegistry } from '../../__test-utils__/mocks';
+import { FrontMcpPrompt } from '../../common/decorators/prompt.decorator';
 import { PromptType } from '../../common/interfaces/prompt.interface';
-import { createMockProviderRegistry, createMockOwner } from '../../__test-utils__/mocks';
+import PromptRegistry from '../prompt.registry';
 
 // Helper to cast test classes to PromptType
 const asPromptTypes = (...classes: unknown[]): PromptType[] => classes as unknown as PromptType[];
@@ -10,7 +11,7 @@ const asPromptTypes = (...classes: unknown[]): PromptType[] => classes as unknow
 describe('PromptRegistry', () => {
   describe('Registration', () => {
     it('should register class-based prompt', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'greeting-prompt',
         arguments: [],
       })
@@ -40,21 +41,21 @@ describe('PromptRegistry', () => {
     });
 
     it('should register multiple prompts', async () => {
-      @Prompt({ name: 'prompt1', arguments: [] })
+      @FrontMcpPrompt({ name: 'prompt1', arguments: [] })
       class Prompt1 {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '1' } }] };
         }
       }
 
-      @Prompt({ name: 'prompt2', arguments: [] })
+      @FrontMcpPrompt({ name: 'prompt2', arguments: [] })
       class Prompt2 {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '2' } }] };
         }
       }
 
-      @Prompt({ name: 'prompt3', arguments: [{ name: 'topic', required: true }] })
+      @FrontMcpPrompt({ name: 'prompt3', arguments: [{ name: 'topic', required: true }] })
       class Prompt3 {
         async execute(args: Record<string, string>) {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: args['topic'] } }] };
@@ -72,7 +73,7 @@ describe('PromptRegistry', () => {
     });
 
     it('should register prompt with arguments', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'parameterized-prompt',
         arguments: [
           { name: 'topic', description: 'The topic to discuss', required: true },
@@ -104,14 +105,14 @@ describe('PromptRegistry', () => {
 
   describe('getPrompts', () => {
     it('should return all prompts', async () => {
-      @Prompt({ name: 'first', arguments: [] })
+      @FrontMcpPrompt({ name: 'first', arguments: [] })
       class First {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '1' } }] };
         }
       }
 
-      @Prompt({ name: 'second', arguments: [] })
+      @FrontMcpPrompt({ name: 'second', arguments: [] })
       class Second {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '2' } }] };
@@ -133,7 +134,7 @@ describe('PromptRegistry', () => {
 
   describe('findByName', () => {
     it('should find prompt by exact name', async () => {
-      @Prompt({ name: 'findable', arguments: [] })
+      @FrontMcpPrompt({ name: 'findable', arguments: [] })
       class Findable {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'found' } }] };
@@ -149,7 +150,7 @@ describe('PromptRegistry', () => {
     });
 
     it('should return undefined for unknown name', async () => {
-      @Prompt({ name: 'existing', arguments: [] })
+      @FrontMcpPrompt({ name: 'existing', arguments: [] })
       class Existing {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'e' } }] };
@@ -164,7 +165,7 @@ describe('PromptRegistry', () => {
     });
 
     it('should find first prompt when multiple have same name', async () => {
-      @Prompt({ name: 'duplicate', arguments: [] })
+      @FrontMcpPrompt({ name: 'duplicate', arguments: [] })
       class Duplicate1 {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '1' } }] };
@@ -182,7 +183,7 @@ describe('PromptRegistry', () => {
 
   describe('findAllByName', () => {
     it('should find all prompts with given name', async () => {
-      @Prompt({ name: 'shared-name', arguments: [] })
+      @FrontMcpPrompt({ name: 'shared-name', arguments: [] })
       class SharedName {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'shared' } }] };
@@ -197,7 +198,7 @@ describe('PromptRegistry', () => {
     });
 
     it('should return empty array for unknown name', async () => {
-      @Prompt({ name: 'known', arguments: [] })
+      @FrontMcpPrompt({ name: 'known', arguments: [] })
       class Known {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'k' } }] };
@@ -214,14 +215,14 @@ describe('PromptRegistry', () => {
 
   describe('listAllIndexed', () => {
     it('should return all indexed prompts', async () => {
-      @Prompt({ name: 'prompt1', arguments: [] })
+      @FrontMcpPrompt({ name: 'prompt1', arguments: [] })
       class Prompt1 {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '1' } }] };
         }
       }
 
-      @Prompt({ name: 'prompt2', arguments: [] })
+      @FrontMcpPrompt({ name: 'prompt2', arguments: [] })
       class Prompt2 {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '2' } }] };
@@ -240,7 +241,7 @@ describe('PromptRegistry', () => {
     });
 
     it('should include lineage info in indexed prompts', async () => {
-      @Prompt({ name: 'lineaged', arguments: [] })
+      @FrontMcpPrompt({ name: 'lineaged', arguments: [] })
       class Lineaged {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'l' } }] };
@@ -260,7 +261,7 @@ describe('PromptRegistry', () => {
 
   describe('exportResolvedNames', () => {
     it('should export with default snake_case', async () => {
-      @Prompt({ name: 'myPrompt', arguments: [] })
+      @FrontMcpPrompt({ name: 'myPrompt', arguments: [] })
       class MyPrompt {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'content' } }] };
@@ -276,7 +277,7 @@ describe('PromptRegistry', () => {
     });
 
     it('should export with kebab-case', async () => {
-      @Prompt({ name: 'myPrompt', arguments: [] })
+      @FrontMcpPrompt({ name: 'myPrompt', arguments: [] })
       class MyPrompt {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'content' } }] };
@@ -292,14 +293,14 @@ describe('PromptRegistry', () => {
     });
 
     it('should handle multiple prompts with unique names', async () => {
-      @Prompt({ name: 'first', arguments: [] })
+      @FrontMcpPrompt({ name: 'first', arguments: [] })
       class First {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '1' } }] };
         }
       }
 
-      @Prompt({ name: 'second', arguments: [] })
+      @FrontMcpPrompt({ name: 'second', arguments: [] })
       class Second {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '2' } }] };
@@ -322,7 +323,7 @@ describe('PromptRegistry', () => {
 
   describe('hasAny', () => {
     it('should return true when registry has prompts', async () => {
-      @Prompt({ name: 'test', arguments: [] })
+      @FrontMcpPrompt({ name: 'test', arguments: [] })
       class Test {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'test' } }] };
@@ -345,7 +346,7 @@ describe('PromptRegistry', () => {
 
   describe('getInlinePrompts', () => {
     it('should return locally registered prompts', async () => {
-      @Prompt({ name: 'inline', arguments: [] })
+      @FrontMcpPrompt({ name: 'inline', arguments: [] })
       class Inline {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'inline' } }] };
@@ -363,7 +364,7 @@ describe('PromptRegistry', () => {
 
   describe('subscribe', () => {
     it('should emit immediate event when requested', async () => {
-      @Prompt({ name: 'subscribed', arguments: [] })
+      @FrontMcpPrompt({ name: 'subscribed', arguments: [] })
       class Subscribed {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 's' } }] };
@@ -382,7 +383,7 @@ describe('PromptRegistry', () => {
     });
 
     it('should return unsubscribe function', async () => {
-      @Prompt({ name: 'unsub', arguments: [] })
+      @FrontMcpPrompt({ name: 'unsub', arguments: [] })
       class Unsub {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'u' } }] };
@@ -403,7 +404,7 @@ describe('PromptRegistry', () => {
 
   describe('listByOwner', () => {
     it('should return prompts for specific owner', async () => {
-      @Prompt({ name: 'owned', arguments: [] })
+      @FrontMcpPrompt({ name: 'owned', arguments: [] })
       class Owned {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'o' } }] };
@@ -420,7 +421,7 @@ describe('PromptRegistry', () => {
     });
 
     it('should return empty array for unknown owner', async () => {
-      @Prompt({ name: 'test', arguments: [] })
+      @FrontMcpPrompt({ name: 'test', arguments: [] })
       class Test {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 't' } }] };
@@ -437,7 +438,7 @@ describe('PromptRegistry', () => {
 
   describe('getExported', () => {
     it('should lookup by exported name', async () => {
-      @Prompt({ name: 'exportedPrompt', arguments: [] })
+      @FrontMcpPrompt({ name: 'exportedPrompt', arguments: [] })
       class ExportedPrompt {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'e' } }] };
@@ -457,7 +458,7 @@ describe('PromptRegistry', () => {
     });
 
     it('should return undefined for non-existent exported name', async () => {
-      @Prompt({ name: 'exists', arguments: [] })
+      @FrontMcpPrompt({ name: 'exists', arguments: [] })
       class Exists {
         async execute() {
           return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'e' } }] };

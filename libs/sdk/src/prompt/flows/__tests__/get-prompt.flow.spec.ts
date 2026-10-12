@@ -9,6 +9,8 @@ import { FlowControl } from '../../../common/interfaces/flow.interface';
 import { InvalidInputError, MissingPromptArgumentError, PromptNotFoundError } from '../../../errors';
 import GetPromptFlow from '../get-prompt.flow';
 
+type MockPromptContext = ReturnType<ReturnType<typeof createMockPromptEntry>['create']>;
+
 describe('GetPromptFlow', () => {
   // Create mock dependencies
   const createMockDependencies = (promptRegistry = createMockPromptRegistry()) => {
@@ -121,7 +123,7 @@ describe('GetPromptFlow', () => {
         }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       addPromptToMock(promptRegistry, 'greeting', promptEntry);
 
@@ -157,7 +159,7 @@ describe('GetPromptFlow', () => {
         }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       addPromptToMock(promptRegistry, 'my-prompt', promptEntry);
 
@@ -192,7 +194,7 @@ describe('GetPromptFlow', () => {
         }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       addPromptToMock(promptRegistry, 'no-args', promptEntry);
 
@@ -229,7 +231,7 @@ describe('GetPromptFlow', () => {
         }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       addPromptToMock(promptRegistry, 'optional-args', promptEntry);
 
@@ -302,7 +304,7 @@ describe('GetPromptFlow', () => {
         execute: jest.fn().mockResolvedValue('Simple string response'),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       // Update safeParseOutput to handle string
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
@@ -349,7 +351,7 @@ describe('GetPromptFlow', () => {
         execute: jest.fn().mockResolvedValue({ messages }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
         success: true,
@@ -497,7 +499,7 @@ describe('GetPromptFlow', () => {
         execute: jest.fn().mockRejectedValue(new Error('Execution failed')),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       addPromptToMock(promptRegistry, 'error-prompt', promptEntry);
 
@@ -530,7 +532,7 @@ describe('GetPromptFlow', () => {
         execute: jest.fn().mockResolvedValue({ invalid: 'format' }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       // Mock safeParseOutput to return failure
       promptEntry.safeParseOutput.mockReturnValue({
@@ -574,7 +576,7 @@ describe('GetPromptFlow', () => {
         }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
         success: true,
@@ -615,7 +617,7 @@ describe('GetPromptFlow', () => {
         }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
         success: true,
@@ -656,7 +658,7 @@ describe('GetPromptFlow', () => {
         }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
         success: true,
@@ -696,7 +698,7 @@ describe('GetPromptFlow', () => {
         }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
         success: true,
@@ -733,7 +735,7 @@ describe('GetPromptFlow', () => {
         execute: jest.fn().mockResolvedValue(null),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
         success: true,
@@ -772,7 +774,7 @@ describe('GetPromptFlow', () => {
         execute: jest.fn().mockResolvedValue(undefined),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       // Flow expects rawOutput to be defined, so this should fail at finalize
       addPromptToMock(promptRegistry, 'undefined-output', promptEntry);
@@ -810,7 +812,7 @@ describe('GetPromptFlow', () => {
         }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
 
       promptEntry.safeParseOutput.mockImplementation((output: any) => ({
         success: true,
@@ -870,7 +872,7 @@ describe('GetPromptFlow', () => {
         }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
       prompt1.safeParseOutput.mockImplementation((o: any) => ({ success: true, data: o }));
 
       const prompt2 = createMockPromptEntry('prompt-2', {
@@ -887,7 +889,7 @@ describe('GetPromptFlow', () => {
         }),
         mark: jest.fn(),
         loadAuthContext: jest.fn(),
-      });
+      } as MockPromptContext);
       prompt2.safeParseOutput.mockImplementation((o: any) => ({ success: true, data: o }));
 
       addPromptToMock(promptRegistry, 'prompt-1', prompt1);

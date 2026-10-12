@@ -65,17 +65,17 @@ describe('FlowRenderer', () => {
     it('should return error for invalid JSON', () => {
       const element = renderer.render('invalid json');
       expect(element).toBeTruthy();
-      expect(element.props.severity).toBe('error');
+      expect((element.props as { severity: string }).severity).toBe('error');
     });
 
     it('should use default className', () => {
       const element = renderer.render(validFlow);
-      expect(element.props.className).toBe('fmcp-flow-content');
+      expect((element.props as { className: string }).className).toBe('fmcp-flow-content');
     });
 
     it('should use custom className', () => {
       const element = renderer.render(validFlow, { className: 'custom' });
-      expect(element.props.className).toBe('custom');
+      expect((element.props as { className: string }).className).toBe('custom');
     });
   });
 

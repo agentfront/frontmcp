@@ -4,8 +4,12 @@
 
 import type { McpOpenAPITool } from 'mcp-from-openapi';
 
+import type { FrontMcpContext } from '@frontmcp/sdk';
+
 import OpenapiAdapter from '../openapi.adapter';
 import { bearerAuthSpec, createMockLogger, multiAuthSpec, spyOnConsole } from './fixtures';
+
+type LegacyAuthMapperContext = FrontMcpContext & { user?: Record<string, string | undefined> };
 
 // Mock the OpenAPIToolGenerator and security
 jest.mock('mcp-from-openapi');
@@ -83,8 +87,8 @@ describe('OpenapiAdapter - Security', () => {
         spec: multiAuthSpec,
         logger: mockLogger,
         authProviderMapper: {
-          GitHubAuth: (authInfo) => authInfo.user?.githubToken,
-          SlackAuth: (authInfo) => authInfo.user?.slackToken,
+          GitHubAuth: (authInfo: LegacyAuthMapperContext) => authInfo.user?.githubToken,
+          SlackAuth: (authInfo: LegacyAuthMapperContext) => authInfo.user?.slackToken,
         },
       });
 
@@ -133,7 +137,7 @@ describe('OpenapiAdapter - Security', () => {
         spec: multiAuthSpec,
         logger: createMockLogger(),
         authProviderMapper: {
-          SlackAuth: (authInfo) => authInfo.user?.slackToken,
+          SlackAuth: (authInfo: LegacyAuthMapperContext) => authInfo.user?.slackToken,
           // GitHubAuth is missing!
         },
       });
@@ -496,7 +500,7 @@ describe('OpenapiAdapter - Security', () => {
         securitySchemesInInput: ['ApiKeyAuth'],
         // GitHubAuth comes from context
         authProviderMapper: {
-          GitHubAuth: (authInfo) => authInfo.user?.githubToken,
+          GitHubAuth: (authInfo: LegacyAuthMapperContext) => authInfo.user?.githubToken,
         },
       });
 
@@ -626,7 +630,7 @@ describe('OpenapiAdapter - Security', () => {
         securitySchemesInInput: ['GitHubAuth'],
         // SlackAuth from context - mapping provided
         authProviderMapper: {
-          SlackAuth: (authInfo) => authInfo.user?.slackToken,
+          SlackAuth: (authInfo: LegacyAuthMapperContext) => authInfo.user?.slackToken,
         },
       });
 

@@ -2,7 +2,7 @@
  * Math Renderer Tests
  */
 
-import { MathRenderer, isMath } from '../math';
+import { isMath, MathRenderer } from '../math';
 
 describe('MathRenderer', () => {
   const renderer = new MathRenderer();
@@ -67,12 +67,12 @@ describe('MathRenderer', () => {
 
     it('should use default className', () => {
       const element = renderer.render('$$x$$');
-      expect(element.props.className).toBe('fmcp-math-content');
+      expect((element.props as { className: string }).className).toBe('fmcp-math-content');
     });
 
     it('should use custom className', () => {
       const element = renderer.render('$$x$$', { className: 'custom' });
-      expect(element.props.className).toBe('custom');
+      expect((element.props as { className: string }).className).toBe('custom');
     });
   });
 

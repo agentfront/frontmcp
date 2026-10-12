@@ -25,7 +25,7 @@ const MODES = ['fail-public', 'throw-public', 'throw-internal'] as const;
   execution: { taskSupport: 'optional' },
 })
 class ExportTicketsTool extends ToolContext {
-  async execute({ mode }: { mode: string }) {
+  async execute({ mode }: { mode: (typeof MODES)[number] }) {
     if (mode === 'fail-public') this.fail(new PublicMcpError(PUBLIC_MESSAGE, 'NOTHING_TO_EXPORT'));
     if (mode === 'throw-public') throw new PublicMcpError(PUBLIC_MESSAGE, 'NOTHING_TO_EXPORT');
     throw new Error(INTERNAL_DETAIL);

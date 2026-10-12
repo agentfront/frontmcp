@@ -118,7 +118,7 @@ describe('MetricsService (issue #397)', () => {
         {
           collect: () => [{ name: 'frontmcp_process_uptime_seconds', value: 10 }],
           close: () => undefined,
-        } as unknown as Parameters<typeof MetricsService>[1],
+        } as unknown as ConstructorParameters<typeof MetricsService>[1],
         { snapshotSource: () => [] },
       );
       const body = service.getMetrics().body;
@@ -131,7 +131,7 @@ describe('MetricsService (issue #397)', () => {
         {
           collect: () => [{ name: 'frontmcp_process_uptime_seconds', value: 99 }],
           close: () => undefined,
-        } as unknown as Parameters<typeof MetricsService>[1],
+        } as unknown as ConstructorParameters<typeof MetricsService>[1],
         { snapshotSource: () => [] },
       );
       const body = service.getMetrics().body;

@@ -57,7 +57,7 @@ describe('tools/list icons and _meta (#722)', () => {
       apps: [DeskApp],
     });
     const { message } = await rpc20260728(server.handler, 'tools/list');
-    const tools = (message as { result: { tools: ListedTool[] } }).result.tools;
+    const tools = (message.result as { tools: ListedTool[] }).tools;
     listedTools = new Map(tools.map((listed) => [listed.name, listed]));
   });
 

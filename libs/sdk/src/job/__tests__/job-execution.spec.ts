@@ -76,7 +76,7 @@ class RetryThenWrongShapeJob extends JobContext {
 @Job({ name: 'free_form', inputSchema: {}, outputSchema: {} })
 class FreeFormJob extends JobContext {
   async execute() {
-    return 'done';
+    return 'done' as unknown as Record<string, never>;
   }
 }
 

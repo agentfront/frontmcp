@@ -29,6 +29,7 @@ function OrderCard(ctx: { output: { order: { id: string } } }): string {
   return `<b>${ctx.output.order.id}</b>`;
 }
 
+// @ts-expect-error a React class component is outside the ui.template type
 @Tool({ name: 'weather_widget', inputSchema: {}, ui: { template: WeatherWidget } })
 class WeatherTool extends ToolContext {
   async execute() {
