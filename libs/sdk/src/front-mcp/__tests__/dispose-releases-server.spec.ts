@@ -30,6 +30,7 @@ import {
 import { create } from '../../direct/create';
 import { Scope } from '../../scope/scope.instance';
 import { FrontMcpInstance } from '../front-mcp';
+import { DEFAULT_SHUTDOWN_DEADLINE_MS } from '../shutdown-signals';
 
 @Tool({ name: 'ping', inputSchema: {} })
 class PingTool extends ToolContext {
@@ -191,6 +192,7 @@ describe('a server that fails to start releases what it built', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     jest.restoreAllMocks();
     if (originalNodeEnv === undefined) delete process.env['NODE_ENV'];
     else process.env['NODE_ENV'] = originalNodeEnv;
@@ -238,6 +240,32 @@ describe('a server that fails to start releases what it built', () => {
 
     expect(build).toHaveBeenCalledTimes(3);
     expect(left).toEqual([]);
+  });
+
+  it('fails with the startup error once the shutdown deadline passes, when releasing never settles', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    let releasing = false;
+    jest.spyOn(Scope.prototype, 'dispose').mockImplementation(() => {
+      releasing = true;
+      return new Promise<void>(() => undefined);
+    });
+    loggedErrors.length = 0;
+    let outcome: unknown;
+    void FrontMcpInstance.createDirect({ ...unstartableConfig, logging: { transports: [ErrorCapture] } }).catch(
+      (error: unknown) => {
+        outcome = error;
+      },
+    );
+    while (!releasing) await new Promise((resolve) => setImmediate(resolve));
+
+    await jest.advanceTimersByTimeAsync(DEFAULT_SHUTDOWN_DEADLINE_MS - 1);
+    expect(outcome).toBeUndefined();
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(outcome).toMatchObject({ code: 'JWT_SECRET_REQUIRED' });
+    expect(loggedErrors).toContain(
+      `Releasing a server that failed to start did not finish within ${DEFAULT_SHUTDOWN_DEADLINE_MS} ms`,
+    );
   });
 
   it('rejects with the startup error when releasing the partial server fails too, and logs that failure', async () => {
