@@ -53,12 +53,12 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "1.9.6",
     "@frontmcp/utils": "1.9.6",
     "ioredis": "^5.8.0"
   },
   "peerDependencies": {
     "@frontmcp/lazy-zod": "1.9.6",
+    "@frontmcp/sdk": "1.9.6",
     "@vercel/kv": "^2.0.0 || ^3.0.0"
   },
   "peerDependenciesMeta": {
@@ -67,6 +67,7 @@
     }
   },
   "devDependencies": {
+    "@frontmcp/sdk": "1.9.6",
     "reflect-metadata": "^0.2.2"
   }
 }

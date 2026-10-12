@@ -22,6 +22,8 @@ export default [
             '{projectRoot}/**/*.test.ts',
             '{projectRoot}/**/*.spec.ts',
           ],
+          // A peer the re-exported plugins resolve from the app, not one this package imports.
+          ignoredDependencies: ['@frontmcp/sdk'],
         },
       ],
     },
