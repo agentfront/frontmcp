@@ -1,7 +1,8 @@
 #!/usr/bin/env node
+import { execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
 
 /**
  * Bump version for all synchronized libraries
@@ -35,8 +36,13 @@ async function getSynchronizedLibs() {
   }
 }
 
+function packageJsonPath(projectName) {
+  const pluginPath = path.join(process.cwd(), 'plugins', projectName, 'package.json');
+  return existsSync(pluginPath) ? pluginPath : path.join(process.cwd(), 'libs', projectName, 'package.json');
+}
+
 async function updateLibVersion(libName, newVersion) {
-  const libPath = path.join(process.cwd(), 'libs', libName, 'package.json');
+  const libPath = packageJsonPath(libName);
 
   try {
     const content = await fs.readFile(libPath, 'utf8');
@@ -77,7 +83,7 @@ async function updateDependencies(libs, newVersion) {
   console.log('\nUpdating internal dependencies...');
 
   for (const libName of libs) {
-    const libPath = path.join(process.cwd(), 'libs', libName, 'package.json');
+    const libPath = packageJsonPath(libName);
 
     try {
       const content = await fs.readFile(libPath, 'utf8');
@@ -89,7 +95,7 @@ async function updateDependencies(libs, newVersion) {
       for (const depType of ['dependencies', 'devDependencies', 'peerDependencies']) {
         if (pkg[depType]) {
           for (const dep of libs) {
-            const depPkgPath = path.join(process.cwd(), 'libs', dep, 'package.json');
+            const depPkgPath = packageJsonPath(dep);
             const depPkg = JSON.parse(await fs.readFile(depPkgPath, 'utf8'));
             const depName = depPkg.name;
 

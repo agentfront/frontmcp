@@ -52,13 +52,13 @@
   "dependencies": {
     "@frontmcp/adapters": "1.9.6",
     "@frontmcp/auth": "1.9.6",
-    "@frontmcp/sdk": "1.9.6",
     "@frontmcp/utils": "1.9.6"
   },
   "peerDependencies": {
     "@enclave-vm/ast": "*",
     "@enclave-vm/core": "*",
     "@frontmcp/lazy-zod": "1.9.6",
+    "@frontmcp/sdk": "1.9.6",
     "undici": ">=6"
   },
   "peerDependenciesMeta": {
@@ -73,6 +73,7 @@
     }
   },
   "devDependencies": {
+    "@frontmcp/sdk": "1.9.6",
     "reflect-metadata": "^0.2.2"
   }
 }

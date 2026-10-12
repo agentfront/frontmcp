@@ -153,7 +153,7 @@ For connecting to a remote MCP server (HTTP), create a server-bound `DirectMcpSe
 
 ## Exposing Tools to Browser Agents (WebMCP)
 
-Install `@frontmcp/plugin-webmcp` to register the page server's tools with WebMCP (`document.modelContext`), the API Gemini in Chrome and other in-browser agents use:
+Install `@frontmcp/plugin-webmcp`, with `@frontmcp/sdk` at the same version (the plugin takes it as a peer), to register the page server's tools with WebMCP (`document.modelContext`), the API Gemini in Chrome and other in-browser agents use:
 
 ```typescript
 import { WebMcpPlugin } from '@frontmcp/plugin-webmcp';
