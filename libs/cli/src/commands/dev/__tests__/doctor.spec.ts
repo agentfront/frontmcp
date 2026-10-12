@@ -26,6 +26,7 @@ jest.mock('@frontmcp/utils', () => {
     fileExists: jest.fn(),
     fileExistsSync: jest.fn(() => false),
     readFile: jest.fn(),
+    readJSON: jest.fn(async () => null),
   };
 });
 
@@ -181,6 +182,29 @@ describe('doctor command', () => {
 
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('❌ Node 18.0.0'));
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Some checks failed'));
+    });
+
+    it('reports moduleResolution node, which TypeScript 6 deprecates', async () => {
+      Object.defineProperty(process, 'versions', {
+        value: { ...originalVersions, node: '22.0.0' },
+        configurable: true,
+      });
+      (fileExists as jest.Mock).mockResolvedValue(true);
+      mockTsconfig({
+        compilerOptions: {
+          target: 'es2021',
+          module: 'esnext',
+          emitDecoratorMetadata: true,
+          experimentalDecorators: true,
+          moduleResolution: 'node',
+        },
+      });
+      (resolveEntry as jest.Mock).mockResolvedValue('/test/src/main.ts');
+
+      await runDoctor();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('"node" is deprecated in TypeScript 6'));
+      expect(process.exitCode).toBe(1);
     });
 
     it('should fail with old npm version', async () => {

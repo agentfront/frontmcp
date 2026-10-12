@@ -9,7 +9,7 @@
 import * as os from 'os';
 import * as path from 'path';
 
-import { mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
+import { mkdir, mkdtemp, readFile, rm, writeFile, writeJSON } from '@frontmcp/utils';
 
 import { readTsconfig, RECOMMENDED_TSCONFIG, runInit } from '../tsconfig';
 
@@ -124,7 +124,72 @@ describe('runInit', () => {
     await runInit(dir);
 
     const { config } = (await readTsconfig(tsconfigPath)) ?? { config: {} };
-    expect(config['compilerOptions']).toMatchObject({ module: 'esnext', moduleResolution: 'node' });
+    expect(config['compilerOptions']).toMatchObject({ module: 'esnext', moduleResolution: 'bundler' });
+  });
+
+  it('writes no types entries for packages the project has not installed', async () => {
+    await runInit(dir);
+
+    const { config } = (await readTsconfig(tsconfigPath)) ?? { config: {} };
+    expect(config['compilerOptions']).not.toHaveProperty('types');
+  });
+
+  it('writes types entries for the type packages the project declares', async () => {
+    await writeJSON(path.join(dir, 'package.json'), {
+      devDependencies: { '@types/node': '^24.0.0', '@types/jest': '^30.0.0', '@frontmcp/testing': '1.9.6' },
+    });
+
+    await runInit(dir);
+
+    const { config } = (await readTsconfig(tsconfigPath)) ?? { config: {} };
+    expect(config['compilerOptions']['types']).toEqual(['node', 'jest', '@frontmcp/testing']);
+  });
+
+  it('writes a types entry for a type package installed but not declared', async () => {
+    await mkdir(path.join(dir, 'node_modules', '@types', 'node'), { recursive: true });
+    await writeJSON(path.join(dir, 'node_modules', '@types', 'node', 'package.json'), { name: '@types/node' });
+
+    await runInit(dir);
+
+    const { config } = (await readTsconfig(tsconfigPath)) ?? { config: {} };
+    expect(config['compilerOptions']['types']).toEqual(['node']);
+  });
+
+  it.each([
+    ['^6.0.0', 'bundler'],
+    ['~7.0.2', 'bundler'],
+    ['^5.5.3', 'node'],
+  ])('picks the moduleResolution TypeScript %s accepts with frontmcp build', async (range, moduleResolution) => {
+    await writeJSON(path.join(dir, 'package.json'), { devDependencies: { typescript: range } });
+
+    await runInit(dir);
+
+    const { config } = (await readTsconfig(tsconfigPath)) ?? { config: {} };
+    expect(config['compilerOptions']['moduleResolution']).toBe(moduleResolution);
+  });
+
+  it('reads the installed TypeScript before the declared range', async () => {
+    await writeJSON(path.join(dir, 'package.json'), { devDependencies: { typescript: '^5.5.3' } });
+    await mkdir(path.join(dir, 'node_modules', 'typescript'), { recursive: true });
+    await writeJSON(path.join(dir, 'node_modules', 'typescript', 'package.json'), {
+      name: 'typescript',
+      version: '6.0.3',
+    });
+
+    await runInit(dir);
+
+    const { config } = (await readTsconfig(tsconfigPath)) ?? { config: {} };
+    expect(config['compilerOptions']['moduleResolution']).toBe('bundler');
+  });
+
+  it('replaces moduleResolution node in an existing tsconfig.json on TypeScript 6', async () => {
+    await writeJSON(path.join(dir, 'package.json'), { devDependencies: { typescript: '^6.0.0' } });
+    await writeFile(tsconfigPath, '{ "compilerOptions": { "moduleResolution": "node" } }');
+
+    await runInit(dir);
+
+    const { config } = (await readTsconfig(tsconfigPath)) ?? { config: {} };
+    expect(config['compilerOptions']['moduleResolution']).toBe('bundler');
   });
 
   it('appends the widget excludes to an existing exclude list (#445)', async () => {

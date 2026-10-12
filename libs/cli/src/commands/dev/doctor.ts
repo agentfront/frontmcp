@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import { c } from '../../core/colors';
-import { checkRequiredTsOptions, readTsconfig } from '../../core/tsconfig';
+import { checkRequiredTsOptions, readTsconfig, resolveModuleResolution } from '../../core/tsconfig';
 import { resolveEntry } from '../../shared/fs';
 import { packageManagerCommand, spawnTool } from '../../shared/tool-command';
 
@@ -69,7 +69,10 @@ export async function runDoctor(): Promise<void> {
     console.log(`❌ ${tsconfigError} — fix it, then run ${c('cyan', 'frontmcp init')}`);
   } else if (tsconfig) {
     console.log(`✅ tsconfig.json found`);
-    const { ok: oks, issues } = checkRequiredTsOptions(tsconfig.config['compilerOptions']);
+    const { ok: oks, issues } = checkRequiredTsOptions(
+      tsconfig.config['compilerOptions'],
+      await resolveModuleResolution(cwd),
+    );
     for (const line of oks) console.log(c('green', `  ✓ ${line}`));
     if (issues.length) {
       ok = false;

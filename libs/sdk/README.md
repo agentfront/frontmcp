@@ -35,7 +35,7 @@ Or add the SDK to a project you already have:
 
 ```bash
 npm install @frontmcp/sdk reflect-metadata
-npm install -D frontmcp typescript@^5 @types/node@^24
+npm install -D frontmcp typescript @types/node@^24
 npx frontmcp init
 ```
 
