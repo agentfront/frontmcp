@@ -77,10 +77,13 @@ export class FrontMcpInstance implements FrontMcpInterface {
   private scopes: ScopeRegistry;
   private log?: FrontMcpLogger;
   private shutdownPromise?: Promise<void>;
+  /** The start itself, before a failure is released: shutdown waits for it, since `ready` waits for shutdown. */
+  private readonly initialization: Promise<void>;
 
   constructor(config: FrontMcpConfigType) {
     this.config = config;
-    this.ready = this.initialize().catch((error: unknown) => this.releaseFailedStart(error));
+    this.initialization = this.initialize();
+    this.ready = this.initialization.catch((error: unknown) => this.releaseFailedStart(error));
   }
 
   /** Shut down what a failed start built, for at most the signal path's deadline, then fail with its error. */
@@ -187,6 +190,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   private async runShutdown(): Promise<void> {
+    await this.initialization.catch(() => undefined);
     const scopes = (this.scopes?.getScopes() ?? []) as Scope[];
     const failures: unknown[] = [];
     const serverStopped = this.providers?.get(FrontMcpServer)?.stop();

@@ -15,6 +15,7 @@ import { mkdtemp, rm } from '@frontmcp/utils';
 import {
   App,
   DynamicPlugin,
+  frontMcpMetadataSchema,
   Job,
   JobContext,
   LogLevel,
@@ -266,6 +267,20 @@ describe('a server that fails to start releases what it built', () => {
     expect(loggedErrors).toContain(
       `Releasing a server that failed to start did not finish within ${DEFAULT_SHUTDOWN_DEADLINE_MS} ms`,
     );
+  });
+
+  it('disposes the failed scope when shutdown() was called while the start was still running', async () => {
+    const dispose = jest.spyOn(Scope.prototype, 'dispose');
+
+    const left = await intervalsLeftRunning(async () => {
+      const instance = new FrontMcpInstance(frontMcpMetadataSchema.parse(unstartableConfig));
+      const shutdown = instance.shutdown();
+      await expect(instance.ready).rejects.toMatchObject({ code: 'JWT_SECRET_REQUIRED' });
+      await shutdown.catch(() => undefined);
+    });
+
+    expect(left).toEqual([]);
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 
   it('rejects with the startup error when releasing the partial server fails too, and logs that failure', async () => {
