@@ -36,6 +36,22 @@ function makeOptions(overrides?: Partial<CliEntryOptions>): CliEntryOptions {
 }
 
 describe('generateCliEntry', () => {
+  describe('doctor', () => {
+    it("checks the CLI's own minimum Node.js major when the app sets no nodeVersion", () => {
+      const { engines } = jest.requireActual<{ engines: { node: string } }>('../../../../../package.json');
+      const minNodeMajor = engines.node.match(/\d+/)?.[0];
+      const source = generateCliEntry(makeOptions());
+      expect(source).toContain(`if (nodeMajor >= ${minNodeMajor})`);
+      expect(source).toContain(`(>=${minNodeMajor} required)`);
+    });
+
+    it("checks the app's nodeVersion when it sets one", () => {
+      const source = generateCliEntry(makeOptions({ nodeVersion: '>=26.1.0' }));
+      expect(source).toContain('if (nodeMajor >= 26)');
+      expect(source).toContain('(>=26 required)');
+    });
+  });
+
   it('should generate valid JavaScript with commander', () => {
     const source = generateCliEntry(makeOptions());
     expect(source).toContain("require('commander')");

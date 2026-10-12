@@ -14,7 +14,7 @@
     },
     "version": { "description": "Server version (semver). Defaults to package.json version.", "type": "string" },
     "entry": { "description": "Entry point file path.", "type": "string" },
-    "nodeVersion": { "description": "Node.js version requirement (default >=22.0.0).", "type": "string" },
+    "nodeVersion": { "description": "Node.js version requirement (default >=24.0.0).", "type": "string" },
     "deployments": {
       "minItems": 1,
       "type": "array",

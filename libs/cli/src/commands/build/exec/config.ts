@@ -5,6 +5,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import type { BuildOptions } from '../../../config/frontmcp-config.types';
+import { getSelfNodeRange } from '../../../core/version';
 import type { SetupDefinition } from './setup';
 
 export interface OAuthConfig {
@@ -201,7 +202,7 @@ export function normalizeConfig(config: FrontmcpExecConfig): Required<
     ...config,
     name: config.name,
     version: config.version || '1.0.0',
-    nodeVersion: config.nodeVersion || '>=22.0.0',
+    nodeVersion: config.nodeVersion || getSelfNodeRange(),
     esbuild: build?.esbuild ? { ...config.esbuild, ...build.esbuild } : config.esbuild,
     dependencies: build?.dependencies ? { ...config.dependencies, ...build.dependencies } : config.dependencies,
     storage: build?.storage ?? config.storage,

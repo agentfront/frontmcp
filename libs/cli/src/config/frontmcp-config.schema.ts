@@ -698,7 +698,7 @@ export const frontmcpConfigSchema = z
       .describe('Server name (alphanumeric with .-_ only).'),
     version: z.string().optional().describe('Server version (semver). Defaults to package.json version.'),
     entry: z.string().optional().describe('Entry point file path.'),
-    nodeVersion: z.string().optional().describe('Node.js version requirement (default >=22.0.0).'),
+    nodeVersion: z.string().optional().describe('Node.js version requirement (default >=24.0.0).'),
     deployments: z
       .array(deploymentTargetSchema)
       .min(1, 'At least one deployment target required')

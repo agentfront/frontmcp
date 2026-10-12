@@ -4,6 +4,7 @@
  * for installation and runtime.
  */
 
+import { getSelfNodeRange } from '../../../core/version';
 import { type FrontmcpExecConfig } from './config';
 import { type SetupStep, zodSchemaToJsonSchema, idToEnvName } from './setup';
 
@@ -85,7 +86,7 @@ export function generateManifest(
   const manifest: ExecManifest = {
     name: config.name,
     version: config.version || '1.0.0',
-    nodeVersion: config.nodeVersion || '>=22.0.0',
+    nodeVersion: config.nodeVersion || getSelfNodeRange(),
     storage: {
       type: config.storage?.type || 'none',
       required: config.storage?.required ?? false,

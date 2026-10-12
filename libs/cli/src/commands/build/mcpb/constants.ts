@@ -6,9 +6,6 @@
 /** Spec version emitted in every generated manifest. */
 export const MCPB_MANIFEST_VERSION = '0.3';
 
-/** Default Node.js version constraint for the bundled runtime. */
-export const DEFAULT_NODE_COMPAT = '>=22.0.0';
-
 /** Default compatibility platforms when none are declared. */
 export const DEFAULT_PLATFORMS = ['darwin', 'linux', 'win32'] as const;
 

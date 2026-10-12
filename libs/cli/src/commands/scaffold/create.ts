@@ -1750,12 +1750,12 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
 
   process.chdir(targetDir);
 
-  // Initialize tsconfig
-  await runInit(targetDir);
-
   // Create package.json with deployment-specific scripts
   const selfVersion = getSelfVersion();
   await upsertPackageJsonWithTarget(targetDir, pkgName, selfVersion, deploymentTarget, packageManager);
+
+  // Initialize tsconfig for the TypeScript and type packages package.json declares
+  await runInit(targetDir);
 
   // Scaffold base files
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'main.ts'), TEMPLATE_MAIN_TS);

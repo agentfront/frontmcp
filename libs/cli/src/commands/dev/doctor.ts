@@ -1,7 +1,8 @@
 import * as path from 'path';
 
 import { c } from '../../core/colors';
-import { checkRequiredTsOptions, readTsconfig } from '../../core/tsconfig';
+import { checkRequiredTsOptions, readTsconfig, resolveModuleResolution } from '../../core/tsconfig';
+import { getSelfMinNodeVersion } from '../../core/version';
 import { resolveEntry } from '../../shared/fs';
 import { packageManagerCommand, spawnTool } from '../../shared/tool-command';
 
@@ -16,7 +17,7 @@ function cmpSemver(a: string, b: string): number {
 }
 
 export async function runDoctor(): Promise<void> {
-  const MIN_NODE = '22.0.0';
+  const MIN_NODE = getSelfMinNodeVersion();
   const MIN_NPM = '10.0.0';
   const cwd = process.cwd();
 
@@ -69,7 +70,10 @@ export async function runDoctor(): Promise<void> {
     console.log(`❌ ${tsconfigError} — fix it, then run ${c('cyan', 'frontmcp init')}`);
   } else if (tsconfig) {
     console.log(`✅ tsconfig.json found`);
-    const { ok: oks, issues } = checkRequiredTsOptions(tsconfig.config['compilerOptions']);
+    const { ok: oks, issues } = checkRequiredTsOptions(
+      tsconfig.config['compilerOptions'],
+      await resolveModuleResolution(cwd),
+    );
     for (const line of oks) console.log(c('green', `  ✓ ${line}`));
     if (issues.length) {
       ok = false;

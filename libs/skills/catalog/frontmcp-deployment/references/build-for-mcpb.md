@@ -104,7 +104,7 @@ dist/mcpb/
 | `tools`                                         | Schema extraction (system tools like `execute_job` filtered out)                    |
 | `prompts`                                       | Schema extraction; emitted with `prompts_generated: true`                           |
 | `user_config`                                   | deployment.userConfig + frontmcp.config `setup.steps` (see below)                   |
-| `compatibility.runtimes.node`                   | deployment.compatibility.runtimes.node → frontmcp.config.nodeVersion → `">=22.0.0"` |
+| `compatibility.runtimes.node`                   | deployment.compatibility.runtimes.node → frontmcp.config.nodeVersion → `">=24.0.0"` |
 | `compatibility.platforms`                       | deployment.compatibility.platforms → `["darwin","linux","win32"]`                   |
 
 ## user_config → env

@@ -1,6 +1,8 @@
 import { generateManifest } from '../manifest';
 import { type FrontmcpExecConfig } from '../config';
 
+const { engines } = jest.requireActual<{ engines: { node: string } }>('../../../../../package.json');
+
 describe('manifest', () => {
   describe('generateManifest', () => {
     it('should generate manifest with defaults', () => {
@@ -13,7 +15,7 @@ describe('manifest', () => {
 
       expect(manifest.name).toBe('test-app');
       expect(manifest.version).toBe('1.0.0');
-      expect(manifest.nodeVersion).toBe('>=22.0.0');
+      expect(manifest.nodeVersion).toBe(engines.node);
       expect(manifest.bundle).toBe('test-app.bundle.js');
       expect(manifest.storage).toEqual({ type: 'none', required: false });
       // #371: default port is 3000 (Express default — what the server
