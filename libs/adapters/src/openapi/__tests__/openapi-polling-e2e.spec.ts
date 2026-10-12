@@ -105,8 +105,8 @@ function configureMockGenerator(tools: ReturnType<typeof createMockTool>[]) {
 
 /** Extract tool names from a FrontMcpAdapterResponse */
 function extractToolNames(response: FrontMcpAdapterResponse): string[] {
-  return (response.tools || []).map((toolFn: Record<symbol, Record<string, unknown>>) => {
-    const meta = toolFn[FrontMcpToolTokens.metadata];
+  return (response.tools || []).map((toolFn) => {
+    const meta = (toolFn as Record<symbol, Record<string, unknown>>)[FrontMcpToolTokens.metadata];
     return (meta?.name ?? meta?.id ?? 'unknown') as string;
   });
 }

@@ -2,7 +2,7 @@
  * Media Renderer Tests
  */
 
-import { VideoRenderer, AudioRenderer, isVideo, isAudio, isMedia } from '../media';
+import { AudioRenderer, isAudio, isMedia, isVideo, VideoRenderer } from '../media';
 
 describe('Media Renderers', () => {
   describe('isVideo()', () => {
@@ -120,7 +120,7 @@ describe('Media Renderers', () => {
 
     it('should use default className', () => {
       const element = renderer.render('https://example.com/video.mp4');
-      expect(element.props.className).toBe('fmcp-media-content');
+      expect((element.props as { className: string }).className).toBe('fmcp-media-content');
     });
   });
 
@@ -150,7 +150,7 @@ describe('Media Renderers', () => {
 
     it('should use default className', () => {
       const element = renderer.render('https://example.com/song.mp3');
-      expect(element.props.className).toBe('fmcp-media-content');
+      expect((element.props as { className: string }).className).toBe('fmcp-media-content');
     });
   });
 });

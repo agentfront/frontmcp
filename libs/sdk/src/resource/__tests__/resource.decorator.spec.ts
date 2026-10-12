@@ -1,13 +1,18 @@
 import 'reflect-metadata';
+
+import { FrontMcpResourceTemplateTokens, FrontMcpResourceTokens } from '../../common';
 import {
-  Resource,
-  ResourceTemplate,
-  resource,
-  resourceTemplate,
   FrontMcpResource,
   FrontMcpResourceTemplate,
+  resource,
+  resourceTemplate,
+  Resource as TypedResource,
+  ResourceTemplate as TypedResourceTemplate,
 } from '../../common/decorators/resource.decorator';
-import { FrontMcpResourceTokens, FrontMcpResourceTemplateTokens } from '../../common';
+
+// The fixtures are plain classes, so the ResourceContext constraint of the typed exports is lifted.
+const Resource = TypedResource as unknown as typeof FrontMcpResource;
+const ResourceTemplate = TypedResourceTemplate as unknown as typeof FrontMcpResourceTemplate;
 
 describe('Resource Decorators', () => {
   describe('@Resource decorator', () => {

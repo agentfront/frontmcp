@@ -28,7 +28,7 @@ function makeSkill(overrides: Partial<SkillEntry> & { name: string; description:
     getDescription(this: SkillEntry) {
       return this.metadata.description;
     },
-    ...overrides,
+    ...(overrides as Partial<SkillEntry>),
   } as unknown as SkillEntry;
 }
 

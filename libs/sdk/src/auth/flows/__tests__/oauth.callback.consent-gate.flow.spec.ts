@@ -19,6 +19,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { createMockHttpRequest, createMockScopeEntry, runFlowStages } from '../../../__test-utils__';
 import { bindSignin, signinCookie } from '../../../__test-utils__/helpers/oauth-flow.helpers';
 import { HttpHtmlSchema, httpInputSchema, HttpRedirectSchema, type FlowMetadata } from '../../../common';
+import type { LocalPrimaryAuth } from '../../instances/instance.local-primary-auth';
 import OauthCallbackFlow from '../oauth.callback.flow';
 
 function createCallbackMetadata(): FlowMetadata<'oauth:callback'> {
@@ -100,7 +101,9 @@ describe('OAuth Callback Flow — consent gate', () => {
 
     // CRITICAL: the pending authorization must NOT have been deleted — the
     // consent form posts back to /oauth/callback using the same id.
-    const stillPending = await scope.auth.authorizationStore.getPendingAuthorization(pendingAuthId);
+    const stillPending = await (scope.auth as LocalPrimaryAuth).authorizationStore.getPendingAuthorization(
+      pendingAuthId,
+    );
     expect(stillPending).toBeTruthy();
     expect(stillPending?.verifiedLogin).toEqual(expect.any(String));
     expect(stillPending?.authUiCsrf).toEqual(expect.any(String));
@@ -128,7 +131,7 @@ describe('OAuth Callback Flow — consent gate', () => {
     expect(state.selectedTools).toEqual(['notes:create']);
 
     // The pending authorization is cleaned up now that we are minting.
-    const gone = await scope.auth.authorizationStore.getPendingAuthorization(pendingAuthId);
+    const gone = await (scope.auth as LocalPrimaryAuth).authorizationStore.getPendingAuthorization(pendingAuthId);
     expect(gone == null).toBe(true);
   });
 
@@ -152,7 +155,9 @@ describe('OAuth Callback Flow — consent gate', () => {
     expect(String(output?.body)).toContain('Please select at least one tool to continue.');
 
     // Pending auth kept alive for the retry.
-    const stillPending = await scope.auth.authorizationStore.getPendingAuthorization(pendingAuthId);
+    const stillPending = await (scope.auth as LocalPrimaryAuth).authorizationStore.getPendingAuthorization(
+      pendingAuthId,
+    );
     expect(stillPending).toBeTruthy();
   });
 
@@ -357,7 +362,7 @@ describe('OAuth Callback Flow — consent gate', () => {
       tools: TOOLS,
     });
     // A pending record with no consent state.
-    const store = scope.auth.authorizationStore;
+    const store = (scope.auth as LocalPrimaryAuth).authorizationStore;
     const pkce = generatePkceChallenge('a'.repeat(64));
     const pending = store.createPendingRecord({
       clientId: 'local-client',

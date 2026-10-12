@@ -49,7 +49,7 @@ class GetUserTool extends ToolContext {
   inputSchema: { id: z.string() },
 })
 class DeleteUserTool extends ToolContext {
-  async execute() {
+  async execute(_input: { id: string }) {
     return ran('users:delete');
   }
 }

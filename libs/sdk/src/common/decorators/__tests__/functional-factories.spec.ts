@@ -9,23 +9,26 @@ import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
 
+import { InvalidDecoratorMetadataError } from '../../../errors/decorator.errors';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
 import { type Scope } from '../../../scope/scope.instance';
 import { createWebFetchHandler, type WebFetchHandler } from '../../../transport/web-fetch-handler';
-import { InvalidDecoratorMetadataError } from '../../../errors/decorator.errors';
 import { app } from '../app.decorator';
 import { prompt } from '../prompt.decorator';
 import { resource } from '../resource.decorator';
 import { skill } from '../skill.decorator';
 import { tool } from '../tool.decorator';
 
-const echoTool = tool({ name: 'echo', description: 'Echo', inputSchema: { message: z.string() } })((input: {
-  message: string;
-}) => ({ content: [{ type: 'text' as const, text: `Echo: ${input.message}` }] }));
-
-const configResource = resource({ name: 'config', uri: 'config://app', description: 'App config', mimeType: 'application/json' })(
-  (uri: string) => ({ contents: [{ uri, text: '{"k":"v"}' }] }),
+const echoTool = tool({ name: 'echo', description: 'Echo', inputSchema: { message: z.string() } })(
+  (input: { message: string }) => ({ content: [{ type: 'text' as const, text: `Echo: ${input.message}` }] }),
 );
+
+const configResource = resource({
+  name: 'config',
+  uri: 'config://app',
+  description: 'App config',
+  mimeType: 'application/json',
+})((uri: string) => ({ contents: [{ uri, text: '{"k":"v"}' }] }));
 
 const greetPrompt = prompt({ name: 'greet', description: 'Greet', arguments: [{ name: 'who', required: true }] })(
   (args: Record<string, string> | undefined) => ({
@@ -73,13 +76,16 @@ describe('functional factories (decorator-free assembly via app())', () => {
   let handler: WebFetchHandler;
 
   beforeAll(async () => {
-    instance = await FrontMcpInstance.createForGraph({ info: { name: 'factory-test', version: '1.0.0' }, apps: [allApp] });
+    instance = await FrontMcpInstance.createForGraph({
+      info: { name: 'factory-test', version: '1.0.0' },
+      apps: [allApp],
+    });
     // The handler serves ONE configured path; this suite drives requests at
     // `/mcp`, so pin the entry path (unconfigured it defaults to the worker root `/`).
     handler = createWebFetchHandler(instance.getScopes()[0] as Scope, { entryPath: '/mcp' });
   });
   afterAll(async () => {
-    await instance?.dispose?.();
+    await (instance as FrontMcpInstance & { dispose?: () => Promise<void> })?.dispose?.();
   });
 
   // The web handler answers with the MCP Streamable-HTTP transport, which emits
@@ -110,7 +116,12 @@ describe('functional factories (decorator-free assembly via app())', () => {
   it('tool: list + call', async () => {
     const list = await result({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
     expect((list.result?.tools ?? []).map((t: { name: string }) => t.name)).toContain('echo');
-    const call = await result({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'echo', arguments: { message: 'hi' } } });
+    const call = await result({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: { name: 'echo', arguments: { message: 'hi' } },
+    });
     expect(call.result?.content?.[0]?.text).toBe('Echo: hi');
   });
 
@@ -124,7 +135,12 @@ describe('functional factories (decorator-free assembly via app())', () => {
   it('prompt: list + get', async () => {
     const list = await result({ jsonrpc: '2.0', id: 5, method: 'prompts/list', params: {} });
     expect((list.result?.prompts ?? []).map((p: { name: string }) => p.name)).toContain('greet');
-    const get = await result({ jsonrpc: '2.0', id: 6, method: 'prompts/get', params: { name: 'greet', arguments: { who: 'Ada' } } });
+    const get = await result({
+      jsonrpc: '2.0',
+      id: 6,
+      method: 'prompts/get',
+      params: { name: 'greet', arguments: { who: 'Ada' } },
+    });
     expect(get.result?.messages?.[0]?.content?.text).toBe('Hi Ada');
   });
 

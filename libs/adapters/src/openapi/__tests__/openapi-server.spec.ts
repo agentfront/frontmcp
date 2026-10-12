@@ -13,7 +13,7 @@ import type { OpenAPIV3 } from 'openapi-types';
 import { FrontMcpToolTokens } from '@frontmcp/sdk';
 
 import OpenapiAdapter from '../openapi.adapter';
-import type { OpenapiAdapterConfig } from '../openapi.types';
+import type { OpenApiAdapterOptions } from '../openapi.types';
 import { createMockLogger } from './fixtures';
 
 // Type for route handler
@@ -473,7 +473,7 @@ describe('OpenAPI Adapter - Real HTTP Server Integration', () => {
    * Helper to get tools from adapter with proper metadata extraction
    */
   async function getTools(spec: OpenAPIV3.Document) {
-    const config: OpenapiAdapterConfig = {
+    const config: OpenApiAdapterOptions = {
       name: 'test-api',
       spec,
       baseUrl,

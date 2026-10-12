@@ -11,6 +11,8 @@
  * namespaces, and the direct-call allowlist itself — is bypassed by naming the tool here
  * instead of inside a script.
  */
+import type { CallToolResult } from '@frontmcp/protocol';
+
 import CodeCallConfig from '../providers/code-call.config';
 import InvokeTool from '../tools/invoke.tool';
 
@@ -67,7 +69,7 @@ type CallToolFlowCall = [flow: string, payload: { request?: { params?: { name?: 
 /** The mocked `ToolContext` surface these harnesses drive, in place of a real scope. */
 interface MockedToolInstance {
   scope: { runFlow: jest.Mock; tools: { getTools: jest.Mock } };
-  execute(input: Record<string, unknown>): Promise<unknown>;
+  execute(input: Record<string, unknown>): Promise<CallToolResult>;
   _setDependency(token: unknown, instance: unknown): void;
 }
 

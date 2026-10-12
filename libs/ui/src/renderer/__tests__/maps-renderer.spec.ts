@@ -2,7 +2,7 @@
  * Maps Renderer Tests
  */
 
-import { MapsRenderer, isMap } from '../maps';
+import { isMap, MapsRenderer } from '../maps';
 
 describe('MapsRenderer', () => {
   const renderer = new MapsRenderer();
@@ -118,17 +118,17 @@ describe('MapsRenderer', () => {
     it('should return error for invalid JSON', () => {
       const element = renderer.render('invalid json');
       expect(element).toBeTruthy();
-      expect(element.props.severity).toBe('error');
+      expect((element.props as { severity: string }).severity).toBe('error');
     });
 
     it('should use default className', () => {
       const element = renderer.render(geojson);
-      expect(element.props.className).toBe('fmcp-map-content');
+      expect((element.props as { className: string }).className).toBe('fmcp-map-content');
     });
 
     it('should use custom className', () => {
       const element = renderer.render(geojson, { className: 'custom' });
-      expect(element.props.className).toBe('custom');
+      expect((element.props as { className: string }).className).toBe('custom');
     });
   });
 

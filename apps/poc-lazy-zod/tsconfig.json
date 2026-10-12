@@ -6,5 +6,7 @@
     {
       "path": "./tsconfig.app.json"
     }
-  ]
+  ],
+  // Typecheck is off: the generated src/schemas are too large for TypeScript to represent (TS2590).
+  "nx": { "addTypecheckTarget": false }
 }

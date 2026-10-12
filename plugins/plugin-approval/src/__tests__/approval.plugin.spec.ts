@@ -2,17 +2,19 @@
 
 import 'reflect-metadata';
 
-import { STATELESS_SESSION_ID } from '@frontmcp/sdk';
+import { STATELESS_SESSION_ID, type ProviderType, type Type } from '@frontmcp/sdk';
 
 import ApprovalPlugin from '../approval.plugin';
 import { ApprovalServiceToken, ApprovalStoreToken, ChallengeServiceToken } from '../approval.symbols';
-import { createApprovalService } from '../services/approval.service';
+import { createApprovalService, type ApprovalService } from '../services/approval.service';
 
 jest.mock('../services/approval.service', () => ({
   ...jest.requireActual('../services/approval.service'),
   createApprovalService: jest.fn().mockReturnValue({}),
 }));
 const mockedCreateService = createApprovalService as jest.MockedFunction<typeof createApprovalService>;
+
+type ProviderRecord = Exclude<ProviderType, Type>;
 
 describe('ApprovalPlugin', () => {
   describe('defaultOptions', () => {
@@ -98,7 +100,7 @@ describe('ApprovalPlugin', () => {
 
   describe('dynamicProviders', () => {
     it('should return store and service providers for recheck mode', () => {
-      const providers = ApprovalPlugin.dynamicProviders({});
+      const providers = ApprovalPlugin.dynamicProviders({}) as ProviderRecord[];
 
       expect(providers.length).toBe(2);
 
@@ -112,7 +114,7 @@ describe('ApprovalPlugin', () => {
     });
 
     it('should include challenge service for webhook mode', () => {
-      const providers = ApprovalPlugin.dynamicProviders({ mode: 'webhook' });
+      const providers = ApprovalPlugin.dynamicProviders({ mode: 'webhook' }) as ProviderRecord[];
 
       expect(providers.length).toBe(3);
 
@@ -122,7 +124,7 @@ describe('ApprovalPlugin', () => {
     });
 
     it('should not include challenge service for recheck mode', () => {
-      const providers = ApprovalPlugin.dynamicProviders({ mode: 'recheck' });
+      const providers = ApprovalPlugin.dynamicProviders({ mode: 'recheck' }) as ProviderRecord[];
 
       const challengeProvider = providers.find((p) => p.provide === ChallengeServiceToken);
       expect(challengeProvider).toBeUndefined();
@@ -132,7 +134,7 @@ describe('ApprovalPlugin', () => {
       const providers = ApprovalPlugin.dynamicProviders({
         namespace: 'custom',
         cleanupIntervalSeconds: 120,
-      });
+      }) as ProviderRecord[];
 
       const storeProvider = providers.find((p) => p.provide === ApprovalStoreToken);
       expect(storeProvider).toBeDefined();
@@ -144,7 +146,7 @@ describe('ApprovalPlugin', () => {
       const providers = ApprovalPlugin.dynamicProviders({
         mode: 'webhook',
         webhook: { challengeTtl: 600 },
-      });
+      }) as ProviderRecord[];
 
       const challengeProvider = providers.find((p) => p.provide === ChallengeServiceToken);
       expect(challengeProvider).toBeDefined();
@@ -153,7 +155,7 @@ describe('ApprovalPlugin', () => {
     });
 
     it('should have inject functions that return dependency tokens', () => {
-      const providers = ApprovalPlugin.dynamicProviders({});
+      const providers = ApprovalPlugin.dynamicProviders({}) as ProviderRecord[];
 
       for (const provider of providers) {
         if ('inject' in provider && typeof provider.inject === 'function') {
@@ -164,7 +166,7 @@ describe('ApprovalPlugin', () => {
     });
 
     it('should have inject functions for webhook mode providers', () => {
-      const providers = ApprovalPlugin.dynamicProviders({ mode: 'webhook' });
+      const providers = ApprovalPlugin.dynamicProviders({ mode: 'webhook' }) as ProviderRecord[];
 
       for (const provider of providers) {
         if ('inject' in provider && typeof provider.inject === 'function') {
@@ -177,7 +179,7 @@ describe('ApprovalPlugin', () => {
 
   describe('service factory userId extraction', () => {
     function getServiceFactory() {
-      const providers = ApprovalPlugin.dynamicProviders({});
+      const providers = ApprovalPlugin.dynamicProviders({}) as ProviderRecord[];
       const serviceProvider = providers.find((p) => p.provide === ApprovalServiceToken);
       expect(serviceProvider).toBeDefined();
       if (!serviceProvider || !('useFactory' in serviceProvider)) throw new Error('Missing useFactory');
@@ -197,7 +199,12 @@ describe('ApprovalPlugin', () => {
       };
 
       factory({}, ctx);
-      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-1', 'user-from-extra', expect.any(Function));
+      expect(mockedCreateService).toHaveBeenCalledWith(
+        expect.anything(),
+        'sess-1',
+        'user-from-extra',
+        expect.any(Function),
+      );
     });
 
     it('should fall back to extra.sub when userId is missing', () => {
@@ -221,7 +228,12 @@ describe('ApprovalPlugin', () => {
       };
 
       factory({}, ctx);
-      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-3', 'fallback-client', expect.any(Function));
+      expect(mockedCreateService).toHaveBeenCalledWith(
+        expect.anything(),
+        'sess-3',
+        'fallback-client',
+        expect.any(Function),
+      );
     });
 
     it('should handle missing authInfo gracefully', () => {
@@ -237,7 +249,12 @@ describe('ApprovalPlugin', () => {
       const ctx = { sessionId: STATELESS_SESSION_ID, authInfo: { clientId: 'alice' } };
 
       factory({}, ctx);
-      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'stateless-user:alice', 'alice', expect.any(Function));
+      expect(mockedCreateService).toHaveBeenCalledWith(
+        expect.anything(),
+        'stateless-user:alice',
+        'alice',
+        expect.any(Function),
+      );
     });
   });
 

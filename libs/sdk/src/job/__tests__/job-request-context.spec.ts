@@ -12,7 +12,6 @@ import { App, Job, JobContext, LogLevel, ProviderScope, Workflow } from '../../c
 import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../context';
 import { type DirectMcpServer } from '../../direct/direct.types';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
-import { type Scope } from '../../scope/scope.instance';
 import { type JobExecutionManager } from '../execution/job-execution.manager';
 
 abstract class CallerSession {
@@ -27,12 +26,13 @@ interface ContextReport {
 
 @Job({ name: 'report_context', inputSchema: {}, outputSchema: {} })
 class ReportContextJob extends JobContext {
-  async execute(): Promise<ContextReport> {
-    return {
+  async execute() {
+    const report: ContextReport = {
       sessionId: this.context.sessionId,
       requestId: this.context.requestId,
       providerSessionId: this.get(CallerSession).sessionId,
     };
+    return report as unknown as Record<string, never>;
   }
 }
 
@@ -72,7 +72,7 @@ describe('jobs run with the request context (#705)', () => {
       apps: [DeskApp],
       logging: { level: LogLevel.Off },
     });
-    const scope = (server as unknown as { scope: Scope & { _jobExecutionManager?: JobExecutionManager } }).scope;
+    const scope = (server as unknown as { scope: { _jobExecutionManager?: JobExecutionManager } }).scope;
     if (!scope._jobExecutionManager) throw new Error('jobs are not enabled');
     executionManager = scope._jobExecutionManager;
   });

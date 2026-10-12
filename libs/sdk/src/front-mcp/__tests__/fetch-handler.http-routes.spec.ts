@@ -97,7 +97,7 @@ function fetchHandler(options: Partial<FrontMcpConfigInput> = {}) {
     logging: { level: LogLevel.Off },
     http: { routes },
     ...options,
-  });
+  } as FrontMcpConfigInput);
 }
 
 describe('createFetchHandler() with http.routes (#819)', () => {

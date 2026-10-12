@@ -3,8 +3,8 @@
  * values come back exactly as stored, never JSON-parsed by the client (#716).
  */
 import { TypedStorage } from '../../typed-storage';
-import type { StorageAdapter } from '../../types';
 import { COMPARE_AND_DELETE_SCRIPT } from '../../utils/compare-and-delete';
+import type { BaseStorageAdapter } from '../base';
 import { UpstashStorageAdapter } from '../upstash';
 import { VercelKvStorageAdapter } from '../vercel-kv';
 
@@ -79,11 +79,11 @@ function createFakeRedisRest() {
 
 const restOptions = { url: 'https://fake-redis.example.com', token: 'token' };
 
-describe.each<[string, () => StorageAdapter]>([
+describe.each<[string, () => BaseStorageAdapter]>([
   ['UpstashStorageAdapter', () => new UpstashStorageAdapter(restOptions)],
   ['VercelKvStorageAdapter', () => new VercelKvStorageAdapter(restOptions)],
 ])('%s over the REST API', (_adapterName, createAdapter) => {
-  let adapter: StorageAdapter;
+  let adapter: BaseStorageAdapter;
 
   beforeEach(async () => {
     const fakeRest = createFakeRedisRest();

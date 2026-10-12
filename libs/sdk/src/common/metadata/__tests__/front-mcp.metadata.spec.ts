@@ -10,7 +10,10 @@ import { redisOptionsSchema, type RedisOptions } from '../../types/options/redis
 import { transportOptionsSchema } from '../../types/options/transport';
 
 // Helper to safely access redis properties (handles union type with Vercel KV)
-function getRedisProperty<K extends string>(redis: RedisOptions | undefined, key: K): unknown {
+function getRedisProperty<K extends string>(
+  redis: RedisOptions | Record<string, unknown> | undefined,
+  key: K,
+): unknown {
   if (!redis) return undefined;
   return (redis as unknown as Record<string, unknown>)[key];
 }

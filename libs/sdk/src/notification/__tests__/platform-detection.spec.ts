@@ -157,14 +157,14 @@ describe('resolvePlatformType (#681)', () => {
   });
 
   it('lets a platformDetection mapping win over the MCP Apps capability', () => {
-    const config: PlatformDetectionConfig = { mappings: [{ pattern: 'gemini-cli', platform: 'gemini' }] };
+    const config = { mappings: [{ pattern: 'gemini-cli', platform: 'gemini' }] } as PlatformDetectionConfig;
     expect(resolvePlatformType(gemini, mcpApps, config)).toBe('gemini');
     expect(resolvePlatformType({ name: 'Claude', version: '1' }, mcpApps, config)).toBe('ext-apps');
   });
 
   it.each([/acme/g, /acme/y])('matches a %s mapping on every call, not every other one', (pattern) => {
     const acme: ClientInfo = { name: 'acme-agent', version: '1' };
-    const config: PlatformDetectionConfig = { mappings: [{ pattern, platform: 'openai' }] };
+    const config = { mappings: [{ pattern, platform: 'openai' }] } as PlatformDetectionConfig;
     const fromInitialize = [1, 2, 3].map(() => resolvePlatformType(acme, mcpApps, config));
     const fromUserAgent = [1, 2].map(() => detectPlatformFromUserAgent('acme-agent/1.0', config));
     expect(fromInitialize).toEqual(['openai', 'openai', 'openai']);

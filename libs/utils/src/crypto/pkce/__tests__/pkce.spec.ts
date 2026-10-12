@@ -1,14 +1,15 @@
 import {
-  generateCodeVerifier,
-  generateCodeChallenge,
-  verifyCodeChallenge,
-  generatePkcePair,
-  isValidCodeVerifier,
-  isValidCodeChallenge,
-  PkceError,
-  MIN_CODE_VERIFIER_LENGTH,
-  MAX_CODE_VERIFIER_LENGTH,
   DEFAULT_CODE_VERIFIER_LENGTH,
+  generateCodeChallenge,
+  generateCodeVerifier,
+  generatePkcePair,
+  isValidCodeChallenge,
+  isValidCodeVerifier,
+  MAX_CODE_VERIFIER_LENGTH,
+  MIN_CODE_VERIFIER_LENGTH,
+  PkceError,
+  verifyCodeChallenge,
+  type PkcePair,
 } from '../pkce';
 
 describe('PKCE utilities', () => {
@@ -217,7 +218,7 @@ describe('PKCE utilities', () => {
     });
 
     it('should generate unique pairs', () => {
-      const pairs = [];
+      const pairs: PkcePair[] = [];
       for (let i = 0; i < 10; i++) {
         pairs.push(generatePkcePair());
       }

@@ -45,7 +45,7 @@ function hook(
 ): HookRecord {
   return {
     kind: HookKind.METHOD_TOKEN,
-    provide: () => undefined,
+    provide: (() => undefined) as unknown as HookRecord['provide'],
     metadata: { flow, type, stage, method, target: null, static: isStatic } as HookRecord['metadata'],
   };
 }

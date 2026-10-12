@@ -39,22 +39,22 @@ describe('PdfRenderer', () => {
 
     it('should use default className', () => {
       const element = renderer.render('JVBERi0xLjQK');
-      expect(element.props.className).toBe('fmcp-pdf-content');
+      expect((element.props as { className: string }).className).toBe('fmcp-pdf-content');
     });
 
     it('should use custom className', () => {
       const element = renderer.render('JVBERi0xLjQK', { className: 'custom' });
-      expect(element.props.className).toBe('custom');
+      expect((element.props as { className: string }).className).toBe('custom');
     });
 
     it('should use toolName as title', () => {
       const element = renderer.render('JVBERi0xLjQK', { toolName: 'report' });
-      expect(element.props.title).toBe('report');
+      expect((element.props as { title: string }).title).toBe('report');
     });
 
     it('should use default title', () => {
       const element = renderer.render('JVBERi0xLjQK');
-      expect(element.props.title).toBe('PDF Document');
+      expect((element.props as { title: string }).title).toBe('PDF Document');
     });
   });
 

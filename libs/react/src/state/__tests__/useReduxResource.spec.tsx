@@ -1,11 +1,15 @@
 import { act, renderHook } from '@testing-library/react';
 import React from 'react';
 
+import type { ReadResourceResult } from '@frontmcp/sdk';
+
 import { ComponentRegistry } from '../../components/ComponentRegistry';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
 import type { FrontMcpContextValue } from '../../types';
 import { useReduxResource } from '../useReduxResource';
+
+type TextResourceContents = Extract<ReadResourceResult['contents'][number], { text: string }>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -126,7 +130,7 @@ describe('useReduxResource', () => {
 
       const resource = dynamicRegistry.findResource('state://redux')!;
       const result = await resource.read();
-      expect(JSON.parse(result.contents[0].text as string)).toEqual({ count: 99 });
+      expect(JSON.parse((result.contents[0] as TextResourceContents).text)).toEqual({ count: 99 });
     });
   });
 
@@ -216,7 +220,7 @@ describe('useReduxResource', () => {
 
       const resource = dynamicRegistry.findResource('state://redux/count')!;
       const result = await resource.read();
-      expect(result.contents[0].text).toBe('42');
+      expect((result.contents[0] as TextResourceContents).text).toBe('42');
     });
   });
 

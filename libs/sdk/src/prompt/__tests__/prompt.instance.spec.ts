@@ -1,14 +1,14 @@
 import 'reflect-metadata';
 
 import { createMockOwner, createMockProviderRegistry } from '../../__test-utils__/mocks';
-import { Prompt, prompt, PromptContext, PromptKind } from '../../common';
+import { FrontMcpPrompt, Prompt, prompt, PromptContext, PromptKind } from '../../common';
 import { PromptInstance } from '../prompt.instance';
 import { normalizePrompt } from '../prompt.utils';
 
 describe('PromptInstance', () => {
   describe('constructor', () => {
     it('should set name from metadata', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'test-prompt',
         arguments: [],
       })
@@ -26,7 +26,7 @@ describe('PromptInstance', () => {
     });
 
     it('should set fullName with owner prefix', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'named',
         arguments: [],
       })
@@ -44,7 +44,7 @@ describe('PromptInstance', () => {
     });
 
     it('should set owner reference', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'owned',
         arguments: [],
       })
@@ -67,7 +67,7 @@ describe('PromptInstance', () => {
 
   describe('getMetadata', () => {
     it('should return PromptMetadata', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'meta-prompt',
         title: 'Prompt Title',
         description: 'Prompt description',
@@ -92,7 +92,7 @@ describe('PromptInstance', () => {
     });
 
     it('should include optional fields when provided', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'full-meta',
         title: 'Full Title',
         description: 'Full description',
@@ -120,7 +120,7 @@ describe('PromptInstance', () => {
 
   describe('parseArguments', () => {
     it('should pass through valid arguments', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'args-prompt',
         arguments: [{ name: 'topic', required: false }],
       })
@@ -139,7 +139,7 @@ describe('PromptInstance', () => {
     });
 
     it('should throw for missing required argument', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'required-args',
         arguments: [{ name: 'required_field', required: true }],
       })
@@ -159,7 +159,7 @@ describe('PromptInstance', () => {
     });
 
     it('should not throw for missing optional argument', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'optional-args',
         arguments: [{ name: 'optional_field', required: false }],
       })
@@ -177,7 +177,7 @@ describe('PromptInstance', () => {
     });
 
     it('should handle undefined args', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'no-args',
         arguments: [],
       })
@@ -196,7 +196,7 @@ describe('PromptInstance', () => {
     });
 
     it('should include extra arguments not in definition', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'extra-args',
         arguments: [{ name: 'defined', required: false }],
       })
@@ -218,7 +218,7 @@ describe('PromptInstance', () => {
 
   describe('parseOutput', () => {
     it('should convert string to user message', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'string-output',
         arguments: [],
       })
@@ -239,7 +239,7 @@ describe('PromptInstance', () => {
     });
 
     it('should pass through GetPromptResult format', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'passthrough',
         arguments: [],
       })
@@ -264,7 +264,7 @@ describe('PromptInstance', () => {
     });
 
     it('should handle array of messages', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'array-output',
         arguments: [],
       })
@@ -290,7 +290,7 @@ describe('PromptInstance', () => {
     });
 
     it('should convert object to JSON user message', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'object-output',
         arguments: [],
       })
@@ -310,7 +310,7 @@ describe('PromptInstance', () => {
     });
 
     it('should use description from metadata', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'described',
         description: 'A test prompt',
         arguments: [],
@@ -332,7 +332,7 @@ describe('PromptInstance', () => {
 
   describe('safeParseOutput', () => {
     it('should return success with parsed content', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'safe-success',
         arguments: [],
       })
@@ -354,7 +354,7 @@ describe('PromptInstance', () => {
     });
 
     it('should handle null output gracefully', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'safe-null',
         arguments: [],
       })
@@ -373,7 +373,7 @@ describe('PromptInstance', () => {
     });
 
     it('should return a failure for undefined output, which has no valid prompt message', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'safe-undefined',
         arguments: [],
       })
@@ -394,7 +394,7 @@ describe('PromptInstance', () => {
 
   describe('record', () => {
     it('should preserve the original record', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'record-test',
         arguments: [],
       })
@@ -415,7 +415,7 @@ describe('PromptInstance', () => {
 
   describe('metadata', () => {
     it('should expose metadata from record', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'meta-access',
         title: 'Access Title',
         arguments: [],
@@ -488,7 +488,7 @@ describe('PromptInstance', () => {
 
   describe('safeParseOutput failure', () => {
     it('should return error for invalid output that throws', async () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'failing-output',
         arguments: [],
       })

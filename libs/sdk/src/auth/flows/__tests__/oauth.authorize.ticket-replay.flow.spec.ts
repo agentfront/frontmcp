@@ -27,6 +27,7 @@ import {
   HttpTextSchema,
   type FlowMetadata,
 } from '../../../common';
+import type { LocalPrimaryAuth } from '../../instances/instance.local-primary-auth';
 import OauthAuthorizeFlow from '../oauth.authorize.flow';
 
 function authorizeMetadata(): FlowMetadata<'oauth:authorize'> {
@@ -52,7 +53,7 @@ describe('OAuth Authorize Flow — replayed incremental ticket', () => {
     const flow = new OauthAuthorizeFlow(authorizeMetadata(), createOAuthInput(params), scope, jest.fn(), new Map());
     await runFlowStages(flow, [...STAGES]);
     const pendingId = flow.state.snapshot()['pendingAuthId'] as string;
-    return scope.auth.authorizationStore.getPendingAuthorization(pendingId);
+    return (scope.auth as LocalPrimaryAuth).authorizationStore.getPendingAuthorization(pendingId);
   }
 
   it('drops the ticket-supplied prior grants, not just the target app', async () => {

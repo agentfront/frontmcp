@@ -6,6 +6,7 @@ import { FlowControl } from '../../common';
 import { InternalMcpError } from '../../errors';
 import type { Scope } from '../../scope/scope.instance';
 import { DirectMcpServerImpl } from '../direct-server';
+import type { DirectRequestMetadata } from '../direct.types';
 
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => ({
@@ -26,7 +27,12 @@ jest.mock('../direct-client', () => ({
 }));
 
 /** Minimal Scope interface required by DirectMcpServerImpl */
-type MockScope = Pick<Scope, 'runFlowForOutput' | 'transportService' | 'logger' | 'emitDispose'>;
+interface MockScope {
+  runFlowForOutput: jest.Mock;
+  transportService: { destroy: jest.Mock };
+  logger: Scope['logger'];
+  emitDispose: jest.Mock;
+}
 
 describe('DirectMcpServerImpl', () => {
   // Mock Scope with type-safe partial
@@ -34,7 +40,7 @@ describe('DirectMcpServerImpl', () => {
     runFlowForOutput: jest.fn(),
     transportService: {
       destroy: jest.fn().mockResolvedValue(undefined),
-    } as unknown as Scope['transportService'],
+    },
     logger: { child: () => ({ error: jest.fn(), warn: jest.fn() }) } as unknown as Scope['logger'],
     emitDispose: jest.fn().mockResolvedValue(undefined),
   });
@@ -468,8 +474,9 @@ describe('DirectMcpServerImpl', () => {
       mockScope.runFlowForOutput.mockResolvedValue({ tools: [] });
 
       const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
+      const metadata: DirectRequestMetadata & { requestId: string } = { requestId: 'req-123' };
       await server.listTools({
-        metadata: { requestId: 'req-123' },
+        metadata,
       });
 
       expect(mockScope.runFlowForOutput).toHaveBeenCalledWith(

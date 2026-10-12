@@ -9,6 +9,8 @@ import { DynamicRegistry } from '../../registry/DynamicRegistry';
 import type { FrontMcpContextValue } from '../../types';
 import { useDynamicResource } from '../useDynamicResource';
 
+type TextResourceContents = Extract<ReadResourceResult['contents'][number], { text: string }>;
+
 function createWrapper(dynamicRegistry: DynamicRegistry) {
   const ctx: FrontMcpContextValue = {
     name: 'test',
@@ -71,7 +73,7 @@ describe('useDynamicResource', () => {
 
     const res = dynamicRegistry.findResource('app://data')!;
     const result = await res.read();
-    expect(result.contents[0].text).toBe('{"x":1}');
+    expect((result.contents[0] as TextResourceContents).text).toBe('{"x":1}');
   });
 
   it('does not register when enabled=false', () => {
@@ -134,7 +136,7 @@ describe('useDynamicResource', () => {
 
     const res = dynamicRegistry.findResource('app://counter')!;
     const result = await res.read();
-    expect(result.contents[0].text).toBe('42');
+    expect((result.contents[0] as TextResourceContents).text).toBe('42');
   });
 
   it('reads through the committed read function while a newer render is suspended', async () => {

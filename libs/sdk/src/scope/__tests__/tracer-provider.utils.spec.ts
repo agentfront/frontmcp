@@ -32,7 +32,11 @@ describe('registerExportingTracerProvider', () => {
   it('registers a provider that exports each span as it ends, on @opentelemetry/sdk-trace-base 2.x', () => {
     const exporter = new InMemorySpanExporter();
 
-    registerExportingTracerProvider(api, sdkTraceBase, exporter);
+    registerExportingTracerProvider(
+      api,
+      sdkTraceBase as Parameters<typeof registerExportingTracerProvider>[1],
+      exporter,
+    );
     api.trace.getTracer('test').startSpan('checked').end();
 
     expect(hasRegisteredTracerProvider(api)).toBe(true);

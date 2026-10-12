@@ -2,11 +2,13 @@
  * Additional branch coverage tests for OpenAPI Adapter
  */
 
-import OpenapiAdapter from '../openapi.adapter';
-import { basicOpenApiSpec } from './fixtures';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
+
 import { FrontMcpToolTokens } from '@frontmcp/sdk';
+
+import OpenapiAdapter from '../openapi.adapter';
 import type { JsonSchemaType, SchemaTransformFn } from '../openapi.types';
+import { basicOpenApiSpec } from './fixtures';
 
 // Mock the OpenAPIToolGenerator
 jest.mock('mcp-from-openapi', () => ({
@@ -200,7 +202,7 @@ describe('OpenapiAdapter - Schema Transform Branch Coverage', () => {
             get_users: ((schema: JsonSchemaType, _ctx) => {
               // Remove secret from input schema
               if (schema.type === 'object' && schema.properties) {
-                const { secret, ...rest } = schema.properties as Record<string, unknown>;
+                const { secret, ...rest } = schema.properties;
                 return { ...schema, properties: rest };
               }
               return schema;
@@ -253,7 +255,7 @@ describe('OpenapiAdapter - Schema Transform Branch Coverage', () => {
             get_users: ((schema: JsonSchemaType | undefined, _ctx) => {
               // Remove internal from output schema
               if (schema?.type === 'object' && schema.properties) {
-                const { internal, ...rest } = schema.properties as Record<string, unknown>;
+                const { internal, ...rest } = schema.properties;
                 return { ...schema, properties: rest };
               }
               return schema;

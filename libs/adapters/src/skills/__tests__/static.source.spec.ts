@@ -150,7 +150,7 @@ operations: {}
     await fs.writeFile(file, JSON.stringify(baseBundle), 'utf8');
 
     const warn = jest.fn();
-    const logger: FrontMcpLogger = { ...makeLogger(), warn };
+    const logger = { ...makeLogger(), warn } as unknown as FrontMcpLogger;
     const source = new StaticSource({ type: 'static', path: file, watch: true }, logger);
     source.onChange(() => {});
     await source.start();

@@ -48,12 +48,12 @@ describe('MdxRenderer', () => {
 
     it('should use default className', () => {
       const element = renderer.render('# Hello');
-      expect(element.props.className).toBe('fmcp-mdx-content');
+      expect((element.props as { className: string }).className).toBe('fmcp-mdx-content');
     });
 
     it('should use custom className', () => {
       const element = renderer.render('# Hello', { className: 'custom' });
-      expect(element.props.className).toBe('custom');
+      expect((element.props as { className: string }).className).toBe('custom');
     });
 
     it('should render headings in fallback mode', () => {

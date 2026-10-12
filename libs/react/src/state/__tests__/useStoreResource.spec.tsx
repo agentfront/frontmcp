@@ -1,13 +1,15 @@
 import { act, render, renderHook } from '@testing-library/react';
 import React from 'react';
 
-import type { CallToolResult } from '@frontmcp/sdk';
+import type { CallToolResult, ReadResourceResult, TextContent } from '@frontmcp/sdk';
 
 import { ComponentRegistry } from '../../components/ComponentRegistry';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
 import type { FrontMcpContextValue } from '../../types';
 import { useStoreResource } from '../useStoreResource';
+
+type TextResourceContents = Extract<ReadResourceResult['contents'][number], { text: string }>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -126,7 +128,7 @@ describe('useStoreResource (state module)', () => {
       const resource = dynamicRegistry.findResource('state://counter')!;
       const result = await resource.read();
 
-      expect(result.contents[0].text).toBe(JSON.stringify({ count: 10 }));
+      expect((result.contents[0] as TextResourceContents).text).toBe(JSON.stringify({ count: 10 }));
     });
 
     it('unregisters main state resource on unmount', () => {
@@ -324,7 +326,7 @@ describe('useStoreResource (state module)', () => {
 
       const resource = dynamicRegistry.findResource('state://counter/doubled')!;
       const result = await resource.read();
-      expect(result.contents[0].text).toBe('42');
+      expect((result.contents[0] as TextResourceContents).text).toBe('42');
     });
 
     it('unregisters selector sub-resources on unmount', () => {
@@ -371,7 +373,7 @@ describe('useStoreResource (state module)', () => {
 
       const resource = dynamicRegistry.findResource('state://undef/missing')!;
       const result = await resource.read();
-      expect(result.contents[0].text).toBe('null');
+      expect((result.contents[0] as TextResourceContents).text).toBe('null');
     });
 
     it('does not register selectors when none provided', () => {
@@ -602,11 +604,11 @@ describe('useStoreResource (state module)', () => {
 
       const mainResource = dynamicRegistry.findResource('state://counter')!;
       const mainResult = await mainResource.read();
-      expect(JSON.parse(mainResult.contents[0].text)).toEqual({ count: 7 });
+      expect(JSON.parse((mainResult.contents[0] as TextResourceContents).text)).toEqual({ count: 7 });
 
       const selectorResource = dynamicRegistry.findResource('state://counter/doubled')!;
       const selectorResult = await selectorResource.read();
-      expect(JSON.parse(selectorResult.contents[0].text)).toBe(14);
+      expect(JSON.parse((selectorResult.contents[0] as TextResourceContents).text)).toBe(14);
     });
   });
 
@@ -649,14 +651,14 @@ describe('useStoreResource (state module)', () => {
       const selected = await dynamicRegistry.findResource('state://inline/count')!.read();
       const action = await dynamicRegistry.findTool('inline_bump')!.execute({});
 
-      expect(JSON.parse(state.contents[0].text)).toEqual({ count: 3, tag: 7 });
-      expect(JSON.parse(selected.contents[0].text)).toEqual(['count', 7]);
-      expect(JSON.parse(action.content[0].text)).toEqual({ success: true, result: 'bump:7' });
+      expect(JSON.parse((state.contents[0] as TextResourceContents).text)).toEqual({ count: 3, tag: 7 });
+      expect(JSON.parse((selected.contents[0] as TextResourceContents).text)).toEqual(['count', 7]);
+      expect(JSON.parse((action.content[0] as TextContent).text)).toEqual({ success: true, result: 'bump:7' });
     });
 
     it('runs the committed action from a layout effect, before passive effects run', async () => {
       const store = createMockStore({ count: 3 });
-      const actionsSeenAfterCommit: Array<Promise<CallToolResult | undefined>> = [];
+      const actionsSeenAfterCommit: Array<Promise<CallToolResult> | undefined> = [];
       function InlineStore({ tag }: { tag: number }) {
         useStoreResource({
           name: 'inline',
@@ -775,11 +777,11 @@ describe('useStoreResource (state module)', () => {
       const multiline = dynamicRegistry.findTool('inline_two\nlines');
 
       expect(dynamicRegistry.hasTool('inline_two')).toBe(false);
-      expect(unnamed && JSON.parse((await unnamed.execute({})).content[0].text)).toEqual({
+      expect(unnamed && JSON.parse(((await unnamed.execute({})).content[0] as TextContent).text)).toEqual({
         success: true,
         result: ':3',
       });
-      expect(multiline && JSON.parse((await multiline.execute({})).content[0].text)).toEqual({
+      expect(multiline && JSON.parse(((await multiline.execute({})).content[0] as TextContent).text)).toEqual({
         success: true,
         result: 'two\nlines:3',
       });
@@ -820,7 +822,7 @@ describe('useStoreResource (state module)', () => {
       actions = { bump: undefined as unknown as () => unknown };
       rerender();
 
-      expect(JSON.parse((await selector.read()).contents[0].text)).toBeNull();
+      expect(JSON.parse(((await selector.read()).contents[0] as TextResourceContents).text)).toBeNull();
       expect(await tool.execute({})).toEqual({
         isError: true,
         content: [{ type: 'text', text: 'Action "bump" is no longer available' }],

@@ -34,9 +34,11 @@ const INITIALIZE = {
 
 const MCP_HEADERS = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' };
 
+type DisposableInstance = FrontMcpInstance & { dispose?: () => Promise<void> };
+
 async function build(
   overrides: Record<string, unknown>,
-): Promise<{ instance: FrontMcpInstance; handler: WebFetchHandler }> {
+): Promise<{ instance: DisposableInstance; handler: WebFetchHandler }> {
   const instance = await FrontMcpInstance.createForGraph({
     info: { name: 'hardening-test', version: '1.0.0' },
     apps: [HardeningApp],
@@ -67,7 +69,7 @@ function chunkedPost(chunks: string[]): Request {
 }
 
 describe('web-fetch handler: security headers', () => {
-  let instance: FrontMcpInstance;
+  let instance: DisposableInstance;
   let handler: WebFetchHandler;
 
   beforeAll(async () => {
@@ -96,7 +98,7 @@ describe('web-fetch handler: security headers', () => {
 });
 
 describe('web-fetch handler: http.bodyLimit', () => {
-  let instance: FrontMcpInstance;
+  let instance: DisposableInstance;
   let handler: WebFetchHandler;
 
   beforeAll(async () => {

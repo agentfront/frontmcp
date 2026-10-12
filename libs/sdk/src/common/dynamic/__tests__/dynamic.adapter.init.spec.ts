@@ -14,7 +14,7 @@ interface NamedOptions {
   name: string;
 }
 
-class NamelessInitAdapter extends DynamicAdapter<NamedOptions> {
+abstract class NamelessInitAdapter extends DynamicAdapter<NamedOptions> {
   options: NamedOptions;
 
   constructor(options: NamedOptions) {

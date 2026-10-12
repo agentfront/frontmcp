@@ -2,8 +2,11 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/spec",
-    "module": "NodeNext",
-    "types": ["jest", "node"]
+    "module": "commonjs",
+    "types": ["jest", "node"],
+    "rootDir": "../..",
+    "declaration": true,
+    "moduleResolution": "node10"
   },
   "include": ["jest.config.ts", "src/**/*.spec.ts", "src/**/*.d.ts", "src/**/__tests__/**/*.ts"]
 }

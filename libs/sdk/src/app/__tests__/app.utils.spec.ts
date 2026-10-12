@@ -1,7 +1,8 @@
 import 'reflect-metadata';
-import { normalizeApp } from '../app.utils';
+
 import { AppKind, AppType } from '../../common';
 import { MissingProvideError } from '../../errors';
+import { normalizeApp } from '../app.utils';
 
 describe('normalizeApp', () => {
   it('should recognize npm remote app with package specifier (no URI scheme)', () => {
@@ -38,7 +39,7 @@ describe('normalizeApp', () => {
 
   it('should throw MissingProvideError for object without provide', () => {
     const input = { name: 'bad-app', foo: 'bar' };
-    expect(() => normalizeApp(input as AppType)).toThrow(MissingProvideError);
+    expect(() => normalizeApp(input as unknown as AppType)).toThrow(MissingProvideError);
   });
 
   it('should use id over name for remote app symbol token', () => {

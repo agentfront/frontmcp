@@ -1,6 +1,9 @@
+import type { ReadResourceResult } from '@frontmcp/sdk';
+
 import { CurrentRouteResource } from '../current-route.resource';
-import { setLocation, clearBridge } from '../router-bridge';
-import type { BridgeLocation } from '../router-bridge';
+import { clearBridge, setLocation, type BridgeLocation } from '../router-bridge';
+
+type TextResourceContents = Extract<ReadResourceResult['contents'][number], { text: string }>;
 
 describe('CurrentRouteResource', () => {
   beforeEach(() => {
@@ -65,7 +68,7 @@ describe('CurrentRouteResource', () => {
     setLocation(location);
 
     const result = await CurrentRouteResource.read();
-    const parsed = JSON.parse(result.contents[0].text);
+    const parsed = JSON.parse((result.contents[0] as TextResourceContents).text);
 
     expect(parsed.href).toBe('/home');
     expect(parsed.pathname).toBe('/home');
@@ -82,7 +85,7 @@ describe('CurrentRouteResource', () => {
     setLocation(location);
 
     const result = await CurrentRouteResource.read();
-    const parsed = JSON.parse(result.contents[0].text);
+    const parsed = JSON.parse((result.contents[0] as TextResourceContents).text);
 
     expect(parsed.href).toBe('/search?q=test&page=2');
   });

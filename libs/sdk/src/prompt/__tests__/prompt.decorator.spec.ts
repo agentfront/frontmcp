@@ -1,11 +1,15 @@
 import 'reflect-metadata';
-import { Prompt, FrontMcpPrompt, prompt, frontMcpPrompt } from '../../common/decorators/prompt.decorator';
+
+import { FrontMcpPrompt, frontMcpPrompt, Prompt, prompt } from '../../common/decorators/prompt.decorator';
+import type { PromptMetadata } from '../../common/metadata';
 import { FrontMcpPromptTokens } from '../../common/tokens';
+
+const PlainClassPrompt = Prompt as typeof FrontMcpPrompt;
 
 describe('prompt.decorator', () => {
   describe('Prompt (class decorator)', () => {
     it('should apply metadata to class', () => {
-      @Prompt({
+      @PlainClassPrompt({
         name: 'test-prompt',
         arguments: [],
       })
@@ -20,7 +24,7 @@ describe('prompt.decorator', () => {
     });
 
     it('should store name metadata', () => {
-      @Prompt({
+      @PlainClassPrompt({
         name: 'named-prompt',
         arguments: [],
       })
@@ -35,7 +39,7 @@ describe('prompt.decorator', () => {
     });
 
     it('should store title metadata', () => {
-      @Prompt({
+      @PlainClassPrompt({
         name: 'titled-prompt',
         title: 'Prompt Title',
         arguments: [],
@@ -51,7 +55,7 @@ describe('prompt.decorator', () => {
     });
 
     it('should store description metadata', () => {
-      @Prompt({
+      @PlainClassPrompt({
         name: 'described-prompt',
         description: 'Prompt Description',
         arguments: [],
@@ -67,7 +71,7 @@ describe('prompt.decorator', () => {
     });
 
     it('should store arguments metadata', () => {
-      @Prompt({
+      @PlainClassPrompt({
         name: 'args-prompt',
         arguments: [
           { name: 'topic', description: 'The topic', required: true },
@@ -89,7 +93,7 @@ describe('prompt.decorator', () => {
     });
 
     it('should handle empty arguments array', () => {
-      @Prompt({
+      @PlainClassPrompt({
         name: 'no-args-prompt',
         arguments: [],
       })
@@ -106,7 +110,7 @@ describe('prompt.decorator', () => {
     it('should validate metadata with zod schema', () => {
       // Empty name should fail
       expect(() => {
-        @Prompt({
+        @PlainClassPrompt({
           name: '',
           arguments: [],
         })
@@ -165,7 +169,7 @@ describe('prompt.decorator', () => {
         messages: [],
       }));
 
-      const metadata = myPrompt[FrontMcpPromptTokens.metadata];
+      const metadata = myPrompt[FrontMcpPromptTokens.metadata] as PromptMetadata;
       expect(metadata.name).toBe('meta-function');
       expect(metadata.title).toBe('Function Title');
       expect(metadata.description).toBe('Function Description');
@@ -211,7 +215,7 @@ describe('prompt.decorator', () => {
         messages: [{ role: 'user' as const, content: { type: 'text' as const, text: args?.['topic'] || 'default' } }],
       }));
 
-      const metadata = myPrompt[FrontMcpPromptTokens.metadata];
+      const metadata = myPrompt[FrontMcpPromptTokens.metadata] as Required<Pick<PromptMetadata, 'arguments'>>;
       expect(metadata.arguments).toHaveLength(2);
       expect(metadata.arguments[0].name).toBe('topic');
       expect(metadata.arguments[1].required).toBe(false);
@@ -232,14 +236,14 @@ describe('prompt.decorator', () => {
       }));
 
       expect(myPrompt[FrontMcpPromptTokens.type]).toBe('function-prompt');
-      expect(myPrompt[FrontMcpPromptTokens.metadata].name).toBe('alias-function');
+      expect((myPrompt[FrontMcpPromptTokens.metadata] as PromptMetadata).name).toBe('alias-function');
     });
   });
 
   describe('metadata validation', () => {
     it('should require name field', () => {
       expect(() => {
-        @Prompt({
+        @PlainClassPrompt({
           name: '',
           arguments: [],
         } as any)
@@ -252,7 +256,7 @@ describe('prompt.decorator', () => {
     });
 
     it('should allow undefined optional fields', () => {
-      @Prompt({
+      @PlainClassPrompt({
         name: 'minimal-metadata',
         arguments: [],
       })
@@ -269,7 +273,7 @@ describe('prompt.decorator', () => {
     });
 
     it('should pass through additional metadata fields', () => {
-      @Prompt({
+      @PlainClassPrompt({
         name: 'extended',
         arguments: [],
         // Any passthrough fields would go here
@@ -287,7 +291,7 @@ describe('prompt.decorator', () => {
 
   describe('argument definitions', () => {
     it('should handle argument with all fields', () => {
-      @Prompt({
+      @PlainClassPrompt({
         name: 'full-args',
         arguments: [
           {
@@ -312,7 +316,7 @@ describe('prompt.decorator', () => {
     });
 
     it('should handle argument with minimal fields', () => {
-      @Prompt({
+      @PlainClassPrompt({
         name: 'minimal-args',
         arguments: [{ name: 'minimal' }],
       })
@@ -329,7 +333,7 @@ describe('prompt.decorator', () => {
     });
 
     it('should handle multiple arguments', () => {
-      @Prompt({
+      @PlainClassPrompt({
         name: 'multi-args',
         arguments: [{ name: 'first', required: true }, { name: 'second', required: false }, { name: 'third' }],
       })

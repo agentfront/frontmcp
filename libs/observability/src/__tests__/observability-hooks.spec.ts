@@ -76,6 +76,8 @@ afterAll(async () => {
   await provider.shutdown();
 });
 
+type FetchingToolContext = { fetch: (url: string, init?: RequestInit) => Promise<Response> };
+
 function makeFlowCtx(traceId = 'a'.repeat(32), parentId = 'b'.repeat(16)) {
   return {
     state: {
@@ -457,7 +459,9 @@ describe('Auto-instrumentation Hooks', () => {
       wrapContextFetch(DEFAULT_OPTS, ctx);
 
       // Call the wrapped fetch
-      const result = await ctx.state.toolContext.fetch('https://api.example.com', { method: 'POST' });
+      const result = await (ctx.state.toolContext as FetchingToolContext).fetch('https://api.example.com', {
+        method: 'POST',
+      });
       expect(result).toBe(mockResponse);
 
       onToolDidExecute(DEFAULT_OPTS, ctx);
@@ -477,7 +481,9 @@ describe('Auto-instrumentation Hooks', () => {
 
       wrapContextFetch(DEFAULT_OPTS, ctx);
 
-      await expect(ctx.state.toolContext.fetch('https://fail.com')).rejects.toThrow('network error');
+      await expect((ctx.state.toolContext as FetchingToolContext).fetch('https://fail.com')).rejects.toThrow(
+        'network error',
+      );
 
       const fetchSpan = exporter.getFinishedSpans().find((s) => s.name === 'GET');
       expect(fetchSpan).toBeTruthy();
@@ -491,8 +497,10 @@ describe('Auto-instrumentation Hooks', () => {
       ctx.state.toolContext = { fetch: origFetch };
 
       wrapContextFetch(DEFAULT_OPTS, ctx);
-      await ctx.state.toolContext.fetch('https://api.example.com');
-      await ctx.state.toolContext.fetch('https://api.example.com', { headers: { traceparent: 'mine' } });
+      await (ctx.state.toolContext as FetchingToolContext).fetch('https://api.example.com');
+      await (ctx.state.toolContext as FetchingToolContext).fetch('https://api.example.com', {
+        headers: { traceparent: 'mine' },
+      });
 
       const fetchSpan = exporter.getFinishedSpans().find((s) => s.name === 'GET');
       const { traceId, spanId } = fetchSpan!.spanContext();
@@ -507,7 +515,7 @@ describe('Auto-instrumentation Hooks', () => {
       ctx.state.toolContext = { fetch: origFetch };
 
       wrapContextFetch({ ...DEFAULT_OPTS, fetchSpans: false }, ctx);
-      await ctx.state.toolContext.fetch('https://api.example.com');
+      await (ctx.state.toolContext as FetchingToolContext).fetch('https://api.example.com');
 
       expect(exporter.getFinishedSpans().find((s) => s.name === 'GET')).toBeUndefined();
       const rpcSpan = ctx.state[SPAN_KEY] as { spanContext(): { spanId: string } };

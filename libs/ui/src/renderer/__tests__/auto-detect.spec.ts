@@ -2,16 +2,17 @@
  * Auto-detect and Registry Tests
  */
 
+import React from 'react';
+
 import {
-  detectContentType,
-  registerRenderer,
   clearRegistry,
-  renderContent,
-  getRenderer,
+  detectContentType,
   getRegisteredRenderers,
+  getRenderer,
+  registerRenderer,
+  renderContent,
 } from '../auto-detect';
 import type { ContentRenderer } from '../types';
-import React from 'react';
 
 // ============================================
 // detectContentType Tests
@@ -147,7 +148,7 @@ describe('Renderer Registry', () => {
   it('should render content using canHandle match', () => {
     const result = renderContent('TEST: hello');
     expect(result).toBeTruthy();
-    expect(result.props.children).toBe('TEST: hello');
+    expect((result.props as { children: string }).children).toBe('TEST: hello');
   });
 
   it('should replace existing renderer with same type on re-register', () => {

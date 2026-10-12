@@ -1,6 +1,6 @@
 // file: plugins/plugin-codecall/src/__tests__/codecall.plugin.spec.ts
 
-import { type ScopeEntry } from '@frontmcp/sdk';
+import { type ProviderType, type ScopeEntry } from '@frontmcp/sdk';
 
 import CodeCallPlugin from '../codecall.plugin';
 import { type CodeCallMode, type CodeCallPluginOptionsInput } from '../codecall.types';
@@ -8,6 +8,9 @@ import CodeCallConfig from '../providers/code-call.config';
 import { ToolSearchService } from '../services';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import EnclaveService from '../services/enclave.service';
+
+type ValueProvider = Extract<ProviderType, { useValue: unknown }>;
+type FactoryProvider = Extract<ProviderType, { useFactory: unknown }>;
 
 describe('CodeCallPlugin', () => {
   describe('constructor', () => {
@@ -35,7 +38,7 @@ describe('CodeCallPlugin', () => {
 
     it('should include codecall:config provider', () => {
       const providers = CodeCallPlugin.dynamicProviders({});
-      const configProvider = providers.find((p) => p.name === 'codecall:config');
+      const configProvider = providers.find((p) => p.name === 'codecall:config') as ValueProvider | undefined;
       expect(configProvider).toBeDefined();
       expect(configProvider?.provide).toBe(CodeCallConfig);
       expect(configProvider?.useValue).toBeInstanceOf(CodeCallConfig);
@@ -43,7 +46,7 @@ describe('CodeCallPlugin', () => {
 
     it('should include codecall:audit-logger provider', () => {
       const providers = CodeCallPlugin.dynamicProviders({});
-      const auditProvider = providers.find((p) => p.name === 'codecall:audit-logger');
+      const auditProvider = providers.find((p) => p.name === 'codecall:audit-logger') as FactoryProvider | undefined;
       expect(auditProvider).toBeDefined();
       expect(auditProvider?.provide).toBe(AuditLoggerService);
       expect(typeof auditProvider?.useFactory).toBe('function');
@@ -52,7 +55,7 @@ describe('CodeCallPlugin', () => {
 
     it('subscribes the audit logger to the scope logger', () => {
       const providers = CodeCallPlugin.dynamicProviders({});
-      const auditProvider = providers.find((p) => p.name === 'codecall:audit-logger');
+      const auditProvider = providers.find((p) => p.name === 'codecall:audit-logger') as FactoryProvider | undefined;
 
       const info = jest.fn();
       const child = jest.fn(() => ({ info }));
@@ -71,7 +74,7 @@ describe('CodeCallPlugin', () => {
 
     it('never puts script source or tool arguments in a log line', () => {
       const providers = CodeCallPlugin.dynamicProviders({});
-      const auditProvider = providers.find((p) => p.name === 'codecall:audit-logger');
+      const auditProvider = providers.find((p) => p.name === 'codecall:audit-logger') as FactoryProvider | undefined;
 
       const info = jest.fn();
       const audit = auditProvider?.useFactory?.({
@@ -88,7 +91,7 @@ describe('CodeCallPlugin', () => {
 
     it('should include codecall:enclave provider', () => {
       const providers = CodeCallPlugin.dynamicProviders({});
-      const enclaveProvider = providers.find((p) => p.name === 'codecall:enclave');
+      const enclaveProvider = providers.find((p) => p.name === 'codecall:enclave') as FactoryProvider | undefined;
       expect(enclaveProvider).toBeDefined();
       expect(enclaveProvider?.provide).toBe(EnclaveService);
       expect(typeof enclaveProvider?.useFactory).toBe('function');
@@ -97,7 +100,7 @@ describe('CodeCallPlugin', () => {
 
     it('should include codecall:tool-search provider', () => {
       const providers = CodeCallPlugin.dynamicProviders({});
-      const searchProvider = providers.find((p) => p.name === 'codecall:tool-search');
+      const searchProvider = providers.find((p) => p.name === 'codecall:tool-search') as FactoryProvider | undefined;
       expect(searchProvider).toBeDefined();
       expect(searchProvider?.provide).toBe(ToolSearchService);
       expect(typeof searchProvider?.useFactory).toBe('function');
@@ -105,7 +108,7 @@ describe('CodeCallPlugin', () => {
 
     it('should create EnclaveService using factory', async () => {
       const providers = CodeCallPlugin.dynamicProviders({});
-      const enclaveProvider = providers.find((p) => p.name === 'codecall:enclave');
+      const enclaveProvider = providers.find((p) => p.name === 'codecall:enclave') as FactoryProvider | undefined;
       const config = new CodeCallConfig({});
       const service = await enclaveProvider?.useFactory?.(config);
       expect(service).toBeInstanceOf(EnclaveService);
@@ -113,7 +116,7 @@ describe('CodeCallPlugin', () => {
 
     it('should create ToolSearchService using factory', async () => {
       const providers = CodeCallPlugin.dynamicProviders({});
-      const searchProvider = providers.find((p) => p.name === 'codecall:tool-search');
+      const searchProvider = providers.find((p) => p.name === 'codecall:tool-search') as FactoryProvider | undefined;
       const mockScope = {
         tools: {
           list: () => [],
@@ -133,7 +136,7 @@ describe('CodeCallPlugin', () => {
         mode: 'codecall_opt_in' as const,
       };
       const providers = CodeCallPlugin.dynamicProviders(options);
-      const searchProvider = providers.find((p) => p.name === 'codecall:tool-search');
+      const searchProvider = providers.find((p) => p.name === 'codecall:tool-search') as FactoryProvider | undefined;
 
       expect(searchProvider).toBeDefined();
       // The factory function should be callable

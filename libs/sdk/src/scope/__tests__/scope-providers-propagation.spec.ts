@@ -12,6 +12,7 @@ import 'reflect-metadata';
 
 import { ProviderScope } from '@frontmcp/di';
 
+import type { AnnotatedClass } from '../../common';
 import { App } from '../../common/decorators/app.decorator';
 import { Provider } from '../../common/decorators/provider.decorator';
 import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
@@ -71,7 +72,7 @@ describe('Scope provider propagation (issue #403)', () => {
           scope: ProviderScope.GLOBAL,
           useFactory: () => RESOLVED,
           inject: [],
-        },
+        } as unknown as AnnotatedClass,
       ],
       apps: [AppFactory],
     });
@@ -91,10 +92,21 @@ describe('Scope provider propagation (issue #403)', () => {
       child(): FrontMcpLogger {
         return this;
       }
-      debug() {}
-      info() {}
-      warn() {}
-      error() {}
+      get verbose() {
+        return () => {};
+      }
+      get debug() {
+        return () => {};
+      }
+      get info() {
+        return () => {};
+      }
+      get warn() {
+        return () => {};
+      }
+      get error() {
+        return () => {};
+      }
     }
     let factoryWasInvoked = false;
 
@@ -113,7 +125,7 @@ describe('Scope provider propagation (issue #403)', () => {
             return new HostileLogger();
           },
           inject: [],
-        },
+        } as unknown as AnnotatedClass,
       ],
       apps: [AppShadow],
     });

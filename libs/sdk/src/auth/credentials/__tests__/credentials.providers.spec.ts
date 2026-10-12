@@ -49,18 +49,16 @@ describe('createCredentialsProviders', () => {
     });
     expect(providers).toHaveLength(2);
 
-    const vaultProvider = providers.find((p) => 'provide' in p && p.provide === SESSION_CREDENTIAL_VAULT) as Record<
-      string,
-      unknown
-    >;
+    const vaultProvider = providers.find(
+      (p) => 'provide' in p && p.provide === SESSION_CREDENTIAL_VAULT,
+    ) as unknown as Record<string, unknown>;
     expect(vaultProvider).toBeTruthy();
     expect(vaultProvider['useValue']).toBe(vault);
     expect(vaultProvider['scope']).toBe('global');
 
-    const accessorProvider = providers.find((p) => 'provide' in p && p.provide === CREDENTIALS_ACCESSOR) as Record<
-      string,
-      unknown
-    >;
+    const accessorProvider = providers.find(
+      (p) => 'provide' in p && p.provide === CREDENTIALS_ACCESSOR,
+    ) as unknown as Record<string, unknown>;
     expect(accessorProvider).toBeTruthy();
     expect(typeof accessorProvider['useFactory']).toBe('function');
     expect(typeof accessorProvider['inject']).toBe('function');

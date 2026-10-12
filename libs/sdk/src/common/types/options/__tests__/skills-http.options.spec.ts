@@ -1,11 +1,11 @@
 // common/types/options/__tests__/skills-http.options.spec.ts
 
 import {
-  skillsConfigOptionsSchema,
-  skillsConfigEndpointConfigSchema,
-  skillsConfigAuthModeSchema,
   normalizeEndpointConfig,
   normalizeSkillsConfigOptions,
+  skillsConfigAuthModeSchema,
+  skillsConfigEndpointConfigSchema,
+  skillsConfigOptionsSchema,
 } from '../skills-http';
 
 describe('skillsConfigAuthModeSchema', () => {
@@ -213,7 +213,8 @@ describe('normalizeEndpointConfig', () => {
   });
 
   it('should always use parent auth regardless of endpoint config', () => {
-    const result = normalizeEndpointConfig({ path: '/custom.txt' }, '/default.txt', 'bearer');
+    const endpointConfig = { path: '/custom.txt' } as Parameters<typeof normalizeEndpointConfig>[0];
+    const result = normalizeEndpointConfig(endpointConfig, '/default.txt', 'bearer');
     expect(result.auth).toBe('bearer');
   });
 });

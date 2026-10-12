@@ -56,6 +56,12 @@ function createFlowCtx(authInfo: unknown, sessionId = 'session-1'): FlowCtxOf<'t
   } as unknown as FlowCtxOf<'tools:call-tool'>;
 }
 
+function toolContextOf(ctx: FlowCtxOf<'tools:call-tool'>) {
+  const { toolContext } = ctx.state;
+  if (!toolContext) throw new Error('flow context has no toolContext');
+  return toolContext;
+}
+
 // The SAME clientId with different subjects: varying both would let the test pass even if
 // the implementation keyed only by clientId.
 const USER_A = { extra: { sub: 'user-a' }, clientId: 'shared-client' };
@@ -74,7 +80,7 @@ describe('CachePlugin — caller identity in the key (GHSA-r6v6-p4r8-p936)', () 
     const keyReadForB = store.getValue.mock.calls[0][0];
 
     expect(keyReadForB).not.toBe(keyForA);
-    expect(ctxB.state.toolContext.respond).not.toHaveBeenCalled();
+    expect(ctxB.state.toolContext?.respond).not.toHaveBeenCalled();
   });
 
   it('uses the same key on read and write for one caller, so the cache still works', async () => {
@@ -99,9 +105,9 @@ describe('CachePlugin — caller identity in the key (GHSA-r6v6-p4r8-p936)', () 
     const { plugin, store } = createHarness();
 
     const first = createFlowCtx(USER_A);
-    first.state.toolContext.input = { id: 1 };
+    toolContextOf(first).input = { id: 1 };
     const second = createFlowCtx(USER_A);
-    second.state.toolContext.input = { id: 2 };
+    toolContextOf(second).input = { id: 2 };
 
     await plugin.willWriteCache(first);
     await plugin.willWriteCache(second);
@@ -142,9 +148,11 @@ describe('CachePlugin — caller identity in the key (GHSA-r6v6-p4r8-p936)', () 
     // No authInfo and no session: two such calls must not collide, because a shared
     // identity-less bucket would serve one caller's response to another.
     const first = createFlowCtx(undefined, '');
-    first.state.toolContext.tryGetContext = () => ({ sessionId: undefined, authInfo: undefined });
+    // @ts-expect-error an identity-less context, which the SDK's context type does not allow
+    toolContextOf(first).tryGetContext = () => ({ sessionId: undefined, authInfo: undefined });
     const second = createFlowCtx(undefined, '');
-    second.state.toolContext.tryGetContext = () => ({ sessionId: undefined, authInfo: undefined });
+    // @ts-expect-error an identity-less context, which the SDK's context type does not allow
+    toolContextOf(second).tryGetContext = () => ({ sessionId: undefined, authInfo: undefined });
 
     await plugin.willWriteCache(first);
     await plugin.willWriteCache(second);
@@ -178,13 +186,13 @@ describe('CachePlugin — caller identity in the key (GHSA-r6v6-p4r8-p936)', () 
     const { plugin, store } = createHarness();
 
     const a = createFlowCtx(USER_A);
-    a.state.toolContext.input = { filters: ['x', 'y'], page: { size: 10, index: 1 } };
+    toolContextOf(a).input = { filters: ['x', 'y'], page: { size: 10, index: 1 } };
     const b = createFlowCtx(USER_A);
     // Same data, different key insertion order: the key must not depend on it.
-    b.state.toolContext.input = { page: { index: 1, size: 10 }, filters: ['x', 'y'] };
+    toolContextOf(b).input = { page: { index: 1, size: 10 }, filters: ['x', 'y'] };
     const c = createFlowCtx(USER_A);
     // Array order IS meaningful, so this must differ.
-    c.state.toolContext.input = { filters: ['y', 'x'], page: { size: 10, index: 1 } };
+    toolContextOf(c).input = { filters: ['y', 'x'], page: { size: 10, index: 1 } };
 
     await plugin.willWriteCache(a);
     await plugin.willWriteCache(b);
@@ -198,7 +206,7 @@ describe('CachePlugin — caller identity in the key (GHSA-r6v6-p4r8-p936)', () 
     const { plugin, store } = createHarness();
 
     const ctx = createFlowCtx(USER_A);
-    ctx.state.toolContext.input = { note: 'a'.repeat(5000) };
+    toolContextOf(ctx).input = { note: 'a'.repeat(5000) };
     await plugin.willWriteCache(ctx);
 
     const key = store.setValue.mock.calls[0][0] as string;

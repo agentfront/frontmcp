@@ -1,13 +1,14 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "../../../dist/out-tsc",
+    "outDir": "./out-tsc/app",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "jsx": "react-jsx",
     "types": ["node"],
     "emitDecoratorMetadata": true,
-    "experimentalDecorators": true
+    "experimentalDecorators": true,
+    "declaration": true
   },
   "exclude": ["jest.config.ts", "jest.e2e.config.ts", "src/**/*.spec.ts", "e2e/**/*.ts"],
   "include": ["src/**/*.ts", "src/**/*.tsx"]
