@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { fallbackNotes, parseNotes, pullRequestNumber } from './release-notes.mjs';
+import { fallbackNotes, isReleaseMechanics, parseNotes, pullRequestNumber } from './release-notes.mjs';
 
 const card = (version, highlights) => `<Card
   title="FrontMCP v${version}: Docs for your agent"
@@ -36,6 +36,51 @@ test('turns down an answer that is not a changelog and a Card', () => {
   assert.equal(parseNotes(`- A change\n---CARD_MDX---\n${card('1.9.5', highlight)}`, '1.9.6'), undefined);
   assert.equal(parseNotes(`- A change\n---CARD_MDX---\n${card('1.9.6', '')}`, '1.9.6'), undefined);
   assert.equal(parseNotes(`No changes.\n---CARD_MDX---\n${card('1.9.6', highlight)}`, '1.9.6'), undefined);
+});
+
+test('leaves out cherry-picks and version syncs, which shipped on their own release line', () => {
+  assert.equal(
+    isReleaseMechanics('Cherry-pick: fix(sdk): a server that fails to start releases the scopes it built (#878)'),
+    true,
+  );
+  assert.equal(isReleaseMechanics('chore: sync version to v1.9.6 (#850)'), true);
+  assert.equal(isReleaseMechanics('chore(release): bump version to 1.10.0'), true);
+  assert.equal(isReleaseMechanics('feat(sdk): serve the MCP Registry domain proof (#853)'), false);
+});
+
+test('reads a Card that follows a --- separator under a CHANGELOG heading', () => {
+  const highlight = '  \u{1F527} **Shutdown** – Waits for a pending start.';
+  const answer = `## CHANGELOG\n**Bug Fixes**\n- Shutdown waits for a pending start (#881).\n---\n${card('1.9.7', highlight)}`;
+
+  const notes = parseNotes(answer, '1.9.7');
+
+  assert.equal(notes.changelog, '**Bug Fixes**\n- Shutdown waits for a pending start (#881).');
+  assert.match(notes.card, /^<Card\b[\s\S]*<\/Card>$/);
+});
+
+test('turns down an answer that leaves out a pull request', () => {
+  const highlight = '  \u{1F527} **Shutdown** – Waits for a pending start.';
+  const answer = `**Bug Fixes**\n\n- Shutdown waits for a pending start (#881).\n---CARD_MDX---\n${card('1.9.7', highlight)}`;
+
+  assert.equal(parseNotes(answer, '1.9.7', [881, 869]), undefined);
+  assert.notEqual(parseNotes(answer, '1.9.7', [881]), undefined);
+});
+
+test('only counts the pull requests a changelog bullet cites', () => {
+  const highlight = '  \u{1F527} **Shutdown** – Waits for a pending start.';
+  const answer = `Release #869 shipped earlier.\n\n- Shutdown waits for a pending start (#881).\n---CARD_MDX---\n${card('1.9.7', highlight)}`;
+
+  assert.equal(parseNotes(answer, '1.9.7', [881, 869]), undefined);
+});
+
+test('links the Card to this version whatever link the answer gives', () => {
+  const highlight = '  \u{1F527} **Shutdown** – Waits for a pending start.';
+  const wrongLink = card('1.9.7', highlight).replace('/tag/v1.9.7', '/tag/v1.9.6');
+
+  const notes = parseNotes(`- Shutdown waits for a pending start (#881).\n---CARD_MDX---\n${wrongLink}`, '1.9.7');
+
+  assert.match(notes.card, /href="https:\/\/github\.com\/agentfront\/frontmcp\/releases\/tag\/v1\.9\.7"/);
+  assert.doesNotMatch(notes.card, /v1\.9\.6/);
 });
 
 test('builds the notes from pull request titles, leaving out chores', () => {

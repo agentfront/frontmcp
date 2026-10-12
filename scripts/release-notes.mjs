@@ -13,7 +13,8 @@ const FILES_LIMIT = 10_000;
 const DIFF_EXCLUDES = ['**/yarn.lock', '**/package-lock.json', '**/*.spec.*', '**/*.test.*', '**/*.snap'].map(
   (pattern) => `:(exclude,glob)${pattern}`,
 );
-const RELEASE_MECHANICS = /^(chore\(release\)|Merge branch |Merge remote-tracking branch )/;
+const RELEASE_MECHANICS =
+  /^(chore\(release\)|chore: sync version|Cherry-pick: |Merge branch |Merge remote-tracking branch )/;
 const LEFT_OUT_TYPES = new Set(['chore', 'ci', 'test', 'build', 'style']);
 const KINDS = {
   feat: { section: 'Features', one: 'feature', many: 'features', rank: 0 },
@@ -29,7 +30,7 @@ const instructions = (
   version,
 ) => `You are a technical writer creating release notes for FrontMCP, a TypeScript framework for building Model Context Protocol (MCP) servers. Write in a clear, professional, benefit-focused tone.
 
-Work from the pull requests: their descriptions say what changed and why. Use the changed files and the diff to confirm details. Describe only changes that are in the input, and leave out release mechanics such as version bumps. Never ask for more information, apologize, or describe the input: a small release gets a short changelog and a Card with one or two highlights.
+Work from the pull requests: their descriptions say what changed and why. Use the changed files and the diff to confirm details. Describe only changes that are in the input, and leave out release mechanics such as version bumps, and repository tooling (chore, ci, test, build and style pull requests). Cover every other pull request, and end each changelog bullet with the numbers of the pull requests it describes, like (#123). Never ask for more information, apologize, or describe the input: a small release gets a short changelog and a Card with one or two highlights.
 
 Output TWO sections, separated by a line containing only ---CARD_MDX---:
 
@@ -63,16 +64,30 @@ export function pullRequestNumber(subject) {
   return number ? Number(number) : undefined;
 }
 
-export function parseNotes(answer, version) {
-  const parts = answer.split(/^[ \t]*---CARD_MDX---[ \t]*$/m);
-  if (parts.length !== 2) return undefined;
-  const changelog = parts[0].trim();
-  const card = parts[1].match(/<Card\b[^>]*>[\s\S]*?<\/Card>/)?.[0];
-  const cardVersion = card?.match(/\btitle="FrontMCP v([^":]+): [^"]+"/)?.[1];
+export function isReleaseMechanics(subject) {
+  return RELEASE_MECHANICS.test(subject);
+}
+
+export function parseNotes(answer, version, requiredNumbers = []) {
+  const card = answer.match(/<Card\b[^>]*>[\s\S]*?<\/Card>/)?.[0];
+  if (!card) return undefined;
+  const changelog = answer
+    .slice(0, answer.indexOf(card))
+    .replace(/^[ \t]*(---CARD_MDX---|---|```\w*|(\d\.\s*)?(#+\s*)?(CHANGELOG|CARD_MDX):?)[ \t]*$/gim, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  const cardVersion = card.match(/\btitle="FrontMCP v([^":]+): [^"]+"/)?.[1];
   const hasBullet = /^\s*[-*]\s+\S/m.test(changelog);
-  const hasHighlight = /^[^\w*`\n]*\*\*[^*\n]+\*\*\s*[–—:-]/mu.test(card ?? '');
-  if (cardVersion !== version || !hasBullet || !hasHighlight) return undefined;
-  return { changelog, card: card.replace(/\n(?=[^\w*`\n]*\*\*)/g, '\n\n').replace(/\n{3,}/g, '\n\n') };
+  const hasHighlight = /^[^\w*`\n]*\*\*[^*\n]+\*\*\s*[–—:-]/mu.test(card);
+  const bulletLines = changelog.split('\n').filter((line) => /^\s*[-*]\s/.test(line));
+  const cited = new Set(bulletLines.flatMap((line) => [...line.matchAll(/#(\d+)/g)].map((match) => Number(match[1]))));
+  const citesEveryChange = requiredNumbers.every((number) => cited.has(number));
+  if (cardVersion !== version || !hasBullet || !hasHighlight || !citesEveryChange) return undefined;
+  const linkedCard = card.replace(
+    /\bhref="[^"]*"/,
+    `href="https://github.com/agentfront/frontmcp/releases/tag/v${version}"`,
+  );
+  return { changelog, card: linkedCard.replace(/\n(?=[^\w*`\n]*\*\*)/g, '\n\n').replace(/\n{3,}/g, '\n\n') };
 }
 
 const capitalize = (text) => text.replace(/^\p{Ll}/u, (letter) => letter.toUpperCase());
@@ -84,6 +99,10 @@ function describeChange(change) {
   if (!change.title || (LEFT_OUT_TYPES.has(type) && !breaking)) return undefined;
   const text = capitalize(summary.replace(/\s*\(#\d+\)$/, ''));
   return { ...(breaking ? BREAKING_KIND : (KINDS[type] ?? OTHER_KIND)), scope, text, number: change.number };
+}
+
+function userFacingNumbers(changes) {
+  return [...new Set(changes.map(describeChange).flatMap((item) => (item?.number ? [item.number] : [])))];
 }
 
 function highlightName(item) {
@@ -161,7 +180,7 @@ function collectChanges(previousTag) {
     .split('\n')
     .filter(Boolean)
     .map((line) => line.split('\x1f'))
-    .filter(([, subject]) => !RELEASE_MECHANICS.test(subject))
+    .filter(([, subject]) => !isReleaseMechanics(subject))
     .flatMap(([hash, subject]) => {
       const number = pullRequestNumber(subject);
       if (!number) return [{ title: subject, body: '' }];
@@ -214,8 +233,12 @@ async function main() {
   if (process.env.OPENAI_API_KEY) {
     try {
       const answer = await askModel(version, describeRelease(version, previousTag, changes));
-      notes = parseNotes(answer, version);
-      if (!notes) console.log(`::warning::The model's answer wasn't a changelog and a Card:\n${answer.slice(0, 2000)}`);
+      notes = parseNotes(answer, version, userFacingNumbers(changes));
+      if (!notes) {
+        console.log(
+          `::warning::The model's answer wasn't a changelog citing every pull request and a Card:\n${answer.slice(0, 2000)}`,
+        );
+      }
     } catch (error) {
       console.log(`::warning::Couldn't get release notes from the model: ${error.message}`);
     }
