@@ -1,9 +1,12 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "../../dist/out-tsc",
+    "outDir": "./out-tsc/spec",
     "module": "NodeNext",
-    "types": ["jest", "node"]
+    "types": ["jest", "node"],
+    "rootDir": "../..",
+    "declaration": true,
+    "noPropertyAccessFromIndexSignature": false
   },
   "include": ["jest.config.ts", "src/**/*.spec.ts", "src/**/*.d.ts"]
 }
