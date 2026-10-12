@@ -15,7 +15,7 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { BundleStore } from '@frontmcp/adapters/skills';
+import { BundleStore, type BundleStoreTelemetry } from '@frontmcp/adapters/skills';
 
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
@@ -94,7 +94,7 @@ describe('SkilledOpenApiPlugin', () => {
 
     it('resolves the requirement in the config the providers share', () => {
       const providers = SkilledOpenApiPlugin.dynamicProviders({ source: { type: 'static', path: '/x' }, dev: true });
-      const config = providers.find((p: { provide: unknown }) => p.provide === SkilledOpenApiConfig) as {
+      const config = providers.find((p) => (p as { provide: unknown }).provide === SkilledOpenApiConfig) as {
         useValue: SkilledOpenApiConfig;
       };
       expect(config.useValue.options.requireSignature).toBe(false);
@@ -129,7 +129,7 @@ describe('SkilledOpenApiPlugin', () => {
       const providers = SkilledOpenApiPlugin.dynamicProviders({
         source: { type: 'static', path: '/x' },
       });
-      const tokens = providers.map((p: { provide: unknown }) => p.provide);
+      const tokens = providers.map((p) => (p as { provide: unknown }).provide);
       expect(tokens).toContain(SkilledOpenApiConfig);
       expect(tokens).toContain(HiddenOpRegistry);
       expect(tokens).toContain(BundleStore);
@@ -144,7 +144,7 @@ describe('SkilledOpenApiPlugin', () => {
         credentials: { 'demo-token': 'sk_xxx' },
       });
       const credProvider = providers.find(
-        (p: { provide: unknown }) => p.provide === SkilledOpenApiCredentialResolver,
+        (p) => (p as { provide: unknown }).provide === SkilledOpenApiCredentialResolver,
       ) as { useValue: SkilledOpenApiCredentialResolver };
       const value = await credProvider.useValue.resolve('demo-token', { bundleId: 'b' });
       expect(value).toBe('sk_xxx');
@@ -161,7 +161,7 @@ describe('SkilledOpenApiPlugin', () => {
         requireSignature: false,
         dev: true,
       });
-      const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+      const syncProvider = providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
         useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
       };
 
@@ -213,7 +213,7 @@ describe('SkilledOpenApiPlugin', () => {
         requireSignature: false,
         dev: true,
       });
-      const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+      const syncProvider = providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
         useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
       };
 
@@ -289,7 +289,7 @@ describe('SkilledOpenApiPlugin', () => {
         dev: true,
         exposeOperationsAsInternalTools: true,
       });
-      const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+      const syncProvider = providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
         useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
       };
 
@@ -366,7 +366,7 @@ describe('SkilledOpenApiPlugin', () => {
           dev: true,
           exposeOperationsAsInternalTools: true,
         });
-        const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+        const syncProvider = providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
           useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
         };
         return syncProvider.useFactory(scope, new HiddenOpRegistry(), new BundleStore());
@@ -402,7 +402,7 @@ describe('SkilledOpenApiPlugin', () => {
           source: { type: 'inline', content: bundleWithOp },
           dev: true,
         });
-        const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+        const syncProvider = providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
           useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
         };
         const sync = await syncProvider.useFactory(scope, new HiddenOpRegistry(), bundleStore);
@@ -421,7 +421,7 @@ describe('SkilledOpenApiPlugin', () => {
         dev: true,
         exposeOperationsAsInternalTools: false,
       });
-      const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+      const syncProvider = providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
         useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
       };
       const fakeLogger = {
@@ -447,7 +447,7 @@ describe('SkilledOpenApiPlugin', () => {
         requireSignature: false,
         dev: true,
       });
-      const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+      const syncProvider = providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
         useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
       };
 
@@ -482,7 +482,7 @@ describe('SkilledOpenApiPlugin', () => {
     const findBundleStoreProvider = (
       providers: ReturnType<typeof SkilledOpenApiPlugin.dynamicProviders>,
     ): { useFactory: (...args: unknown[]) => BundleStore } => {
-      const p = providers.find((entry: { provide: unknown }) => entry.provide === BundleStore) as {
+      const p = providers.find((entry) => (entry as { provide: unknown }).provide === BundleStore) as {
         useFactory: (...args: unknown[]) => BundleStore;
       };
       return p;
@@ -537,9 +537,7 @@ describe('SkilledOpenApiPlugin', () => {
       // The store carries telemetry whose callbacks delegate to the factory —
       // exercise both paths so the wrapper arrows on resolveBundleTelemetry's
       // return value are reached.
-      const telemetry = (
-        store as unknown as { telemetry?: { createCounter: (n: string) => unknown; startSpan: (n: string) => unknown } }
-      ).telemetry;
+      const telemetry = (store as unknown as { telemetry?: BundleStoreTelemetry }).telemetry;
       if (telemetry) {
         telemetry.createCounter('bundle.pulls', 'pulls-desc');
         telemetry.startSpan('skill.bundle.swap', { v: '1' });
@@ -554,7 +552,7 @@ describe('SkilledOpenApiPlugin', () => {
       const providers = SkilledOpenApiPlugin.dynamicProviders({
         source: { type: 'static', path: '/x' },
       });
-      const ag = providers.find((p: { provide: unknown }) => p.provide === AuthorityGuard) as {
+      const ag = providers.find((p) => (p as { provide: unknown }).provide === AuthorityGuard) as {
         useFactory: (...args: unknown[]) => AuthorityGuard;
       };
       const child = jest.fn();

@@ -8,6 +8,7 @@
 import { createMemoryStorage, type NamespacedStorage } from '@frontmcp/utils';
 
 import { ConcurrencyLimitError, GuardStorageUnavailableError, QueueTimeoutError } from '../../errors';
+import type { RateLimitResult } from '../../rate-limit';
 import { GuardManager } from '../guard.manager';
 import type { GuardConfig, GuardLogger } from '../types';
 
@@ -136,7 +137,7 @@ describe('GuardManager when the storage goes away at runtime (#660)', () => {
       });
       setDown(true);
 
-      const results = [];
+      const results: RateLimitResult[] = [];
       for (let i = 0; i < 3; i++) results.push(await manager.checkRateLimit('tool', undefined, undefined));
 
       expect(results.map((r) => r.allowed)).toEqual([true, true, false]);

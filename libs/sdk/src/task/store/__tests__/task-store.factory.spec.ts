@@ -22,7 +22,7 @@ describe('task-store.factory', () => {
   it('createMemoryTaskStore returns a usable memory-backed store', async () => {
     const { store, type, storage } = createMemoryTaskStore({ keyPrefix: 'test:mem:' });
     expect(type).toBe('memory');
-    await storage.connect();
+    await storage!.connect();
     const now = Date.now();
     await store.create({
       taskId: 'fact-1',
@@ -37,7 +37,7 @@ describe('task-store.factory', () => {
     const read = await store.get('fact-1', 's');
     expect(read?.taskId).toBe('fact-1');
     await store.destroy?.();
-    await storage.disconnect();
+    await storage!.disconnect();
   });
 
   it('createTaskStore auto-detects memory in the default environment', async () => {

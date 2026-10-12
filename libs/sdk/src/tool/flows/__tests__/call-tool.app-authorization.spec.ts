@@ -23,7 +23,7 @@ const inputSchema = { parse: (v: unknown) => v } as any;
 const outputSchema = { parse: (v: unknown) => v } as any;
 
 function makeFlow(opts: {
-  tool: { name: string; fullName: string; owner?: { id: string; kind?: string } };
+  tool: { name: string; fullName: string; owner?: { id: string; kind?: string; ref?: unknown } };
   authInfo?: Record<string, unknown>;
   apps?: Array<{ id: string; name: string; auth?: { mode: string } }>;
   incrementalAuth?: { enabled?: boolean; skippedAppBehavior?: 'anonymous' | 'require-auth' };

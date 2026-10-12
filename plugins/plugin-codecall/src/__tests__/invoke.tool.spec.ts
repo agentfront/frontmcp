@@ -85,7 +85,8 @@ jest.mock('@frontmcp/sdk', () => ({
 /** The mocked `ToolContext` surface these harnesses drive, in place of a real scope. */
 interface MockedToolInstance {
   scope: { runFlow: jest.Mock; tools: { getTools: jest.Mock } };
-  execute(input: Record<string, unknown>): Promise<unknown>;
+  authInfo?: unknown;
+  execute(input: Record<string, unknown>): Promise<CallToolResult>;
   _setDependency(token: unknown, instance: unknown): void;
 }
 

@@ -187,7 +187,7 @@ describe('legacy remember purge', () => {
     });
 
     it('falls back to read-then-write on a store without a conditional write', async () => {
-      const plain = new FakeStore() as FakeStore & { setIfAbsent?: unknown };
+      const plain = new FakeStore() as Omit<FakeStore, 'setIfAbsent'> & Pick<RememberStoreInterface, 'setIfAbsent'>;
       delete plain.setIfAbsent;
 
       const firstSeenAt = await readLayoutFirstSeenAt(plain, 'remember:');

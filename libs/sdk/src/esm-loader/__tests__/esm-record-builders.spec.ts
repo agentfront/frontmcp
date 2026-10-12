@@ -9,6 +9,8 @@ import {
   type EsmToolDefinition,
 } from '../factories/esm-record-builders';
 
+type EsmToolMetadata = ReturnType<typeof buildEsmToolRecord>['metadata'] & { rawInputSchema?: unknown };
+
 describe('esm-record-builders', () => {
   describe('buildEsmToolRecord()', () => {
     const baseTool: EsmToolDefinition = {
@@ -25,7 +27,7 @@ describe('esm-record-builders', () => {
       expect(record.metadata.name).toBe('echo');
       expect(record.metadata.id).toBe('echo');
       expect(record.metadata.description).toBe('Echoes input');
-      expect(record.metadata.rawInputSchema).toEqual(baseTool.inputSchema);
+      expect((record.metadata as EsmToolMetadata).rawInputSchema).toEqual(baseTool.inputSchema);
       expect(record.provide).toBeDefined();
     });
 
@@ -64,7 +66,7 @@ describe('esm-record-builders', () => {
         execute: jest.fn(),
       };
       const record = buildEsmToolRecord(tool);
-      expect(record.metadata.rawInputSchema).toEqual(jsonSchema);
+      expect((record.metadata as EsmToolMetadata).rawInputSchema).toEqual(jsonSchema);
       expect(record.metadata.inputSchema).toEqual({});
     });
 
@@ -80,7 +82,7 @@ describe('esm-record-builders', () => {
       };
       const record = buildEsmToolRecord(tool);
       expect(record.metadata.inputSchema).toEqual(zodShape);
-      expect(record.metadata.rawInputSchema).toBeUndefined();
+      expect((record.metadata as EsmToolMetadata).rawInputSchema).toBeUndefined();
     });
 
     it('handles undefined inputSchema', () => {
@@ -90,7 +92,7 @@ describe('esm-record-builders', () => {
       };
       const record = buildEsmToolRecord(tool);
       expect(record.metadata.inputSchema).toEqual({});
-      expect(record.metadata.rawInputSchema).toBeUndefined();
+      expect((record.metadata as EsmToolMetadata).rawInputSchema).toBeUndefined();
     });
   });
 

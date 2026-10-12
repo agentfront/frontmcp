@@ -50,18 +50,16 @@ describe('createSecureStoreProviders', () => {
     const providers = createSecureStoreProviders({ backend, scope: 'user' });
     expect(providers).toHaveLength(2);
 
-    const backendProvider = providers.find((p) => 'provide' in p && p.provide === SECURE_STORE_BACKEND) as Record<
-      string,
-      unknown
-    >;
+    const backendProvider = providers.find(
+      (p) => 'provide' in p && p.provide === SECURE_STORE_BACKEND,
+    ) as unknown as Record<string, unknown>;
     expect(backendProvider).toBeTruthy();
     expect(backendProvider['useValue']).toBe(backend);
     expect(backendProvider['scope']).toBe('global');
 
-    const accessorProvider = providers.find((p) => 'provide' in p && p.provide === SECURE_STORE_ACCESSOR) as Record<
-      string,
-      unknown
-    >;
+    const accessorProvider = providers.find(
+      (p) => 'provide' in p && p.provide === SECURE_STORE_ACCESSOR,
+    ) as unknown as Record<string, unknown>;
     expect(accessorProvider).toBeTruthy();
     expect(typeof accessorProvider['useFactory']).toBe('function');
     expect(typeof accessorProvider['inject']).toBe('function');

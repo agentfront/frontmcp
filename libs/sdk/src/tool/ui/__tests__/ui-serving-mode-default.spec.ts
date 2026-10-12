@@ -181,7 +181,7 @@ describe('startup notices for a default that does not do what it says', () => {
 describe('toolServingMode', () => {
   type FakeTool = Parameters<typeof toolServingMode>[0];
 
-  function tool(servingMode: string | undefined, owner: FakeTool['owner']): FakeTool {
+  function tool(servingMode: string | undefined, owner: Pick<FakeTool['owner'], 'kind' | 'id'>): FakeTool {
     return { metadata: { name: 't', ui: servingMode ? { servingMode } : {} }, owner } as FakeTool;
   }
 

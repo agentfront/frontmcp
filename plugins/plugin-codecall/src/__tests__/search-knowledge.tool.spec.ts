@@ -1,6 +1,8 @@
 // file: libs/plugins/src/codecall/__tests__/search-knowledge.tool.spec.ts
 
-import type { SearchKnowledgeToolOutput } from '../tools/search-knowledge.schema';
+import type { z } from '@frontmcp/lazy-zod';
+
+import type { searchKnowledgeToolInputSchema, SearchKnowledgeToolOutput } from '../tools/search-knowledge.schema';
 import SearchKnowledgeTool from '../tools/search-knowledge.tool';
 
 jest.mock('@frontmcp/sdk', () => ({
@@ -37,9 +39,12 @@ function knowledgeMeta() {
   };
 }
 
+type SearchKnowledgeCallInput = z.input<z.ZodObject<typeof searchKnowledgeToolInputSchema>>;
+
 describe('SearchKnowledgeTool', () => {
-  let tool: SearchKnowledgeTool & {
+  let tool: Omit<SearchKnowledgeTool, 'scope' | 'execute'> & {
     scope: { skills: { getKnowledgeOnlySkills: jest.Mock; search: jest.Mock } };
+    execute(input: SearchKnowledgeCallInput): Promise<SearchKnowledgeToolOutput>;
   };
   let mockRegistry: { getKnowledgeOnlySkills: jest.Mock; search: jest.Mock };
 
@@ -55,8 +60,8 @@ describe('SearchKnowledgeTool', () => {
     // SDK-internal flow. Cast the class to a parameterless constructor so
     // jest can instantiate it without `any`. `scope` is then injected
     // matching the field's declared mock type from the `tool` local.
-    type SearchKnowledgeToolCtor = new () => SearchKnowledgeTool;
-    tool = new (SearchKnowledgeTool as unknown as SearchKnowledgeToolCtor)() as typeof tool;
+    type SearchKnowledgeToolCtor = new () => typeof tool;
+    tool = new (SearchKnowledgeTool as unknown as SearchKnowledgeToolCtor)();
     tool.scope = { skills: mockRegistry };
   });
 

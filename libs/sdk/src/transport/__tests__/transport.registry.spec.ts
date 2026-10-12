@@ -5,6 +5,7 @@
  */
 import { sha256Hex } from '@frontmcp/utils';
 
+import type { TransportPersistenceConfigInput } from '../../common';
 import { TransportService } from '../transport.registry';
 
 // Mock dependencies
@@ -74,6 +75,13 @@ const mockResponse = {
   end: jest.fn(),
 };
 
+function createServiceWithEnabledFlag(
+  scope: unknown,
+  persistenceConfig: TransportPersistenceConfigInput & { enabled: boolean },
+): TransportService {
+  return new TransportService(scope as never, persistenceConfig);
+}
+
 describe('TransportService', () => {
   let service: TransportService;
 
@@ -102,7 +110,7 @@ describe('TransportService', () => {
     });
 
     it('should create service with Redis config', async () => {
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost', port: 6379 },
       });
@@ -111,7 +119,7 @@ describe('TransportService', () => {
     });
 
     it('should validate Redis connection on startup', async () => {
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost' },
       });
@@ -121,7 +129,7 @@ describe('TransportService', () => {
 
     it('should disable session store when Redis ping fails', async () => {
       mockRedisSessionStore.ping.mockResolvedValue(false);
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost' },
       });
@@ -130,7 +138,7 @@ describe('TransportService', () => {
     });
 
     it('should use custom key prefix', async () => {
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost', keyPrefix: 'custom:prefix:' },
       });
@@ -139,7 +147,7 @@ describe('TransportService', () => {
     });
 
     it('should use custom defaultTtlMs', async () => {
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost' },
         defaultTtlMs: 7200000,
@@ -262,7 +270,7 @@ describe('TransportService', () => {
 
   describe('createTransporter', () => {
     beforeEach(async () => {
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost' },
       });
@@ -372,7 +380,7 @@ describe('TransportService', () => {
 
   describe('getStoredSession', () => {
     beforeEach(async () => {
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost' },
       });
@@ -430,7 +438,7 @@ describe('TransportService', () => {
 
   describe('recreateTransporter', () => {
     beforeEach(async () => {
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost' },
       });
@@ -567,7 +575,7 @@ describe('TransportService', () => {
   describe('destroyTransporter cleanup', () => {
     beforeEach(async () => {
       // Use Redis-enabled service so onDispose triggers sessionStore.delete
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost' },
       });
@@ -675,7 +683,7 @@ describe('TransportService', () => {
 
   describe('wasSessionCreatedAsync', () => {
     beforeEach(async () => {
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost' },
       });
@@ -819,7 +827,7 @@ describe('TransportService', () => {
 
   describe('Cleanup', () => {
     it('should disconnect Redis on destroy', async () => {
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost' },
       });
@@ -835,7 +843,7 @@ describe('TransportService', () => {
 
   describe('deleteStoredSession', () => {
     it('deletes the stored record', async () => {
-      service = new TransportService(mockScope as never, { enabled: true, redis: { host: 'localhost' } });
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
       await service.ready;
 
       await service.deleteStoredSession('deleted-session');
@@ -852,7 +860,7 @@ describe('TransportService', () => {
     });
 
     it('rejects when the store fails, so a DELETE does not confirm a record that stays', async () => {
-      service = new TransportService(mockScope as never, { enabled: true, redis: { host: 'localhost' } });
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
       await service.ready;
       mockRedisSessionStore.delete.mockRejectedValueOnce(new Error('Redis down'));
 
@@ -874,7 +882,7 @@ describe('TransportService', () => {
     };
 
     beforeEach(async () => {
-      service = new TransportService(mockScope as never, { enabled: true, redis: { host: 'localhost' } });
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
       await service.ready;
     });
 
@@ -1004,7 +1012,7 @@ describe('TransportService', () => {
 
   describe('updateStoredSessionCapabilities', () => {
     it('should update stored session with client capabilities', async () => {
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost' },
       });
@@ -1029,7 +1037,7 @@ describe('TransportService', () => {
     });
 
     it('should not throw when session not found in store', async () => {
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost' },
       });
@@ -1052,7 +1060,7 @@ describe('TransportService', () => {
     });
 
     it('should handle Redis write failure gracefully', async () => {
-      service = new TransportService(mockScope as never, {
+      service = createServiceWithEnabledFlag(mockScope, {
         enabled: true,
         redis: { host: 'localhost' },
       });
@@ -1081,7 +1089,7 @@ describe('TransportService', () => {
   describe('Transport Recreation - Production Scenarios', () => {
     describe('serverless cold start simulation', () => {
       beforeEach(async () => {
-        service = new TransportService(mockScope as never, {
+        service = createServiceWithEnabledFlag(mockScope, {
           enabled: true,
           redis: { host: 'localhost' },
         });
@@ -1188,7 +1196,7 @@ describe('TransportService', () => {
 
     describe('multi-instance failover simulation', () => {
       beforeEach(async () => {
-        service = new TransportService(mockScope as never, {
+        service = createServiceWithEnabledFlag(mockScope, {
           enabled: true,
           redis: { host: 'localhost' },
         });
@@ -1327,7 +1335,7 @@ describe('TransportService', () => {
 
     describe('security validation', () => {
       beforeEach(async () => {
-        service = new TransportService(mockScope as never, {
+        service = createServiceWithEnabledFlag(mockScope, {
           enabled: true,
           redis: { host: 'localhost' },
         });
@@ -1396,7 +1404,7 @@ describe('TransportService', () => {
 
     describe('error handling', () => {
       beforeEach(async () => {
-        service = new TransportService(mockScope as never, {
+        service = createServiceWithEnabledFlag(mockScope, {
           enabled: true,
           redis: { host: 'localhost' },
         });
@@ -1447,7 +1455,7 @@ describe('TransportService', () => {
 
     describe('client capabilities restoration', () => {
       beforeEach(async () => {
-        service = new TransportService(mockScope as never, {
+        service = createServiceWithEnabledFlag(mockScope, {
           enabled: true,
           redis: { host: 'localhost' },
         });
@@ -1511,7 +1519,7 @@ describe('TransportService', () => {
 
     describe('session state preservation', () => {
       beforeEach(async () => {
-        service = new TransportService(mockScope as never, {
+        service = createServiceWithEnabledFlag(mockScope, {
           enabled: true,
           redis: { host: 'localhost' },
         });

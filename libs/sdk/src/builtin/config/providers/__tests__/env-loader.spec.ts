@@ -462,7 +462,7 @@ describe('env-loader', () => {
           .object({
             inner: z.number().default(42),
           })
-          .default({}),
+          .default({} as { inner: number }),
       });
       const paths = extractSchemaPaths(schema);
       expect(paths).toContain('withDefault');

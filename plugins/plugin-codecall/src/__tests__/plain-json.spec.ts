@@ -6,7 +6,7 @@ describe('toPlainJson', () => {
   it('returns a structurally equal copy of plain data', () => {
     const source = { type: 'object', properties: { limit: { type: 'number' } } };
 
-    const copy = toPlainJson(source);
+    const copy = toPlainJson<typeof source>(source);
 
     expect(copy).toEqual(source);
     expect(copy).not.toBe(source);

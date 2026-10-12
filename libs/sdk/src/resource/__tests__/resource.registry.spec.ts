@@ -1,6 +1,9 @@
 import 'reflect-metadata';
 
-import { Resource, ResourceTemplate } from '../../common/decorators/resource.decorator';
+import {
+  FrontMcpResource as Resource,
+  FrontMcpResourceTemplate as ResourceTemplate,
+} from '../../common/decorators/resource.decorator';
 import ResourceRegistry from '../resource.registry';
 
 // Mock the complex dependencies

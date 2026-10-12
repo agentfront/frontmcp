@@ -11,6 +11,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+// Type-only: the parser's module augments '@frontmcp/sdk', so typecheck needs that module in the program.
+import type {} from '@frontmcp/sdk';
+
 import { parseSkillMdFrontmatter, skillMdFrontmatterToMetadata } from '../../sdk/src/skill/skill-md-parser';
 import {
   VALID_BUNDLES,

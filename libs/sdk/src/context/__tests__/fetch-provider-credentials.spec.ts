@@ -2,7 +2,7 @@ import 'reflect-metadata';
 
 import { AUTH_PROVIDERS_ACCESSOR } from '@frontmcp/auth';
 
-import { App, LogLevel, Tool, ToolContext } from '../../common';
+import { App, LogLevel, Tool, ToolContext, type AnnotatedClass } from '../../common';
 import { type DirectMcpServer } from '../../direct/direct.types';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 
@@ -46,7 +46,13 @@ describe('this.fetch() with credentials: { provider }', () => {
     server = await FrontMcpInstance.createDirect({
       info: { name: 'fetch-provider-credentials', version: '1.0.0' },
       apps: [DeskApp],
-      providers: [{ provide: AUTH_PROVIDERS_ACCESSOR, name: 'AuthProvidersAccessor', useValue: fakeAccessor }],
+      providers: [
+        {
+          provide: AUTH_PROVIDERS_ACCESSOR,
+          name: 'AuthProvidersAccessor',
+          useValue: fakeAccessor,
+        } as unknown as AnnotatedClass,
+      ],
       logging: { level: LogLevel.Off },
     });
   });

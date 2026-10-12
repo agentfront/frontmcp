@@ -5,8 +5,9 @@
  * directly in OpenAPI specs for declarative tool configuration.
  */
 
+import type { FrontMcpExtensionData, McpOpenAPITool } from 'mcp-from-openapi';
+
 import { createOpenApiTool } from '../openapi.tool';
-import type { McpOpenAPITool, FrontMcpExtensionData } from 'mcp-from-openapi';
 import { createMockLogger } from './fixtures';
 
 // Mock mcp-from-openapi
@@ -60,7 +61,7 @@ function createMockTool(
         required: false,
       },
     ],
-    metadata: metadata as McpOpenAPITool['metadata'],
+    metadata: metadata as unknown as McpOpenAPITool['metadata'],
   };
 }
 

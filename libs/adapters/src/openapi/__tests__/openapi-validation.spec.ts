@@ -4,7 +4,11 @@
 
 import type { McpOpenAPITool } from 'mcp-from-openapi';
 
+import type { FrontMcpContext } from '@frontmcp/sdk';
+
 import { extractSecuritySchemes, validateSecurityConfiguration } from '../openapi.security';
+
+type LegacyAuthMapperContext = FrontMcpContext & { token?: string; user?: Record<string, string | undefined> };
 
 describe('OpenapiAdapter - Validation', () => {
   describe('extractSecuritySchemes', () => {
@@ -134,7 +138,7 @@ describe('OpenapiAdapter - Validation', () => {
       it('should return LOW risk for authProviderMapper', () => {
         const result = validateSecurityConfiguration([mockToolWithAuth], {
           authProviderMapper: {
-            BearerAuth: (authInfo) => authInfo.token,
+            BearerAuth: (authInfo: LegacyAuthMapperContext) => authInfo.token,
           },
         });
 
@@ -144,7 +148,7 @@ describe('OpenapiAdapter - Validation', () => {
 
       it('should return LOW risk for securityResolver', () => {
         const result = validateSecurityConfiguration([mockToolWithAuth], {
-          securityResolver: (tool, authInfo) => ({ jwt: authInfo.token }),
+          securityResolver: (tool, authInfo: LegacyAuthMapperContext) => ({ jwt: authInfo.token }),
         });
 
         expect(result.securityRiskScore).toBe('low');
@@ -220,7 +224,7 @@ describe('OpenapiAdapter - Validation', () => {
 
         const result = validateSecurityConfiguration([multiAuthTool], {
           authProviderMapper: {
-            GitHubAuth: (authInfo) => authInfo.user?.githubToken,
+            GitHubAuth: (authInfo: LegacyAuthMapperContext) => authInfo.user?.githubToken,
             // SlackAuth is missing!
           },
         });
@@ -267,8 +271,8 @@ describe('OpenapiAdapter - Validation', () => {
 
         const result = validateSecurityConfiguration([multiAuthTool], {
           authProviderMapper: {
-            GitHubAuth: (authInfo) => authInfo.user?.githubToken,
-            SlackAuth: (authInfo) => authInfo.user?.slackToken,
+            GitHubAuth: (authInfo: LegacyAuthMapperContext) => authInfo.user?.githubToken,
+            SlackAuth: (authInfo: LegacyAuthMapperContext) => authInfo.user?.slackToken,
           },
         });
 
@@ -280,7 +284,7 @@ describe('OpenapiAdapter - Validation', () => {
     describe('Warnings and Info Messages', () => {
       it('should provide info for custom securityResolver', () => {
         const result = validateSecurityConfiguration([mockToolWithAuth], {
-          securityResolver: (tool, authInfo) => ({ jwt: authInfo.token }),
+          securityResolver: (tool, authInfo: LegacyAuthMapperContext) => ({ jwt: authInfo.token }),
         });
 
         expect(result.warnings.some((w) => w.includes('Using custom securityResolver'))).toBe(true);

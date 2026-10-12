@@ -90,7 +90,7 @@ test.beforeEach(async ({ mcp }) => {
 
 test.afterEach(async ({ mcp }) => {
   // Fixtures are still connected in afterEach: teardown comes after the last hook
-  events.push(`outer-after:${idOf(mcp)}:${(mcp as FakeMcp).isConnected()}`);
+  events.push(`outer-after:${idOf(mcp)}:${mcp.isConnected()}`);
 });
 
 test('env objects passed to test.use() are read when the server starts', async () => {

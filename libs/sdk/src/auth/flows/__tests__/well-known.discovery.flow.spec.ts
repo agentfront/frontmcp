@@ -60,7 +60,7 @@ describe('Well-known PRM flow — authorization_servers host-derivation (#467a)'
       outputSchema,
       access: 'public',
       middleware: { method: 'GET' },
-    } as FlowMetadata<'well-known.oauth-protected-resource'>;
+    } as unknown as FlowMetadata<'well-known.oauth-protected-resource'>;
   }
 
   it('uses the request Host (not the static issuer) for authorization_servers', async () => {

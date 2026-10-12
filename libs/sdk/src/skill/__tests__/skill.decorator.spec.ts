@@ -28,11 +28,11 @@ const parseCallerDir = (stack: string | undefined): string | undefined => parseC
 
 // Mock SkillContext for testing
 class MockSkillContext extends SkillContext {
-  async loadInstructions(): Promise<string> {
+  override async loadInstructions(): Promise<string> {
     return this.metadata.instructions as string;
   }
 
-  async build(): Promise<SkillContent> {
+  override async build(): Promise<SkillContent> {
     return {
       id: this.skillId,
       name: this.skillName,

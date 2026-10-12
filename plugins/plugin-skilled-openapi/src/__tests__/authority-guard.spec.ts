@@ -215,7 +215,7 @@ describe('AuthorityGuard', () => {
         debug: () => undefined,
         verbose: () => undefined,
         child: () => logger,
-      } as unknown as Parameters<typeof AuthorityGuard.prototype.constructor>[0]['logger'];
+      } as unknown as NonNullable<ConstructorParameters<typeof AuthorityGuard>[0]>['logger'];
       const guard = new AuthorityGuard({ logger });
       installEngineThrow(guard, new Error('engine boom'));
       const r = await guard.check({

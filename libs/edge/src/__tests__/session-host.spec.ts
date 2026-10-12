@@ -138,9 +138,11 @@ describe('createEdgeSessionRouter', () => {
   });
 });
 
+type EdgeScope = Awaited<ReturnType<Parameters<typeof createEdgeSessionDurableObject>[0]>>;
+
 describe('createEdgeSessionDurableObject', () => {
-  function makeScope(): Record<string, unknown> {
-    return { __scope: true };
+  function makeScope(): EdgeScope {
+    return { __scope: true } as unknown as EdgeScope;
   }
 
   it('bridges env, builds scope + persistent pair once, and runs the flow', async () => {

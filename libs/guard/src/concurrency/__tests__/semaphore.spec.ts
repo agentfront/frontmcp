@@ -1,13 +1,14 @@
 import {
   createMemoryStorage,
   StorageNotSupportedError,
+  type MessageHandler,
   type NamespacedStorage,
   type SetOptions,
   type StorageAdapter,
 } from '@frontmcp/utils';
 
 import { GuardStorageUnsupportedError, QueueTimeoutError } from '../../errors/index';
-import { DistributedSemaphore } from '../index';
+import { DistributedSemaphore, type SemaphoreTicket } from '../index';
 
 function createMockStorage(): jest.Mocked<StorageAdapter> {
   const data = new Map<string, string>();
@@ -82,7 +83,7 @@ describe('DistributedSemaphore', () => {
     });
 
     it('should acquire up to maxConcurrent slots', async () => {
-      const tickets = [];
+      const tickets: SemaphoreTicket[] = [];
       for (let i = 0; i < 3; i++) {
         const ticket = await semaphore.acquire('test', 3, 0, 'my-tool');
         expect(ticket).not.toBeNull();
@@ -269,8 +270,8 @@ describe('DistributedSemaphore', () => {
       const mockUnsubscribe = jest.fn().mockResolvedValue(undefined);
 
       storage.supportsPubSub.mockReturnValue(true);
-      storage.subscribe.mockImplementation(async (_channel: string, cb: () => void) => {
-        subscribeCallback = cb;
+      storage.subscribe.mockImplementation(async (_channel: string, cb: MessageHandler) => {
+        subscribeCallback = cb as () => void;
         return mockUnsubscribe;
       });
 
@@ -304,8 +305,8 @@ describe('DistributedSemaphore', () => {
       let pollCount = 0;
 
       storage.supportsPubSub.mockReturnValue(true);
-      storage.subscribe.mockImplementation(async (_channel: string, cb: () => void) => {
-        subscribeCallback = cb;
+      storage.subscribe.mockImplementation(async (_channel: string, cb: MessageHandler) => {
+        subscribeCallback = cb as () => void;
         return mockUnsubscribe;
       });
 

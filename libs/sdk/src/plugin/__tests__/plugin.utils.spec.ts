@@ -3,12 +3,13 @@
  */
 
 import 'reflect-metadata';
-import { normalizePlugin, collectPluginMetadata, pluginDiscoveryDeps } from '../plugin.utils';
+
+import { createValueProvider } from '../../__test-utils__/fixtures/provider.fixtures';
 import { FrontMcpPlugin } from '../../common/decorators/plugin.decorator';
 import { FrontMcpProvider } from '../../common/decorators/provider.decorator';
-
+import type { PluginType } from '../../common/interfaces';
 import { PluginKind } from '../../common/records';
-import { createValueProvider } from '../../__test-utils__/fixtures/provider.fixtures';
+import { collectPluginMetadata, normalizePlugin, pluginDiscoveryDeps } from '../plugin.utils';
 
 describe('Plugin Utils', () => {
   describe('collectPluginMetadata', () => {
@@ -307,7 +308,7 @@ describe('Plugin Utils', () => {
           providers: [], // empty dynamic providers from init()
         };
 
-        const record = normalizePlugin(plugin);
+        const record = normalizePlugin(plugin as unknown as PluginType);
 
         expect(record.kind).toBe(PluginKind.VALUE);
         // Decorator providers must NOT be overwritten by empty inline providers
@@ -337,7 +338,7 @@ describe('Plugin Utils', () => {
           providers: [DynamicService], // dynamic providers from init()
         };
 
-        const record = normalizePlugin(plugin);
+        const record = normalizePlugin(plugin as PluginType);
 
         // Decorator providers preserved in metadata
         expect(record.metadata.providers).toEqual([StaticService]);
@@ -364,7 +365,7 @@ describe('Plugin Utils', () => {
           scope: 'server', // inline scope override
         };
 
-        const record = normalizePlugin(plugin);
+        const record = normalizePlugin(plugin as unknown as PluginType);
 
         // Scope override still works
         expect(record.metadata.scope).toBe('server');

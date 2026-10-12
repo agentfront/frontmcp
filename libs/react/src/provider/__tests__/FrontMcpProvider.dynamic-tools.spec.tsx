@@ -9,7 +9,11 @@ import { useFrontMcp } from '../../hooks/useFrontMcp';
 import type { DynamicRegistry } from '../../registry/DynamicRegistry';
 import { serverRegistry } from '../../registry/ServerRegistry';
 import { FrontMcpContext } from '../FrontMcpContext';
-import { FrontMcpProvider } from '../FrontMcpProvider';
+import { FrontMcpProvider as FrontMcpProviderComponent, type FrontMcpProviderProps } from '../FrontMcpProvider';
+
+const FrontMcpProvider = FrontMcpProviderComponent as React.FC<
+  Omit<FrontMcpProviderProps, 'children'> & { children?: React.ReactNode }
+>;
 
 /**
  * The provider registers the tools components register with the server (`server.registerTool()`),

@@ -2,8 +2,13 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/spec",
-    "module": "NodeNext",
-    "types": ["jest", "node"]
+    "module": "commonjs",
+    "types": ["jest", "node"],
+    "rootDir": "../..",
+    "declaration": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "moduleResolution": "node10",
+    "moduleDetection": "force"
   },
   "include": ["jest.config.ts", "src/**/*.spec.ts", "src/**/*.d.ts", "src/**/__tests__/**/*.ts"]
 }

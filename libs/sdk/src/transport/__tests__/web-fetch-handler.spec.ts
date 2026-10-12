@@ -79,8 +79,10 @@ async function readMcpResult<T = Record<string, unknown>>(res: Response): Promis
   return JSON.parse(text) as T;
 }
 
+type DisposableInstance = FrontMcpInstance & { dispose?: () => Promise<void> };
+
 describe('createWebFetchHandler (Cloudflare Worker path)', () => {
-  let instance: FrontMcpInstance;
+  let instance: DisposableInstance;
   let handler: WebFetchHandler;
 
   beforeAll(async () => {
@@ -157,7 +159,7 @@ describe('createWebFetchHandler (Cloudflare Worker path)', () => {
 });
 
 describe('createWebFetchHandler initialize', () => {
-  let instance: FrontMcpInstance | undefined;
+  let instance: DisposableInstance | undefined;
 
   afterAll(async () => {
     await instance?.dispose?.();
@@ -180,7 +182,7 @@ describe('createWebFetchHandler initialize', () => {
 });
 
 describe('createWebFetchHandler config-driven routing, CORS & SSE', () => {
-  const instances: FrontMcpInstance[] = [];
+  const instances: DisposableInstance[] = [];
 
   async function scopeFor(extra: Record<string, unknown>): Promise<Scope> {
     const instance = await FrontMcpInstance.createForGraph({
@@ -282,7 +284,7 @@ describe('createWebFetchHandler config-driven routing, CORS & SSE', () => {
  * report — and it saves an operator that round trip.
  */
 describe('createWebFetchHandler misconfiguration reporting (#546)', () => {
-  let instance: FrontMcpInstance;
+  let instance: DisposableInstance;
   let scope: Scope;
 
   beforeAll(async () => {

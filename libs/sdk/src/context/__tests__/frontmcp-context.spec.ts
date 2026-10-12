@@ -467,7 +467,7 @@ describe('FrontMcpContext', () => {
       expect(logContext.sessionIdHash).toBeDefined();
       expect(logContext.sessionIdHash).not.toBe(ctx.sessionId); // Should be hashed
       expect(typeof logContext.sessionIdHash).toBe('string');
-      expect(logContext.sessionIdHash.length).toBe(12); // First 12 chars of hash
+      expect((logContext.sessionIdHash as string).length).toBe(12); // First 12 chars of hash
       expect(logContext.scopeId).toBe('test-scope');
       expect(logContext.flowName).toBe('test-flow');
       expect(typeof logContext.elapsed).toBe('number');

@@ -23,7 +23,7 @@ function loadBundledBrowserEnv(options: { define?: string; shimNodeEnv?: string 
   });
   const fakeGlobal = options.shimNodeEnv === undefined ? {} : { process: { env: { NODE_ENV: options.shimNodeEnv } } };
   const module = { exports: {} as BrowserEnvModule };
-  new Function('module', 'exports', 'process', 'globalThis', result.outputFiles[0].text)(
+  new Function('module', 'exports', 'process', 'globalThis', result.outputFiles![0].text)(
     module,
     module.exports,
     undefined,

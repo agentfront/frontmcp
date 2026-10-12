@@ -1,7 +1,7 @@
 import type { Token } from '@frontmcp/di';
 import type { ProviderRegistry, ToolFunctionTokenRecord, ToolRegistry } from '@frontmcp/sdk';
 
-import { executeOperation } from '../executor/openapi-runtime';
+import { executeOperation, type ExecutionResult } from '../executor/openapi-runtime';
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
 import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
@@ -158,10 +158,10 @@ describe('OperationToolFactory', () => {
       const toolRegistry = new FakeToolRegistry();
       const providers = new FakeProviderRegistry();
       // Capture the metadata block by intercepting registerToolInstance.
-      let captured: Record<string, unknown> | undefined;
+      let captured: ToolFunctionTokenRecord['metadata'] | undefined;
       jest
         .spyOn(toolRegistry, 'registerToolInstance')
-        .mockImplementation((tool: { record: { metadata: Record<string, unknown> } }) => {
+        .mockImplementation((tool: { record: ToolFunctionTokenRecord }) => {
           captured = tool.record.metadata;
         });
       const factory = new OperationToolFactory({
@@ -260,7 +260,7 @@ describe('OperationToolFactory', () => {
           toolRegistry: toolRegistry as unknown as ToolRegistry,
           providers: providers as unknown as ProviderRegistry,
           logger: noopLogger as never,
-          classificationRegistry: classificationRegistry as unknown as Parameters<
+          classificationRegistry: classificationRegistry as unknown as ConstructorParameters<
             typeof OperationToolFactory
           >[0]['classificationRegistry'],
         });
@@ -416,7 +416,12 @@ describe('OperationToolFactory', () => {
     });
 
     it('preserves error and contentType from upstream failure', async () => {
-      mockExecuteOperation.mockResolvedValueOnce({ ok: false, status: 500, error: 'upstream-boom', data: undefined });
+      mockExecuteOperation.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        error: 'upstream-boom',
+        data: undefined,
+      } as ExecutionResult);
       const { factory, toolRegistry } = makeFactory();
       factory.register(buildEntry());
       const exec = lastExecutor(toolRegistry);
@@ -427,7 +432,7 @@ describe('OperationToolFactory', () => {
     });
 
     it('omits data/contentType/error when upstream omits them', async () => {
-      mockExecuteOperation.mockResolvedValueOnce({ ok: true, status: 204, data: undefined });
+      mockExecuteOperation.mockResolvedValueOnce({ ok: true, status: 204, data: undefined } as ExecutionResult);
       const { factory, toolRegistry } = makeFactory();
       factory.register(buildEntry());
       const exec = lastExecutor(toolRegistry);

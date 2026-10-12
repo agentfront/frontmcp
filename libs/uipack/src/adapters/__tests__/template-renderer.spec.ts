@@ -6,6 +6,8 @@
 
 import { renderToolTemplate, warnIfComponentReference } from '../template-renderer';
 
+declare const React: { createElement(type: string, props: null, ...children: string[]): unknown };
+
 // Mock fs and esbuild for FileSource tests.
 jest.mock('fs', () => ({
   readFileSync: jest.fn(

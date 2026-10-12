@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 
 import { App, LogLevel, Tool, ToolContext } from '../../common';
-import { FrontMcpContextStorage } from '../../context';
+import { FrontMcpContextStorage, type FrontMcpContextConfig } from '../../context';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../scope.instance';
 
@@ -29,7 +29,7 @@ describe('Scope context storage', () => {
     const config = storage.run(
       { sessionId: 'scope-storage', scopeId: scope.id },
       () => storage.getStoreOrThrow().config,
-    );
+    ) as Required<FrontMcpContextConfig>;
 
     expect(config.forwardCallerTokenTo).toEqual(['https://api.example.com']);
   });

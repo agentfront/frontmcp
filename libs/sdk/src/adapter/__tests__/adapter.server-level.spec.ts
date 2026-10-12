@@ -20,6 +20,7 @@ import {
   Tool,
   ToolContext,
   type AdapterType,
+  type AnnotatedClass,
   type FrontMcpAdapterResponse,
 } from '../../common';
 import { type DirectMcpServer } from '../../direct/direct.types';
@@ -80,7 +81,7 @@ describe('server-level adapters', () => {
     server = await FrontMcpInstance.createDirect({
       info: { name: 'server-adapters', version: '1.0.0' },
       apps: [DeskApp],
-      adapters: [StatusAdapter.init({ name: 'status-eu', region: 'eu' })],
+      adapters: [StatusAdapter.init({ name: 'status-eu', region: 'eu' }) as AnnotatedClass],
       logging: { level: LogLevel.Off },
     });
   });
@@ -174,7 +175,7 @@ function serverWith(...adapters: AdapterType[]): Promise<DirectMcpServer> {
   return FrontMcpInstance.createDirect({
     info: { name: 'feed-server', version: '1.0.0' },
     apps: [DeskApp],
-    adapters,
+    adapters: adapters as AnnotatedClass[],
     logging: { level: LogLevel.Off },
   });
 }
@@ -299,8 +300,8 @@ describe('several adapters installed together', () => {
       info: { name: 'two-server-adapters', version: '1.0.0' },
       apps: [DeskApp],
       adapters: [
-        StatusAdapter.init({ name: 'status-ap', region: 'ap' }),
-        StatusAdapter.init({ name: 'status-sa', region: 'sa' }),
+        StatusAdapter.init({ name: 'status-ap', region: 'ap' }) as AnnotatedClass,
+        StatusAdapter.init({ name: 'status-sa', region: 'sa' }) as AnnotatedClass,
       ],
       logging: { level: LogLevel.Off },
     });

@@ -10,11 +10,13 @@
  */
 import 'reflect-metadata';
 
-import { App, type RemoteUrlAppOptions } from '../../common';
+import { App, type FrontMcpConfigInput, type RemoteUrlAppOptions } from '../../common';
 import { frontMcpRemoteAppMetadataSchema } from '../../common/metadata/app.metadata';
 import type { DirectMcpServer } from '../../direct/direct.types';
 import { McpClientService } from '../../remote-mcp/mcp-client.service';
 import type { McpClientConnection, McpConnectRequest, McpRemoteCapabilities } from '../../remote-mcp/mcp-client.types';
+
+type ConfigApps = FrontMcpConfigInput['apps'];
 
 const capabilities: McpRemoteCapabilities = {
   tools: [{ name: 'echo', description: 'Echo', inputSchema: { type: 'object', properties: {} } }],
@@ -50,7 +52,9 @@ describe('App.remote()', () => {
     const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
     server = await FrontMcpInstance.createDirect({
       info: { name: 'remote-gateway', version: '1.0.0' },
-      apps: [App.remote('http://localhost:65530/mcp', { name: 'upstream', namespace: 'up', ...options })],
+      apps: [
+        App.remote('http://localhost:65530/mcp', { name: 'upstream', namespace: 'up', ...options }),
+      ] as unknown as ConfigApps,
     });
     return server;
   }
@@ -156,7 +160,7 @@ describe('App.remote()', () => {
           App.remote('http://localhost:65530/mcp', { name: 'first', namespace: 'a' }),
           App.remote('http://localhost:65531/mcp', { name: 'second', namespace: 'b' }),
           App.remote('http://localhost:65532/mcp', { name: 'third', namespace: 'c' }),
-        ],
+        ] as unknown as ConfigApps,
       });
 
       const templates = (await server.listResourceTemplates()).resourceTemplates.map((t) => t.name).sort();

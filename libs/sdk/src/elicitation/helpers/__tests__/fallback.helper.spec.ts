@@ -2,6 +2,7 @@
  * Tests for elicitation fallback helpers.
  */
 import type { ClientCapabilities } from '@frontmcp/protocol';
+
 import type { Scope } from '../../../scope';
 import { canDeliverNotifications } from '../fallback.helper';
 
@@ -74,7 +75,7 @@ describe('canDeliverNotifications', () => {
 
   it('should return true when client has experimental capabilities', () => {
     const capabilities: ClientCapabilities = {
-      experimental: { customFeature: true },
+      experimental: { customFeature: true } as unknown as ClientCapabilities['experimental'],
     };
     const scope = createMockScope(capabilities);
 

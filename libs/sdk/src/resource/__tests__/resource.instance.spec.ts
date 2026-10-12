@@ -1,8 +1,12 @@
 import 'reflect-metadata';
-import { ResourceInstance } from '../resource.instance';
-import { Resource, ResourceTemplate } from '../../common/decorators/resource.decorator';
-import { normalizeResource, normalizeResourceTemplate } from '../resource.utils';
+
+import {
+  FrontMcpResource as Resource,
+  FrontMcpResourceTemplate as ResourceTemplate,
+} from '../../common/decorators/resource.decorator';
 import { ResourceKind } from '../../common/records';
+import { ResourceInstance } from '../resource.instance';
+import { normalizeResource, normalizeResourceTemplate } from '../resource.utils';
 
 // Helper to safely access content properties (handles text/blob union)
 function getContentText(content: { uri: string; text?: string; blob?: string }): string | undefined {

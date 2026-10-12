@@ -5,7 +5,13 @@ import 'reflect-metadata';
 import { ApprovalOperationError, ApprovalScopeNotAllowedError, userGrantor } from '../approval';
 import { ApprovalService, createApprovalService } from '../services/approval.service';
 import type { ApprovalStore } from '../stores/approval-store.interface';
-import { ApprovalScope, ApprovalState, type ApprovalRecord } from '../types';
+import {
+  ApprovalScope,
+  ApprovalState,
+  type ApprovalContext,
+  type ApprovalGrantor,
+  type ApprovalRecord,
+} from '../types';
 
 describe('ApprovalService', () => {
   let mockStore: jest.Mocked<ApprovalStore>;
@@ -13,7 +19,7 @@ describe('ApprovalService', () => {
   const sessionId = 'test-session-123';
   const userId = 'test-user-456';
 
-  const mockApprovalRecord: ApprovalRecord = {
+  const mockApprovalRecord: ApprovalRecord & { id: string; createdAt: number } = {
     id: 'approval-1',
     toolId: 'test-tool',
     scope: ApprovalScope.SESSION,
@@ -21,7 +27,7 @@ describe('ApprovalService', () => {
     sessionId,
     createdAt: Date.now(),
     grantedAt: Date.now(),
-    grantedBy: 'user',
+    grantedBy: 'user' as unknown as ApprovalGrantor,
   };
 
   beforeEach(() => {
@@ -62,7 +68,7 @@ describe('ApprovalService', () => {
 
     it('should pass context to store', async () => {
       mockStore.isApproved.mockResolvedValue(false);
-      const context = { resource: 'file.txt' };
+      const context = { resource: 'file.txt' } as unknown as ApprovalContext;
 
       const result = await service.isApproved('my-tool', context);
 
@@ -272,7 +278,7 @@ describe('ApprovalService', () => {
     it('should grant context-specific approval', async () => {
       const contextApproval = { ...mockApprovalRecord, scope: ApprovalScope.CONTEXT_SPECIFIC };
       mockStore.grantApproval.mockResolvedValue(contextApproval);
-      const context = { resource: '/path/to/file' };
+      const context = { resource: '/path/to/file' } as unknown as ApprovalContext;
 
       const result = await service.grantContextApproval('my-tool', context);
 
