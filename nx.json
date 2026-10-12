@@ -87,6 +87,9 @@
     "build": {
       "cache": true,
       "inputs": ["production", "^production"]
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck", "^build"]
     }
   },
   "release": {
