@@ -15,7 +15,7 @@ import { DuplicateAppIdError, InvalidRegistryKindError, RegistryDependencyNotReg
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { appDiscoveryDeps, appIdOf, normalizeApp } from './app.utils';
-import { AppEsmInstance, AppLocalInstance, AppRemoteInstance } from './instances';
+import { AppLocalInstance } from './instances/app.local.instance';
 
 export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, AppType[]> {
   private readonly owner: EntryOwnerRef;
@@ -77,8 +77,10 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
       } else if (rec.kind === AppKind.REMOTE_VALUE) {
         const remoteMeta = rec.metadata as RemoteAppMetadata;
         if (remoteMeta.urlType === 'npm' || remoteMeta.urlType === 'esm') {
+          const { AppEsmInstance } = await import('./instances/app.esm.instance.js');
           app = new AppEsmInstance(rec, this.providers);
         } else {
+          const { AppRemoteInstance } = await import('./instances/app.remote.instance.js');
           app = new AppRemoteInstance(rec, this.providers);
         }
       } else {

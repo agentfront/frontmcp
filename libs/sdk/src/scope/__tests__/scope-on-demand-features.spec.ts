@@ -14,14 +14,18 @@ import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import type { Scope } from '../scope.instance';
 
 const ON_DEMAND_MODULES = [
+  '../../app/instances/app.esm.instance',
+  '../../app/instances/app.remote.instance',
   '../../channel/channel-scope.helper',
   '../../elicitation/flows',
   '../../elicitation/send-elicitation-result.tool',
   '../../elicitation/store/elicitation-store.factory',
+  '../../esm-loader/esm-entries',
   '../../ha',
   '../../job/job-scope.helper',
   '../../mcp-registry/mcp-registry-scope.helper',
   '../observability-scope.helper',
+  '../../remote-mcp/remote-entries',
   '../../tool/ui/ui-option-warnings',
   '../../tool/ui/ui-render',
   '../../tool/ui/ui-resource-template',

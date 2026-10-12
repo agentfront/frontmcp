@@ -66,7 +66,6 @@ const KNOWN_LEAKS: string[] = [
   'health',
   'http transport',
   'metrics',
-  'remote and esm entries',
   'skills',
 ];
 
