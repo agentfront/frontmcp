@@ -1,25 +1,61 @@
 # @frontmcp/guard
 
-![npm version](https://img.shields.io/npm/v/@frontmcp/guard)
-![license](https://img.shields.io/npm/l/@frontmcp/guard)
+Rate limiting, concurrency limits, execution timeouts and IP filtering for FrontMCP. `@frontmcp/sdk` uses it for the `throttle` option of `@FrontMcp` and the `rateLimit`, `concurrency` and `timeout` options of tools and agents, so in a FrontMCP server you set those options and don't import this package. Install it directly to use the limiters on their own. They keep their counters behind the `StorageAdapter` interface of `@frontmcp/utils`, so they work with memory, Redis, Vercel KV, Upstash and Cloudflare KV storage.
 
-Rate limiting, concurrency control, timeout enforcement, and IP filtering for FrontMCP applications. Built on the `StorageAdapter` interface from `@frontmcp/utils`, so it works with Memory, Redis, Vercel KV, and Upstash backends out of the box.
+[![npm](https://img.shields.io/npm/v/@frontmcp/guard.svg)](https://www.npmjs.com/package/@frontmcp/guard) [![License](https://img.shields.io/npm/l/@frontmcp/guard.svg)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
 
-## Installation
-
-```bash
-npm install @frontmcp/guard
-# or
-yarn add @frontmcp/guard
-```
-
-Peer dependency:
+## Install
 
 ```bash
-npm install zod@^4
+npm install @frontmcp/guard @frontmcp/lazy-zod zod
 ```
 
-## Quick Start
+`@frontmcp/lazy-zod` is a peer dependency (the configuration schemas use it), and it needs `zod` 4. Node.js 24 or later. A FrontMCP server doesn't need this install: `@frontmcp/sdk` depends on `@frontmcp/guard` and re-exports everything in it.
+
+## Usage
+
+### In a FrontMCP server
+
+Set limits on a tool, and defaults for the whole server. The SDK passes these options to this package:
+
+```typescript
+import { App, FrontMcp, Tool, ToolContext } from '@frontmcp/sdk';
+
+@Tool({
+  name: 'export_tickets',
+  description: 'Export every ticket as CSV. At most 2 exports an hour per caller, one at a time.',
+  inputSchema: {},
+  rateLimit: { maxRequests: 2, windowMs: 60 * 60_000, partitionBy: 'userId' },
+  concurrency: { maxConcurrent: 1, queueTimeoutMs: 5_000 },
+  timeout: { executeMs: 30_000 },
+})
+class ExportTickets extends ToolContext {
+  async execute() {
+    return { csv: 'id,title' };
+  }
+}
+
+@App({ id: 'help-desk', name: 'Help Desk', tools: [ExportTickets] })
+class HelpDeskApp {}
+
+@FrontMcp({
+  info: { name: 'help-desk', version: '1.0.0' },
+  apps: [HelpDeskApp],
+  throttle: {
+    enabled: true,
+    defaultRateLimit: { maxRequests: 60, windowMs: 60_000, partitionBy: 'userId' },
+    global: { maxRequests: 1_000, windowMs: 60_000, partitionBy: 'ip' },
+    ipFilter: { denyList: ['192.0.2.0/24'] },
+  },
+})
+export default class Server {}
+```
+
+[Guard options](https://frontmcp.dev/reference/sdk/guard) covers what each option does in a server, and the error a caller gets back.
+
+### On its own
+
+`createGuardManager` builds a `GuardManager` from one configuration object:
 
 ```typescript
 import { createGuardManager } from '@frontmcp/guard';
@@ -27,62 +63,47 @@ import { createGuardManager } from '@frontmcp/guard';
 const guard = await createGuardManager({
   config: {
     enabled: true,
-    global: { maxRequests: 100, windowMs: 60_000 },
-    defaultTimeout: { executeMs: 30_000 },
-    ipFilter: {
-      denyList: ['10.0.0.0/8'],
-      defaultAction: 'allow',
-    },
+    defaultRateLimit: { maxRequests: 100, windowMs: 60_000, partitionBy: 'session' },
+    defaultConcurrency: { maxConcurrent: 5 },
+    ipFilter: { denyList: ['10.0.0.0/8'], defaultAction: 'allow' },
   },
 });
 
-// Check IP filter
 const ipResult = guard.checkIpFilter('203.0.113.5');
+if (ipResult && !ipResult.allowed) throw new Error('IP refused');
 
-// Check rate limit
-const rlResult = await guard.checkRateLimit('my-tool', undefined, {
-  sessionId: 'sess-123',
-});
+const rateLimit = await guard.checkRateLimit('my-tool', undefined, { sessionId: 'sess-123' });
+if (!rateLimit.allowed) throw new Error(`Retry after ${rateLimit.retryAfterMs}ms`);
 
-// Acquire concurrency slot
-const ticket = await guard.acquireSemaphore(
-  'my-tool',
-  { maxConcurrent: 5 },
-  {
-    sessionId: 'sess-123',
-  },
-);
+const ticket = await guard.acquireSemaphore('my-tool', undefined, { sessionId: 'sess-123' });
+if (!ticket) throw new Error('No free slot');
 try {
-  // ... do work ...
+  // ... do the work ...
 } finally {
-  await ticket?.release();
+  await ticket.release();
 }
+
+await guard.destroy();
 ```
 
-## Modules
+Without a `storage` configuration the manager keeps its counters in memory, one set per process, and warns about it through `logger` when you pass one.
 
-| Module           | Main Export                           | Purpose                                                               |
-| ---------------- | ------------------------------------- | --------------------------------------------------------------------- |
-| `errors/`        | `GuardError` + subclasses             | Error hierarchy with machine-readable codes and HTTP status codes     |
-| `schemas/`       | `guardConfigSchema`                   | Zod validation schemas for all configuration objects                  |
-| `partition-key/` | `resolvePartitionKey`                 | Resolves request partition keys (ip, session, userId, global, custom) |
-| `rate-limit/`    | `SlidingWindowRateLimiter`            | Sliding window counter rate limiter                                   |
-| `concurrency/`   | `DistributedSemaphore`                | Distributed semaphore for concurrency control                         |
-| `timeout/`       | `withTimeout`                         | Async execution timeout wrapper                                       |
-| `ip-filter/`     | `IpFilter`                            | IP allow/deny list filtering with CIDR support                        |
-| `manager/`       | `GuardManager` + `createGuardManager` | Orchestrator combining all guard modules                              |
+## Rate limiting
 
-## Rate Limiting
+`SlidingWindowRateLimiter` uses the sliding window counter algorithm. It keeps two adjacent fixed-window counters and weights the previous window's count by how much of that window still falls within `windowMs` of now. That approximates a true sliding window with constant storage per key, without the bursts a single fixed window allows at its edges. Windows are aligned to the clock.
 
-Uses the **sliding window counter** algorithm. Two adjacent fixed-window counters are maintained; their counts are combined with a time-weighted interpolation to approximate a true sliding window. This provides O(1) storage per key while avoiding the burst edges of simple fixed-window counters.
+The class takes a storage adapter. `createMemoryStorage` and the other adapters come from `@frontmcp/utils`, which is installed with this package; add it to your own dependencies to import it.
 
 ```typescript
 import { SlidingWindowRateLimiter } from '@frontmcp/guard';
+import { createMemoryStorage } from '@frontmcp/utils';
 
-const limiter = new SlidingWindowRateLimiter(storageAdapter);
+const storage = createMemoryStorage();
+await storage.connect();
+const limiter = new SlidingWindowRateLimiter(storage);
 
 const result = await limiter.check(
-  'user:42', // partition key
+  'user:42', // key
   100, // max requests
   60_000, // window in ms
 );
@@ -92,69 +113,66 @@ if (!result.allowed) {
 }
 ```
 
-The `RateLimitResult` includes:
+An allowed check counts the request. `RateLimitResult` has:
 
-- `allowed` -- whether the request can proceed
-- `remaining` -- approximate remaining requests in this window
-- `resetMs` -- milliseconds until the current window resets
-- `retryAfterMs` -- (only when blocked) suggested retry delay
+- `allowed`: whether the request can proceed
+- `remaining`: approximate requests left in this window
+- `resetMs`: milliseconds until the current window ends
+- `retryAfterMs`: when blocked, how long to wait
 
-## Concurrency Control
+`reset(key, windowMs)` deletes a key's counters.
 
-The `DistributedSemaphore` limits the number of concurrent executions for a given key. Each execution acquires a "ticket" via atomic `incr` on a counter key. Individual ticket keys are stored with a TTL for crash safety -- if a process dies without releasing, the ticket TTL expires and the counter self-corrects.
+## Concurrency control
 
-When all slots are full, callers can optionally wait in a queue with exponential backoff polling. If the storage backend supports pub/sub, slot releases trigger immediate wakeup of waiting callers.
+`DistributedSemaphore` limits how many executions run at once for a key. Each execution takes a slot with an atomic `incr` on a counter key, and gets a ticket, stored as its own key with a time to live (TTL, 300 seconds by default). The counter has no TTL: a ticket that expires doesn't free its slot, so if a process dies without calling `release()`, the slot stays taken until `forceReset(key)`.
+
+When every slot is taken, a caller can wait for one, polling every 100 ms at first and backing off to once a second. If the storage supports publish/subscribe (memory, Redis, and Upstash with publish/subscribe turned on), a released slot wakes waiting callers at once.
 
 ```typescript
 import { DistributedSemaphore } from '@frontmcp/guard';
+import { createMemoryStorage } from '@frontmcp/utils';
 
-const semaphore = new DistributedSemaphore(storageAdapter, 300 /* ticket TTL seconds */);
+const storage = createMemoryStorage();
+await storage.connect();
+const semaphore = new DistributedSemaphore(storage, 300 /* ticket TTL in seconds */);
 
 const ticket = await semaphore.acquire(
   'my-tool:global', // key
   5, // max concurrent
-  10_000, // queue timeout ms (0 = no wait)
-  'my-tool', // entity name (for error messages)
+  10_000, // how long to wait for a slot, in ms (0 = don't wait)
+  'my-tool', // name used in error messages
 );
 
-if (!ticket) {
-  // Rejected (queueTimeoutMs was 0 and all slots full)
-  return;
-}
-
-try {
-  await doWork();
-} finally {
-  await ticket.release();
+if (ticket) {
+  try {
+    // ... do the work ...
+  } finally {
+    await ticket.release();
+  }
 }
 ```
 
-Additional methods:
-
-- `getActiveCount(key)` -- returns the current number of active tickets
-- `forceReset(key)` -- resets the counter and removes all ticket keys
+`acquire` returns `null` when every slot is taken and the wait is `0`, and throws `QueueTimeoutError` when it waited and no slot freed up. `getActiveCount(key)` returns the number of active tickets, and `forceReset(key)` resets the counter and removes every ticket key.
 
 ## Timeout
 
-The `withTimeout` utility wraps an async function with a deadline using `AbortController` + `Promise.race`. Throws `ExecutionTimeoutError` if the function does not complete within the specified duration.
+`withTimeout` runs an async function with a deadline. It passes the function an `AbortSignal` that is aborted when time runs out, and rejects with `ExecutionTimeoutError`. The function keeps running unless it listens to the signal.
 
 ```typescript
 import { withTimeout } from '@frontmcp/guard';
 
-const result = await withTimeout(
-  () => fetchData(),
+const response = await withTimeout(
+  (signal) => fetch('https://api.example.com/data', { signal }),
   5_000, // timeout in ms
-  'fetch-data', // entity name (for error messages)
+  'fetch-data', // name used in error messages
 );
 ```
 
-## IP Filtering
+## IP filtering
 
-The `IpFilter` class checks client IP addresses against allow and deny lists. Supports individual IP addresses and CIDR notation for both IPv4 and IPv6. IPv4-mapped IPv6 addresses (e.g., `::ffff:192.168.1.1`, how a dual-stack socket reports an IPv4 client) are matched as the IPv4 address they map.
+`IpFilter` checks a client IP against allow and deny lists of addresses and CIDR ranges, IPv4 and IPv6. An IPv4-mapped IPv6 address (`::ffff:192.168.1.1`, which a dual-stack socket reports for an IPv4 client) matches as the IPv4 address it maps. Matching uses bigint arithmetic, so it's exact across the whole IPv6 address space.
 
-**Precedence**: the deny list is always checked first. If an IP matches the deny list, it is blocked regardless of the allow list. If an allow list is configured and the IP does not match any allow rule, the `defaultAction` determines the outcome. A missing or unparseable IP matches no rule, so it also gets `defaultAction` -- `checkIpFilter(undefined)` rejects under `defaultAction: 'deny'`.
-
-All matching is performed using bigint arithmetic for correctness across the full IPv6 address space.
+The deny list is checked first: an IP on it is refused, whatever the allow list says. Then the allow list, then `defaultAction`. An allow list on its own refuses nothing: add `defaultAction: 'deny'` to refuse every other address. A missing or unparseable IP matches no rule and gets `defaultAction`, so `check(undefined)` refuses under `defaultAction: 'deny'`.
 
 ```typescript
 import { IpFilter } from '@frontmcp/guard';
@@ -172,41 +190,41 @@ const blocked = filter.check('192.168.1.100');
 // { allowed: false, reason: 'denylisted', matchedRule: '192.168.1.100' }
 ```
 
-The `isAllowListed(ip)` method provides a quick check for whether an IP is on the allow list, which can be used to bypass rate limiting for trusted addresses.
+`isAllowListed(ip)` tells you whether an IP is on the allow list, for example to skip rate limiting for trusted addresses.
 
-## Partition Keys
+## Partition keys
 
-Partition keys determine how rate limits and concurrency slots are bucketed. Built-in strategies:
+A partition key decides which calls share a rate-limit count or a set of concurrency slots:
 
-| Strategy    | Behavior                                                        |
-| ----------- | --------------------------------------------------------------- |
-| `'global'`  | Single shared bucket for all callers (default)                  |
-| `'ip'`      | One bucket per client IP address                                |
-| `'session'` | One bucket per session ID                                       |
-| `'userId'`  | One bucket per authenticated user ID (falls back to session ID) |
+| Strategy    | Calls that share a count                                                                             |
+| ----------- | ---------------------------------------------------------------------------------------------------- |
+| `'global'`  | All of them (the default)                                                                            |
+| `'ip'`      | Calls from the same client IP. Without an IP, calls by the same `userId`; without either, one bucket |
+| `'session'` | Calls in the same session                                                                            |
+| `'userId'`  | Calls by the same authenticated user, or in the same session when there's no user                    |
 
-You can also pass a custom function:
+You can also pass a function of the `PartitionKeyContext`, which has `sessionId` (always set) and optional `clientIp` and `userId`:
 
 ```typescript
+import type { RateLimitConfig } from '@frontmcp/guard';
+
 const config: RateLimitConfig = {
   maxRequests: 100,
   windowMs: 60_000,
-  partitionBy: (ctx) => `org:${ctx.userId?.split(':')[0]}`,
+  partitionBy: (ctx) => (ctx.userId ? `user:${ctx.userId}` : `session:${ctx.sessionId}`),
 };
 ```
 
-The `PartitionKeyContext` passed to custom functions contains `sessionId` (always present), plus optional `clientIp` and `userId`.
+## Guard manager
 
-## Guard Manager
+`GuardManager` combines rate limiting, concurrency control and IP filtering behind one configuration. `createGuardManager` creates its storage and connects it.
 
-`GuardManager` is the central orchestrator. It combines rate limiting, concurrency control, IP filtering, and timeout configuration into a single interface. The `createGuardManager` factory handles storage initialization.
+The configuration has two levels:
 
-The manager supports two levels of configuration:
+- **Global**, applied to every request: `global` (a rate limit) and `globalConcurrency`.
+- **Default**, applied to an entity that doesn't pass its own: `defaultRateLimit`, `defaultConcurrency`, `defaultTimeout`.
 
-- **Global** -- applied to every request (`global`, `globalConcurrency`)
-- **Default** -- applied to entities that do not specify their own config (`defaultRateLimit`, `defaultConcurrency`, `defaultTimeout`)
-
-Per-entity configuration takes precedence over defaults.
+A configuration passed for one entity replaces the default; it doesn't add to it.
 
 ```typescript
 import { createGuardManager } from '@frontmcp/guard';
@@ -230,103 +248,113 @@ const guard = await createGuardManager({
   logger: console,
 });
 
-// Use the manager
-const globalRl = await guard.checkGlobalRateLimit({ sessionId: 'sess-1' });
-const entityRl = await guard.checkRateLimit('my-tool', undefined, { sessionId: 'sess-1' });
-const ticket = await guard.acquireSemaphore('my-tool', undefined, { sessionId: 'sess-1' });
+const context = { sessionId: 'sess-1', clientIp: '203.0.113.5' };
+const globalRateLimit = await guard.checkGlobalRateLimit(context);
+const entityRateLimit = await guard.checkRateLimit('my-tool', undefined, context);
+const globalTicket = await guard.acquireGlobalSemaphore(context);
+const ticket = await guard.acquireSemaphore('my-tool', undefined, context);
 
-// Cleanup
+await ticket?.release();
+await globalTicket?.release();
 await guard.destroy();
 ```
 
-## Configuration Reference
+| Method                                    | Returns                                                                          |
+| ----------------------------------------- | -------------------------------------------------------------------------------- |
+| `checkIpFilter(ip)`                       | An `IpFilterResult`, or `undefined` when there's no `ipFilter`                   |
+| `isIpAllowListed(ip)`                     | Whether the IP is on the allow list                                              |
+| `checkRateLimit(name, config, context)`   | A `RateLimitResult`. With no `config` and no `defaultRateLimit`, always allowed  |
+| `checkGlobalRateLimit(context)`           | A `RateLimitResult` against `global`                                             |
+| `acquireSemaphore(name, config, context)` | A `SemaphoreTicket`, or `null` when no slot is free or there's no limit to apply |
+| `acquireGlobalSemaphore(context)`         | A `SemaphoreTicket` against `globalConcurrency`, or `null`                       |
+| `destroy()`                               | Disconnects the storage                                                          |
+
+The manager doesn't apply `defaultTimeout` itself: read it from `guard.config` and pass it to `withTimeout`.
+
+## Configuration reference
 
 ### `GuardConfig`
 
-| Field                | Type                | Default        | Description                                              |
-| -------------------- | ------------------- | -------------- | -------------------------------------------------------- |
-| `enabled`            | `boolean`           | --             | Whether the guard system is active                       |
-| `storage`            | `StorageConfig`     | memory         | Storage backend configuration                            |
-| `keyPrefix`          | `string`            | `'mcp:guard:'` | Prefix for all storage keys (a trailing `:` is dropped)  |
-| `global`             | `RateLimitConfig`   | --             | Global rate limit for ALL requests                       |
-| `globalConcurrency`  | `ConcurrencyConfig` | --             | Global concurrency limit                                 |
-| `defaultRateLimit`   | `RateLimitConfig`   | --             | Default rate limit for entities without explicit config  |
-| `defaultConcurrency` | `ConcurrencyConfig` | --             | Default concurrency for entities without explicit config |
-| `defaultTimeout`     | `TimeoutConfig`     | --             | Default timeout for entity execution                     |
-| `ipFilter`           | `IpFilterConfig`    | --             | IP filtering configuration                               |
+| Field                | Type                | Default        | Description                                                                     |
+| -------------------- | ------------------- | -------------- | ------------------------------------------------------------------------------- |
+| `enabled`            | `boolean`           | required       | Whether the guard is on. `@frontmcp/sdk` reads it; `createGuardManager` doesn't |
+| `storage`            | `StorageConfig`     | memory         | Storage backend, from `@frontmcp/utils`                                         |
+| `keyPrefix`          | `string`            | `'mcp:guard:'` | Prefix for every storage key (a trailing `:` is dropped)                        |
+| `global`             | `RateLimitConfig`   | none           | Rate limit for every request                                                    |
+| `globalConcurrency`  | `ConcurrencyConfig` | none           | Concurrency limit across every entity                                           |
+| `defaultRateLimit`   | `RateLimitConfig`   | none           | Rate limit for entities without their own                                       |
+| `defaultConcurrency` | `ConcurrencyConfig` | none           | Concurrency limit for entities without their own                                |
+| `defaultTimeout`     | `TimeoutConfig`     | none           | Timeout for entities without their own                                          |
+| `ipFilter`           | `IpFilterConfig`    | none           | IP filtering                                                                    |
 
 ### `RateLimitConfig`
 
-| Field         | Type           | Default    | Description                         |
-| ------------- | -------------- | ---------- | ----------------------------------- |
-| `maxRequests` | `number`       | --         | Maximum requests allowed per window |
-| `windowMs`    | `number`       | `60000`    | Time window in milliseconds         |
-| `partitionBy` | `PartitionKey` | `'global'` | Partition key strategy              |
+| Field         | Type           | Default    | Description                   |
+| ------------- | -------------- | ---------- | ----------------------------- |
+| `maxRequests` | `number`       | required   | Requests allowed per window   |
+| `windowMs`    | `number`       | `60000`    | Window length in milliseconds |
+| `partitionBy` | `PartitionKey` | `'global'` | Which calls share a count     |
 
 ### `ConcurrencyConfig`
 
-| Field            | Type           | Default    | Description                                     |
-| ---------------- | -------------- | ---------- | ----------------------------------------------- |
-| `maxConcurrent`  | `number`       | --         | Maximum concurrent executions                   |
-| `queueTimeoutMs` | `number`       | `0`        | Max wait time in queue (0 = reject immediately) |
-| `partitionBy`    | `PartitionKey` | `'global'` | Partition key strategy                          |
+| Field            | Type           | Default    | Description                                            |
+| ---------------- | -------------- | ---------- | ------------------------------------------------------ |
+| `maxConcurrent`  | `number`       | required   | Executions allowed at once                             |
+| `queueTimeoutMs` | `number`       | `0`        | How long to wait for a free slot (`0` refuses at once) |
+| `partitionBy`    | `PartitionKey` | `'global'` | Which calls share the slots                            |
 
 ### `TimeoutConfig`
 
-| Field       | Type     | Default | Description                            |
-| ----------- | -------- | ------- | -------------------------------------- |
-| `executeMs` | `number` | --      | Maximum execution time in milliseconds |
+| Field       | Type     | Default  | Description                            |
+| ----------- | -------- | -------- | -------------------------------------- |
+| `executeMs` | `number` | required | Maximum execution time in milliseconds |
 
 ### `IpFilterConfig`
 
-| Field               | Type                | Default   | Description                                                                       |
-| ------------------- | ------------------- | --------- | --------------------------------------------------------------------------------- |
-| `allowList`         | `string[]`          | --        | IP addresses or CIDR ranges to always allow                                       |
-| `denyList`          | `string[]`          | --        | IP addresses or CIDR ranges to always block                                       |
-| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list, or when no client IP could be established    |
-| `trustProxy`        | `boolean`           | `false`   | **Not read** (logs a startup warning). Set `FRONTMCP_TRUST_PROXY` instead         |
-| `trustedProxyDepth` | `number`            | `1`       | **Not read** (logs a startup warning). Set `FRONTMCP_TRUSTED_PROXY_DEPTH` instead |
+| Field               | Type                | Default   | Description                                                                                                                                |
+| ------------------- | ------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `allowList`         | `string[]`          | none      | IP addresses or CIDR ranges to allow                                                                                                       |
+| `denyList`          | `string[]`          | none      | IP addresses or CIDR ranges to refuse                                                                                                      |
+| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | What happens to an IP on neither list, or when the client IP isn't known                                                                   |
+| `trustProxy`        | `boolean`           | `false`   | Read by `@frontmcp/sdk`, not by `IpFilter`: `true` takes the client IP from `X-Forwarded-For`; `false` leaves it to `FRONTMCP_TRUST_PROXY` |
+| `trustedProxyDepth` | `number`            | `1`       | Read by `@frontmcp/sdk` when `trustProxy` is `true`: how many proxies in front of the server append to `X-Forwarded-For`                   |
 
-## Storage Backends
+## Storage
 
-The guard library delegates all persistence to the `StorageAdapter` interface from `@frontmcp/utils`. Choose a backend based on your deployment:
+The guard keeps everything behind the `StorageAdapter` interface of `@frontmcp/utils`. `createGuardManager` builds one from `storage` with `createStorage`:
 
-| Backend       | Use Case                                                                                                     |
-| ------------- | ------------------------------------------------------------------------------------------------------------ |
-| **Memory**    | Development, testing, single-process deployments. Not suitable for distributed setups.                       |
-| **Redis**     | Production multi-instance deployments. Provides atomic operations and optional pub/sub for semaphore wakeup. |
-| **Vercel KV** | Vercel-hosted applications. Redis-compatible API.                                                            |
-| **Upstash**   | Serverless environments. HTTP-based Redis compatible.                                                        |
+| Backend                                 | Use it for                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------ |
+| Memory (`type: 'memory'`, the default)  | Development, tests and single-process servers. Each process counts on its own        |
+| Redis (`type: 'redis'`)                 | Several instances sharing limits. Publish/subscribe wakes callers waiting for a slot |
+| Vercel KV (`type: 'vercel-kv'`)         | Servers on Vercel                                                                    |
+| Upstash (`type: 'upstash'`)             | Serverless functions: Redis over HTTP, with optional publish/subscribe               |
+| Cloudflare KV (`type: 'cloudflare-kv'`) | Cloudflare Workers, with the KV namespace passed in                                  |
 
-If no `storage` config is provided, the factory falls back to in-memory storage and logs a warning.
+`storage` is a `StorageConfig`, such as `{ type: 'redis', redis: { config: { host, port } } }` or `{ type: 'redis', redis: { url } }`. Without `type` it's `'auto'`, which picks a backend from environment variables.
 
-`storage` is a `StorageConfig` from `@frontmcp/utils`: `{ type: 'redis', redis: { config: { host, port } } }` or
-`{ type: 'redis', redis: { url } }`. When a configured backend cannot be reached, `createGuardManager` rejects with
-`GuardStorageUnavailableError` — rate limits fail closed, including in production where `createStorage` defaults
-`fallback` to `'error'`. Set `storage.fallback: 'memory'` to start with per-instance counters instead.
+`storage.fallback` decides what happens when the backend can't be reached. With `'error'`, the default in production (`NODE_ENV=production`), `createGuardManager` rejects with `GuardStorageUnavailableError`: rate limits fail closed. With `'memory'`, the default elsewhere, it starts with per-instance counters and logs a warning. The same setting applies if the backend stops answering later: each check then fails with `GuardStorageUnavailableError`, or, with `'memory'`, is served from per-instance counters until the backend answers again.
 
-Keys are written as `<keyPrefix><entity>:<partition>:<kind>:…` with a single `:` after the prefix (for example
-`mcp:guard:export_tickets:global:rl:…`). Before 1.8.6 the default prefix produced `mcp:guard::export_tickets:…`;
-counters written by an older instance are not read by a newer one, so limits briefly split during a rolling deploy.
+Keys are written as `<keyPrefix><entity>:<partition>:<kind>:…` with a single `:` after the prefix, for example `mcp:guard:export_tickets:global:rl:…`. Before 1.8.6 the default prefix produced `mcp:guard::export_tickets:…`. Counters written by an older instance aren't read by a newer one, so limits briefly split during a rolling deploy.
 
-## Error Handling
+## Errors
 
-All errors extend `GuardError`, which carries a machine-readable `code` and an HTTP `statusCode`.
+Every error extends `GuardError`, which has a machine-readable `code` and an HTTP `statusCode`. `instanceof GuardError` also recognizes an error from another copy of this package in the same process.
 
-| Error Class             | Code                | Status | When                                                   |
-| ----------------------- | ------------------- | ------ | ------------------------------------------------------ |
-| `GuardError`            | (base)              | --     | Base class for all guard errors                        |
-| `ExecutionTimeoutError` | `EXECUTION_TIMEOUT` | `408`  | Execution exceeds configured timeout                   |
-| `ConcurrencyLimitError` | `CONCURRENCY_LIMIT` | `429`  | Concurrency limit reached (no queue or queue disabled) |
-| `QueueTimeoutError`     | `QUEUE_TIMEOUT`     | `429`  | Waited in concurrency queue but timed out              |
-| `IpBlockedError`        | `IP_BLOCKED`        | `403`  | Client IP is on the deny list                          |
-| `IpNotAllowedError`     | `IP_NOT_ALLOWED`    | `403`  | Client IP is not on the allow list                     |
+| Error class                    | Code                        | Status | Thrown by                                                                        |
+| ------------------------------ | --------------------------- | ------ | -------------------------------------------------------------------------------- |
+| `ExecutionTimeoutError`        | `EXECUTION_TIMEOUT`         | `408`  | `withTimeout`, when time runs out                                                |
+| `QueueTimeoutError`            | `QUEUE_TIMEOUT`             | `429`  | `DistributedSemaphore.acquire`, when it waited and no slot freed up              |
+| `GuardStorageUnavailableError` | `GUARD_STORAGE_UNAVAILABLE` | `503`  | `createGuardManager` and the manager's checks, when the storage can't be reached |
+| `ConcurrencyLimitError`        | `CONCURRENCY_LIMIT`         | `429`  | Your code (and `@frontmcp/sdk`), when `acquireSemaphore` returns `null`          |
+| `IpBlockedError`               | `IP_BLOCKED`                | `403`  | Your code, for an IP on the deny list                                            |
+| `IpNotAllowedError`            | `IP_NOT_ALLOWED`            | `403`  | Your code, for an IP not on the allow list                                       |
 
 ```typescript
-import { ExecutionTimeoutError, GuardError } from '@frontmcp/guard';
+import { ExecutionTimeoutError, withTimeout } from '@frontmcp/guard';
 
 try {
-  await withTimeout(() => slowOp(), 5_000, 'slow-op');
+  await withTimeout(() => new Promise((resolve) => setTimeout(resolve, 10_000)), 5_000, 'slow-op');
 } catch (err) {
   if (err instanceof ExecutionTimeoutError) {
     console.log(err.code); // 'EXECUTION_TIMEOUT'
@@ -336,67 +364,35 @@ try {
 }
 ```
 
-## API Reference
+## API reference
 
-### Classes
+Everything is exported from the package root.
 
-| Export                     | Module        | Description                                      |
-| -------------------------- | ------------- | ------------------------------------------------ |
-| `SlidingWindowRateLimiter` | `rate-limit`  | Sliding window counter rate limiter              |
-| `DistributedSemaphore`     | `concurrency` | Distributed semaphore with ticket-based tracking |
-| `IpFilter`                 | `ip-filter`   | IP allow/deny list with CIDR support             |
-| `GuardManager`             | `manager`     | Central orchestrator for all guard modules       |
+| Kind            | Exports                                                                                                                                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Classes         | `GuardManager`, `SlidingWindowRateLimiter`, `DistributedSemaphore`, `IpFilter`                                                                                                                                   |
+| Functions       | `createGuardManager`, `withTimeout`, `resolvePartitionKey(partitionBy, context)`, `buildStorageKey(entity, partition, suffix?)`                                                                                  |
+| Errors          | `GuardError`, `ExecutionTimeoutError`, `ConcurrencyLimitError`, `QueueTimeoutError`, `IpBlockedError`, `IpNotAllowedError`, `GuardStorageUnavailableError`                                                       |
+| Zod schemas     | `guardConfigSchema`, `rateLimitConfigSchema`, `concurrencyConfigSchema`, `timeoutConfigSchema`, `ipFilterConfigSchema`, `partitionKeySchema`                                                                     |
+| Types           | `GuardConfig`, `GuardLogger`, `GuardManagerOptions`, `CreateGuardManagerArgs`, `RateLimitConfig`, `RateLimitResult`, `ConcurrencyConfig`, `SemaphoreTicket`, `TimeoutConfig`, `IpFilterConfig`, `IpFilterResult` |
+| Partition types | `PartitionKey`, `PartitionKeyStrategy`, `CustomPartitionKeyFn`, `PartitionKeyContext`                                                                                                                            |
+| Schema inputs   | `GuardConfigInput`, `RateLimitConfigInput`, `ConcurrencyConfigInput`, `TimeoutConfigInput`, `IpFilterConfigInput`                                                                                                |
 
-### Functions
+## Docs
 
-| Export                | Module          | Description                                              |
-| --------------------- | --------------- | -------------------------------------------------------- |
-| `withTimeout`         | `timeout`       | Wrap an async function with a deadline                   |
-| `resolvePartitionKey` | `partition-key` | Resolve a partition key string from strategy and context |
-| `buildStorageKey`     | `partition-key` | Build a namespaced storage key                           |
-| `createGuardManager`  | `manager`       | Factory to create and initialize a `GuardManager`        |
+- [Guard options](https://frontmcp.dev/reference/sdk/guard): `rateLimit`, `concurrency`, `timeout` and `throttle` in a FrontMCP server, and the [building blocks](https://frontmcp.dev/reference/sdk/guard#building-blocks) this package exports
+- [Limiting and timing out calls](https://frontmcp.dev/learn/limiting-calls): the same options, step by step
+- [Error classes](https://frontmcp.dev/reference/sdk/error-classes): the errors a caller gets back
 
-### Error Classes
+## Related packages
 
-| Export                  | Module   | Description               |
-| ----------------------- | -------- | ------------------------- |
-| `GuardError`            | `errors` | Base error class          |
-| `ExecutionTimeoutError` | `errors` | Timeout exceeded          |
-| `ConcurrencyLimitError` | `errors` | Concurrency limit reached |
-| `QueueTimeoutError`     | `errors` | Queue wait timed out      |
-| `IpBlockedError`        | `errors` | IP on deny list           |
-| `IpNotAllowedError`     | `errors` | IP not on allow list      |
+- [`@frontmcp/sdk`](https://www.npmjs.com/package/@frontmcp/sdk): the framework that applies these limits to tools and agents
+- [`@frontmcp/utils`](https://www.npmjs.com/package/@frontmcp/utils): the storage adapters the guard keeps its counters in
 
-### Zod Schemas
+## Contributing
 
-| Export                    | Module    | Description                                         |
-| ------------------------- | --------- | --------------------------------------------------- |
-| `partitionKeySchema`      | `schemas` | Validates partition key strategy or custom function |
-| `rateLimitConfigSchema`   | `schemas` | Validates `RateLimitConfig`                         |
-| `concurrencyConfigSchema` | `schemas` | Validates `ConcurrencyConfig`                       |
-| `timeoutConfigSchema`     | `schemas` | Validates `TimeoutConfig`                           |
-| `ipFilterConfigSchema`    | `schemas` | Validates `IpFilterConfig`                          |
-| `guardConfigSchema`       | `schemas` | Validates the full `GuardConfig`                    |
-
-### Types
-
-| Export                   | Module          | Description                                 |
-| ------------------------ | --------------- | ------------------------------------------- |
-| `RateLimitConfig`        | `rate-limit`    | Rate limit configuration                    |
-| `RateLimitResult`        | `rate-limit`    | Result from a rate limit check              |
-| `ConcurrencyConfig`      | `concurrency`   | Concurrency control configuration           |
-| `SemaphoreTicket`        | `concurrency`   | Acquired concurrency slot handle            |
-| `TimeoutConfig`          | `timeout`       | Timeout configuration                       |
-| `IpFilterConfig`         | `ip-filter`     | IP filter configuration                     |
-| `IpFilterResult`         | `ip-filter`     | Result from an IP filter check              |
-| `PartitionKeyStrategy`   | `partition-key` | Built-in partition key strategies union     |
-| `CustomPartitionKeyFn`   | `partition-key` | Custom partition key resolver function      |
-| `PartitionKeyContext`    | `partition-key` | Context passed to partition key resolvers   |
-| `PartitionKey`           | `partition-key` | Union of strategy string or custom function |
-| `GuardConfig`            | `manager`       | Full guard configuration                    |
-| `GuardLogger`            | `manager`       | Minimal logger interface                    |
-| `CreateGuardManagerArgs` | `manager`       | Arguments for `createGuardManager`          |
+Source: [`libs/guard`](https://github.com/agentfront/frontmcp/tree/main/libs/guard). Issues and pull requests are welcome; see [CONTRIBUTING.md](https://github.com/agentfront/frontmcp/blob/main/CONTRIBUTING.md).
 
 ## License
 
-Apache-2.0
+Apache-2.0. See [LICENSE](https://github.com/agentfront/frontmcp/blob/main/LICENSE).

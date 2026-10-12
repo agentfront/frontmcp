@@ -1,19 +1,21 @@
 {
   "name": "@frontmcp/observability",
   "version": "1.9.6",
-  "description": "OpenTelemetry instrumentation, structured JSON logging, and request log objects for FrontMCP",
+  "description": "OpenTelemetry tracing, structured JSON logging, request logs and Prometheus-format metrics for FrontMCP servers",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
   "keywords": [
+    "frontmcp",
+    "mcp",
+    "model-context-protocol",
     "opentelemetry",
     "otel",
     "observability",
     "tracing",
+    "metrics",
+    "prometheus",
     "structured-logging",
-    "json-logging",
     "request-log",
-    "mcp",
-    "frontmcp",
     "typescript"
   ],
   "repository": {

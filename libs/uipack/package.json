@@ -1,23 +1,26 @@
 {
   "name": "@frontmcp/uipack",
   "version": "1.9.6",
-  "description": "FrontMCP UIpack - HTML shell builder, pluggable import resolver, and NPM component loader for MCP UI (React-free core)",
+  "description": "React-free core that builds FrontMCP widget pages: HTML shell with CSP and bridge, template rendering, CDN import resolution",
   "author": "AgentFront <info@agentfront.dev>",
-  "homepage": "https://frontmcp.dev/reference/ui",
+  "homepage": "https://frontmcp.dev/reference/ui/components#frontmcpuipack",
   "license": "Apache-2.0",
   "keywords": [
-    "mcp",
-    "ui",
-    "bundler",
-    "template",
-    "agentfront",
     "frontmcp",
-    "framework",
-    "typescript"
+    "mcp",
+    "model-context-protocol",
+    "mcp-apps",
+    "widgets",
+    "ui",
+    "html",
+    "csp",
+    "import-map",
+    "agentfront"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentfront/frontmcp.git"
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/uipack"
   },
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"

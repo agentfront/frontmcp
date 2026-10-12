@@ -1,17 +1,19 @@
 {
   "name": "frontmcp",
   "version": "1.9.6",
-  "description": "FrontMCP command line interface",
+  "description": "The FrontMCP CLI: create, run, test and build MCP servers, and install FrontMCP skills for coding agents",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/cli",
   "license": "Apache-2.0",
   "keywords": [
-    "cli",
-    "mcp",
-    "agentfront",
     "frontmcp",
-    "framework",
-    "typescript"
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "cli",
+    "scaffold",
+    "typescript",
+    "agentfront"
   ],
   "repository": {
     "type": "git",

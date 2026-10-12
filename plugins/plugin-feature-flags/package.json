@@ -8,13 +8,14 @@
     "node": ">=24.0.0"
   },
   "keywords": [
+    "frontmcp",
     "mcp",
+    "model-context-protocol",
     "feature-flags",
-    "split",
     "launchdarkly",
+    "splitio",
     "unleash",
     "plugin",
-    "frontmcp",
     "agentfront"
   ],
   "repository": {
