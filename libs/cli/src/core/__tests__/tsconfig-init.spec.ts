@@ -182,6 +182,48 @@ describe('runInit', () => {
     expect(config['compilerOptions']['moduleResolution']).toBe('bundler');
   });
 
+  it('replaces moduleResolution bundler in an existing tsconfig.json on TypeScript 5', async () => {
+    await writeJSON(path.join(dir, 'package.json'), { devDependencies: { typescript: '^5.5.3' } });
+    await writeFile(tsconfigPath, '{ "compilerOptions": { "moduleResolution": "bundler" } }');
+
+    await runInit(dir);
+
+    const { config } = (await readTsconfig(tsconfigPath)) ?? { config: {} };
+    expect(config['compilerOptions']['moduleResolution']).toBe('node');
+  });
+
+  describe('a project inside a folder that has its own TypeScript installed', () => {
+    let projectDir: string;
+
+    beforeEach(async () => {
+      await mkdir(path.join(dir, 'node_modules', 'typescript'), { recursive: true });
+      await writeJSON(path.join(dir, 'node_modules', 'typescript', 'package.json'), {
+        name: 'typescript',
+        version: '5.9.3',
+      });
+      projectDir = path.join(dir, 'app');
+      await mkdir(projectDir, { recursive: true });
+    });
+
+    const moduleResolutionAfterInit = async () => {
+      await runInit(projectDir);
+      const { config } = (await readTsconfig(path.join(projectDir, 'tsconfig.json'))) ?? { config: {} };
+      return config['compilerOptions']['moduleResolution'];
+    };
+
+    it("follows the project's declared TypeScript over the ancestor's", async () => {
+      await writeJSON(path.join(projectDir, 'package.json'), { devDependencies: { typescript: '^6.0.0' } });
+
+      expect(await moduleResolutionAfterInit()).toBe('bundler');
+    });
+
+    it("uses the ancestor's TypeScript, which the build will run, when the project declares none", async () => {
+      await writeJSON(path.join(projectDir, 'package.json'), { name: 'app' });
+
+      expect(await moduleResolutionAfterInit()).toBe('node');
+    });
+  });
+
   it('replaces moduleResolution node in an existing tsconfig.json on TypeScript 6', async () => {
     await writeJSON(path.join(dir, 'package.json'), { devDependencies: { typescript: '^6.0.0' } });
     await writeFile(tsconfigPath, '{ "compilerOptions": { "moduleResolution": "node" } }');

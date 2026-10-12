@@ -162,9 +162,14 @@ describe('tsconfig utilities', () => {
       expect(result.compilerOptions.moduleResolution).toBe('bundler');
     });
 
-    it.each(['node', 'bundler'])('keeps moduleResolution %s for a project on TypeScript 5', (moduleResolution) => {
-      const result = ensureRequiredTsOptions({ compilerOptions: { moduleResolution } }, 'node');
-      expect(result.compilerOptions.moduleResolution).toBe(moduleResolution);
+    it('keeps moduleResolution node for a project on TypeScript 5', () => {
+      const result = ensureRequiredTsOptions({ compilerOptions: { moduleResolution: 'node' } }, 'node');
+      expect(result.compilerOptions.moduleResolution).toBe('node');
+    });
+
+    it('replaces moduleResolution bundler, which TypeScript 5 rejects with --module commonjs (TS5095)', () => {
+      const result = ensureRequiredTsOptions({ compilerOptions: { moduleResolution: 'bundler' } }, 'node');
+      expect(result.compilerOptions.moduleResolution).toBe('node');
     });
 
     it('replaces moduleResolution nodenext with node for a project on TypeScript 5', () => {
@@ -217,6 +222,20 @@ describe('tsconfig utilities', () => {
         'compilerOptions.moduleResolution "node" is deprecated in TypeScript 6 and removed in 7 — use "bundler"',
       ]);
       expect(checkRequiredTsOptions(compilerOptions, 'node').issues).toEqual([]);
+    });
+
+    it('reports moduleResolution bundler on TypeScript 5', () => {
+      const { issues } = checkRequiredTsOptions(
+        {
+          target: 'es2021',
+          module: 'esnext',
+          emitDecoratorMetadata: true,
+          experimentalDecorators: true,
+          moduleResolution: 'bundler',
+        },
+        'node',
+      );
+      expect(issues.join('\n')).toContain('TS5095');
     });
 
     it('should return all ok for correct config', () => {

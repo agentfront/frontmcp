@@ -120,6 +120,9 @@ function moduleResolutionIssue(value: unknown, recommended: ModuleResolution): s
   if (recommended === 'bundler' && resolution !== undefined && LEGACY_MODULE_RESOLUTIONS.includes(resolution)) {
     return `compilerOptions.moduleResolution "${value}" is deprecated in TypeScript 6 and removed in 7 — use "${recommended}"`;
   }
+  if (recommended === 'node' && resolution === 'bundler') {
+    return `compilerOptions.moduleResolution "${value}" needs TypeScript 6 with the CommonJS output of frontmcp build (TS5095) — use "${recommended}"`;
+  }
   return undefined;
 }
 
@@ -176,12 +179,16 @@ function declaredRange(packageJson: ProjectPackageJson, packageName: string): st
   return packageJson.devDependencies?.[packageName] ?? packageJson.dependencies?.[packageName];
 }
 
-/** The project's TypeScript major: the installed compiler first, then the declared range. */
+async function installedVersion(packageJsonPath: string | undefined): Promise<string | undefined> {
+  return packageJsonPath ? ((await readJSON<{ version?: string }>(packageJsonPath))?.version ?? undefined) : undefined;
+}
+
+/** The project's TypeScript major: its own install, its declared range, else an ancestor's (what `frontmcp build` runs). */
 async function typescriptMajor(cwd: string, packageJson: ProjectPackageJson): Promise<number | undefined> {
-  const installedPackageJson = resolveInstalledPackageJson(cwd, 'typescript');
-  const version = installedPackageJson
-    ? (await readJSON<{ version?: string }>(installedPackageJson))?.version
-    : declaredRange(packageJson, 'typescript');
+  const version =
+    (await installedVersion(path.join(cwd, 'node_modules', 'typescript', 'package.json'))) ??
+    declaredRange(packageJson, 'typescript') ??
+    (await installedVersion(resolveInstalledPackageJson(cwd, 'typescript')));
   const major = Number(version?.match(/\d+/)?.[0]);
   return Number.isFinite(major) ? major : undefined;
 }
