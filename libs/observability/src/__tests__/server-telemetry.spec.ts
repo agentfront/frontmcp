@@ -23,7 +23,6 @@ import {
   ToolContext,
   ToolHook,
   type FlowCtxOf,
-  type FrontMcpConfigInput,
 } from '@frontmcp/sdk';
 
 import type { TracingOptions } from '../otel/otel.types';
@@ -99,7 +98,7 @@ async function serve(tracing: TracingOptions = {}, logs: RequestLog[] = []) {
       AuditPlugin,
       ObservabilityPlugin.init({ tracing, requestLogs: { onRequestComplete: (log) => void logs.push(log) } }),
     ],
-  } as FrontMcpConfigInput);
+  });
 }
 
 const span = (name: string): ReadableSpan => {

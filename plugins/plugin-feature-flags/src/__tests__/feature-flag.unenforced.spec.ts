@@ -26,8 +26,6 @@ import FeatureFlagPlugin from '../feature-flag.plugin';
 
 const FLAGS = { 'flag-on': true, 'flag-off': false };
 
-/** Server-level plugins: the config type names plugin classes, and an `init()` result is accepted at run time. */
-const serverPlugins = (...plugins: unknown[]) => plugins as FrontMcpConfigInput['plugins'];
 const executed: string[] = [];
 
 @Tool({ name: 'beta_export', inputSchema: {}, featureFlag: 'flag-off' })
@@ -86,10 +84,7 @@ describe('featureFlag without a feature-flag plugin', () => {
 
   it('starts with FeatureFlagPlugin on the server', async () => {
     const server = await FrontMcpInstance.createDirect(
-      config(
-        { tools: [BetaExportTool] },
-        { plugins: serverPlugins(FeatureFlagPlugin.init({ adapter: 'static', flags: FLAGS })) },
-      ),
+      config({ tools: [BetaExportTool] }, { plugins: [FeatureFlagPlugin.init({ adapter: 'static', flags: FLAGS })] }),
     );
     try {
       expect(await errorMessageOf(server.callTool('beta_export', {}))).toMatch(/disabled by feature flag/);

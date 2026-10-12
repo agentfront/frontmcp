@@ -19,8 +19,6 @@ import {
   ResourceContext,
   Tool,
   ToolContext,
-  type AdapterType,
-  type AnnotatedClass,
   type FrontMcpAdapterResponse,
 } from '../../common';
 import { type DirectMcpServer } from '../../direct/direct.types';
@@ -81,7 +79,7 @@ describe('server-level adapters', () => {
     server = await FrontMcpInstance.createDirect({
       info: { name: 'server-adapters', version: '1.0.0' },
       apps: [DeskApp],
-      adapters: [StatusAdapter.init({ name: 'status-eu', region: 'eu' }) as AnnotatedClass],
+      adapters: [StatusAdapter.init({ name: 'status-eu', region: 'eu' })],
       logging: { level: LogLevel.Off },
     });
   });
@@ -171,16 +169,18 @@ class FeedAdapter extends DynamicAdapter<FeedOptions> {
   }
 }
 
-function serverWith(...adapters: AdapterType[]): Promise<DirectMcpServer> {
+type FeedAdapterRecord = ReturnType<typeof FeedAdapter.init>;
+
+function serverWith(...adapters: FeedAdapterRecord[]): Promise<DirectMcpServer> {
   return FrontMcpInstance.createDirect({
     info: { name: 'feed-server', version: '1.0.0' },
     apps: [DeskApp],
-    adapters: adapters as AnnotatedClass[],
+    adapters,
     logging: { level: LogLevel.Off },
   });
 }
 
-function feedAdapter(options: FeedOptions): { record: AdapterType; adapter: FeedAdapter } {
+function feedAdapter(options: FeedOptions): { record: FeedAdapterRecord; adapter: FeedAdapter } {
   const record = FeedAdapter.init(options);
   return { record, adapter: feedAdapters[feedAdapters.length - 1] };
 }
@@ -240,7 +240,7 @@ describe('server-level adapter lifecycle', () => {
 
   it('keeps a shared useValue adapter polling until the last server serving it is disposed', async () => {
     const shared = new FeedAdapter({ name: 'feed-shared', feed: 'shared' });
-    const record = { provide: Symbol('feed-shared'), useValue: shared } as unknown as AdapterType;
+    const record = { provide: Symbol('feed-shared'), useValue: shared } as unknown as FeedAdapterRecord;
     const first = await serverWith(record);
     const second = await serverWith(record);
 
@@ -300,8 +300,8 @@ describe('several adapters installed together', () => {
       info: { name: 'two-server-adapters', version: '1.0.0' },
       apps: [DeskApp],
       adapters: [
-        StatusAdapter.init({ name: 'status-ap', region: 'ap' }) as AnnotatedClass,
-        StatusAdapter.init({ name: 'status-sa', region: 'sa' }) as AnnotatedClass,
+        StatusAdapter.init({ name: 'status-ap', region: 'ap' }),
+        StatusAdapter.init({ name: 'status-sa', region: 'sa' }),
       ],
       logging: { level: LogLevel.Off },
     });

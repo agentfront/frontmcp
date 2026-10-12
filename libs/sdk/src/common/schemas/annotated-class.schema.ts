@@ -2,13 +2,14 @@ import { type Type } from '@frontmcp/di';
 import { z } from '@frontmcp/lazy-zod';
 
 import { isPackageSpecifier } from '../../esm-loader/package-specifier';
-import type { AgentType } from '../interfaces';
+import type { AdapterType, AgentType, PluginType, ProviderType } from '../interfaces';
 import {
   frontMcpAdapterMetadataSchema,
   frontMcpAuthProviderMetadataSchema,
   frontMcpPluginMetadataSchema,
   frontMcpProviderMetadataSchema,
   frontMcpRemoteAppMetadataSchema,
+  type RemoteAppMetadata,
 } from '../metadata';
 import type {
   JobEsmTargetRecord,
@@ -58,8 +59,12 @@ function hasMetadataCompat(token: symbol, target: object): boolean {
 /** A class reference; declared in this package so published declarations name it from here, not from a monorepo path. */
 export interface AnnotatedClass extends Type {}
 
-export const annotatedFrontMcpAppSchema = z.custom<AnnotatedClass>(
-  (v): v is AnnotatedClass => {
+/** The plugin and adapter forms the schemas accept: every form but a `useClass` record. */
+type PluginEntry = Exclude<PluginType, { useClass: unknown }>;
+type AdapterEntry = Exclude<AdapterType, { useClass: unknown }>;
+
+export const annotatedFrontMcpAppSchema = z.custom<AnnotatedClass | RemoteAppMetadata>(
+  (v): v is AnnotatedClass | RemoteAppMetadata => {
     // Check for class-based @App() decorator
     if (typeof v === 'function' && hasMetadataCompat(FrontMcpLocalAppTokens.type, v)) {
       return true;
@@ -78,8 +83,8 @@ export const annotatedFrontMcpAppSchema = z.custom<AnnotatedClass>(
   { message: 'apps items must be annotated with @App() | @FrontMcpApp() or be a valid remote app configuration.' },
 );
 
-export const annotatedFrontMcpProvidersSchema = z.custom<AnnotatedClass>(
-  (v): v is AnnotatedClass => {
+export const annotatedFrontMcpProvidersSchema = z.custom<ProviderType>(
+  (v): v is ProviderType => {
     if (typeof v === 'function' && hasMetadataCompat(FrontMcpProviderTokens.type, v)) {
       return true;
     }
@@ -130,8 +135,8 @@ export const annotatedFrontMcpAuthProvidersSchema = z.custom<AnnotatedClass>(
   { message: 'auth providers items must be annotated with @AuthProvider() | @FrontMcpAuthProvider().' },
 );
 
-export const annotatedFrontMcpPluginsSchema = z.custom<AnnotatedClass>(
-  (v): v is AnnotatedClass => {
+export const annotatedFrontMcpPluginsSchema = z.custom<PluginEntry>(
+  (v): v is PluginEntry => {
     if (typeof v === 'function' && hasMetadataCompat(FrontMcpPluginTokens.type, v)) {
       return true;
     }
@@ -157,8 +162,8 @@ export const annotatedFrontMcpPluginsSchema = z.custom<AnnotatedClass>(
   { message: 'plugins items must be annotated with @Plugin() | @FrontMcpPlugin().' },
 );
 
-export const annotatedFrontMcpAdaptersSchema = z.custom<AnnotatedClass>(
-  (v): v is AnnotatedClass => {
+export const annotatedFrontMcpAdaptersSchema = z.custom<AdapterEntry>(
+  (v): v is AdapterEntry => {
     if (typeof v === 'function' && hasMetadataCompat(FrontMcpAdapterTokens.type, v)) {
       return true;
     }
