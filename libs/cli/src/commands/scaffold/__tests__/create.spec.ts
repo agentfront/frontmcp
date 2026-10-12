@@ -307,6 +307,21 @@ describe('runCreate', () => {
       expect(consoleLogs.some((log) => log.includes('README.md'))).toBe(true);
     });
 
+    it('writes a tsconfig.json for the TypeScript and type packages it scaffolds', async () => {
+      await runCreate('tsconfig-app', { yes: true });
+
+      const base = path.join(tempDir, 'tsconfig-app');
+      const { devDependencies } = JSON.parse(readFileSync(path.join(base, 'package.json'), 'utf8'));
+      const { compilerOptions } = JSON.parse(readFileSync(path.join(base, 'tsconfig.json'), 'utf8'));
+      expect(devDependencies).toMatchObject({
+        typescript: '^5.5.3',
+        '@types/node': '^24.0.0',
+        '@types/jest': '^30.0.0',
+      });
+      expect(compilerOptions.moduleResolution).toBe('node');
+      expect(compilerOptions.types).toEqual(['node', 'jest', '@frontmcp/testing']);
+    });
+
     it('should create .nvmrc with Node.js 24', async () => {
       await runCreate('nvmrc-app', { yes: true });
 

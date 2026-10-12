@@ -426,6 +426,15 @@ commas; a file that is not valid JSON(C) is reported (line and column) and left
 untouched, never overwritten. So is one that declares an option `init` must set
 more than once — only the last occurrence takes effect, so remove the duplicate.
 
+`init` sets the `moduleResolution` the project's TypeScript accepts with the CommonJS output of
+`frontmcp build`: `bundler` on TypeScript 6 and later (or when no TypeScript is found), `node` on
+TypeScript 5. The project's TypeScript is its own install, else the version its package.json declares,
+else one installed in a parent folder. On TypeScript 6+ it replaces `node`, `node10` and `classic`, which
+TypeScript 6 deprecates and 7 removes; on TypeScript 5 it replaces `bundler`, which TypeScript 5 rejects
+with CommonJS output. Its `types` list names only packages the project has: `node` (`@types/node`),
+`jest` (`@types/jest`) and `@frontmcp/testing`. `frontmcp doctor` checks the same, and checks Node.js
+against the CLI's `engines` (24 or later).
+
 Test with curl:
 
 ```bash

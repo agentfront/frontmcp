@@ -1,6 +1,9 @@
 import { generateInstallerScript } from '../installer-script';
 import { type FrontmcpExecConfig } from '../config';
 
+const { engines } = jest.requireActual<{ engines: { node: string } }>('../../../../../package.json');
+const cliMinNodeMajor = engines.node.match(/\d+/)?.[0];
+
 describe('installer-script', () => {
   describe('generateInstallerScript', () => {
     it('should generate a valid bash script', () => {
@@ -58,10 +61,10 @@ describe('installer-script', () => {
       expect(script).toContain('.frontmcp/apps');
     });
 
-    it('should default min Node major to 22 when version has no digits', () => {
+    it("should default min Node major to the CLI's engines.node when version has no digits", () => {
       const config: FrontmcpExecConfig = { name: 'app', nodeVersion: 'latest' };
       const script = generateInstallerScript(config);
-      expect(script).toContain('-lt "22"');
+      expect(script).toContain(`-lt "${cliMinNodeMajor}"`);
     });
 
     it('should extract min major from nodeVersion string', () => {

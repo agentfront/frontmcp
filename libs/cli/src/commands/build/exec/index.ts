@@ -332,6 +332,7 @@ export async function buildExec(
       oauthConfig,
       selfContained: !!seaEnabled,
       env: opts.execOverrides?.env,
+      nodeVersion: config.nodeVersion,
     });
 
     const cliEntryPath = path.join(tempDir, 'cli-entry.js');

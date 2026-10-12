@@ -53,7 +53,7 @@ module.exports = {
   name: 'greeter-mcpb',
   version: '1.0.0',
   entry: './src/main.ts',
-  nodeVersion: '>=22.0.0',
+  nodeVersion: '>=24.0.0',
   deployments: [
     {
       target: 'mcpb',
@@ -68,7 +68,7 @@ module.exports = {
       compatibility: {
         claude_desktop: '>=1.0.0',
         platforms: ['darwin', 'linux', 'win32'],
-        runtimes: { node: '>=22.0.0' },
+        runtimes: { node: '>=24.0.0' },
       },
       sea: { enabled: true },
       // Each entry reaches the server as an env var: `env`, else the key in UPPER_SNAKE_CASE.

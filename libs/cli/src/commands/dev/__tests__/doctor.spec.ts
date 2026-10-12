@@ -26,6 +26,7 @@ jest.mock('@frontmcp/utils', () => {
     fileExists: jest.fn(),
     fileExistsSync: jest.fn(() => false),
     readFile: jest.fn(),
+    readJSON: jest.fn(async () => null),
   };
 });
 
@@ -89,9 +90,8 @@ describe('doctor command', () => {
 
   describe('runDoctor', () => {
     it('should pass with all requirements met', async () => {
-      // Mock Node 22
       Object.defineProperty(process, 'versions', {
-        value: { ...originalVersions, node: '22.0.0' },
+        value: { ...originalVersions, node: '24.0.0' },
         configurable: true,
       });
 
@@ -116,7 +116,7 @@ describe('doctor command', () => {
     // #679 — comments and trailing commas are legal in tsconfig.json.
     it('accepts a tsconfig.json with comments and trailing commas', async () => {
       Object.defineProperty(process, 'versions', {
-        value: { ...originalVersions, node: '22.0.0' },
+        value: { ...originalVersions, node: '24.0.0' },
         configurable: true,
       });
       (fileExists as jest.Mock).mockResolvedValue(true);
@@ -183,9 +183,56 @@ describe('doctor command', () => {
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Some checks failed'));
     });
 
-    it('should fail with old npm version', async () => {
+    it('requires the Node.js version the package engines declare', async () => {
+      const { engines } = jest.requireActual<{ engines: { node: string } }>('../../../../package.json');
+      expect(engines.node).toBe('>=24.0.0');
       Object.defineProperty(process, 'versions', {
         value: { ...originalVersions, node: '22.0.0' },
+        configurable: true,
+      });
+      (fileExists as jest.Mock).mockResolvedValue(true);
+      mockTsconfig({
+        compilerOptions: {
+          target: 'es2021',
+          module: 'esnext',
+          emitDecoratorMetadata: true,
+          experimentalDecorators: true,
+        },
+      });
+      (resolveEntry as jest.Mock).mockResolvedValue('/test/src/main.ts');
+
+      await runDoctor();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith('❌ Node 22.0.0 — please upgrade to >= 24.0.0');
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('reports moduleResolution node, which TypeScript 6 deprecates', async () => {
+      Object.defineProperty(process, 'versions', {
+        value: { ...originalVersions, node: '24.0.0' },
+        configurable: true,
+      });
+      (fileExists as jest.Mock).mockResolvedValue(true);
+      mockTsconfig({
+        compilerOptions: {
+          target: 'es2021',
+          module: 'esnext',
+          emitDecoratorMetadata: true,
+          experimentalDecorators: true,
+          moduleResolution: 'node',
+        },
+      });
+      (resolveEntry as jest.Mock).mockResolvedValue('/test/src/main.ts');
+
+      await runDoctor();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('"node" is deprecated in TypeScript 6'));
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should fail with old npm version', async () => {
+      Object.defineProperty(process, 'versions', {
+        value: { ...originalVersions, node: '24.0.0' },
         configurable: true,
       });
 
@@ -209,7 +256,7 @@ describe('doctor command', () => {
 
     it('should handle npm not found', async () => {
       Object.defineProperty(process, 'versions', {
-        value: { ...originalVersions, node: '22.0.0' },
+        value: { ...originalVersions, node: '24.0.0' },
         configurable: true,
       });
 
@@ -233,7 +280,7 @@ describe('doctor command', () => {
 
     it('should fail if tsconfig.json not found', async () => {
       Object.defineProperty(process, 'versions', {
-        value: { ...originalVersions, node: '22.0.0' },
+        value: { ...originalVersions, node: '24.0.0' },
         configurable: true,
       });
 
@@ -247,7 +294,7 @@ describe('doctor command', () => {
 
     it('should report tsconfig issues', async () => {
       Object.defineProperty(process, 'versions', {
-        value: { ...originalVersions, node: '22.0.0' },
+        value: { ...originalVersions, node: '24.0.0' },
         configurable: true,
       });
 
@@ -269,7 +316,7 @@ describe('doctor command', () => {
 
     it('should handle entry not found', async () => {
       Object.defineProperty(process, 'versions', {
-        value: { ...originalVersions, node: '22.0.0' },
+        value: { ...originalVersions, node: '24.0.0' },
         configurable: true,
       });
 
@@ -293,7 +340,7 @@ describe('doctor command', () => {
       // #381: doctor must not pass `shell: true` to spawn — it triggers
       // Node's DEP0190 deprecation warning every time the command runs.
       Object.defineProperty(process, 'versions', {
-        value: { ...originalVersions, node: '22.0.0' },
+        value: { ...originalVersions, node: '24.0.0' },
         configurable: true,
       });
       (fileExists as jest.Mock).mockResolvedValue(true);
@@ -367,7 +414,7 @@ describe('doctor command', () => {
 
     it('should show entry file path when found', async () => {
       Object.defineProperty(process, 'versions', {
-        value: { ...originalVersions, node: '22.0.0' },
+        value: { ...originalVersions, node: '24.0.0' },
         configurable: true,
       });
 

@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { fileExists, readFile, writeFile, writeJSON } from '@frontmcp/utils';
+import { fileExists, readFile, readJSON, writeFile, writeJSON } from '@frontmcp/utils';
 
 import { JsoncDuplicateKeyError, JsoncParseError, parseJsoncObject, updateJsoncText } from '../shared/jsonc';
 import { c } from './colors';
@@ -11,8 +11,21 @@ export const REQUIRED_DECORATOR_FIELDS = {
   emitDecoratorMetadata: true,
   experimentalDecorators: true,
   strictFunctionTypes: true,
-  moduleResolution: 'node',
+  moduleResolution: 'bundler',
 } as const;
+
+/** `frontmcp build` compiles with `--module commonjs`: TypeScript 5 needs `node` for it, 6+ accepts `bundler`. */
+export type ModuleResolution = 'bundler' | 'node';
+
+const LEGACY_MODULE_RESOLUTIONS = ['node', 'node10', 'classic'];
+
+const LEGACY_GENERATED_TYPES = ['node', '@types/jest', '@frontmcp/testing'];
+
+const TYPES_ENTRIES = [
+  { entry: 'node', packageName: '@types/node' },
+  { entry: 'jest', packageName: '@types/jest' },
+  { entry: '@frontmcp/testing', packageName: '@frontmcp/testing' },
+] as const;
 
 /**
  * Filename suffixes for tool UI widget source files that ship to the browser.
@@ -38,7 +51,6 @@ export const RECOMMENDED_TSCONFIG = {
     sourceMap: true,
     outDir: 'dist',
     rootDir: 'src',
-    types: ['node', '@types/jest', '@frontmcp/testing'],
   },
   include: ['src/**/*'],
   exclude: [...WIDGET_FILE_PATTERNS],
@@ -56,18 +68,18 @@ export function deepMerge<T extends Record<string, any>, U extends Record<string
   return out as T & U;
 }
 
-export function ensureRequiredTsOptions(obj: Record<string, any>): Record<string, any> {
+export function ensureRequiredTsOptions(
+  obj: Record<string, any>,
+  moduleResolution: ModuleResolution = REQUIRED_DECORATOR_FIELDS.moduleResolution,
+): Record<string, any> {
   const next = { ...obj };
   next.compilerOptions = { ...(next.compilerOptions || {}) };
   next.compilerOptions.target = REQUIRED_DECORATOR_FIELDS.target;
   next.compilerOptions.module = REQUIRED_DECORATOR_FIELDS.module;
   next.compilerOptions.emitDecoratorMetadata = REQUIRED_DECORATOR_FIELDS.emitDecoratorMetadata;
   next.compilerOptions.experimentalDecorators = REQUIRED_DECORATOR_FIELDS.experimentalDecorators;
-  // `module: esnext` with `moduleResolution: node16|nodenext` is rejected by TypeScript (TS5110):
-  // the Node resolution modes require the matching `module`. Fall back to the recommended value.
-  const resolution = normalizeStr(next.compilerOptions.moduleResolution);
-  if (resolution === 'node16' || resolution === 'nodenext') {
-    next.compilerOptions.moduleResolution = REQUIRED_DECORATOR_FIELDS.moduleResolution;
+  if (moduleResolutionIssue(next.compilerOptions.moduleResolution, moduleResolution)) {
+    next.compilerOptions.moduleResolution = moduleResolution;
   }
   return next;
 }
@@ -102,7 +114,24 @@ function normalizeStr(x: unknown): string | undefined {
   return typeof x === 'string' ? x.toLowerCase() : undefined;
 }
 
-export function checkRequiredTsOptions(compilerOptions: Record<string, any> | undefined) {
+function moduleResolutionIssue(value: unknown, recommended: ModuleResolution): string | undefined {
+  const resolution = normalizeStr(value);
+  if (resolution === 'node16' || resolution === 'nodenext') {
+    return `compilerOptions.moduleResolution "${value}" requires module "${value}" (TS5110) — use "${recommended}"`;
+  }
+  if (recommended === 'bundler' && resolution !== undefined && LEGACY_MODULE_RESOLUTIONS.includes(resolution)) {
+    return `compilerOptions.moduleResolution "${value}" is deprecated in TypeScript 6 and removed in 7 — use "${recommended}"`;
+  }
+  if (recommended === 'node' && resolution === 'bundler') {
+    return `compilerOptions.moduleResolution "${value}" needs TypeScript 6 with the CommonJS output of frontmcp build (TS5095) — use "${recommended}"`;
+  }
+  return undefined;
+}
+
+export function checkRequiredTsOptions(
+  compilerOptions: Record<string, any> | undefined,
+  moduleResolution: ModuleResolution = REQUIRED_DECORATOR_FIELDS.moduleResolution,
+) {
   const issues: string[] = [];
   const ok: string[] = [];
 
@@ -125,14 +154,71 @@ export function checkRequiredTsOptions(compilerOptions: Record<string, any> | un
   if (ed === REQUIRED_DECORATOR_FIELDS.experimentalDecorators) ok.push(`compilerOptions.experimentalDecorators = true`);
   else issues.push(`compilerOptions.experimentalDecorators should be true`);
 
-  const resolution = normalizeStr(compilerOptions?.moduleResolution);
-  if (resolution === 'node16' || resolution === 'nodenext') {
-    issues.push(
-      `compilerOptions.moduleResolution "${compilerOptions?.moduleResolution}" requires module "${compilerOptions?.moduleResolution}" (TS5110) — use "${REQUIRED_DECORATOR_FIELDS.moduleResolution}"`,
-    );
-  }
+  const resolutionIssue = moduleResolutionIssue(compilerOptions?.moduleResolution, moduleResolution);
+  if (resolutionIssue) issues.push(resolutionIssue);
 
   return { ok, issues };
+}
+
+interface ProjectPackageJson {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+}
+
+async function readProjectPackageJson(cwd: string): Promise<ProjectPackageJson> {
+  return (await readJSON<ProjectPackageJson>(path.join(cwd, 'package.json'))) ?? {};
+}
+
+function resolveInstalledPackageJson(cwd: string, packageName: string): string | undefined {
+  try {
+    return require.resolve(`${packageName}/package.json`, { paths: [cwd] });
+  } catch {
+    return undefined;
+  }
+}
+
+function declaredRange(packageJson: ProjectPackageJson, packageName: string): string | undefined {
+  return packageJson.devDependencies?.[packageName] ?? packageJson.dependencies?.[packageName];
+}
+
+async function installedVersion(packageJsonPath: string | undefined): Promise<string | undefined> {
+  return packageJsonPath ? ((await readJSON<{ version?: string }>(packageJsonPath))?.version ?? undefined) : undefined;
+}
+
+/** The project's TypeScript major: its own install, its declared range, else an ancestor's (what `frontmcp build` runs). */
+async function typescriptMajor(cwd: string, packageJson: ProjectPackageJson): Promise<number | undefined> {
+  const version =
+    (await installedVersion(path.join(cwd, 'node_modules', 'typescript', 'package.json'))) ??
+    declaredRange(packageJson, 'typescript') ??
+    (await installedVersion(resolveInstalledPackageJson(cwd, 'typescript')));
+  const major = Number(version?.match(/\d+/)?.[0]);
+  return Number.isFinite(major) ? major : undefined;
+}
+
+/** A project without its own TypeScript builds with the registry's latest, so it gets `bundler` too. */
+export async function resolveModuleResolution(
+  cwd: string,
+  packageJson?: ProjectPackageJson,
+): Promise<ModuleResolution> {
+  const major = await typescriptMajor(cwd, packageJson ?? (await readProjectPackageJson(cwd)));
+  return major !== undefined && major < 6 ? 'node' : REQUIRED_DECORATOR_FIELDS.moduleResolution;
+}
+
+async function recommendedTsconfigFor(cwd: string) {
+  const packageJson = await readProjectPackageJson(cwd);
+  const types = TYPES_ENTRIES.filter(
+    ({ packageName }) =>
+      declaredRange(packageJson, packageName) !== undefined ||
+      resolveInstalledPackageJson(cwd, packageName) !== undefined,
+  ).map(({ entry }) => entry);
+  return {
+    ...RECOMMENDED_TSCONFIG,
+    compilerOptions: {
+      ...RECOMMENDED_TSCONFIG.compilerOptions,
+      moduleResolution: await resolveModuleResolution(cwd, packageJson),
+      ...(types.length > 0 && { types }),
+    },
+  };
 }
 
 /**
@@ -154,6 +240,10 @@ function leftUnchanged(err: unknown): unknown {
   return new Error(`${err.message}. It was left unchanged — fix it, then run "frontmcp init" again.`, { cause: err });
 }
 
+function isLegacyGeneratedTypes(types: unknown): boolean {
+  return Array.isArray(types) && JSON.stringify(types) === JSON.stringify(LEGACY_GENERATED_TYPES);
+}
+
 export async function runInit(baseDir?: string): Promise<void> {
   const cwd = baseDir ?? process.cwd();
   const tsconfigPath = path.join(cwd, 'tsconfig.json');
@@ -166,16 +256,20 @@ export async function runInit(baseDir?: string): Promise<void> {
     throw leftUnchanged(err);
   }
 
+  const recommended = await recommendedTsconfigFor(cwd);
   if (!current) {
     console.log(c('yellow', `tsconfig.json not found — creating one in ${path.relative(process.cwd(), cwd) || '.'}.`));
-    await writeJSON(tsconfigPath, RECOMMENDED_TSCONFIG);
+    await writeJSON(tsconfigPath, recommended);
     console.log(c('green', '✅ Created tsconfig.json with required decorator settings.'));
     return;
   }
 
   const existing = current.config;
-  let merged = deepMerge(RECOMMENDED_TSCONFIG as any, existing);
-  merged = ensureRequiredTsOptions(merged);
+  let merged = deepMerge(recommended as any, existing);
+  if (isLegacyGeneratedTypes(existing['compilerOptions']?.types)) {
+    merged.compilerOptions = { ...merged.compilerOptions, types: recommended.compilerOptions.types };
+  }
+  merged = ensureRequiredTsOptions(merged, recommended.compilerOptions.moduleResolution);
 
   const { result: withWidgetExcludes, added: addedExcludes } = ensureWidgetExcludes(merged);
   merged = withWidgetExcludes;
