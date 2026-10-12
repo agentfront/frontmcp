@@ -355,7 +355,11 @@ describe('GuardManager', () => {
       expect(ticket!.ticket).toBeDefined();
 
       // Verify storage key includes IP partition
-      expect(storage.incr).toHaveBeenCalledWith(expect.stringContaining('__global__:10.0.0.1:sem:count'));
+      expect(storage.set).toHaveBeenCalledWith(
+        expect.stringContaining('__global__:10.0.0.1:sem:slot:0'),
+        ticket!.ticket,
+        expect.objectContaining({ ifNotExists: true }),
+      );
     });
 
     it('should reject when global concurrency limit is reached', async () => {

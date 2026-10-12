@@ -2,14 +2,14 @@
  * Distributed Semaphore
  *
  * Provides concurrency control using the StorageAdapter interface.
- * Each concurrent execution acquires a "ticket" stored in the backend.
- * Active tickets tracked via atomic counter + individual ticket keys with TTL.
+ * Each concurrent execution holds one of `maxConcurrent` slot keys, claimed
+ * with a conditional set and a TTL, so a slot whose ticket expires is free again.
  */
 
-import { randomUUID } from '@frontmcp/utils';
-import type { StorageAdapter } from '@frontmcp/utils';
-import type { SemaphoreTicket } from './types';
+import { randomUUID, type StorageAdapter } from '@frontmcp/utils';
+
 import { QueueTimeoutError } from '../errors';
+import type { SemaphoreTicket } from './types';
 
 const DEFAULT_TICKET_TTL_SECONDS = 300;
 const MIN_POLL_INTERVAL_MS = 100;
@@ -42,36 +42,29 @@ export class DistributedSemaphore {
   }
 
   private async tryAcquire(key: string, maxConcurrent: number): Promise<SemaphoreTicket | null> {
-    const countKey = `${key}:count`;
-    const newCount = await this.storage.incr(countKey);
+    const slotKeys = Array.from({ length: maxConcurrent }, (_, slot) => `${key}:slot:${slot}`);
+    const holders = await this.storage.mget(slotKeys);
+    const ticketId = randomUUID();
 
-    if (newCount <= maxConcurrent) {
-      const ticketId = randomUUID();
-      const ticketKey = `${key}:ticket:${ticketId}`;
-
-      await this.storage.set(ticketKey, String(Date.now()), {
-        ttlSeconds: this.ticketTtlSeconds,
-      });
-
+    for (const [slot, slotKey] of slotKeys.entries()) {
+      if (holders[slot] !== null) continue;
+      await this.storage.set(slotKey, ticketId, { ttlSeconds: this.ticketTtlSeconds, ifNotExists: true });
+      if ((await this.storage.get(slotKey)) !== ticketId) continue;
       return {
         ticket: ticketId,
-        release: () => this.release(key, ticketId),
+        release: () => this.release(key, slotKey, ticketId),
       };
     }
 
-    await this.storage.decr(countKey);
     return null;
   }
 
-  private async release(key: string, ticketId: string): Promise<void> {
-    const countKey = `${key}:count`;
-    const ticketKey = `${key}:ticket:${ticketId}`;
-
-    await this.storage.delete(ticketKey);
-    const newCount = await this.storage.decr(countKey);
-
-    if (newCount < 0) {
-      await this.storage.set(countKey, '0');
+  private async release(key: string, slotKey: string, ticketId: string): Promise<void> {
+    // A slot that expired may hold another ticket by now; only free it while it is still ours.
+    if (this.storage.deleteIfEquals) {
+      await this.storage.deleteIfEquals(slotKey, ticketId);
+    } else if ((await this.storage.get(slotKey)) === ticketId) {
+      await this.storage.delete(slotKey);
     }
 
     if (this.storage.supportsPubSub()) {
@@ -136,17 +129,13 @@ export class DistributedSemaphore {
   }
 
   async getActiveCount(key: string): Promise<number> {
-    const countKey = `${key}:count`;
-    const raw = await this.storage.get(countKey);
-    return Math.max(0, parseInt(raw ?? '0', 10) || 0);
+    return this.storage.count(`${key}:slot:*`);
   }
 
   async forceReset(key: string): Promise<void> {
-    const countKey = `${key}:count`;
-    await this.storage.delete(countKey);
-    const ticketKeys = await this.storage.keys(`${key}:ticket:*`);
-    if (ticketKeys.length > 0) {
-      await this.storage.mdelete(ticketKeys);
+    const slotKeys = await this.storage.keys(`${key}:slot:*`);
+    if (slotKeys.length > 0) {
+      await this.storage.mdelete(slotKeys);
     }
   }
 }
