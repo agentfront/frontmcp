@@ -1185,6 +1185,7 @@ void registerWebMcpTools(resolveDocumentModelContext(), tools, (modelContext) =>
 ### Installation
 
 - [ ] Plugin package is installed (`@frontmcp/plugin-codecall`, `@frontmcp/plugin-remember`, etc.)
+- [ ] `@frontmcp/sdk` is installed in the app at the plugin's version. The approval, CodeCall, dashboard, feature-flags, Remember, skilled-OpenAPI and WebMCP plugins take it as a peer dependency, so they run on the app's copy of the SDK; a second copy breaks their dependency injection
 - [ ] Plugin is registered via `.init()` in the `plugins` array of `@FrontMcp`
 - [ ] Required configuration options are provided (storage type, API keys, endpoints)
 

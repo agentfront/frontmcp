@@ -62,13 +62,14 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "1.9.6",
     "@frontmcp/utils": "1.9.6"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.9.6"
+    "@frontmcp/lazy-zod": "1.9.6",
+    "@frontmcp/sdk": "1.9.6"
   },
   "devDependencies": {
+    "@frontmcp/sdk": "1.9.6",
     "reflect-metadata": "^0.2.2"
   }
 }
