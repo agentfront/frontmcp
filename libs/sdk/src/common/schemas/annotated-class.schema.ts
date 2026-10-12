@@ -59,9 +59,9 @@ function hasMetadataCompat(token: symbol, target: object): boolean {
 /** A class reference; declared in this package so published declarations name it from here, not from a monorepo path. */
 export interface AnnotatedClass extends Type {}
 
-/** The plugin and adapter forms the schemas accept: every form but a `useClass` record. */
-type PluginEntry = Exclude<PluginType, { useClass: unknown }>;
-type AdapterEntry = Exclude<AdapterType, { useClass: unknown }>;
+/** The plugin and adapter forms the schemas accept: a class, or any record but a `useClass` one. */
+type PluginEntry = AnnotatedClass | Exclude<PluginType, Type | { useClass: unknown }>;
+type AdapterEntry = AnnotatedClass | Exclude<AdapterType, Type | { useClass: unknown }>;
 
 export const annotatedFrontMcpAppSchema = z.custom<AnnotatedClass | RemoteAppMetadata>(
   (v): v is AnnotatedClass | RemoteAppMetadata => {
