@@ -52,7 +52,7 @@ describe('buildSea', () => {
       expect.any(String),
     );
 
-    const configJson = JSON.parse(mockFs.writeFileSync.mock.calls[0][1]);
+    const configJson = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
     expect(configJson.main).toBe('/tmp/out/app.bundle.js');
     expect(configJson.output).toBe(path.join('/tmp/out', 'app.blob'));
     expect(configJson.disableExperimentalSEAWarning).toBe(true);

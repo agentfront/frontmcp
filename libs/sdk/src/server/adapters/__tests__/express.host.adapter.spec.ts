@@ -6,6 +6,9 @@ import { ExpressHostAdapter } from '../express.host.adapter';
 
 // server/adapters/__tests__/express.host.adapter.spec.ts
 
+// A worker's specs share http.globalAgent; its socket to a closed server whose port is reused fails with "socket hang up".
+const noKeepAlive = { agent: false } as const;
+
 // Mock base.host.adapter to break the import chain into ../../common (which pulls @frontmcp/auth)
 jest.mock('../base.host.adapter', () => {
   class HostServerAdapter {
@@ -139,7 +142,7 @@ describe('ExpressHostAdapter', () => {
 
       try {
         const response = await new Promise<any>((resolve, reject) => {
-          http.get(`http://127.0.0.1:${port}/test`, (res: any) => resolve(res)).on('error', reject);
+          http.get(`http://127.0.0.1:${port}/test`, noKeepAlive, (res: any) => resolve(res)).on('error', reject);
         });
 
         const exposeHeaders = response.headers['access-control-expose-headers'];
@@ -147,6 +150,40 @@ describe('ExpressHostAdapter', () => {
         expect(exposeHeaders).toContain('WWW-Authenticate');
       } finally {
         await new Promise<void>((resolve) => server.close(resolve));
+      }
+    });
+
+    it('answers a request on a port that a closed server in this worker used', async () => {
+      const listen = async (port: number) => {
+        const adapter = new ExpressHostAdapter();
+        adapter.registerRoute('GET', '/test', (_req: unknown, res: any) => {
+          res.status(200).json({ ok: true });
+        });
+        const server = http.createServer(adapter.getHandler() as http.RequestListener);
+        await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
+        return server;
+      };
+      const statusOf = (port: number) =>
+        new Promise<number>((resolve, reject) => {
+          http
+            .get(`http://127.0.0.1:${port}/test`, noKeepAlive, (res) => {
+              res.resume();
+              resolve(res.statusCode ?? 0);
+            })
+            .on('error', reject);
+        });
+
+      const first = await listen(0);
+      const port = (first.address() as { port: number }).port;
+      expect(await statusOf(port)).toBe(200);
+      await new Promise<void>((resolve) => first.close(() => resolve()));
+
+      const second = await listen(port);
+      try {
+        expect(await statusOf(port)).toBe(200);
+      } finally {
+        second.closeAllConnections();
+        await new Promise<void>((resolve) => second.close(() => resolve()));
       }
     });
 
@@ -163,7 +200,7 @@ describe('ExpressHostAdapter', () => {
 
       try {
         const response = await new Promise<any>((resolve, reject) => {
-          http.get(`http://127.0.0.1:${port}/test`, (res: any) => resolve(res)).on('error', reject);
+          http.get(`http://127.0.0.1:${port}/test`, noKeepAlive, (res: any) => resolve(res)).on('error', reject);
         });
 
         const exposeHeaders = response.headers['access-control-expose-headers'];
@@ -184,7 +221,7 @@ describe('ExpressHostAdapter', () => {
       const port = (server.address() as { port: number }).port;
       try {
         const res = await new Promise<http.IncomingMessage>((resolve, reject) => {
-          http.get(`http://127.0.0.1:${port}${path}`, resolve).on('error', reject);
+          http.get(`http://127.0.0.1:${port}${path}`, noKeepAlive, resolve).on('error', reject);
         });
         res.resume();
         return res.headers;
@@ -340,6 +377,7 @@ describe('ExpressHostAdapter', () => {
       return new Promise((resolve, reject) => {
         const req = http.request(
           {
+            ...noKeepAlive,
             method: 'POST',
             hostname,
             port,
@@ -508,10 +546,13 @@ describe('ExpressHostAdapter — derived host allow-list scope', () => {
     const port = (server.address() as { port: number }).port;
     try {
       return await new Promise<number>((resolve, reject) => {
-        const req = http.request({ hostname: '127.0.0.1', port, path: '/', headers: { Host: host } }, (res) => {
-          res.resume();
-          resolve(res.statusCode ?? 0);
-        });
+        const req = http.request(
+          { ...noKeepAlive, hostname: '127.0.0.1', port, path: '/', headers: { Host: host } },
+          (res) => {
+            res.resume();
+            resolve(res.statusCode ?? 0);
+          },
+        );
         req.on('error', reject);
         req.end();
       });

@@ -1,3 +1,5 @@
+import { base64urlDecode, base64urlEncode } from '@frontmcp/utils';
+
 import { decryptValue, deriveEncryptionKey, encryptValue } from '../encryption';
 
 describe('Encryption', () => {
@@ -76,11 +78,14 @@ describe('Encryption', () => {
     });
 
     it('should throw on tampered ciphertext', () => {
-      const encrypted = encryptValue(key, 'secret data');
-      const parts = encrypted.split(':');
-      // Tamper with ciphertext
-      parts[2] = parts[2].slice(0, -2) + 'XX';
-      expect(() => decryptValue(key, parts.join(':'))).toThrow();
+      const [iv, tag, ciphertext] = encryptValue(key, 'secret data').split(':');
+      const bytes = base64urlDecode(ciphertext);
+      // Flip bits, not base64 characters: the last character's padding bits can change without changing a byte.
+      for (let index = 0; index < bytes.length; index++) {
+        const tampered = Uint8Array.from(bytes);
+        tampered[index] ^= 0x01;
+        expect(() => decryptValue(key, [iv, tag, base64urlEncode(tampered)].join(':'))).toThrow();
+      }
     });
   });
 });

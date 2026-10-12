@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 import { createStorage } from '@frontmcp/utils';
 
 import {
@@ -56,6 +58,12 @@ describe('task-store.factory', () => {
         ttlCleanupIntervalMs: 1000,
         busyTimeoutMs: 40,
       }),
+    );
+  });
+
+  it('resolves @frontmcp/storage-sqlite to its source, so the mock above applies whether or not it is built', () => {
+    expect(require.resolve('@frontmcp/storage-sqlite')).toBe(
+      path.resolve(__dirname, '../../../../../storage-sqlite/src/index.ts'),
     );
   });
 

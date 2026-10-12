@@ -20,7 +20,7 @@ import { parse as parseToml } from 'smol-toml';
 import { runInstallCurrentProject } from '../install-claude-plugin';
 
 describe('runInstallCurrentProject — option normalization (issue #411)', () => {
-  let exitSpy: jest.SpyInstance<never, [code?: number | undefined]>;
+  let exitSpy: jest.SpyInstance<never, Parameters<typeof process.exit>>;
   let stderrSpy: jest.SpyInstance;
 
   beforeEach(() => {

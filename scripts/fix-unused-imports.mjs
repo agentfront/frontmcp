@@ -6,16 +6,15 @@
  *   node scripts/fix-unused-imports.mjs [base-branch]
  *
  * Arguments:
- *   base-branch  The branch to compare against (default: auto-detect merge-base with main/master)
+ *   base-branch  The branch to compare against (default: the pull request's base, see detectBaseBranch)
  *
  * Examples:
- *   node scripts/fix-unused-imports.mjs           # Compare against main/master
+ *   node scripts/fix-unused-imports.mjs           # Compare against the pull request's base
  *   node scripts/fix-unused-imports.mjs main      # Compare against main
  *   node scripts/fix-unused-imports.mjs release/1.0  # Compare against release/1.0
  */
-
 import { execFileSync } from 'child_process';
-import { existsSync, writeFileSync, unlinkSync } from 'fs';
+import { existsSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 /** Valid branch name pattern (alphanumeric, hyphens, underscores, slashes, dots) */
@@ -56,7 +55,11 @@ function getBaseBranch() {
     return arg;
   }
 
-  // Auto-detect: try main, then master
+  const detected = detectBaseBranch();
+  if (detected) {
+    return detected;
+  }
+
   try {
     execFileSync('git', ['rev-parse', '--verify', 'main'], { stdio: 'ignore' });
     return 'main';
@@ -69,6 +72,46 @@ function getBaseBranch() {
       process.exit(1);
     }
   }
+}
+
+/**
+ * The branch a pull request from HEAD targets: `GITHUB_BASE_REF` in CI, else the remote `main`, `master`,
+ * `release/*` or `next/*` branch with the fewest commits on HEAD that it doesn't have. A local `main` can
+ * be stale, and a branch from `release/*` has every commit since the release line left `main`.
+ */
+function detectBaseBranch() {
+  const pullRequestBase = process.env.GITHUB_BASE_REF;
+  if (pullRequestBase && isValidBranchName(pullRequestBase)) {
+    return `origin/${pullRequestBase}`;
+  }
+
+  const candidates = execFileSync(
+    'git',
+    [
+      'for-each-ref',
+      '--format=%(refname:short)',
+      'refs/remotes/origin/main',
+      'refs/remotes/origin/master',
+      'refs/remotes/origin/release',
+      'refs/remotes/origin/next',
+    ],
+    { encoding: 'utf-8' },
+  )
+    .split('\n')
+    .filter(Boolean);
+
+  let nearest;
+  let fewestCommitsAhead = Infinity;
+  for (const candidate of candidates) {
+    const commitsAhead = Number(
+      execFileSync('git', ['rev-list', '--count', `${candidate}..HEAD`], { encoding: 'utf-8' }).trim(),
+    );
+    if (commitsAhead < fewestCommitsAhead) {
+      nearest = candidate;
+      fewestCommitsAhead = commitsAhead;
+    }
+  }
+  return nearest;
 }
 
 /**

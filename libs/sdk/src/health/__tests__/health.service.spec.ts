@@ -1,5 +1,4 @@
-import { HealthService } from '../health.service';
-import type { HealthScopeView } from '../health.service';
+import { HealthService, type HealthScopeView } from '../health.service';
 import type { HealthProbe } from '../health.types';
 
 // Mock @frontmcp/utils
@@ -54,6 +53,8 @@ describe('HealthService', () => {
   describe('getHealthz', () => {
     it('should return correct liveness response', () => {
       const service = new HealthService(defaultConfig, defaultServerInfo);
+      // Uptime counts from when the SDK loaded, so it is 0 in that millisecond; let a second pass.
+      jest.advanceTimersByTime(1000);
 
       const result = service.getHealthz();
 
@@ -64,7 +65,7 @@ describe('HealthService', () => {
       expect(result.runtime.runtime).toBe('node');
       expect(result.runtime.deployment).toBe('standalone');
       expect(result.runtime.env).toBe('test');
-      expect(result.uptime).toBeGreaterThan(0);
+      expect(result.uptime).toBeGreaterThanOrEqual(1);
     });
 
     it('should use "unknown" for missing server info', () => {
