@@ -225,22 +225,21 @@ class DashboardHttpPlugin extends DynamicPlugin<DashboardPluginOptions, Dashboar
  * - Real-time event streaming via SSE (built into FrontMCP)
  * - Access to server scope for monitoring
  *
- * The dashboard UI is loaded from CDN (esm.sh by default) and connects
- * to the dashboard via MCP protocol over SSE transport.
+ * The dashboard UI is loaded from CDN (esm.sh by default) and reads the server's
+ * structure from the dashboard's own MCP endpoint, at the dashboard's path.
  *
  * @example
  * ```typescript
- * import { DashboardApp } from '@frontmcp/plugins';
+ * import { DashboardApp } from '@frontmcp/plugin-dashboard';
  *
- * @FrontMCP({
- *   name: 'my-server',
- *   apps: [DashboardApp],
+ * @FrontMcp({
+ *   info: { name: 'my-server', version: '1.0.0' },
+ *   apps: [MyApp, DashboardApp],
  * })
  * class MyServer {}
  * ```
  *
- * Then access the dashboard at `http://localhost:3000/dashboard`
- * The dashboard connects via SSE at the standard `/sse` endpoint.
+ * Then open the dashboard at `http://localhost:3000/dashboard`. Register `DashboardPlugin.init()` to set its options.
  */
 @App({
   name: 'dashboard',

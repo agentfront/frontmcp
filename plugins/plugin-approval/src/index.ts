@@ -9,26 +9,18 @@
  * ```typescript
  * import { ApprovalPlugin } from '@frontmcp/plugin-approval';
  *
- * // Basic usage with auto-detected storage
- * const plugin = ApprovalPlugin.init();
+ * @FrontMcp({
+ *   info: { name: 'my-server', version: '1.0.0' },
+ *   apps: [MyApp],
+ *   plugins: [ApprovalPlugin.init()],
+ * })
+ * class MyServer {}
  *
- * // With webhook mode
- * const plugin = ApprovalPlugin.init({
- *   mode: 'webhook',
- *   webhook: {
- *     url: 'https://approval.example.com/webhook',
- *     challengeTtl: 300,
- *   },
- * });
- *
- * // Install into scope
- * await plugin.install(scope);
- *
- * // In tools, use this.approval
+ * // In tools, use this.approval with `<app id>:<tool name>` ids
  * class MyTool extends ToolContext {
  *   async execute() {
- *     const approved = await this.approval.isApproved('other-tool');
- *     await this.approval.grantSessionApproval('helper-tool');
+ *     const approved = await this.approval.isApproved('my-app:other_tool');
+ *     await this.approval.grantSessionApproval('my-app:helper_tool');
  *   }
  * }
  * ```
