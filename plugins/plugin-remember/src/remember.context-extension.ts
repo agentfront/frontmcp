@@ -22,6 +22,8 @@
  * @packageDocumentation
  */
 
+import type { ExecutionContextBase } from '@frontmcp/sdk';
+
 import type { RememberAccessor } from './providers/remember-accessor.provider';
 import { RememberAccessorToken } from './remember.symbols';
 
@@ -66,19 +68,19 @@ declare module '@frontmcp/sdk' {
  *
  * @throws Error if RememberPlugin is not installed
  */
-export function getRemember<T extends { get: (token: unknown) => unknown }>(ctx: T): RememberAccessor {
-  return ctx.get(RememberAccessorToken) as RememberAccessor;
+export function getRemember<T extends Pick<ExecutionContextBase, 'get'>>(ctx: T): RememberAccessor {
+  return ctx.get(RememberAccessorToken);
 }
 
 /**
  * Try to get the RememberAccessor, returning undefined if not available.
  * Use this for graceful degradation when the plugin might not be installed.
  */
-export function tryGetRemember<T extends { tryGet?: (token: unknown) => unknown }>(
+export function tryGetRemember<T extends Partial<Pick<ExecutionContextBase, 'tryGet'>>>(
   ctx: T,
 ): RememberAccessor | undefined {
   if (typeof ctx.tryGet === 'function') {
-    return ctx.tryGet(RememberAccessorToken) as RememberAccessor | undefined;
+    return ctx.tryGet(RememberAccessorToken);
   }
   return undefined;
 }

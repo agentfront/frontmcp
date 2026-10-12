@@ -1,4 +1,5 @@
 // Helper functions
+import type { ExecutionContextBase } from '../../common';
 import { ConfigService } from './providers/config.service';
 
 /**
@@ -91,7 +92,7 @@ export type { ConfigEntityType, ConfigResolutionContext, ConfigResolver } from '
  *
  * @throws Error if ConfigPlugin is not installed
  */
-export function getConfig<T extends { get: (token: unknown) => unknown }>(ctx: T): ConfigService {
+export function getConfig<T extends Pick<ExecutionContextBase, 'get'>>(ctx: T): ConfigService {
   return ctx.get(ConfigService) as ConfigService;
 }
 
@@ -99,7 +100,9 @@ export function getConfig<T extends { get: (token: unknown) => unknown }>(ctx: T
  * Try to get the ConfigService, returning undefined if not available.
  * Use this for graceful degradation when the plugin might not be installed.
  */
-export function tryGetConfig<T extends { tryGet?: (token: unknown) => unknown }>(ctx: T): ConfigService | undefined {
+export function tryGetConfig<T extends Partial<Pick<ExecutionContextBase, 'tryGet'>>>(
+  ctx: T,
+): ConfigService | undefined {
   if (typeof ctx.tryGet === 'function') {
     return ctx.tryGet(ConfigService) as ConfigService | undefined;
   }
