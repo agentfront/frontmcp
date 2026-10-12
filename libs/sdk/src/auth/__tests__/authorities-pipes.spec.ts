@@ -54,7 +54,7 @@ class WhoAmIResource extends ResourceContext {
   llm: { adapter: { completion: async () => ({ content: 'unused', finishReason: 'stop' as const }) } },
 })
 class WhoAgent extends AgentContext {
-  override async execute(_input: Record<string, never>) {
+  override async execute() {
     return piped(this.auth);
   }
 }
