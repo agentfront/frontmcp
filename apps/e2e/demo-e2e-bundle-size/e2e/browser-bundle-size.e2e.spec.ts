@@ -24,8 +24,8 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 2_110_000 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 2_120_000 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_560_000 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_570_000 },
 ];
 
 const VITE_INITIAL_CHUNK_MAX_BYTES = 1_180_000;
@@ -34,13 +34,15 @@ const sdkModule = (pattern: string) => new RegExp(`^libs/sdk/dist/browser/(${pat
 
 const FEATURE_MODULES: Record<string, RegExp> = {
   agents: sdkModule('agent/(agent\\.instance|agent\\.scope|agent-execution-loop|flows/|adapters/)'),
-  auth: sdkModule('auth/(flows|instances|auth-ui|cimd|credentials|secure-store)/|front-mcp/authorities-rules\\.check'),
+  auth: sdkModule(
+    'auth/(flows|instances|auth-ui|cimd|credentials|secure-store)/|auth/primary-auth\\.factory|front-mcp/authorities-engine',
+  ),
   channels: sdkModule('channel/(?!channel\\.utils)'),
   'distributed transport': sdkModule('ha/|transport/(bus|relay|event-stores)/'),
   elicitation: sdkModule('elicitation/(store|flows)/|elicitation/send-elicitation-result\\.tool'),
   health: sdkModule('health/'),
   'http transport': sdkModule(
-    'scope/flows/http\\.|transport/(flows/|adapters/|transport\\.registry|web-fetch-handler)|server/custom-routes\\.helper',
+    'scope/(flows/http\\.|http-scope\\.helper)|transport/(flows/|adapters/|transport\\.registry|web-fetch-handler)|server/(custom-routes\\.helper|server\\.instance)',
   ),
   'ipc transport': sdkModule('transport/ipc-server\\.transport'),
   jobs: sdkModule('job/(?!job\\.utils)|workflow/'),
@@ -56,9 +58,6 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   'tool ui':
     /^libs\/uipack\/dist\/esm\/(adapters|shell|bridge-runtime)\/|^libs\/sdk\/dist\/browser\/tool\/ui\/(ui-render|ui-resource\.handler|ui-option-warnings|ui-resource-template)\./,
 };
-
-// Only shrinks: a feature leaves this list in the change that keeps it out of the core path
-const KNOWN_LEAKS: string[] = ['auth', 'distributed transport', 'health', 'http transport', 'metrics'];
 
 function topInputs(bundle: BrowserBundle, count = 15): string {
   return inputSizes(bundle.metafile)
@@ -88,18 +87,17 @@ describe('the browser bundle of create()', () => {
     }
   });
 
-  it('reaches only the feature modules it is known to reach', async () => {
+  it('reaches no feature module its config does not use', async () => {
     const bundle = await bundleForBrowser(resolve(fixtureDir, 'create-tool.ts'), SERVER_MODULES);
     const leaks = leakedFeatures(bundle.metafile, FEATURE_MODULES);
-    const unexpected = [...leaks.keys()].filter((feature) => !KNOWN_LEAKS.includes(feature)).sort();
+    const leaked = [...leaks.keys()].sort();
     const importChains = Object.fromEntries(
-      unexpected.map((feature) => [
+      leaked.map((feature) => [
         feature,
         importChain(bundle.metafile, bundle.entryInput, (leaks.get(feature) as string[])[0]),
       ]),
     );
-    expect({ unexpected, importChains }).toEqual({ unexpected: [], importChains: {} });
-    expect(KNOWN_LEAKS.filter((feature) => !leaks.has(feature))).toEqual([]);
+    expect({ leaked, importChains }).toEqual({ leaked: [], importChains: {} });
   });
 
   it('keeps the initial chunk of a Vite app within its budget', async () => {
