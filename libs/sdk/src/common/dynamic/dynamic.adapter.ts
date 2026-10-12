@@ -32,7 +32,8 @@ type AdapterOptionsOf<TThis extends AdapterClassWithOptions<unknown>> = TThis['p
   ? O
   : never;
 
-type AdapterReturn<T> = AdapterType;
+/** `init()` returns a value record, or a factory record for `init({ useFactory })`, never a `useClass` record. */
+type AdapterReturn<T> = Exclude<AdapterType, { useClass: unknown }>;
 
 /** Tracks adapter names per class to detect duplicates at registration time */
 const usedAdapterNames = new WeakMap<object, Set<string>>();

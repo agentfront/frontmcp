@@ -11,17 +11,12 @@ import {
 } from '../remember.legacy-purge';
 import type { RememberPluginOptions } from '../remember.types';
 
-class FakeStore implements RememberStoreInterface {
+/** A store without the optional conditional write, `setIfAbsent`. */
+class PlainStore implements RememberStoreInterface {
   readonly data = new Map<string, string>();
 
   async setValue(key: string, value: unknown): Promise<void> {
     this.data.set(key, typeof value === 'string' ? value : JSON.stringify(value));
-  }
-
-  async setIfAbsent(key: string, value: unknown): Promise<boolean> {
-    if (this.data.has(key)) return false;
-    await this.setValue(key, value);
-    return true;
   }
 
   async getValue<T = unknown>(key: string): Promise<T | undefined> {
@@ -45,6 +40,14 @@ class FakeStore implements RememberStoreInterface {
 
   async close(): Promise<void> {
     this.data.clear();
+  }
+}
+
+class FakeStore extends PlainStore {
+  async setIfAbsent(key: string, value: unknown): Promise<boolean> {
+    if (this.data.has(key)) return false;
+    await this.setValue(key, value);
+    return true;
   }
 }
 
@@ -187,11 +190,13 @@ describe('legacy remember purge', () => {
     });
 
     it('falls back to read-then-write on a store without a conditional write', async () => {
-      const plain = new FakeStore() as Omit<FakeStore, 'setIfAbsent'> & Pick<RememberStoreInterface, 'setIfAbsent'>;
-      delete plain.setIfAbsent;
+      const plain = new PlainStore();
+      const setValue = jest.spyOn(plain, 'setValue');
 
       const firstSeenAt = await readLayoutFirstSeenAt(plain, 'remember:');
 
+      expect('setIfAbsent' in plain).toBe(false);
+      expect(setValue).toHaveBeenCalledTimes(1);
       expect(firstSeenAt).toBeCloseTo(Date.now(), -2);
       expect(JSON.parse(plain.data.get(MARKER_KEY) as string).firstSeenAt).toBe(firstSeenAt);
     });

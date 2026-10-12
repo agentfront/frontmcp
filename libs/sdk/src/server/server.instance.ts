@@ -26,8 +26,11 @@ import { auditSecurityDefaults, logSecurityFindings, resolveBindAddress } from '
  */
 const DEFAULT_CORS: CorsOptions | undefined = undefined;
 
+/** The server's HTTP options; without `bodyLimit`, the host adapter applies its default. */
+export type HttpServerOptions = Omit<HttpOptions, 'bodyLimit'> & Partial<Pick<HttpOptions, 'bodyLimit'>>;
+
 export class FrontMcpServerInstance extends FrontMcpServer {
-  config: HttpOptions;
+  config: HttpServerOptions;
   host: HostServerAdapter;
   private healthRouteRegistered = false;
   private _healthService?: HealthService;
@@ -36,7 +39,7 @@ export class FrontMcpServerInstance extends FrontMcpServer {
   private _metricsService?: MetricsService;
   private _metricsConfig?: MetricsOptionsInterface;
 
-  constructor(httpConfig: HttpOptions) {
+  constructor(httpConfig: HttpServerOptions) {
     super();
     this.config = httpConfig;
     this.setupDefaults();
