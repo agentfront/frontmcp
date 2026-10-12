@@ -77,6 +77,7 @@ describe('ToolUIRegistry compiled widgets (#681)', () => {
     }
     const uiConfig = { template: InlineCard };
 
+    await registry.load();
     registry.checkTemplate('inline_card', InlineCard);
     await registry.compileLeanWidgetAsync({ toolName: 'inline_card', uiConfig });
     const componentWarningsAtStartup = warn.mock.calls.filter(([message]) =>

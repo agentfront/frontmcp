@@ -22,7 +22,7 @@ import { availabilityForCall, callSurfaceOf } from '../../common/availability';
 import { runOnSurface } from '../../context/call-surface';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { ResolvedEntries } from '../../flows/resolved-entries';
-import { hasUIConfig } from '../../tool/ui';
+import { hasUIConfig } from '../../tool/ui/ui-shared';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
 const inputSchema = z.object({

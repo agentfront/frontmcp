@@ -53,7 +53,8 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   tasks: sdkModule(
     'task/(store/(?!task-backend\\.utils)|flows/|task\\.registry|helpers/(task-runner|cli-task-runner))',
   ),
-  'tool ui': /^libs\/uipack\//,
+  'tool ui':
+    /^libs\/uipack\/dist\/esm\/(adapters|shell|bridge-runtime)\/|^libs\/sdk\/dist\/browser\/tool\/ui\/(ui-render|ui-resource\.handler|ui-option-warnings|ui-resource-template)\./,
 };
 
 // Only shrinks: a feature leaves this list in the change that keeps it out of the core path
@@ -67,7 +68,6 @@ const KNOWN_LEAKS: string[] = [
   'metrics',
   'remote and esm entries',
   'skills',
-  'tool ui',
 ];
 
 function topInputs(bundle: BrowserBundle, count = 15): string {

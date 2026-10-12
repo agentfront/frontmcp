@@ -81,9 +81,8 @@ import { resolvesToVercelKvTaskBackend } from '../task/store/task-backend.utils'
 import { ToolInstance } from '../tool/tool.instance';
 import ToolRegistry from '../tool/tool.registry';
 import { normalizeTool } from '../tool/tool.utils';
-import { hasUIConfig, StaticWidgetResourceTemplate, ToolUIRegistry } from '../tool/ui';
 import { toolServingMode } from '../tool/ui/serving-mode-default';
-import { describeIgnoredUiOptions, describeServingModeDefault } from '../tool/ui/ui-option-warnings';
+import { hasUIConfig, ToolUIRegistry } from '../tool/ui/ui-shared';
 import type { RedisTransportBus } from '../transport/bus';
 import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/request-state';
 import type { SessionRelayHandle } from '../transport/relay/relay-scope.helper';
@@ -1071,6 +1070,13 @@ export class Scope extends ScopeEntry {
   private async compileUIWidgets(): Promise<void> {
     const toolsWithUI = this.scopeTools.getTools(true).filter((t) => hasUIConfig(t.metadata));
     if (toolsWithUI.length === 0) return;
+
+    const [{ describeIgnoredUiOptions, describeServingModeDefault }, { StaticWidgetResourceTemplate }] =
+      await Promise.all([
+        import('../tool/ui/ui-option-warnings.js'),
+        import('../tool/ui/ui-resource-template.js'),
+        this.toolUIRegistry.load(),
+      ]);
 
     for (const tool of toolsWithUI) {
       const resourceUri = tool.metadata.ui?.resourceUri;

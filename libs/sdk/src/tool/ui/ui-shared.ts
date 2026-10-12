@@ -4,65 +4,21 @@
  * Internal module to avoid circular imports between index.ts and ui-resource.handler.ts.
  */
 
-import {
-  MCP_APPS_MIME_TYPE,
-  renderToolTemplate,
-  detectUIType as uipackDetectUIType,
-  warnIfComponentReference,
-  type RenderToolTemplateOptions,
-} from '@frontmcp/uipack/adapters';
-import { type ImportResolver } from '@frontmcp/uipack/resolver';
-import { validateCSPDomain, type WidgetSizing } from '@frontmcp/uipack/shell';
+import type { RenderToolTemplateOptions } from '@frontmcp/uipack/adapters';
+import type { ImportResolver } from '@frontmcp/uipack/resolver';
 
-/**
- * Extract widget sizing config (`preferredHeight` / `minHeight` / `maxHeight` /
- * `aspectRatio` / `autoResize`) from a tool's `ui` config so it flows into the
- * rendered shell (CSS + `__mcpWidgetSizing`) and the response `_meta`.
- *
- * Returns `undefined` when no sizing field is set so widgets that don't opt in
- * stay byte-for-byte unchanged.
- */
-function extractSizing(uiConfig: Record<string, unknown> | undefined): WidgetSizing | undefined {
-  if (!uiConfig) return undefined;
-  const sizing: WidgetSizing = {};
-  let has = false;
-  if (uiConfig['preferredHeight'] !== undefined) {
-    sizing.preferredHeight = uiConfig['preferredHeight'] as WidgetSizing['preferredHeight'];
-    has = true;
-  }
-  if (uiConfig['minHeight'] !== undefined) {
-    sizing.minHeight = uiConfig['minHeight'] as WidgetSizing['minHeight'];
-    has = true;
-  }
-  if (uiConfig['maxHeight'] !== undefined) {
-    sizing.maxHeight = uiConfig['maxHeight'] as WidgetSizing['maxHeight'];
-    has = true;
-  }
-  if (uiConfig['aspectRatio'] !== undefined) {
-    sizing.aspectRatio = uiConfig['aspectRatio'] as WidgetSizing['aspectRatio'];
-    has = true;
-  }
-  if (uiConfig['autoResize'] !== undefined) {
-    sizing.autoResize = uiConfig['autoResize'] as WidgetSizing['autoResize'];
-    has = true;
-  }
-  return has ? sizing : undefined;
+import { InternalMcpError } from '../../errors/mcp.error';
+
+/** The `tools/call` `_meta` key a widget's bridge sets on its own calls, as `@frontmcp/uipack/bridge-runtime` names it. */
+export const WIDGET_CALL_META_KEY = 'frontmcp/widgetCall';
+
+export function hasUIConfig(tool: unknown): boolean {
+  if (typeof tool !== 'object' || tool === null) return false;
+  const metadata = (tool as Record<string, unknown>)['ui'];
+  return metadata !== undefined && metadata !== null;
 }
 
-/**
- * A tool's `ui.csp` with only the origins the widget page's own Content-Security-Policy can
- * list. Startup already warned about the others (see `describeIgnoredUiOptions`), so leaving
- * them out here keeps a render from warning again on every call.
- */
-function pageCsp(uiConfig: Record<string, unknown> | undefined): UIResourceMeta['csp'] | undefined {
-  const csp = uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined;
-  if (!csp) return undefined;
-  const listable = (domains: unknown): string[] | undefined =>
-    Array.isArray(domains)
-      ? domains.filter((domain): domain is string => typeof domain === 'string' && validateCSPDomain(domain))
-      : undefined;
-  return { connectDomains: listable(csp.connectDomains), resourceDomains: listable(csp.resourceDomains) };
-}
+type UIRenderer = typeof import('./ui-render.js');
 
 // ============================================
 // ToolUIRegistry
@@ -112,6 +68,7 @@ export class ToolUIRegistry {
   private customUris = new Map<string, string>();
   private resolver?: ImportResolver;
   private readonly options: ToolUIRegistryOptions;
+  private renderer?: UIRenderer;
 
   constructor(resolver?: ImportResolver, options: ToolUIRegistryOptions = {}) {
     this.resolver = resolver;
@@ -139,9 +96,21 @@ export class ToolUIRegistry {
     if (resourceUri) this.customUris.set(resourceUri, toolName);
   }
 
+  /** Loads the rendering machinery (`@frontmcp/uipack`) once a tool with a UI needs it; `checkTemplate` and `detectUIType` need it loaded. */
+  async load(): Promise<void> {
+    this.renderer ??= await import('./ui-render.js');
+  }
+
+  private get loadedRenderer(): UIRenderer {
+    if (!this.renderer) {
+      throw new InternalMcpError('The tool UI renderer is used before ToolUIRegistry.load()', 'TOOL_UI_NOT_LOADED');
+    }
+    return this.renderer;
+  }
+
   /** Warn at startup when a tool's `ui.template` is a React component reference it cannot bundle. */
   checkTemplate(toolName: string, template: unknown): void {
-    warnIfComponentReference(toolName, template, this.options.logger ?? console);
+    this.loadedRenderer.warnIfComponentReference(toolName, template, this.options.logger ?? console);
   }
 
   /** The tool that advertised `uri` as its custom `ui.resourceUri`. */
@@ -182,7 +151,7 @@ export class ToolUIRegistry {
   }
 
   detectUIType(template: unknown): string {
-    return uipackDetectUIType(template);
+    return this.loadedRenderer.detectUIType(template);
   }
 
   async compileStaticWidgetAsync(options: Record<string, unknown>): Promise<void> {
@@ -212,6 +181,8 @@ export class ToolUIRegistry {
 
     if (!template) return;
 
+    await this.load();
+    const { renderToolTemplate, extractSizing, pageCsp } = this.loadedRenderer;
     const result = renderToolTemplate({
       toolName,
       input,
@@ -263,13 +234,14 @@ export class ToolUIRegistry {
     // Hybrid compiles the shell but not data.
     // Template functions may fail at startup (no real data available),
     // so set a fallback manifest to ensure buildHybridComponentPayload works.
+    await this.load();
     try {
       await this.compileStaticWidgetAsync(options);
     } catch {
       const toolName = options['toolName'] as string;
       const template = options['template'];
       if (toolName && template) {
-        const uiType = uipackDetectUIType(template);
+        const uiType = this.loadedRenderer.detectUIType(template);
         this.manifests.set(toolName, { uiType, hash: '', size: 0 });
       }
     }
@@ -314,6 +286,8 @@ export class ToolUIRegistry {
     // config — same reasoning as compileStaticWidgetAsync.
     this.updateResourceMetaFromConfig(toolName, uiConfig);
 
+    await this.load();
+    const { renderToolTemplate, extractSizing, pageCsp } = this.loadedRenderer;
     const result = renderToolTemplate({
       toolName,
       input,
@@ -387,10 +361,4 @@ function decodeWidgetToolName(segment: string): string | null {
 
 export function buildStaticWidgetUri(toolName: string): string {
   return `ui://widget/${encodeURIComponent(toolName)}.html`;
-}
-
-export function getUIResourceMimeType(_platformOrUri?: string): string {
-  if (_platformOrUri?.endsWith('.js')) return 'application/javascript';
-  if (_platformOrUri?.endsWith('.css')) return 'text/css';
-  return MCP_APPS_MIME_TYPE;
 }

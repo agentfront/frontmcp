@@ -3,14 +3,7 @@ import { AuthorityDeniedError, resolveRequiredScopes, signIncrementalAuthTicket 
 import { ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@frontmcp/protocol';
-import {
-  buildToolResponseContent,
-  isUIRenderFailure,
-  MCP_APPS_MIME_TYPE,
-  resolveServingMode,
-  type ToolResponseContent,
-} from '@frontmcp/uipack/adapters';
-import { WIDGET_CALL_META_KEY } from '@frontmcp/uipack/bridge-runtime';
+import type { ToolResponseContent } from '@frontmcp/uipack/adapters';
 import {
   awaitOutsideRequest,
   findNonFiniteNumber,
@@ -78,8 +71,8 @@ import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
-import { hasUIConfig } from '../ui';
 import { toolServingMode } from '../ui/serving-mode-default';
+import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
 import { evaluateToolCredentialGate } from './tool-credentials.gate';
 
 /**
@@ -1337,6 +1330,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     try {
       const scope = this.scope;
+      const { buildToolResponseContent, isUIRenderFailure, MCP_APPS_MIME_TYPE, resolveServingMode } = await import(
+        '../ui/ui-render.js'
+      );
 
       // Get session info for platform detection from authInfo (already in state from parseInput)
       const { authInfo } = this.state;

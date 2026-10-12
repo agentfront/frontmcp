@@ -20,8 +20,10 @@ export {
   isStaticWidgetUri,
   parseWidgetUri,
   buildStaticWidgetUri,
-  getUIResourceMimeType,
+  hasUIConfig,
+  WIDGET_CALL_META_KEY,
 } from './ui-shared';
+export { getUIResourceMimeType } from './ui-render';
 export type { ParsedWidgetUri, UIResourceMeta } from './ui-shared';
 
 // ============================================
@@ -51,12 +53,6 @@ export function renderToolTemplate(
 }
 
 /** Check if a tool entry has UI configuration */
-export function hasUIConfig(tool: unknown): boolean {
-  if (typeof tool !== 'object' || tool === null) return false;
-  const metadata = (tool as Record<string, unknown>)['ui'];
-  return metadata !== undefined && metadata !== null;
-}
-
 export function isReactComponent(template: unknown): boolean {
   return detectUIType(template) === 'react';
 }
@@ -101,14 +97,7 @@ export type { UIMetadata, BuildUIMetaOptions } from './platform-adapters';
 // ============================================
 // Template Helpers (from @frontmcp/ui/runtime)
 // ============================================
-export {
-  escapeHtml,
-  formatDate,
-  formatCurrency,
-  uniqueId,
-  jsonEmbed,
-  createTemplateHelpers,
-} from './template-helpers';
+export { escapeHtml, formatDate, formatCurrency, uniqueId, jsonEmbed, createTemplateHelpers } from './template-helpers';
 
 // ============================================
 // SDK-Specific (MCP Integration)

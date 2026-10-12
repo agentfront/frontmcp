@@ -7,7 +7,7 @@ import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
 import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError, ResourceNotFoundError } from '../../errors';
-import { isUIResourceUri } from '../../tool/ui';
+import { isUIResourceUri } from '../../tool/ui/ui-shared';
 import { mcpRequestSessionId } from '../../transport/mcp-handlers/mcp-surface';
 
 const inputSchema = z.object({

@@ -22,6 +22,10 @@ const ON_DEMAND_MODULES = [
   '../../job/job-scope.helper',
   '../../mcp-registry/mcp-registry-scope.helper',
   '../observability-scope.helper',
+  '../../tool/ui/ui-option-warnings',
+  '../../tool/ui/ui-render',
+  '../../tool/ui/ui-resource-template',
+  '../../tool/ui/ui-resource.handler',
   '../../transport/bus',
   '../../transport/event-stores',
   '../../transport/ipc-server.transport',
@@ -55,6 +59,13 @@ class ConfirmTool extends ToolContext {
 class ReportTool extends ToolContext {
   async execute() {
     return { rows: 3 };
+  }
+}
+
+@Tool({ name: 'lookup', inputSchema: {}, ui: { template: '<div id="lookup-widget"></div>', servingMode: 'static' } })
+class LookupTool extends ToolContext {
+  async execute() {
+    return { source: 'crm' };
   }
 }
 
@@ -146,6 +157,25 @@ describe('Scope features loaded on demand', () => {
       expect(await taskStatus()).toMatchObject({ taskId: created.task.taskId, status: 'completed' });
     } finally {
       await instance.shutdown();
+    }
+  });
+
+  it('lists and serves the widget of a tool with a UI', async () => {
+    const server = await create({ info: { name: 'on-demand-ui', version: '1.0.0' }, tools: [LookupTool] });
+    try {
+      const { tools } = await server.listTools();
+      expect(tools[0]._meta).toMatchObject({
+        ui: { resourceUri: 'ui://widget/lookup.html' },
+        'frontmcp/type': 'html',
+        'frontmcp/cdn': expect.any(Object),
+      });
+      const { contents } = await server.readResource('ui://widget/lookup.html');
+      expect(contents[0]).toMatchObject({
+        mimeType: 'text/html;profile=mcp-app',
+        text: expect.stringContaining('lookup-widget'),
+      });
+    } finally {
+      await server.dispose();
     }
   });
 });
