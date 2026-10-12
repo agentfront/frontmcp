@@ -2,7 +2,7 @@ import { toJSONSchema, type ZodType } from '@frontmcp/lazy-zod';
 import { type RequestId } from '@frontmcp/protocol';
 
 import { type ServerResponse } from '../../common';
-import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult } from '../../elicitation';
+import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult } from '../../elicitation/elicitation.types';
 import { ElicitationTimeoutError, InvalidInputError } from '../../errors';
 import { type AuthenticatedServerRequest } from '../../server/server.types';
 import { rpcRequest } from '../transport.error';

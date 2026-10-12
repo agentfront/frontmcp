@@ -13,17 +13,19 @@ import { mkdtemp, rm } from '@frontmcp/utils';
 
 import {
   bundleForBrowser,
+  DEFAULT_CONFIG_MODULES,
   fixtureDir,
   importChain,
   inputSizes,
   leakedFeatures,
   OPTIONAL_PEERS,
+  SERVER_MODULES,
   type BrowserBundle,
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 2_690_000 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 2_700_000 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 2_110_000 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 2_120_000 },
 ];
 
 const VITE_INITIAL_CHUNK_MAX_BYTES = 1_180_000;
@@ -47,26 +49,16 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   observability: sdkModule('scope/(observability-scope\\.helper|tracer-provider\\.utils)'),
   'remote and esm entries': sdkModule('remote-mcp/|esm-loader/(?!package-specifier)'),
   skills:
-    /^libs\/sdk\/dist\/browser\/skill\/(providers|session|sep-2640|flows|hooks)\/|\/node_modules\/(js-yaml|vectoriadb)\//,
-  tasks: sdkModule('task/(store|flows)/|task/task\\.registry|task/helpers/(task-runner|cli-task-runner)'),
-  'tool ui': /^libs\/uipack\//,
+    /^libs\/sdk\/dist\/browser\/skill\/(providers\/|session\/|hooks\/|sep-2640\/(?!sep-2640\.constants)|flows\/(?!filter-skills\.flow)|skill-md-parser)|\/node_modules\/(js-yaml|vectoriadb)\//,
+  tasks: sdkModule(
+    'task/(store/(?!task-backend\\.utils)|flows/|task\\.registry|helpers/(task-runner|cli-task-runner))',
+  ),
+  'tool ui':
+    /^libs\/uipack\/dist\/esm\/(adapters|shell|bridge-runtime)\/|^libs\/sdk\/dist\/browser\/tool\/ui\/(ui-render|ui-resource\.handler|ui-option-warnings|ui-resource-template)\./,
 };
 
 // Only shrinks: a feature leaves this list in the change that keeps it out of the core path
-const KNOWN_LEAKS: string[] = [
-  'agents',
-  'auth',
-  'channels',
-  'distributed transport',
-  'elicitation',
-  'health',
-  'http transport',
-  'metrics',
-  'remote and esm entries',
-  'skills',
-  'tasks',
-  'tool ui',
-];
+const KNOWN_LEAKS: string[] = ['auth', 'distributed transport', 'health', 'http transport', 'metrics'];
 
 function topInputs(bundle: BrowserBundle, count = 15): string {
   return inputSizes(bundle.metafile)
@@ -79,7 +71,9 @@ describe('the browser bundle of create()', () => {
   const bundles = new Map<string, BrowserBundle>();
 
   beforeAll(async () => {
-    for (const { entry } of BUDGETS) bundles.set(entry, await bundleForBrowser(resolve(fixtureDir, entry)));
+    for (const { entry } of BUDGETS) {
+      bundles.set(entry, await bundleForBrowser(resolve(fixtureDir, entry), DEFAULT_CONFIG_MODULES));
+    }
   });
 
   it.each(BUDGETS)('keeps $label within its budget', ({ entry, label, maxBytes }) => {
@@ -94,8 +88,8 @@ describe('the browser bundle of create()', () => {
     }
   });
 
-  it('reaches only the feature modules it is known to reach', () => {
-    const bundle = bundles.get('create-tool.ts') as BrowserBundle;
+  it('reaches only the feature modules it is known to reach', async () => {
+    const bundle = await bundleForBrowser(resolve(fixtureDir, 'create-tool.ts'), SERVER_MODULES);
     const leaks = leakedFeatures(bundle.metafile, FEATURE_MODULES);
     const unexpected = [...leaks.keys()].filter((feature) => !KNOWN_LEAKS.includes(feature)).sort();
     const importChains = Object.fromEntries(

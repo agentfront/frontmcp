@@ -10,8 +10,10 @@ export const workspaceRoot = resolve(__dirname, '../../../../..');
 export const fixtureDir = resolve(__dirname, '../../fixture');
 export const OPTIONAL_PEERS = ['openai', '@anthropic-ai/sdk', '@vercel/kv', '@upstash/redis', '@enclave-vm/core'];
 
-// The modules create() loads with import() whatever the config asks for
-const CORE_LAZY_MODULES = new Set(['front-mcp/front-mcp.mjs']);
+// The modules create() always loads with import(): the server
+export const SERVER_MODULES = ['front-mcp/front-mcp.mjs'];
+// With the fixtures' config create() also loads tasks, which are on by default
+export const DEFAULT_CONFIG_MODULES = [...SERVER_MODULES, 'task/index.mjs'];
 const nodeBuiltins = new Set(builtinModules);
 
 export interface BrowserBundle {
@@ -21,14 +23,14 @@ export interface BrowserBundle {
   metafile: Metafile;
 }
 
-function keepOnDemandModulesOut(sdkBrowserDist: string): Plugin {
+function keepOnDemandModulesOut(sdkBrowserDist: string, loadedModules: readonly string[]): Plugin {
   return {
     name: 'keep-on-demand-modules-out',
     setup(pluginBuild) {
       pluginBuild.onResolve({ filter: /^\./ }, (args) => {
         if (args.kind !== 'dynamic-import' || !args.importer.startsWith(sdkBrowserDist)) return undefined;
         const target = relative(sdkBrowserDist, resolve(dirname(args.importer), args.path));
-        return CORE_LAZY_MODULES.has(target) ? undefined : { path: args.path, external: true };
+        return loadedModules.includes(target) ? undefined : { path: args.path, external: true };
       });
     },
   };
@@ -60,8 +62,8 @@ const stubOptionalPeers: Plugin = {
   },
 };
 
-/** What an app's browser bundle of the entry loads up to create(), from the built packages, without optional peers. */
-export async function bundleForBrowser(entryFile: string): Promise<BrowserBundle> {
+/** An app's browser bundle of the entry from the built packages, without optional peers, with these on-demand SDK modules. */
+export async function bundleForBrowser(entryFile: string, loadedModules: readonly string[]): Promise<BrowserBundle> {
   const sdkBrowserDist = await realpath(resolve(workspaceRoot, 'libs/sdk/dist/browser'));
   const result = await build({
     entryPoints: [entryFile],
@@ -76,7 +78,7 @@ export async function bundleForBrowser(entryFile: string): Promise<BrowserBundle
     conditions: ['browser'],
     tsconfigRaw: {},
     logLevel: 'silent',
-    plugins: [keepOnDemandModulesOut(sdkBrowserDist), stubNodeBuiltins, stubOptionalPeers],
+    plugins: [keepOnDemandModulesOut(sdkBrowserDist, loadedModules), stubNodeBuiltins, stubOptionalPeers],
   });
   const output = result.outputFiles.find((file) => file.path.endsWith('.js'));
   if (!output) throw new Error(`esbuild emitted no JavaScript for ${entryFile}`);

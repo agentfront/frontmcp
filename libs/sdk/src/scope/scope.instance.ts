@@ -10,7 +10,6 @@ import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeR
 
 import AdapterRegistry from '../adapter/adapter.registry';
 import AgentRegistry from '../agent/agent.registry';
-import CallAgentFlow from '../agent/flows/call-agent.flow';
 import AppRegistry from '../app/app.registry';
 import { AuthUiRegistry } from '../auth/auth-ui';
 import { AuthRegistry } from '../auth/auth.registry';
@@ -44,9 +43,7 @@ import { resolveEntryPath } from '../common/utils/path.utils';
 import CompleteFlow from '../completion/flows/complete.flow';
 import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
 import { proxyTrustOf } from '../context/metadata.utils';
-import { createElicitationStore, type ElicitationStore } from '../elicitation';
-import { ElicitationRequestFlow, ElicitationResultFlow } from '../elicitation/flows';
-import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
+import type { ElicitationStore } from '../elicitation';
 import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors';
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
@@ -74,29 +71,16 @@ import {
   type RegisteredHttpRoute,
 } from '../server/custom-routes.helper';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
-import { createSkillToolGuardHook } from '../skill/hooks';
-import { createSkillSessionStore, SkillSessionManager } from '../skill/session';
+import type { SkillSessionManager } from '../skill/session';
 import { pluginsRegisterDynamicSkills, registerSkillCapabilities } from '../skill/skill-scope.helper';
 import SkillRegistry from '../skill/skill.registry';
-import {
-  CliTaskRunner,
-  createTaskStore,
-  InProcessTaskRunner,
-  resolvesToVercelKvTaskBackend,
-  TaskNotifier,
-  TaskRegistry,
-  TasksCancelFlow,
-  TasksGetFlow,
-  TasksListFlow,
-  TasksResultFlow,
-  type TaskStore,
-} from '../task';
+import type { InProcessTaskRunner, TaskRegistry, TaskStore } from '../task';
+import { resolvesToVercelKvTaskBackend } from '../task/store/task-backend.utils';
 import { ToolInstance } from '../tool/tool.instance';
 import ToolRegistry from '../tool/tool.registry';
 import { normalizeTool } from '../tool/tool.utils';
-import { hasUIConfig, StaticWidgetResourceTemplate, ToolUIRegistry } from '../tool/ui';
 import { toolServingMode } from '../tool/ui/serving-mode-default';
-import { describeIgnoredUiOptions, describeServingModeDefault } from '../tool/ui/ui-option-warnings';
+import { hasUIConfig, ToolUIRegistry } from '../tool/ui/ui-shared';
 import type { RedisTransportBus } from '../transport/bus';
 import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/request-state';
 import type { SessionRelayHandle } from '../transport/relay/relay-scope.helper';
@@ -379,6 +363,7 @@ export class Scope extends ScopeEntry {
           const elicitationRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
           // Top-level `sqlite` is the fallback when no Redis source is configured (issue #401).
           const elicitationSqlite = elicitationRedis ? undefined : resolvedTopLevelSqlite;
+          const { createElicitationStore } = await import('../elicitation/store/elicitation-store.factory.js');
           const { store: elicitStore, type: elicitType } = await createElicitationStore({
             redis: elicitationRedis,
             sqlite: elicitationSqlite,
@@ -454,8 +439,10 @@ export class Scope extends ScopeEntry {
       !tasksUnavailableOnVercelKv &&
       (!this.cliMode || tasksEnabledForCli || isTaskWorker);
 
+    let taskModule: typeof import('../task/index.js') | undefined;
     const tasksPromise = shouldInitTasks
       ? (async () => {
+          taskModule = await import('../task/index.js');
           const tasksRedis = tasksConfig?.redis ?? this.metadata.redis;
           // Mirror the elicitation precedence: an explicit `tasks.sqlite` is
           // always honored, but the top-level `metadata.sqlite` fallback only
@@ -477,7 +464,7 @@ export class Scope extends ScopeEntry {
             store: taskStore,
             type: taskType,
             storage: taskStorage,
-          } = await createTaskStore({
+          } = await taskModule.createTaskStore({
             redis: tasksRedis,
             sqlite: tasksSqlite,
             keyPrefix: tasksConfig?.keyPrefix ?? 'mcp:task:',
@@ -490,7 +477,7 @@ export class Scope extends ScopeEntry {
             await taskStorage?.disconnect();
           });
           this.taskBackendType = taskType;
-          this._taskRegistry = new TaskRegistry(
+          this._taskRegistry = new taskModule.TaskRegistry(
             {
               enabled: tasksConfig?.enabled,
               defaultTtlMs: tasksConfig?.defaultTtlMs,
@@ -512,7 +499,8 @@ export class Scope extends ScopeEntry {
     // after the NotificationService is initialized in batch3.
     const installTaskRunner = shouldInitTasks
       ? () => {
-          if (!this._taskStore || !this._taskRegistry) return;
+          const tasks = taskModule;
+          if (!this._taskStore || !this._taskRegistry || !tasks) return;
           // Runner selection: explicit `tasks.runner` wins; a task worker is
           // ALWAYS in-process regardless of config (it's the worker itself).
           const explicit = tasksConfig?.runner;
@@ -539,16 +527,16 @@ export class Scope extends ScopeEntry {
             );
           }
           const runner = useCliRunner
-            ? new CliTaskRunner({
+            ? new tasks.CliTaskRunner({
                 store: this._taskStore,
                 command: tasksConfig?.cliRunnerCommand,
                 logger: this.logger,
               })
-            : new InProcessTaskRunner({
+            : new tasks.InProcessTaskRunner({
                 scope: this as unknown as ConstructorParameters<typeof InProcessTaskRunner>[0]['scope'],
                 store: this._taskStore,
                 registry: this._taskRegistry,
-                notifier: new TaskNotifier(this.notificationService, this.logger),
+                notifier: new tasks.TaskNotifier(this.notificationService, this.logger),
                 logger: this.logger,
               });
           this._taskRegistry.setRunner(runner);
@@ -703,7 +691,7 @@ export class Scope extends ScopeEntry {
 
     // Register sendElicitationResult system tool if elicitation is enabled
     if (elicitationEnabled) {
-      this.registerSendElicitationResultTool(scopeRef);
+      await this.registerSendElicitationResultTool(scopeRef);
     }
 
     // Create UI import resolver with CDN overrides if configured
@@ -746,9 +734,13 @@ export class Scope extends ScopeEntry {
 
     // Initialize skill session manager if skills are available, or a plugin registers them at runtime
     if (this.scopeSkills.hasAny() || dynamicSkills) {
-      const store = createSkillSessionStore({ type: 'memory' });
+      const [skillSession, { createSkillToolGuardHook }] = await Promise.all([
+        import('../skill/session/index.js'),
+        import('../skill/hooks/index.js'),
+      ]);
+      const store = skillSession.createSkillSessionStore({ type: 'memory' });
 
-      this._skillSession = new SkillSessionManager(
+      this._skillSession = new skillSession.SkillSessionManager(
         {
           defaultPolicyMode: 'permissive',
         },
@@ -910,18 +902,20 @@ export class Scope extends ScopeEntry {
     // The runner needs it to deliver `notifications/tasks/status` events.
     installTaskRunner?.();
 
-    // Register logging, completion, agent, elicitation, and task flows.
-    await this.scopeFlows.registryFlows([
-      SetLevelFlow,
-      CompleteFlow,
-      CallAgentFlow,
-      ElicitationRequestFlow,
-      ElicitationResultFlow,
-      TasksGetFlow,
-      TasksResultFlow,
-      TasksCancelFlow,
-      TasksListFlow,
-    ]);
+    // Register logging and completion flows, and the agent, elicitation and task flows when those are on.
+    await this.scopeFlows.registryFlows([SetLevelFlow, CompleteFlow]);
+    if (this.scopeAgents.listAllInstances().length > 0) {
+      const { CallAgentFlow } = await import('../agent/flows/index.js');
+      await this.scopeFlows.registryFlows([CallAgentFlow]);
+    }
+    if (this.metadata.elicitation?.enabled === true) {
+      const { ElicitationRequestFlow, ElicitationResultFlow } = await import('../elicitation/flows/index.js');
+      await this.scopeFlows.registryFlows([ElicitationRequestFlow, ElicitationResultFlow]);
+    }
+    if (taskModule) {
+      const { TasksGetFlow, TasksResultFlow, TasksCancelFlow, TasksListFlow } = taskModule;
+      await this.scopeFlows.registryFlows([TasksGetFlow, TasksResultFlow, TasksCancelFlow, TasksListFlow]);
+    }
 
     if (this.metadata.registry) {
       const { registerMcpRegistryFlows } = await import('../mcp-registry/mcp-registry-scope.helper.js');
@@ -1082,6 +1076,13 @@ export class Scope extends ScopeEntry {
   private async compileUIWidgets(): Promise<void> {
     const toolsWithUI = this.scopeTools.getTools(true).filter((t) => hasUIConfig(t.metadata));
     if (toolsWithUI.length === 0) return;
+
+    const [{ describeIgnoredUiOptions, describeServingModeDefault }, { StaticWidgetResourceTemplate }] =
+      await Promise.all([
+        import('../tool/ui/ui-option-warnings.js'),
+        import('../tool/ui/ui-resource-template.js'),
+        this.toolUIRegistry.load(),
+      ]);
 
     for (const tool of toolsWithUI) {
       const resourceUri = tool.metadata.ui?.resourceUri;
@@ -1764,8 +1765,9 @@ export class Scope extends ScopeEntry {
    * Register the sendElicitationResult system tool.
    * This tool is hidden by default and only shown to clients that don't support elicitation.
    */
-  private registerSendElicitationResultTool(_scopeRef: EntryOwnerRef): void {
+  private async registerSendElicitationResultTool(_scopeRef: EntryOwnerRef): Promise<void> {
     try {
+      const { SendElicitationResultTool } = await import('../elicitation/send-elicitation-result.tool.js');
       const toolRecord = normalizeTool(SendElicitationResultTool);
       const systemToolEntry = new ToolInstance(toolRecord, this.scopeProviders, {
         kind: 'scope',

@@ -23,10 +23,8 @@ import {
   RegistryDefinitionNotFoundError,
   RegistryGraphEntryNotFoundError,
 } from '../errors';
-import { loadEsmPromptEntries } from '../esm-loader/esm-entries';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
-import { loadRemotePromptEntry } from '../remote-mcp/remote-entries';
 import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils';
 import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import GetPromptFlow from './flows/get-prompt.flow';
@@ -193,7 +191,11 @@ export default class PromptRegistry extends RegistryAbstract<
   private async registerExternalPrompts(records: readonly PromptExternalRecord[]): Promise<void> {
     const scope = this.providers.getActiveScope();
     const loads = records.map((record) =>
-      record.kind === PromptKind.ESM ? loadEsmPromptEntries(scope, record) : loadRemotePromptEntry(scope, record),
+      record.kind === PromptKind.ESM
+        ? import('../esm-loader/esm-entries.js').then(({ loadEsmPromptEntries }) => loadEsmPromptEntries(scope, record))
+        : import('../remote-mcp/remote-entries.js').then(({ loadRemotePromptEntry }) =>
+            loadRemotePromptEntry(scope, record),
+          ),
     );
     for (const record of (await Promise.all(loads)).flat()) {
       const instance = new PromptInstance(record, this.providers, this.owner);

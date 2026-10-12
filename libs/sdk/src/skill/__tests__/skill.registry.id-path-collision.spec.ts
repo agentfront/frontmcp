@@ -12,6 +12,7 @@ import 'reflect-metadata';
 import { createProviderRegistryWithScope } from '../../__test-utils__/fixtures/scope.fixtures';
 import { Skill, SkillContext, type ScopeEntry, type SkillContent } from '../../common';
 import { InvalidSkillError, PublicMcpError } from '../../errors';
+import { MemorySkillProvider } from '../providers/memory-skill.provider';
 import { findSkillByPath } from '../sep-2640/sep-2640.resource-helpers';
 import SkillRegistry from '../skill.registry';
 
@@ -29,6 +30,8 @@ const content = (id: string, name: string, overrides: Partial<SkillContent> = {}
 async function emptyRegistry(): Promise<SkillRegistry> {
   const registry = new SkillRegistry(await createProviderRegistryWithScope(), [], owner());
   await registry.ready;
+  // Builds the storage provider an empty registry otherwise creates on its first skill, so a test can hold it back
+  await (registry as unknown as { storage(): Promise<unknown> }).storage();
   return registry;
 }
 
@@ -464,6 +467,37 @@ describe('SkillRegistry — a skill id that is another skill path', () => {
 
       await expect(parent.loadSkill('ledger')).resolves.toBeUndefined();
       expect(await skillIds(parent)).toEqual({ search: ['invoices'], list: ['invoices'], count: ['1'] });
+    });
+
+    it("does not serve a child's skill removed before the adopter's storage provider has loaded", async () => {
+      const parent = new SkillRegistry(await createProviderRegistryWithScope(), [], owner());
+      await parent.ready;
+      const child = await emptyRegistry();
+      await parent.adoptFromChild(child, owner());
+      const initialize = MemorySkillProvider.prototype.initialize;
+      let release: () => void = () => undefined;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      const heldLoad = jest.spyOn(MemorySkillProvider.prototype, 'initialize').mockImplementationOnce(async function (
+        this: MemorySkillProvider,
+      ) {
+        await released;
+        return initialize.call(this);
+      });
+
+      try {
+        await child.registerSkillContent(content('ledger', 'ledger'));
+        await child.registerSkillContent(content('invoices', 'invoices'));
+        await child.unregisterSkill('ledger');
+        await settle();
+        expect(heldLoad).toHaveBeenCalledTimes(1);
+        release();
+        await settle();
+
+        await expect(parent.loadSkill('ledger')).resolves.toBeUndefined();
+        expect(await skillIds(parent)).toEqual({ search: ['invoices'], list: ['invoices'], count: ['1'] });
+      } finally {
+        heldLoad.mockRestore();
+      }
     });
 
     it('keeps the storage provider in step when a change subscriber throws', async () => {

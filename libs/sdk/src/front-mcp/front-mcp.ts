@@ -23,7 +23,7 @@ import { type Scope } from '../scope/scope.instance';
 import { ScopeRegistry } from '../scope/scope.registry';
 import { type FrontMcpServerInstance } from '../server/server.instance';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
-import { computeTaskCapabilities } from '../task';
+import { computeTaskCapabilities } from '../task/task-scope.helper';
 import type { FetchHandlerCtx, WebFetchHandler } from '../transport/web-fetch-handler';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { createMcpGlobalProviders } from './front-mcp.providers';

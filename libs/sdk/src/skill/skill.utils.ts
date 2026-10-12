@@ -21,7 +21,6 @@ import {
 import { type SkillContent, type SkillExampleInfo, type SkillReferenceInfo } from '../common/interfaces';
 import { isExternalEntryRecord, unsupportedExternalEntry } from '../common/utils/external-entry.utils';
 import { InvalidInstructionSourceError, InvalidSkillError, SkillInstructionFetchError } from '../errors';
-import { stripFrontmatter } from './skill-md-parser';
 
 /**
  * Collect skill metadata from a decorated class.
@@ -160,6 +159,7 @@ export async function loadInstructions(source: SkillInstructionSource, basePath?
     const filePath = isAbsolute(source.file) ? source.file : basePath ? pathJoin(basePath, source.file) : source.file;
     const content = await readFile(filePath, 'utf-8');
     // Strip YAML frontmatter if present (e.g., SKILL.md files)
+    const { stripFrontmatter } = await import('./skill-md-parser.js');
     return stripFrontmatter(content);
   }
 

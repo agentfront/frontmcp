@@ -11,7 +11,7 @@
 import { type ServerCapabilities } from '@frontmcp/protocol';
 
 import { type Scope } from '../scope/scope.instance';
-import { computeTaskCapabilities } from '../task';
+import { computeTaskCapabilities } from '../task/task-scope.helper';
 
 /**
  * The MCP `ServerOptions.capabilities` type doesn't model the forward-compat

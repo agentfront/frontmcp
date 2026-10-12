@@ -1,12 +1,18 @@
 // file: libs/sdk/src/channel/channel.utils.ts
 
 import 'reflect-metadata';
+
 import { FrontMcpChannelTokens } from '../common';
-import type { ChannelRecord } from '../common/records/channel.record';
-import { ChannelKind } from '../common/records/channel.record';
-import type { ChannelMetadata } from '../common/metadata/channel.metadata';
-import type { ChannelType } from '../common/interfaces/channel.interface';
 import { isChannelClass, isChannelFunction } from '../common/decorators/channel.decorator';
+import type { ChannelType } from '../common/interfaces/channel.interface';
+import type { ChannelMetadata } from '../common/metadata/channel.metadata';
+import { ChannelKind, type ChannelRecord } from '../common/records/channel.record';
+
+/**
+ * The MCP notification method for Claude Code channels.
+ * This is an experimental extension, not part of the standard MCP spec.
+ */
+export const CHANNEL_NOTIFICATION_METHOD = 'notifications/claude/channel';
 
 /**
  * Normalize a ChannelType (class, function, or descriptor) into a ChannelRecord.

@@ -32,7 +32,7 @@ import { ResolvedEntries } from '../../flows/resolved-entries';
 import { type EntryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
-import { handleUIResourceRead, isUIResourceUri } from '../../tool/ui';
+import { isUIResourceUri } from '../../tool/ui/ui-shared';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
 const inputSchema = z.object({
@@ -230,6 +230,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
         throw new ResourceNotFoundError(uri);
       }
 
+      const { handleUIResourceRead } = await import('../../tool/ui/ui-resource.handler.js');
       const uiResult = handleUIResourceRead(uri, this.scope.toolUI, platformType);
 
       if (uiResult.handled) {

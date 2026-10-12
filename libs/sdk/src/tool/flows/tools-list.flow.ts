@@ -17,7 +17,7 @@ import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
 import { ListToolsRequestSchema, ListToolsResultSchema, type AuthInfo } from '@frontmcp/protocol';
-import { buildCDNInfoForUIType, type AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/adapters';
+import type { AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/adapters';
 import { isUIType, type UIType } from '@frontmcp/uipack/types';
 import { base64Decode, base64Encode } from '@frontmcp/utils';
 
@@ -27,7 +27,7 @@ import { DEFAULT_TOOL_PAGINATION, type ToolPaginationOptions } from '../../commo
 import { InternalMcpError, InvalidInputError, InvalidMethodError } from '../../errors';
 import { type Scope } from '../../scope/scope.instance';
 import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
-import { buildStaticWidgetUri, hasUIConfig } from '../ui';
+import { buildStaticWidgetUri, hasUIConfig } from '../ui/ui-shared';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,
@@ -173,6 +173,12 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
   /**
    * Encode an offset into a cursor string.
    */
+  /** The UI machinery the listing of a tool with a UI uses, loaded only when one is listed. */
+  private async loadToolUIRenderer() {
+    await this.scope.toolUI?.load();
+    return import('../ui/ui-render.js');
+  }
+
   private encodeCursor(offset: number): string {
     return base64Encode(new TextEncoder().encode(JSON.stringify({ offset })));
   }
@@ -475,6 +481,10 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         this.scope.apps.getApps().map((app) => [app.id, (app.metadata as { output?: OutputPolicy }).output]),
       );
 
+      const uiRenderer = resolved.some(({ tool }) => hasUIConfig(tool.metadata))
+        ? await this.loadToolUIRenderer()
+        : undefined;
+
       const tools: ResponseToolItem[] = resolved.map(({ finalName, tool }) => {
         const inputSchema = (tool.getInputJsonSchema() ?? {
           type: 'object',
@@ -631,7 +641,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
             // Additional FrontMCP extension keys (outside ui namespace)
             if (manifest) {
               meta['frontmcp/type'] = manifest.uiType;
-              meta['frontmcp/cdn'] = buildCDNInfoForUIType(uiType);
+              meta['frontmcp/cdn'] = uiRenderer?.buildCDNInfoForUIType(uiType);
               meta['frontmcp/displayMode'] = manifest.displayMode;
             }
           } else {
@@ -660,7 +670,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
             // Additional FrontMCP extension keys (outside ui namespace)
             if (manifest) {
               meta['frontmcp/type'] = manifest.uiType;
-              meta['frontmcp/cdn'] = buildCDNInfoForUIType(uiType);
+              meta['frontmcp/cdn'] = uiRenderer?.buildCDNInfoForUIType(uiType);
               meta['frontmcp/displayMode'] = manifest.displayMode;
             } else if (uiConfig.template) {
               meta['frontmcp/type'] = uiType;

@@ -2,16 +2,15 @@ import { type FrontMcpFetchInit } from '@frontmcp/auth';
 import { type FuncType, type Type } from '@frontmcp/di';
 import { type ZodType } from '@frontmcp/lazy-zod';
 
+import { type ElicitOptions, type ElicitResult } from '../../elicitation/elicitation.types';
 import {
   performElicit,
   performListRoots,
   performSample,
-  type ElicitOptions,
-  type ElicitResult,
   type Root,
   type SampleOptions,
   type SampleResult,
-} from '../../elicitation';
+} from '../../elicitation/helpers';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
 import { type ToolInputType, type ToolMetadata, type ToolOutputType } from '../metadata';

@@ -19,10 +19,8 @@ import { logAvailabilityFiltering } from '../common/availability';
 import { ResourceKind, ResourceTemplateKind } from '../common/records/resource.record';
 import { externalEntryAfterStartup } from '../common/utils/external-entry.utils';
 import { EntryValidationError, NameDisambiguationError } from '../errors';
-import { loadEsmResourceEntries } from '../esm-loader/esm-entries';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
-import { loadRemoteResourceEntry } from '../remote-mcp/remote-entries';
 import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
 import ReadResourceFlow from './flows/read-resource.flow';
@@ -202,7 +200,13 @@ export default class ResourceRegistry extends RegistryAbstract<
   private async registerExternalResources(records: readonly ResourceExternalRecord[]): Promise<void> {
     const scope = this.providers.getActiveScope();
     const loads = records.map((record) =>
-      record.kind === ResourceKind.ESM ? loadEsmResourceEntries(scope, record) : loadRemoteResourceEntry(scope, record),
+      record.kind === ResourceKind.ESM
+        ? import('../esm-loader/esm-entries.js').then(({ loadEsmResourceEntries }) =>
+            loadEsmResourceEntries(scope, record),
+          )
+        : import('../remote-mcp/remote-entries.js').then(({ loadRemoteResourceEntry }) =>
+            loadRemoteResourceEntry(scope, record),
+          ),
     );
     for (const record of (await Promise.all(loads)).flat()) {
       const instance = new ResourceInstance(record, this.providers, this.owner);
