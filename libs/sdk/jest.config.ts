@@ -51,6 +51,8 @@ module.exports = {
     '^@frontmcp/ui$': '<rootDir>/../ui/dist/index.js',
     '^@frontmcp/ui/(.*)$': '<rootDir>/../ui/dist/$1/index.js',
     '^@frontmcp/auth$': '<rootDir>/../auth/src/index.ts',
+    // Pinned so a spec's jest.mock and the code's lazy require resolve it the same way, built or not.
+    '^@frontmcp/storage-sqlite$': '<rootDir>/../storage-sqlite/src/index.ts',
     '^@frontmcp/utils$': '<rootDir>/../utils/src/index.ts',
     '^@frontmcp/utils/crypto/node$': '<rootDir>/../utils/src/crypto/node.ts',
   },
