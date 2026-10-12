@@ -26,8 +26,9 @@ import {
   type SkillValidationResult,
 } from './errors/skill-validation.error';
 import type { ExternalSkillProviderBase } from './providers/external-skill.provider';
-import { MemorySkillProvider } from './providers/memory-skill.provider';
-import { SEP_2640_EXTENSION_ID, type SkillIndexEntry } from './sep-2640';
+import type { MemorySkillProvider } from './providers/memory-skill.provider';
+import type { SkillIndexEntry } from './sep-2640';
+import { SEP_2640_EXTENSION_ID } from './sep-2640/sep-2640.constants';
 import { type SkillIndexCache, type SkillIndexScoring } from './skill-index-cache.interface';
 import {
   type MutableSkillStorageProvider,
@@ -437,8 +438,12 @@ export default class SkillRegistry
   private version = 0;
   private emitter = new SkillEmitter();
 
-  /** Internal storage provider for search */
-  private storageProvider: SkillStorageProvider;
+  /** Internal storage provider for search; see {@link storage} */
+  private storageProvider?: SkillStorageProvider;
+  private storageProviderLoad?: Promise<SkillStorageProvider>;
+
+  /** The search-index snapshot cache the in-memory provider gets ({@link setIndexCache}) */
+  private indexCache?: SkillIndexCache;
 
   /** External skill provider for sync operations */
   private externalProvider?: ExternalSkillProviderBase;
@@ -466,14 +471,7 @@ export default class SkillRegistry
     this.owner = owner;
     this.scope = providers.getActiveScope();
     this.options = options ?? {};
-
-    // Create storage provider (will set tool validator later after tools are available)
-    this.storageProvider = new MemorySkillProvider({
-      defaultTopK: 10,
-      defaultMinScore: 0.1,
-      ...(this.options.scoring ? { scoring: this.options.scoring } : {}),
-      ...(this.options.indexCache ? { indexCache: this.options.indexCache } : {}),
-    });
+    this.indexCache = this.options.indexCache;
 
     // Build dependency graph
     this.buildGraph();
@@ -522,14 +520,10 @@ export default class SkillRegistry
       const toolRegistry = this.scope.tools;
       if (toolRegistry) {
         this.toolValidator = new SkillToolValidator(toolRegistry);
-        (this.storageProvider as MemorySkillProvider).setToolValidator(this.toolValidator);
       }
     } catch {
       // Tools registry not available yet, continue without validator
     }
-
-    // Initialize storage provider
-    await this.storageProvider.initialize();
 
     // Create instances for each local skill
     for (const token of this.tokens) {
@@ -547,7 +541,7 @@ export default class SkillRegistry
       try {
         await this.syncProvider(instance.metadata.id ?? instance.metadata.name, async () => {
           const content = await instance.load();
-          await (this.storageProvider as MemorySkillProvider).add(content);
+          await ((await this.storage()) as MemorySkillProvider).add(content);
         });
       } catch (error) {
         this.scope.logger.warn(`Failed to load skill ${instance.name}: ${(error as Error).message}`);
@@ -627,7 +621,7 @@ export default class SkillRegistry
         const skillId = row.instance.metadata.id ?? row.instance.metadata.name;
         this.syncProvider(skillId, async () => {
           const content = await row.instance.load();
-          await (this.storageProvider as MemorySkillProvider).add(content);
+          await ((await this.storage()) as MemorySkillProvider).add(content);
         }).catch((error) => {
           this.scope.logger.warn(`Failed to reload adopted skill ${row.baseName}: ${(error as Error).message}`);
         });
@@ -643,7 +637,7 @@ export default class SkillRegistry
         try {
           await this.syncProvider(row.instance.metadata.id ?? row.instance.metadata.name, async () => {
             const content = await row.instance.load();
-            await (this.storageProvider as MemorySkillProvider).add(content);
+            await ((await this.storage()) as MemorySkillProvider).add(content);
           });
         } catch (error) {
           this.scope.logger.warn(`Failed to load adopted skill ${row.baseName}: ${(error as Error).message}`);
@@ -807,8 +801,9 @@ export default class SkillRegistry
    * the index off the first request's critical path.
    */
   setIndexCache(cache: SkillIndexCache | undefined): void {
-    const provider = this.storageProvider as MemorySkillProvider;
-    if (typeof provider.setIndexCache === 'function') {
+    this.indexCache = cache;
+    const provider = this.storageProvider as MemorySkillProvider | undefined;
+    if (typeof provider?.setIndexCache === 'function') {
       provider.setIndexCache(cache);
     }
   }
@@ -820,7 +815,7 @@ export default class SkillRegistry
    */
   async warmIndex(): Promise<void> {
     await this.ready;
-    const provider = this.storageProvider as MemorySkillProvider;
+    const provider = (await this.storage()) as MemorySkillProvider;
     if (typeof provider.warm === 'function') {
       await provider.warm();
     }
@@ -832,7 +827,7 @@ export default class SkillRegistry
     // Ask for as many more as could be withdrawn, so skipping them still leaves `topK` results.
     const providerOptions =
       hidden.size > 0 && typeof topK === 'number' && topK >= 0 ? { ...options, topK: topK + hidden.size } : options;
-    let baseResults = await this.storageProvider.search(query, providerOptions);
+    let baseResults = await (await this.storage()).search(query, providerOptions);
     if (hidden.size > 0 || this.withdrawn.size > 0) {
       baseResults = baseResults.filter((r) => !hidden.has(r.metadata));
       if (typeof topK === 'number' && topK >= 0) baseResults = baseResults.slice(0, topK);
@@ -940,7 +935,7 @@ export default class SkillRegistry
     // Try storage provider (for external skills)
     const hidden = this.hiddenFromProviderRead();
     if (hidden.has({ name: skillId })) return undefined;
-    const result = await this.storageProvider.load(skillId);
+    const result = await (await this.storage()).load(skillId);
     if (result && hidden.has(result.skill)) return undefined;
     return result ?? undefined;
   }
@@ -981,7 +976,7 @@ export default class SkillRegistry
   async listSkills(options?: SkillListOptions): Promise<SkillListResult> {
     const hidden = this.hiddenFromProviderRead();
     if (this.dynamicContents.size === 0 && hidden.size === 0) {
-      const page = await this.storageProvider.list(options);
+      const page = await (await this.storage()).list(options);
       // A skill withdrawn while the provider answered makes the page stale: read again, filtered.
       if (this.withdrawn.size === 0) return page;
     }
@@ -1019,8 +1014,9 @@ export default class SkillRegistry
    */
   private async listAllFromProvider(options?: SkillListOptions): Promise<SkillMetadata[]> {
     const all: SkillMetadata[] = [];
+    const storage = await this.storage();
     for (;;) {
-      const page = await this.storageProvider.list({ ...options, offset: all.length, limit: Number.MAX_SAFE_INTEGER });
+      const page = await storage.list({ ...options, offset: all.length, limit: Number.MAX_SAFE_INTEGER });
       all.push(...page.skills);
       // An empty page ends the read even if the provider still claims more, so it cannot loop forever.
       if (!page.hasMore || page.skills.length === 0) return all;
@@ -1068,7 +1064,7 @@ export default class SkillRegistry
   async count(options?: { tags?: string[]; includeHidden?: boolean }): Promise<number> {
     const hidden = this.hiddenFromProviderRead();
     if (this.dynamicContents.size === 0 && hidden.size === 0) {
-      const counted = await this.storageProvider.count(options);
+      const counted = await (await this.storage()).count(options);
       // A skill withdrawn while the provider answered may be in that count: count again, filtered.
       if (this.withdrawn.size === 0) return counted;
     }
@@ -1480,6 +1476,8 @@ export default class SkillRegistry
       );
     }
 
+    const storage = await this.storage();
+
     // From here to the commit below nothing is awaited, so two registrations can't both pass the
     // check. Refused before anything changes, so the version this would replace stays registered.
     // The version this replaces and the skills the caller supersedes are left out of the check.
@@ -1500,7 +1498,7 @@ export default class SkillRegistry
     // A superseded skill the new one collides with leaves in this same commit. Left in place until
     // the caller removes it, `skill://<id>/SKILL.md` would serve it while `loadSkill(<id>)` found
     // the new skill.
-    const mutable = this.asMutableProvider(this.storageProvider);
+    const mutable = this.asMutableProvider(storage);
     const removed = this.dynamicRows
       .filter((r) => superseded.has(r.instance.name) && findIdPathCollision([r.instance, instance]))
       .map((r) => r.instance.name);
@@ -1678,9 +1676,10 @@ export default class SkillRegistry
 
   /* -------------------- Internal helpers -------------------- */
 
-  private asMutableProvider(provider: SkillStorageProvider): MutableSkillStorageProvider | undefined {
-    const candidate = provider as Partial<MutableSkillStorageProvider>;
+  private asMutableProvider(provider: SkillStorageProvider | undefined): MutableSkillStorageProvider | undefined {
+    const candidate = provider as Partial<MutableSkillStorageProvider> | undefined;
     if (
+      candidate &&
       typeof candidate.add === 'function' &&
       typeof candidate.update === 'function' &&
       typeof candidate.remove === 'function' &&
@@ -1689,6 +1688,26 @@ export default class SkillRegistry
       return provider as MutableSkillStorageProvider;
     }
     return undefined;
+  }
+
+  /** The search and storage provider; the in-memory one, with its search index, is built the first time a skill needs it. */
+  private storage(): Promise<SkillStorageProvider> {
+    this.storageProviderLoad ??= this.createMemoryProvider();
+    return this.storageProviderLoad;
+  }
+
+  private async createMemoryProvider(): Promise<SkillStorageProvider> {
+    const { MemorySkillProvider: Provider } = await import('./providers/memory-skill.provider.js');
+    const provider = new Provider({
+      defaultTopK: 10,
+      defaultMinScore: 0.1,
+      ...(this.options.scoring ? { scoring: this.options.scoring } : {}),
+      ...(this.indexCache ? { indexCache: this.indexCache } : {}),
+    });
+    if (this.toolValidator) provider.setToolValidator(this.toolValidator);
+    await provider.initialize();
+    this.storageProvider ??= provider;
+    return this.storageProvider;
   }
 
   private listAllIndexed(): IndexedSkill[] {
@@ -1775,6 +1794,7 @@ export default class SkillRegistry
     // In read-only mode, use external provider as the primary storage
     if (provider.isReadOnly()) {
       this.storageProvider = provider;
+      this.storageProviderLoad = Promise.resolve(provider);
       this.scope.logger.info('[SkillRegistry] Using external provider in read-only mode');
     } else {
       // In persistent mode, keep local storage but enable sync

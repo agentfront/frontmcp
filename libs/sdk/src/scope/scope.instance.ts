@@ -71,8 +71,7 @@ import {
   type RegisteredHttpRoute,
 } from '../server/custom-routes.helper';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
-import { createSkillToolGuardHook } from '../skill/hooks';
-import { createSkillSessionStore, SkillSessionManager } from '../skill/session';
+import type { SkillSessionManager } from '../skill/session';
 import { pluginsRegisterDynamicSkills, registerSkillCapabilities } from '../skill/skill-scope.helper';
 import SkillRegistry from '../skill/skill.registry';
 import type { InProcessTaskRunner, TaskRegistry, TaskStore } from '../task';
@@ -735,9 +734,13 @@ export class Scope extends ScopeEntry {
 
     // Initialize skill session manager if skills are available, or a plugin registers them at runtime
     if (this.scopeSkills.hasAny() || dynamicSkills) {
-      const store = createSkillSessionStore({ type: 'memory' });
+      const [skillSession, { createSkillToolGuardHook }] = await Promise.all([
+        import('../skill/session/index.js'),
+        import('../skill/hooks/index.js'),
+      ]);
+      const store = skillSession.createSkillSessionStore({ type: 'memory' });
 
-      this._skillSession = new SkillSessionManager(
+      this._skillSession = new skillSession.SkillSessionManager(
         {
           defaultPolicyMode: 'permissive',
         },

@@ -49,7 +49,7 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   observability: sdkModule('scope/(observability-scope\\.helper|tracer-provider\\.utils)'),
   'remote and esm entries': sdkModule('remote-mcp/|esm-loader/(?!package-specifier)'),
   skills:
-    /^libs\/sdk\/dist\/browser\/skill\/(providers|session|sep-2640|flows|hooks)\/|\/node_modules\/(js-yaml|vectoriadb)\//,
+    /^libs\/sdk\/dist\/browser\/skill\/(providers\/|session\/|hooks\/|sep-2640\/(?!sep-2640\.constants)|flows\/(?!filter-skills\.flow)|skill-md-parser)|\/node_modules\/(js-yaml|vectoriadb)\//,
   tasks: sdkModule(
     'task/(store/(?!task-backend\\.utils)|flows/|task\\.registry|helpers/(task-runner|cli-task-runner))',
   ),
@@ -58,7 +58,7 @@ const FEATURE_MODULES: Record<string, RegExp> = {
 };
 
 // Only shrinks: a feature leaves this list in the change that keeps it out of the core path
-const KNOWN_LEAKS: string[] = ['auth', 'distributed transport', 'health', 'http transport', 'metrics', 'skills'];
+const KNOWN_LEAKS: string[] = ['auth', 'distributed transport', 'health', 'http transport', 'metrics'];
 
 function topInputs(bundle: BrowserBundle, count = 15): string {
   return inputSizes(bundle.metafile)

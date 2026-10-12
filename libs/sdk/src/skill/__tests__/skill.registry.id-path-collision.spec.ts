@@ -29,6 +29,8 @@ const content = (id: string, name: string, overrides: Partial<SkillContent> = {}
 async function emptyRegistry(): Promise<SkillRegistry> {
   const registry = new SkillRegistry(await createProviderRegistryWithScope(), [], owner());
   await registry.ready;
+  // Builds the storage provider an empty registry otherwise creates on its first skill, so a test can hold it back
+  await (registry as unknown as { storage(): Promise<unknown> }).storage();
   return registry;
 }
 

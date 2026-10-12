@@ -11,10 +11,14 @@ import {
   Agent,
   AgentContext,
   App,
+  DynamicPlugin,
   frontMcpMetadataSchema,
   Job,
   JobContext,
   LogLevel,
+  Plugin,
+  ScopeEntry,
+  skill,
   Tool,
   ToolContext,
 } from '../../common';
@@ -38,6 +42,11 @@ const ON_DEMAND_MODULES = [
   '../../mcp-registry/mcp-registry-scope.helper',
   '../observability-scope.helper',
   '../../remote-mcp/remote-entries',
+  '../../skill/flows/index',
+  '../../skill/hooks/index',
+  '../../skill/providers/memory-skill.provider',
+  '../../skill/session/index',
+  '../../skill/skill-md-parser',
   '../../tool/ui/ui-option-warnings',
   '../../tool/ui/ui-render',
   '../../tool/ui/ui-resource-template',
@@ -91,6 +100,29 @@ class LookupTool extends ToolContext {
   llm: { adapter: { completion: async () => ({ content: 'done', finishReason: 'stop' as const }) } },
 })
 class HelperAgent extends AgentContext {}
+
+@Tool({ name: 'add_skill_at_runtime', inputSchema: {} })
+class AddSkillAtRuntimeTool extends ToolContext {
+  async execute() {
+    const skills = this.get(ScopeEntry).skills;
+    await skills.registerSkillContent({
+      id: 'late-skill',
+      name: 'late-skill',
+      description: 'Registered at runtime',
+      instructions: 'Do the late thing.',
+      tools: [],
+    });
+    return { description: (await skills.loadSkill('late-skill'))?.skill.description };
+  }
+}
+
+@Plugin({ name: 'runtime-skills', tools: [AddSkillAtRuntimeTool] })
+class RuntimeSkillsPlugin extends DynamicPlugin<Record<string, never>> {}
+
+@Plugin({ name: 'declared-runtime-skills', dynamicSkills: true, tools: [AddSkillAtRuntimeTool] })
+class DeclaredRuntimeSkillsPlugin extends DynamicPlugin<Record<string, never>> {}
+
+const startupSkill = skill({ name: 'startup-skill', description: 'Present at startup', instructions: 'Do it.' });
 
 @App({ id: 'desk', name: 'Desk', tools: [ConfirmTool, ReportTool] })
 class DeskApp {}
@@ -208,6 +240,30 @@ describe('Scope features loaded on demand', () => {
       const { tools } = await server.listTools();
       expect(tools.map((tool) => tool.name)).toContain('invoke_helper');
       expect(JSON.stringify(await server.callTool('invoke_helper', {}))).toContain('done');
+    } finally {
+      await server.dispose();
+    }
+  });
+
+  it('searches and loads a skill declared at startup', async () => {
+    const client = await connect({ ...deskConfig, apps: [DeskApp], skills: [startupSkill] });
+    try {
+      const { skills } = await client.searchSkills('startup');
+      expect(skills.map((found) => found.name)).toContain('startup-skill');
+      expect(JSON.stringify(await client.loadSkills(['startup-skill']))).toContain('Do it.');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it.each([
+    ['without declaring it', RuntimeSkillsPlugin],
+    ['with dynamicSkills', DeclaredRuntimeSkillsPlugin],
+  ])('serves a skill a plugin registers at runtime, %s', async (_label, plugin) => {
+    const server = await create({ info: { name: 'on-demand-runtime-skill', version: '1.0.0' }, plugins: [plugin] });
+    try {
+      const result = (await server.callTool('add_skill_at_runtime', {})) as { structuredContent?: unknown };
+      expect(result.structuredContent).toEqual({ description: 'Registered at runtime' });
     } finally {
       await server.dispose();
     }

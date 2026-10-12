@@ -20,10 +20,7 @@ import type FlowRegistry from '../flows/flow.registry';
 import { normalizePlugin } from '../plugin/plugin.utils';
 import type ProviderRegistry from '../provider/provider.registry';
 import type ResourceRegistry from '../resource/resource.registry';
-import { FilterSkillsFlow, LlmFullTxtFlow, LlmTxtFlow, LoadSkillFlow, SearchSkillsFlow, SkillsApiFlow } from './flows';
-import { getSep2640Resources } from './sep-2640/resources';
-import { resolveLastModifiedForSkill } from './sep-2640/sep-2640.last-modified';
-import { registerPerSkillResources } from './sep-2640/sep-2640.per-skill';
+import FilterSkillsFlow from './flows/filter-skills.flow';
 import { registerSkillAuditWriter } from './skill-audit.helper';
 import type SkillRegistry from './skill.registry';
 
@@ -124,6 +121,9 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
   }
 
   // Always register MCP flows for skills
+  const { LlmFullTxtFlow, LlmTxtFlow, LoadSkillFlow, SearchSkillsFlow, SkillsApiFlow } = await import(
+    './flows/index.js'
+  );
   await flowRegistry.registryFlows([SearchSkillsFlow, LoadSkillFlow]);
 
   // Register SEP-2640 `skill://` resources unless explicitly disabled.
@@ -136,6 +136,10 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
     // and `description`. The template alone covers `resources/read` but
     // doesn't enumerate; per-skill concrete records fill that gap, for
     // skills registered after startup too.
+    const [{ registerPerSkillResources }, { resolveLastModifiedForSkill }] = await Promise.all([
+      import('./sep-2640/sep-2640.per-skill.js'),
+      import('./sep-2640/sep-2640.last-modified.js'),
+    ]);
     await registerPerSkillResources({
       scope: providers.getActiveScope(),
       skillRegistry,
@@ -170,6 +174,7 @@ async function registerSep2640Resources(options: {
   logger: FrontMcpLogger;
 }): Promise<void> {
   const { resourceRegistry, logger } = options;
+  const { getSep2640Resources } = await import('./sep-2640/resources/index.js');
   const resources = getSep2640Resources();
 
   for (const ResourceClass of resources) {
