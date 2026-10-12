@@ -19,7 +19,6 @@ import {
   ResourceContext,
   Tool,
   ToolContext,
-  type FrontMcpConfigInput,
   type ProviderType,
 } from '../../common';
 import { type DirectMcpServer } from '../../direct/direct.types';
@@ -157,7 +156,7 @@ describe('providers a plugin installed on one app contributes', () => {
     server = await FrontMcpInstance.createDirect({
       info: { name: 'ledger-isolation', version: '1.0.0' },
       apps: [BillingApp, SupportApp],
-      plugins: [AuditTrailPlugin.init({ owner: 'server' })] as FrontMcpConfigInput['plugins'],
+      plugins: [AuditTrailPlugin.init({ owner: 'server' })],
       logging: { level: LogLevel.Off },
     });
   });

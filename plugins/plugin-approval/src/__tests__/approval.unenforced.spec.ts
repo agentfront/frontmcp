@@ -52,9 +52,6 @@ class RefundsAgent extends AgentContext {
 
 const CALLER: DirectAuthContext = { sessionId: 'session-alice', user: { sub: 'alice' } };
 
-/** Server-level plugins: the config type names plugin classes, and an `init()` result is accepted at run time. */
-const serverPlugins = (...plugins: unknown[]) => plugins as FrontMcpConfigInput['plugins'];
-
 function config(app: Record<string, unknown>, extra: Partial<FrontMcpConfigInput> = {}): FrontMcpConfigInput {
   @App({ id: 'repos', name: 'Repos', ...app })
   class ReposApp {}
@@ -94,10 +91,7 @@ describe('approval without an approval plugin', () => {
     const storage = createMemoryStorage();
     await storage.connect();
     const server = await FrontMcpInstance.createDirect(
-      config(
-        { tools: [DeleteRepoTool] },
-        { plugins: serverPlugins(ApprovalPlugin.init({ storageInstance: storage })) },
-      ),
+      config({ tools: [DeleteRepoTool] }, { plugins: [ApprovalPlugin.init({ storageInstance: storage })] }),
     );
     try {
       expect(await outcome(server, 'delete_repo')).toBe('refused');

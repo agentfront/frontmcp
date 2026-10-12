@@ -79,10 +79,8 @@ async function readMcpResult<T = Record<string, unknown>>(res: Response): Promis
   return JSON.parse(text) as T;
 }
 
-type DisposableInstance = FrontMcpInstance & { dispose?: () => Promise<void> };
-
 describe('createWebFetchHandler (Cloudflare Worker path)', () => {
-  let instance: DisposableInstance;
+  let instance: FrontMcpInstance;
   let handler: WebFetchHandler;
 
   beforeAll(async () => {
@@ -98,7 +96,7 @@ describe('createWebFetchHandler (Cloudflare Worker path)', () => {
   });
 
   afterAll(async () => {
-    await instance?.dispose?.();
+    await instance?.shutdown();
   });
 
   it('answers liveness probes without spinning up the MCP server', async () => {
@@ -159,10 +157,10 @@ describe('createWebFetchHandler (Cloudflare Worker path)', () => {
 });
 
 describe('createWebFetchHandler initialize', () => {
-  let instance: DisposableInstance | undefined;
+  let instance: FrontMcpInstance | undefined;
 
   afterAll(async () => {
-    await instance?.dispose?.();
+    await instance?.shutdown();
   });
 
   it("answers with the server's instructions and info.title, as the Node server does", async () => {
@@ -182,7 +180,7 @@ describe('createWebFetchHandler initialize', () => {
 });
 
 describe('createWebFetchHandler config-driven routing, CORS & SSE', () => {
-  const instances: DisposableInstance[] = [];
+  const instances: FrontMcpInstance[] = [];
 
   async function scopeFor(extra: Record<string, unknown>): Promise<Scope> {
     const instance = await FrontMcpInstance.createForGraph({
@@ -195,7 +193,7 @@ describe('createWebFetchHandler config-driven routing, CORS & SSE', () => {
   }
 
   afterAll(async () => {
-    await Promise.all(instances.map((i) => i.dispose?.()));
+    await Promise.all(instances.map((i) => i.shutdown()));
   });
 
   it('defaults to the worker root `/` when http.entryPath is unset (one path, not both)', async () => {
@@ -284,7 +282,7 @@ describe('createWebFetchHandler config-driven routing, CORS & SSE', () => {
  * report — and it saves an operator that round trip.
  */
 describe('createWebFetchHandler misconfiguration reporting (#546)', () => {
-  let instance: DisposableInstance;
+  let instance: FrontMcpInstance;
   let scope: Scope;
 
   beforeAll(async () => {
@@ -296,7 +294,7 @@ describe('createWebFetchHandler misconfiguration reporting (#546)', () => {
   });
 
   afterAll(async () => {
-    await instance?.dispose?.();
+    await instance?.shutdown();
   });
 
   afterEach(() => {

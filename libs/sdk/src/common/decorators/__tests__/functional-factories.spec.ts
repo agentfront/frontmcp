@@ -85,7 +85,7 @@ describe('functional factories (decorator-free assembly via app())', () => {
     handler = createWebFetchHandler(instance.getScopes()[0] as Scope, { entryPath: '/mcp' });
   });
   afterAll(async () => {
-    await (instance as FrontMcpInstance & { dispose?: () => Promise<void> })?.dispose?.();
+    await instance?.shutdown();
   });
 
   // The web handler answers with the MCP Streamable-HTTP transport, which emits
