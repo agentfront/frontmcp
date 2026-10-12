@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 
+import type { Token } from '@frontmcp/di';
+
 import { type ProviderType } from '../../common/interfaces';
 import { ProviderScope } from '../../common/metadata';
 import { FrontMcpContext } from '../../context/frontmcp-context';
@@ -26,7 +28,7 @@ function contextProvider(
 }
 
 /** A request whose session the server verified, so CONTEXT instances are cached for it across calls. */
-function verifiedSession(): Map<symbol, unknown> {
+function verifiedSession(): Map<Token, unknown> {
   const context = new FrontMcpContext({
     requestId: 'context-source-request',
     sessionId: SESSION_KEY,

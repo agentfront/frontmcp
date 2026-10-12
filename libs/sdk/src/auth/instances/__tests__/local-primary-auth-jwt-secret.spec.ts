@@ -11,6 +11,7 @@ import 'reflect-metadata';
 
 import { App } from '../../../common/decorators/app.decorator';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
+import type { Scope } from '../../../scope/scope.instance';
 
 @App({ id: 'jwt-secret-app', name: 'jwt-secret-app' })
 class JwtSecretApp {}
@@ -46,7 +47,7 @@ async function expectBoots(mode: 'public' | 'local'): Promise<void> {
   try {
     expect(instance.getScopes().length).toBeGreaterThan(0);
   } finally {
-    await Promise.all(instance.getScopes().map((scope) => scope.dispose()));
+    await Promise.all((instance.getScopes() as Scope[]).map((scope) => scope.dispose()));
   }
 }
 

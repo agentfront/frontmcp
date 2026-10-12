@@ -17,12 +17,12 @@ describe('runtime-context', () => {
   // ---- isEntryAvailable (pure matcher) ----
 
   describe('isEntryAvailable', () => {
-    const ctx: RuntimeContext = {
+    const ctx = {
       platform: 'darwin',
       runtime: 'node',
       deployment: 'standalone',
       env: 'production',
-    };
+    } as RuntimeContext;
 
     it('returns true when availability is undefined', () => {
       expect(isEntryAvailable(undefined, ctx)).toBe(true);

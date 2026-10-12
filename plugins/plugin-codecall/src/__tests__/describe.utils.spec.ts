@@ -1,5 +1,7 @@
 // file: libs/plugins/src/codecall/__tests__/describe.utils.spec.ts
 
+import type { JSONSchema } from '@frontmcp/lazy-zod';
+
 import {
   detectToolIntent,
   generateBasicExample,
@@ -18,6 +20,8 @@ import {
   jsonSchemaToNaturalLanguage,
   jsonSchemaToSignature,
 } from '../utils/describe.utils';
+
+type JsonSchema = JSONSchema.JSONSchema;
 
 describe('detectToolIntent', () => {
   describe('Create Intent Detection', () => {
@@ -158,7 +162,7 @@ describe('Intent-Specific Example Generators', () => {
     });
 
     it('should include required parameters from schema', () => {
-      const schema = {
+      const schema: JsonSchema = {
         type: 'object' as const,
         properties: {
           email: { type: 'string' },
@@ -181,7 +185,7 @@ describe('Intent-Specific Example Generators', () => {
     });
 
     it('should detect ID parameter', () => {
-      const schema = {
+      const schema: JsonSchema = {
         type: 'object' as const,
         properties: {
           id: { type: 'string' },
@@ -195,7 +199,7 @@ describe('Intent-Specific Example Generators', () => {
     });
 
     it('should detect userId parameter', () => {
-      const schema = {
+      const schema: JsonSchema = {
         type: 'object' as const,
         properties: {
           userId: { type: 'string' },
@@ -230,7 +234,7 @@ describe('Intent-Specific Example Generators', () => {
     });
 
     it('should include ID parameter when present', () => {
-      const schema = {
+      const schema: JsonSchema = {
         type: 'object' as const,
         properties: {
           id: { type: 'string' },
@@ -253,7 +257,7 @@ describe('Intent-Specific Example Generators', () => {
     });
 
     it('should detect ID parameter', () => {
-      const schema = {
+      const schema: JsonSchema = {
         type: 'object' as const,
         properties: {
           id: { type: 'string' },
@@ -275,7 +279,7 @@ describe('Intent-Specific Example Generators', () => {
     });
 
     it('should detect query parameter', () => {
-      const schema = {
+      const schema: JsonSchema = {
         type: 'object' as const,
         properties: {
           query: { type: 'string' },
@@ -287,7 +291,7 @@ describe('Intent-Specific Example Generators', () => {
     });
 
     it('should detect search parameter', () => {
-      const schema = {
+      const schema: JsonSchema = {
         type: 'object' as const,
         properties: {
           searchTerm: { type: 'string' },
@@ -332,7 +336,7 @@ describe('generateSmartExample', () => {
   });
 
   it('should use pagination example for list tools with pagination params', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: {
         limit: { type: 'number' },
@@ -353,7 +357,7 @@ describe('generateSmartExample', () => {
 
 describe('hasPaginationParams', () => {
   it('should return true for schemas with limit parameter', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: { limit: { type: 'number' } },
     };
@@ -361,7 +365,7 @@ describe('hasPaginationParams', () => {
   });
 
   it('should return true for schemas with offset parameter', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: { offset: { type: 'number' } },
     };
@@ -369,7 +373,7 @@ describe('hasPaginationParams', () => {
   });
 
   it('should return true for schemas with page parameter', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: { page: { type: 'number' } },
     };
@@ -377,7 +381,7 @@ describe('hasPaginationParams', () => {
   });
 
   it('should return true for schemas with cursor parameter', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: { cursor: { type: 'string' } },
     };
@@ -385,7 +389,7 @@ describe('hasPaginationParams', () => {
   });
 
   it('should return false for schemas without pagination params', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: { id: { type: 'string' } },
     };
@@ -617,10 +621,10 @@ describe('jsonSchemaToSignature', () => {
   });
 
   it('should handle schema with boolean property schema', () => {
-    const inputSchema = {
+    const inputSchema: JsonSchema = {
       type: 'object' as const,
       properties: {
-        valid: true as unknown,
+        valid: true,
         data: { type: 'string' as const },
       },
     };
@@ -766,7 +770,7 @@ describe('jsonSchemaToNaturalLanguage', () => {
   });
 
   it('should handle schema without type', () => {
-    const schema = { description: undefined } as unknown;
+    const schema: JsonSchema = { description: undefined };
 
     const result = jsonSchemaToNaturalLanguage(schema, 'input');
     expect(result).toBe('Takes a value');
@@ -951,10 +955,10 @@ describe('generateBasicExample', () => {
   });
 
   it('should skip boolean property schemas', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: {
-        valid: true as unknown,
+        valid: true,
       },
       required: ['valid'],
     };
@@ -1063,7 +1067,7 @@ describe('generateFilterExample', () => {
 
 describe('hasFilterParams', () => {
   it('should return true for schemas with filter parameter', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: { filter: { type: 'string' } },
     };
@@ -1071,7 +1075,7 @@ describe('hasFilterParams', () => {
   });
 
   it('should return true for schemas with query parameter', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: { query: { type: 'string' } },
     };
@@ -1079,7 +1083,7 @@ describe('hasFilterParams', () => {
   });
 
   it('should return true for schemas with search parameter', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: { searchTerm: { type: 'string' } },
     };
@@ -1087,7 +1091,7 @@ describe('hasFilterParams', () => {
   });
 
   it('should return true for schemas with status parameter', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: { status: { type: 'string' } },
     };
@@ -1095,7 +1099,7 @@ describe('hasFilterParams', () => {
   });
 
   it('should return true for schemas with type parameter', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: { type: { type: 'string' } },
     };
@@ -1103,7 +1107,7 @@ describe('hasFilterParams', () => {
   });
 
   it('should return true for schemas with role parameter', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: { role: { type: 'string' } },
     };
@@ -1111,7 +1115,7 @@ describe('hasFilterParams', () => {
   });
 
   it('should return false for schemas without filter params', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: { id: { type: 'string' }, name: { type: 'string' } },
     };
@@ -1135,7 +1139,7 @@ describe('hasFilterParams', () => {
 
 describe('getFilterProperties', () => {
   it('should return filter-like property names', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: {
         id: { type: 'string' },
@@ -1153,7 +1157,7 @@ describe('getFilterProperties', () => {
   });
 
   it('should return properties containing "filter"', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: {
         userFilter: { type: 'string' },
@@ -1167,7 +1171,7 @@ describe('getFilterProperties', () => {
   });
 
   it('should return properties containing "query"', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: {
         searchQuery: { type: 'string' },
@@ -1179,7 +1183,7 @@ describe('getFilterProperties', () => {
   });
 
   it('should return type and role properties', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: {
         type: { type: 'string' },
@@ -1207,7 +1211,7 @@ describe('getFilterProperties', () => {
   });
 
   it('should return empty array for schema with no filter params', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: {
         id: { type: 'string' },
@@ -1296,11 +1300,11 @@ describe('generateUpdateExample edge cases', () => {
   });
 
   it('should skip boolean property schemas in update fields', () => {
-    const schema = {
+    const schema: JsonSchema = {
       type: 'object' as const,
       properties: {
         id: { type: 'string' as const },
-        valid: true as unknown,
+        valid: true,
         name: { type: 'string' as const },
       },
       required: ['id'],

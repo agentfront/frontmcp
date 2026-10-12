@@ -27,8 +27,8 @@ describe('tasks/cancel under protocol 2026-07-28', () => {
   let server: TestFetchServer;
   const detachedRunner: jest.Mocked<TaskRunner> = {
     kind: 'cli',
-    run: jest.fn(async () => undefined),
-    cancel: jest.fn(async () => undefined),
+    run: jest.fn<Promise<void>, Parameters<TaskRunner['run']>>(async () => undefined),
+    cancel: jest.fn<Promise<void>, Parameters<TaskRunner['cancel']>>(async () => undefined),
   };
 
   beforeAll(async () => {

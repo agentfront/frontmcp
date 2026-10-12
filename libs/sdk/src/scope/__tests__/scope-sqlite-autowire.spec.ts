@@ -9,7 +9,7 @@ import 'reflect-metadata';
 
 import { App } from '../../common/decorators/app.decorator';
 import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
-import { ProviderScope } from '../../common/types';
+import { ProviderScope } from '../../common/metadata';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 
 // Mock the storage-sqlite package so unit tests don't pull in better-sqlite3.

@@ -373,9 +373,9 @@ describe('ToolForm', () => {
       const color = container.querySelector('#field-color') as HTMLSelectElement;
 
       expect(note.value).toBe('');
-      expect([...note.options].map((o) => o.value)).toEqual(['', 'a', 'b']);
+      expect(Array.from(note.options).map((o) => o.value)).toEqual(['', 'a', 'b']);
       // A required enum has no empty choice
-      expect([...color.options].map((o) => o.value)).toEqual(['red', 'green']);
+      expect(Array.from(color.options).map((o) => o.value)).toEqual(['red', 'green']);
     });
 
     it('submits an optional enum once the user picks a value, and leaves it out again when cleared', () => {

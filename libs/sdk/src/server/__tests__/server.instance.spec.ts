@@ -39,6 +39,12 @@ jest.mock('../adapters/express.host.adapter', () => {
   };
 });
 
+type ServerConfig = ConstructorParameters<typeof FrontMcpServerInstance>[0];
+
+function createServer(config: Omit<ServerConfig, 'bodyLimit'>): FrontMcpServerInstance {
+  return new FrontMcpServerInstance(config as ServerConfig);
+}
+
 describe('FrontMcpServerInstance', () => {
   beforeEach(() => {
     capturedAdapterArgs = [];
@@ -50,20 +56,20 @@ describe('FrontMcpServerInstance', () => {
     // reflected, so any page the user visited could read a local server's responses. A server that
     // wants cross-origin browser access now says so.
     it('sends NO CORS headers when cors is not specified — same-origin only', () => {
-      new FrontMcpServerInstance({ port: 3001, entryPath: '' });
+      createServer({ port: 3001, entryPath: '' });
 
       expect(capturedAdapterArgs).toHaveLength(1);
       expect(capturedAdapterArgs[0]).not.toHaveProperty('cors');
     });
 
     it('still honours an explicit permissive CORS config — the way back', () => {
-      new FrontMcpServerInstance({ port: 3001, entryPath: '', cors: { origin: true } });
+      createServer({ port: 3001, entryPath: '', cors: { origin: true } });
 
       expect(capturedAdapterArgs[0]).toMatchObject({ cors: { origin: true } });
     });
 
     it('should pass empty options when cors is false', () => {
-      new FrontMcpServerInstance({ port: 3001, entryPath: '', cors: false });
+      createServer({ port: 3001, entryPath: '', cors: false });
 
       expect(capturedAdapterArgs).toHaveLength(1);
       expect(capturedAdapterArgs[0]).not.toHaveProperty('cors');
@@ -71,14 +77,14 @@ describe('FrontMcpServerInstance', () => {
 
     it('should pass custom cors config through to adapter', () => {
       const customCors = { origin: 'https://example.com', credentials: true, maxAge: 600 };
-      new FrontMcpServerInstance({ port: 3001, entryPath: '', cors: customCors });
+      createServer({ port: 3001, entryPath: '', cors: customCors });
 
       expect(capturedAdapterArgs).toHaveLength(1);
       expect(capturedAdapterArgs[0]).toMatchObject({ cors: customCors });
     });
 
     it('should pass empty cors object through to adapter', () => {
-      new FrontMcpServerInstance({ port: 3001, entryPath: '', cors: {} });
+      createServer({ port: 3001, entryPath: '', cors: {} });
 
       expect(capturedAdapterArgs).toHaveLength(1);
       expect(capturedAdapterArgs[0]).toMatchObject({ cors: {} });
@@ -86,7 +92,7 @@ describe('FrontMcpServerInstance', () => {
 
     it('should pass cors with array of origins', () => {
       const customCors = { origin: ['https://a.com', 'https://b.com'] };
-      new FrontMcpServerInstance({ port: 3001, entryPath: '', cors: customCors });
+      createServer({ port: 3001, entryPath: '', cors: customCors });
 
       expect(capturedAdapterArgs).toHaveLength(1);
       expect(capturedAdapterArgs[0]).toMatchObject({ cors: customCors });
@@ -99,19 +105,19 @@ describe('FrontMcpServerInstance', () => {
     // to be the resolved ones. Predicting them at construction instead left a
     // direct caller's loopback listener unprotected.
     it('starts on the resolved bind address and port', async () => {
-      await new FrontMcpServerInstance({ port: 3001, entryPath: '' }).start();
+      await createServer({ port: 3001, entryPath: '' }).start();
 
       expect(capturedStartArgs).toEqual([3001, '127.0.0.1']);
     });
 
     it('starts on the socket path instead of a port for a unix-socket server', async () => {
-      await new FrontMcpServerInstance({ port: 3001, entryPath: '', socketPath: '/tmp/frontmcp.sock' }).start();
+      await createServer({ port: 3001, entryPath: '', socketPath: '/tmp/frontmcp.sock' }).start();
 
       expect(capturedStartArgs[0]).toBe('/tmp/frontmcp.sock');
     });
 
     it('honours an explicit bind address override', async () => {
-      await new FrontMcpServerInstance({ port: 3001, entryPath: '', security: { bindAddress: 'all' } }).start();
+      await createServer({ port: 3001, entryPath: '', security: { bindAddress: 'all' } }).start();
 
       expect(capturedStartArgs).toEqual([3001, '0.0.0.0']);
     });
@@ -119,14 +125,14 @@ describe('FrontMcpServerInstance', () => {
     it('audits for production from the NODE_ENV the deployment sets, not a bundler-folded read', async () => {
       jest.mocked(isProduction).mockReturnValueOnce(true);
 
-      await new FrontMcpServerInstance({ port: 3001, entryPath: '' }).start();
+      await createServer({ port: 3001, entryPath: '' }).start();
 
       expect(process.env['NODE_ENV']).not.toBe('production');
       expect(auditSecurityDefaults).toHaveBeenLastCalledWith(expect.any(Object), true);
     });
 
     it('does not hand the adapter a predicted listener', () => {
-      new FrontMcpServerInstance({ port: 3001, entryPath: '' });
+      createServer({ port: 3001, entryPath: '' });
 
       expect(capturedAdapterArgs[0]).not.toHaveProperty('listen.bindAddress');
       expect(capturedAdapterArgs[0]).not.toHaveProperty('listen.port');
@@ -144,7 +150,7 @@ describe('FrontMcpServerInstance', () => {
       };
       const factory = jest.fn().mockReturnValue(mockHost);
 
-      const instance = new FrontMcpServerInstance({
+      const instance = createServer({
         port: 3001,
         entryPath: '',
         hostFactory: factory,
@@ -168,7 +174,7 @@ describe('FrontMcpServerInstance', () => {
         start: jest.fn(),
       };
 
-      const instance = new FrontMcpServerInstance({
+      const instance = createServer({
         port: 3001,
         entryPath: '',
         hostFactory: mockHost as unknown as FrontMcpServer,
@@ -182,7 +188,7 @@ describe('FrontMcpServerInstance', () => {
 
   describe('registerRoute delegation (custom http.routes plumbing)', () => {
     it('delegates registerRoute to the host adapter', () => {
-      const instance = new FrontMcpServerInstance({ port: 3001, entryPath: '' });
+      const instance = createServer({ port: 3001, entryPath: '' });
       const spy = jest.spyOn(instance.host, 'registerRoute');
       const handler = jest.fn();
 
@@ -195,7 +201,7 @@ describe('FrontMcpServerInstance', () => {
       // routes are registered from the scope, not the server instance — the
       // server simply carries them through on `config`.
       const handler = jest.fn();
-      const instance = new FrontMcpServerInstance({
+      const instance = createServer({
         port: 3001,
         entryPath: '',
         routes: [{ method: 'GET', path: '/ping', handler }],
@@ -210,7 +216,7 @@ describe('FrontMcpServerInstance', () => {
 
   describe('health endpoint', () => {
     it('should register health route on prepare()', () => {
-      const instance = new FrontMcpServerInstance({ port: 3001, entryPath: '' });
+      const instance = createServer({ port: 3001, entryPath: '' });
       const registerSpy = jest.spyOn(instance.host, 'registerRoute');
 
       instance.prepare();
@@ -219,7 +225,7 @@ describe('FrontMcpServerInstance', () => {
     });
 
     it('should register health route only once on multiple prepare() calls', () => {
-      const instance = new FrontMcpServerInstance({ port: 3001, entryPath: '' });
+      const instance = createServer({ port: 3001, entryPath: '' });
       const registerSpy = jest.spyOn(instance.host, 'registerRoute');
 
       instance.prepare();

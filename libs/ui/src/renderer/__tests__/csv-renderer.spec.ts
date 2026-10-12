@@ -82,12 +82,12 @@ describe('CsvRenderer', () => {
 
     it('should use default className', () => {
       const element = renderer.render('name,age\nAlice,30');
-      expect(element.props.className).toBe('fmcp-csv-table');
+      expect((element.props as { className: string }).className).toBe('fmcp-csv-table');
     });
 
     it('should use custom className', () => {
       const element = renderer.render('name,age\nAlice,30', { className: 'custom' });
-      expect(element.props.className).toBe('custom');
+      expect((element.props as { className: string }).className).toBe('custom');
     });
 
     it('should accept rendererOptions pageSize', () => {

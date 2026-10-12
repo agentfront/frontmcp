@@ -12,7 +12,18 @@ import * as path from 'node:path';
 import { z } from '@frontmcp/lazy-zod';
 import { mkdtemp, rm } from '@frontmcp/utils';
 
-import { App, DynamicPlugin, Job, JobContext, LogLevel, Plugin, Tool, ToolContext, Workflow } from '../../common';
+import {
+  App,
+  DynamicPlugin,
+  Job,
+  JobContext,
+  LogLevel,
+  Plugin,
+  Tool,
+  ToolContext,
+  Workflow,
+  type PluginType,
+} from '../../common';
 import { create } from '../../direct/create';
 import { FrontMcpInstance } from '../front-mcp';
 
@@ -66,7 +77,7 @@ async function intervalsLeftRunning(run: () => Promise<void>): Promise<string[]>
   return [...running.values()];
 }
 
-async function serveHelpDesk(options: Record<string, unknown> = {}, plugins: unknown[] = []) {
+async function serveHelpDesk(options: Record<string, unknown> = {}, plugins: PluginType[] = []) {
   @App({ id: 'help-desk', name: 'Help Desk', tools: [PingTool], jobs: [CountJob], workflows: [CountFlow], plugins })
   class HelpDeskApp {}
   return FrontMcpInstance.createDirect({
@@ -130,11 +141,11 @@ describe('dispose() releases the server (#821)', () => {
 
     const first = await serveHelpDesk({}, [record]);
     await first.dispose();
-    expect(Object.prototype.hasOwnProperty.call(record.useValue, 'get')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call((record as { useValue: object }).useValue, 'get')).toBe(false);
 
     const second = await serveHelpDesk({}, [record]);
     await expect(second.listTools()).resolves.toEqual(expect.objectContaining({ tools: expect.any(Array) }));
     await second.dispose();
-    expect(Object.prototype.hasOwnProperty.call(record.useValue, 'get')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call((record as { useValue: object }).useValue, 'get')).toBe(false);
   });
 });

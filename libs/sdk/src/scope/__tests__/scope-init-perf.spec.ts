@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 
+import type { ToolEntry as ToolEntryBase } from '../../common';
+
 /**
  * Performance tests for Scope initialization.
  * Validates that parallel batch initialization is faster than sequential.
@@ -163,7 +165,9 @@ describe('Scope initialization performance', () => {
   });
 
   it('ToolEntry should cache getInputJsonSchema result', () => {
-    const { ToolEntry } = require('../../common');
+    const { ToolEntry } = require('../../common') as {
+      ToolEntry: new (record: unknown) => Pick<ToolEntryBase, 'getInputJsonSchema'>;
+    };
 
     // Create a minimal tool entry
     class TestToolEntry extends ToolEntry {

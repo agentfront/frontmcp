@@ -76,6 +76,8 @@ function createMockToolContext() {
   };
 }
 
+type ToolExecutor = (input: unknown, toolCtx: ReturnType<typeof createMockToolContext>) => Promise<unknown>;
+
 describe('createOpenApiTool - Tool Execution', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -121,7 +123,7 @@ describe('createOpenApiTool - Tool Execution', () => {
       );
 
       // Get the executor function
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
 
       await executor({ id: '123' }, toolCtx);
@@ -136,7 +138,7 @@ describe('createOpenApiTool - Tool Execution', () => {
       const headersMapper = jest.fn((ctx, headers) => {
         const result = new Map(headers);
         result.set('X-Custom-Header', 'custom-value');
-        return result;
+        return result as unknown as Headers;
       });
 
       const tool = createOpenApiTool(
@@ -151,7 +153,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
       await executor({ id: '123' }, toolCtx);
 
@@ -176,7 +178,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
 
       await expect(executor({ id: '123' }, toolCtx)).rejects.toThrow(
@@ -202,7 +204,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
 
       await expect(executor({ id: '123' }, toolCtx)).rejects.toThrow('string error');
@@ -237,7 +239,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
       await executor({ name: 'Test' }, toolCtx);
 
@@ -269,7 +271,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
 
       await expect(executor({ name: 'Test' }, toolCtx)).rejects.toThrow(
@@ -299,7 +301,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
       await executor({ data: 'test' }, toolCtx);
 
@@ -334,7 +336,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
 
       await expect(executor({ a: 1 }, toolCtx)).rejects.toThrow('Failed to serialize request body');
@@ -363,7 +365,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
 
       await expect(executor({ data: 'x'.repeat(1000) }, toolCtx)).rejects.toThrow('exceeds maximum allowed');
@@ -392,7 +394,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
 
       await expect(executor({ id: '123' }, toolCtx)).rejects.toThrow('Request timeout');
@@ -414,7 +416,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
 
       await expect(executor({ id: '123' }, toolCtx)).rejects.toThrow('Network error');
@@ -462,7 +464,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
       await executor({ id: '123' }, toolCtx);
 
@@ -499,7 +501,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
 
       await expect(executor({ id: '123' }, toolCtx)).rejects.toThrow(
@@ -535,7 +537,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
 
       await expect(executor({ id: '123' }, toolCtx)).rejects.toThrow('reserved keys');
@@ -569,7 +571,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
 
       // Pass non-object input
@@ -604,7 +606,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
 
       await expect(executor(null as any, toolCtx)).rejects.toThrow('expected object, received null');
@@ -652,7 +654,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
       await executor({ id: '123' }, toolCtx);
 
@@ -698,7 +700,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
       await executor({ id: '123' }, toolCtx);
 
@@ -727,7 +729,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
       await executor({ data: 'test' }, toolCtx);
 
@@ -755,7 +757,7 @@ describe('createOpenApiTool - Tool Execution', () => {
         mockLogger,
       );
 
-      const executor = tool();
+      const executor = tool() as unknown as ToolExecutor;
       const toolCtx = createMockToolContext();
       await executor({ data: 'test' }, toolCtx);
 

@@ -2,7 +2,7 @@ import { PublicMcpError, type FrontMcpContext } from '@frontmcp/sdk';
 
 import { createRememberAccessor, RememberAccessor } from '../providers/remember-accessor.provider';
 import type { RememberStoreInterface } from '../providers/remember-store.interface';
-import type { RememberPluginOptions } from '../remember.types';
+import type { MemoryRememberPluginOptions, PayloadBrandType, RememberPluginOptions } from '../remember.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mocks
@@ -67,7 +67,7 @@ function createMockContext(overrides: Partial<FrontMcpContext> = {}): FrontMcpCo
   } as unknown as FrontMcpContext;
 }
 
-function createConfig(overrides: Partial<RememberPluginOptions> = {}): RememberPluginOptions {
+function createConfig(overrides: Partial<MemoryRememberPluginOptions> = {}): RememberPluginOptions {
   return {
     type: 'memory',
     keyPrefix: 'remember:',
@@ -190,7 +190,7 @@ describe('RememberAccessor', () => {
 
   describe('getEntry', () => {
     it('returns full entry with metadata', async () => {
-      await accessor.set('key', 'value', { brand: 'test' });
+      await accessor.set('key', 'value', { brand: 'test' as PayloadBrandType });
       const entry = await accessor.getEntry<string>('key');
 
       expect(entry).toBeDefined();
@@ -304,7 +304,7 @@ describe('RememberAccessor', () => {
 
   describe('update', () => {
     it('updates existing value and preserves metadata', async () => {
-      await accessor.set('key', 'original', { brand: 'test', metadata: { v: 1 } });
+      await accessor.set('key', 'original', { brand: 'test' as PayloadBrandType, metadata: { v: 1 } });
 
       const beforeUpdate = Date.now();
       await new Promise((r) => setTimeout(r, 10));
@@ -437,7 +437,7 @@ describe('RememberAccessor', () => {
 
     it('uses default prefix when not specified', async () => {
       const noPrefix = createConfig();
-      delete (noPrefix as Record<string, unknown>).keyPrefix;
+      delete noPrefix.keyPrefix;
       const accessor2 = new RememberAccessor(store, ctx, noPrefix);
 
       await accessor2.set('key', 'value');

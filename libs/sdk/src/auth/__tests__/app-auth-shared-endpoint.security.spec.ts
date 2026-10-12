@@ -5,7 +5,7 @@
  */
 import 'reflect-metadata';
 
-import { App, Tool, ToolContext } from '../../common';
+import { App, Tool, ToolContext, type AnnotatedClass } from '../../common';
 import { AuthConfigurationError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 
@@ -45,7 +45,12 @@ describe("App.remote({ remoteAuth: { mode: 'forward' } })", () => {
     await expect(
       FrontMcpInstance.createDirect({
         info: { name: 'gw', version: '1.0.0' },
-        apps: [App.remote('http://127.0.0.1:9/mcp', { name: 'upstream', remoteAuth: { mode: 'forward' } })],
+        apps: [
+          App.remote('http://127.0.0.1:9/mcp', {
+            name: 'upstream',
+            remoteAuth: { mode: 'forward' },
+          }) as unknown as AnnotatedClass,
+        ],
       }),
     ).rejects.toThrow("remoteAuth: { mode: 'forward' } on upstream would send the remote a token");
   });
@@ -65,7 +70,12 @@ describe('the suggestion on a refused auth configuration', () => {
     const suggestion = await suggestionFor({
       info: { name: 'gw', version: '1.0.0' },
       auth: { mode: 'local' },
-      apps: [App.remote('http://127.0.0.1:9/mcp', { name: 'upstream', remoteAuth: { mode: 'forward' } })],
+      apps: [
+        App.remote('http://127.0.0.1:9/mcp', {
+          name: 'upstream',
+          remoteAuth: { mode: 'forward' },
+        }) as unknown as AnnotatedClass,
+      ],
     });
 
     expect(suggestion).toContain("remoteAuth: { mode: 'static'");

@@ -8,10 +8,12 @@
  */
 
 import 'reflect-metadata';
+// prettier-ignore
 import { ResourceInstance } from '../resource.instance';
+
 import { ResourceTemplate } from '../../common/decorators/resource.decorator';
-import { normalizeResourceTemplate } from '../resource.utils';
 import { ResourceContext } from '../../common/interfaces/resource.interface';
+import { normalizeResourceTemplate } from '../resource.utils';
 
 // Simple class to use as a DI token (Token = Type<T> | Reference<T>)
 class TestService {
@@ -128,7 +130,7 @@ describe('ResourceInstance - getArgumentCompleter', () => {
           return { text: 'content' };
         }
 
-        getArgumentCompleter(argName: string) {
+        override getArgumentCompleter(argName: string) {
           if (argName === 'thingId') {
             return async (partial: string) => {
               const service = this.get(TestService);
@@ -164,7 +166,7 @@ describe('ResourceInstance - getArgumentCompleter', () => {
           return { text: 'content' };
         }
 
-        getArgumentCompleter(argName: string) {
+        override getArgumentCompleter(argName: string) {
           if (argName === 'userId') {
             return async (partial: string) => ({ values: [] as string[] });
           }
@@ -197,7 +199,7 @@ describe('ResourceInstance - getArgumentCompleter', () => {
           return { values: ['from-convention'] };
         }
 
-        getArgumentCompleter(argName: string) {
+        override getArgumentCompleter(argName: string) {
           if (argName === 'itemId') {
             return async (partial: string) => ({ values: ['from-override'] });
           }

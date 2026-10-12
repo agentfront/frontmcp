@@ -2,9 +2,14 @@
 
 import 'reflect-metadata';
 
+import type { ProviderValueType } from '@frontmcp/sdk';
+
 import { resetDashboardOptions } from '../dashboard.config-store';
 import DashboardPlugin from '../dashboard.plugin';
 import { DashboardConfigToken } from '../dashboard.symbol';
+import type { DashboardPluginOptions } from '../dashboard.types';
+
+type ConfigProvider = ProviderValueType<DashboardPluginOptions>;
 
 describe('DashboardPlugin', () => {
   // Dashboard options are process-wide, and a conflicting AUTH configuration is
@@ -66,7 +71,7 @@ describe('DashboardPlugin', () => {
 
   describe('dynamicProviders', () => {
     it('should return providers with config token', () => {
-      const providers = DashboardPlugin.dynamicProviders({});
+      const providers = DashboardPlugin.dynamicProviders({}) as ConfigProvider[];
 
       expect(providers.length).toBe(1);
       expect(providers[0].provide).toBe(DashboardConfigToken);
@@ -77,7 +82,7 @@ describe('DashboardPlugin', () => {
       const providers = DashboardPlugin.dynamicProviders({
         basePath: '/admin',
         auth: { enabled: true, token: 'secret' },
-      });
+      }) as ConfigProvider[];
 
       const configProvider = providers[0];
       expect(configProvider.useValue.basePath).toBe('/admin');
@@ -86,7 +91,7 @@ describe('DashboardPlugin', () => {
     });
 
     it('should apply defaults to empty options', () => {
-      const providers = DashboardPlugin.dynamicProviders({});
+      const providers = DashboardPlugin.dynamicProviders({}) as ConfigProvider[];
 
       const configProvider = providers[0];
       expect(configProvider.useValue.basePath).toBe('/dashboard');
@@ -96,7 +101,7 @@ describe('DashboardPlugin', () => {
     it('should parse cdn options with defaults', () => {
       const providers = DashboardPlugin.dynamicProviders({
         cdn: { react: 'https://custom.cdn/react' },
-      });
+      }) as ConfigProvider[];
 
       const configProvider = providers[0];
       expect(configProvider.useValue.cdn.react).toBe('https://custom.cdn/react');

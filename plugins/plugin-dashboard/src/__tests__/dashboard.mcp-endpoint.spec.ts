@@ -13,7 +13,7 @@ import 'reflect-metadata';
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { App, FrontMcpInstance, LogLevel, Tool, ToolContext } from '@frontmcp/sdk';
+import { App, FrontMcpInstance, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '@frontmcp/sdk';
 
 import { DashboardApp } from '../app/dashboard.app';
 import { resetDashboardOptions } from '../dashboard.config-store';
@@ -48,7 +48,7 @@ async function startServer(options: DashboardPluginOptionsInput): Promise<Runnin
     apps: [LabApp, DashboardApp],
     plugins: [DashboardPlugin.init(options)],
     logging: { level: LogLevel.Off, enableConsole: false },
-  })) as http.RequestListener;
+  } as FrontMcpConfigInput)) as http.RequestListener;
   const server = http.createServer(app);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
@@ -415,7 +415,7 @@ describe('Dashboard tools without the HTTP gate', () => {
       apps: [DashboardApp],
       plugins: [DashboardPlugin.init(options)],
       logging: { level: LogLevel.Off, enableConsole: false },
-    });
+    } as FrontMcpConfigInput);
   }
 
   afterAll(() => resetDashboardOptions());
@@ -464,7 +464,7 @@ describe('Dashboard MCP endpoint through createFetchHandler', () => {
       apps: [DashboardApp],
       plugins: [DashboardPlugin.init(options)],
       logging: { level: LogLevel.Off, enableConsole: false },
-    });
+    } as FrontMcpConfigInput);
   }
 
   function graphRequest(headers: Record<string, string> = {}, path = '/dashboard'): Request {

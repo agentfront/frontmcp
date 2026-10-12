@@ -145,7 +145,7 @@ describe('session-id.utils', () => {
     it('should pass platform detection config when provided', () => {
       mockDetectPlatformFromUserAgent.mockReturnValue('cursor');
 
-      const config: PlatformDetectionConfig = { mappings: [{ pattern: 'custom', platform: 'cursor' }] };
+      const config = { mappings: [{ pattern: 'custom', platform: 'cursor' }] } as PlatformDetectionConfig;
       createSessionId('streamable-http', TEST_TOKEN, {
         userAgent: 'Custom-Client/1.0',
         platformDetectionConfig: config,

@@ -104,7 +104,7 @@ function getSyncFactory() {
     dev: true,
   });
   return (
-    providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+    providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
       useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
     }
   ).useFactory;

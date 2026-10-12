@@ -201,7 +201,7 @@ describe('SkilledOpenApiPlugin host-injected runtime deps (attach)', () => {
       requireSignature: false,
       dev: true,
     });
-    return providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+    return providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
       useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
     };
   }

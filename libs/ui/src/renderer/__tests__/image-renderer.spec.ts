@@ -80,12 +80,12 @@ describe('ImageRenderer', () => {
 
     it('should use provided className', () => {
       const element = renderer.render('https://example.com/photo.jpg', { className: 'custom' });
-      expect(element.props.className).toBe('custom');
+      expect((element.props as { className: string }).className).toBe('custom');
     });
 
     it('should use default className', () => {
       const element = renderer.render('https://example.com/photo.jpg');
-      expect(element.props.className).toBe('fmcp-image-content');
+      expect((element.props as { className: string }).className).toBe('fmcp-image-content');
     });
   });
 

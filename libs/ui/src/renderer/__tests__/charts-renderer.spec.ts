@@ -77,17 +77,17 @@ describe('ChartsRenderer', () => {
       const element = renderer.render('not valid json');
       expect(element).toBeTruthy();
       // Should be an Alert component
-      expect(element.props.severity).toBe('error');
+      expect((element.props as { severity: string }).severity).toBe('error');
     });
 
     it('should use default className for valid JSON', () => {
       const element = renderer.render(validChart);
-      expect(element.props.className).toBe('fmcp-chart-content');
+      expect((element.props as { className: string }).className).toBe('fmcp-chart-content');
     });
 
     it('should use custom className', () => {
       const element = renderer.render(validChart, { className: 'custom' });
-      expect(element.props.className).toBe('custom');
+      expect((element.props as { className: string }).className).toBe('custom');
     });
   });
 

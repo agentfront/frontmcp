@@ -61,6 +61,7 @@ export interface FrameWindow extends Window {
   eval(code: string): unknown;
   HTMLElement: typeof HTMLElement;
   MessageEvent: typeof MessageEvent;
+  CustomEvent: typeof CustomEvent;
   ResizeObserver?: unknown;
   __mcpAppsEnabled?: boolean;
   __mcpWidgetSizing?: Record<string, unknown>;

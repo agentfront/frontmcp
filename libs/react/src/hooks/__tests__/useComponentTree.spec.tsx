@@ -1,10 +1,15 @@
-import React from 'react';
 import { renderHook } from '@testing-library/react';
-import { useComponentTree } from '../useComponentTree';
+import React from 'react';
+
+import type { ReadResourceResult } from '@frontmcp/sdk';
+
+import { ComponentRegistry } from '../../components/ComponentRegistry';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
-import { ComponentRegistry } from '../../components/ComponentRegistry';
 import type { FrontMcpContextValue } from '../../types';
+import { useComponentTree } from '../useComponentTree';
+
+type TextResourceContents = Extract<ReadResourceResult['contents'][number], { text: string }>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -119,7 +124,7 @@ describe('useComponentTree', () => {
       expect(result.contents[0].uri).toBe('react://component-tree');
       expect(result.contents[0].mimeType).toBe('application/json');
 
-      const parsed = JSON.parse(result.contents[0].text as string);
+      const parsed = JSON.parse((result.contents[0] as TextResourceContents).text);
       expect(parsed).toEqual({ error: 'Root element not mounted' });
     });
 
@@ -148,7 +153,7 @@ describe('useComponentTree', () => {
 
       const resource = dynamicRegistry.findResource('react://component-tree')!;
       const result = await resource.read();
-      const tree = JSON.parse(result.contents[0].text as string);
+      const tree = JSON.parse((result.contents[0] as TextResourceContents).text);
 
       expect(tree.component).toBe('App');
       expect(tree.tag).toBe('div');
@@ -181,7 +186,7 @@ describe('useComponentTree', () => {
 
       const resource = dynamicRegistry.findResource('react://component-tree')!;
       const result = await resource.read();
-      const tree = JSON.parse(result.contents[0].text as string);
+      const tree = JSON.parse((result.contents[0] as TextResourceContents).text);
 
       // No props on the root or any child
       expect(tree.props).toBeUndefined();
@@ -200,7 +205,7 @@ describe('useComponentTree', () => {
 
       const resource = dynamicRegistry.findResource('react://component-tree')!;
       const result = await resource.read();
-      const tree = JSON.parse(result.contents[0].text as string);
+      const tree = JSON.parse((result.contents[0] as TextResourceContents).text);
 
       // Header has data-testid="hdr" and data-role="banner", but NOT data-component
       const header = tree.children[0];
@@ -222,7 +227,7 @@ describe('useComponentTree', () => {
 
       const resource = dynamicRegistry.findResource('react://component-tree')!;
       const result = await resource.read();
-      const tree = JSON.parse(result.contents[0].text as string);
+      const tree = JSON.parse((result.contents[0] as TextResourceContents).text);
 
       expect(tree.props).toBeUndefined();
     });
@@ -240,7 +245,7 @@ describe('useComponentTree', () => {
 
       const resource = dynamicRegistry.findResource('react://component-tree')!;
       const result = await resource.read();
-      const tree = JSON.parse(result.contents[0].text as string);
+      const tree = JSON.parse((result.contents[0] as TextResourceContents).text);
 
       expect(tree.props).toEqual({ 'data-value': '42' });
     });
@@ -264,7 +269,7 @@ describe('useComponentTree', () => {
 
       const resource = dynamicRegistry.findResource('react://component-tree')!;
       const result = await resource.read();
-      const tree = JSON.parse(result.contents[0].text as string);
+      const tree = JSON.parse((result.contents[0] as TextResourceContents).text);
 
       // Walk down to depth 4
       let node = tree;
@@ -290,7 +295,7 @@ describe('useComponentTree', () => {
 
       const resource = dynamicRegistry.findResource('react://component-tree')!;
       const result = await resource.read();
-      const tree = JSON.parse(result.contents[0].text as string);
+      const tree = JSON.parse((result.contents[0] as TextResourceContents).text);
 
       // depth 0 = root (div), depth 1 = child (section) — within limit
       expect(tree.tag).toBe('div');
@@ -311,7 +316,7 @@ describe('useComponentTree', () => {
 
       const resource = dynamicRegistry.findResource('react://component-tree')!;
       const result = await resource.read();
-      const tree = JSON.parse(result.contents[0].text as string);
+      const tree = JSON.parse((result.contents[0] as TextResourceContents).text);
 
       expect(tree.tag).toBe('div');
       expect(tree.children).toHaveLength(0);
@@ -329,7 +334,7 @@ describe('useComponentTree', () => {
 
       const resource = dynamicRegistry.findResource('react://component-tree')!;
       const result = await resource.read();
-      const tree = JSON.parse(result.contents[0].text as string);
+      const tree = JSON.parse((result.contents[0] as TextResourceContents).text);
 
       expect(tree.component).toBe('article');
       expect(tree.tag).toBe('article');
@@ -347,7 +352,7 @@ describe('useComponentTree', () => {
 
       const resource = dynamicRegistry.findResource('react://component-tree')!;
       const result = await resource.read();
-      const tree = JSON.parse(result.contents[0].text as string);
+      const tree = JSON.parse((result.contents[0] as TextResourceContents).text);
 
       expect(tree.component).toBe('div');
       expect(tree.tag).toBe('div');

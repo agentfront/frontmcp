@@ -4,6 +4,7 @@ import { type ReadResourceResult } from '@frontmcp/protocol';
 
 import { ResourceTemplate } from '../../common/decorators/resource.decorator';
 import { ResourceContext } from '../../common/interfaces';
+import type { ResourceTemplateMetadata } from '../../common/metadata';
 import { collectResourceTemplateMetadata, normalizeResourceTemplate } from '../resource.utils';
 
 const reportAuthorities = { roles: { any: ['finance'] } };
@@ -34,7 +35,8 @@ class InheritedNameKeysTemplate extends ResourceContext<{ reportId: string }> {
 
 describe('@ResourceTemplate metadata contributed by extensions', () => {
   it('keeps extension keys that share a name with Object.prototype members', () => {
-    const metadata = collectResourceTemplateMetadata(InheritedNameKeysTemplate) as Record<string, unknown>;
+    const metadata = collectResourceTemplateMetadata(InheritedNameKeysTemplate) as ResourceTemplateMetadata &
+      Record<string, unknown>;
     expect(Object.prototype.hasOwnProperty.call(metadata, 'toString') && metadata['toString']).toBe('extension-value');
     expect(Object.prototype.hasOwnProperty.call(metadata, 'valueOf') && metadata['valueOf']).toBe(
       'another-extension-value',

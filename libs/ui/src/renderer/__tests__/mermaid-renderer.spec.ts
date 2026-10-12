@@ -2,7 +2,7 @@
  * Mermaid Renderer Tests
  */
 
-import { MermaidRenderer, isMermaid } from '../mermaid';
+import { isMermaid, MermaidRenderer } from '../mermaid';
 
 describe('MermaidRenderer', () => {
   const renderer = new MermaidRenderer();
@@ -77,17 +77,17 @@ describe('MermaidRenderer', () => {
 
     it('should use default className', () => {
       const element = renderer.render('graph TD\n  A-->B');
-      expect(element.props.className).toBe('fmcp-mermaid-content');
+      expect((element.props as { className: string }).className).toBe('fmcp-mermaid-content');
     });
 
     it('should use custom className', () => {
       const element = renderer.render('graph TD\n  A-->B', { className: 'custom' });
-      expect(element.props.className).toBe('custom');
+      expect((element.props as { className: string }).className).toBe('custom');
     });
 
     it('should trim content', () => {
       const element = renderer.render('  graph TD\n  A-->B  ');
-      expect(element.props.definition).toBe('graph TD\n  A-->B');
+      expect((element.props as { definition: string }).definition).toBe('graph TD\n  A-->B');
     });
   });
 

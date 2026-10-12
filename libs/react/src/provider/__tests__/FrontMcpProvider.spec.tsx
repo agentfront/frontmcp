@@ -1,11 +1,17 @@
+import { act, render, renderHook, screen } from '@testing-library/react';
 import React from 'react';
-import { render, act, screen, renderHook } from '@testing-library/react';
-import type { DirectMcpServer, DirectClient } from '@frontmcp/sdk';
-import { FrontMcpProvider } from '../FrontMcpProvider';
-import { FrontMcpContext } from '../FrontMcpContext';
-import { serverRegistry } from '../../registry/ServerRegistry';
+
+import type { DirectClient, DirectMcpServer } from '@frontmcp/sdk';
+
 import { useFrontMcp } from '../../hooks/useFrontMcp';
+import { serverRegistry } from '../../registry/ServerRegistry';
 import type { StoreAdapter } from '../../types';
+import { FrontMcpContext } from '../FrontMcpContext';
+import { FrontMcpProvider as FrontMcpProviderComponent, type FrontMcpProviderProps } from '../FrontMcpProvider';
+
+const FrontMcpProvider = FrontMcpProviderComponent as React.FC<
+  Omit<FrontMcpProviderProps, 'children'> & { children?: React.ReactNode }
+>;
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 

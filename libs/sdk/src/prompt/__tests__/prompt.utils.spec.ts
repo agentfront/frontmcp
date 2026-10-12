@@ -1,12 +1,13 @@
 import 'reflect-metadata';
-import { normalizePrompt, collectPromptMetadata, buildParsedPromptResult, promptDiscoveryDeps } from '../prompt.utils';
-import { Prompt, prompt } from '../../common/decorators/prompt.decorator';
+
+import { FrontMcpPrompt, prompt } from '../../common/decorators/prompt.decorator';
 import { PromptKind } from '../../common/records';
+import { buildParsedPromptResult, collectPromptMetadata, normalizePrompt, promptDiscoveryDeps } from '../prompt.utils';
 
 describe('prompt.utils', () => {
   describe('collectPromptMetadata', () => {
     it('should collect metadata from decorated class', () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'test-prompt',
         title: 'Test Title',
         description: 'Test description',
@@ -26,7 +27,7 @@ describe('prompt.utils', () => {
     });
 
     it('should collect minimal metadata', () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'minimal',
         arguments: [],
       })
@@ -41,7 +42,7 @@ describe('prompt.utils', () => {
     });
 
     it('should handle prompt with multiple arguments', () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'multi-arg',
         arguments: [
           { name: 'first', required: true },
@@ -62,7 +63,7 @@ describe('prompt.utils', () => {
 
   describe('normalizePrompt', () => {
     it('should normalize class-based prompt', () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'class-prompt',
         arguments: [],
       })
@@ -98,7 +99,7 @@ describe('prompt.utils', () => {
     });
 
     it('should preserve all metadata fields', () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'full-metadata',
         title: 'Full Title',
         description: 'Full Description',
@@ -210,7 +211,7 @@ describe('prompt.utils', () => {
 
   describe('promptDiscoveryDeps', () => {
     it('should return empty array for class without dependencies', () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'no-deps',
         arguments: [],
       })
@@ -241,7 +242,7 @@ describe('prompt.utils', () => {
 
   describe('edge cases', () => {
     it('should handle empty arguments array', () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'empty-args',
         arguments: [],
       })
@@ -256,7 +257,7 @@ describe('prompt.utils', () => {
     });
 
     it('should handle prompt with only name', () => {
-      @Prompt({
+      @FrontMcpPrompt({
         name: 'name-only',
         arguments: [],
       })

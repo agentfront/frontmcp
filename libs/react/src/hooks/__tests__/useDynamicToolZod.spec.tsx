@@ -384,7 +384,7 @@ describe('useDynamicTool — Zod schema mode', () => {
   it('runs the committed execute from a layout effect, before passive effects run', async () => {
     const firstExecute = jest.fn(async () => okResult('first'));
     const secondExecute = jest.fn(async () => okResult('second'));
-    const resultsSeenAfterCommit: Array<Promise<CallToolResult | undefined>> = [];
+    const resultsSeenAfterCommit: Array<Promise<CallToolResult> | undefined> = [];
     function SearchTool({ execute }: { execute: () => Promise<CallToolResult> }) {
       useDynamicTool({ name: 'search', description: 'Search', schema: z.object({ query: z.string() }), execute });
       return null;
