@@ -2940,9 +2940,6 @@ __metadata:
     rehype-highlight: ^7.0.0
     rehype-raw: ^7.0.0
     remark-gfm: ^4.0.0
-  dependenciesMeta:
-    "@frontmcp/uipack":
-      optional: true
   peerDependenciesMeta:
     "@xyflow/react":
       optional: true
