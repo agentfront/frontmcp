@@ -145,6 +145,13 @@ jobs:
           if git cherry-pick $CHERRY_PICK_ARGS "$MERGE_SHA"; then
             echo "conflict=false" >> "$GITHUB_OUTPUT"
 
+            # The target already has these changes (e.g. a stacked cherry-pick carried them): nothing to commit
+            if git diff --cached --quiet; then
+              echo "already_applied=true" >> "$GITHUB_OUTPUT"
+              echo "$CHERRY_BASE already has the changes of #$PR_NUMBER; no cherry-pick PR is needed."
+              exit 0
+            fi
+
             # Create commit with proper attribution
             git commit -m "$(cat <<EOF
           Cherry-pick: $PR_TITLE
@@ -174,7 +181,7 @@ jobs:
       # Rewriting the pins back to main's own version and refreshing the lockfile keeps
       # the genuine change (new external deps, code) and drops only the version drag.
       - name: Setup Node + Yarn
-        if: steps.prepare.outputs.conflict == 'false'
+        if: steps.prepare.outputs.conflict == 'false' && steps.prepare.outputs.already_applied != 'true'
         uses: ./.github/actions/setup-node-yarn
         with:
           node-version-file: ".nvmrc"
@@ -182,7 +189,7 @@ jobs:
           cache: ""
 
       - name: Re-pin internal versions to the target branch line
-        if: steps.prepare.outputs.conflict == 'false'
+        if: steps.prepare.outputs.conflict == 'false' && steps.prepare.outputs.already_applied != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -206,7 +213,7 @@ jobs:
           fi
 
       - name: Push branch and create PR
-        if: steps.prepare.outputs.conflict == 'false'
+        if: steps.prepare.outputs.conflict == 'false' && steps.prepare.outputs.already_applied != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHERRY_BRANCH: ${{ steps.prepare.outputs.cherry_branch }}
@@ -260,7 +267,7 @@ jobs:
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
 
       - name: Comment on original PR (success)
-        if: steps.prepare.outputs.conflict == 'false'
+        if: steps.prepare.outputs.conflict == 'false' && steps.prepare.outputs.already_applied != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ORIGINAL_PR: ${{ github.event.pull_request.number }}
@@ -275,6 +282,21 @@ jobs:
           **Please review and merge if this change should also be in \`$DEFAULT_BRANCH\`.**
 
           If the cherry-pick is not needed, close the PR.
+          EOF
+          )"
+
+      - name: Comment on original PR (already applied)
+        if: steps.prepare.outputs.already_applied == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORIGINAL_PR: ${{ github.event.pull_request.number }}
+          CHERRY_BASE: ${{ steps.target.outputs.cherry_base }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          gh pr comment "$ORIGINAL_PR" --body "$(cat <<EOF
+          ## No cherry-pick needed
+
+          \`$CHERRY_BASE\` already has the changes of this PR: cherry-picking $MERGE_SHA onto it leaves nothing to commit. No cherry-pick PR or issue was created.
           EOF
           )"
 
