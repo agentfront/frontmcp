@@ -7,17 +7,16 @@ OpenTelemetry tracing, structured JSON logs, per-request log objects and counter
 ## Install
 
 ```bash
-npm install @frontmcp/observability @opentelemetry/sdk-trace-base
+npm install @frontmcp/observability
 ```
 
 Requires Node.js 24 or later, and `@frontmcp/sdk` in the app (a peer dependency, as is `@frontmcp/utils`, which comes with the SDK). `@opentelemetry/api` is installed with the package.
 
-`@opentelemetry/sdk-trace-base` is listed as an optional peer, but the package loads it as soon as it's imported, so install it.
-
-The other optional peers each enable one thing:
+The optional peers each enable one thing:
 
 | Package                                   | Enables                                                                                                                       |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `@opentelemetry/sdk-trace-base`           | Printing spans in development, `setupOTel({ exporter: 'console' })` and `createTestTracer()`                                  |
 | `@opentelemetry/sdk-node`                 | `setupOTel()`, which also needs `@opentelemetry/resources` and `@opentelemetry/semantic-conventions`                          |
 | `@opentelemetry/exporter-trace-otlp-http` | Sending spans to an OpenTelemetry collector over OTLP (the OpenTelemetry protocol), such as `setupOTel({ exporter: 'otlp' })` |
 | `pino`, `winston`                         | The `pino` and `winston` log sinks, which write to a logger you create                                                        |

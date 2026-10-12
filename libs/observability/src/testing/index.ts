@@ -29,13 +29,8 @@
  */
 
 import { type Tracer } from '@opentelemetry/api';
-
-import {
-  BasicTracerProvider,
-  InMemorySpanExporter,
-  SimpleSpanProcessor,
-  type ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+import type * as SdkTraceBase from '@opentelemetry/sdk-trace-base';
+import type { BasicTracerProvider, InMemorySpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
 /**
  * Result from createTestTracer().
@@ -63,9 +58,11 @@ export interface TestTracer {
  * @param name - Tracer name (default: 'test')
  */
 export function createTestTracer(name = 'test'): TestTracer {
-  const exporter = new InMemorySpanExporter();
-  const provider = new BasicTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  // Loaded here, not at import: `@opentelemetry/sdk-trace-base` is an optional peer.
+  const sdkTraceBase = require('@opentelemetry/sdk-trace-base') as typeof SdkTraceBase;
+  const exporter = new sdkTraceBase.InMemorySpanExporter();
+  const provider = new sdkTraceBase.BasicTracerProvider({
+    spanProcessors: [new sdkTraceBase.SimpleSpanProcessor(exporter)],
   });
   const tracer = provider.getTracer(name);
 
