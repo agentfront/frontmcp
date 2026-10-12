@@ -10,7 +10,7 @@ module.exports = {
   displayName: '@frontmcp/sdk',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
-  // Limit workers to avoid SIGSEGV crashes on Node.js 24+.
+  // The Node 24 worker SIGSEGV is a V8 Sparkplug bug (nodejs/node#62393): project.json runs Jest with --no-sparkplug.
   maxWorkers: '50%',
   // Recycle a worker once its heap grows past this limit. Coverage instrumentation
   // over the full suite otherwise accumulates until a worker hits the default

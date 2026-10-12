@@ -146,7 +146,10 @@
       }
     },
     "test": {
-      "dependsOn": ["^build", { "projects": ["uipack", "ui"], "target": "build" }]
+      "dependsOn": ["^build", { "projects": ["uipack", "ui"], "target": "build" }],
+      "options": {
+        "command": "node --no-sparkplug ../../node_modules/jest/bin/jest.js"
+      }
     },
     "publish": {
       "executor": "nx:run-commands",
