@@ -8,6 +8,8 @@
  * This file only provides TypeScript type augmentation.
  */
 
+import type { ExecutionContextBase } from '@frontmcp/sdk';
+
 import { FeatureFlagAccessorToken } from './feature-flag.symbols';
 import type { FeatureFlagAccessor } from './providers/feature-flag-accessor.provider';
 
@@ -46,19 +48,19 @@ declare module '@frontmcp/sdk' {
  *
  * @throws Error if FeatureFlagPlugin is not installed
  */
-export function getFeatureFlags<T extends { get: (token: unknown) => unknown }>(ctx: T): FeatureFlagAccessor {
-  return ctx.get(FeatureFlagAccessorToken) as FeatureFlagAccessor;
+export function getFeatureFlags<T extends Pick<ExecutionContextBase, 'get'>>(ctx: T): FeatureFlagAccessor {
+  return ctx.get(FeatureFlagAccessorToken);
 }
 
 /**
  * Try to get the FeatureFlagAccessor, returning undefined if not available.
  * Use this for graceful degradation when the plugin might not be installed.
  */
-export function tryGetFeatureFlags<T extends { tryGet?: (token: unknown) => unknown }>(
+export function tryGetFeatureFlags<T extends Partial<Pick<ExecutionContextBase, 'tryGet'>>>(
   ctx: T,
 ): FeatureFlagAccessor | undefined {
   if (typeof ctx.tryGet === 'function') {
-    return ctx.tryGet(FeatureFlagAccessorToken) as FeatureFlagAccessor | undefined;
+    return ctx.tryGet(FeatureFlagAccessorToken);
   }
   return undefined;
 }

@@ -62,11 +62,18 @@ describe('@frontmcp/testing outside Jest', () => {
   it('the playwright entry is importable and explains that it is not implemented', () => {
     const result = runNode(`
       const pw = require(${JSON.stringify(join(dist, 'playwright/index.js'))});
-      try { pw.test('x', async () => {}); } catch (e) { console.log(e.message); }
+      for (const use of [() => pw.test('x', async () => {}), () => pw.test.describe('x', () => {}), () => pw.expect(1)]) {
+        try { use(); } catch (e) { console.log(e.message); }
+      }
       console.log(pw.playwrightIntegration.status);
     `);
     expect(result.status).toBe(0);
-    expect(result.stdout).toMatch(/not yet implemented/);
-    expect(result.stdout).toMatch(/planned/);
+    const messages = result.stdout.trim().split('\n');
+    expect(messages.slice(0, 3)).toEqual(
+      Array(3).fill(
+        expect.stringMatching(/^@frontmcp\/testing\/playwright is not implemented\. .*`@playwright\/test`/),
+      ),
+    );
+    expect(messages[3]).toBe('planned');
   });
 });

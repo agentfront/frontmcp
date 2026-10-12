@@ -1,49 +1,40 @@
 /**
  * @file playwright/index.ts
- * @description Playwright integration for OAuth flow testing (Future Phase)
+ * @description Not implemented: a Playwright integration for OAuth flow testing is planned.
  *
- * This module will provide Playwright-based testing utilities for:
- * - OAuth consent flow testing
- * - Login page interactions
- * - Browser-based authentication flows
- *
- * @example
- * ```typescript
- * import { test, expect } from '@frontmcp/testing/playwright';
- * import MyServer from './src/main';
- *
- * test.describe('OAuth Flow', () => {
- *   test.use({
- *     server: MyServer,
- *     auth: { mode: 'local' }
- *   });
- *
- *   test('completes OAuth flow', async ({ page, oauth }) => {
- *     const { authorizeUrl } = await oauth.startFlow({ ... });
- *     await page.goto(authorizeUrl);
- *     // Test login and consent pages
- *   });
- * });
- * ```
+ * `test` and `expect` from this entry point throw when called or used (`test.describe`, `test.use`,
+ * `expect(value)`), with a message naming what to use instead:
+ * - Browser tests: `test` and `expect` from `@playwright/test`, against a server started with
+ *   `TestServer.start()` from `@frontmcp/testing`.
+ * - OAuth flows without a browser: `MockOAuthServer` and `TestTokenFactory` from `@frontmcp/testing`.
  */
 
-// Placeholder exports - will be implemented in future phase
+const PLAYWRIGHT_NOT_IMPLEMENTED_MESSAGE =
+  '@frontmcp/testing/playwright is not implemented. For browser tests, use `test` and `expect` from ' +
+  '`@playwright/test` against a server started with `TestServer.start()` from `@frontmcp/testing`. ' +
+  'For OAuth flows without a browser, use `MockOAuthServer` and `TestTokenFactory` from `@frontmcp/testing`.';
+
+function notImplemented(): never {
+  throw new Error(PLAYWRIGHT_NOT_IMPLEMENTED_MESSAGE);
+}
+
+/** Throws the not-implemented message when called, and when any member it doesn't have is read. */
+function notImplementedApi<T extends (...args: never[]) => unknown>(target: T): T {
+  return new Proxy(target, {
+    apply: notImplemented,
+    get: (api, property) =>
+      typeof property === 'string' && !(property in api) ? notImplemented() : Reflect.get(api, property),
+  });
+}
+
 export const playwrightIntegration = {
   version: '0.4.0',
   status: 'planned',
-  description: 'Playwright integration for OAuth flow testing - coming in a future release',
+  description: 'Playwright integration for OAuth flow testing - not implemented',
 };
 
-// Export placeholder test function
-export function test(_name: string, _fn: () => Promise<void>): void {
-  throw new Error(
-    'Playwright integration not yet implemented. ' +
-      'Use @frontmcp/testing for non-browser tests, ' +
-      'or wait for a future release that includes playwright support.',
-  );
-}
+export const test = notImplementedApi((_name: string, _fn: () => Promise<void>): void => notImplemented());
 
-// Export placeholder expect
-export const expect = {
-  notImplemented: true,
-};
+export const expect = notImplementedApi(
+  Object.assign((): never => notImplemented(), { notImplemented: true as const }),
+);
