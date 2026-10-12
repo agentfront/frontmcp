@@ -5,5 +5,7 @@
   "references": [{ "path": "./tsconfig.e2e.json" }],
   "compilerOptions": {
     "esModuleInterop": true
-  }
+  },
+  // Typecheck is off: @cloudflare/workers-types isn't installed, so miniflare's binding types don't resolve (TS2339).
+  "nx": { "addTypecheckTarget": false }
 }
