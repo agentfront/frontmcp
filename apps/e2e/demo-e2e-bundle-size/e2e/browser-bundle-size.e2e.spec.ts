@@ -58,16 +58,7 @@ const FEATURE_MODULES: Record<string, RegExp> = {
 };
 
 // Only shrinks: a feature leaves this list in the change that keeps it out of the core path
-const KNOWN_LEAKS: string[] = [
-  'agents',
-  'auth',
-  'channels',
-  'distributed transport',
-  'health',
-  'http transport',
-  'metrics',
-  'skills',
-];
+const KNOWN_LEAKS: string[] = ['auth', 'distributed transport', 'health', 'http transport', 'metrics', 'skills'];
 
 function topInputs(bundle: BrowserBundle, count = 15): string {
   return inputSizes(bundle.metafile)

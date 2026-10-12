@@ -10,7 +10,7 @@ import { DependencyNotFoundError } from '../errors/mcp.error';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { AgentEmitter, type AgentChangeEvent } from './agent.events';
-import { AgentInstance } from './agent.instance';
+import type { AgentInstance } from './agent.instance';
 import { agentDiscoveryDeps, normalizeAgent } from './agent.utils';
 
 // ============================================================================
@@ -125,20 +125,7 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
   // ============================================================================
 
   protected override async initialize(): Promise<void> {
-    // Instantiate each local agent once
-    for (const token of this.tokens) {
-      const rec = this.defs.get(token);
-      if (!rec) {
-        throw new DependencyNotFoundError('AgentRegistry', tokenName(token));
-      }
-
-      const ai = new AgentInstance(rec, this.providers, this.owner);
-      this.instances.set(token as Token<AgentInstance>, ai);
-
-      const lineage: EntryLineage = this.owner ? [this.owner] : [];
-      const row = this.makeRow(token, ai, lineage, this);
-      this.localRows.push(row);
-    }
+    if (this.tokens.size > 0) await this.instantiateLocalAgents();
 
     // Adopt agents from app registries (similar to ToolRegistry pattern)
     const childAppRegistries = this.providers.getRegistries('AppRegistry');
@@ -181,6 +168,24 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
     // in its agent's private scope, so the agent's model gets the nested agents as tools.
     if (this.owner.kind === 'scope' || this.owner.kind === 'agent') {
       await this.registerAgentToolsInParentScope();
+    }
+  }
+
+  /** One AgentInstance per local agent; the agent machinery loads only for a registry that has agents. */
+  private async instantiateLocalAgents(): Promise<void> {
+    const agentModule = await import('./agent.instance.js');
+    for (const token of this.tokens) {
+      const rec = this.defs.get(token);
+      if (!rec) {
+        throw new DependencyNotFoundError('AgentRegistry', tokenName(token));
+      }
+
+      const ai = new agentModule.AgentInstance(rec, this.providers, this.owner);
+      this.instances.set(token as Token<AgentInstance>, ai);
+
+      const lineage: EntryLineage = this.owner ? [this.owner] : [];
+      const row = this.makeRow(token, ai, lineage, this);
+      this.localRows.push(row);
     }
   }
 

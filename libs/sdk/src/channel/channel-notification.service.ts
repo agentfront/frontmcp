@@ -2,12 +2,7 @@
 
 import { type FrontMcpLogger } from '../common';
 import { supportsChannels, type NotificationService } from '../notification/notification.service';
-
-/**
- * The MCP notification method for Claude Code channels.
- * This is an experimental extension, not part of the standard MCP spec.
- */
-export const CHANNEL_NOTIFICATION_METHOD = 'notifications/claude/channel';
+import { CHANNEL_NOTIFICATION_METHOD } from './channel.utils';
 
 /**
  * Metadata accompanying a channel notification.

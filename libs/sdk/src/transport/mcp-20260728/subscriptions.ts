@@ -17,7 +17,7 @@
  */
 import { MCP_20260728_META, SUBSCRIPTIONS_ACKNOWLEDGED_METHOD, type SubscriptionFilter } from '@frontmcp/protocol';
 
-import { CHANNEL_NOTIFICATION_METHOD } from '../../channel/channel-notification.service';
+import { CHANNEL_NOTIFICATION_METHOD } from '../../channel/channel.utils';
 import { type Scope } from '../../scope';
 
 /** How often a bare SSE comment is emitted to hold the connection open. */

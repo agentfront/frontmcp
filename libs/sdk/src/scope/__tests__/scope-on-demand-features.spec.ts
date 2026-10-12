@@ -7,13 +7,25 @@ import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
 
-import { App, frontMcpMetadataSchema, Job, JobContext, LogLevel, Tool, ToolContext } from '../../common';
+import {
+  Agent,
+  AgentContext,
+  App,
+  frontMcpMetadataSchema,
+  Job,
+  JobContext,
+  LogLevel,
+  Tool,
+  ToolContext,
+} from '../../common';
 import { connect } from '../../direct/connect';
 import { create } from '../../direct/create';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import type { Scope } from '../scope.instance';
 
 const ON_DEMAND_MODULES = [
+  '../../agent/agent.instance',
+  '../../agent/flows',
   '../../app/instances/app.esm.instance',
   '../../app/instances/app.remote.instance',
   '../../channel/channel-scope.helper',
@@ -72,6 +84,13 @@ class LookupTool extends ToolContext {
     return { source: 'crm' };
   }
 }
+
+@Agent({
+  name: 'helper',
+  inputSchema: {},
+  llm: { adapter: { completion: async () => ({ content: 'done', finishReason: 'stop' as const }) } },
+})
+class HelperAgent extends AgentContext {}
 
 @App({ id: 'desk', name: 'Desk', tools: [ConfirmTool, ReportTool] })
 class DeskApp {}
@@ -178,6 +197,17 @@ describe('Scope features loaded on demand', () => {
         mimeType: 'text/html;profile=mcp-app',
         text: expect.stringContaining('lookup-widget'),
       });
+    } finally {
+      await server.dispose();
+    }
+  });
+
+  it('lists and calls an agent', async () => {
+    const server = await create({ info: { name: 'on-demand-agent', version: '1.0.0' }, agents: [HelperAgent] });
+    try {
+      const { tools } = await server.listTools();
+      expect(tools.map((tool) => tool.name)).toContain('invoke_helper');
+      expect(JSON.stringify(await server.callTool('invoke_helper', {}))).toContain('done');
     } finally {
       await server.dispose();
     }

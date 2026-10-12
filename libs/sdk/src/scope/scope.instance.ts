@@ -10,7 +10,6 @@ import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeR
 
 import AdapterRegistry from '../adapter/adapter.registry';
 import AgentRegistry from '../agent/agent.registry';
-import CallAgentFlow from '../agent/flows/call-agent.flow';
 import AppRegistry from '../app/app.registry';
 import { AuthUiRegistry } from '../auth/auth-ui';
 import { AuthRegistry } from '../auth/auth.registry';
@@ -900,8 +899,12 @@ export class Scope extends ScopeEntry {
     // The runner needs it to deliver `notifications/tasks/status` events.
     installTaskRunner?.();
 
-    // Register logging, completion and agent flows, and the elicitation and task flows when those are on.
-    await this.scopeFlows.registryFlows([SetLevelFlow, CompleteFlow, CallAgentFlow]);
+    // Register logging and completion flows, and the agent, elicitation and task flows when those are on.
+    await this.scopeFlows.registryFlows([SetLevelFlow, CompleteFlow]);
+    if (this.scopeAgents.listAllInstances().length > 0) {
+      const { CallAgentFlow } = await import('../agent/flows/index.js');
+      await this.scopeFlows.registryFlows([CallAgentFlow]);
+    }
     if (this.metadata.elicitation?.enabled === true) {
       const { ElicitationRequestFlow, ElicitationResultFlow } = await import('../elicitation/flows/index.js');
       await this.scopeFlows.registryFlows([ElicitationRequestFlow, ElicitationResultFlow]);
