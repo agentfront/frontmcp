@@ -13,13 +13,13 @@ import { FrontMcp } from '../front-mcp.decorator';
 const runStdioMock = jest.fn().mockResolvedValue(undefined);
 const bootstrapMock = jest.fn().mockResolvedValue(undefined);
 const createHandlerMock = jest.fn().mockResolvedValue(undefined);
+let mockServerModuleError: Error | undefined;
 
 // Mock the module the decorator loads on demand, to observe which entry point it routes to without booting a server
 jest.mock('../../../front-mcp/front-mcp', () => ({
-  FrontMcpInstance: {
-    runStdio: runStdioMock,
-    bootstrap: bootstrapMock,
-    createHandler: createHandlerMock,
+  get FrontMcpInstance() {
+    if (mockServerModuleError) throw mockServerModuleError;
+    return { runStdio: runStdioMock, bootstrap: bootstrapMock, createHandler: createHandlerMock };
   },
 }));
 
@@ -94,5 +94,46 @@ describe('FrontMcp decorator — stdio auto-serve (FRONTMCP_STDIO)', () => {
 
     expect(runStdioMock).not.toHaveBeenCalled();
     expect(bootstrapMock).not.toHaveBeenCalled();
+  });
+
+  describe('when the server fails to start', () => {
+    let exit: jest.SpyInstance;
+    let consoleError: jest.SpyInstance;
+
+    beforeEach(() => {
+      exit = jest.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+      consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      exit.mockRestore();
+      consoleError.mockRestore();
+    });
+
+    it('logs the failure and exits when bootstrap rejects', async () => {
+      const failure = new Error('port in use');
+      bootstrapMock.mockRejectedValueOnce(failure);
+
+      FrontMcp(config as never)(class S {});
+      await serverLoaded();
+
+      expect(consoleError).toHaveBeenCalledWith('[FrontMCP] server failed to start:', failure);
+      expect(exit).toHaveBeenCalledWith(1);
+    });
+
+    it('logs the failure and exits when the server module fails to load', async () => {
+      const failure = new Error('server module failed to load');
+      mockServerModuleError = failure;
+      try {
+        FrontMcp(config as never)(class S {});
+        await serverLoaded();
+      } finally {
+        mockServerModuleError = undefined;
+      }
+
+      expect(consoleError).toHaveBeenCalledWith('[FrontMCP] server failed to start:', failure);
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(bootstrapMock).not.toHaveBeenCalled();
+    });
   });
 });

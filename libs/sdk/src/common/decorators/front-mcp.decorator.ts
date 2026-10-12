@@ -152,7 +152,12 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       });
     } else if (metadata.serve) {
       // Normal mode: bootstrap and start server
-      void loadFrontMcpInstance().then((FrontMcpInstance) => FrontMcpInstance.bootstrap(metadata));
+      loadFrontMcpInstance()
+        .then((FrontMcpInstance) => FrontMcpInstance.bootstrap(metadata))
+        .catch((err: unknown) => {
+          console.error('[FrontMCP] server failed to start:', err);
+          process.exit(1);
+        });
     }
   };
 }
