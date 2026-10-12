@@ -430,7 +430,8 @@ more than once — only the last occurrence takes effect, so remove the duplicat
 `frontmcp build`: `bundler` on TypeScript 6 and later (or when the project has no TypeScript of its own),
 `node` on TypeScript 5. On TypeScript 6+ it replaces `node`, `node10` and `classic`, which TypeScript 6
 deprecates and 7 removes. Its `types` list names only packages the project has: `node` (`@types/node`),
-`jest` (`@types/jest`) and `@frontmcp/testing`. `frontmcp doctor` checks the same.
+`jest` (`@types/jest`) and `@frontmcp/testing`. `frontmcp doctor` checks the same, and checks Node.js
+against the CLI's `engines` (24 or later).
 
 Test with curl:
 
