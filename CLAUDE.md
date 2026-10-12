@@ -342,7 +342,7 @@ node scripts/fix-unused-imports.mjs
 
 This script automatically:
 
-- Finds all files changed in the current branch (compared to main)
+- Finds all files changed in the current branch, compared to the pull request's base: `origin/$GITHUB_BASE_REF` in CI, otherwise the nearest remote `main`, `master`, `release/*` or `next/*`
 - Removes unused imports using ESLint
 - Supports custom base branch: `node scripts/fix-unused-imports.mjs <branch-name>`
 

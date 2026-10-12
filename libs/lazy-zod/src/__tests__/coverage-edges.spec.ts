@@ -68,7 +68,7 @@ describe('forceMaterialize - nested lazy structures', () => {
       typeof def.shape === 'function'
         ? (def.shape as () => Record<string, unknown>)()
         : (def.shape as unknown as Record<string, unknown>);
-    shape.self = real; // cycle: real → shape.self → real
+    shape['self'] = real; // cycle: real → shape.self → real
     expect(() => forceMaterialize(real)).not.toThrow();
   });
 

@@ -10,7 +10,7 @@ module.exports = {
   displayName: '@frontmcp/sdk',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
-  // Limit workers to avoid SIGSEGV crashes on Node.js 24+.
+  // The Node 24 worker SIGSEGV is a V8 Sparkplug bug (nodejs/node#62393): project.json runs Jest with --no-sparkplug.
   maxWorkers: '50%',
   // Recycle a worker once its heap grows past this limit. Coverage instrumentation
   // over the full suite otherwise accumulates until a worker hits the default
@@ -51,6 +51,8 @@ module.exports = {
     '^@frontmcp/ui$': '<rootDir>/../ui/dist/index.js',
     '^@frontmcp/ui/(.*)$': '<rootDir>/../ui/dist/$1/index.js',
     '^@frontmcp/auth$': '<rootDir>/../auth/src/index.ts',
+    // Pinned so a spec's jest.mock and the code's lazy require resolve it the same way, built or not.
+    '^@frontmcp/storage-sqlite$': '<rootDir>/../storage-sqlite/src/index.ts',
     '^@frontmcp/utils$': '<rootDir>/../utils/src/index.ts',
     '^@frontmcp/utils/crypto/node$': '<rootDir>/../utils/src/crypto/node.ts',
   },
