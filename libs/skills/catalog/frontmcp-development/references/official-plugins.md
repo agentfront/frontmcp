@@ -1132,7 +1132,7 @@ For other browsers, load a polyfill that installs `document.modelContext` (e.g. 
 
 ### Registering tools before the server loads
 
-The server is a large bundle (about 2 MB minified for `create()` with one tool) and starting it is one long task, so starting it on page load costs every visit. Compute the list at build time and load the server on an agent's first call:
+The server is a large bundle (about 1.5 MB minified for `create()` with one tool) and starting it is one long task, so starting it on page load costs every visit. Compute the list at build time and load the server on an agent's first call:
 
 `server.ts`, one factory for the build script and the page:
 
