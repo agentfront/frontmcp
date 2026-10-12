@@ -10,7 +10,6 @@ import {
 } from '../common';
 import { FrontMcpContextStorage } from '../context';
 import { NoopFrontMcpServer } from '../server/noop-server';
-import { FrontMcpServerInstance } from '../server/server.instance';
 import { FrontMcpConfig } from './front-mcp.tokens';
 
 const frontMcpConfig = {
@@ -35,7 +34,8 @@ const frontMcpServer = AsyncProvider({
   scope: ProviderScope.GLOBAL,
   provide: FrontMcpServer,
   inject: () => [FrontMcpConfig],
-  useFactory: (config) => {
+  useFactory: async (config) => {
+    const { FrontMcpServerInstance } = await import('../server/server.instance.js');
     return new FrontMcpServerInstance(config.http ?? defaultHttpOptions());
   },
 });

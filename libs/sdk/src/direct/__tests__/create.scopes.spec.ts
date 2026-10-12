@@ -6,6 +6,7 @@
  */
 import 'reflect-metadata';
 
+import { DirectPublicAuth } from '../../auth/direct-public-auth';
 import { LocalPrimaryAuth } from '../../auth/instances/instance.local-primary-auth';
 import { RemotePrimaryAuth } from '../../auth/instances/instance.remote-primary-auth';
 import { LogLevel, Plugin, tool, type ScopeEntry } from '../../common';
@@ -61,7 +62,7 @@ describe('create() scopes (#825)', () => {
   });
 
   it.each([
-    ['no auth', undefined, LocalPrimaryAuth],
+    ['no auth', undefined, DirectPublicAuth],
     ['public', { mode: 'public' }, LocalPrimaryAuth],
     ['local', { mode: 'local' }, LocalPrimaryAuth],
     ['remote', { mode: 'remote', provider: 'https://idp.example.com', clientId: 'help-desk' }, LocalPrimaryAuth],

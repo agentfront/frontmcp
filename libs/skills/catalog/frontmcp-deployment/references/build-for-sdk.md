@@ -162,6 +162,8 @@ create({
 
 A `create()` server builds one scope, the root scope, which holds the synthetic app (`standalone: false`) and applies `auth` as the server's auth. A server-scoped plugin (`@Plugin({ scope: 'server' })`) in `plugins` installs there. Up to 1.9.4 the synthetic app had a scope of its own and an empty root scope started too, so every `create()` server ran two task stores, two task runners and their timers, and a server-scoped plugin failed with `InvalidPluginScopeError`.
 
+A `create()`, `createDirect()` or `connect()` server is reached in process only, so its scopes set up nothing that serves HTTP: no transport (`scope.transportService` is `undefined`), no `http:*` flows, custom `http.routes`, channel webhook routes or health checks (`scope.healthService` is `undefined`). Without `auth`, the scope's auth is public mode without the OAuth, discovery and session flows (`scope.auth.options.mode` is `'public'`); with `auth`, it is the auth of that mode with its flows, as before. To serve the same config over HTTP, use `FrontMcpInstance.bootstrap()`, `createHandler()` or `createFetchHandler()`.
+
 ## Platform-Specific Connections
 
 Use `connect*()` functions to get tools formatted for a specific LLM platform:

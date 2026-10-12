@@ -53,7 +53,7 @@ function getInstance(
         // CLI mode skips non-essential registries for faster startup
         return mode === 'cli'
           ? await FrontMcpInstance.createForCli(resolvedConfig)
-          : await FrontMcpInstance.createForGraph(resolvedConfig);
+          : await FrontMcpInstance.createForConnect(resolvedConfig);
       } catch (error) {
         // Remove from cache on failure to allow retry
         instanceCache.delete(cacheKey);

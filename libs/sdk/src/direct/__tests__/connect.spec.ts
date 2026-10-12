@@ -53,7 +53,7 @@ const mockFrontMcpInstance = {
 
 jest.mock('../../front-mcp/front-mcp', () => ({
   FrontMcpInstance: {
-    createForGraph: jest.fn().mockResolvedValue(mockFrontMcpInstance),
+    createForConnect: jest.fn().mockResolvedValue(mockFrontMcpInstance),
     createForCli: jest.fn().mockResolvedValue(mockFrontMcpInstance),
   },
 }));
@@ -205,7 +205,7 @@ describe('connect utilities', () => {
       await connect(decoratedClass as unknown as FrontMcpConfigInput);
 
       // Should have been called with the resolved config object, not the class function
-      expect(FrontMcpInstance.createForGraph).toHaveBeenCalledWith(storedConfig);
+      expect(FrontMcpInstance.createForConnect).toHaveBeenCalledWith(storedConfig);
     });
 
     it('should use cli mode when specified with decorated class', async () => {

@@ -100,7 +100,7 @@ export default function initializeRequestHandler({
           scope.notifications.setClientCapabilities(sessionId, clientCapabilities);
 
           // Persist capabilities to session store for recreation after transport eviction/restart
-          await scope.transportService.updateStoredSessionCapabilities(
+          await scope.transportService?.updateStoredSessionCapabilities(
             sessionId,
             clientCapabilities as unknown as Record<string, unknown>,
           );

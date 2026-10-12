@@ -37,7 +37,7 @@ class CIAlertChannel extends ChannelContext {
 }
 ```
 
-The path is a `POST` route on FrontMCP's HTTP server (`bootstrap()` / `createHandler()`), guarded like a custom `http.routes` entry: `throttle.ipFilter` runs first, the path may not be a FrontMCP path (MCP endpoint, `/oauth/*`, `/.well-known/*`, `/health`, `/metrics`), and one channel per path (either mistake fails startup). The route does not authenticate the sender: verify signatures (e.g. `X-Hub-Signature-256`) in `onEvent()`. `createDirect()`, stdio and `createFetchHandler()` serve no webhook route.
+The path is a `POST` route on FrontMCP's HTTP server (`bootstrap()` / `createHandler()`), guarded like a custom `http.routes` entry: `throttle.ipFilter` runs first, the path may not be a FrontMCP path (MCP endpoint, `/oauth/*`, `/.well-known/*`, `/health`, `/metrics`), and one channel per path (either mistake fails startup). The route does not authenticate the sender: verify signatures (e.g. `X-Hub-Signature-256`) in `onEvent()`. `createDirect()`, stdio and `createFetchHandler()` serve no webhook route; `create()`, `createDirect()` and `connect()` log a warning for a webhook source.
 
 ## App Event Source
 

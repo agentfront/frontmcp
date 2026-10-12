@@ -1,10 +1,4 @@
-import {
-  AuthoritiesEngine,
-  AuthoritiesEvaluatorRegistry,
-  AuthoritiesProfileRegistry,
-  type AuthoritiesEvaluator,
-  type AuthoritiesPolicyMetadata,
-} from '@frontmcp/auth';
+import type { AuthoritiesEngine } from '@frontmcp/auth';
 
 import { AuthConfigurationError } from '../errors';
 
@@ -12,19 +6,6 @@ import { AuthConfigurationError } from '../errors';
 export interface EntryAuthorities {
   label: string;
   authorities: unknown;
-}
-
-/** The authorities engine for `@FrontMcp({ authorities })`: its `profiles` and `evaluators`. */
-export function createAuthoritiesEngine(config: Record<string, unknown>): AuthoritiesEngine {
-  const profileRegistry = new AuthoritiesProfileRegistry();
-  if (config['profiles']) {
-    profileRegistry.registerAll(config['profiles'] as Record<string, AuthoritiesPolicyMetadata>);
-  }
-  const evaluatorRegistry = new AuthoritiesEvaluatorRegistry();
-  if (config['evaluators']) {
-    evaluatorRegistry.registerAll(config['evaluators'] as Record<string, AuthoritiesEvaluator>);
-  }
-  return new AuthoritiesEngine(profileRegistry, evaluatorRegistry);
 }
 
 /**
