@@ -15,7 +15,6 @@ import AppRegistry from '../app/app.registry';
 import { AuthUiRegistry } from '../auth/auth-ui';
 import { AuthRegistry } from '../auth/auth.registry';
 import { type ChannelNotificationService } from '../channel/channel-notification.service';
-import { registerChannelCapabilities } from '../channel/channel-scope.helper';
 import type ChannelRegistry from '../channel/channel.registry';
 import { normalizeChannel } from '../channel/channel.utils';
 import { type ChannelEventBus } from '../channel/sources/app-event.source';
@@ -52,18 +51,17 @@ import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors'
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
 import { assertAuthoritiesRules, createAuthoritiesEngine } from '../front-mcp/authorities-rules.check';
-import { HaManager, resolveHaConfigFromEnv } from '../ha';
+import type { HaManager } from '../ha';
 import { HealthService, servedHealthPaths } from '../health';
 import HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils';
 import { type JobExecutionManager } from '../job/execution/job-execution.manager';
-import { registerJobCapabilities, type JobsConfig } from '../job/job-scope.helper';
+import type { JobsConfig } from '../job/job-scope.helper';
 import type JobRegistry from '../job/job.registry';
 import { normalizeJob } from '../job/job.utils';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
-import { registerMcpRegistryFlows } from '../mcp-registry/mcp-registry-scope.helper';
 import { NotificationService } from '../notification';
 import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
@@ -99,20 +97,17 @@ import { normalizeTool } from '../tool/tool.utils';
 import { hasUIConfig, StaticWidgetResourceTemplate, ToolUIRegistry } from '../tool/ui';
 import { toolServingMode } from '../tool/ui/serving-mode-default';
 import { describeIgnoredUiOptions, describeServingModeDefault } from '../tool/ui/ui-option-warnings';
-import { RedisTransportBus } from '../transport/bus';
-import { createEventStore } from '../transport/event-stores';
+import type { RedisTransportBus } from '../transport/bus';
 import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/request-state';
-import { wireSessionRelay, type SessionRelayHandle } from '../transport/relay/relay-scope.helper';
+import type { SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import { TransportService } from '../transport/transport.registry';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import HttpIpFilterFlow from './flows/http.ip-filter.flow';
 import HttpRequestFlow from './flows/http.request.flow';
-import { probeOptionalDependency, requireOptionalModule } from './optional-dependency.util';
 import { registerServerEntries } from './server-entries.helper';
 import { reportStartup } from './startup-report.helper';
-import { hasRegisteredTracerProvider, registerExportingTracerProvider } from './tracer-provider.utils';
 
 /**
  * Flows the web-fetch adapter must NOT auto-dispatch by HTTP match: `http:request`
@@ -280,16 +275,17 @@ export class Scope extends ScopeEntry {
     const transportConfig = this.metadata.transport;
     const isDistributed = getRuntimeContext().deployment === 'distributed';
     if (isDistributed && this.metadata.redis && !this.cliMode) {
+      const ha = await import('../ha/index.js');
       try {
         const haRedis = this.createHaRedisClient();
         // The relay channel needs its own connection: a subscribed ioredis client runs no other commands.
         const haSubscriber = this.createHaRedisClient('ha-subscriber');
-        this.haManager = HaManager.create({
+        this.haManager = ha.HaManager.create({
           redis: haRedis as never,
           pubsubPublisher: haRedis as never,
           pubsubSubscriber: haSubscriber as never,
           nodeId: getMachineId(),
-          config: resolveHaConfigFromEnv(),
+          config: ha.resolveHaConfigFromEnv(),
           logger: this.logger,
         });
         await this.haManager.start();
@@ -302,10 +298,11 @@ export class Scope extends ScopeEntry {
     }
 
     // Transport bus (distributed mode only — requires HA Manager + Redis)
-    let transportBus: InstanceType<typeof RedisTransportBus> | undefined;
+    let transportBus: RedisTransportBus | undefined;
     if (this.haManager && this.haRedisClient && isDistributed) {
+      const bus = await import('../transport/bus/index.js');
       const haConfig = this.haManager.getConfig();
-      transportBus = new RedisTransportBus(this.haRedisClient as never, getMachineId(), {
+      transportBus = new bus.RedisTransportBus(this.haRedisClient as never, getMachineId(), {
         haKeyPrefix: haConfig.redisKeyPrefix,
         retryAfterSeconds: Math.ceil(haConfig.heartbeatTtlMs / 1000),
         logger: this.logger,
@@ -366,6 +363,7 @@ export class Scope extends ScopeEntry {
         ? { enabled: true, provider: 'redis' as const, redis: this.metadata.redis }
         : undefined);
     if (effectiveEventStoreConfig?.enabled && !this.cliMode) {
+      const { createEventStore } = await import('../transport/event-stores/index.js');
       const { eventStore } = createEventStore(effectiveEventStoreConfig, this.logger);
       this._eventStore = eventStore;
       this.logger.info('EventStore initialized for SSE resumability', {
@@ -616,145 +614,16 @@ export class Scope extends ScopeEntry {
     const serverPlugins = [...(this.metadata.plugins ?? [])];
 
     // Auto-load ObservabilityPlugin when observability config is present.
-    // Uses lazy require to avoid bundling @frontmcp/observability in browser builds.
     const observabilityConfig = this.metadata.observability;
     if (observabilityConfig) {
-      let ObservabilityPluginModule: any;
-      try {
-        ObservabilityPluginModule = requireOptionalModule('@frontmcp/observability', () =>
-          require('@frontmcp/observability'),
-        );
-      } catch (err) {
-        // Don't blindly report "not installed" — `require()` also throws when the
-        // package resolves but fails to load (export-condition / transpile / peer
-        // mismatch, e.g. tsx + yarn resolving the source entry). Re-probe with the
-        // runtime resolver so the warning matches reality and is debuggable (#453).
-        const probe = probeOptionalDependency('@frontmcp/observability', err, require.resolve);
-        if (probe.status === 'not-installed') {
-          this.logger.warn(
-            'observability config is set but @frontmcp/observability is not installed. ' +
-              'Install it with: npm install @frontmcp/observability',
-          );
-        } else {
-          this.logger.warn(
-            'observability config is set and @frontmcp/observability resolved but failed to load — ' +
-              'telemetry is disabled. Reinstalling will not help: this is usually an export-condition or ' +
-              'transpile mismatch (e.g. a dev runtime resolving the package source instead of its built ' +
-              'entry) or a failing transitive peer dependency. Inspect the resolved path and error below.',
-            { resolvedPath: probe.resolvedPath, error: probe.error },
-          );
-        }
-      }
-      if (ObservabilityPluginModule)
-        try {
-          const { ObservabilityPlugin } = ObservabilityPluginModule;
-          const pluginOptions = observabilityConfig === true ? {} : observabilityConfig;
-          serverPlugins.push(ObservabilityPlugin.init(pluginOptions));
-          this.logger.verbose('observability: auto-loaded ObservabilityPlugin from config');
-
-          // Wire StructuredLogTransport into the SDK logger pipeline so that
-          // every logger.info() call flows through it with trace correlation.
-          const loggingEnabled = pluginOptions.logging !== false;
-          if (loggingEnabled) {
-            try {
-              const { StructuredLogTransport, createSinks } = ObservabilityPluginModule;
-              const LoggerRegistryCls = require('../logger/logger.registry').default;
-              let loggerRegistry: any;
-              try {
-                loggerRegistry = this.globalProviders.get(LoggerRegistryCls);
-              } catch {
-                /* not available */
-              }
-              if (
-                loggerRegistry &&
-                typeof loggerRegistry.addTransport === 'function' &&
-                !loggerRegistry._hasStructuredTransport
-              ) {
-                const rawLogging = pluginOptions.logging;
-                const loggingOpts: Record<string, unknown> =
-                  rawLogging === true ? {} : typeof rawLogging === 'object' ? rawLogging : {};
-                const sinks = createSinks(loggingOpts['sinks'] as any);
-                const { FrontMcpContextStorage: CtxStorage } = require('../context/frontmcp-context-storage');
-                let contextStorage: any;
-                try {
-                  contextStorage = this.globalProviders.get(CtxStorage);
-                } catch {
-                  /* not available */
-                }
-                const contextAccessor = contextStorage
-                  ? () => {
-                      const ctx = contextStorage.getStore();
-                      if (!ctx) return undefined;
-                      return {
-                        requestId: ctx.requestId,
-                        traceContext: ctx.traceContext,
-                        sessionIdHash: require('@frontmcp/utils').sha256Hex(ctx.sessionId).slice(0, 12),
-                        scopeId: ctx.scopeId,
-                        flowName: ctx.flow?.name,
-                        elapsed: ctx.elapsed(),
-                      };
-                    }
-                  : undefined;
-
-                const transport = new StructuredLogTransport(
-                  sinks,
-                  {
-                    redactFields: loggingOpts['redactFields'] as string[] | undefined,
-                    includeStacks: loggingOpts['includeStacks'] as boolean | undefined,
-                    staticFields: loggingOpts['staticFields'] as Record<string, unknown> | undefined,
-                  },
-                  contextAccessor,
-                );
-
-                // Each entry logged during a request joins that request's log (`observability.requestLogs`)
-                transport.onEntry = (entry: unknown) => {
-                  const requestLog = contextStorage
-                    ?.getStore()
-                    ?.get(Symbol.for('frontmcp:observability:request-log-collector'));
-                  (requestLog as { addEntry?: (logged: unknown) => void } | undefined)?.addEntry?.(entry);
-                };
-                loggerRegistry.addTransport(transport);
-                loggerRegistry._hasStructuredTransport = true;
-                this.logger.verbose('observability: wired StructuredLogTransport into SDK logger');
-              }
-            } catch (e) {
-              this.logger.warn('observability: failed to wire structured logging', {
-                error: e instanceof Error ? e.message : 'Unknown error',
-              });
-            }
-          }
-
-          // Auto-configure tracing exporter if none is set
-          if (pluginOptions.tracing !== false) {
-            try {
-              if (!hasRegisteredTracerProvider(require('@opentelemetry/api'))) {
-                const { isDevelopment: checkDev } = require('@frontmcp/utils');
-                if (checkDev()) {
-                  const sdkTraceBase = require('@opentelemetry/sdk-trace-base');
-                  const { PrettySpanExporter } = ObservabilityPluginModule;
-                  const exporter = PrettySpanExporter
-                    ? new PrettySpanExporter()
-                    : new sdkTraceBase.ConsoleSpanExporter();
-                  registerExportingTracerProvider(require('@opentelemetry/api'), sdkTraceBase, exporter);
-                  this.logger.info('observability: auto-configured tracing (development mode)');
-                } else {
-                  this.logger.warn(
-                    'observability: tracing enabled but no TracerProvider configured. ' +
-                      'Set OTEL_EXPORTER_OTLP_ENDPOINT or call setupOTel() before server start.',
-                  );
-                }
-              }
-            } catch (e) {
-              this.logger.warn('observability: could not set up development tracing; spans are not recorded', {
-                error: e instanceof Error ? e.message : 'Unknown error',
-              });
-            }
-          }
-        } catch (e) {
-          this.logger.warn('observability: plugin initialization failed', {
-            error: e instanceof Error ? e.message : 'Unknown error',
-          });
-        }
+      const { observabilityPlugins } = await import('./observability-scope.helper.js');
+      serverPlugins.push(
+        ...observabilityPlugins({
+          config: observabilityConfig,
+          logger: this.logger,
+          globalProviders: this.globalProviders,
+        }),
+      );
     }
 
     if (serverPlugins.length > 0) {
@@ -991,6 +860,7 @@ export class Scope extends ScopeEntry {
         }
       };
 
+      const { registerJobCapabilities } = await import('../job/job-scope.helper.js');
       const result = await registerJobCapabilities({
         providers: this.scopeProviders,
         flowRegistry: this.scopeFlows,
@@ -1053,11 +923,14 @@ export class Scope extends ScopeEntry {
       TasksListFlow,
     ]);
 
-    await registerMcpRegistryFlows({
-      flowRegistry: this.scopeFlows,
-      registryOptions: this.metadata.registry,
-      servesServerEndpoint: this.routeBase === '' && this.metadata.apps.length > 0,
-    });
+    if (this.metadata.registry) {
+      const { registerMcpRegistryFlows } = await import('../mcp-registry/mcp-registry-scope.helper.js');
+      await registerMcpRegistryFlows({
+        flowRegistry: this.scopeFlows,
+        registryOptions: this.metadata.registry,
+        servesServerEndpoint: this.routeBase === '' && this.metadata.apps.length > 0,
+      });
+    }
 
     await this.auth.ready;
     await this.transportService.ready;
@@ -1066,6 +939,7 @@ export class Scope extends ScopeEntry {
     // Wired once every flow and the notification service exist — a relayed request runs
     // through this scope's `http:request` flow.
     if (this.haManager && this.transportBus) {
+      const { wireSessionRelay } = await import('../transport/relay/relay-scope.helper.js');
       this.sessionRelayHandle = wireSessionRelay({
         nodeId: getMachineId(),
         haManager: this.haManager,
@@ -1111,6 +985,7 @@ export class Scope extends ScopeEntry {
       // agent-completion and job-completion sources subscribe to this scope's completion events
       // (published by agents:call-agent and the job execution manager); webhook sources get an
       // HTTP route guarded like a custom http.route.
+      const { registerChannelCapabilities } = await import('../channel/channel-scope.helper.js');
       const channelResult = await registerChannelCapabilities({
         providers: this.scopeProviders,
         owner: scopeRef,

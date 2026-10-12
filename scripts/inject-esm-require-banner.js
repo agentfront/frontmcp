@@ -50,10 +50,16 @@ const BANNER =
   "const require = __frontmcpModule ? __frontmcpModule.createRequire(import.meta.url || 'file:///') : undefined;\n" +
   '// __frontmcpCreateRequire\n';
 
+// Any reference to `require` (a call, `typeof require`, `require.resolve`, esbuild's `__require` shim); a mention in a string or comment only adds the banner
+const REQUIRE_REFERENCE = /(^|[^.\w$])(__)?require\b/m;
+
 function injectInto(file) {
   const original = fs.readFileSync(file, 'utf8');
   if (original.includes(MARKER)) {
     return false; // already injected
+  }
+  if (!REQUIRE_REFERENCE.test(original)) {
+    return false; // nothing names `require`, so the module stays free of top-level side effects
   }
   fs.writeFileSync(file, BANNER + original, 'utf8');
   return true;

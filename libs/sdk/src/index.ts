@@ -327,9 +327,9 @@ export type {
 export { OpenAIAdapter, AnthropicAdapter } from './agent/adapters';
 export type { OpenAIAdapterConfig, OpenAIApiMode, AnthropicAdapterConfig } from './agent/adapters';
 
-export const ToolHook = FlowHooksOf('tools:call-tool');
-export const ListToolsHook = FlowHooksOf('tools:list-tools');
-export const HttpHook = FlowHooksOf('http:request');
+export const ToolHook = /* @__PURE__ */ FlowHooksOf('tools:call-tool');
+export const ListToolsHook = /* @__PURE__ */ FlowHooksOf('tools:list-tools');
+export const HttpHook = /* @__PURE__ */ FlowHooksOf('http:request');
 
 // Custom authorization-UI primitives (#469) are configured via the `auth.ui`
 // slot→file map + `auth.extras` name→handler map on the auth config — there is
@@ -341,33 +341,33 @@ export const HttpHook = FlowHooksOf('http:request');
 // OAuth flow hooks (local-mode authorization server). Exported so the OAuth AS
 // flow augmentations land in the public type graph and `FlowHooksOf('oauth:*')`
 // typechecks for consumers — no more `as any` to hook login/callback/token (#460).
-export const OAuthAuthorizeHook = FlowHooksOf('oauth:authorize');
-export const OAuthCallbackHook = FlowHooksOf('oauth:callback');
-export const OAuthTokenHook = FlowHooksOf('oauth:token');
-export const OAuthRegisterHook = FlowHooksOf('oauth:register');
+export const OAuthAuthorizeHook = /* @__PURE__ */ FlowHooksOf('oauth:authorize');
+export const OAuthCallbackHook = /* @__PURE__ */ FlowHooksOf('oauth:callback');
+export const OAuthTokenHook = /* @__PURE__ */ FlowHooksOf('oauth:token');
+export const OAuthRegisterHook = /* @__PURE__ */ FlowHooksOf('oauth:register');
 
 // Resource hooks
-export const ResourceHook = FlowHooksOf('resources:read-resource');
-export const ListResourcesHook = FlowHooksOf('resources:list-resources');
-export const ListResourceTemplatesHook = FlowHooksOf('resources:list-resource-templates');
+export const ResourceHook = /* @__PURE__ */ FlowHooksOf('resources:read-resource');
+export const ListResourcesHook = /* @__PURE__ */ FlowHooksOf('resources:list-resources');
+export const ListResourceTemplatesHook = /* @__PURE__ */ FlowHooksOf('resources:list-resource-templates');
 
 // Prompt and completion hooks. Exported so their flow augmentations land in the public type graph
 // and `FlowHooksOf('prompts:get-prompt' | 'prompts:list-prompts' | 'completion:complete')` typechecks
 // for consumers (#678).
-export const PromptHook = FlowHooksOf('prompts:get-prompt');
-export const ListPromptsHook = FlowHooksOf('prompts:list-prompts');
-export const CompletionHook = FlowHooksOf('completion:complete');
+export const PromptHook = /* @__PURE__ */ FlowHooksOf('prompts:get-prompt');
+export const ListPromptsHook = /* @__PURE__ */ FlowHooksOf('prompts:list-prompts');
+export const CompletionHook = /* @__PURE__ */ FlowHooksOf('completion:complete');
 
 // Agent hooks
-export const AgentCallHook = FlowHooksOf('agents:call-agent');
+export const AgentCallHook = /* @__PURE__ */ FlowHooksOf('agents:call-agent');
 
 // Job hooks: every attempt of a job runs `jobs:execute-job`, inline or in the background, each retry
 // and each workflow step (#700)
-export const JobHook = FlowHooksOf('jobs:execute-job');
+export const JobHook = /* @__PURE__ */ FlowHooksOf('jobs:execute-job');
 
 // Channel hooks
-export const ChannelSendHook = FlowHooksOf('channels:send-notification');
-export const ChannelListHook = FlowHooksOf('channels:list');
+export const ChannelSendHook = /* @__PURE__ */ FlowHooksOf('channels:send-notification');
+export const ChannelListHook = /* @__PURE__ */ FlowHooksOf('channels:list');
 
 // Built-in flows no other export reaches. Exporting them puts their `ExtendFlows` entries in the published type graph,
 // so `FlowHooksOf()`, `FlowCtxOf` and `@Flow` accept every flow name FrontMCP runs.

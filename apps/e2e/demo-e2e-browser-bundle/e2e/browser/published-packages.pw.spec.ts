@@ -125,9 +125,11 @@ test.describe('a CommonJS dependency requiring @frontmcp/sdk in a plain Vite app
       .flatMap((item) => (item.type === 'chunk' ? item.moduleIds : []))
       .map((id) => id.split('\\').join('/'));
 
-    expect(moduleIds.filter((id) => id.includes('/libs/sdk/dist/'))).toEqual([
-      join(workspace, 'libs/sdk/dist/browser/index.mjs').split('\\').join('/'),
-    ]);
+    // The browser build is one module per source file, so the bundle holds its entry and the modules it reaches
+    const sdkModuleIds = moduleIds.filter((id) => id.includes('/libs/sdk/dist/'));
+    const browserBuild = join(workspace, 'libs/sdk/dist/browser').split('\\').join('/');
+    expect(sdkModuleIds).toContain(`${browserBuild}/index.mjs`);
+    expect(sdkModuleIds.filter((id) => !id.startsWith(`${browserBuild}/`))).toEqual([]);
 
     const server = await vite.preview({ root: cjsProject, configFile, preview: { port: 4413, strictPort: true } });
     try {

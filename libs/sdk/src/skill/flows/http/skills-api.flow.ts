@@ -27,6 +27,7 @@ import { extractToolNames } from '../../../common/metadata/skill.metadata';
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
 import type ToolRegistry from '../../../tool/tool.registry';
 import { authorizeSkillHttpRequest } from '../../auth';
+import { SkillSemanticSearchToken } from '../../semantic/skill-semantic-search.interface';
 import { filterSkillsByAuthorities, getSkillAuthorities } from '../../skill-authorities.helper';
 import { createSkillEntryResolver } from '../../skill-entry.resolver';
 import {
@@ -523,9 +524,6 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     | { search(q: string, limit: number): Promise<{ skillId: string; score: number }[]> }
     | undefined {
     try {
-      // Late require to avoid a top-of-file circular when this file is the
-      // first one importing semantic/.
-      const { SkillSemanticSearchToken } = require('../../semantic/skill-semantic-search.interface');
       const providers = this.scope.providers as {
         tryGet?: <T>(t: unknown) => T | undefined;
         get?: <T>(t: unknown) => T;

@@ -1,0 +1,40 @@
+{
+  "name": "demo-e2e-bundle-size",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-bundle-size/fixture",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:bundle-size"],
+  "targets": {
+    "build": {
+      "executor": "nx:noop",
+      "dependsOn": [{ "projects": ["sdk", "plugin-webmcp"], "target": "build" }]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-bundle-size"],
+      "dependsOn": [{ "projects": ["sdk", "plugin-webmcp"], "target": "build" }],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-bundle-size/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": false
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-bundle-size-e2e"],
+      "dependsOn": [{ "projects": ["sdk", "plugin-webmcp"], "target": "build" }],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-bundle-size/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": false
+      }
+    },
+    "typecheck-e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p tsconfig.e2e.json",
+        "cwd": "apps/e2e/demo-e2e-bundle-size"
+      }
+    }
+  }
+}

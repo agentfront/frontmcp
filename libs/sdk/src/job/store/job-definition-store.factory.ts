@@ -3,6 +3,7 @@ import { createRedisClient, StorageConfigError } from '@frontmcp/utils';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobDefinitionStore } from './job-definition.interface';
 import { MemoryJobDefinitionStore } from './memory-job-definition.store';
+import { RedisJobDefinitionStore } from './redis-job-definition.store';
 
 /* istanbul ignore next -- no-op fallback used only when caller omits logger */
 const noopFn = () => {};
@@ -56,7 +57,6 @@ export function createJobDefinitionStore(
 
   if (options?.redis) {
     try {
-      const { RedisJobDefinitionStore } = require('./redis-job-definition.store');
       const { url, host, port, password, db, tls } = options.redis;
       const client = createRedisClient({
         url,

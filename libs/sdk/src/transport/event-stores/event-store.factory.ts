@@ -11,6 +11,8 @@ import type { EventStore } from '@frontmcp/protocol';
 
 import type { FrontMcpLogger, RedisOptionsInput, SqliteOptionsInput } from '../../common';
 import { PublicMcpError } from '../../errors';
+import { MemoryEventStore } from './memory.event-store';
+import { RedisEventStore } from './redis.event-store';
 
 /**
  * EventStore configuration for SSE resumability support.
@@ -163,10 +165,6 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
       );
     }
 
-    // Lazy-load Redis EventStore
-
-    const { RedisEventStore } = require('./redis.event-store') as typeof import('./redis.event-store');
-
     logger?.info('[EventStoreFactory] Creating Redis EventStore for resumability', {
       maxEvents,
       ttlMs,
@@ -183,9 +181,6 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
   }
 
   // Default: memory
-
-  const { MemoryEventStore } = require('./memory.event-store') as typeof import('./memory.event-store');
-
   logger?.info('[EventStoreFactory] Creating in-memory EventStore for resumability', {
     maxEvents,
     ttlMs,

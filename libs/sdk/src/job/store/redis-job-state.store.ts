@@ -24,10 +24,15 @@ export interface RedisStateStoreLike {
 export class RedisJobStateStore implements JobStateStore {
   private readonly client: RedisStateStoreLike;
   private readonly keyPrefix: string;
-  private readonly logger: FrontMcpLogger;
+  private readonly logger?: FrontMcpLogger;
   private readonly ttlSeconds: number;
 
-  constructor(client: RedisStateStoreLike, logger: FrontMcpLogger, keyPrefix = 'mcp:jobs:', ttlSeconds = 86400) {
+  constructor(
+    client: RedisStateStoreLike,
+    logger: FrontMcpLogger | undefined,
+    keyPrefix = 'mcp:jobs:',
+    ttlSeconds = 86400,
+  ) {
     this.client = client;
     this.logger = logger;
     this.keyPrefix = keyPrefix;
