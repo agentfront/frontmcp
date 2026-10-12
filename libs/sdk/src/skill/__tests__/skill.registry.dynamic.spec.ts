@@ -13,6 +13,7 @@ import 'reflect-metadata';
 
 import { createProviderRegistryWithScope } from '../../__test-utils__/fixtures/scope.fixtures';
 import { type SkillAction, type SkillContent } from '../../common/interfaces';
+import { MemorySkillProvider } from '../providers/memory-skill.provider';
 import SkillRegistry from '../skill.registry';
 
 const owner = () => ({ kind: 'app' as const, id: 'dyn-test-app', ref: Symbol('dyn-test') });
@@ -35,6 +36,25 @@ const buildAction = (overrides: Partial<SkillAction> = {}): SkillAction => ({
 });
 
 describe('SkillRegistry — dynamic registration', () => {
+  it('builds its search provider again when the first build fails', async () => {
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+    const initialize = jest
+      .spyOn(MemorySkillProvider.prototype, 'initialize')
+      .mockRejectedValueOnce(new Error('index unavailable'));
+
+    try {
+      await expect(registry.registerSkillContent(buildSkillContent())).rejects.toThrow('index unavailable');
+      await registry.registerSkillContent(buildSkillContent());
+
+      expect(initialize).toHaveBeenCalledTimes(2);
+      expect((await registry.loadSkill('billing'))?.skill.name).toBe('billing');
+    } finally {
+      initialize.mockRestore();
+    }
+  });
+
   it('registers a skill that immediately appears in getSkills, findByName, and loadSkill', async () => {
     const providers = await createProviderRegistryWithScope();
     const registry = new SkillRegistry(providers, [], owner());

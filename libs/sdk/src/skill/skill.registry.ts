@@ -1692,7 +1692,14 @@ export default class SkillRegistry
 
   /** The search and storage provider; the in-memory one, with its search index, is built the first time a skill needs it. */
   private storage(): Promise<SkillStorageProvider> {
-    this.storageProviderLoad ??= this.createMemoryProvider();
+    if (!this.storageProviderLoad) {
+      const load = this.createMemoryProvider().catch((error: unknown) => {
+        // A failed build is retried by the next caller, unless a provider replaced it meanwhile
+        if (this.storageProviderLoad === load) this.storageProviderLoad = undefined;
+        throw error;
+      });
+      this.storageProviderLoad = load;
+    }
     return this.storageProviderLoad;
   }
 
