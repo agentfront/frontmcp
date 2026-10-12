@@ -2528,6 +2528,7 @@ __metadata:
     reflect-metadata: "npm:^0.2.2"
   peerDependencies:
     "@frontmcp/lazy-zod": 1.9.6
+    "@frontmcp/sdk": 1.9.6
     "@vercel/kv": ^2.0.0 || ^3.0.0
   peerDependenciesMeta:
     "@vercel/kv":
@@ -2565,6 +2566,7 @@ __metadata:
   peerDependencies:
     "@frontmcp/lazy-zod": 1.9.6
     "@frontmcp/plugin-cache": 1.9.6
+    "@frontmcp/sdk": 1.9.6
   languageName: unknown
   linkType: soft
 
@@ -2576,6 +2578,7 @@ __metadata:
     reflect-metadata: "npm:^0.2.2"
   peerDependencies:
     "@frontmcp/lazy-zod": 1.9.6
+    "@frontmcp/sdk": 1.9.6
   languageName: unknown
   linkType: soft
 
@@ -2586,6 +2589,7 @@ __metadata:
     "@frontmcp/sdk": "npm:1.9.6"
     reflect-metadata: "npm:^0.2.2"
   peerDependencies:
+    "@frontmcp/sdk": 1.9.6
     "@launchdarkly/node-server-sdk": ^9.0.0 || ^10.0.0
     "@splitsoftware/splitio": ^10.0.0 || ^11.0.0
     unleash-client: ^5.0.0 || ^6.0.0
@@ -2609,6 +2613,7 @@ __metadata:
     reflect-metadata: "npm:^0.2.2"
   peerDependencies:
     "@frontmcp/lazy-zod": 1.9.6
+    "@frontmcp/sdk": 1.9.6
     "@vercel/kv": ^2.0.0 || ^3.0.0
   peerDependenciesMeta:
     "@vercel/kv":
@@ -2629,6 +2634,7 @@ __metadata:
     "@enclave-vm/ast": "*"
     "@enclave-vm/core": "*"
     "@frontmcp/lazy-zod": 1.9.6
+    "@frontmcp/sdk": 1.9.6
     undici: ">=6"
   peerDependenciesMeta:
     "@enclave-vm/ast":
@@ -2649,6 +2655,7 @@ __metadata:
     reflect-metadata: "npm:^0.2.2"
   peerDependencies:
     "@frontmcp/lazy-zod": 1.9.6
+    "@frontmcp/sdk": 1.9.6
   languageName: unknown
   linkType: soft
 
@@ -2660,6 +2667,9 @@ __metadata:
     "@frontmcp/plugin-codecall": "npm:1.9.6"
     "@frontmcp/plugin-dashboard": "npm:1.9.6"
     "@frontmcp/plugin-remember": "npm:1.9.6"
+    "@frontmcp/sdk": "npm:1.9.6"
+  peerDependencies:
+    "@frontmcp/sdk": 1.9.6
   languageName: unknown
   linkType: soft
 

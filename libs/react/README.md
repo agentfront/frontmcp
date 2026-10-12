@@ -11,7 +11,7 @@ npm install @frontmcp/react react react-dom
 ```
 
 - `react` and `react-dom` 18 or 19 are peer dependencies.
-- `@frontmcp/sdk` and `@frontmcp/utils` come with it, at the same version. `@frontmcp/react` re-exports what an app needs from the SDK (`create`, `connect` and its variants, the decorators and their function forms, the context classes, and `z`), so you don't import `@frontmcp/sdk` yourself. npm 7 and later also install its peer `@frontmcp/lazy-zod`, and `zod` with it.
+- `@frontmcp/sdk` is a peer dependency, at the same version, so the app and this package share one copy: npm 7 and later and pnpm install it for you, and with Yarn add it yourself. `@frontmcp/utils` comes with it. `@frontmcp/react` re-exports what an app needs from the SDK (`create`, `connect` and its variants, the decorators and their function forms, the context classes, and `z`), so you don't import `@frontmcp/sdk` yourself. npm 7 and later also install its peer `@frontmcp/lazy-zod`, and `zod` with it.
 - `react-router-dom` 7 is an optional peer, needed only for `@frontmcp/react/router`.
 - In the browser, a bundler that follows the `browser` export condition, such as Vite, picks the SDK's browser build ([Running in a browser](https://frontmcp.dev/reference/react#running-in-a-browser)). In Node, for tests or server rendering, use Node.js 24 or later.
 

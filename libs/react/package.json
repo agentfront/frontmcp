@@ -110,10 +110,10 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "1.9.6",
     "@frontmcp/utils": "1.9.6"
   },
   "devDependencies": {
+    "@frontmcp/sdk": "1.9.6",
     "typescript": "^5.9.3"
   }
 }
