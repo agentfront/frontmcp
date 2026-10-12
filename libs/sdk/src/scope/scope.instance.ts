@@ -1612,8 +1612,8 @@ export class Scope extends ScopeEntry {
       | undefined;
     if (!config) return;
 
-    const { authoritiesFromConfig } = await import('../front-mcp/authorities-engine.js');
     try {
+      const { authoritiesFromConfig } = await import('../front-mcp/authorities-engine.js');
       const authorities = authoritiesFromConfig(config);
       this._authoritiesEngine = authorities.engine;
       this._authoritiesContextBuilder = authorities.contextBuilder;
