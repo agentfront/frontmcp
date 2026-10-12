@@ -19,6 +19,8 @@ export type ModuleResolution = 'bundler' | 'node';
 
 const LEGACY_MODULE_RESOLUTIONS = ['node', 'node10', 'classic'];
 
+const LEGACY_GENERATED_TYPES = ['node', '@types/jest', '@frontmcp/testing'];
+
 const TYPES_ENTRIES = [
   { entry: 'node', packageName: '@types/node' },
   { entry: 'jest', packageName: '@types/jest' },
@@ -238,6 +240,10 @@ function leftUnchanged(err: unknown): unknown {
   return new Error(`${err.message}. It was left unchanged — fix it, then run "frontmcp init" again.`, { cause: err });
 }
 
+function isLegacyGeneratedTypes(types: unknown): boolean {
+  return Array.isArray(types) && JSON.stringify(types) === JSON.stringify(LEGACY_GENERATED_TYPES);
+}
+
 export async function runInit(baseDir?: string): Promise<void> {
   const cwd = baseDir ?? process.cwd();
   const tsconfigPath = path.join(cwd, 'tsconfig.json');
@@ -260,6 +266,9 @@ export async function runInit(baseDir?: string): Promise<void> {
 
   const existing = current.config;
   let merged = deepMerge(recommended as any, existing);
+  if (isLegacyGeneratedTypes(existing['compilerOptions']?.types)) {
+    merged.compilerOptions = { ...merged.compilerOptions, types: recommended.compilerOptions.types };
+  }
   merged = ensureRequiredTsOptions(merged, recommended.compilerOptions.moduleResolution);
 
   const { result: withWidgetExcludes, added: addedExcludes } = ensureWidgetExcludes(merged);

@@ -145,6 +145,40 @@ describe('runInit', () => {
     expect(config['compilerOptions']['types']).toEqual(['node', 'jest', '@frontmcp/testing']);
   });
 
+  it('drops the types list an earlier init generated when none of its packages is there', async () => {
+    await writeJSON(tsconfigPath, {
+      compilerOptions: { ...RECOMMENDED_TSCONFIG.compilerOptions, types: ['node', '@types/jest', '@frontmcp/testing'] },
+    });
+
+    await runInit(dir);
+
+    const { config } = (await readTsconfig(tsconfigPath)) ?? { config: {} };
+    expect(config['compilerOptions']).not.toHaveProperty('types');
+  });
+
+  it('replaces the types list an earlier init generated with the packages the project has', async () => {
+    await writeJSON(path.join(dir, 'package.json'), { devDependencies: { '@types/node': '^24.0.0' } });
+    await writeJSON(tsconfigPath, {
+      compilerOptions: { ...RECOMMENDED_TSCONFIG.compilerOptions, types: ['node', '@types/jest', '@frontmcp/testing'] },
+    });
+
+    await runInit(dir);
+
+    const { config } = (await readTsconfig(tsconfigPath)) ?? { config: {} };
+    expect(config['compilerOptions']['types']).toEqual(['node']);
+  });
+
+  it('keeps a types list the user wrote', async () => {
+    await writeJSON(tsconfigPath, {
+      compilerOptions: { ...RECOMMENDED_TSCONFIG.compilerOptions, types: ['node', 'vitest/globals'] },
+    });
+
+    await runInit(dir);
+
+    const { config } = (await readTsconfig(tsconfigPath)) ?? { config: {} };
+    expect(config['compilerOptions']['types']).toEqual(['node', 'vitest/globals']);
+  });
+
   it('writes a types entry for a type package installed but not declared', async () => {
     await mkdir(path.join(dir, 'node_modules', '@types', 'node'), { recursive: true });
     await writeJSON(path.join(dir, 'node_modules', '@types', 'node', 'package.json'), { name: '@types/node' });
