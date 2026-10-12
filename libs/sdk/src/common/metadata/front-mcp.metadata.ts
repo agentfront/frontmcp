@@ -19,6 +19,7 @@ import {
   healthOptionsSchema,
   httpOptionsSchema,
   loggingOptionsSchema,
+  mcpRegistryOptionsSchema,
   metricsOptionsSchema,
   observabilityOptionsSchema,
   outboundFetchOptionsSchema,
@@ -36,6 +37,7 @@ import {
   type HealthOptionsInput,
   type HttpOptionsInput,
   type LoggingOptionsInput,
+  type McpRegistryOptionsInput,
   type MetricsOptionsInput,
   type ObservabilityOptionsInterface,
   type OutboundFetchOptionsInput,
@@ -448,6 +450,9 @@ export interface FrontMcpBaseMetadata {
    */
   metrics?: MetricsOptionsInput;
 
+  /** MCP Registry domain proof, SEP-2127 server card and AI Catalog. See `McpRegistryOptionsInterface`. */
+  registry?: McpRegistryOptionsInput;
+
   /**
    * Observability configuration — OpenTelemetry tracing, structured logging,
    * and per-request log collection.
@@ -652,6 +657,7 @@ export const frontMcpBaseSchema = z.object({
   observability: observabilityOptionsSchema,
   health: healthOptionsSchema.optional(),
   metrics: metricsOptionsSchema.optional(),
+  registry: mcpRegistryOptionsSchema.optional(),
   channels: channelsConfigSchema.optional(),
   authorities: z
     .object({

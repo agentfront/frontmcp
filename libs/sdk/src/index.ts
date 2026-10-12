@@ -380,6 +380,9 @@ export type { default as OauthUserInfoFlow } from './auth/flows/oauth.userinfo.f
 export type { default as WellKnownJwksFlow } from './auth/flows/well-known.jwks.flow';
 export type { default as WellKnownAsFlow } from './auth/flows/well-known.oauth-authorization-server.flow';
 export type { default as WellKnownPrmFlow } from './auth/flows/well-known.prm.flow';
+export type { default as WellKnownMcpRegistryAuthFlow } from './mcp-registry/flows/well-known.mcp-registry-auth.flow';
+export type { default as WellKnownAiCatalogFlow } from './mcp-registry/flows/well-known.ai-catalog.flow';
+export type { default as ServerCardFlow } from './mcp-registry/flows/server-card.flow';
 export type { default as ElicitationRequestFlow } from './elicitation/flows/elicitation-request.flow';
 export type { default as ElicitationResultFlow } from './elicitation/flows/elicitation-result.flow';
 export type { default as SetLevelFlow } from './logging/flows/set-level.flow';

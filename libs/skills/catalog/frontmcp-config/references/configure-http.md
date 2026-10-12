@@ -389,9 +389,12 @@ Custom paths that collide with FrontMCP's own surfaces are **rejected at
 startup** (fail-fast) — they would otherwise shadow or be shadowed by the MCP
 endpoint. Reserved:
 
-- the resolved MCP entry path (and its `/sse` + `/message` siblings) — split-by-app
-  scope bases are included (e.g. `/mcp/billing`),
-- anything under `/oauth/*` and `/.well-known/*`,
+- the resolved MCP entry path (and its `/sse`, `/message` and `/server-card` siblings) —
+  split-by-app scope bases are included (e.g. `/mcp/billing`),
+- anything under `/oauth/*` and `/.well-known/*`. FrontMCP serves its discovery documents
+  there: OAuth metadata, and with `@FrontMcp({ registry })` the MCP Registry domain proof
+  (`/.well-known/mcp-registry-auth`) and the AI Catalog (`/.well-known/ai-catalog.json`), always
+  at the root of the host whatever `entryPath` is,
 - `/health` and `/metrics`,
 - the health probe paths, `/healthz` and `/readyz` (or `health.healthzPath` /
   `health.readyzPath`), while health is enabled. Up to 1.9.4 a route there
@@ -502,7 +505,7 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 
 ### Custom Routes
 
-- [ ] No custom `path` collides with the MCP entry path, `/sse`, `/message`, `/oauth/*`, `/.well-known/*`, `/health`, or `/metrics`
+- [ ] No custom `path` collides with the MCP entry path, `/sse`, `/message`, `/server-card`, `/oauth/*`, `/.well-known/*`, `/health`, or `/metrics`
 - [ ] HTML/binary/stream handlers call `res.setHeader('Content-Type', ...)` (or `res.type(...)`) before `res.send(...)`
 - [ ] `auth: true` is set on any route that must require a verified session
 - [ ] Large payloads are served via a custom GET route + `resource_link`, not a `@Resource`

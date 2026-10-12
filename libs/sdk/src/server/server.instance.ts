@@ -9,7 +9,9 @@ import {
 } from '../common';
 import { type HealthOptionsInterface } from '../common/types/options/health';
 import { type MetricsOptionsInterface } from '../common/types/options/metrics';
+import { resolveEntryPath } from '../common/utils/path.utils';
 import { registerHealthRoutes, type HealthService } from '../health';
+import { serverCardPath } from '../mcp-registry/mcp-registry.utils';
 import { registerMetricsRoutes, type MetricsService } from '../metrics';
 import { type HostServerAdapter } from './adapters/base.host.adapter';
 import { resolveHttpCors } from './middleware/cors-env';
@@ -62,6 +64,7 @@ export class FrontMcpServerInstance extends FrontMcpServer {
       const { ExpressHostAdapter } = require('#express-host') as typeof import('#express-host');
       this.host = new ExpressHostAdapter({
         ...(corsConfig ? { cors: corsConfig } : {}),
+        publicCorsPaths: [serverCardPath({ entryPath: resolveEntryPath(this.config.entryPath), routeBase: '' })],
         ...(this.config.security ? { security: this.config.security } : {}),
         ...(this.config.securityHeaders ? { securityHeaders: this.config.securityHeaders } : {}),
         ...(this.config.bodyLimit !== undefined ? { bodyLimit: this.config.bodyLimit } : {}),

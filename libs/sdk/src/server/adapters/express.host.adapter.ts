@@ -41,6 +41,9 @@ export interface ExpressHostAdapterOptions {
    */
   cors?: CorsOptions;
 
+  /** Paths `cors` leaves alone because their flows send public CORS, preflight included (the server card). */
+  publicCorsPaths?: string[];
+
   /**
    * Security options for transport hardening.
    * Includes bind address and DNS rebinding protection.
@@ -117,13 +120,13 @@ export class ExpressHostAdapter extends HostServerAdapter {
     const corsOptions = options?.cors;
     const corsEnabled = corsOptions?.origin !== undefined && corsOptions.origin !== false;
     if (corsEnabled) {
-      this.app.use(
-        cors({
-          origin: corsOptions.origin,
-          credentials: corsOptions.credentials ?? false,
-          maxAge: corsOptions.maxAge ?? 300,
-        }),
-      );
+      const configuredCors = cors({
+        origin: corsOptions.origin,
+        credentials: corsOptions.credentials ?? false,
+        maxAge: corsOptions.maxAge ?? 300,
+      });
+      const publicCorsPaths = new Set(options?.publicCorsPaths);
+      this.app.use((req, res, next) => (publicCorsPaths.has(req.path) ? next() : configuredCors(req, res, next)));
     }
 
     // Host validation (DNS-rebinding protection, GHSA-mc9g-v2cp-vfff).

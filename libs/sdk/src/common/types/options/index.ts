@@ -17,3 +17,4 @@ export * from './sqlite';
 export * from './observability';
 export * from './health';
 export * from './metrics';
+export * from './registry';
