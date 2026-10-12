@@ -1,147 +1,173 @@
 # @frontmcp/plugin-skilled-openapi
 
-> Wrap your REST API as a **skilled MCP server** without rewriting any controllers.
+Serves a REST API to the model as a few named **skills** instead of one tool per endpoint. You describe the API in a
+**bundle**: its services, credentials, operations, and skills that each group some operations with instructions. The
+model sees three tools: `search_skill` finds a skill, `load_skill` reads its instructions and the operations it offers,
+and `run_workflow` runs a short script that calls those operations, each one checked, authorized and sent with
+credentials the model never sees. Use it for an API with too many operations to list as tools. For a small API, where
+the model should see every operation, use the OpenAPI adapter in
+[`@frontmcp/adapters`](https://www.npmjs.com/package/@frontmcp/adapters); the two work side by side.
 
-This plugin lets a FrontMCP server consume **skill bundles** (a standard OpenAPI spec plus an Overlay, optionally signed) and serve them as MCP **skills**. The MCP client only ever sees three meta-tools — `search_skill`, `load_skill`, `run_workflow` — while the per-operation REST tools stay hidden behind the skill abstraction. `run_workflow` runs a short AgentScript program in a dependency-free enclave sandbox where each `await callTool(actionId, input)` invokes a loaded skill's operation, so one workflow can chain many calls in a single round-trip.
+[![npm](https://img.shields.io/npm/v/@frontmcp/plugin-skilled-openapi.svg)](https://www.npmjs.com/package/@frontmcp/plugin-skilled-openapi) [![License](https://img.shields.io/npm/l/@frontmcp/plugin-skilled-openapi.svg)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
 
-This sidesteps the well-documented "tool overload" problem (model reliability degrades past ~20 tools, GPT Actions caps at 30, Cursor at 40) when wrapping a real-world API with hundreds of endpoints.
-
-## Installation
-
-```bash
-npm install @frontmcp/plugin-skilled-openapi
-```
-
-The `run_workflow` meta-tool runs AgentScript in the [`@enclave-vm`](https://www.npmjs.com/package/@enclave-vm/core) sandbox, which is an **optional** peer dependency. Install it to enable workflows (without it, `search_skill`/`load_skill` still work and `run_workflow` returns a clear "sandbox not installed" error):
+## Install
 
 ```bash
-npm install @enclave-vm/core @enclave-vm/ast
+npm install @frontmcp/plugin-skilled-openapi @enclave-vm/core @enclave-vm/ast
 ```
+
+The plugin runs inside a FrontMCP server, so your app needs `@frontmcp/sdk`, at the same version as this package, and
+Node.js 24 or later. Its peer dependency `@frontmcp/lazy-zod` comes with the SDK. The other peers are optional:
+
+| Package                               | Enables                                                                                                                                                                          |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@enclave-vm/core`, `@enclave-vm/ast` | `run_workflow`. Without them, `search_skill` and `load_skill` still work, and `run_workflow` answers `workflow execution unavailable: the @enclave-vm sandbox is not installed`. |
+| `undici`                              | `outbound.egressProxy` on Node.js. The plugin loads it only when that option is set.                                                                                             |
 
 ## Usage
 
-Register the plugin with `SkilledOpenApiPlugin.init(...)` and point it at a bundle source. The `dev: true` flag bypasses signature verification (unless `requireSignature` is set explicitly) and allows `http://` upstreams for local iteration — see [Security](https://frontmcp.dev/reference/plugins/skilled-openapi#what-the-checks-protect-against) before going to production.
+Register the plugin with `SkilledOpenApiPlugin.init()` (also the package's default export) in the `plugins` of
+`@FrontMcp` or of an `@App`, and point it at a bundle:
 
-```typescript
-import * as path from 'node:path';
-
-import SkilledOpenApiPlugin from '@frontmcp/plugin-skilled-openapi';
-import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+```ts
+import { SkilledOpenApiPlugin } from '@frontmcp/plugin-skilled-openapi';
+import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
-  info: { name: 'Skilled-OpenAPI Demo', version: '0.1.0' },
+  info: { name: 'billing', version: '1.0.0' },
   apps: [],
   plugins: [
     SkilledOpenApiPlugin.init({
-      source: { type: 'static', path: path.resolve(__dirname, '../bundle.json'), watch: true },
-      // Local iteration only — bypasses signing and allows http:// upstreams.
-      dev: true,
+      source: { type: 'static', path: './billing.bundle.json', watch: true },
       requireSignature: false,
-      // Dev/single-tenant credential map (vaultRef -> secret). In production,
-      // resolve credentials from @frontmcp/auth's vault instead.
-      credentials: { 'billing-token': 'demo-bearer-xyz' },
+      credentials: { 'billing-token': process.env.BILLING_API_TOKEN! },
     }),
   ],
-  http: { port: 3010 },
-  logging: { level: LogLevel.Info },
 })
 export default class Server {}
 ```
 
-With the server running, `tools/list` returns **only** `search_skill`, `load_skill`, `run_workflow`; the bundle's operations are hidden. A workflow then drives them:
+`requireSignature: false` lets an unsigned bundle load while you develop. In production, sign the bundle in CI, list the
+public key in `trustedKeys`, and set `unprotectedOps: 'deny'`; see [Security](#security).
+
+`tools/list` then returns `search_skill`, `load_skill` and `run_workflow`, and none of the bundle's operations. After
+loading a skill, the model runs its operations with a script:
 
 ```jsonc
-// run_workflow
-{ "script": "const inv = await callTool('createInvoice', { customerId: 'cus_1', amount: 4200 }); return inv;" }
-// -> { "success": true, "value": { "id": "inv_1", "status": "open" }, "stats": { "durationMs": 12, "toolCalls": 1, "steps": 3 } }
+// run_workflow arguments
+{ "script": "const invoice = await callTool('getInvoice', { id: 'INV-1' }); return invoice.status;" }
+// result
+{ "success": true, "value": "paid", "stats": { "durationMs": 12, "toolCalls": 1, "steps": 3 } }
 ```
 
-See the [5-minute quickstart](https://frontmcp.dev/reference/plugins/skilled-openapi#serving-a-bundle) for an end-to-end run against a mock upstream.
+## The three tools
 
-## How it works
+| Tool           | Input                                                | What it does                                                                                                                                                                             |
+| -------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_skill` | `query`, `limit?` (default 20), `tags?`, `notQuery?` | Searches the skills and returns `{ skills: [{ skillId, name, description, score }] }`. Its description lists the skills the caller may use, so the model sees what the server can do.    |
+| `load_skill`   | `skillId`                                            | Returns the skill's markdown instructions and its `actions`, with their input and output JSON Schemas: the `actionId`s a script calls.                                                   |
+| `run_workflow` | `script`                                             | Runs an AgentScript program (a subset of JavaScript) in the `@enclave-vm` sandbox. Each `await callTool(actionId, input)` calls an operation; the script's `return` value is the result. |
 
-```text
-OpenAPI spec  --(analyzer + optional signing)-->  bundle (spec + overlay)
-                                                  │
-                                                  ▼
-                          FrontMCP server with @frontmcp/plugin-skilled-openapi
-                                                  │
-                                                  ▼
-   tools/list    ->  [ search_skill, load_skill, run_workflow ]
-   skills/*      ->  curated skills (each carrying instructions + actions[])
-   run_workflow  ->  enclave sandbox runs AgentScript; per callTool(actionId, input):
-                     authorize (ABAC) -> validate input -> HTTPS -> validate output -> result
-```
+For each `callTool`, the plugin checks the caller against the operation's and skill's `requiredAuthorities`, validates
+the input against the operation's `inputSchema`, sends the request with the credential from the bundle's auth binding,
+and checks a JSON answer against `outputSchema`. The first failure ends the script with `success: false`. A script may
+make up to 25 calls and run for up to 8 seconds.
 
-## Meta-Tools
+With `exposeOperationsAsInternalTools` (the default), each operation is also an internal tool named
+`<bundleId>.<operationId>`, which your own tools can call with `this.callTool()`. Clients can't list or call it.
 
-| Tool           | Purpose                                                                                                                                                                                                                                      |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_skill` | Semantic search over the loaded skills; returns matching `skillId`s with scores. The live skill catalog is injected into the tool description so the model can discover what's available.                                                    |
-| `load_skill`   | Returns a skill's markdown instructions plus its `actions[]` and their JSON Schemas (the `actionId`s a workflow calls).                                                                                                                      |
-| `run_workflow` | Runs an AgentScript `script` in the enclave sandbox. Each `await callTool(actionId, input)` invokes a loaded operation through the full authorize → validate → HTTPS → validate path; the script's `return` value is surfaced as the result. |
+## Options
 
-## Features
+`init()` checks the options with a Zod schema, exported as `skilledOpenApiPluginOptionsSchema`, and throws a `ZodError`
+for a bad one.
 
-- **Three meta-tools instead of hundreds of endpoints** — keeps the client's tool list small and reliable.
-- **Composable workflows** — one `run_workflow` call can chain multiple operations in a sandboxed AgentScript program.
-- **Multiple bundle sources** — `static` (file), `npm` (pinned package), `saas` (CI-driven, signed, hot-pulled), or `inline`.
-- **Hot reload** — `static`/`saas` sources watch for changes and emit `notifications/skills/list_changed` on an atomic swap.
-- **Hidden operation tools** — per-operation REST tools never reach `tools/list`; they're reachable only via `callTool` inside a workflow.
-- **Defense-in-depth security** — see below.
+| Option                            | Type                                                     | Default                             | Description                                                                                                                                              |
+| --------------------------------- | -------------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`                          | `{ type: 'inline' \| 'static' \| 'npm' \| 'saas', ... }` | required                            | Where the bundle comes from. See [Sources](#sources).                                                                                                    |
+| `requireSignature`                | `boolean`                                                | `true`, or `false` with `dev: true` | Apply only bundles signed by one of `trustedKeys`. An explicit value wins over `dev`.                                                                    |
+| `trustedKeys`                     | `{ keyId, alg: 'RS256' \| 'EdDSA', publicKeyPem }[]`     | `[]`                                | Public keys a bundle may be signed with, matched by `keyId`.                                                                                             |
+| `credentials`                     | `Record<string, string>`                                 |                                     | Secrets for the bundle's auth bindings, keyed by `vaultRef`. To read them from a vault instead, replace the `SkilledOpenApiCredentialResolver` provider. |
+| `unprotectedOps`                  | `'allow' \| 'deny'`                                      | `'allow'`                           | Whether an operation with no `requiredAuthorities`, on itself or its skill, may be called. `'deny'` blocks it unless it's marked `public: true`.         |
+| `outbound`                        | `OutboundOptions`                                        | see below                           | Limits on the requests to your API.                                                                                                                      |
+| `dev`                             | `boolean`                                                | `false`                             | For development only: turns off signature checks (unless `requireSignature` is set) and allows `http:` URLs. Logs a warning.                             |
+| `bundleCacheDir`                  | `string`                                                 | `'.frontmcp/skilled-openapi/'`      | Where the `saas` source keeps the last bundle it pulled, used when a pull fails at startup.                                                              |
+| `exposeOperationsAsInternalTools` | `boolean`                                                | `true`                              | Register each operation as an internal tool for `this.callTool()`.                                                                                       |
+| `sourceConflictPolicy`            | `'static-wins' \| 'last-wins' \| 'reject'`               | `'static-wins'`                     | Accepted and currently unused: the plugin has one source.                                                                                                |
 
-## Configuration
+`outbound`:
 
-All options are validated by a strict Zod schema (`skilledOpenApiPluginOptionsSchema`).
+| Field                     | Default  | Description                                                                                                             |
+| ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `allowHttp`               | `false`  | Allow `http:` services. `dev: true` turns it on.                                                                        |
+| `allowPrivateNetworks`    | `false`  | Allow services on private and loopback addresses. Link-local and cloud metadata addresses stay blocked. Logs a warning. |
+| `defaultTimeoutMs`        | `30000`  | How long a request may take, in milliseconds. An operation's `timeoutMs` overrides it.                                  |
+| `defaultMaxResponseBytes` | `262144` | The largest response read (256 KB). An operation's `maxResponseBytes` overrides it.                                     |
+| `maxConcurrencyPerHost`   | `10`     | Requests in flight to one host; more wait their turn.                                                                   |
+| `egressProxy`             |          | A proxy URL every request to your API goes through. Needs `undici` on Node.js.                                          |
 
-| Option                            | Type                                       | Default                           | Description                                                                                                                                                              |
-| --------------------------------- | ------------------------------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `source`                          | `static \| npm \| saas \| inline`          | — (required)                      | Where bundles come from. `{ type: 'static', path, watch? }`, `{ type: 'npm', package }`, `{ type: 'saas', endpoint, ... }`, or `{ type: 'inline', ... }`.                |
-| `requireSignature`                | `boolean`                                  | `true` (`false` with `dev: true`) | Require a valid bundle signature (RS256/Ed25519 JWT-of-hashes). Opt out with `dev: true` or `requireSignature: false`; an explicit value wins over `dev`.                |
-| `trustedKeys`                     | `SignatureKey[]`                           | `[]`                              | Public keys trusted to sign bundles.                                                                                                                                     |
-| `dev`                             | `boolean`                                  | `false`                           | Local-dev escape hatch: turns the signature requirement off (unless `requireSignature` is set) and widens `outbound` to allow `http://`. **Never enable in production.** |
-| `outbound`                        | `OutboundOptions`                          | see below                         | SSRF / egress controls.                                                                                                                                                  |
-| `unprotectedOps`                  | `'allow' \| 'deny'`                        | `'allow'`                         | Default-deny policy for operations that declare no required authorities.                                                                                                 |
-| `sourceConflictPolicy`            | `'static-wins' \| 'last-wins' \| 'reject'` | `'static-wins'`                   | How to resolve two sources registering the same skill id.                                                                                                                |
-| `bundleCacheDir`                  | `string`                                   | —                                 | Last-good cache directory (only for `source.type === 'saas'`).                                                                                                           |
-| `credentials`                     | `Record<vaultRef, secret>`                 | —                                 | In-memory credential map for dev / single-tenant. In production resolve via `@frontmcp/auth`'s vault.                                                                    |
-| `exposeOperationsAsInternalTools` | `boolean`                                  | `true`                            | Register each operation as an internal tool, callable in-process as `this.callTool('<bundleId>.<operationId>', input)` (hidden from `tools/list`).                       |
+### Sources
 
-`outbound` (SSRF + egress):
+| `type`   | Fields                                                                                      | What it does                                                                                                                                                                                           |
+| -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `inline` | `content`                                                                                   | The bundle object itself. For tests, bundles built in code, and runtimes without a file system.                                                                                                        |
+| `static` | `path`, `watch?`                                                                            | A JSON or YAML bundle file, resolved from the working directory. With `watch: true`, the plugin reloads it when it changes.                                                                            |
+| `npm`    | `packageName`, `exportName?`, `verifyProvenance?`                                           | Imports a package and uses one of its exports. Provenance checks aren't implemented yet, so the default `verifyProvenance: true` refuses to load it; set `false` only for a package you pin and trust. |
+| `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`.                          |
 
-| Field                     | Default  | Description                                                                                               |
-| ------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| `allowPrivateNetworks`    | `false`  | Allow connections to private/loopback IPs (link-local and metadata stay blocked); logs a startup warning. |
-| `allowHttp`               | `false`  | Allow `http://` upstreams (auto-enabled by `dev: true`).                                                  |
-| `maxConcurrencyPerHost`   | `10`     | Per-host concurrency cap.                                                                                 |
-| `defaultTimeoutMs`        | `30000`  | Per-request timeout.                                                                                      |
-| `defaultMaxResponseBytes` | `262144` | Per-response size cap.                                                                                    |
+A new bundle from `static` (with `watch`) or `saas` is checked like the first, then replaces the skills and operations
+at once. A bundle that fails its checks isn't applied, and the reason is logged.
 
-Full reference: [Configuration](https://frontmcp.dev/reference/plugins/skilled-openapi#skilledopenapiplugininitoptions).
+### The bundle
 
-## Security model
+A bundle is a JSON or YAML object with `schemaVersion`, `bundleId`, `version`, `services`, `authBindings`, `skills`,
+`operations` and, when signed, `integrity`. It can also be wrapped in an OpenAPI Overlay document, under
+`info["x-frontmcp-bundle"]`, so it can live next to the spec it describes. `compileSkilledBundleFromOpenApi()` from
+`@frontmcp/adapters/skills` builds the services and operations from an OpenAPI spec, and the same entry point exports
+`canonicalize()`, `bundleDigest()` and `verifyBundleSignature()` for signing in CI. See
+[The bundle](https://frontmcp.dev/reference/plugins/skilled-openapi#the-bundle) for every field.
 
-- **Optional bundle signing** (RS256/Ed25519 JWT-of-hashes). `requireSignature: true` is the default; opt out only via explicit `dev: true`.
-- **RFC 8707 Resource Indicators** enforced on every inbound JWT (per the MCP authorization spec), blocking confused-deputy attacks at admission.
-- **Layered SSRF defenses** — URL string check → host allowlist (the operation's single declared service) → post-DNS-resolution IP blocklist (RFC 1918, link-local incl. cloud metadata, loopback, ULA) → DNS-rebinding pin → per-host concurrency cap → optional egress proxy.
-- **Bundle data treated as adversarial** even after signature verification — WHATWG `URL` only, RFC 7230 header validation, no shell-out, no `eval`, strict JSON Schema with `additionalProperties: false`.
-- **Indirect-prompt-injection mitigations** — `run_workflow` runs in a no-host-access sandbox (upstream data reaches the model only via the script's `return`), output-schema validation is mandatory on each action, and responses are size-capped.
+## Security
 
-Details: [Security](https://frontmcp.dev/reference/plugins/skilled-openapi#what-the-checks-protect-against).
+- **Signing.** With `requireSignature` (the default), a bundle is applied only if its `integrity` signature, RS256 or
+  EdDSA (Ed25519) over the bundle's canonical JSON, verifies with a key in `trustedKeys`. A signed bundle is still
+  checked for shape: unknown fields are errors, and path templates and header names are restricted.
+- **Authorization.** `requiredAuthorities` on skills and operations are checked on every `callTool`. Skills organize
+  what the model reads; they don't limit what a script can call, so protect operations with rules and use
+  `unprotectedOps: 'deny'` in production. Each caller is shown only the skills and actions their rules allow.
+- **Credentials.** Credentials stay on the server: the plugin adds them to each request, and the script gets only the
+  API's answer. Redirects aren't followed, so a credential isn't sent elsewhere.
+- **Outbound requests.** URLs must be `https:` (unless `allowHttp`) and on the operation's service host. The host's
+  addresses are checked before sending: private and loopback addresses are refused unless `allowPrivateNetworks`, and
+  link-local and cloud metadata addresses always. Responses are size- and time-limited.
+- **What reaches the model.** The model sees only what the script returns, but the content of your API's answers isn't
+  checked. Treat text your API returns, like ticket bodies or notes, as you would user input.
 
-## Standards alignment
+See [What the checks protect against](https://frontmcp.dev/reference/plugins/skilled-openapi#what-the-checks-protect-against)
+for the full model.
 
-- **OpenAPI Overlay 1.0/1.1** — a bundle is a standard OpenAPI spec plus an Overlay layering `x-frontmcp-skill: <id>` annotations onto operations, so customers can hand-author overlays in any OpenAPI tool.
-- **SEP-2076** (Agent Skills as a First-Class MCP Primitive, working-group draft) — skills surface via the SDK's skills primitive when the client supports it, falling back to meta-tool-only mode otherwise.
-- **Anthropic Agent Skills format** — skill content is markdown with progressive disclosure.
+## Docs
 
-## Documentation
+- [Skilled OpenAPI reference](https://frontmcp.dev/reference/plugins/skilled-openapi): options, sources, the bundle
+  format, credentials, authorization, signing and the audit log.
+- [Serving a bundle](https://frontmcp.dev/reference/plugins/skilled-openapi#serving-a-bundle): a runnable example.
+- [Building a bundle from an OpenAPI spec](https://frontmcp.dev/reference/plugins/skilled-openapi#building-a-bundle-from-an-openapi-spec).
+- [Teaching the model skills](https://frontmcp.dev/learn/teaching-the-model-skills): skills in FrontMCP.
 
-Full docs: **https://frontmcp.dev/reference/plugins/skilled-openapi**
+## Related packages
 
-- [Overview](https://frontmcp.dev/reference/plugins/skilled-openapi) · [Quickstart](https://frontmcp.dev/reference/plugins/skilled-openapi#serving-a-bundle) · [Sources](https://frontmcp.dev/reference/plugins/skilled-openapi#loading-bundles-from-files-packages-and-servers) · [Bundle format](https://frontmcp.dev/reference/plugins/skilled-openapi#the-bundle)
-- [Configuration](https://frontmcp.dev/reference/plugins/skilled-openapi#skilledopenapiplugininitoptions) · [Meta-tools](https://frontmcp.dev/reference/plugins/skilled-openapi#what-the-plugin-adds) · [Security](https://frontmcp.dev/reference/plugins/skilled-openapi#what-the-checks-protect-against) · [API reference](https://frontmcp.dev/reference/plugins/skilled-openapi#reference)
+- [`@frontmcp/sdk`](https://www.npmjs.com/package/@frontmcp/sdk): the FrontMCP framework this plugin runs in.
+- [`@frontmcp/adapters`](https://www.npmjs.com/package/@frontmcp/adapters): the OpenAPI adapter, one tool per
+  operation, and the `@frontmcp/adapters/skills` bundle tools.
+- [`@frontmcp/plugin-codecall`](https://www.npmjs.com/package/@frontmcp/plugin-codecall): lets the model write scripts
+  that call your server's own tools.
+
+## Contributing
+
+Source:
+[`plugins/plugin-skilled-openapi`](https://github.com/agentfront/frontmcp/tree/main/plugins/plugin-skilled-openapi).
+Issues and pull requests are welcome; see
+[CONTRIBUTING.md](https://github.com/agentfront/frontmcp/blob/main/CONTRIBUTING.md).
 
 ## License
 
-Apache-2.0
+Apache-2.0. See [LICENSE](https://github.com/agentfront/frontmcp/blob/main/LICENSE).
