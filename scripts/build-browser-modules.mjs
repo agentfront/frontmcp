@@ -1,4 +1,5 @@
 // Builds a browser ESM entry as one module per source file, so an app's bundler can drop the modules it doesn't use
+import { realpathSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 
 import { build } from 'esbuild';
@@ -9,7 +10,8 @@ if (!entryArg || !outdirArg || !tsconfig) {
   process.exit(1);
 }
 
-const entry = resolve(entryArg);
+// esbuild reports real paths, so a checkout reached through a symlink must not skew the output layout
+const entry = realpathSync(resolve(entryArg));
 const sourceRoot = dirname(entry);
 const outdir = resolve(outdirArg);
 const pendingSources = [entry];
