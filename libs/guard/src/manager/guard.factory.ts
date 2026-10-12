@@ -7,6 +7,7 @@
 
 import { createMemoryStorage, createStorage, isProduction, type RootStorage } from '@frontmcp/utils';
 
+import { DistributedSemaphore } from '../concurrency/semaphore';
 import { GuardStorageUnavailableError } from '../errors';
 import { GuardManager } from './guard.manager';
 import type { CreateGuardManagerArgs } from './types';
@@ -66,6 +67,11 @@ export async function createGuardManager(args: CreateGuardManagerArgs): Promise<
     hasDefaultTimeout: !!config.defaultTimeout,
     hasIpFilter: !!config.ipFilter,
   });
+
+  if (config.globalConcurrency || config.defaultConcurrency) {
+    // Refuse a storage that can't hold concurrency slots now, not on the first call.
+    await new DistributedSemaphore(namespacedStorage).verifyAtomicSlots();
+  }
 
   return new GuardManager(namespacedStorage, config, {
     storageType: config.storage?.type ?? (config.storage ? 'auto' : 'memory'),

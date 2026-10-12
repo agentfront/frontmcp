@@ -142,6 +142,15 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
     );
   }
 
+  /** Default: not supported, for the same reason as {@link deleteIfEquals}. */
+  async expireIfEquals(_key: string, _expectedValue: string, _ttlSeconds: number): Promise<boolean> {
+    throw new StorageNotSupportedError(
+      'expireIfEquals',
+      this.backendName,
+      'Use the memory, Redis, Upstash or Vercel KV adapter for an atomic compare-and-expire.',
+    );
+  }
+
   // ============================================
   // Pub/Sub (default: not supported)
   // ============================================

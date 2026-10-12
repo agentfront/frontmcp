@@ -197,6 +197,13 @@ export class NamespacedStorageImpl implements NamespacedStorage {
     return this.adapter.deleteIfEquals(this.prefixKey(key), expectedValue);
   }
 
+  async expireIfEquals(key: string, expectedValue: string, ttlSeconds: number): Promise<boolean> {
+    if (!this.adapter.expireIfEquals) {
+      throw new StorageNotSupportedError('expireIfEquals', 'this storage adapter');
+    }
+    return this.adapter.expireIfEquals(this.prefixKey(key), expectedValue, ttlSeconds);
+  }
+
   // ============================================
   // Pub/Sub (with channel prefixing)
   // ============================================

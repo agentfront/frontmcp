@@ -135,3 +135,20 @@ export class GuardStorageUnavailableError extends GuardError {
 }
 
 brandClass(GuardStorageUnavailableError, '@frontmcp/guard:GuardStorageUnavailableError');
+
+/**
+ * Thrown when the guard's storage can't hold concurrency slots safely: it has no atomic
+ * compare-and-delete and compare-and-expire, which releasing and renewing a slot need.
+ */
+export class GuardStorageUnsupportedError extends GuardError {
+  constructor(cause?: unknown) {
+    const reason = cause instanceof Error ? cause.message : 'it has no atomic compare-and-delete';
+    super(
+      'Concurrency limits need storage with an atomic compare-and-delete and compare-and-expire ' +
+        `(memory, Redis, Upstash or Vercel KV): ${reason}`,
+      'GUARD_STORAGE_UNSUPPORTED',
+      500,
+    );
+    this.cause = cause;
+  }
+}

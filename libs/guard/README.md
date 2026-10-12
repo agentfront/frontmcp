@@ -124,7 +124,7 @@ An allowed check counts the request. `RateLimitResult` has:
 
 ## Concurrency control
 
-`DistributedSemaphore` limits how many executions run at once for a key. Each execution takes a slot with an atomic `incr` on a counter key, and gets a ticket, stored as its own key with a time to live (TTL, 300 seconds by default). The counter has no TTL: a ticket that expires doesn't free its slot, so if a process dies without calling `release()`, the slot stays taken until `forceReset(key)`.
+`DistributedSemaphore` limits how many executions run at once for a key. The key has `maxConcurrent` slots, each stored as its own key. An execution claims a free slot with a write-if-absent that carries its ticket's time to live (TTL, 300 seconds by default), and renews the TTL every third of it until it calls `release()`. So the slot is held for as long as the execution runs, and the TTL only frees the slot of a process that died without releasing it. Releasing or renewing only touches a slot that still holds the same ticket, so the storage needs an atomic compare-and-delete and compare-and-expire: memory, Redis, Upstash or Vercel KV. With another adapter, `acquire()` throws `GuardStorageUnsupportedError`, and `createGuardManager` does too when `globalConcurrency` or `defaultConcurrency` is set.
 
 When every slot is taken, a caller can wait for one, polling every 100 ms at first and backing off to once a second. If the storage supports publish/subscribe (memory, Redis, and Upstash with publish/subscribe turned on), a released slot wakes waiting callers at once.
 
@@ -152,7 +152,7 @@ if (ticket) {
 }
 ```
 
-`acquire` returns `null` when every slot is taken and the wait is `0`, and throws `QueueTimeoutError` when it waited and no slot freed up. `getActiveCount(key)` returns the number of active tickets, and `forceReset(key)` resets the counter and removes every ticket key.
+`acquire` returns `null` when every slot is taken and the wait is `0`, and throws `QueueTimeoutError` when it waited and no slot freed up. `getActiveCount(key)` returns the number of taken slots, and `forceReset(key)` frees every slot.
 
 ## Timeout
 
