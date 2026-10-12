@@ -557,7 +557,7 @@ export interface FrontMcpConfig {
   version?: string;
   /** Entry point file path. */
   entry?: string;
-  /** Node.js version requirement. @default '>=22.0.0' */
+  /** Node.js version requirement. @default '>=24.0.0' */
   nodeVersion?: string;
   /** Build targets — server config lives inside each target that needs it. */
   deployments: DeploymentTarget[];

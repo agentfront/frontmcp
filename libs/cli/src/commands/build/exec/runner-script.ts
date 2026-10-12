@@ -3,6 +3,7 @@
  * The runner checks Node.js, loads .env, and runs the bundle.
  */
 
+import { getSelfNodeRange, minNodeMajorOf } from '../../../core/version';
 import { type FrontmcpExecConfig } from './config';
 
 /**
@@ -128,8 +129,8 @@ exec "\${BINARY}" "$@"
 `;
   }
 
-  const nodeVersion = config.nodeVersion || '>=22.0.0';
-  const minNodeMajor = extractMinMajor(nodeVersion);
+  const nodeVersion = config.nodeVersion || getSelfNodeRange();
+  const minNodeMajor = minNodeMajorOf(nodeVersion);
 
   const bundle = cliMode
     ? `\${SCRIPT_DIR}/${name}-cli.bundle.js`
@@ -186,9 +187,4 @@ export NODE_COMPILE_CACHE="\${COMPILE_CACHE_DIR}"
 # Run
 exec node "\${BUNDLE}" "$@"
 `;
-}
-
-function extractMinMajor(version: string): number {
-  const match = version.match(/(\d+)/);
-  return match ? parseInt(match[1], 10) : 22;
 }

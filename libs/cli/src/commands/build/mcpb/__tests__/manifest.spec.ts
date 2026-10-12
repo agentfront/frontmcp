@@ -303,6 +303,20 @@ describe('generateMcpbManifest', () => {
     expect(manifest.compatibility?.runtimes?.node).toBe('>=24.0.0');
   });
 
+  it("requires the CLI's own engines.node runtime when no nodeVersion is given", () => {
+    const { engines } = jest.requireActual<{ engines: { node: string } }>('../../../../../package.json');
+    const manifest = generateMcpbManifest({
+      name: 'demo',
+      version: '1.0.0',
+      cwd: tmp,
+      schema: emptySchema(),
+      userConfig: {},
+      userConfigEnv: {},
+    });
+
+    expect(manifest.compatibility?.runtimes?.node).toBe(engines.node);
+  });
+
   // #376 — `@Resource`-decorated entries were dropped from the MCPB manifest
   // even though they registered at runtime, leaving Claude Desktop and other
   // MCPB consumers blind to them.
