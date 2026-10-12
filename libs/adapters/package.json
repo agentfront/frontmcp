@@ -1,17 +1,20 @@
 {
   "name": "@frontmcp/adapters",
   "version": "1.9.6",
-  "description": "Adapters for the FrontMCP framework",
+  "description": "FrontMCP adapters: turn an OpenAPI spec into MCP tools (OpenapiAdapter)",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/adapters/openapi",
   "license": "Apache-2.0",
   "keywords": [
-    "mcp",
-    "adapters",
-    "agentfront",
     "frontmcp",
-    "framework",
-    "typescript"
+    "mcp",
+    "model-context-protocol",
+    "adapters",
+    "openapi",
+    "swagger",
+    "rest",
+    "tools",
+    "agentfront"
   ],
   "repository": {
     "type": "git",

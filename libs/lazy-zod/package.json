@@ -1,7 +1,7 @@
 {
   "name": "@frontmcp/lazy-zod",
   "version": "1.9.6",
-  "description": "Drop-in zod replacement that lazily constructs compound schemas for dramatic cold-start speedups. Exports `z` (lazy, drop-in), `eagerZ` (real zod, zero overhead), and `lazyZ` (explicit factory wrapper).",
+  "description": "Zod 4's z with compound schemas built on first use, for faster start-up. Exports z (lazy), eagerZ (Zod's own) and lazyZ",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
   "keywords": [
@@ -24,7 +24,7 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
-  "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/lazy-zod/README.md",
+  "homepage": "https://frontmcp.dev/reference/sdk#z-eagerz-and-lazyz",
   "type": "commonjs",
   "main": "./dist/index.js",
   "module": "./dist/esm/index.mjs",

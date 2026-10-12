@@ -1,30 +1,27 @@
 {
   "name": "@frontmcp/ui",
   "version": "1.9.6",
-  "description": "FrontMCP UI - MUI-based React components, renderers, and MCP bridge for MCP applications",
+  "description": "React components, bridge hooks and content renderers (built on MUI) for FrontMCP tool widgets in ChatGPT, Claude and other MCP Apps hosts",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/ui",
   "license": "Apache-2.0",
   "keywords": [
-    "mcp",
-    "ui",
-    "agentfront",
     "frontmcp",
+    "mcp",
+    "model-context-protocol",
+    "mcp-apps",
+    "widgets",
+    "ui",
     "react",
     "mui",
-    "material-ui",
-    "hooks",
     "components",
     "renderers",
-    "charts",
-    "mermaid",
-    "markdown",
-    "pdf",
-    "maps"
+    "agentfront"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentfront/frontmcp.git"
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/ui"
   },
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"

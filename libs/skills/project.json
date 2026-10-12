@@ -29,7 +29,7 @@
         "main": "libs/skills/src/index.ts",
         "tsConfig": "libs/skills/tsconfig.lib.json",
         "assets": [
-          "README.md",
+          "libs/skills/README.md",
           "LICENSE",
           {
             "glob": "**/*",

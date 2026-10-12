@@ -1,25 +1,25 @@
 {
   "name": "@frontmcp/testing",
   "version": "1.9.6",
-  "description": "E2E testing framework for FrontMCP servers - MCP client, auth mocks, Playwright integration",
+  "description": "End-to-end testing for FrontMCP servers: Jest fixtures with a connected MCP client, MCP matchers, JWT and OAuth mocks, and HTTP mocking",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/testing",
   "license": "Apache-2.0",
   "keywords": [
+    "frontmcp",
     "mcp",
+    "model-context-protocol",
     "testing",
     "e2e",
     "integration-testing",
+    "jest",
     "mcp-client",
-    "playwright",
-    "agentfront",
-    "frontmcp",
-    "framework",
-    "typescript"
+    "agentfront"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentfront/frontmcp.git"
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/testing"
   },
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"

@@ -1,19 +1,22 @@
 {
   "name": "@frontmcp/plugin-codecall",
   "version": "1.9.6",
-  "description": "CodeCall plugin for FrontMCP - AgentScript-based meta-tools for orchestrating MCP tools",
+  "description": "CodeCall plugin for FrontMCP: puts many tools behind search, describe, invoke and execute meta-tools, and runs scripts that call them in a sandbox",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=24.0.0"
   },
   "keywords": [
-    "mcp",
-    "codecall",
-    "orchestration",
-    "meta-tools",
-    "plugin",
     "frontmcp",
+    "mcp",
+    "model-context-protocol",
+    "codecall",
+    "meta-tools",
+    "tool-search",
+    "agentscript",
+    "sandbox",
+    "plugin",
     "agentfront"
   ],
   "repository": {

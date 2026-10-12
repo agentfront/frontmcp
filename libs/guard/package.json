@@ -5,6 +5,8 @@
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
   "keywords": [
+    "frontmcp",
+    "mcp",
     "rate-limiting",
     "concurrency",
     "semaphore",
