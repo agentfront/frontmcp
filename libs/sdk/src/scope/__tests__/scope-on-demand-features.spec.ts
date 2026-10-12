@@ -18,7 +18,8 @@ import {
   LogLevel,
   Plugin,
   ScopeEntry,
-  skill,
+  Skill,
+  SkillContext,
   Tool,
   ToolContext,
 } from '../../common';
@@ -122,7 +123,8 @@ class RuntimeSkillsPlugin extends DynamicPlugin<Record<string, never>> {}
 @Plugin({ name: 'declared-runtime-skills', dynamicSkills: true, tools: [AddSkillAtRuntimeTool] })
 class DeclaredRuntimeSkillsPlugin extends DynamicPlugin<Record<string, never>> {}
 
-const startupSkill = skill({ name: 'startup-skill', description: 'Present at startup', instructions: 'Do it.' });
+@Skill({ name: 'startup-skill', description: 'Present at startup', instructions: 'Do it.' })
+class StartupSkill extends SkillContext {}
 
 @App({ id: 'desk', name: 'Desk', tools: [ConfirmTool, ReportTool] })
 class DeskApp {}
@@ -246,7 +248,7 @@ describe('Scope features loaded on demand', () => {
   });
 
   it('searches and loads a skill declared at startup', async () => {
-    const client = await connect({ ...deskConfig, apps: [DeskApp], skills: [startupSkill] });
+    const client = await connect({ ...deskConfig, apps: [DeskApp], skills: [StartupSkill] });
     try {
       const { skills } = await client.searchSkills('startup');
       expect(skills.map((found) => found.name)).toContain('startup-skill');
