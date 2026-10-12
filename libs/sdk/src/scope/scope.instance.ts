@@ -48,8 +48,9 @@ import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors'
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
 import { assertAuthoritiesRules, createAuthoritiesEngine } from '../front-mcp/authorities-rules.check';
+import { isDirectOnly } from '../front-mcp/direct-only.flag';
 import type { HaManager } from '../ha';
-import { HealthService, servedHealthPaths } from '../health';
+import type { HealthService } from '../health';
 import HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils';
 import { type JobExecutionManager } from '../job/execution/job-execution.manager';
@@ -65,11 +66,7 @@ import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry'
 import PromptRegistry from '../prompt/prompt.registry';
 import ProviderRegistry from '../provider/provider.registry';
 import ResourceRegistry from '../resource/resource.registry';
-import {
-  registerCustomHttpRoutes,
-  type HttpRouteRegistrar,
-  type RegisteredHttpRoute,
-} from '../server/custom-routes.helper';
+import type { HttpRouteRegistrar, RegisteredHttpRoute } from '../server/custom-routes.helper';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
 import type { SkillSessionManager } from '../skill/session';
 import { pluginsRegisterDynamicSkills, registerSkillCapabilities } from '../skill/skill-scope.helper';
@@ -85,11 +82,9 @@ import type { RedisTransportBus } from '../transport/bus';
 import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/request-state';
 import type { SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
-import { TransportService } from '../transport/transport.registry';
+import type { TransportService } from '../transport/transport.registry';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type WorkflowRegistry from '../workflow/workflow.registry';
-import HttpIpFilterFlow from './flows/http.ip-filter.flow';
-import HttpRequestFlow from './flows/http.request.flow';
 import { registerServerEntries } from './server-entries.helper';
 import { reportStartup } from './startup-report.helper';
 
@@ -116,7 +111,8 @@ export class Scope extends ScopeEntry {
   private scopeSkills: SkillRegistry;
   private scopePlugins?: PluginRegistry;
 
-  transportService: TransportService; // TODO: migrate transport service to transport.registry
+  /** Undefined in a direct-only scope, which serves no HTTP. */
+  transportService: TransportService | undefined; // TODO: migrate transport service to transport.registry
   notificationService: NotificationService;
   declare haManager?: HaManager;
   /** ioredis client owned by the HA manager and transport bus; closed in shutdown(). */
@@ -196,6 +192,9 @@ export class Scope extends ScopeEntry {
   /** CLI mode flag — skips non-essential initialization for faster startup */
   private readonly cliMode: boolean;
 
+  /** Served in process only (`createDirect()`, `connect()`): no HTTP transport, routes, health checks or OAuth flows */
+  private readonly directOnly: boolean;
+
   constructor(rec: ScopeRecord, globalProviders: ProviderRegistry) {
     super(rec, rec.provide);
     this.id = rec.metadata.id;
@@ -212,6 +211,7 @@ export class Scope extends ScopeEntry {
 
     // Check if CLI mode was requested (set by FrontMcpInstance.createForCli)
     this.cliMode = !!(rec.metadata as unknown as Record<string, unknown>)['__cliMode'];
+    this.directOnly = isDirectOnly(rec.metadata);
 
     // Pass distributed config to ProviderRegistry for serverless/multi-instance support
     const distributedMode = rec.metadata.transport?.distributedMode;
@@ -246,10 +246,15 @@ export class Scope extends ScopeEntry {
       ? (label: string) => this.logger.info(`[PERF] ${label}: ${(performance.now() - t0).toFixed(1)}ms`)
       : () => {};
 
+    const httpServing = this.directOnly ? undefined : await import('./http-scope.helper.js');
+
     // ═══ BATCH 1: Independent registries (parallel) ═══
     // These only depend on scopeProviders — no cross-registry dependencies.
     this.scopeHooks = new HookRegistry(scopeProviders, []);
-    this.scopeFlows = new FlowRegistry(scopeProviders, [HttpRequestFlow, HttpIpFilterFlow]);
+    this.scopeFlows = new FlowRegistry(
+      scopeProviders,
+      httpServing ? [httpServing.HttpRequestFlow, httpServing.HttpIpFilterFlow] : [],
+    );
     this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth);
     this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps, scopeRef);
     this.logger.info(`Initializing ${this.metadata.apps.length} app(s)...`);
@@ -258,7 +263,7 @@ export class Scope extends ScopeEntry {
     // Must be created before TransportService so the bus can be passed to it.
     const transportConfig = this.metadata.transport;
     const isDistributed = getRuntimeContext().deployment === 'distributed';
-    if (isDistributed && this.metadata.redis && !this.cliMode) {
+    if (isDistributed && this.metadata.redis && !this.cliMode && !this.directOnly) {
       const ha = await import('../ha/index.js');
       try {
         const haRedis = this.createHaRedisClient();
@@ -312,14 +317,16 @@ export class Scope extends ScopeEntry {
     if (effectivePersistence === undefined && resolvedTopLevelSqlite) {
       effectivePersistence = { sqlite: resolvedTopLevelSqlite };
     }
-    this.transportService = new TransportService(this, effectivePersistence, transportBus);
+    if (httpServing) {
+      this.transportService = new httpServing.TransportService(this, effectivePersistence, transportBus);
+    }
     warnIfRequestStateKeyNotShared({ logger: this.logger, metadata: this.metadata });
     warnIfSessionModeIgnored({ logger: this.logger, transport: transportConfig, session: this.metadata.session });
 
     // Orphan session scanner (distributed mode only — scans for dead-pod sessions).
     // A claimed session is re-advertised on the bus, so every node relays its requests here.
-    if (this.haManager && isDistributed && this.transportService.getBackendKind() === 'redis') {
-      const transportService = this.transportService;
+    const transportService = this.transportService;
+    if (this.haManager && isDistributed && transportService?.getBackendKind() === 'redis') {
       this.haManager.startOrphanScanner({
         sessionKeyPrefix: transportService.getSessionKeyPrefix(),
         onOrphan: (sessionId, previousNodeId, session) =>
@@ -343,10 +350,10 @@ export class Scope extends ScopeEntry {
     // In distributed mode, auto-enable Redis event store for cross-pod SSE resumability
     const effectiveEventStoreConfig =
       transportConfig?.eventStore ??
-      (isDistributed && this.metadata.redis && !this.cliMode
+      (isDistributed && this.metadata.redis && !this.cliMode && !this.directOnly
         ? { enabled: true, provider: 'redis' as const, redis: this.metadata.redis }
         : undefined);
-    if (effectiveEventStoreConfig?.enabled && !this.cliMode) {
+    if (effectiveEventStoreConfig?.enabled && !this.cliMode && !this.directOnly) {
       const { createEventStore } = await import('../transport/event-stores/index.js');
       const { eventStore } = createEventStore(effectiveEventStoreConfig, this.logger);
       this._eventStore = eventStore;
@@ -572,7 +579,7 @@ export class Scope extends ScopeEntry {
     if (serverHooks.length > 0) await this.scopeHooks.registerHooks(false, ...serverHooks);
     this.logger.verbose('HookRegistry initialized');
     this.logger.verbose('FlowRegistry initialized');
-    this.logger.verbose('TransportService initialized');
+    if (this.transportService) this.logger.verbose('TransportService initialized');
     this.logger.verbose('AuthRegistry initialized');
     mark('batch1:parallel (hooks+flows+auth+apps)');
 
@@ -584,7 +591,8 @@ export class Scope extends ScopeEntry {
     // unused.
     if (this.metadata.sqlite) {
       const transportUsedSqlite =
-        this.transportService.isSessionStoreConfigured() && this.transportService.getBackendKind() === 'sqlite';
+        this.transportService?.isSessionStoreConfigured() === true &&
+        this.transportService.getBackendKind() === 'sqlite';
       const tasksUsedSqlite = this.taskBackendType === 'sqlite';
       const elicitationUsedSqlite = this.elicitationBackendType === 'sqlite';
       if (!transportUsedSqlite && !tasksUsedSqlite && !elicitationUsedSqlite) {
@@ -927,18 +935,18 @@ export class Scope extends ScopeEntry {
     }
 
     await this.auth.ready;
-    await this.transportService.ready;
+    await transportService?.ready;
 
     // Distributed: serve requests relayed by other nodes, and relay ours to session owners.
     // Wired once every flow and the notification service exist — a relayed request runs
     // through this scope's `http:request` flow.
-    if (this.haManager && this.transportBus) {
+    if (this.haManager && this.transportBus && transportService) {
       const { wireSessionRelay } = await import('../transport/relay/relay-scope.helper.js');
       this.sessionRelayHandle = wireSessionRelay({
         nodeId: getMachineId(),
         haManager: this.haManager,
         bus: this.transportBus,
-        transportService: this.transportService,
+        transportService,
         notifications: this.notificationService,
         flows: { runFlow: (name, input) => this.runFlow(name, input) },
         logger: this.logger,
@@ -949,23 +957,25 @@ export class Scope extends ScopeEntry {
     // ready so `auth: true` routes can dispatch the `session:verify` flow. The
     // reserved-path guard uses the resolved entryPath + routeBase, so it is
     // aware of split-by-app scope bases (e.g. /mcp/billing).
-    registerCustomHttpRoutes({
-      routes: this.metadata.http?.routes,
-      server: this.httpRouteRegistrar,
-      // `session:verify` input uses a loose passthrough request shape; the
-      // ServerRequest class instance satisfies it at runtime.
-      verifySession: (request) =>
-        this.runFlow('session:verify', { request: request as unknown as Record<string, unknown> }),
-      checkClientIp: (request, response) =>
-        this.runFlow('http:ip-filter', {
-          request: request as unknown as Record<string, unknown>,
-          response: response as unknown as Record<string, unknown>,
-        }),
-      entryPath: this.entryPath,
-      routeBase: this.routeBase,
-      healthPaths: servedHealthPaths(this.metadata.health),
-      logger: this.logger,
-    });
+    if (httpServing) {
+      httpServing.registerCustomHttpRoutes({
+        routes: this.metadata.http?.routes,
+        server: this.httpRouteRegistrar,
+        // `session:verify` input uses a loose passthrough request shape; the
+        // ServerRequest class instance satisfies it at runtime.
+        verifySession: (request) =>
+          this.runFlow('session:verify', { request: request as unknown as Record<string, unknown> }),
+        checkClientIp: (request, response) =>
+          this.runFlow('http:ip-filter', {
+            request: request as unknown as Record<string, unknown>,
+            response: response as unknown as Record<string, unknown>,
+          }),
+        entryPath: this.entryPath,
+        routeBase: this.routeBase,
+        healthPaths: httpServing.servedHealthPaths(this.metadata.health),
+        logger: this.logger,
+      });
+    }
 
     // Initialize channels if enabled (after notification service and all registries are ready)
     const channelsConfig = this.metadata.channels as ChannelsConfigOptions | undefined;
@@ -989,7 +999,7 @@ export class Scope extends ScopeEntry {
         notificationService: this.notificationService,
         flowRegistry: this.scopeFlows,
         toolRegistry: this.scopeTools,
-        http: {
+        http: httpServing && {
           server: this.httpRouteRegistrar,
           checkClientIp: (request, response) =>
             this.runFlow('http:ip-filter', {
@@ -998,7 +1008,7 @@ export class Scope extends ScopeEntry {
             }),
           entryPath: this.entryPath,
           routeBase: this.routeBase,
-          healthPaths: servedHealthPaths(this.metadata.health),
+          healthPaths: httpServing.servedHealthPaths(this.metadata.health),
         },
         logger: this.logger,
       });
@@ -1013,8 +1023,8 @@ export class Scope extends ScopeEntry {
     }
 
     // Initialize health service (after all registries and stores are ready)
-    if (this.metadata.health?.enabled !== false) {
-      this._healthService = new HealthService(this.metadata.health ?? {}, this.metadata.info);
+    if (httpServing && this.metadata.health?.enabled !== false) {
+      this._healthService = new httpServing.HealthService(this.metadata.health ?? {}, this.metadata.info);
       this._healthService.autoDiscoverProbes(this);
       this.logger.verbose(`HealthService initialized (${this._healthService.getProbeCount()} probe(s))`);
     }

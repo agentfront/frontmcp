@@ -16,7 +16,7 @@ const processStartTime = Date.now();
  * Avoids importing the full Scope class to prevent circular dependencies.
  */
 export interface HealthScopeView {
-  readonly transportService: {
+  readonly transportService?: {
     pingSessionStore(): Promise<boolean>;
   };
   readonly tools: {

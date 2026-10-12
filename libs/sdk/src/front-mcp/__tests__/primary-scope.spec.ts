@@ -204,7 +204,7 @@ describe('tearing down a server reached in-process', () => {
 
   it('connect() disposes and forgets the server when the app has no endpoint of its own', async () => {
     const disposed = disposedScopeIds();
-    const createForGraph = jest.spyOn(FrontMcpInstance, 'createForGraph');
+    const createForConnect = jest.spyOn(FrontMcpInstance, 'createForConnect');
     const shared = config([OrdersApp, OpsApp]);
 
     await expect(connect(shared, { app: 'orders' })).rejects.toThrow('No endpoint serves app "orders" on its own');
@@ -212,6 +212,6 @@ describe('tearing down a server reached in-process', () => {
 
     const client = await connect(shared);
     await client.close();
-    expect(createForGraph).toHaveBeenCalledTimes(2);
+    expect(createForConnect).toHaveBeenCalledTimes(2);
   });
 });

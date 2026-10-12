@@ -14,10 +14,10 @@ import {
 import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 import { DirectMcpServerImpl, type DirectMcpServer, type DirectServerOptions } from '../direct';
 import { describeConfigIssues, InternalMcpError, ScopeConfigurationError, ServerNotFoundError } from '../errors';
-import { HealthService } from '../health';
+import type { HealthService } from '../health';
 import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import LoggerRegistry from '../logger/logger.registry';
-import { createProcessStatsCollectorIfEnabled, MetricsService } from '../metrics';
+import type { MetricsService } from '../metrics';
 import ProviderRegistry from '../provider/provider.registry';
 import { type Scope } from '../scope/scope.instance';
 import { ScopeRegistry } from '../scope/scope.registry';
@@ -26,6 +26,7 @@ import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task/task-scope.helper';
 import type { FetchHandlerCtx, WebFetchHandler } from '../transport/web-fetch-handler';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
+import { markDirectOnly } from './direct-only.flag';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 import { exitOnShutdownSignals } from './shutdown-signals';
 import { assertStaticStartupConfig } from './static-startup.check';
@@ -108,10 +109,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
     }
 
     // Wire health service from the first scope (if available)
-    this.wireHealthService(server);
+    await this.wireHealthService(server);
 
     // Wire metrics service when configured (issue #397). Off by default.
-    this.wireMetricsService(server);
+    await this.wireMetricsService(server);
 
     await server.start();
 
@@ -220,7 +221,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * Wire the health service from the first scope into the server instance.
    * Called before server.start() or server.prepare() to register health routes.
    */
-  private wireHealthService(server: FrontMcpServer): void {
+  private async wireHealthService(server: FrontMcpServer): Promise<void> {
     const serverInstance = server as FrontMcpServerInstance;
     if (typeof serverInstance.setHealthService !== 'function') return;
 
@@ -234,6 +235,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       serverInstance.setHealthService(scopeServices[0], healthConfig);
     } else if (scopeServices.length > 1) {
       // Aggregate: create a composite service that merges probes from all scopes
+      const { HealthService } = await import('../health/index.js');
       const composite = new HealthService(healthConfig, this.config.info);
       for (const scopeService of scopeServices) {
         for (const probe of scopeService.getProbes()) {
@@ -261,12 +263,12 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * because the endpoint is server-wide, not per-app — counters and process
    * stats are process-global.
    */
-  private wireMetricsService(server: FrontMcpServer): void {
+  private async wireMetricsService(server: FrontMcpServer): Promise<void> {
     const serverInstance = server as FrontMcpServerInstance;
     if (typeof serverInstance.setMetricsService !== 'function') return;
 
     const metricsConfig = this.config.metrics;
-    const service = this.createMetricsService();
+    const service = await this.createMetricsService();
     if (!metricsConfig || !service) {
       serverInstance.setMetricsConfig(metricsConfig ?? {});
       return;
@@ -279,9 +281,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * Shared by the Express host (`wireMetricsService`) and `createFetchHandler()`,
    * so both transports serve the endpoint from the same config.
    */
-  private createMetricsService(): MetricsService | undefined {
+  private async createMetricsService(): Promise<MetricsService | undefined> {
     const metricsConfig = this.config.metrics;
     if (!metricsConfig || metricsConfig.enabled !== true) return undefined;
+    const { createProcessStatsCollectorIfEnabled, MetricsService } = await import('../metrics/index.js');
     try {
       const processCollector = createProcessStatsCollectorIfEnabled(metricsConfig);
       return new MetricsService(metricsConfig, processCollector);
@@ -344,10 +347,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
     }
 
     // Wire health service for serverless mode
-    frontMcp.wireHealthService(server);
+    await frontMcp.wireHealthService(server);
 
     // Wire metrics service for serverless mode (issue #397)
-    frontMcp.wireMetricsService(server);
+    await frontMcp.wireMetricsService(server);
 
     server.prepare();
     frontMcp.log?.info('FrontMCP handler created (serverless mode)');
@@ -401,7 +404,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       }
       // `/metrics` is served by the handler too (#680 — it answered 404), from the same service
       // the Express host registers as a route.
-      const metricsService = frontMcp.createMetricsService();
+      const metricsService = await frontMcp.createMetricsService();
       const metricsConfig = frontMcp.config.metrics;
       frontMcp.log?.info('FrontMCP fetch handler created (web-standard transport)');
       return createServerFetchHandler(
@@ -457,8 +460,17 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * const scopes = instance.getScopes();
    */
   public static async createForGraph(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
-    // Never listens, so no HTTP host: connect() builds on this, and a browser build has no Express
+    // Never listens, so no HTTP host: a browser build has no Express
     const parsedConfig = frontMcpMetadataSchema.parse({ ...options, serve: false });
+    const frontMcp = new FrontMcpInstance(parsedConfig);
+    await frontMcp.ready;
+    return frontMcp;
+  }
+
+  /** @internal The instance `connect()` serves in process: it never listens, and its scopes are direct-only. */
+  public static async createForConnect(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
+    const parsedConfig = frontMcpMetadataSchema.parse({ ...options, serve: false });
+    markDirectOnly(parsedConfig);
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
     return frontMcp;
@@ -550,6 +562,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       http: undefined,
       serve: false,
     });
+    markDirectOnly(parsedConfig);
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 

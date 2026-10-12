@@ -38,11 +38,18 @@ const ON_DEMAND_MODULES = [
   '../../elicitation/send-elicitation-result.tool',
   '../../elicitation/store/elicitation-store.factory',
   '../../esm-loader/esm-entries',
+  '../flows/http.ip-filter.flow',
+  '../flows/http.request.flow',
   '../../ha',
+  '../../health',
+  '../http-scope.helper',
   '../../job/job-scope.helper',
   '../../mcp-registry/mcp-registry-scope.helper',
+  '../../metrics',
   '../observability-scope.helper',
   '../../remote-mcp/remote-entries',
+  '../../server/custom-routes.helper',
+  '../../server/server.instance',
   '../../skill/flows/index',
   '../../skill/hooks/index',
   '../../skill/providers/memory-skill.provider',
@@ -56,6 +63,7 @@ const ON_DEMAND_MODULES = [
   '../../transport/event-stores',
   '../../transport/ipc-server.transport',
   '../../transport/relay/relay-scope.helper',
+  '../../transport/transport.registry',
   '../../transport/web-fetch-handler',
 ];
 
@@ -140,31 +148,55 @@ describe('Scope features loaded on demand', () => {
     for (const modulePath of ON_DEMAND_MODULES) jest.dontMock(modulePath);
   });
 
-  it('creates a server without loading a feature its config does not use', async () => {
-    await jest.isolateModulesAsync(async () => {
-      for (const modulePath of ON_DEMAND_MODULES) {
-        jest.doMock(modulePath, () => {
-          throw new Error(`${modulePath} was loaded`);
-        });
-      }
-      const common = await import('../../common');
-      const { create: createIsolated } = await import('../../direct/create');
-      class IsolatedPingTool extends common.ToolContext {
-        async execute() {
-          return { pong: true };
+  it.each(['create', 'connect'] as const)(
+    'serves %s() without loading a feature its config does not use, HTTP included',
+    async (entry) => {
+      await jest.isolateModulesAsync(async () => {
+        for (const modulePath of ON_DEMAND_MODULES) {
+          jest.doMock(modulePath, () => {
+            throw new Error(`${modulePath} was loaded`);
+          });
         }
-      }
-      common.Tool({ name: 'ping', inputSchema: {} })(IsolatedPingTool);
+        const common = await import('../../common');
+        class IsolatedPingTool extends common.ToolContext {
+          async execute() {
+            return { pong: true };
+          }
+        }
+        common.Tool({ name: 'ping', inputSchema: {} })(IsolatedPingTool);
 
-      const server = await createIsolated({ info: { name: 'on-demand', version: '1.0.0' }, tools: [IsolatedPingTool] });
-      try {
-        const { tools } = await server.listTools();
-        expect(tools.map((tool) => tool.name)).toEqual(['ping']);
-      } finally {
-        await server.dispose();
-      }
-    });
-  });
+        if (entry === 'create') {
+          const { create: createIsolated } = await import('../../direct/create');
+          const server = await createIsolated({
+            info: { name: 'on-demand', version: '1.0.0' },
+            tools: [IsolatedPingTool],
+          });
+          try {
+            const { tools } = await server.listTools();
+            expect(tools.map((tool) => tool.name)).toEqual(['ping']);
+          } finally {
+            await server.dispose();
+          }
+          return;
+        }
+
+        const { connect: connectIsolated } = await import('../../direct/connect');
+        @common.App({ id: 'pinger', name: 'Pinger', tools: [IsolatedPingTool] })
+        class PingerApp {}
+        const client = await connectIsolated({
+          info: { name: 'on-demand', version: '1.0.0' },
+          apps: [PingerApp],
+          logging: { level: common.LogLevel.Off },
+        });
+        try {
+          const tools = (await client.listTools()) as Array<{ name: string }>;
+          expect(tools.map((tool) => tool.name)).toEqual(['ping']);
+        } finally {
+          await client.close();
+        }
+      });
+    },
+  );
 
   it('loads a feature the config uses before create() resolves', async () => {
     const server = await create({
