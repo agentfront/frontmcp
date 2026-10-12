@@ -13,7 +13,8 @@
     "typescript",
     "decorators",
     "reflect-metadata",
-    "inversion-of-control"
+    "inversion-of-control",
+    "frontmcp"
   ],
   "repository": {
     "type": "git",
@@ -23,7 +24,7 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
-  "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/di/README.md",
+  "homepage": "https://frontmcp.dev",
   "type": "commonjs",
   "main": "./dist/index.js",
   "module": "./dist/esm/index.mjs",

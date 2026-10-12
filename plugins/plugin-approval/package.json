@@ -1,20 +1,21 @@
 {
   "name": "@frontmcp/plugin-approval",
   "version": "1.9.6",
-  "description": "Approval plugin for FrontMCP - tool authorization workflow with PKCE webhook security",
+  "description": "Approval plugin for FrontMCP: refuses to run marked tools until an approval is recorded for the caller",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=24.0.0"
   },
   "keywords": [
-    "mcp",
-    "approval",
-    "authorization",
-    "pkce",
-    "webhook",
-    "plugin",
     "frontmcp",
+    "mcp",
+    "model-context-protocol",
+    "approval",
+    "tool-approval",
+    "human-in-the-loop",
+    "authorization",
+    "plugin",
     "agentfront"
   ],
   "repository": {

@@ -1,24 +1,25 @@
 {
   "name": "@frontmcp/sdk",
   "version": "1.9.6",
-  "description": "FrontMCP SDK",
+  "description": "TypeScript framework for building MCP servers: tools, resources and prompts as decorated classes, with transports, sessions, auth and dependency injection",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/sdk",
   "license": "Apache-2.0",
   "keywords": [
-    "mcp",
-    "dependency injection",
-    "sdk",
-    "adapters",
-    "plugins",
-    "agentfront",
     "frontmcp",
-    "framework",
-    "typescript"
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "sdk",
+    "decorators",
+    "dependency-injection",
+    "typescript",
+    "agentfront"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentfront/frontmcp.git"
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/sdk"
   },
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"

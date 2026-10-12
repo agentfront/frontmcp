@@ -1,19 +1,20 @@
 {
   "name": "@frontmcp/plugin-cache",
   "version": "1.9.6",
-  "description": "Cache plugin for FrontMCP - Redis, Vercel KV, and in-memory caching with automatic tool result caching",
+  "description": "Cache plugin for FrontMCP: answers repeated tool calls from memory, Redis or Vercel KV instead of running the tool again",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=24.0.0"
   },
   "keywords": [
+    "frontmcp",
     "mcp",
+    "model-context-protocol",
     "cache",
     "redis",
     "vercel-kv",
     "plugin",
-    "frontmcp",
     "agentfront"
   ],
   "repository": {

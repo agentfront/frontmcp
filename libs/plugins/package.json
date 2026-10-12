@@ -1,17 +1,20 @@
 {
   "name": "@frontmcp/plugins",
   "version": "1.9.6",
-  "description": "FrontMCP plugins meta-package - installs all official plugins",
+  "description": "Meta-package that installs and re-exports the FrontMCP cache, CodeCall, dashboard and Remember plugins",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/plugins",
   "license": "Apache-2.0",
   "keywords": [
-    "mcp",
-    "plugins",
-    "agentfront",
     "frontmcp",
-    "framework",
-    "typescript"
+    "mcp",
+    "model-context-protocol",
+    "plugins",
+    "cache",
+    "codecall",
+    "dashboard",
+    "remember",
+    "agentfront"
   ],
   "repository": {
     "type": "git",

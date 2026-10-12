@@ -1,16 +1,17 @@
 {
   "name": "@frontmcp/protocol",
   "version": "1.9.6",
-  "description": "Centralized MCP protocol types, server, and client re-exports for FrontMCP",
+  "description": "Internal FrontMCP package: the single re-export point for @modelcontextprotocol/sdk types, server, client and transports",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
   "keywords": [
+    "frontmcp",
     "mcp",
+    "model-context-protocol",
     "protocol",
     "modelcontextprotocol",
-    "agentfront",
-    "frontmcp",
-    "typescript"
+    "typescript",
+    "agentfront"
   ],
   "repository": {
     "type": "git",
@@ -20,7 +21,7 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
-  "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/protocol/README.md",
+  "homepage": "https://frontmcp.dev",
   "engines": {
     "node": ">=24.0.0"
   },
