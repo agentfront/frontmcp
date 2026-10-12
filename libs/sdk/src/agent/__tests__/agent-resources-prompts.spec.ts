@@ -15,6 +15,8 @@ import {
   createTestFetchServer,
   createTestJwtIssuer,
   rpc20260728,
+  type TestFetchServer,
+  type TestJwtIssuer,
 } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import {
   Agent,
@@ -534,15 +536,21 @@ class WardenAgent extends AgentContext {}
 class KeepApp {}
 
 describe("authorities on an agent's resource", () => {
-  it('apply to the caller the agent runs for', async () => {
-    const issuer = await createTestJwtIssuer();
-    const server = await createTestFetchServer({
+  let issuer: TestJwtIssuer;
+  let server: TestFetchServer;
+
+  // The first HTTP server here loads the auth modules on demand: seconds when coverage instruments them on a cold cache
+  beforeAll(async () => {
+    issuer = await createTestJwtIssuer();
+    server = await createTestFetchServer({
       info: { name: 'agent-reads-authorities', version: '1.0.0' },
       apps: [KeepApp],
       auth: { mode: 'transparent', provider: issuer.issuer, providerConfig: { jwks: issuer.jwks } },
       authorities: { claimsMapping: { roles: 'roles' }, profiles: { admin: { roles: { any: ['admin'] } } } },
     });
+  }, 30_000);
 
+  it('apply to the caller the agent runs for', async () => {
     const readAs = async (roles: string[], sub: string) => {
       const token = await issuer.sign({ roles }, sub);
       const { message } = await rpc20260728(
