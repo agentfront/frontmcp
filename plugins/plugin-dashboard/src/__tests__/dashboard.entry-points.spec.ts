@@ -32,8 +32,7 @@ class LabApp {}
 const config: FrontMcpConfigInput = {
   info: { name: 'inventory', version: '1.0.0' },
   apps: [LabApp, DashboardApp],
-  // The config type names plugin classes; an `init()` result is accepted at run time.
-  plugins: [DashboardPlugin.init({ enabled: true })] as unknown[] as FrontMcpConfigInput['plugins'],
+  plugins: [DashboardPlugin.init({ enabled: true })],
   logging: { level: LogLevel.Off, enableConsole: false },
 };
 

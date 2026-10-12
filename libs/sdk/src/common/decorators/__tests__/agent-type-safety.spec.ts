@@ -44,6 +44,36 @@ class ValidAgentWithGuards extends AgentContext {
   }
 }
 
+// ── Valid: execute() without a parameter, for an empty input schema ──
+
+@Agent({
+  name: 'valid-agent-no-param',
+  inputSchema: {},
+  llm: { provider: 'openai', model: 'gpt-4', apiKey: 'test-key' },
+})
+class ValidAgentNoParam extends AgentContext {
+  override async execute() {
+    return { result: 'done' };
+  }
+}
+
+// ── Invalid: execute() without a parameter, for an input schema with fields ──
+
+function _testNoParamWithInput() {
+  // @ts-expect-error - execute() needs a parameter matching the input schema { topic: string }
+  @Agent({
+    name: 'no-param-with-input-agent',
+    inputSchema: { topic: z.string() },
+    llm: { provider: 'openai', model: 'gpt-4', apiKey: 'test-key' },
+  })
+  class NoParamWithInputAgent extends AgentContext {
+    override async execute() {
+      return {};
+    }
+  }
+  void NoParamWithInputAgent;
+}
+
 // ── Invalid: concurrency typo ───────────────────────────────
 
 function _testInvalidConcurrency() {
@@ -101,6 +131,8 @@ function _testNotAgentContext() {
 // Suppress unused variable/function warnings
 void ValidAgent;
 void ValidAgentWithGuards;
+void ValidAgentNoParam;
+void _testNoParamWithInput;
 void _testInvalidConcurrency;
 void _testWrongParamType;
 void _testNotAgentContext;

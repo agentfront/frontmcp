@@ -12,7 +12,6 @@ import 'reflect-metadata';
 
 import { ProviderScope } from '@frontmcp/di';
 
-import type { AnnotatedClass } from '../../common';
 import { App } from '../../common/decorators/app.decorator';
 import { Provider } from '../../common/decorators/provider.decorator';
 import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
@@ -71,8 +70,8 @@ describe('Scope provider propagation (issue #403)', () => {
           provide: FACTORY_TOKEN,
           scope: ProviderScope.GLOBAL,
           useFactory: () => RESOLVED,
-          inject: [],
-        } as unknown as AnnotatedClass,
+          inject: () => [],
+        },
       ],
       apps: [AppFactory],
     });
@@ -124,8 +123,8 @@ describe('Scope provider propagation (issue #403)', () => {
             factoryWasInvoked = true;
             return new HostileLogger();
           },
-          inject: [],
-        } as unknown as AnnotatedClass,
+          inject: () => [],
+        },
       ],
       apps: [AppShadow],
     });

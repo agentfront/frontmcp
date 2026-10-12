@@ -34,11 +34,9 @@ const INITIALIZE = {
 
 const MCP_HEADERS = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' };
 
-type DisposableInstance = FrontMcpInstance & { dispose?: () => Promise<void> };
-
 async function build(
   overrides: Record<string, unknown>,
-): Promise<{ instance: DisposableInstance; handler: WebFetchHandler }> {
+): Promise<{ instance: FrontMcpInstance; handler: WebFetchHandler }> {
   const instance = await FrontMcpInstance.createForGraph({
     info: { name: 'hardening-test', version: '1.0.0' },
     apps: [HardeningApp],
@@ -69,7 +67,7 @@ function chunkedPost(chunks: string[]): Request {
 }
 
 describe('web-fetch handler: security headers', () => {
-  let instance: DisposableInstance;
+  let instance: FrontMcpInstance;
   let handler: WebFetchHandler;
 
   beforeAll(async () => {
@@ -80,7 +78,7 @@ describe('web-fetch handler: security headers', () => {
       },
     }));
   });
-  afterAll(async () => instance?.dispose?.());
+  afterAll(async () => instance?.shutdown());
 
   it.each([
     ['health probe', () => new Request('https://worker.example.com/healthz')],
@@ -98,13 +96,13 @@ describe('web-fetch handler: security headers', () => {
 });
 
 describe('web-fetch handler: http.bodyLimit', () => {
-  let instance: DisposableInstance;
+  let instance: FrontMcpInstance;
   let handler: WebFetchHandler;
 
   beforeAll(async () => {
     ({ instance, handler } = await build({ http: { entryPath: '/mcp', bodyLimit: '1kb' } }));
   });
-  afterAll(async () => instance?.dispose?.());
+  afterAll(async () => instance?.shutdown());
 
   it('rejects a declared content-length over the limit with a structured 413', async () => {
     const res = await handler(post(JSON.stringify({ ...INITIALIZE, pad: 'x'.repeat(2048) })));
@@ -151,7 +149,7 @@ describe('web-fetch handler: health config', () => {
       const gone = await handler(new Request('https://worker.example.com/healthz'));
       expect(gone.status).toBe(404);
     } finally {
-      await instance.dispose?.();
+      await instance.shutdown();
     }
   });
 
@@ -163,7 +161,7 @@ describe('web-fetch handler: health config', () => {
         expect(res.status).toBe(404);
       }
     } finally {
-      await instance.dispose?.();
+      await instance.shutdown();
     }
   });
 
@@ -181,7 +179,7 @@ describe('web-fetch handler: health config', () => {
       const body = (await res.json()) as { status: string };
       expect(body.status).toBe('not_ready');
     } finally {
-      await instance.dispose?.();
+      await instance.shutdown();
     }
   });
 });
