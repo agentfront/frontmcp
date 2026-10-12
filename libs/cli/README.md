@@ -1,35 +1,69 @@
+<div align="center">
+
+<a href="https://frontmcp.dev">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/agentfront/frontmcp/v1.9.6/.github/assets/readme/hero.svg">
+  <img src="https://raw.githubusercontent.com/agentfront/frontmcp/v1.9.6/.github/assets/readme/hero.light.svg" alt="FrontMCP - The TypeScript way to build MCP servers" width="100%">
+</picture>
+</a>
+
+</div>
+
 # frontmcp
 
-Command-line interface for scaffolding, building, and managing FrontMCP server projects.
+The FrontMCP command-line tool. It creates a project, runs it with hot reload, tests it, and builds it for Node, a
+single executable, Vercel, AWS Lambda, Cloudflare Workers or an MCP Bundle (`.mcpb`). It also runs servers in the
+background, installs MCP apps, and installs FrontMCP's skills for coding agents.
 
-[![NPM](https://img.shields.io/npm/v/frontmcp.svg)](https://www.npmjs.com/package/frontmcp)
+[FrontMCP](https://frontmcp.dev) is a TypeScript framework for building
+[Model Context Protocol](https://modelcontextprotocol.io) (MCP) servers: you write tools, resources and prompts as
+decorated classes with [`@frontmcp/sdk`](https://www.npmjs.com/package/@frontmcp/sdk), and this package is the tooling
+around them.
+
+[![npm](https://img.shields.io/npm/v/frontmcp.svg)](https://www.npmjs.com/package/frontmcp)
+[![Node](https://img.shields.io/node/v/frontmcp.svg)](https://nodejs.org)
+[![License](https://img.shields.io/npm/l/frontmcp.svg)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
+
+## Quick start
+
+```bash
+npx frontmcp create my-app
+cd my-app
+npm install
+npm run dev
+```
+
+`create` asks for a deployment target, a Redis setup and CI workflows (`--yes` takes the defaults), and doesn't install
+packages. `npm run dev` runs `frontmcp dev`, and the server answers at `http://localhost:3000/mcp`. Point the
+[MCP Inspector](https://frontmcp.dev/reference/cli#frontmcp-inspector) (`npm run inspect`) or any MCP client at it,
+then follow [Learn](https://frontmcp.dev/learn) on frontmcp.dev.
 
 ## Install
 
 ```bash
-npm install -g frontmcp
-# or use directly
-npx frontmcp create my-app
+npm install -D frontmcp   # in a project (frontmcp create adds it for you)
+npm install -g frontmcp   # or globally
+npx frontmcp <command>    # or without installing
 ```
 
-> Requires Node.js >= 22
+Requires Node.js 24 or later. To add FrontMCP to a project you already have, see
+[Installation](https://frontmcp.dev/learn/installation#adding-frontmcp-to-an-existing-project).
 
 ## Commands
 
 ### Development
 
-| Command                       | Description                                                |
-| ----------------------------- | ---------------------------------------------------------- |
-| `frontmcp dev`                | Start in development mode (tsx --watch + async type-check) |
-| `frontmcp build`              | Compile entry with TypeScript (tsc)                        |
-| `frontmcp build --exec`       | Build distributable executable bundle (esbuild)            |
-| `frontmcp build --exec --cli` | Generate CLI with subcommands per tool                     |
-| `frontmcp test [patterns...]` | Run E2E tests with auto-injected Jest configuration        |
-| `frontmcp init`               | Create or fix a tsconfig.json suitable for FrontMCP        |
-| `frontmcp doctor`             | Check Node/npm versions and tsconfig requirements          |
-| `frontmcp inspector`          | Launch MCP Inspector UI                                    |
-| `frontmcp create [name]`      | Scaffold a new FrontMCP project                            |
-| `frontmcp socket <entry>`     | Start Unix socket daemon for local MCP server              |
+| Command                            | Description                                                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `frontmcp create [name]`           | Scaffold a new FrontMCP project (interactive when `name` is omitted)                                         |
+| `frontmcp init`                    | Create or fix a `tsconfig.json` with the decorator settings FrontMCP needs                                   |
+| `frontmcp doctor`                  | Check the Node and npm versions and the `tsconfig.json`                                                      |
+| `frontmcp dev`                     | Run the server with hot reload (`tsx --watch`) and a type check in the background                            |
+| `frontmcp dev --stdio`             | Run `dev` as a stdio bridge, for an MCP client that starts the server itself                                 |
+| `frontmcp build`                   | Build every deployment in `frontmcp.config`, or the `node` target without a config                           |
+| `frontmcp build --target <target>` | Build one target: `node`, `cli`, `sdk`, `browser`, `vercel`, `lambda`, `cloudflare`, `distributed` or `mcpb` |
+| `frontmcp test [patterns...]`      | Run E2E tests with an injected Jest configuration                                                            |
+| `frontmcp inspector`               | Launch the MCP Inspector                                                                                     |
 
 ### Process Manager
 
@@ -41,6 +75,7 @@ npx frontmcp create my-app
 | `frontmcp status [name]`           | Show process status (detail if name given, table if omitted) |
 | `frontmcp list`                    | List all managed processes                                   |
 | `frontmcp logs <name>`             | Tail log output for a managed server                         |
+| `frontmcp socket <entry>`          | Serve a local MCP server on a Unix socket                    |
 | `frontmcp service <action> [name]` | Install/uninstall systemd/launchd service                    |
 
 ### Package Manager
@@ -50,6 +85,29 @@ npx frontmcp create my-app
 | `frontmcp install <source>` | Install an MCP app from npm, local path, or git |
 | `frontmcp uninstall <name>` | Remove an installed MCP app                     |
 | `frontmcp configure <name>` | Re-run setup questionnaire for an installed app |
+
+### Skills
+
+Skills teach a coding agent, such as Claude Code or Codex, how to build with FrontMCP. The catalog ships in
+[`@frontmcp/skills`](https://www.npmjs.com/package/@frontmcp/skills).
+
+| Command                                         | Description                                                                              |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `frontmcp skills search <query>`                | Search the catalog                                                                       |
+| `frontmcp skills list`                          | List the skills in the catalog                                                           |
+| `frontmcp skills install [name]`                | Install skills into `.claude/skills` or `.codex/skills` (`--all`, `--tag`, `--category`) |
+| `frontmcp skills read <nameOrPath> [reference]` | Print a skill, one of its references, or a file in its folder                            |
+| `frontmcp skills export`                        | Turn a catalog skill into a Cursor, Windsurf or Copilot rule file                        |
+| `frontmcp skills publish <name>`                | Publish a skill to Smithery or Glama                                                     |
+
+### MCP Clients
+
+| Command                              | Description                                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `frontmcp eject-mcp-config <client>` | Print an MCP config snippet for `claude-code`, `claude-desktop`, `cursor`, `windsurf` or `vscode` |
+| `frontmcp plugin install`            | Install this server as a Claude Code plugin (`--claude`) or a Codex MCP server (`--codex`)        |
+| `frontmcp plugin status`             | Show what `plugin install` installed, per provider                                                |
+| `frontmcp plugin uninstall`          | Remove what `plugin install` wrote                                                                |
 
 ### MCP Bundles (MCPB)
 
@@ -62,20 +120,41 @@ npx frontmcp create my-app
 
 ### General
 
-| Flag            | Description   |
-| --------------- | ------------- |
-| `-V, --version` | Print version |
-| `-h, --help`    | Print help    |
+| Flag                  | Description                                                               |
+| --------------------- | ------------------------------------------------------------------------- |
+| `-V, --version`       | Print version                                                             |
+| `-h, --help`          | Print help                                                                |
+| `-c, --config <path>` | Use this `frontmcp.config` file instead of searching for one              |
+| `--list-commands`     | List every command, built-in and [project-defined][docs-project-commands] |
+
+### Dev
+
+| Flag                        | Description                                                    | Default             |
+| --------------------------- | -------------------------------------------------------------- | ------------------- |
+| `-e, --entry <path>`        | Entry file path                                                | auto-detected       |
+| `-p, --port <port>`         | Port to listen on                                              | `3000`              |
+| `--auto-port`               | If the port is busy, use the next free one                     | `false`             |
+| `--show-conflict`           | When the port is busy, print the process holding it            | `false`             |
+| `--stdio`                   | Run as a stdio bridge for an MCP client                        | `false`             |
+| `--serve`                   | With `--stdio`, talk to the server over a pipe instead of HTTP | `false`             |
+| `--log-file <path>`         | Bridge log file                                                | `.frontmcp/dev.log` |
+| `--buffer-size <n>`         | Requests held while the server reloads                         | `8`                 |
+| `--reload-deadline-ms <ms>` | How long to wait for a reload                                  | `30000`             |
 
 ### Build
 
-| Flag                   | Description                                                  | Default       |
-| ---------------------- | ------------------------------------------------------------ | ------------- |
-| `-o, --out-dir <dir>`  | Output directory                                             | `dist`        |
-| `-e, --entry <path>`   | Entry file path                                              | auto-detected |
-| `-a, --adapter <name>` | Deployment adapter: `node`, `vercel`, `lambda`, `cloudflare` | —             |
-| `--exec`               | Build distributable executable bundle (esbuild)              | `false`       |
-| `--cli`                | Generate CLI with subcommands per tool (use with `--exec`)   | `false`       |
+| Flag                    | Description                                                                        | Default       |
+| ----------------------- | ---------------------------------------------------------------------------------- | ------------- |
+| `-t, --target <target>` | One target (see [Commands](#development)); without it, every configured deployment | —             |
+| `-o, --out-dir <dir>`   | Output directory; each target writes to `<dir>/<target>/`                          | `dist`        |
+| `-e, --entry <path>`    | Entry file path                                                                    | auto-detected |
+| `--js`                  | `cli` target: a JavaScript bundle instead of a single executable                   | `false`       |
+| `--sea`                 | `mcpb` target: add a single-executable binary for this platform                    | `false`       |
+| `--merge-from <dir>`    | `mcpb` target: add single-executable binaries built on other platforms             | —             |
+| `--icon <path>`         | `mcpb` target: the icon to put in the archive                                      | —             |
+| `--no-deterministic`    | `mcpb` target: don't make the archive reproducible                                 | —             |
+| `--stage-only`          | `mcpb` target: keep the staging folder and skip the zip                            | `false`       |
+| `--no-clean`            | Keep what's already in the output folder                                           | —             |
 
 ### Start
 
@@ -118,14 +197,15 @@ npx frontmcp create my-app
 
 ### Create
 
-| Flag                 | Description                                                  | Default  |
-| -------------------- | ------------------------------------------------------------ | -------- |
-| `-y, --yes`          | Use defaults (non-interactive mode)                          | `false`  |
-| `--target <target>`  | Deployment target: `node`, `vercel`, `lambda`, `cloudflare`  | `node`   |
-| `--redis <setup>`    | Redis setup: `docker`, `existing`, `none` (node target only) | `docker` |
-| `--pm <pm>`          | Package manager: `npm`, `yarn`, `pnpm`                       | detected |
-| `--cicd / --no-cicd` | Enable/disable GitHub Actions CI/CD                          | `true`   |
-| `--nx`               | Scaffold an Nx monorepo instead of standalone project        | `false`  |
+| Flag                 | Description                                                  | Default       |
+| -------------------- | ------------------------------------------------------------ | ------------- |
+| `-y, --yes`          | Use defaults (non-interactive mode)                          | `false`       |
+| `--target <target>`  | Deployment target: `node`, `vercel`, `lambda`, `cloudflare`  | `node`        |
+| `--redis <setup>`    | Redis setup: `docker`, `existing`, `none` (node target only) | `docker`      |
+| `--pm <pm>`          | Package manager: `npm`, `yarn`, `pnpm`                       | detected      |
+| `--cicd / --no-cicd` | Enable/disable GitHub Actions CI/CD                          | `true`        |
+| `--nx`               | Scaffold an Nx monorepo instead of standalone project        | `false`       |
+| `--skills <bundle>`  | Skills to install: `recommended`, `minimal`, `full`, `none`  | `recommended` |
 
 ### Test
 
@@ -135,6 +215,7 @@ npx frontmcp create my-app
 | `-w, --watch`        | Run tests in watch mode                      | `false` |
 | `-v, --verbose`      | Show verbose test output                     | `false` |
 | `-t, --timeout <ms>` | Set test timeout                             | `60000` |
+| `--no-env`           | Don't load `.env` or `.env.local`            | —       |
 | `-c, --coverage`     | Collect test coverage                        | `false` |
 
 ## Examples
@@ -161,8 +242,9 @@ frontmcp inspector                  # Launch MCP Inspector UI
 ### Executable Builds
 
 ```bash
-frontmcp build --exec               # Single-file executable bundle
-frontmcp build --exec --cli         # CLI with subcommands per tool
+frontmcp build --target node        # Bundle plus a runner script; run it where node_modules is
+frontmcp build --target cli         # Single executable with a subcommand per tool
+frontmcp build --target cli --js    # The same CLI as a JavaScript bundle
 ```
 
 ### MCP Bundles (`.mcpb`)
@@ -199,7 +281,7 @@ export default defineConfig({
       compatibility: {
         claude_desktop: '>=1.0.0',
         platforms: ['darwin', 'linux', 'win32'],
-        runtimes: { node: '>=22.0.0' },
+        runtimes: { node: '>=24.0.0' },
       },
       sea: { enabled: true },
     },
@@ -224,7 +306,9 @@ pre-built binaries organized as `{mergeFromDir}/{platform}/{appName}[.exe]`.
 
 ### Generated CLI Features
 
-When built with `--exec --cli`, the output is a standalone executable with auto-generated commands derived from your MCP server's tools, resources, prompts, and templates. The CLI groups commands into five categories visible in `--help` output:
+`frontmcp build --target cli` turns the server into a command-line program, `dist/cli/<name>`, whose commands come
+from the server's tools, resources, prompts and resource templates. Without `--js` it's a single executable that
+runs without `node_modules`. Its `--help` groups the commands:
 
 **Tool subcommands** — each MCP tool becomes a kebab-case subcommand with flags generated from its input schema:
 
@@ -233,7 +317,7 @@ When built with `--exec --cli`, the output is a standalone executable with auto-
 ./myapp send-email --to "bob@example.com" --body '{"html": true}'
 ```
 
-Object-typed parameters accept JSON strings that are automatically parsed.
+An object field takes a JSON string; an array field takes the flag once per value (`--tags a --tags b`).
 
 **Resources & Prompts:**
 
@@ -243,10 +327,10 @@ Object-typed parameters accept JSON strings that are automatically parsed.
 ./myapp template list                          # List resource templates
 ./myapp template user-profile --user-id 42     # Read a template with parameters
 ./myapp prompt list                            # List available prompts
-./myapp prompt greeting --name "Alice"         # Execute a prompt with arguments
+./myapp prompt get greeting --name "Alice"     # Render a prompt with arguments
 ```
 
-**Auth & Sessions:**
+**Auth & Sessions** (only with `cli.authRequired: true`):
 
 ```bash
 ./myapp login --server https://auth.example.com   # OAuth PKCE login
@@ -266,52 +350,54 @@ Object-typed parameters accept JSON strings that are automatically parsed.
 **System:**
 
 ```bash
-./myapp serve                     # Start MCP server (stdio transport)
+./myapp serve --port 3000         # Start the MCP server over HTTP
+./myapp serve --stdio             # Start the MCP server over stdio
 ./myapp daemon start              # Start as background daemon
 ./myapp daemon stop               # Stop the daemon
 ./myapp daemon status             # Show daemon status
 ./myapp daemon logs               # Tail daemon logs
 ./myapp doctor                    # Check runtime dependencies
-./myapp install                   # Install shell completions
-./myapp uninstall                 # Remove shell completions
+./myapp install                   # Install to ~/.frontmcp/ (or, with -p, as an IDE plugin)
+./myapp uninstall                 # Remove what install added
 ```
 
-**Global option:** `--output <text|json>` controls the output format for all commands (default set by `cli.outputDefault` in config).
+A server with skills also gets `skills list`, `skills search`, `skills read` and `skills load`.
+
+**Global options:** `--output <text|json>` sets the output format (the default comes from `cli.outputDefault`);
+`--verbose` and `--log-dir <path>` control logging.
 
 **Tool name conflict resolution:** if a tool name collides with a built-in command (e.g., `login`, `serve`), the tool subcommand is automatically suffixed with `-tool` (e.g., `login-tool`).
 
 **Auth token injection:** when `cli.authRequired` is `true` in config, the active session's stored token is sent with every tool/resource/prompt call, and those commands refuse to run (exit 1) until `login` or `connect --token` has stored one.
 
-### `frontmcp.config.js` — CLI Options
+### `frontmcp.config` — `cli` deployment options
 
-The `cli` block in your config controls CLI generation:
+The `cli` block of a `cli` deployment controls the generated program:
 
-```js
-// frontmcp.config.js
-module.exports = {
+```ts
+import { defineConfig } from 'frontmcp';
+
+export default defineConfig({
   name: 'myapp',
   version: '1.0.0',
-  cli: {
-    enabled: true,
-    outputDefault: 'text', // 'text' | 'json'
-    authRequired: false, // inject OAuth tokens into calls
-    description: 'My MCP CLI',
-    excludeTools: [], // tool names to hide from CLI
-    nativeDeps: {
-      // checked by `doctor` command
-      brew: [],
-      apt: [],
-      npm: [],
+  deployments: [
+    {
+      target: 'cli',
+      cli: {
+        description: 'My MCP CLI', // the line under "Usage:" in --help
+        outputDefault: 'text', // 'text' | 'json'
+        authRequired: false, // true adds login/logout/sessions/connect
+        excludeTools: [], // tool names to leave out
+        oauth: {
+          serverUrl: 'https://auth.example.com',
+          clientId: 'my-app',
+          defaultScope: 'read write',
+          portRange: [17830, 17850], // local callback port range
+        },
+      },
     },
-    oauth: {
-      serverUrl: 'https://auth.example.com',
-      clientId: 'my-app',
-      defaultScope: 'read write',
-      portRange: [17830, 17850], // local callback port range
-      timeout: 120000, // login timeout (ms)
-    },
-  },
-};
+  ],
+});
 ```
 
 ### Process Management
@@ -345,25 +431,41 @@ frontmcp socket ./src/main.ts --socket /tmp/my-app.sock
 frontmcp socket ./src/main.ts --background --db ./data.db
 ```
 
+### Skills
+
+```bash
+frontmcp skills search "openapi"                # Find skills in the catalog
+frontmcp skills install frontmcp-development    # Install one skill for Claude Code
+frontmcp skills install --all --provider codex  # Install every skill for Codex
+```
+
 ## Docs
 
-| Topic                | Link                                |
-| -------------------- | ----------------------------------- |
-| Installation & setup | [Installation][docs-install]        |
-| CLI reference        | [CLI Reference][docs-cli-ref]       |
-| Local development    | [Local Dev Server][docs-dev]        |
-| Production builds    | [Production Build][docs-production] |
+| Topic                | Link                                      |
+| -------------------- | ----------------------------------------- |
+| Installation & setup | [Installation][docs-install]              |
+| CLI reference        | [CLI Reference][docs-cli-ref]             |
+| Local development    | [Local Dev Server][docs-dev]              |
+| Build targets        | [Build targets][docs-targets]             |
+| Production builds    | [Production Build][docs-production]       |
+| `frontmcp.config`    | [Config files][docs-config]               |
+| Connecting a client  | [MCP clients][docs-clients]               |
+| Skills               | [Skills commands][docs-skills]            |
+| Custom commands      | [Project commands][docs-project-commands] |
 
 ## Related Packages
 
-- [`@frontmcp/sdk`](../sdk) — core framework
-- [`@frontmcp/testing`](../testing) — E2E testing (used by `frontmcp test`)
-- [`@frontmcp/uipack`](../uipack) — UI template rendering
-- [`@frontmcp/adapters`](../adapters) — framework adapters (Express, Fastify, etc.)
+- [`@frontmcp/sdk`](https://www.npmjs.com/package/@frontmcp/sdk) — the framework you write the server with
+- [`@frontmcp/testing`](https://www.npmjs.com/package/@frontmcp/testing) — the test framework `frontmcp test` runs
+- [`@frontmcp/skills`](https://www.npmjs.com/package/@frontmcp/skills) — the catalog behind `frontmcp skills`
+- [`@frontmcp/nx`](https://www.npmjs.com/package/@frontmcp/nx) — Nx generators and executors that run these commands
 
 ---
 
 ## Contributing
+
+Source: [`libs/cli`](https://github.com/agentfront/frontmcp/tree/main/libs/cli). Issues and pull requests are welcome;
+see [CONTRIBUTING.md](https://github.com/agentfront/frontmcp/blob/main/CONTRIBUTING.md).
 
 ### Architecture
 
@@ -376,7 +478,7 @@ libs/cli/src/
 │   ├── args.ts         # ParsedArgs type definitions
 │   └── help.ts         # Custom grouped help formatter
 ├── commands/
-│   ├── build/          # build, build --exec, build --exec --cli
+│   ├── build/          # build: node, cli, sdk, browser, adapter and mcpb targets
 │   │   └── exec/
 │   │       ├── cli-runtime/            # Generated CLI runtime modules
 │   │       │   ├── generate-cli-entry.ts   # Code-gen for Commander CLI entry
@@ -392,6 +494,10 @@ libs/cli/src/
 │   │       ├── manifest.ts             # Build manifest generation
 │   │       └── index.ts                # Exec build orchestrator
 │   ├── dev/            # dev, test, init, doctor, inspector
+│   ├── eject/          # eject-mcp-config
+│   ├── install/        # plugin install, uninstall, status
+│   ├── mcpb/           # mcpb validate
+│   ├── skills/         # skills search, list, install, read, export, publish
 │   ├── pm/             # start, stop, restart, status, list, logs, service, socket
 │   ├── package/        # install, uninstall, configure
 │   └── scaffold/       # create
@@ -433,11 +539,16 @@ nx build cli
 
 ## License
 
-Apache-2.0 — see [LICENSE](../../LICENSE).
+Apache-2.0. See [LICENSE](https://github.com/agentfront/frontmcp/blob/main/LICENSE).
 
 <!-- links -->
 
 [docs-install]: https://frontmcp.dev/learn/installation
 [docs-cli-ref]: https://frontmcp.dev/reference/cli
 [docs-dev]: https://frontmcp.dev/reference/cli#frontmcp-dev
+[docs-targets]: https://frontmcp.dev/reference/cli#the-targets
 [docs-production]: https://frontmcp.dev/reference/deployment/production-build
+[docs-config]: https://frontmcp.dev/reference/server/config-files
+[docs-clients]: https://frontmcp.dev/reference/deployment/mcp-clients
+[docs-skills]: https://frontmcp.dev/reference/cli#skills
+[docs-project-commands]: https://frontmcp.dev/reference/cli#project-commands
