@@ -56,6 +56,19 @@ test('with no process global the bundle still loads and require stays undefined'
   assert.equal(res.stdout.trim(), 'undefined');
 });
 
+test('a module that never names require is left without the banner', async () => {
+  const body = 'export const ok = true;\n';
+  const file = await bundleWithBanner(body);
+  assert.equal(await fs.readFile(file, 'utf8'), body);
+});
+
+test("typeof require and esbuild's __require shim get the banner too", async () => {
+  for (const body of ['export const kind = typeof require;\n', 'var __require = () => undefined;\nexport {};\n']) {
+    const file = await bundleWithBanner(body);
+    assert.match(await fs.readFile(file, 'utf8'), /__frontmcpCreateRequire/);
+  }
+});
+
 test('injection is idempotent', async () => {
   const file = await bundleWithBanner('export const x = 1;\n');
   const first = await fs.readFile(file, 'utf8');
