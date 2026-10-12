@@ -1,6 +1,6 @@
 const SHUTDOWN_SIGNALS = ['SIGTERM', 'SIGINT'] as const;
 
-const DEFAULT_SHUTDOWN_DEADLINE_MS = 10_000;
+export const DEFAULT_SHUTDOWN_DEADLINE_MS = 10_000;
 
 interface SignalTarget {
   on(signal: string, listener: () => void): unknown;

@@ -109,8 +109,12 @@ export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, Fro
           throw new InvalidRegistryKindError('scope', String((rec as { kind: string }).kind));
       }
 
-      await scope.ready;
-      this.instances.set(token, scope);
+      try {
+        await scope.ready;
+      } finally {
+        // A scope that failed is kept too, so shutting the server down disposes what it built
+        this.instances.set(token, scope);
+      }
       this.logger?.verbose(`ScopeRegistry: initialized scope '${tokenName(token)}'`);
     }
     this.logger?.verbose(`ScopeRegistry: initialization complete (${this.instances.size} scope(s))`);
