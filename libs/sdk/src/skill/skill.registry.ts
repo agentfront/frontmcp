@@ -1530,7 +1530,7 @@ export default class SkillRegistry
     // response is queued after them rather than overtaken by them.
     const providerWrites = mutable
       ? [
-          ...removed.map((removedId) => this.removeFromProvider(mutable, removedId)),
+          ...removed.map((removedId) => this.removeFromProvider(removedId)),
           this.syncProvider(id, async () => {
             if (await mutable.exists(id)) {
               await mutable.update(id, content);
@@ -1580,7 +1580,7 @@ export default class SkillRegistry
     this.withdrawDynamicSkill(id, mutable);
     this.reindex();
     // Queued before the change is announced, so a change a subscriber makes in response comes after it.
-    const removal = mutable ? this.removeFromProvider(mutable, id) : undefined;
+    const removal = mutable ? this.removeFromProvider(id) : undefined;
     this.bump('reset');
     await removal;
 
@@ -1603,11 +1603,16 @@ export default class SkillRegistry
     if (mutable) this.withdrawn.set(id, ++this.withdrawals);
   }
 
-  /** Remove a withdrawn skill's copy from the provider. If that fails it stays withdrawn from reads. */
-  private async removeFromProvider(mutable: MutableSkillStorageProvider, id: string): Promise<void> {
+  /**
+   * Remove a withdrawn skill's copy from the provider, after the writes queued before it for that id (an add
+   * waiting for the provider's first load included). If that fails it stays withdrawn from reads.
+   */
+  private async removeFromProvider(id: string): Promise<void> {
     const withdrawal = this.withdrawn.get(id);
     try {
-      await this.syncProvider(id, () => mutable.remove(id));
+      await this.syncProvider(id, async () => {
+        await this.asMutableProvider(await this.storage())?.remove(id);
+      });
       // The provider no longer holds it, so reads need not skip it, unless it was withdrawn again
       // (registered and removed once more) while this removal was queued.
       if (this.withdrawn.get(id) === withdrawal) this.withdrawn.delete(id);
@@ -1643,8 +1648,8 @@ export default class SkillRegistry
    * if it fails, provider-backed reads skip it.
    */
   private withdrawGoneAdoptedSkills(previous: readonly IndexedSkill[]): void {
-    const mutable = this.asMutableProvider(this.storageProvider);
-    if (!mutable) return;
+    // A provider still loading is withdrawn from too: the adds queued for it land first, then the removal
+    if (this.storageProvider && !this.asMutableProvider(this.storageProvider)) return;
     const skillIdOf = (entry: SkillEntry): string => entry.metadata.id ?? entry.metadata.name;
     const live = new Set(this.listAllIndexed().map((r) => skillIdOf(r.instance)));
     // Also when nothing left: a skill the child registers again is live, even if the removal of its
@@ -1654,7 +1659,7 @@ export default class SkillRegistry
       const id = skillIdOf(row.instance);
       if (live.has(id) || this.withdrawn.has(id)) continue;
       this.withdrawn.set(id, ++this.withdrawals);
-      void this.removeFromProvider(mutable, id);
+      void this.removeFromProvider(id);
     }
   }
 
