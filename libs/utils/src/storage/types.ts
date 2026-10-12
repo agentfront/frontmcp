@@ -271,6 +271,17 @@ export interface StorageAdapter {
    */
   deleteIfEquals?(key: string, expectedValue: string): Promise<boolean>;
 
+  /**
+   * Atomically set a key's TTL only while it still holds `expectedValue` (compare-and-expire).
+   *
+   * @param key - Storage key
+   * @param expectedValue - The exact value the key must hold
+   * @param ttlSeconds - The new time to live, in seconds
+   * @returns true if this call set the TTL, false if the key was missing or held another value
+   * @throws StorageNotSupportedError if the backend has no atomic compare-and-expire
+   */
+  expireIfEquals?(key: string, expectedValue: string, ttlSeconds: number): Promise<boolean>;
+
   // ============================================
   // Pub/Sub (Optional)
   // ============================================
@@ -348,6 +359,9 @@ export interface NamespacedStorage extends StorageAdapter {
 
   /** {@link StorageAdapter.deleteIfEquals}; throws StorageNotSupportedError when the adapter has none. */
   deleteIfEquals(key: string, expectedValue: string): Promise<boolean>;
+
+  /** {@link StorageAdapter.expireIfEquals}; throws StorageNotSupportedError when the adapter has none. */
+  expireIfEquals(key: string, expectedValue: string, ttlSeconds: number): Promise<boolean>;
 
   /**
    * Get the underlying root adapter (for advanced use).
