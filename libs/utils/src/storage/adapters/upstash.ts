@@ -7,7 +7,7 @@
 
 import { StorageConfigError, StorageConnectionError } from '../errors';
 import type { MessageHandler, SetOptions, Unsubscribe, UpstashAdapterOptions } from '../types';
-import { COMPARE_AND_DELETE_SCRIPT } from '../utils/compare-and-delete';
+import { COMPARE_AND_DELETE_SCRIPT, COMPARE_AND_EXPIRE_SCRIPT } from '../utils/compare-and-delete';
 import { validateTTL } from '../utils/ttl';
 import { BaseStorageAdapter } from './base';
 
@@ -227,6 +227,16 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
       [expectedValue],
     );
     return deleted === 1;
+  }
+
+  override async expireIfEquals(key: string, expectedValue: string, ttlSeconds: number): Promise<boolean> {
+    validateTTL(ttlSeconds);
+    const extended = await this.getConnectedClient().eval(
+      COMPARE_AND_EXPIRE_SCRIPT,
+      [this.prefixKey(key)],
+      [expectedValue, String(ttlSeconds)],
+    );
+    return extended === 1;
   }
 
   async exists(key: string): Promise<boolean> {

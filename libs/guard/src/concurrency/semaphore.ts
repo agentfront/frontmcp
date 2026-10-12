@@ -2,20 +2,26 @@
  * Distributed Semaphore
  *
  * Provides concurrency control using the StorageAdapter interface.
- * Each concurrent execution acquires a "ticket" stored in the backend.
- * Active tickets tracked via atomic counter + individual ticket keys with TTL.
+ * Each concurrent execution holds one of `maxConcurrent` slot keys, claimed
+ * with a conditional set and a TTL. The holder renews the TTL until it releases
+ * the slot, so the TTL only frees the slots of holders that died.
  */
 
-import { randomUUID } from '@frontmcp/utils';
-import type { StorageAdapter } from '@frontmcp/utils';
+import { randomUUID, StorageNotSupportedError, type StorageAdapter } from '@frontmcp/utils';
+
+import { GuardStorageUnsupportedError, QueueTimeoutError } from '../errors';
 import type { SemaphoreTicket } from './types';
-import { QueueTimeoutError } from '../errors';
 
 const DEFAULT_TICKET_TTL_SECONDS = 300;
 const MIN_POLL_INTERVAL_MS = 100;
 const MAX_POLL_INTERVAL_MS = 1000;
+/** A held slot's TTL is renewed this many times per TTL, so one missed renewal doesn't free it. */
+const RENEWALS_PER_TTL = 3;
+const PROBE_KEY = '__frontmcp_semaphore_probe__';
 
 export class DistributedSemaphore {
+  private atomicSlotsVerified = false;
+
   constructor(
     private readonly storage: StorageAdapter,
     private readonly ticketTtlSeconds: number = DEFAULT_TICKET_TTL_SECONDS,
@@ -33,6 +39,7 @@ export class DistributedSemaphore {
     queueTimeoutMs: number,
     entityName: string,
   ): Promise<SemaphoreTicket | null> {
+    await this.verifyAtomicSlots();
     const ticket = await this.tryAcquire(key, maxConcurrent);
     if (ticket) return ticket;
 
@@ -42,37 +49,71 @@ export class DistributedSemaphore {
   }
 
   private async tryAcquire(key: string, maxConcurrent: number): Promise<SemaphoreTicket | null> {
-    const countKey = `${key}:count`;
-    const newCount = await this.storage.incr(countKey);
+    const slotKeys = Array.from({ length: maxConcurrent }, (_, slot) => `${key}:slot:${slot}`);
+    const holders = await this.storage.mget(slotKeys);
+    const ticketId = randomUUID();
 
-    if (newCount <= maxConcurrent) {
-      const ticketId = randomUUID();
-      const ticketKey = `${key}:ticket:${ticketId}`;
-
-      await this.storage.set(ticketKey, String(Date.now()), {
-        ttlSeconds: this.ticketTtlSeconds,
-      });
-
-      return {
-        ticket: ticketId,
-        release: () => this.release(key, ticketId),
-      };
+    for (const [slot, slotKey] of slotKeys.entries()) {
+      if (holders[slot] !== null) continue;
+      await this.storage.set(slotKey, ticketId, { ttlSeconds: this.ticketTtlSeconds, ifNotExists: true });
+      if ((await this.storage.get(slotKey)) !== ticketId) continue;
+      return this.holdSlot(key, slotKey, ticketId);
     }
 
-    await this.storage.decr(countKey);
     return null;
   }
 
-  private async release(key: string, ticketId: string): Promise<void> {
-    const countKey = `${key}:count`;
-    const ticketKey = `${key}:ticket:${ticketId}`;
-
-    await this.storage.delete(ticketKey);
-    const newCount = await this.storage.decr(countKey);
-
-    if (newCount < 0) {
-      await this.storage.set(countKey, '0');
+  /**
+   * Checks once that the storage can compare-and-delete and compare-and-expire atomically, which releasing and
+   * renewing a slot need. Without them a late release or renewal could free or extend another ticket's slot.
+   *
+   * @throws GuardStorageUnsupportedError when it can't
+   */
+  async verifyAtomicSlots(): Promise<void> {
+    if (this.atomicSlotsVerified) return;
+    try {
+      await this.compareAndDelete(PROBE_KEY, '');
+      await this.compareAndExpire(PROBE_KEY, '');
+    } catch (error) {
+      if (error instanceof StorageNotSupportedError) throw new GuardStorageUnsupportedError(error);
+      throw error;
     }
+    this.atomicSlotsVerified = true;
+  }
+
+  /** Renews the slot's TTL until it is released, or until the slot turns out to hold another ticket. */
+  private holdSlot(key: string, slotKey: string, ticketId: string): SemaphoreTicket {
+    const renew = async () => {
+      try {
+        if (!(await this.compareAndExpire(slotKey, ticketId))) clearInterval(heartbeat);
+      } catch {
+        // A storage error skips this renewal; the next one runs before the TTL can run out.
+      }
+    };
+    const heartbeat = setInterval(() => void renew(), (this.ticketTtlSeconds * 1000) / RENEWALS_PER_TTL);
+    heartbeat.unref?.();
+    return {
+      ticket: ticketId,
+      release: () => {
+        clearInterval(heartbeat);
+        return this.release(key, slotKey, ticketId);
+      },
+    };
+  }
+
+  private compareAndDelete(slotKey: string, ticketId: string): Promise<boolean> {
+    if (!this.storage.deleteIfEquals) throw new StorageNotSupportedError('deleteIfEquals', 'this storage adapter');
+    return this.storage.deleteIfEquals(slotKey, ticketId);
+  }
+
+  private compareAndExpire(slotKey: string, ticketId: string): Promise<boolean> {
+    if (!this.storage.expireIfEquals) throw new StorageNotSupportedError('expireIfEquals', 'this storage adapter');
+    return this.storage.expireIfEquals(slotKey, ticketId, this.ticketTtlSeconds);
+  }
+
+  private async release(key: string, slotKey: string, ticketId: string): Promise<void> {
+    // A slot whose ticket expired may hold another ticket by now; only free it while it is still ours.
+    await this.compareAndDelete(slotKey, ticketId);
 
     if (this.storage.supportsPubSub()) {
       try {
@@ -136,18 +177,21 @@ export class DistributedSemaphore {
   }
 
   async getActiveCount(key: string): Promise<number> {
-    const countKey = `${key}:count`;
-    const raw = await this.storage.get(countKey);
-    return Math.max(0, parseInt(raw ?? '0', 10) || 0);
+    return (await this.heldSlotKeys(key)).length;
   }
 
   async forceReset(key: string): Promise<void> {
-    const countKey = `${key}:count`;
-    await this.storage.delete(countKey);
-    const ticketKeys = await this.storage.keys(`${key}:ticket:*`);
-    if (ticketKeys.length > 0) {
-      await this.storage.mdelete(ticketKeys);
+    const slotKeys = await this.heldSlotKeys(key);
+    if (slotKeys.length > 0) {
+      await this.storage.mdelete(slotKeys);
     }
+  }
+
+  /** `<key>:slot:<n>` only: the pattern also matches the slots of a key such as `<key>:slot:0`. */
+  private async heldSlotKeys(key: string): Promise<string[]> {
+    const prefix = `${key}:slot:`;
+    const matches = await this.storage.keys(`${prefix}*`);
+    return matches.filter((slotKey) => slotKey.startsWith(prefix) && /^\d+$/.test(slotKey.slice(prefix.length)));
   }
 }
 

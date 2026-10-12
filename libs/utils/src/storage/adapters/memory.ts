@@ -187,6 +187,13 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
     return this.deleteEntry(key);
   }
 
+  override async expireIfEquals(key: string, expectedValue: string, ttlSeconds: number): Promise<boolean> {
+    this.ensureConnected();
+    const entry = this.store.get(key);
+    if (!entry || isExpired(entry.expiresAt) || entry.value !== expectedValue) return false;
+    return this.expire(key, ttlSeconds);
+  }
+
   async exists(key: string): Promise<boolean> {
     this.ensureConnected();
 

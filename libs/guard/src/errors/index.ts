@@ -6,4 +6,5 @@ export {
   IpBlockedError,
   IpNotAllowedError,
   GuardStorageUnavailableError,
+  GuardStorageUnsupportedError,
 } from './errors';

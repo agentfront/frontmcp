@@ -15,6 +15,12 @@ function createMockNamespacedStorage(): jest.Mocked<NamespacedStorage> {
       data.set(key, value);
     }),
     delete: jest.fn().mockImplementation(async (key: string) => data.delete(key)),
+    deleteIfEquals: jest
+      .fn()
+      .mockImplementation(async (key: string, expected: string) =>
+        data.get(key) === expected ? data.delete(key) : false,
+      ),
+    expireIfEquals: jest.fn().mockImplementation(async (key: string, expected: string) => data.get(key) === expected),
     exists: jest.fn().mockImplementation(async (key: string) => data.has(key)),
     mget: jest.fn().mockImplementation(async (keys: string[]) => keys.map((k) => data.get(k) ?? null)),
     mset: jest.fn().mockResolvedValue(undefined),
@@ -355,7 +361,11 @@ describe('GuardManager', () => {
       expect(ticket!.ticket).toBeDefined();
 
       // Verify storage key includes IP partition
-      expect(storage.incr).toHaveBeenCalledWith(expect.stringContaining('__global__:10.0.0.1:sem:count'));
+      expect(storage.set).toHaveBeenCalledWith(
+        expect.stringContaining('__global__:10.0.0.1:sem:slot:0'),
+        ticket!.ticket,
+        expect.objectContaining({ ifNotExists: true }),
+      );
     });
 
     it('should reject when global concurrency limit is reached', async () => {

@@ -4,12 +4,13 @@ Distributed semaphore for concurrency control, built on the `StorageAdapter` int
 
 ## How It Works
 
-Each concurrent execution acquires a "ticket":
+Each concurrent execution holds one of `maxConcurrent` slots, stored as `key:slot:<n>`:
 
-1. **Acquire**: Atomically increment a counter key (`key:count`) via `incr`. If the new value is at or below `maxConcurrent`, the slot is granted. A unique ticket key (`key:ticket:<uuid>`) is written with a configurable TTL (default: 300 seconds) for crash safety.
-2. **Reject/Queue**: If the counter exceeds the limit, it is immediately decremented via `decr`. Depending on `queueTimeoutMs`, the caller is either rejected (returns `null`) or enters a polling queue.
-3. **Release**: On release, the ticket key is deleted and the counter is decremented. If the storage backend supports pub/sub, a message is published to `key:released` to wake up any waiting callers.
-4. **Crash Safety**: Individual ticket keys have a TTL. If a process dies without releasing, the ticket key expires naturally. The counter may drift but self-corrects as stale tickets expire.
+1. **Acquire**: Read every slot key with one `mget`, then claim a free one with `set` (`ifNotExists`, with the ticket TTL, default 300 seconds) and read it back to confirm the ticket won it. Another caller that claimed the same slot first sends this one to the next free slot.
+2. **Reject/Queue**: If no slot is free, the caller is either rejected (returns `null`) or enters a polling queue, depending on `queueTimeoutMs`.
+3. **Hold**: While the ticket is held, its slot's TTL is renewed every third of the TTL (`expireIfEquals`, which renews only a slot that still holds this ticket). An execution that runs longer than the TTL keeps its slot.
+4. **Release**: On release, the renewal stops and the slot key is deleted only while it still holds this ticket (`deleteIfEquals`). If the storage backend supports pub/sub, a message is published to `key:released` to wake up any waiting callers.
+5. **Crash Safety**: A process that dies stops renewing, so its slot key expires with the TTL and the slot is free again.
 
 ## Queuing Behavior
 
@@ -44,10 +45,10 @@ try {
 // Inspect active count
 const active = await semaphore.getActiveCount('my-tool:global');
 
-// Emergency reset (clears counter and all ticket keys)
+// Emergency reset (frees every slot)
 await semaphore.forceReset('my-tool:global');
 ```
 
 ## Storage Requirements
 
-The semaphore calls `incr`, `decr`, `set` (with TTL), `get`, `delete`, `keys`, `mdelete`, and optionally `publish`/`subscribe` on the storage adapter.
+The semaphore calls `mget`, `set` (with TTL and `ifNotExists`), `get`, `deleteIfEquals`, `expireIfEquals`, `keys`, `mdelete`, and optionally `publish`/`subscribe` on the storage adapter. `deleteIfEquals` and `expireIfEquals` must be atomic (memory, Redis, Upstash and Vercel KV); with an adapter that lacks them, `acquire()` throws `GuardStorageUnsupportedError` before it claims a slot.
