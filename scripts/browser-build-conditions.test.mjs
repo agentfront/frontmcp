@@ -64,7 +64,7 @@ for (const [consumer, conditions, expected] of SDK_RESOLUTIONS) {
   });
 }
 
-test('libs/sdk: a browser bundler gets the browser-conditioned bundle', () => {
+test('libs/sdk: a browser bundler gets the browser-conditioned build', () => {
   const pkg = read('libs/sdk/package.json');
   const project = read('libs/sdk/project.json');
   const keys = Object.keys(pkg.exports['.']);
@@ -72,18 +72,27 @@ test('libs/sdk: a browser bundler gets the browser-conditioned bundle', () => {
   assert.ok(keys.indexOf('browser') < keys.indexOf('require'), '"browser" must come before "require"');
   assert.ok(keys.indexOf('browser') < keys.indexOf('import'), '"browser" must come before "import"');
 
-  const browserBuild = project.targets['build-browser'];
-  assert.equal(browserBuild.options.outputPath, 'libs/sdk/dist/browser');
-  assert.deepEqual(browserBuild.options.format, ['esm', 'cjs'], 'emits index.mjs and index.cjs');
-  assert.deepEqual(browserBuild.options.esbuildOptions.outExtension, { '.js': '.mjs' });
-  assert.ok(browserBuild.options.esbuildOptions.conditions.includes('browser'));
+  const cjsBuild = project.targets['build-browser'];
+  assert.equal(cjsBuild.options.outputPath, 'libs/sdk/dist/browser');
+  assert.deepEqual(cjsBuild.options.format, ['cjs'], 'emits index.cjs, one bundle for a CommonJS require()');
+  assert.deepEqual(cjsBuild.options.esbuildOptions.outExtension, { '.js': '.cjs' });
+  assert.ok(cjsBuild.options.esbuildOptions.conditions.includes('browser'));
   assert.deepEqual(
-    [...browserBuild.options.esbuildOptions.external].sort(),
+    [...cjsBuild.options.esbuildOptions.external].sort(),
     [...project.targets['build-esm'].options.esbuildOptions.external].sort(),
     'the browser bundle must keep the same packages external as the ESM bundle',
   );
 
+  const esmBuild = project.targets['build-browser-esm'];
+  assert.ok(esmBuild.dependsOn.includes('build-browser'), 'runs after the CJS build, which empties dist/browser');
+  assert.match(
+    esmBuild.options.command,
+    /scripts\/build-browser-modules\.mjs libs\/sdk\/src\/index\.ts libs\/sdk\/dist\/browser /,
+    'emits dist/browser/index.mjs, the entry of one module per source file',
+  );
+
   const build = project.targets.build;
   assert.ok(build.dependsOn.includes('build-browser'));
+  assert.ok(build.dependsOn.includes('build-browser-esm'));
   assert.ok(build.options.commands.some((cmd) => /inject-esm-require-banner\.js .*libs\/sdk\/dist\/browser/.test(cmd)));
 });
