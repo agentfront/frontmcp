@@ -34,7 +34,7 @@ import {
 } from '../transport/web-fetch-handler';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { createMcpGlobalProviders } from './front-mcp.providers';
-import { exitOnShutdownSignals } from './shutdown-signals';
+import { DEFAULT_SHUTDOWN_DEADLINE_MS, exitOnShutdownSignals } from './shutdown-signals';
 import { assertStaticStartupConfig } from './static-startup.check';
 
 /**
@@ -87,7 +87,26 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
   constructor(config: FrontMcpConfigType) {
     this.config = config;
-    this.ready = this.initialize();
+    this.ready = this.initialize().catch((error: unknown) => this.releaseFailedStart(error));
+  }
+
+  /** Shut down what a failed start built, for at most the signal path's deadline, then fail with its error. */
+  private async releaseFailedStart(error: unknown): Promise<never> {
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    const outlasted = new Promise<boolean>((resolve) => {
+      deadline = setTimeout(() => resolve(true), DEFAULT_SHUTDOWN_DEADLINE_MS);
+    });
+    const released = this.shutdown().then(
+      () => false,
+      () => false,
+    );
+    if (await Promise.race([released, outlasted])) {
+      this.log?.error(
+        `Releasing a server that failed to start did not finish within ${DEFAULT_SHUTDOWN_DEADLINE_MS} ms`,
+      );
+    }
+    clearTimeout(deadline);
+    throw error;
   }
 
   async initialize(): Promise<void> {
@@ -175,9 +194,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   private async runShutdown(): Promise<void> {
-    const scopes = this.getScopes() as Scope[];
+    const scopes = (this.scopes?.getScopes() ?? []) as Scope[];
     const failures: unknown[] = [];
-    const serverStopped = this.providers.get(FrontMcpServer)?.stop();
+    const serverStopped = this.providers?.get(FrontMcpServer)?.stop();
     for (const scope of scopes) {
       await this.bestEffort('scope shutdown', () => scope.shutdown(), failures);
     }
