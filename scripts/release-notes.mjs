@@ -79,10 +79,15 @@ export function parseNotes(answer, version, requiredNumbers = []) {
   const cardVersion = card.match(/\btitle="FrontMCP v([^":]+): [^"]+"/)?.[1];
   const hasBullet = /^\s*[-*]\s+\S/m.test(changelog);
   const hasHighlight = /^[^\w*`\n]*\*\*[^*\n]+\*\*\s*[–—:-]/mu.test(card);
-  const cited = new Set([...changelog.matchAll(/#(\d+)/g)].map((match) => Number(match[1])));
+  const bulletLines = changelog.split('\n').filter((line) => /^\s*[-*]\s/.test(line));
+  const cited = new Set(bulletLines.flatMap((line) => [...line.matchAll(/#(\d+)/g)].map((match) => Number(match[1]))));
   const citesEveryChange = requiredNumbers.every((number) => cited.has(number));
   if (cardVersion !== version || !hasBullet || !hasHighlight || !citesEveryChange) return undefined;
-  return { changelog, card: card.replace(/\n(?=[^\w*`\n]*\*\*)/g, '\n\n').replace(/\n{3,}/g, '\n\n') };
+  const linkedCard = card.replace(
+    /\bhref="[^"]*"/,
+    `href="https://github.com/agentfront/frontmcp/releases/tag/v${version}"`,
+  );
+  return { changelog, card: linkedCard.replace(/\n(?=[^\w*`\n]*\*\*)/g, '\n\n').replace(/\n{3,}/g, '\n\n') };
 }
 
 const capitalize = (text) => text.replace(/^\p{Ll}/u, (letter) => letter.toUpperCase());

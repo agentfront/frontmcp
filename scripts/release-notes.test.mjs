@@ -66,6 +66,23 @@ test('turns down an answer that leaves out a pull request', () => {
   assert.notEqual(parseNotes(answer, '1.9.7', [881]), undefined);
 });
 
+test('only counts the pull requests a changelog bullet cites', () => {
+  const highlight = '  \u{1F527} **Shutdown** – Waits for a pending start.';
+  const answer = `Release #869 shipped earlier.\n\n- Shutdown waits for a pending start (#881).\n---CARD_MDX---\n${card('1.9.7', highlight)}`;
+
+  assert.equal(parseNotes(answer, '1.9.7', [881, 869]), undefined);
+});
+
+test('links the Card to this version whatever link the answer gives', () => {
+  const highlight = '  \u{1F527} **Shutdown** – Waits for a pending start.';
+  const wrongLink = card('1.9.7', highlight).replace('/tag/v1.9.7', '/tag/v1.9.6');
+
+  const notes = parseNotes(`- Shutdown waits for a pending start (#881).\n---CARD_MDX---\n${wrongLink}`, '1.9.7');
+
+  assert.match(notes.card, /href="https:\/\/github\.com\/agentfront\/frontmcp\/releases\/tag\/v1\.9\.7"/);
+  assert.doesNotMatch(notes.card, /v1\.9\.6/);
+});
+
 test('builds the notes from pull request titles, leaving out chores', () => {
   const changes = [
     { number: 848, title: "fix(nx-plugin): point new workspaces at frontmcp.dev's docs MCP server", body: '' },
