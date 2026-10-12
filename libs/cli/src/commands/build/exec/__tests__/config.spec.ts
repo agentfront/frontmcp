@@ -9,6 +9,7 @@ jest.mock('fs', () => ({
 import { normalizeConfig, loadExecConfig, type FrontmcpExecConfig } from '../config';
 
 const mockFs = fs as jest.Mocked<typeof fs>;
+const { engines } = jest.requireActual<{ engines: { node: string } }>('../../../../../package.json');
 
 jest.mock('/test-cwd/frontmcp.config.js', () => ({
   default: { name: 'js-app', version: '2.0.0' },
@@ -28,7 +29,7 @@ describe('config', () => {
       const result = normalizeConfig(config);
       expect(result.name).toBe('my-app');
       expect(result.version).toBe('1.2.3');
-      expect(result.nodeVersion).toBe('>=22.0.0');
+      expect(result.nodeVersion).toBe(engines.node);
     });
 
     it('should set defaults for missing optional fields', () => {
@@ -37,7 +38,7 @@ describe('config', () => {
       };
       const result = normalizeConfig(config);
       expect(result.version).toBe('1.0.0');
-      expect(result.nodeVersion).toBe('>=22.0.0');
+      expect(result.nodeVersion).toBe(engines.node);
     });
 
     it('should reject invalid app name', () => {

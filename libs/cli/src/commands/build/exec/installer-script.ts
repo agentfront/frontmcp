@@ -3,6 +3,7 @@
  * Supports interactive and --yes (silent) modes.
  */
 
+import { getSelfNodeRange, minNodeMajorOf } from '../../../core/version';
 import { type FrontmcpExecConfig } from './config';
 import { sanitizeShellLiteral } from './runner-script';
 
@@ -22,8 +23,8 @@ export function generateInstallerScript(
   const storageType = config.storage?.type || 'none';
   // Sanitize before interpolating into bash echo / error messages — the
   // user-controlled `nodeVersion` ends up in command lines verbatim.
-  const nodeVersion = sanitizeShellLiteral(config.nodeVersion || '>=22.0.0');
-  const minNodeMajor = extractMinMajor(nodeVersion);
+  const nodeVersion = sanitizeShellLiteral(config.nodeVersion || getSelfNodeRange());
+  const minNodeMajor = minNodeMajorOf(nodeVersion);
 
   // CLI/SEA installs ship a self-contained binary — no Node runtime required
   // at install or run time. Skip the Node check entirely; the binary is the
@@ -124,7 +125,3 @@ echo "FRONTMCP_SQLITE_PATH=\${DATA_DIR}/${name}.sqlite" >> "\${INSTALL_DIR}/.env
 `;
 }
 
-function extractMinMajor(version: string): number {
-  const match = version.match(/(\d+)/);
-  return match ? parseInt(match[1], 10) : 22;
-}

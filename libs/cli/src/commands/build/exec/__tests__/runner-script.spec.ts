@@ -5,6 +5,9 @@ import * as path from 'path';
 import { generateRunnerScript, sanitizeHttpPath } from '../runner-script';
 import { type FrontmcpExecConfig } from '../config';
 
+const { engines } = jest.requireActual<{ engines: { node: string } }>('../../../../../package.json');
+const cliMinNodeMajor = engines.node.match(/\d+/)?.[0];
+
 describe('runner-script', () => {
   describe('generateRunnerScript', () => {
     it('should generate a valid bash script', () => {
@@ -169,10 +172,10 @@ describe('runner-script', () => {
   });
 
   describe('extractMinMajor fallback', () => {
-    it('should default min Node major to 22 when version has no digits', () => {
+    it("should default min Node major to the CLI's engines.node when version has no digits", () => {
       const config: FrontmcpExecConfig = { name: 'app', nodeVersion: 'latest' };
       const script = generateRunnerScript(config);
-      expect(script).toContain('-lt "22"');
+      expect(script).toContain(`-lt "${cliMinNodeMajor}"`);
     });
 
     it('should extract min major from nodeVersion string', () => {

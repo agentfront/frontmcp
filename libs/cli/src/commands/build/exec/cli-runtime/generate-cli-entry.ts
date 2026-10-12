@@ -10,6 +10,7 @@ import { EXTRACT_PUBLIC_MESSAGE_SNIPPET } from './extract-public-message.snippet
 import { type ExtractedSchema, type ExtractedTool, type ExtractedPrompt, type ExtractedResourceTemplate, type ExtractedCapabilities, type ExtractedJob, SYSTEM_TOOL_NAMES } from './schema-extractor';
 import { schemaToCommander, generateOptionCode, camelToKebab } from './schema-to-commander';
 import { envDefaultStatements } from '../../../../config/deployment-env';
+import { getSelfNodeRange, minNodeMajorOf } from '../../../../core/version';
 
 export const RESERVED_COMMANDS = new Set([
   'resource', 'template', 'prompt', 'subscribe',
@@ -36,6 +37,8 @@ export interface CliEntryOptions {
   selfContained?: boolean;
   /** `deployments[].env` of the cli target: defaults set before anything runs (#680). */
   env?: Record<string, string>;
+  /** The app's Node.js range; the generated `doctor` checks its minimum major. Defaults to the CLI's own. */
+  nodeVersion?: string;
 }
 
 /**
@@ -64,7 +67,9 @@ export function generateCliEntry(options: CliEntryOptions): string {
     excludeTools,
     oauthConfig,
     authRequired,
+    nodeVersion,
   } = options;
+  const minNodeMajor = minNodeMajorOf(nodeVersion ?? getSelfNodeRange());
 
   const capabilities = schema.capabilities;
 
@@ -90,7 +95,7 @@ export function generateCliEntry(options: CliEntryOptions): string {
       generateSessionCommands(),
     ] : []),
     generateServeCommand(serverBundleFilename, selfContained),
-    generateDoctorCommand(appName, options.nativeDeps),
+    generateDoctorCommand(appName, options.nativeDeps, minNodeMajor),
     generateInstallCommand(appName, options.nativeDeps, selfContained),
     generateDaemonCommands(appName, appVersion, serverBundleFilename, selfContained),
     generateFooter(),
@@ -1392,6 +1397,7 @@ function generateServeCommand(serverBundleFilename: string, selfContained?: bool
 function generateDoctorCommand(
   appName: string,
   nativeDeps: NonNullable<CliConfig['nativeDeps']>,
+  minNodeMajor: number,
 ): string {
   const checks: string[] = [];
 
@@ -1421,10 +1427,10 @@ function generateDoctorCommand(
 
     // Check Node.js version
     var nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
-    if (nodeMajor >= 22) {
+    if (nodeMajor >= ${minNodeMajor}) {
       console.log('  [ok] Node.js v' + process.versions.node);
     } else {
-      console.log('  [!!] Node.js v' + process.versions.node + ' (>=22 required)');
+      console.log('  [!!] Node.js v' + process.versions.node + ' (>=${minNodeMajor} required)');
       ok = false;
     }
 

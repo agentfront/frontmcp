@@ -18,8 +18,8 @@ import type {
   McpbRepository,
   McpbUserConfigEntry,
 } from '../../../config/frontmcp-config.types';
+import { getSelfNodeRange } from '../../../core/version';
 import {
-  DEFAULT_NODE_COMPAT,
   DEFAULT_PLATFORMS,
   MCPB_MANIFEST_VERSION,
   type McpbOsKey,
@@ -263,7 +263,7 @@ export interface GenerateMcpbManifestInput {
   name: string;
   /** Resolved server version. */
   version: string;
-  /** Optional resolved node version range (e.g., ">=22.0.0"). */
+  /** Optional resolved node version range (e.g., ">=24.0.0"). */
   nodeVersion?: string;
   /** Project root. Used for icon resolution and package.json fallback. */
   cwd: string;
@@ -316,7 +316,7 @@ export function generateMcpbManifest(input: GenerateMcpbManifestInput): McpbMani
 
   const nodeVersion = deployment?.compatibility?.runtimes?.node
     ?? input.nodeVersion
-    ?? DEFAULT_NODE_COMPAT;
+    ?? getSelfNodeRange();
 
   const compatibility: McpbCompatibility = {
     ...(deployment?.compatibility?.claude_desktop
