@@ -130,7 +130,6 @@ describe('cliExtensionConfigSchema', () => {
     it('rejects unknown top-level keys', () => {
       const result = cliExtensionConfigSchema.safeParse({
         commands: { deploy: { entry: './x.ts' } },
-        // @ts-expect-error - testing strict rejection
         extra: true,
       });
       expect(result.success).toBe(false);
@@ -141,7 +140,6 @@ describe('cliExtensionConfigSchema', () => {
         commands: {
           deploy: {
             entry: './x.ts',
-            // @ts-expect-error - testing strict rejection
             unknownKey: 'oops',
           },
         },

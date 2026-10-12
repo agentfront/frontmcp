@@ -68,7 +68,7 @@ describe('registerProjectCommands', () => {
     expect(opts).toContain('-c, --concurrency <num>');
 
     // Replace the spawn action with a capture-only handler before parsing.
-    let captured: { args: unknown[]; opts: Record<string, unknown> } | null = null;
+    let captured = null as { args: unknown[]; opts: Record<string, unknown> } | null;
     deploy.action((...all: unknown[]) => {
       const opts = all[all.length - 2] as Record<string, unknown>;
       const args = all.slice(0, all.length - 2);

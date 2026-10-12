@@ -47,7 +47,7 @@ describe('stdio-framer (issue #399)', () => {
     const output = new PassThrough();
     const { logger } = makeLog();
     const frames: JsonRpcFrame[] = [];
-    const framer = createStdioFramer({ input, output, log: logger, onFrame: (f) => frames.push(f) });
+    const framer = createStdioFramer({ input, output, log: logger, onFrame: (f) => void frames.push(f) });
     framer.start();
 
     input.write('{"jsonrpc":"2.0","id":1,"meth');
@@ -68,7 +68,7 @@ describe('stdio-framer (issue #399)', () => {
     output.on('data', (chunk: Buffer) => written.push(chunk.toString('utf-8')));
     const { logger } = makeLog();
     const frames: JsonRpcFrame[] = [];
-    const framer = createStdioFramer({ input, output, log: logger, onFrame: (f) => frames.push(f) });
+    const framer = createStdioFramer({ input, output, log: logger, onFrame: (f) => void frames.push(f) });
     framer.start();
 
     input.write('not json\n');
@@ -99,7 +99,7 @@ describe('stdio-framer (issue #399)', () => {
     const output = new PassThrough();
     const { logger } = makeLog();
     const frames: JsonRpcFrame[] = [];
-    const framer = createStdioFramer({ input, output, log: logger, onFrame: (f) => frames.push(f) });
+    const framer = createStdioFramer({ input, output, log: logger, onFrame: (f) => void frames.push(f) });
     framer.start();
 
     input.write('\n\n\n');
@@ -114,7 +114,7 @@ describe('stdio-framer (issue #399)', () => {
     const output = new PassThrough();
     const { logger } = makeLog();
     const frames: JsonRpcFrame[] = [];
-    const framer = createStdioFramer({ input, output, log: logger, onFrame: (f) => frames.push(f) });
+    const framer = createStdioFramer({ input, output, log: logger, onFrame: (f) => void frames.push(f) });
     framer.start();
 
     // Windows/CRLF-shipped JSON-RPC frames must parse the same as LF.
@@ -132,7 +132,7 @@ describe('stdio-framer (issue #399)', () => {
     output.on('data', (chunk: Buffer) => written.push(chunk.toString('utf-8')));
     const { logger, lines } = makeLog();
     const frames: JsonRpcFrame[] = [];
-    const framer = createStdioFramer({ input, output, log: logger, onFrame: (f) => frames.push(f) });
+    const framer = createStdioFramer({ input, output, log: logger, onFrame: (f) => void frames.push(f) });
     framer.start();
 
     input.write('42\n');

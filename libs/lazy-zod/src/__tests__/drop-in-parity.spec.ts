@@ -4,7 +4,7 @@ import { z as lazy } from '../lazy-z';
 
 type Case = {
   name: string;
-  build: (Z: typeof realZ) => ReturnType<typeof realZ.object> | ReturnType<typeof realZ.string>;
+  build: (Z: typeof realZ) => realZ.ZodType;
   valid: unknown[];
   invalid: unknown[];
 };
