@@ -1,20 +1,23 @@
 {
   "name": "@frontmcp/plugin-remember",
   "version": "1.9.6",
-  "description": "Remember plugin for FrontMCP - encrypted session memory with approval system for secure tool authorization",
+  "description": "Remember plugin for FrontMCP: encrypted key-value memory for tools (this.remember) in session, user, tool and global scopes, stored in memory, Redis or Vercel KV",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=24.0.0"
   },
   "keywords": [
+    "frontmcp",
     "mcp",
+    "model-context-protocol",
+    "remember",
     "memory",
     "session",
     "encryption",
-    "approval",
+    "redis",
+    "vercel-kv",
     "plugin",
-    "frontmcp",
     "agentfront"
   ],
   "repository": {

@@ -75,7 +75,7 @@ Then follow **[Learn][docs-learn]** on [frontmcp.dev](https://frontmcp.dev), or 
 
 ## Packages
 
-Install `frontmcp` (CLI) and `@frontmcp/sdk`. The rest is pulled in for you, or opt-in. Keep every `@frontmcp/*` package on the same version; a mismatch fails fast at boot ([why][docs-production]).
+Install `frontmcp` (CLI) and `@frontmcp/sdk`. The rest is pulled in for you, or opt-in. Keep every `@frontmcp/*` package on the same version: they depend on each other at exact versions.
 
 <details>
 <summary><b>Core and extensions</b></summary>
@@ -83,7 +83,7 @@ Install `frontmcp` (CLI) and `@frontmcp/sdk`. The rest is pulled in for you, or 
 
 | Package                                             | What it does                                                    |
 | --------------------------------------------------- | --------------------------------------------------------------- |
-| [`frontmcp`](libs/cli)                              | CLI: `create`, `init`, `dev`, `build`, `inspect`, `doctor`      |
+| [`frontmcp`](libs/cli)                              | CLI: `create`, `init`, `dev`, `build`, `test`, `inspector`      |
 | [`@frontmcp/sdk`](libs/sdk)                         | Core framework: decorators, DI, flows, transport, MCP protocol  |
 | [`@frontmcp/auth`](libs/auth)                       | OAuth, JWKS, DCR/CIMD, sessions, credential vault               |
 | [`@frontmcp/testing`](libs/testing)                 | E2E test framework with fixtures and matchers                   |
@@ -142,4 +142,3 @@ PRs welcome: see [CONTRIBUTING](./CONTRIBUTING.md). Released under the [Apache-2
 [docs-plugins]: https://frontmcp.dev/reference/plugins 'Plugins'
 [docs-testing]: https://frontmcp.dev/reference/testing 'Testing'
 [docs-deploy]: https://frontmcp.dev/reference/deployment/node 'Deployment'
-[docs-production]: https://frontmcp.dev/reference/deployment/production-build 'Production Build'

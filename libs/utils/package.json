@@ -1,18 +1,19 @@
 {
   "name": "@frontmcp/utils",
   "version": "1.9.6",
-  "description": "Shared utility functions for FrontMCP - string manipulation, URI handling, path utilities, and more",
+  "description": "Shared helpers for FrontMCP: URI templates, naming, cross-platform crypto and PKCE, key-value storage, file system and environment detection",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
   "keywords": [
+    "frontmcp",
+    "mcp",
     "utils",
-    "utilities",
-    "uri",
-    "url",
-    "string",
-    "path",
-    "typescript",
-    "mcp"
+    "uri-template",
+    "crypto",
+    "pkce",
+    "storage",
+    "redis",
+    "typescript"
   ],
   "repository": {
     "type": "git",
@@ -22,7 +23,7 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
-  "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/utils/README.md",
+  "homepage": "https://frontmcp.dev",
   "engines": {
     "node": ">=24.0.0"
   },

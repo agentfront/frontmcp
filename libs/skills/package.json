@@ -1,18 +1,20 @@
 {
   "name": "@frontmcp/skills",
   "version": "1.9.6",
-  "description": "Curated skills catalog for FrontMCP projects",
+  "description": "FrontMCP's skills catalog: SKILL.md instructions that teach coding agents to build, test and deploy FrontMCP servers",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/cli#skills",
   "license": "Apache-2.0",
   "keywords": [
-    "skills",
-    "mcp",
-    "agentfront",
     "frontmcp",
-    "catalog",
+    "mcp",
+    "model-context-protocol",
+    "skills",
     "agent-skills",
-    "typescript"
+    "claude-code",
+    "codex",
+    "catalog",
+    "agentfront"
   ],
   "repository": {
     "type": "git",

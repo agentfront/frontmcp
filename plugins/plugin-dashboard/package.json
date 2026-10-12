@@ -1,18 +1,20 @@
 {
   "name": "@frontmcp/plugin-dashboard",
   "version": "1.9.6",
-  "description": "Dashboard plugin for FrontMCP - visual monitoring and introspection of MCP servers",
+  "description": "Dashboard plugin for FrontMCP: a web page and MCP endpoint that show a server's apps, tools, resources and prompts",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=24.0.0"
   },
   "keywords": [
-    "mcp",
-    "dashboard",
-    "monitoring",
-    "plugin",
     "frontmcp",
+    "mcp",
+    "model-context-protocol",
+    "dashboard",
+    "devtools",
+    "inspector",
+    "plugin",
     "agentfront"
   ],
   "repository": {

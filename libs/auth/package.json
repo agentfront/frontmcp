@@ -1,26 +1,31 @@
 {
   "name": "@frontmcp/auth",
   "version": "1.9.6",
-  "description": "FrontMCP Auth - Authentication, session management, and credential vault",
+  "description": "Authentication and authorization for FrontMCP servers: auth modes, OAuth 2.1 (local and remote), JWT and session checks, authorities and the credential vault",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/auth",
   "license": "Apache-2.0",
   "keywords": [
+    "frontmcp",
     "mcp",
+    "model-context-protocol",
     "auth",
     "authentication",
-    "session",
+    "authorization",
     "oauth",
+    "oauth2",
     "jwt",
     "jwks",
+    "pkce",
+    "cimd",
+    "session",
     "vault",
-    "credentials",
-    "agentfront",
-    "frontmcp"
+    "agentfront"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentfront/frontmcp.git"
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/auth"
   },
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"

@@ -1,25 +1,28 @@
 {
   "name": "@frontmcp/react",
   "version": "1.9.6",
-  "description": "React hooks, components, and AI SDK integration for FrontMCP",
+  "description": "Run a FrontMCP server inside a React app: provider, hooks, components and AI SDK integration",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/react",
   "license": "Apache-2.0",
   "keywords": [
+    "frontmcp",
     "mcp",
+    "model-context-protocol",
     "react",
     "hooks",
+    "agent",
+    "webmcp",
     "ai",
-    "tools",
     "openai",
     "claude",
     "vercel-ai",
-    "agentfront",
-    "frontmcp"
+    "agentfront"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentfront/frontmcp.git"
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/react"
   },
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
