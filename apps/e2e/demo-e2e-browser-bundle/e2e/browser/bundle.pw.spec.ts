@@ -58,7 +58,7 @@ test.describe('Browser bundle integration', () => {
     expect(results['searchSkills']).toEqual({ pass: true, value: 'deploy-app' });
   });
 
-  test('env utilities return browser defaults', async ({ page }) => {
+  test('env utilities return browser defaults, and the NODE_ENV the bundler defines (#770)', async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('[data-testid="summary"]');
     const results = (await page.evaluate(
@@ -67,7 +67,7 @@ test.describe('Browser bundle integration', () => {
 
     expect(results['getCwd'].value).toBe('/');
     expect(results['isProduction'].value).toBe('false');
-    expect(results['isDevelopment'].value).toBe('false');
+    expect(results['isDevelopment'].value).toBe('true');
     expect(results['isDebug'].value).toBe('false');
     expect(results['getEnv-default'].value).toBe('fb');
   });

@@ -31,7 +31,7 @@ describe('Build Adapters', () => {
     });
 
     it('should return empty entry template', () => {
-      expect(nodeAdapter.getEntryTemplate()).toBe('');
+      expect(nodeAdapter.getEntryTemplate('./main.js')).toBe('');
     });
 
     it('should not require bundling', () => {

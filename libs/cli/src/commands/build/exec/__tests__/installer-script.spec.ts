@@ -76,7 +76,7 @@ describe('installer-script', () => {
     it('should skip storage setup when storage type is not sqlite', () => {
       const config: FrontmcpExecConfig = {
         name: 'app',
-        storage: { type: 'memory' },
+        storage: { type: 'redis' },
       };
       const script = generateInstallerScript(config);
       expect(script).toContain('No storage setup required');

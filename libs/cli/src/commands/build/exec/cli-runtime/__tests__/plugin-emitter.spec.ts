@@ -97,7 +97,7 @@ describe('plugin-emitter (issue #411)', () => {
         skills: [],
         commands: [],
         cliVersion: '0.5.0',
-      } as const;
+      };
       const first = await emitClaudePlugin(opts);
       const second = await emitClaudePlugin(opts);
       expect(second.manifest._meta.frontmcp.managedFiles).toEqual(first.manifest._meta.frontmcp.managedFiles);
@@ -114,7 +114,7 @@ describe('plugin-emitter (issue #411)', () => {
         mcpArgs: ['serve', '--stdio'],
         envHints: [],
         cliVersion: '0.5.0',
-      } as const;
+      };
       await emitClaudePlugin({
         ...base,
         skills: [],
@@ -150,7 +150,7 @@ describe('plugin-emitter (issue #411)', () => {
         skills: [],
         commands: [],
         cliVersion: '0.5.0',
-      } as const;
+      };
       await emitClaudePlugin(base);
       const manifestPath = path.join(destRoot, 'preserves', '.claude-plugin', 'plugin.json');
       const orig = JSON.parse(await readFile(manifestPath));
@@ -424,7 +424,7 @@ describe('plugin-emitter (issue #411)', () => {
         skills: [],
         commands: [{ name: 'one' }],
         cliVersion: '0.5.0',
-      } as const;
+      };
       await emitClaudePlugin(opts);
       const pluginDir = path.join(destRoot, 'cleanup');
       await writeFile(path.join(pluginDir, 'USER-FILE.txt'), 'mine');
@@ -459,7 +459,7 @@ describe('plugin-emitter (issue #411)', () => {
         ],
         commands: [],
         cliVersion: '0.5.0',
-      } as const;
+      };
       await emitClaudePlugin(opts);
       const pluginDir = path.join(destRoot, 'nested');
       // User drops a file inside skills/managed/ alongside the managed SKILL.md,
@@ -488,7 +488,7 @@ describe('plugin-emitter (issue #411)', () => {
         skills: [],
         commands: [],
         cliVersion: '0.5.0',
-      } as const;
+      };
       await emitClaudePlugin(opts);
       const pluginDir = path.join(destRoot, 'tamper');
       const manifestPath = path.join(pluginDir, '.claude-plugin', 'plugin.json');
