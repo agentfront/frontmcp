@@ -1,4 +1,6 @@
-import { GuardError, GuardStorageUnavailableError } from '../../errors';
+import { StorageNotSupportedError } from '@frontmcp/utils';
+
+import { GuardError, GuardStorageUnavailableError, GuardStorageUnsupportedError } from '../../errors';
 import { createGuardManager } from '../guard.factory';
 import { GuardManager } from '../guard.manager';
 import type { GuardConfig, GuardLogger } from '../types';
@@ -10,6 +12,8 @@ const mockNamespace = jest.fn().mockReturnValue({
   get: jest.fn(),
   set: jest.fn(),
   delete: jest.fn(),
+  deleteIfEquals: jest.fn().mockResolvedValue(false),
+  expireIfEquals: jest.fn().mockResolvedValue(false),
   exists: jest.fn(),
   mget: jest.fn(),
   mset: jest.fn(),
@@ -49,6 +53,33 @@ jest.mock('@frontmcp/utils', () => ({
 describe('createGuardManager', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('refuses to start when concurrency is configured and the storage has no atomic compare-and-delete', async () => {
+    const storage = mockNamespace();
+    storage.deleteIfEquals.mockRejectedValueOnce(new StorageNotSupportedError('deleteIfEquals', 'cloudflare-kv'));
+
+    await expect(
+      createGuardManager({
+        config: {
+          enabled: true,
+          storage: { type: 'cloudflare-kv' } as unknown as GuardConfig['storage'],
+          defaultConcurrency: { maxConcurrent: 2 },
+        },
+      }),
+    ).rejects.toBeInstanceOf(GuardStorageUnsupportedError);
+  });
+
+  it('starts without probing the storage when no global or default concurrency is configured', async () => {
+    const storage = mockNamespace();
+    storage.deleteIfEquals.mockRejectedValueOnce(new StorageNotSupportedError('deleteIfEquals', 'cloudflare-kv'));
+
+    await expect(
+      createGuardManager({
+        config: { enabled: true, storage: { type: 'cloudflare-kv' } as unknown as GuardConfig['storage'] },
+      }),
+    ).resolves.toBeInstanceOf(GuardManager);
+    storage.deleteIfEquals.mockReset();
   });
 
   it('should use createStorage when storage config is provided', async () => {

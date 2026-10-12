@@ -1,6 +1,12 @@
-import { createMemoryStorage, type SetOptions, type StorageAdapter } from '@frontmcp/utils';
+import {
+  createMemoryStorage,
+  StorageNotSupportedError,
+  type NamespacedStorage,
+  type SetOptions,
+  type StorageAdapter,
+} from '@frontmcp/utils';
 
-import { QueueTimeoutError } from '../../errors/index';
+import { GuardStorageUnsupportedError, QueueTimeoutError } from '../../errors/index';
 import { DistributedSemaphore } from '../index';
 
 function createMockStorage(): jest.Mocked<StorageAdapter> {
@@ -18,6 +24,12 @@ function createMockStorage(): jest.Mocked<StorageAdapter> {
       data.set(key, value);
     }),
     delete: jest.fn().mockImplementation(async (key: string) => data.delete(key)),
+    deleteIfEquals: jest
+      .fn()
+      .mockImplementation(async (key: string, expected: string) =>
+        data.get(key) === expected ? data.delete(key) : false,
+      ),
+    expireIfEquals: jest.fn().mockImplementation(async (key: string, expected: string) => data.get(key) === expected),
     exists: jest.fn().mockImplementation(async (key: string) => data.has(key)),
     mget: jest.fn().mockImplementation(async (keys: string[]) => keys.map((k) => data.get(k) ?? null)),
     mset: jest.fn().mockResolvedValue(undefined),
@@ -119,13 +131,13 @@ describe('DistributedSemaphore', () => {
   });
 
   describe('release', () => {
-    it('should release the slot and delete ticket', async () => {
+    it('should release the slot with a compare-and-delete of its own ticket', async () => {
       const ticket = await semaphore.acquire('test', 3, 0, 'my-tool');
       expect(ticket).not.toBeNull();
 
       await ticket!.release();
 
-      expect(storage.delete).toHaveBeenCalledWith('test:slot:0');
+      expect(storage.deleteIfEquals).toHaveBeenCalledWith('test:slot:0', ticket!.ticket);
     });
 
     it('should allow new acquisitions after release', async () => {
@@ -374,44 +386,71 @@ describe('DistributedSemaphore', () => {
 });
 
 describe('DistributedSemaphore ticket TTL', () => {
-  const ticketTtlSeconds = 1;
+  const ticketTtlSeconds = 3;
+  let storage: NamespacedStorage;
   let semaphore: DistributedSemaphore;
-  let clock: jest.SpyInstance<number, []>;
-  let startedAt: number;
 
   beforeEach(async () => {
+    jest.useFakeTimers();
     const root = createMemoryStorage({ enableSweeper: false });
     await root.connect();
-    semaphore = new DistributedSemaphore(root.namespace('mcp:guard'), ticketTtlSeconds);
-    startedAt = Date.now();
-    clock = jest.spyOn(Date, 'now').mockReturnValue(startedAt);
+    storage = root.namespace('mcp:guard');
+    semaphore = new DistributedSemaphore(storage, ticketTtlSeconds);
   });
 
   afterEach(() => {
-    clock.mockRestore();
+    jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 
-  const afterTicketTtl = () => clock.mockReturnValue(startedAt + ticketTtlSeconds * 1000 + 1);
+  /** Moves the clock without running timers, as an event loop blocked for that long would. */
+  const stallPastTicketTtl = () => jest.setSystemTime(Date.now() + ticketTtlSeconds * 1000 + 1);
 
-  it('frees the slot of a ticket that expired without a release', async () => {
+  it('holds the slot while its execution runs longer than the ticket TTL', async () => {
+    const running = await semaphore.acquire('tool:global', 1, 0, 'tool');
+
+    await jest.advanceTimersByTimeAsync(ticketTtlSeconds * 1000 * 10);
+
+    expect(await semaphore.getActiveCount('tool:global')).toBe(1);
+    expect(await semaphore.acquire('tool:global', 1, 0, 'tool')).toBeNull();
+    await running!.release();
     expect(await semaphore.acquire('tool:global', 1, 0, 'tool')).not.toBeNull();
+  });
+
+  it('frees the slot of a holder that died, once the ticket TTL runs out', async () => {
+    await storage.set('tool:global:slot:0', 'ticket-of-a-crashed-process', { ttlSeconds: ticketTtlSeconds });
     expect(await semaphore.acquire('tool:global', 1, 0, 'tool')).toBeNull();
 
-    afterTicketTtl();
+    await jest.advanceTimersByTimeAsync(ticketTtlSeconds * 1000 + 1);
 
     expect(await semaphore.getActiveCount('tool:global')).toBe(0);
     expect(await semaphore.acquire('tool:global', 1, 0, 'tool')).not.toBeNull();
   });
 
-  it('keeps the slot of a newer ticket when an expired ticket is released late', async () => {
-    const expired = await semaphore.acquire('tool:global', 1, 0, 'tool');
-    afterTicketTtl();
+  it('stops renewing a slot once it is released', async () => {
+    const renew = jest.spyOn(storage, 'expireIfEquals');
+    const ticket = await semaphore.acquire('tool:global', 1, 0, 'tool');
+    await jest.advanceTimersByTimeAsync(ticketTtlSeconds * 1000);
+    const renewalsWhileHeld = renew.mock.calls.length;
+
+    await ticket!.release();
+    await jest.advanceTimersByTimeAsync(ticketTtlSeconds * 1000 * 3);
+
+    expect(renewalsWhileHeld).toBeGreaterThan(0);
+    expect(renew.mock.calls.length).toBe(renewalsWhileHeld);
+    expect(await semaphore.getActiveCount('tool:global')).toBe(0);
+  });
+
+  it('keeps the slot of a newer ticket when a stalled holder renews or releases late', async () => {
+    const stalled = await semaphore.acquire('tool:global', 1, 0, 'tool');
+    stallPastTicketTtl();
     const newer = await semaphore.acquire('tool:global', 1, 0, 'tool');
     expect(newer).not.toBeNull();
 
-    await expired!.release();
+    await jest.advanceTimersByTimeAsync(ticketTtlSeconds * 1000);
+    await stalled!.release();
 
-    expect(await semaphore.getActiveCount('tool:global')).toBe(1);
+    expect(await storage.get('tool:global:slot:0')).toBe(newer!.ticket);
     expect(await semaphore.acquire('tool:global', 1, 0, 'tool')).toBeNull();
   });
 
@@ -420,5 +459,33 @@ describe('DistributedSemaphore ticket TTL', () => {
 
     expect(tickets.filter((ticket) => ticket !== null)).toHaveLength(3);
     expect(await semaphore.getActiveCount('tool:global')).toBe(3);
+  });
+
+  it("counts and resets only a key's own slots, not those of a key that extends it", async () => {
+    await semaphore.acquire('tool', 2, 0, 'tool');
+    await semaphore.acquire('tool:slot:0', 2, 0, 'tool');
+
+    expect(await semaphore.getActiveCount('tool')).toBe(1);
+    await semaphore.forceReset('tool');
+
+    expect(await semaphore.getActiveCount('tool')).toBe(0);
+    expect(await semaphore.getActiveCount('tool:slot:0')).toBe(1);
+  });
+});
+
+describe('DistributedSemaphore storage requirements', () => {
+  it.each([
+    ['has no compare-and-delete', { deleteIfEquals: undefined }],
+    ['has no compare-and-expire', { expireIfEquals: undefined }],
+    [
+      'cannot compare and delete atomically',
+      { deleteIfEquals: jest.fn().mockRejectedValue(new StorageNotSupportedError('deleteIfEquals', 'filesystem')) },
+    ],
+  ])('refuses a storage adapter that %s, before claiming a slot', async (_description, overrides) => {
+    const storage = { ...createMockStorage(), ...overrides } as jest.Mocked<StorageAdapter>;
+    const semaphore = new DistributedSemaphore(storage, 300);
+
+    await expect(semaphore.acquire('test', 1, 0, 'my-tool')).rejects.toBeInstanceOf(GuardStorageUnsupportedError);
+    expect(storage.set).not.toHaveBeenCalled();
   });
 });

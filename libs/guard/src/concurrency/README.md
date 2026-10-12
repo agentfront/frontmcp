@@ -8,8 +8,9 @@ Each concurrent execution holds one of `maxConcurrent` slots, stored as `key:slo
 
 1. **Acquire**: Read every slot key with one `mget`, then claim a free one with `set` (`ifNotExists`, with the ticket TTL, default 300 seconds) and read it back to confirm the ticket won it. Another caller that claimed the same slot first sends this one to the next free slot.
 2. **Reject/Queue**: If no slot is free, the caller is either rejected (returns `null`) or enters a polling queue, depending on `queueTimeoutMs`.
-3. **Release**: On release, the slot key is deleted only while it still holds this ticket (`deleteIfEquals`). If the storage backend supports pub/sub, a message is published to `key:released` to wake up any waiting callers.
-4. **Crash Safety**: A slot key expires with its ticket's TTL. If a process dies without releasing, the slot is free again once the TTL runs out.
+3. **Hold**: While the ticket is held, its slot's TTL is renewed every third of the TTL (`expireIfEquals`, which renews only a slot that still holds this ticket). An execution that runs longer than the TTL keeps its slot.
+4. **Release**: On release, the renewal stops and the slot key is deleted only while it still holds this ticket (`deleteIfEquals`). If the storage backend supports pub/sub, a message is published to `key:released` to wake up any waiting callers.
+5. **Crash Safety**: A process that dies stops renewing, so its slot key expires with the TTL and the slot is free again.
 
 ## Queuing Behavior
 
@@ -50,4 +51,4 @@ await semaphore.forceReset('my-tool:global');
 
 ## Storage Requirements
 
-The semaphore calls `mget`, `set` (with TTL and `ifNotExists`), `get`, `deleteIfEquals` (or `get` and `delete` when the adapter has none), `count`, `keys`, `mdelete`, and optionally `publish`/`subscribe` on the storage adapter.
+The semaphore calls `mget`, `set` (with TTL and `ifNotExists`), `get`, `deleteIfEquals`, `expireIfEquals`, `keys`, `mdelete`, and optionally `publish`/`subscribe` on the storage adapter. `deleteIfEquals` and `expireIfEquals` must be atomic (memory, Redis, Upstash and Vercel KV); with an adapter that lacks them, `acquire()` throws `GuardStorageUnsupportedError` before it claims a slot.

@@ -15,6 +15,12 @@ function createMockNamespacedStorage(): jest.Mocked<NamespacedStorage> {
       data.set(key, value);
     }),
     delete: jest.fn().mockImplementation(async (key: string) => data.delete(key)),
+    deleteIfEquals: jest
+      .fn()
+      .mockImplementation(async (key: string, expected: string) =>
+        data.get(key) === expected ? data.delete(key) : false,
+      ),
+    expireIfEquals: jest.fn().mockImplementation(async (key: string, expected: string) => data.get(key) === expected),
     exists: jest.fn().mockImplementation(async (key: string) => data.has(key)),
     mget: jest.fn().mockImplementation(async (keys: string[]) => keys.map((k) => data.get(k) ?? null)),
     mset: jest.fn().mockResolvedValue(undefined),

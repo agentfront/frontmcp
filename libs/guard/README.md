@@ -124,7 +124,7 @@ An allowed check counts the request. `RateLimitResult` has:
 
 ## Concurrency control
 
-`DistributedSemaphore` limits how many executions run at once for a key. The key has `maxConcurrent` slots, each stored as its own key. An execution claims a free slot with a write-if-absent that carries its ticket's time to live (TTL, 300 seconds by default). The slot frees when the ticket is released or its TTL runs out, so a process that dies without calling `release()` holds its slot for the TTL at most. Releasing a ticket after its TTL leaves the slot alone if another execution has taken it since.
+`DistributedSemaphore` limits how many executions run at once for a key. The key has `maxConcurrent` slots, each stored as its own key. An execution claims a free slot with a write-if-absent that carries its ticket's time to live (TTL, 300 seconds by default), and renews the TTL every third of it until it calls `release()`. So the slot is held for as long as the execution runs, and the TTL only frees the slot of a process that died without releasing it. Releasing or renewing only touches a slot that still holds the same ticket, so the storage needs an atomic compare-and-delete and compare-and-expire: memory, Redis, Upstash or Vercel KV. With another adapter, `acquire()` throws `GuardStorageUnsupportedError`, and `createGuardManager` does too when `globalConcurrency` or `defaultConcurrency` is set.
 
 When every slot is taken, a caller can wait for one, polling every 100 ms at first and backing off to once a second. If the storage supports publish/subscribe (memory, Redis, and Upstash with publish/subscribe turned on), a released slot wakes waiting callers at once.
 
