@@ -15,7 +15,7 @@ import {
 } from '../redis-url';
 import type { MessageHandler, RedisAdapterOptions, SetOptions, Unsubscribe } from '../types';
 import { validateTTL } from '../utils';
-import { COMPARE_AND_DELETE_SCRIPT } from '../utils/compare-and-delete';
+import { COMPARE_AND_DELETE_SCRIPT, COMPARE_AND_EXPIRE_SCRIPT } from '../utils/compare-and-delete';
 import { BaseStorageAdapter } from './base';
 
 // Type imports for ioredis (dynamic import at runtime)
@@ -276,6 +276,18 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
       expectedValue,
     );
     return deleted === 1;
+  }
+
+  override async expireIfEquals(key: string, expectedValue: string, ttlSeconds: number): Promise<boolean> {
+    validateTTL(ttlSeconds);
+    const extended = await this.getConnectedClient().eval(
+      COMPARE_AND_EXPIRE_SCRIPT,
+      1,
+      this.prefixKey(key),
+      expectedValue,
+      String(ttlSeconds),
+    );
+    return extended === 1;
   }
 
   async exists(key: string): Promise<boolean> {
