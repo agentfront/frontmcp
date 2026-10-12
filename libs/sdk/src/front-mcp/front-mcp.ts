@@ -87,7 +87,13 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
   constructor(config: FrontMcpConfigType) {
     this.config = config;
-    this.ready = this.initialize();
+    this.ready = this.initialize().catch((error: unknown) => this.releaseFailedStart(error));
+  }
+
+  /** Shut down what a failed start built, then fail with the start's own error; shutdown() logs its own failures. */
+  private async releaseFailedStart(error: unknown): Promise<never> {
+    await this.shutdown().catch(() => undefined);
+    throw error;
   }
 
   async initialize(): Promise<void> {
@@ -175,9 +181,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   private async runShutdown(): Promise<void> {
-    const scopes = this.getScopes() as Scope[];
+    const scopes = (this.scopes?.getScopes() ?? []) as Scope[];
     const failures: unknown[] = [];
-    const serverStopped = this.providers.get(FrontMcpServer)?.stop();
+    const serverStopped = this.providers?.get(FrontMcpServer)?.stop();
     for (const scope of scopes) {
       await this.bestEffort('scope shutdown', () => scope.shutdown(), failures);
     }
