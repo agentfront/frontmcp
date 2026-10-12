@@ -145,7 +145,7 @@ function FrontMcpSkill(providedMetadata: SkillMetadata): ClassDecorator {
  *   license: 'MIT',
  * });
  *
- * @FrontMcp({
+ * @App({
  *   name: 'my-app',
  *   skills: [reviewPRSkill],
  * })

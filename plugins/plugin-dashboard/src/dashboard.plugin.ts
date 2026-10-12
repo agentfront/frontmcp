@@ -17,41 +17,46 @@ import {
  * - Real-time monitoring via MCP protocol
  * - Graph-based visualization of your MCP architecture
  *
- * The dashboard UI is loaded from CDN (esm.sh by default) and connects
- * to the dashboard via MCP protocol over SSE transport.
+ * The dashboard UI is loaded from CDN (esm.sh by default) and reads the server's
+ * structure from the dashboard's own MCP endpoint, at the dashboard's path.
+ *
+ * `DashboardApp` serves the dashboard; this plugin, registered with `init()`, sets its options.
  *
  * @example Basic usage
  * ```typescript
- * import { DashboardPlugin } from '@frontmcp/plugins';
+ * import { DashboardApp, DashboardPlugin } from '@frontmcp/plugin-dashboard';
  *
- * @FrontMCP({
- *   name: 'my-server',
- *   plugins: [new DashboardPlugin()],
+ * @FrontMcp({
+ *   info: { name: 'my-server', version: '1.0.0' },
+ *   apps: [MyApp, DashboardApp],
+ *   plugins: [DashboardPlugin.init()],
  * })
  * class MyServer {}
  * ```
  *
  * @example With authentication
  * ```typescript
- * @FrontMCP({
- *   name: 'my-server',
+ * @FrontMcp({
+ *   info: { name: 'my-server', version: '1.0.0' },
+ *   apps: [MyApp, DashboardApp],
  *   plugins: [
- *     new DashboardPlugin({
- *       auth: { enabled: true, token: 'my-secret-token' },
+ *     DashboardPlugin.init({
+ *       auth: { enabled: true, token: process.env.DASHBOARD_TOKEN },
  *     }),
  *   ],
  * })
  * class MyServer {}
  *
- * // Access: http://localhost:3000/dashboard?token=my-secret-token
+ * // Access: http://localhost:3000/dashboard?token=<DASHBOARD_TOKEN>
  * ```
  *
  * @example With custom CDN entrypoint
  * ```typescript
- * @FrontMCP({
- *   name: 'my-server',
+ * @FrontMcp({
+ *   info: { name: 'my-server', version: '1.0.0' },
+ *   apps: [MyApp, DashboardApp],
  *   plugins: [
- *     new DashboardPlugin({
+ *     DashboardPlugin.init({
  *       cdn: {
  *         entrypoint: 'https://cdn.example.com/dashboard-ui@1.0.0/index.js',
  *       },
