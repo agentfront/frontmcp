@@ -371,6 +371,36 @@ describe('frontmcpConfigSchema', () => {
     });
   });
 
+  describe('registry (frontmcp registry publish defaults)', () => {
+    it('accepts the url, npm package and registry URL', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'weather',
+        deployments: [{ target: 'node' }],
+        registry: {
+          url: 'https://mcp.example.com/mcp',
+          packages: ['npm'],
+          registryUrl: 'https://staging.registry.modelcontextprotocol.io',
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects unknown keys and package types', () => {
+      const unknownKey = frontmcpConfigSchema.safeParse({
+        name: 'weather',
+        deployments: [{ target: 'node' }],
+        registry: { name: 'com.example/weather' },
+      });
+      const unknownPackage = frontmcpConfigSchema.safeParse({
+        name: 'weather',
+        deployments: [{ target: 'node' }],
+        registry: { packages: ['pypi'] },
+      });
+      expect(unknownKey.success).toBe(false);
+      expect(unknownPackage.success).toBe(false);
+    });
+  });
+
   describe('clients (issue #400 — Verdaccio E2E regression)', () => {
     // The scaffold emits `clients: { 'claude-code': {…} }` and nothing
     // else. A `z.record(z.enum([...]), …)` (the pre-fix shape) requires

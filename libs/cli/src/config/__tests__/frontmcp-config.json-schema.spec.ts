@@ -44,6 +44,7 @@ describe('libs/cli/frontmcp.schema.json', () => {
       'env',
       'name',
       'nodeVersion',
+      'registry',
       'setup',
       'skills',
       'test',

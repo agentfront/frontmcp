@@ -1643,7 +1643,7 @@
         },
         {
           "name": "list-in-mcp-registry",
-          "description": "List a deployed FrontMCP server in the MCP Registry - serve the domain proof, the SEP-2127 server card and the AI Catalog with @FrontMcp({ registry })",
+          "description": "List a FrontMCP server in the MCP Registry - @FrontMcp({ registry }) serves the domain proof, the SEP-2127 server card and the AI Catalog, and frontmcp registry keygen, publish and status manage the listing",
           "examples": []
         },
         {

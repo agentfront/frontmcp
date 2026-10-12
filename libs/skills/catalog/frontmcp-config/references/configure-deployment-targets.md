@@ -109,6 +109,7 @@ frontmcp build --target vercel
 | `deployments` | array  | Yes      | One or more deployment targets                                                                                                      |
 | `setup`       | object | No       | `{ steps: [...] }` install-time questionnaire: `frontmcp install` / `configure` for `node` and `cli`, MCPB `user_config` for `mcpb` |
 | `build`       | object | No       | Bundler and packaging options for every target that bundles with esbuild (see [Build Options](#build-options-build))                |
+| `registry`    | object | No       | `frontmcp registry publish` defaults: `url` (remotes[0]), `packages: ['npm']`, `registryUrl` (see `list-in-mcp-registry`)           |
 
 ### Available Targets
 

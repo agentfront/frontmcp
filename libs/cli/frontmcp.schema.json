@@ -1216,6 +1216,26 @@
         }
       },
       "additionalProperties": false
+    },
+    "registry": {
+      "description": "frontmcp registry publish defaults.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "Public Streamable HTTP URL of the deployed server, listed as remotes[0] in server.json.",
+          "type": "string"
+        },
+        "packages": {
+          "description": "Packages listed in server.json: 'npm' lists package.json's name and version.",
+          "type": "array",
+          "items": { "type": "string", "enum": ["npm"] }
+        },
+        "registryUrl": {
+          "description": "MCP Registry base URL (default https://registry.modelcontextprotocol.io).",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": ["name", "deployments"],

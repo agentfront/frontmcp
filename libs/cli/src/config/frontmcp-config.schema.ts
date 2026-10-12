@@ -442,6 +442,7 @@ export const RESERVED_VERBS: ReadonlySet<string> = new Set([
   'configure',
   'skills',
   'mcpb',
+  'registry',
   'pm',
   'help',
   'version',
@@ -649,6 +650,30 @@ export const skillsCliConfigSchema = z
   .strict();
 
 // ============================================
+// MCP Registry publishing
+// ============================================
+//
+// `frontmcp registry publish` defaults. The server's name and description
+// come from `@FrontMcp({ registry })`; this block says where it runs.
+
+export const registryCliConfigSchema = z
+  .object({
+    url: z
+      .string()
+      .optional()
+      .describe('Public Streamable HTTP URL of the deployed server, listed as remotes[0] in server.json.'),
+    packages: z
+      .array(z.enum(['npm']))
+      .optional()
+      .describe("Packages listed in server.json: 'npm' lists package.json's name and version."),
+    registryUrl: z
+      .string()
+      .optional()
+      .describe('MCP Registry base URL (default https://registry.modelcontextprotocol.io).'),
+  })
+  .strict();
+
+// ============================================
 // Setup questionnaire
 // ============================================
 //
@@ -724,6 +749,7 @@ export const frontmcpConfigSchema = z
       .describe('MCP client snippets emitted by frontmcp eject-mcp-config <client>.'),
     test: testConfigSchema.optional().describe('frontmcp test defaults.'),
     skills: skillsCliConfigSchema.optional().describe('frontmcp skills install / export defaults.'),
+    registry: registryCliConfigSchema.optional().describe('frontmcp registry publish defaults.'),
   })
   .strict();
 
