@@ -1,3 +1,4 @@
+import type { CounterSnapshotEntry } from '../../telemetry';
 import { PROMETHEUS_CONTENT_TYPE, renderJsonExposition, renderPrometheusExposition } from '../render';
 
 describe('renderPrometheusExposition (issue #397)', () => {
@@ -56,7 +57,7 @@ describe('renderPrometheusExposition (issue #397)', () => {
   });
 
   it('is deterministic: two runs of the same input produce byte-identical output', () => {
-    const counters = [
+    const counters: CounterSnapshotEntry[] = [
       { name: 'b_total', count: 2, attributes: { region: 'us', tier: 'pro' } },
       { name: 'a_total', count: 1, attributes: { region: 'eu' } },
     ];
