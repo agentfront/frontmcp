@@ -21,7 +21,7 @@ import { ElicitationNotSupportedError, UnauthorizedError } from '../../errors';
 import { type Scope } from '../../scope';
 import { type AuthenticatedServerRequest, type SdkAuthInfo } from '../../server/server.types';
 import { composeCallerInstructions } from '../../skill/skill-instructions.helper';
-import { computeTaskCapabilities } from '../../task';
+import { computeTaskCapabilities } from '../../task/task-scope.helper';
 import { createMcpHandlers } from '../mcp-handlers';
 import { type TransportKey, type TransportType } from '../transport.types';
 import { type RecreateableSSEServerTransport } from './sse-transport';

@@ -8,7 +8,8 @@ import {
 } from '../../agent/agent-execution-loop';
 import { type FrontMcpContext } from '../../context/frontmcp-context';
 import { FrontMcpContextStorage } from '../../context/frontmcp-context-storage';
-import { performElicit, type ElicitOptions, type ElicitResult } from '../../elicitation';
+import { type ElicitOptions, type ElicitResult } from '../../elicitation/elicitation.types';
+import { performElicit } from '../../elicitation/helpers';
 import { AgentMethodNotAvailableError, toMcpError } from '../../errors';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
 import { type CallSurface } from '../availability';

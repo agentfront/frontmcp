@@ -13,11 +13,13 @@ import { mkdtemp, rm } from '@frontmcp/utils';
 
 import {
   bundleForBrowser,
+  DEFAULT_CONFIG_MODULES,
   fixtureDir,
   importChain,
   inputSizes,
   leakedFeatures,
   OPTIONAL_PEERS,
+  SERVER_MODULES,
   type BrowserBundle,
 } from './helpers/browser-bundle';
 
@@ -48,7 +50,9 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   'remote and esm entries': sdkModule('remote-mcp/|esm-loader/(?!package-specifier)'),
   skills:
     /^libs\/sdk\/dist\/browser\/skill\/(providers|session|sep-2640|flows|hooks)\/|\/node_modules\/(js-yaml|vectoriadb)\//,
-  tasks: sdkModule('task/(store|flows)/|task/task\\.registry|task/helpers/(task-runner|cli-task-runner)'),
+  tasks: sdkModule(
+    'task/(store/(?!task-backend\\.utils)|flows/|task\\.registry|helpers/(task-runner|cli-task-runner))',
+  ),
   'tool ui': /^libs\/uipack\//,
 };
 
@@ -58,13 +62,11 @@ const KNOWN_LEAKS: string[] = [
   'auth',
   'channels',
   'distributed transport',
-  'elicitation',
   'health',
   'http transport',
   'metrics',
   'remote and esm entries',
   'skills',
-  'tasks',
   'tool ui',
 ];
 
@@ -79,7 +81,9 @@ describe('the browser bundle of create()', () => {
   const bundles = new Map<string, BrowserBundle>();
 
   beforeAll(async () => {
-    for (const { entry } of BUDGETS) bundles.set(entry, await bundleForBrowser(resolve(fixtureDir, entry)));
+    for (const { entry } of BUDGETS) {
+      bundles.set(entry, await bundleForBrowser(resolve(fixtureDir, entry), DEFAULT_CONFIG_MODULES));
+    }
   });
 
   it.each(BUDGETS)('keeps $label within its budget', ({ entry, label, maxBytes }) => {
@@ -94,8 +98,8 @@ describe('the browser bundle of create()', () => {
     }
   });
 
-  it('reaches only the feature modules it is known to reach', () => {
-    const bundle = bundles.get('create-tool.ts') as BrowserBundle;
+  it('reaches only the feature modules it is known to reach', async () => {
+    const bundle = await bundleForBrowser(resolve(fixtureDir, 'create-tool.ts'), SERVER_MODULES);
     const leaks = leakedFeatures(bundle.metafile, FEATURE_MODULES);
     const unexpected = [...leaks.keys()].filter((feature) => !KNOWN_LEAKS.includes(feature)).sort();
     const importChains = Object.fromEntries(

@@ -15,7 +15,7 @@ import {
 import { logAvailabilityFiltering } from '../common/availability';
 import { resolveToolVisibility } from '../common/metadata/tool.metadata';
 import { externalEntryAfterStartup } from '../common/utils/external-entry.utils';
-import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
+import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.utils';
 import {
   EntryValidationError,
   NameDisambiguationError,
