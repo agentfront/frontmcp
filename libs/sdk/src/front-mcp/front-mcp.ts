@@ -29,7 +29,6 @@ import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { markDirectOnly } from './direct-only.flag';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 import { exitOnShutdownSignals } from './shutdown-signals';
-import { assertStaticStartupConfig } from './static-startup.check';
 
 /**
  * A `@FrontMcp`-decorated server class, or the raw config object it wraps.
@@ -424,6 +423,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // instance/scope construction is deferred to the first request, and only the startup checks the
     // config's metadata settles run here. The build runs once and is kept; concurrent first
     // requests share the same in-flight build.
+    const { assertStaticStartupConfig } = await import('./static-startup.check.js');
     assertStaticStartupConfig(options);
     // A failed build is kept and refuses requests until its retry delay passes (1 s, doubling up to
     // 60 s), so a transient failure doesn't brick the isolate and a permanent one isn't rebuilt by

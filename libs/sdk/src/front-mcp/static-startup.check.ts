@@ -52,7 +52,8 @@ import { normalizePrompt } from '../prompt/prompt.utils';
 import { isResourceTemplate, normalizeResource, normalizeResourceTemplate } from '../resource/resource.utils';
 import { normalizeSkill } from '../skill/skill.utils';
 import { normalizeTool } from '../tool/tool.utils';
-import { assertAuthoritiesRules, createAuthoritiesEngine } from './authorities-rules.check';
+import { createAuthoritiesEngine } from './authorities-engine';
+import { assertAuthoritiesRules } from './authorities-rules.check';
 
 /** An entry the config names, labelled as the full checks label it. */
 interface StaticEntry {

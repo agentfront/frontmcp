@@ -1,9 +1,5 @@
 import 'reflect-metadata';
 
-// A static import, not a lazy `require()`: a lazy require of this hard dependency becomes an
-// opaque `__require("@frontmcp/auth")` in the ESM build that a worker bundler cannot follow, so
-// the authorities engine failed to load on Cloudflare Workers (#680).
-import { AuthoritiesContextBuilder } from '@frontmcp/auth';
 import { createGuardManager, type GuardConfig, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
 import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
@@ -11,8 +7,9 @@ import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeR
 import AdapterRegistry from '../adapter/adapter.registry';
 import AgentRegistry from '../agent/agent.registry';
 import AppRegistry from '../app/app.registry';
-import { AuthUiRegistry } from '../auth/auth-ui';
-import { AuthRegistry } from '../auth/auth.registry';
+import type { AuthUiRegistry } from '../auth/auth-ui';
+import { AuthRegistry, type PrimaryAuthFactory } from '../auth/auth.registry';
+import { DirectPublicAuth } from '../auth/direct-public-auth';
 import { type ChannelNotificationService } from '../channel/channel-notification.service';
 import type ChannelRegistry from '../channel/channel.registry';
 import { normalizeChannel } from '../channel/channel.utils';
@@ -28,6 +25,7 @@ import {
   type FlowOutputOf,
   type FlowType,
   type FrontMcpAuth,
+  type PublicAuthOptions,
   type ScopeRecord,
   type ServerRequest,
   type Token,
@@ -47,7 +45,7 @@ import type { ElicitationStore } from '../elicitation';
 import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors';
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
-import { assertAuthoritiesRules, createAuthoritiesEngine } from '../front-mcp/authorities-rules.check';
+import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
 import { isDirectOnly } from '../front-mcp/direct-only.flag';
 import type { HaManager } from '../ha';
 import type { HealthService } from '../health';
@@ -247,6 +245,7 @@ export class Scope extends ScopeEntry {
       : () => {};
 
     const httpServing = this.directOnly ? undefined : await import('./http-scope.helper.js');
+    const createPrimaryAuth = await this.primaryAuthFactory();
 
     // ═══ BATCH 1: Independent registries (parallel) ═══
     // These only depend on scopeProviders — no cross-registry dependencies.
@@ -255,7 +254,7 @@ export class Scope extends ScopeEntry {
       scopeProviders,
       httpServing ? [httpServing.HttpRequestFlow, httpServing.HttpIpFilterFlow] : [],
     );
-    this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth);
+    this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth, createPrimaryAuth);
     this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps, scopeRef);
     this.logger.info(`Initializing ${this.metadata.apps.length} app(s)...`);
 
@@ -655,7 +654,7 @@ export class Scope extends ScopeEntry {
     );
 
     // Initialize authorities engine from metadata config (built-in, no plugin needed)
-    this.initAuthoritiesFromConfig();
+    await this.initAuthoritiesFromConfig();
 
     this.scopeTools = new ToolRegistry(this.scopeProviders, [], scopeRef);
     this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
@@ -1044,6 +1043,15 @@ export class Scope extends ScopeEntry {
     );
   }
 
+  /** A direct-only scope without `auth` gets the minimal public auth; any other loads the auth of its mode. */
+  private async primaryAuthFactory(): Promise<PrimaryAuthFactory> {
+    if (this.directOnly && this.metadata.auth === undefined) {
+      return (scope, _providers, options) => new DirectPublicAuth(scope, options as PublicAuthOptions);
+    }
+    const { createPrimaryAuth } = await import('../auth/primary-auth.factory.js');
+    return createPrimaryAuth;
+  }
+
   /**
    * Resolve the top-level `sqlite` config, filling in a default `path`
    * when the user provided the block without one (issue #401). Also
@@ -1271,6 +1279,7 @@ export class Scope extends ScopeEntry {
       }
     }
 
+    const { AuthUiRegistry } = await import('../auth/auth-ui/index.js');
     const registry = new AuthUiRegistry(this.logger);
     registry.registerAuthUiMap(authUi, sourceDir);
     registry.registerAuthExtrasMap(authExtras);
@@ -1597,24 +1606,18 @@ export class Scope extends ScopeEntry {
    * Built-in integration — no plugin required.
    * @internal
    */
-  private initAuthoritiesFromConfig(): void {
+  private async initAuthoritiesFromConfig(): Promise<void> {
     const config = (this.metadata as unknown as Record<string, unknown>)['authorities'] as
       | Record<string, unknown>
       | undefined;
     if (!config) return;
 
+    const { authoritiesFromConfig } = await import('../front-mcp/authorities-engine.js');
     try {
-      type BuilderOptions = NonNullable<ConstructorParameters<typeof AuthoritiesContextBuilder>[0]>;
-      this._authoritiesEngine = createAuthoritiesEngine(config);
-      this._authoritiesContextBuilder = new AuthoritiesContextBuilder({
-        claimsMapping: config['claimsMapping'] as BuilderOptions['claimsMapping'],
-        claimsResolver: config['claimsResolver'] as BuilderOptions['claimsResolver'],
-        relationshipResolver: config['relationshipResolver'] as BuilderOptions['relationshipResolver'],
-      });
-
-      this._authoritiesScopeMapping = config['scopeMapping'] as
-        | import('@frontmcp/auth').AuthoritiesScopeMapping
-        | undefined;
+      const authorities = authoritiesFromConfig(config);
+      this._authoritiesEngine = authorities.engine;
+      this._authoritiesContextBuilder = authorities.contextBuilder;
+      this._authoritiesScopeMapping = authorities.scopeMapping;
 
       this.logger.verbose('Scope: authorities engine initialized from config');
     } catch (error) {

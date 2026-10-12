@@ -9,10 +9,7 @@ import {
   AuthProviderKind,
   FrontMcpAuth,
   FrontMcpLogger,
-  isOrchestratedLocal,
   isOrchestratedMode,
-  isPublicMode,
-  isStaticMode,
   isTransparentMode,
   parseAuthOptions,
   type AppType,
@@ -23,7 +20,6 @@ import {
   type AuthProviderType,
   type EntryOwnerRef,
   type PrimaryAuthRecord,
-  type PublicAuthOptions,
   type ScopeEntry,
 } from '../common';
 import { installContextExtensions } from '../context/context-extension';
@@ -32,8 +28,9 @@ import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { authDiscoveryDeps, normalizeAuth } from './auth.utils';
 import { orchestratedAuthContextExtension } from './authorization/orchestrated.context-extension';
-import { LocalPrimaryAuth } from './instances/instance.local-primary-auth';
-import { RemotePrimaryAuth } from './instances/instance.remote-primary-auth';
+
+/** Builds a scope's primary auth from its parsed auth options. */
+export type PrimaryAuthFactory = (scope: ScopeEntry, providers: ProviderRegistry, options: AuthOptions) => FrontMcpAuth;
 
 /**
  * Default auth options when none provided - public mode with all tools open
@@ -63,7 +60,8 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
     providers: ProviderRegistry,
     metadata: AuthProviderType[],
     owner: EntryOwnerRef,
-    primaryInput?: AuthOptionsInput,
+    primaryInput: AuthOptionsInput | undefined,
+    createPrimaryAuth: PrimaryAuthFactory,
   ) {
     super('AuthRegistry', providers, metadata, false);
 
@@ -84,8 +82,7 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
     // Validate configuration and throw if invalid
     this.validateConfiguration();
 
-    // Create the appropriate primary auth provider based on mode
-    this.primary = this.createPrimaryAuth(scope, providers, this.parsedOptions);
+    this.primary = createPrimaryAuth(scope, providers, this.parsedOptions);
 
     // Install orchestrated auth context extension for orchestrated mode
     // This adds `this.orchestration` to ExecutionContextBase.prototype
@@ -223,46 +220,6 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
       `     mode: 'local', // or 'remote' with your provider config\n` +
       `   }`
     );
-  }
-
-  /**
-   * Create the appropriate primary auth provider based on parsed options
-   */
-  private createPrimaryAuth(scope: ScopeEntry, providers: ProviderRegistry, options: AuthOptions): FrontMcpAuth {
-    if (isPublicMode(options)) {
-      return new LocalPrimaryAuth(scope, providers, options);
-    }
-
-    // #544 — static mode reuses the local instance (it needs the same session /
-    // discovery surface public mode does) while `session:verify`'s
-    // `handleStaticToken` stage is the whole of its authentication. Without this
-    // branch a static config fell through to the public-mode fallback below,
-    // which would silently serve a token-protected server unauthenticated.
-    if (isStaticMode(options)) {
-      return new LocalPrimaryAuth(scope, providers, options);
-    }
-
-    if (isTransparentMode(options)) {
-      return new RemotePrimaryAuth(scope, providers, options);
-    }
-
-    if (isOrchestratedMode(options)) {
-      if (isOrchestratedLocal(options)) {
-        return new LocalPrimaryAuth(scope, providers, options);
-      } else {
-        // Remote mode: FrontMCP runs a local OAuth server that proxies user
-        // authentication to a single mandatory upstream IdP. LocalPrimaryAuth
-        // registers the flat remote config as one upstream provider (see
-        // registerRemoteProvider), so /oauth/authorize federates straight to the
-        // upstream IdP, the provider-callback exchanges + stores its tokens, and
-        // the minted FrontMCP session identity derives from the upstream user.
-        return new LocalPrimaryAuth(scope, providers, options);
-      }
-    }
-
-    // Fallback (should never reach here) - create public mode with defaults
-    const defaultOptions = parseAuthOptions({ mode: 'public' }) as PublicAuthOptions;
-    return new LocalPrimaryAuth(scope, providers, defaultOptions);
   }
 
   protected override buildMap(list: AuthProviderType[]): RegistryBuildMapResult<AuthProviderRecord> {

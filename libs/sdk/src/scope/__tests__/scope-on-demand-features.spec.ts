@@ -33,11 +33,16 @@ const ON_DEMAND_MODULES = [
   '../../agent/flows',
   '../../app/instances/app.esm.instance',
   '../../app/instances/app.remote.instance',
+  '../../auth/auth-ui',
+  '../../auth/instances/instance.local-primary-auth',
+  '../../auth/primary-auth.factory',
   '../../channel/channel-scope.helper',
   '../../elicitation/flows',
   '../../elicitation/send-elicitation-result.tool',
   '../../elicitation/store/elicitation-store.factory',
   '../../esm-loader/esm-entries',
+  '../../front-mcp/authorities-engine',
+  '../../front-mcp/static-startup.check',
   '../flows/http.ip-filter.flow',
   '../flows/http.request.flow',
   '../../ha',
@@ -149,7 +154,7 @@ describe('Scope features loaded on demand', () => {
   });
 
   it.each(['create', 'connect'] as const)(
-    'serves %s() without loading a feature its config does not use, HTTP included',
+    'serves %s() without loading a feature its config does not use, HTTP and OAuth included',
     async (entry) => {
       await jest.isolateModulesAsync(async () => {
         for (const modulePath of ON_DEMAND_MODULES) {
