@@ -8,6 +8,7 @@ import type { RenderToolTemplateOptions } from '@frontmcp/uipack/adapters';
 import type { ImportResolver } from '@frontmcp/uipack/resolver';
 
 import { InternalMcpError } from '../../errors/mcp.error';
+import { detectUIType, warnIfComponentReference } from './template-detection';
 
 /** The `tools/call` `_meta` key a widget's bridge sets on its own calls, as `@frontmcp/uipack/bridge-runtime` names it. */
 export const WIDGET_CALL_META_KEY = 'frontmcp/widgetCall';
@@ -96,7 +97,7 @@ export class ToolUIRegistry {
     if (resourceUri) this.customUris.set(resourceUri, toolName);
   }
 
-  /** Loads the rendering machinery (`@frontmcp/uipack`) once a tool with a UI needs it; `checkTemplate` and `detectUIType` need it loaded. */
+  /** Loads the rendering machinery (`@frontmcp/uipack`) once a tool with a UI needs it; only rendering needs it. */
   async load(): Promise<void> {
     this.renderer ??= await import('./ui-render.js');
   }
@@ -110,7 +111,9 @@ export class ToolUIRegistry {
 
   /** Warn at startup when a tool's `ui.template` is a React component reference it cannot bundle. */
   checkTemplate(toolName: string, template: unknown): void {
-    this.loadedRenderer.warnIfComponentReference(toolName, template, this.options.logger ?? console);
+    // Once loaded, the renderer's own check shares its once-per-tool memory with the warning a render gives
+    const warnIfComponent = this.renderer?.warnIfComponentReference ?? warnIfComponentReference;
+    warnIfComponent(toolName, template, this.options.logger ?? console);
   }
 
   /** The tool that advertised `uri` as its custom `ui.resourceUri`. */
@@ -151,7 +154,7 @@ export class ToolUIRegistry {
   }
 
   detectUIType(template: unknown): string {
-    return this.loadedRenderer.detectUIType(template);
+    return detectUIType(template);
   }
 
   async compileStaticWidgetAsync(options: Record<string, unknown>): Promise<void> {
@@ -241,7 +244,7 @@ export class ToolUIRegistry {
       const toolName = options['toolName'] as string;
       const template = options['template'];
       if (toolName && template) {
-        const uiType = this.loadedRenderer.detectUIType(template);
+        const uiType = detectUIType(template);
         this.manifests.set(toolName, { uiType, hash: '', size: 0 });
       }
     }

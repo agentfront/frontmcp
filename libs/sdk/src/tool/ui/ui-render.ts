@@ -1,7 +1,6 @@
 import {
   buildCDNInfoForUIType,
   buildToolResponseContent,
-  detectUIType,
   isUIRenderFailure,
   MCP_APPS_MIME_TYPE,
   renderToolTemplate,
@@ -15,7 +14,6 @@ import { type UIResourceMeta } from './ui-shared';
 export {
   buildCDNInfoForUIType,
   buildToolResponseContent,
-  detectUIType,
   isUIRenderFailure,
   MCP_APPS_MIME_TYPE,
   renderToolTemplate,
