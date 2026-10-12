@@ -1,83 +1,82 @@
 # @frontmcp/lazy-zod
 
-Drop-in Zod replacement that lazily constructs compound schemas. On bundled
-CLI binaries and edge workers, this cuts module-init cold-start by ~50× on
-schema-heavy entries with effectively zero steady-state parse overhead.
+Zod 4's `z`, with compound schemas like `z.object()` built the first time they're used instead of when the module loads. A process that defines many schemas but uses few of them per run, like a CLI, a serverless function or an edge worker, starts faster. This is an internal package: `@frontmcp/sdk` re-exports all of it, so in a FrontMCP server import `z`, `eagerZ` and `lazyZ` from `@frontmcp/sdk`. It doesn't depend on the rest of FrontMCP, so you can also use it on its own.
 
-## Why
-
-In a benchmark of 1,515 realistic schemas (see `apps/poc-lazy-zod/`):
-
-| Metric              | Eager zod | Lazy zod | Delta    |
-| ------------------- | --------- | -------- | -------- |
-| Cold-start (median) | 387 ms    | 7.1 ms   | **−98%** |
-| First-parse         | 0.45 ms   | 1.47 ms  | +1 ms    |
-| Parse-all (steady)  | 31 ms     | 31 ms    | +0.2%    |
-| Bundle size         | 1.69 MB   | 1.70 MB  | +0.64%   |
-
-The win comes from deferring `z.object({…})` / `z.union([…])` construction
-until the first `.parse()` call — and self-patching the schema instance on
-that first call so all subsequent parses bypass the wrapper entirely.
+[![npm](https://img.shields.io/npm/v/@frontmcp/lazy-zod.svg)](https://www.npmjs.com/package/@frontmcp/lazy-zod) [![License](https://img.shields.io/npm/l/@frontmcp/lazy-zod.svg)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
 
 ## Install
 
-```sh
+```bash
 npm install @frontmcp/lazy-zod zod
 ```
 
-`zod` is a peer dependency (v4).
+`zod` `^4.0.0` is a peer dependency: the package wraps the Zod you install. Zod 3 isn't supported. It needs Node.js 24 or later.
 
 ## Usage
 
-```ts
-// Preferred — lazy by default, full drop-in for zod's `z`.
-import { z } from '@frontmcp/lazy-zod';
+Import `z` from here instead of from `zod`:
 
-const schema = z.object({
-  name: z.string(),
-  age: z.number().optional(),
+```ts
+import { eagerZ, lazyZ, toJSONSchema, z } from '@frontmcp/lazy-zod';
+
+const Ticket = z.object({
+  title: z.string().min(5),
+  customer: z.object({ email: z.string().email() }).optional(),
 });
 
-type User = z.infer<typeof schema>; // { name: string; age?: number }
-schema.parse({ name: 'Ada', age: 36 });
+type Ticket = z.infer<typeof Ticket>;
+
+const ticket: Ticket = Ticket.parse({ title: 'Cannot log in' });
+
+const jsonSchema = toJSONSchema(Ticket);
+
+const Built = eagerZ.object({ id: eagerZ.string() });
+
+const Deferred = lazyZ(() => eagerZ.object({ id: eagerZ.string() }));
 ```
 
-```ts
-// Escape hatch — real zod, zero proxy overhead.
-// Use when you need a schema to be fully-constructed at module load
-// (e.g. a library will immediately introspect it via toJSONSchema).
-import { eagerZ } from '@frontmcp/lazy-zod';
+`z.object()`, `z.strictObject()`, `z.looseObject()`, `z.union()`, `z.discriminatedUnion()`, `z.intersection()`, `z.record()` and `z.tuple()` return a stand-in. The real Zod schema is built the first time the stand-in is used, by a parse or by reading a property like `.shape`, and methods you chain on it, like `.optional()`, return stand-ins too. After the first parse, `parse`, `safeParse`, `parseAsync` and `safeParseAsync` call Zod directly. The other factories, like `z.string()` and `z.enum()`, are Zod's own.
 
-const eager = eagerZ.object({ foo: eagerZ.string() });
-```
+A stand-in behaves like the schema it stands for: it parses the same, `instanceof ZodObject` is `true`, and `z.infer` gives the same type.
 
-```ts
-// Explicit factory-style wrapper — when you already have a real zod schema
-// and want to defer it.
-import { eagerZ, lazyZ } from '@frontmcp/lazy-zod';
+| Export                        | What it is                                                                                                                                                                                                                                                                 |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `z` (also the default export) | Zod 4's `z`, with the factories above deferred.                                                                                                                                                                                                                            |
+| `eagerZ`                      | Zod's own `z`. Use it for a schema that something reads as soon as it's defined.                                                                                                                                                                                           |
+| `lazyZ(build)`                | A schema that calls `build()` the first time it's used, and only then.                                                                                                                                                                                                     |
+| `isLazy(schema)`              | `true` for a stand-in, from `z` or from `lazyZ()`.                                                                                                                                                                                                                         |
+| `forceMaterialize(schema)`    | The real Zod schema, with every stand-in inside it built.                                                                                                                                                                                                                  |
+| `toJSONSchema(schema)`        | Zod's JSON Schema converter, run on `forceMaterialize(schema)`. Use it instead of Zod's own `z.toJSONSchema()`, which throws `TypeError: Cannot set properties of undefined (setting 'ref')` when an object or union in the schema is `.optional()` or has a `.default()`. |
+| `ZodObject`, `ZodError`, …    | Zod's classes and types (`ZodTypeAny`, `infer`, `input`, `output`), so your code needs no import from `zod`.                                                                                                                                                               |
 
-const deferred = lazyZ(() => eagerZ.object({ foo: eagerZ.string() }));
-deferred.parse({ foo: 'bar' }); // materializes on first call
-```
+## Performance
 
-When used inside FrontMCP, you don't need to depend on this package
-directly — it's re-exported as `z` from `@frontmcp/sdk`.
+The prototype this package grew from was measured on 1,515 generated schemas, bundled into one file, on Node.js 24 (medians of 30 runs):
 
-## Status
+| Metric                       | Zod's `z` | Lazy `z` |
+| ---------------------------- | --------- | -------- |
+| Start-up                     | 387 ms    | 7.1 ms   |
+| First parse of one schema    | 0.45 ms   | 1.47 ms  |
+| First parse of every schema  | 235 ms    | 616 ms   |
+| Second parse of every schema | 31.0 ms   | 31.0 ms  |
+| Bundle size                  | 1.69 MB   | 1.70 MB  |
 
-Implemented. `z` is lazy by default — heavy compound factories (`z.object`,
-`z.union`, `z.discriminatedUnion`, `z.intersection`, `z.record`, `z.tuple`,
-plus `z.strictObject` / `z.looseObject`) return a `Proxy` over a
-`LazyZodSchema` that materializes the real zod schema on first
-`.parse()` / `.safeParse()` / `.parseAsync()` / `.safeParseAsync()` call
-and self-patches the hot-path methods onto the instance so subsequent
-parses run at native zod speed (measured at +0.2% steady-state overhead
-in the POC). Light factories (`z.string`, `z.number`, `z.enum`,
-`z.literal`, `z.lazy`, etc.) pass straight through to real zod. See
-`src/lazy-z.ts` for the Proxy and `src/lazy-schema.ts` for the wrapper.
-Use `eagerZ` when a consumer needs a fully-constructed schema at
-import time (e.g. immediate introspection).
+The work isn't removed, it's moved: each schema costs more the first time it's parsed. Lazy schemas pay off when a process starts often and uses only some of its schemas. The benchmark, with its method and full results, is in [`apps/poc-lazy-zod`](https://github.com/agentfront/frontmcp/blob/main/apps/poc-lazy-zod/results/README.md).
+
+## Docs
+
+- [`z`, `eagerZ` and `lazyZ`](https://frontmcp.dev/reference/sdk#z-eagerz-and-lazyz): how FrontMCP uses this package
+- [Schemas are contracts](https://frontmcp.dev/learn/schemas-are-contracts): writing input schemas for tools
+
+## Related packages
+
+- [`@frontmcp/sdk`](https://www.npmjs.com/package/@frontmcp/sdk): re-exports this package. Use it in a FrontMCP server.
+- [`zod`](https://www.npmjs.com/package/zod): the schema library this package wraps.
+
+## Contributing
+
+Source: [`libs/lazy-zod`](https://github.com/agentfront/frontmcp/tree/main/libs/lazy-zod). Issues and pull requests are welcome; see [CONTRIBUTING.md](https://github.com/agentfront/frontmcp/blob/main/CONTRIBUTING.md).
 
 ## License
 
-Apache-2.0
+Apache-2.0. See [LICENSE](https://github.com/agentfront/frontmcp/blob/main/LICENSE).

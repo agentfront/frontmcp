@@ -1,9 +1,8 @@
 # @frontmcp/ui
 
-MUI-based React components, content renderers, and MCP bridge for building interactive MCP widgets.
+`@frontmcp/ui` is the React side of FrontMCP widgets: the UI a tool shows inside an AI host such as ChatGPT or Claude. You write a widget as a React component in a file of its own and point the tool's `ui.template` at it; FrontMCP bundles the file, wraps it in `McpBridgeProvider` and mounts it with the call's data. This package gives that component hooks that read the call and call tools through the host, eleven components built on MUI (Material UI), a theme, and renderers for content such as charts, PDFs, maps and diagrams. A widget written as an HTML template doesn't need it ([Tools with a UI](https://frontmcp.dev/learn/tools-with-a-ui)). To make a React app that an agent can drive, use [`@frontmcp/react`](https://www.npmjs.com/package/@frontmcp/react) instead.
 
-[![NPM](https://img.shields.io/npm/v/@frontmcp/ui.svg)](https://www.npmjs.com/package/@frontmcp/ui)
-[![License](https://img.shields.io/npm/l/@frontmcp/ui.svg)](../../LICENSE)
+[![npm](https://img.shields.io/npm/v/@frontmcp/ui.svg)](https://www.npmjs.com/package/@frontmcp/ui) [![License](https://img.shields.io/npm/l/@frontmcp/ui.svg)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
 
 ## Install
 
@@ -11,292 +10,192 @@ MUI-based React components, content renderers, and MCP bridge for building inter
 npm install @frontmcp/ui react react-dom @mui/material @emotion/react @emotion/styled
 ```
 
-> **Note:** Renderer libraries (recharts, react-pdf, mermaid, katex, etc.) are **not** installed locally. They are automatically lazy-loaded from [esm.sh](https://esm.sh) in the browser at runtime.
+- For widget files, install it in the server's project, even when a widget doesn't import it: the code FrontMCP adds to mount a widget file imports `McpBridgeProvider` from `@frontmcp/ui/react`.
+- The required peers are `react` and `react-dom` 18 or 19, `@mui/material` 7, 8 or 9, and `@emotion/react` and `@emotion/styled` 11. npm 7 and later install them with the package, along with `@types/react` and `@types/react-dom`.
+- FrontMCP bundles widget files with `esbuild`, an optional peer of `@frontmcp/uipack` that nothing installs for you. A project from `frontmcp create` has it; anywhere else, run `npm install esbuild` and keep it a dependency, not a dev dependency, since it's loaded when the tool is called.
+- The server needs Node.js 24 or later.
 
-## Quick Start
+### Optional peers for the renderers
 
-### Theme + Components
+The renderers' libraries are optional peers, not installed with the package:
+
+| Renderer               | Entry point                                           | Optional peers                                                   |
+| ---------------------- | ----------------------------------------------------- | ---------------------------------------------------------------- |
+| Charts                 | `@frontmcp/ui/renderer/charts`                        | `recharts`                                                       |
+| PDF                    | `@frontmcp/ui/renderer/pdf`                           | `react-pdf`, `pdfjs-dist`                                        |
+| Flow diagrams          | `@frontmcp/ui/renderer/flow`                          | `@xyflow/react`                                                  |
+| Maps                   | `@frontmcp/ui/renderer/maps`                          | `react-leaflet`, `leaflet`                                       |
+| Mermaid diagrams       | `@frontmcp/ui/renderer/mermaid`                       | `mermaid`                                                        |
+| Math                   | `@frontmcp/ui/renderer/math`                          | `katex`                                                          |
+| Video and audio        | `@frontmcp/ui/renderer/media`                         | `react-player`                                                   |
+| Markdown and MDX       | `@frontmcp/ui/renderer/mdx`                           | `react-markdown`, `remark-gfm`, `rehype-highlight`, `rehype-raw` |
+| HTML                   | `@frontmcp/ui/renderer/html`                          | `dompurify`; without it the HTML is shown escaped                |
+| CSV, images, React JSX | `/renderer/csv`, `/renderer/image`, `/renderer/react` | None. JSX is compiled with Babel, loaded from esm.sh.            |
+
+Each renderer loads its library at runtime, the first time it renders: by package name where the page can resolve it (an installed peer under Node or a dev server, or an import map), and otherwise from [esm.sh](https://esm.sh) in the browser. The stylesheets for maps, math and flow diagrams, and the PDF.js worker, always come from esm.sh.
+
+## Usage
+
+Point the tool's `ui.template` at the widget file with an absolute path:
+
+```ts
+import { join } from 'node:path';
+
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
+@Tool({
+  name: 'get_weather',
+  description: 'Current weather for a city',
+  inputSchema: { city: z.string() },
+  outputSchema: { city: z.string(), tempC: z.number(), conditions: z.string() },
+  ui: { template: { file: join(__dirname, 'weather.widget.tsx') } },
+})
+export class GetWeather extends ToolContext {
+  async execute({ city }: { city: string }) {
+    return { city, tempC: 21, conditions: 'Sunny' };
+  }
+}
+```
+
+Export the component as the default from `weather.widget.tsx`:
 
 ```tsx
-import { Badge, Button, Card } from '@frontmcp/ui/components';
+import { Badge, Card } from '@frontmcp/ui/components';
 import { FrontMcpThemeProvider } from '@frontmcp/ui/theme';
 
-function App() {
+type Weather = { city: string; tempC: number; conditions: string };
+
+export default function WeatherWidget({ output }: { output: Weather | null }) {
+  if (!output?.city) return <p>Loading…</p>;
   return (
     <FrontMcpThemeProvider>
-      <Card title="Weather" elevation={2}>
-        <Badge label="Live" variant="success" />
-        <p>Temperature: 18C</p>
-        <Button variant="primary" onClick={() => {}}>
-          Refresh
-        </Button>
+      <Card title={output.city} subtitle="Current weather">
+        <p>{output.tempC}°C</p>
+        <Badge label={output.conditions} variant="success" />
       </Card>
     </FrontMcpThemeProvider>
   );
 }
 ```
 
-### MCP Bridge Hooks
+The widget gets three props: `output`, `input` and `loading`. Check for a field you need, like `output?.city`, rather than for `output`: a failed result's error text is truthy too. In an ES module server, use `join(import.meta.dirname, 'weather.widget.tsx')`. Name widget files `*.widget.tsx` and leave them out of the server's own `tsc` build; `frontmcp build` copies them into its output. [Building a widget file](https://frontmcp.dev/reference/ui/components#building-a-widget-file) covers relative paths, `resourceMode` and what each host gets.
+
+### Calling a tool from a widget
 
 ```tsx
-import { McpBridgeProvider, useCallTool, useToolOutput } from '@frontmcp/ui/react';
+import { useCallTool } from '@frontmcp/ui/react';
 
-function WeatherWidget() {
-  const output = useToolOutput<{ temp: number }>();
-  const [callWeather, { loading }] = useCallTool<{ city: string }>('get_weather');
+type Weather = { city: string; tempC: number };
 
+export default function Refreshable({ output }: { output: Weather | null }) {
+  const [refresh, { data, loading, error }] = useCallTool<{ city: string }, Weather>('get_weather');
+
+  const weather = data?.structuredContent ?? (output?.city ? output : null);
   return (
     <div>
-      <p>{output?.temp}C</p>
-      <button onClick={() => callWeather({ city: 'London' })} disabled={loading}>
-        Refresh
+      <p>{weather ? `${weather.city}: ${weather.tempC}°C` : 'No data yet'}</p>
+      <button disabled={loading} onClick={() => refresh({ city: 'Bergen' })}>
+        Bergen
       </button>
+      {error && <p role="alert">{error.message}</p>}
     </div>
   );
 }
-
-// Wrap with provider
-<McpBridgeProvider>
-  <WeatherWidget />
-</McpBridgeProvider>;
 ```
 
-### Content Rendering
+`useCallTool()` returns an array, not an object. `call(args)` asks the host to call the tool and resolves with the host's whole result, so the tool's output is in `data.structuredContent`. A tool that fails usually comes back as a result with `isError: true` in `data`; `error` is for calls that couldn't be made, like `Tool calls not supported on this platform (ext-apps)` from a host that never answered the handshake.
+
+### Entry points
+
+| Import                                           | What's in it                                                                                                                                                                                                |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@frontmcp/ui/react`                             | `McpBridgeProvider` and the hooks. `@frontmcp/ui` exports them too, with the bridge.                                                                                                                        |
+| `@frontmcp/ui/components`                        | The eleven components. Each also has its own entry point, like `@frontmcp/ui/components/Card`.                                                                                                              |
+| `@frontmcp/ui/theme`                             | `FrontMcpThemeProvider`, `createFrontMcpTheme`, `defaultTheme`, `darkTheme`, `useFrontMcpTheme`.                                                                                                            |
+| `@frontmcp/ui/renderer`                          | `ContentView`, `renderContent`, `detectContentType`, `registerAllRenderers`, `registerRenderer`, and every renderer. Each renderer also has its own entry point; `/renderer/common` has the shared helpers. |
+| `@frontmcp/ui/bridge`                            | The bridge as a class, `FrontMcpBridge` and `createBridge()`, with its adapters and `generateBridgeIIFE()`, for pages FrontMCP doesn't build.                                                               |
+| `@frontmcp/ui/runtime`                           | `detectContentType`, and `transpileJsx()` with the Babel loader it uses.                                                                                                                                    |
+| `@frontmcp/ui/auth`, `@frontmcp/ui/auth/vanilla` | Components and helpers for a [custom login UI](https://frontmcp.dev/reference/auth/login-ui); the `vanilla` entry has no React.                                                                             |
+
+### Hooks
+
+A widget file is already inside `McpBridgeProvider`. Outside a provider the hooks return empty values, and `call()` fails with `Bridge not initialized`.
+
+| Hook                                      | Returns                                                                                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `useToolOutput<T>()`                      | The call's output: the output embedded in the page, then each result the host sends.                                      |
+| `useToolInput<T>()`                       | The call's arguments.                                                                                                     |
+| `useStructuredContent<T>()`               | The `structuredContent` of the result the host sent; empty until one arrives.                                             |
+| `useCallTool<In, Out>(name, options?)`    | `[call, { data, loading, error, called }, reset]`. Options: `onSuccess`, `onError`, `resetOnToolChange` (default `true`). |
+| `useToolCalls({ key: toolName, ... })`    | `{ key: { call, data, loading, error, reset }, ... }`: `useCallTool` for several tools.                                   |
+| `useSendMessage()`                        | `[send(text), { loading, error, sent }]`: adds a message to the conversation, where the host allows it.                   |
+| `useOpenLink()`                           | `open(url)`, through the host.                                                                                            |
+| `useTheme()`, `useDisplayMode()`          | `"light"` or `"dark"`, and `"inline"`, `"fullscreen"` or `"pip"`, as the host reports them.                               |
+| `useHostContext()`                        | What the host said about itself: `{ theme, displayMode, locale, userAgent, safeArea, viewport?, ... }`.                   |
+| `useCapability(name)`                     | Whether the host can do `name`, like `"canCallTools"`. `false` until the host answers the handshake.                      |
+| `useMcpBridge()`, `useMcpBridgeContext()` | The bridge, and `{ bridge, loading, error, ready, adapterId, capabilities, revision }`.                                   |
+
+### Components
+
+`@frontmcp/ui/components` are React components built on MUI. Put them inside `FrontMcpThemeProvider`.
+
+| Component   | Main props                                                                                      | Renders                                        |
+| ----------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `Button`    | `variant` (`primary`, `secondary`, `danger`, `ghost`), `size`, `loading`, `disabled`, `onClick` | An MUI `Button`; `loading` adds a spinner.     |
+| `Card`      | `title`, `subtitle`, `headerActions`, `footer`, `elevation`, `clickable`, `slotProps`           | An MUI `Card`.                                 |
+| `Alert`     | `severity`, `title`, `dismissible`, `onDismiss`, `icon`                                         | An MUI `Alert`.                                |
+| `Badge`     | `label` (required), `variant`, `size`, `dot`, `removable`, `onRemove`                           | An MUI `Chip`.                                 |
+| `Avatar`    | `src`, `alt`, `size`, `variant`                                                                 | An MUI `Avatar`.                               |
+| `Modal`     | `open` and `onClose` (required), `title`, `actions`, `maxWidth`, `slotProps`                    | An MUI `Dialog`.                               |
+| `Table`     | `columns` (`{ key, label, align? }[]`), `rows`, `size`, `stickyHeader`, `maxHeight`             | An MUI `Table`.                                |
+| `TextField` | `label`, `value`, `onChange(value)`, `type`, `multiline`, `error`, `helperText`                 | An MUI `TextField`; `onChange` gets the value. |
+| `Select`    | `options` (`{ value, label }[]`), `label`, `value`, `onChange(value)`                           | An MUI select field.                           |
+| `List`      | `items` (`{ id, primary, secondary?, icon?, onClick?, divider? }[]`), `dense`                   | An MUI `List`.                                 |
+| `Loader`    | `variant` (`spinner`, `bar`, `skeleton`, `overlay`), `label`, `determinate`, `value`            | A spinner, progress bar, skeleton or backdrop. |
+
+`LoaderProvider` replaces every `Loader` under it with your own render function. The theme comes from `createFrontMcpTheme({ palette?, typography?, shape?, mode? })`, or the ready-made `defaultTheme` and `darkTheme`, passed to `FrontMcpThemeProvider` as `theme`.
+
+### Renderers
 
 ```tsx
-import { detectContentType, renderContent } from '@frontmcp/ui/renderer';
+import { ContentView, registerAllRenderers } from '@frontmcp/ui/renderer';
 
-// Auto-detects content type and renders with the appropriate renderer
-const type = detectContentType(data); // 'chart' | 'csv' | 'pdf' | 'mermaid' | ...
-const element = renderContent(data, { type });
-```
+registerAllRenderers();
 
-## Features
-
-- **11 MUI components** — Button, Card, Alert, Badge, Avatar, Modal, Table, TextField, Select, List, Loader
-- **13 content renderers** — Charts, CSV, Flow, HTML, Image, Maps, Math, MDX, Media (video + audio), Mermaid, PDF, React JSX
-- **MCP bridge hooks** — `useCallTool`, `useToolInput`, `useToolOutput`, `useSendMessage`, `useOpenLink`, and more
-- **5 platform adapters** — OpenAI, ExtApps, Claude, Gemini, Generic (auto-detected)
-- **MUI theme system** — `FrontMcpThemeProvider` with light/dark presets and custom theme support
-- **Runtime utilities** — Content type auto-detection, Babel JSX transpilation
-- **Tree-shakeable** — Import individual components and renderers to minimize bundle size
-
-## Entry Points
-
-| Path                           | Exports                                                                     |
-| ------------------------------ | --------------------------------------------------------------------------- |
-| `@frontmcp/ui`                 | Bridge core, hooks (main barrel)                                            |
-| `@frontmcp/ui/theme`           | `FrontMcpThemeProvider`, `createFrontMcpTheme`, `defaultTheme`, `darkTheme` |
-| `@frontmcp/ui/components`      | All 11 React components                                                     |
-| `@frontmcp/ui/components/*`    | Individual components (`/Button`, `/Card`, `/Alert`, etc.)                  |
-| `@frontmcp/ui/renderer`        | `renderContent`, `detectContentType`, `registerAllRenderers`                |
-| `@frontmcp/ui/renderer/*`      | Individual renderers (`/charts`, `/csv`, `/pdf`, `/mdx`, etc.)              |
-| `@frontmcp/ui/renderer/common` | Shared renderer utilities (`useLazyModule`, `useRendererTheme`)             |
-| `@frontmcp/ui/react`           | `McpBridgeProvider`, all hooks                                              |
-| `@frontmcp/ui/bridge`          | `FrontMcpBridge`, `createBridge`, `AdapterRegistry`, adapters               |
-| `@frontmcp/ui/runtime`         | `detectContentType`, `transpileJsx`, Babel loader                           |
-
-## Components
-
-| Component   | Key Props                           | Description                             |
-| ----------- | ----------------------------------- | --------------------------------------- |
-| `Button`    | `variant`, `onClick`, `disabled`    | MUI button with FrontMCP variants       |
-| `Card`      | `title`, `elevation`, `slots`       | Content card with customizable slots    |
-| `Alert`     | `severity`, `title`, `onClose`      | Status alert banner                     |
-| `Badge`     | `label`, `variant`                  | Status/label badge                      |
-| `Avatar`    | `src`, `alt`, `size`                | User avatar                             |
-| `Modal`     | `open`, `onClose`, `title`, `slots` | Dialog modal                            |
-| `Table`     | `columns`, `rows`, `sortable`       | Data table                              |
-| `TextField` | `label`, `value`, `onChange`        | Text input field                        |
-| `Select`    | `options`, `value`, `onChange`      | Dropdown select                         |
-| `List`      | `items`, `onItemClick`              | List with item definitions              |
-| `Loader`    | `variant`, context provider         | Loading indicator with `LoaderProvider` |
-
-## Renderers
-
-| Renderer  | Type              | Priority |
-| --------- | ----------------- | -------- |
-| PDF       | `pdf`             | 90       |
-| Charts    | `chart`           | 80       |
-| Flow      | `flow`            | 70       |
-| Maps      | `map`             | 60       |
-| Mermaid   | `mermaid`         | 50       |
-| Math      | `math`            | 40       |
-| Image     | `image`           | 30       |
-| Media     | `video` / `audio` | 20       |
-| CSV       | `csv`             | 10       |
-| React JSX | `jsx`             | 10       |
-| MDX       | `mdx`             | 5        |
-| HTML      | `html`            | 0        |
-
-All renderer libraries are lazy-loaded from [esm.sh](https://esm.sh) in the browser at runtime — no local installation is needed. Priority determines which renderer wins when multiple match.
-
-## Bridge Adapters
-
-| Adapter | Detects Via                           | Priority | Key Capabilities                                |
-| ------- | ------------------------------------- | -------- | ----------------------------------------------- |
-| OpenAI  | `window.openai.callTool`              | 100      | `callTool`, `sendMessage`, `requestDisplayMode` |
-| ExtApps | `window.__mcpPlatform === 'ext-apps'` | 80       | Negotiated via `postMessage` handshake          |
-| Claude  | `window.claude`, hostname `claude.ai` | 60       | `openLink`                                      |
-| Gemini  | `window.__mcpPlatform === 'gemini'`   | 40       | `openLink`, `networkAccess`                     |
-| Generic | Always matches (fallback)             | 0        | `openLink`, `networkAccess`                     |
-
-## Contributing
-
-### Architecture
-
-```mermaid
-graph TD
-    subgraph "@frontmcp/ui"
-        IDX["index.ts<br/><i>Main barrel exports</i>"]
-
-        subgraph bridge["bridge/"]
-            B_CORE["core/<br/>AdapterRegistry, bridge factory"]
-            B_ADAPT["adapters/<br/>OpenAI, ExtApps, Claude,<br/>Gemini, Generic + base"]
-            B_RT["runtime/<br/>Script generation<br/><i>re-exports from uipack</i>"]
-            B_TYPES["types/<br/>TypeScript interfaces"]
-        end
-
-        subgraph theme["theme/"]
-            TH_CREATE["create-theme.ts"]
-            TH_PROV["FrontMcpThemeProvider.tsx"]
-            TH_HOOK["use-theme.ts"]
-        end
-
-        subgraph components["components/ (11)"]
-            C_BTN["Button"] --- C_CARD["Card"] --- C_ALERT["Alert"]
-            C_BADGE["Badge"] --- C_AVATAR["Avatar"] --- C_MODAL["Modal"]
-            C_TABLE["Table"] --- C_TF["TextField"] --- C_SEL["Select"]
-            C_LIST["List"] --- C_LOADER["Loader<br/><i>+ LoaderProvider</i>"]
-        end
-
-        subgraph renderer["renderer/ (13)"]
-            R_CHARTS["charts<br/><i>recharts</i>"]
-            R_CSV["csv"]
-            R_FLOW["flow<br/><i>@xyflow/react</i>"]
-            R_HTML["html<br/><i>dompurify</i>"]
-            R_IMG["image"]
-            R_MAPS["maps<br/><i>leaflet</i>"]
-            R_MATH["math<br/><i>katex</i>"]
-            R_MDX["mdx<br/><i>react-markdown</i>"]
-            R_MEDIA["media<br/><i>react-player</i>"]
-            R_MERM["mermaid"]
-            R_PDF["pdf<br/><i>react-pdf</i>"]
-            R_REACT["react/jsx"]
-            R_COMMON["common/<br/>useLazyModule,<br/>useRendererTheme"]
-        end
-
-        subgraph react["react/hooks/"]
-            H_CTX["context.ts<br/>McpBridgeProvider,<br/>useMcpBridge, useTheme"]
-            H_TOOLS["tools.ts<br/>useCallTool, useToolInput,<br/>useToolOutput"]
-        end
-
-        subgraph runtime["runtime/"]
-            RT_DETECT["content-detector.ts<br/>detectContentType()"]
-            RT_BABEL["babel-runtime.ts<br/>transpileJsx(), loadBabel()"]
-        end
-    end
-
-    IDX --> bridge
-    IDX --> react
-    bridge --> B_CORE
-    bridge --> B_ADAPT
-    bridge --> B_RT
-    react --> H_CTX
-    react --> H_TOOLS
-    H_CTX --> bridge
-```
-
-### How @frontmcp/ui works with @frontmcp/uipack
-
-These two packages split concerns between server-side (uipack) and browser-side (ui):
-
-| Concern           | @frontmcp/ui (browser)      | @frontmcp/uipack (server)       |
-| ----------------- | --------------------------- | ------------------------------- |
-| React dependency  | Yes (peer dep)              | No                              |
-| Bridge            | Runtime class + React hooks | IIFE generator (vanilla JS)     |
-| Components        | MUI React components        | --                              |
-| Shell building    | --                          | HTML shell, CSP, data injection |
-| Rendering         | 13 content renderers        | --                              |
-| Import resolution | --                          | esm.sh resolver, import maps    |
-| Theme             | MUI ThemeProvider           | --                              |
-
-**End-to-end data flow:**
-
-```mermaid
-sequenceDiagram
-    participant Dev as Developer
-    participant SDK as @frontmcp/sdk
-    participant UP as @frontmcp/uipack
-    participant Browser
-    participant UI as @frontmcp/ui
-
-    Dev->>SDK: @Tool({ ui: { npm: '...' } })
-    SDK->>UP: renderComponent(config, shellConfig)
-    UP->>UP: resolve deps (esm.sh)
-    UP->>UP: build shell (CSP + data injection)
-    UP->>UP: inject bridge IIFE
-    UP-->>SDK: ShellResult { html, hash, size }
-
-    Browser->>SDK: readResource("ui://widget/tool.html")
-    SDK-->>Browser: cached HTML
-
-    Browser->>Browser: Load @frontmcp/ui via esm.sh
-    Browser->>UI: Mount React components
-    UI->>UI: Bridge hooks read window.__mcp* globals
-    UI->>Browser: Interactive widget rendered
-```
-
-1. **Server-side** (`@frontmcp/uipack`): Resolves component dependencies, builds HTML shell with CSP and bridge IIFE, injects tool data as `window.__mcp*` globals
-2. **Browser-side** (`@frontmcp/ui`): Loaded via esm.sh in the browser, provides React components, hooks to read injected data, and the bridge runtime for host communication
-
-### Renderer System
-
-Each renderer implements the `ContentRenderer` interface:
-
-```typescript
-interface ContentRenderer {
-  type: string; // e.g. 'chart', 'csv', 'pdf'
-  priority: number; // Higher wins when multiple match
-  canHandle(content: string): boolean;
-  render(content: string, options?: RenderOptions): ReactElement;
+export function Report({ content }: { content: string }) {
+  return <ContentView content={content} />;
 }
 ```
 
-Renderers are registered via `registerAllRenderers()` and auto-detected at runtime. Each renderer lazy-loads its peer dependencies using `useLazyModule()` — if a peer dep is missing, the renderer gracefully skips.
+`ContentView` detects the kind of content in a string, such as CSV, a Mermaid diagram, a chart's JSON or an image URL, and renders it with the matching renderer, wrapped in `Suspense`. `renderContent(content, options?)` does the same without the `Suspense` boundary, and `detectContentType(content)` only names the kind. When more than one renderer matches, the higher priority wins, in this order: pdf, chart, flow, map, mermaid, math, image, video, audio, csv, jsx, mdx, html. `registerRenderer()` adds your own `{ type, priority?, canHandle(content), render(content, options?) }`.
 
-### Development
+## Docs
+
+- [Widget components](https://frontmcp.dev/reference/ui/components): building a widget file, the props, hooks, components, theme and renderers
+- [Building Widgets with React](https://frontmcp.dev/learn/building-widgets-with-react): the step-by-step guide
+- [Tools with a UI](https://frontmcp.dev/learn/tools-with-a-ui): templates or React, and how a widget is served
+- [The `ui` option](https://frontmcp.dev/reference/ui): every option of a tool's widget, serving modes, Content Security Policy
+- [Hosts and platforms](https://frontmcp.dev/reference/ui/hosts): what each host gets, and the bridge the hooks talk to
+
+## Related packages
+
+- [`@frontmcp/sdk`](https://www.npmjs.com/package/@frontmcp/sdk): the server framework; a tool's `ui` option comes from it.
+- [`@frontmcp/uipack`](https://www.npmjs.com/package/@frontmcp/uipack): the React-free core that builds every widget page on the server, with the `html` template helpers.
+- [`@frontmcp/testing`](https://www.npmjs.com/package/@frontmcp/testing): test helpers, with matchers for a tool's rendered widget.
+- [`@frontmcp/react`](https://www.npmjs.com/package/@frontmcp/react): hooks and components for running a FrontMCP server inside a React app.
+
+## Contributing
+
+Source: [`libs/ui`](https://github.com/agentfront/frontmcp/tree/main/libs/ui). Issues and pull requests are welcome; see [CONTRIBUTING.md](https://github.com/agentfront/frontmcp/blob/main/CONTRIBUTING.md).
+
+The source has one folder per entry point under `src/`: `react/` (provider and hooks), `components/` (one folder per component), `theme/`, `renderer/` (one folder per renderer, plus `common/`), `bridge/` (adapters, the registry and the bridge class), `runtime/` (content detection and the Babel loader) and `auth/`. The bridge script the server puts in each page comes from `@frontmcp/uipack`. In the monorepo:
 
 ```bash
-# Build
 nx build ui
-
-# Test
 nx test ui
-
-# Lint
 nx lint ui
 ```
 
-### Testing
-
-- 95%+ coverage required across statements, branches, functions, lines
-- Test all component variants and edge cases
-- Test renderer content detection logic
-- Test bridge adapter detection and capability checks
-
-## Requirements
-
-- Node.js >= 22.0.0
-- React ^18.0.0 || ^19.0.0
-- MUI >= 7.0.0
-
-## Related Packages
-
-- [`@frontmcp/uipack`](../uipack) — React-free server-side shell builder, import resolver, component loader
-- [`@frontmcp/sdk`](../sdk) — Core FrontMCP SDK
-- [`@frontmcp/testing`](../testing) — UI test assertions
-
 ## License
 
-Apache-2.0 — see [LICENSE](../../LICENSE).
+Apache-2.0. See [LICENSE](https://github.com/agentfront/frontmcp/blob/main/LICENSE).
