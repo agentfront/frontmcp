@@ -119,6 +119,27 @@ export async function bundleEntriesWithSharedChunks(entries: Record<string, stri
   });
 }
 
+/**
+ * A Worker's bundle of the entry from the built packages, as wrangler makes it: one file without shared chunks, written
+ * as an ES module Node can run, with the require() that wrangler's nodejs_compat gives it.
+ */
+export async function bundleAsWorker(entryFile: string, outfile: string): Promise<void> {
+  await build({
+    entryPoints: [entryFile],
+    absWorkingDir: workspaceRoot,
+    outfile,
+    bundle: true,
+    format: 'esm',
+    platform: 'neutral',
+    mainFields: ['browser', 'module', 'main'],
+    conditions: ['workerd', 'worker', 'browser'],
+    tsconfigRaw: {},
+    banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
+    logLevel: 'silent',
+    plugins: [externalNodeBuiltins, stubOptionalPeers],
+  });
+}
+
 /** The bytes each input contributes to the bundle, largest first. */
 export function inputSizes(metafile: Metafile): Array<[input: string, bytes: number]> {
   const sizes = new Map<string, number>();
