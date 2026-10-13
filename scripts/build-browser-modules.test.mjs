@@ -4,7 +4,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { build } from 'esbuild';
 
 const scriptPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'build-browser-modules.mjs');
 const tempDirs = [];
@@ -66,6 +68,51 @@ test('builds one browser module per source file, with packages external', async 
       `${file} is browser-only`,
     );
   }
+});
+
+test('names what each star re-export brings in, so a bundle without splitting keeps the modules it loads', async () => {
+  const { dir, result } = await buildFixture({
+    'package.json': JSON.stringify({ name: 'fixture', type: 'module', sideEffects: false }),
+    'node_modules/fixture-dep/package.json': JSON.stringify({
+      name: 'fixture-dep',
+      type: 'module',
+      exports: './index.mjs',
+    }),
+    'node_modules/fixture-dep/index.mjs': 'export const depValue = 1;\n',
+    'src/index.ts': "export * from './barrel';\nexport * from 'fixture-dep';\n",
+    'src/barrel/index.ts': "export * from './thing';\n",
+    'src/barrel/thing.ts':
+      "export class Thing {\n  static make() {\n    return 'made';\n  }\n  static reload() {\n    return import('./thing');\n  }\n}\nexport default Thing;\n",
+  });
+  assert.equal(result.status, 0, result.stderr);
+
+  const barrel = await fs.readFile(path.join(dir, 'dist/barrel/index.mjs'), 'utf8');
+  assert.match(barrel, /export \{ Thing \} from "\.\/thing\.mjs";/, 'a star re-export leaves out the default export');
+  const entry = await fs.readFile(path.join(dir, 'dist/index.mjs'), 'utf8');
+  assert.match(entry, /export \{ Thing \} from "\.\/barrel\/index\.mjs";/, 'nested star re-exports are followed');
+  assert.match(entry, /export \{ depValue \} from "fixture-dep";/, "a package's star re-export is named too");
+  for (const file of await fs.readdir(path.join(dir, 'dist'), { recursive: true })) {
+    if (!file.endsWith('.mjs')) continue;
+    assert.doesNotMatch(
+      await fs.readFile(path.join(dir, 'dist', file), 'utf8'),
+      /export \*/,
+      `${file} has no export *`,
+    );
+  }
+
+  const bundlePath = path.join(dir, 'single-file-bundle.mjs');
+  await build({
+    stdin: {
+      contents: `import { Thing } from ${JSON.stringify(path.join(dir, 'dist/index.mjs'))};\nexport const made = Thing.make();\n`,
+      resolveDir: dir,
+    },
+    bundle: true,
+    format: 'esm',
+    outfile: bundlePath,
+    logLevel: 'silent',
+  });
+  const { made } = await import(pathToFileURL(bundlePath).href);
+  assert.equal(made, 'made');
 });
 
 test('refuses a require() of another source module, which has no browser ESM equivalent', async () => {
