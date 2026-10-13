@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/auth",
-  "version": "1.10.1",
+  "version": "1.10.2",
   "description": "Authentication and authorization for FrontMCP servers: auth modes, OAuth 2.1 (local and remote), JWT and session checks, authorities and the credential vault",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/auth",
@@ -53,8 +53,8 @@
     "node": ">=24.0.0"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.10.1",
-    "@frontmcp/storage-sqlite": "1.10.1",
+    "@frontmcp/lazy-zod": "1.10.2",
+    "@frontmcp/storage-sqlite": "1.10.2",
     "@vercel/kv": "^3.0.0",
     "ioredis": "^5.0.0"
   },
@@ -70,8 +70,8 @@
     }
   },
   "dependencies": {
-    "@frontmcp/di": "1.10.1",
-    "@frontmcp/utils": "1.10.1",
+    "@frontmcp/di": "1.10.2",
+    "@frontmcp/utils": "1.10.2",
     "jose": "^6.0.0"
   },
   "devDependencies": {
