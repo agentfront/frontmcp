@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugin-dashboard",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "Dashboard plugin for FrontMCP: a web page and MCP endpoint that show a server's apps, tools, resources and prompts",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -50,11 +50,11 @@
     }
   },
   "devDependencies": {
-    "@frontmcp/sdk": "1.10.0",
+    "@frontmcp/sdk": "1.10.1",
     "reflect-metadata": "^0.2.2"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.10.0",
-    "@frontmcp/sdk": "1.10.0"
+    "@frontmcp/lazy-zod": "1.10.1",
+    "@frontmcp/sdk": "1.10.1"
   }
 }
