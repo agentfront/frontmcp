@@ -1,6 +1,7 @@
+import { ProviderScope } from '@frontmcp/di';
 import { type z } from '@frontmcp/lazy-zod';
 
-import { Provider, ProviderScope } from '../../../common';
+import { Provider } from '../../../common/decorators/provider.decorator';
 import { type DottedPath, type PathValue } from '../../../common/providers/base-config.provider';
 
 /**

@@ -36,7 +36,7 @@ describe('the browser build wherever module evaluation enters it', () => {
     }
   });
 
-  it.each(['common/schemas/annotated-class.schema.mjs'])(
+  it.each(['common/schemas/annotated-class.schema.mjs', 'common/interfaces/execution-context.interface.mjs'])(
     'serves a tool when %s is evaluated first',
     (moduleToLoadFirst) => {
       const sdkEntry = join(sdkBrowserDist, 'index.mjs');
