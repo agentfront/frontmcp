@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/lazy-zod",
-  "version": "1.9.7",
+  "version": "1.10.0",
   "description": "Zod 4's z with compound schemas built on first use, for faster start-up. Exports z (lazy), eagerZ (Zod's own) and lazyZ",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
