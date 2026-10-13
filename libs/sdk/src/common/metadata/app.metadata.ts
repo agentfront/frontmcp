@@ -200,18 +200,24 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
   // Captured call-site dir (#469 — anchors auth.ui relative paths for splitByApp).
   __sourceDir: z.string().optional(),
   description: z.string().optional(),
-  providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
-  authProviders: z.array(annotatedFrontMcpAuthProvidersSchema).optional().default([]),
-  plugins: z.array(annotatedFrontMcpPluginsSchema).optional(),
-  adapters: z.array(annotatedFrontMcpAdaptersSchema).optional(),
-  tools: z.array(annotatedFrontMcpToolsSchema).optional(),
-  resources: z.array(annotatedFrontMcpResourcesSchema).optional(),
-  prompts: z.array(annotatedFrontMcpPromptsSchema).optional(),
-  agents: z.array(annotatedFrontMcpAgentsSchema).optional(),
-  skills: z.array(annotatedFrontMcpSkillsSchema).optional(),
-  jobs: z.array(annotatedFrontMcpJobsSchema).optional(),
-  workflows: z.array(annotatedFrontMcpWorkflowsSchema).optional(),
-  channels: z.array(annotatedFrontMcpChannelsSchema).optional(),
+  providers: z
+    .array(z.lazy(() => annotatedFrontMcpProvidersSchema))
+    .optional()
+    .default([]),
+  authProviders: z
+    .array(z.lazy(() => annotatedFrontMcpAuthProvidersSchema))
+    .optional()
+    .default([]),
+  plugins: z.array(z.lazy(() => annotatedFrontMcpPluginsSchema)).optional(),
+  adapters: z.array(z.lazy(() => annotatedFrontMcpAdaptersSchema)).optional(),
+  tools: z.array(z.lazy(() => annotatedFrontMcpToolsSchema)).optional(),
+  resources: z.array(z.lazy(() => annotatedFrontMcpResourcesSchema)).optional(),
+  prompts: z.array(z.lazy(() => annotatedFrontMcpPromptsSchema)).optional(),
+  agents: z.array(z.lazy(() => annotatedFrontMcpAgentsSchema)).optional(),
+  skills: z.array(z.lazy(() => annotatedFrontMcpSkillsSchema)).optional(),
+  jobs: z.array(z.lazy(() => annotatedFrontMcpJobsSchema)).optional(),
+  workflows: z.array(z.lazy(() => annotatedFrontMcpWorkflowsSchema)).optional(),
+  channels: z.array(z.lazy(() => annotatedFrontMcpChannelsSchema)).optional(),
   auth: authOptionsSchema.optional(),
   output: outputPolicySchema.optional(),
   ui: z.object({ servingMode: widgetServingModeSchema.optional() }).optional(),

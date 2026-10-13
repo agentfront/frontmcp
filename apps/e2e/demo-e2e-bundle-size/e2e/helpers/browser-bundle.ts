@@ -48,6 +48,15 @@ const stubNodeBuiltins: Plugin = {
   },
 };
 
+const externalNodeBuiltins: Plugin = {
+  name: 'external-node-builtins',
+  setup(pluginBuild) {
+    pluginBuild.onResolve({ filter: /^[a-z0-9_:/]+$/ }, (args) =>
+      args.path.startsWith('node:') || nodeBuiltins.has(args.path) ? { path: args.path, external: true } : undefined,
+    );
+  },
+};
+
 const stubOptionalPeers: Plugin = {
   name: 'stub-optional-peers',
   setup(pluginBuild) {
@@ -88,6 +97,26 @@ export async function bundleForBrowser(entryFile: string, loadedModules: readonl
     entryInput: relative(workspaceRoot, entryFile),
     metafile: result.metafile,
   };
+}
+
+/** A page's browser bundle of several entries that share chunks, from the built packages, written as ES modules Node can run. */
+export async function bundleEntriesWithSharedChunks(entries: Record<string, string>, outdir: string): Promise<void> {
+  await build({
+    entryPoints: entries,
+    absWorkingDir: workspaceRoot,
+    outdir,
+    outExtension: { '.js': '.mjs' },
+    bundle: true,
+    splitting: true,
+    minify: true,
+    keepNames: true,
+    format: 'esm',
+    platform: 'browser',
+    conditions: ['browser'],
+    tsconfigRaw: {},
+    logLevel: 'silent',
+    plugins: [externalNodeBuiltins, stubOptionalPeers],
+  });
 }
 
 /** The bytes each input contributes to the bundle, largest first. */
