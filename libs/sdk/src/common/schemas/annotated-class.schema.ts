@@ -3,14 +3,11 @@ import { z } from '@frontmcp/lazy-zod';
 
 import { isPackageSpecifier } from '../../esm-loader/package-specifier';
 import type { AdapterType, AgentType, PluginType, ProviderType } from '../interfaces';
-import {
-  frontMcpAdapterMetadataSchema,
-  frontMcpAuthProviderMetadataSchema,
-  frontMcpPluginMetadataSchema,
-  frontMcpProviderMetadataSchema,
-  frontMcpRemoteAppMetadataSchema,
-  type RemoteAppMetadata,
-} from '../metadata';
+import { frontMcpAdapterMetadataSchema } from '../metadata/adapter.metadata';
+import { frontMcpRemoteAppMetadataSchema, type RemoteAppMetadata } from '../metadata/app.metadata';
+import { frontMcpAuthProviderMetadataSchema } from '../metadata/auth-provider.metadata';
+import { frontMcpPluginMetadataSchema } from '../metadata/plugin.metadata';
+import { frontMcpProviderMetadataSchema } from '../metadata/provider.metadata';
 import type {
   JobEsmTargetRecord,
   JobRemoteRecord,
