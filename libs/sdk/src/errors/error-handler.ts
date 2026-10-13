@@ -1,7 +1,7 @@
 // errors/error-handler.ts
 import { isProduction } from '@frontmcp/utils';
 
-import { FlowControl } from '../common';
+import { FlowControl } from '../common/interfaces/flow.interface';
 import { McpError, toMcpError } from './mcp.error';
 
 /**
