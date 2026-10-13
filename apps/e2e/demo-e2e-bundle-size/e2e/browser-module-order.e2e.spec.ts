@@ -31,6 +31,7 @@ describe('the browser build wherever module evaluation enters it', () => {
         outDir,
       );
       expect(callGreetTool(join(outDir, 'runtime.mjs'))).toMatchObject(greeting);
+      expect(callGreetTool(join(outDir, 'runtime.mjs'), join(outDir, 'plugins.mjs'))).toMatchObject(greeting);
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }
