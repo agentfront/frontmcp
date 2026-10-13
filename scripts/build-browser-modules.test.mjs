@@ -115,6 +115,18 @@ test('names what each star re-export brings in, so a bundle without splitting ke
   assert.equal(made, 'made');
 });
 
+test('re-exports once a binding that two star re-exports bring in', async () => {
+  const { dir, result } = await buildFixture({
+    'src/index.ts': "export * from './math';\nexport * from './math-again';\n",
+    'src/math-again.ts': "export { sum } from './math';\n",
+  });
+  assert.equal(result.status, 0, result.stderr);
+
+  const entry = await fs.readFile(path.join(dir, 'dist/index.mjs'), 'utf8');
+  assert.match(entry, /export \{ sum \} from "\.\/math\.mjs";/);
+  assert.match(entry, /import "\.\/math-again\.mjs";/, 'the star that brings in nothing new still loads its module');
+});
+
 test('refuses a require() of another source module, which has no browser ESM equivalent', async () => {
   const { result } = await buildFixture({ 'src/index.ts': "export const math = require('./math');\n" });
   assert.notEqual(result.status, 0);

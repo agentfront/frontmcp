@@ -130,6 +130,7 @@ function exportedNamesOf(outputPath, ancestors = []) {
   return exportedNames;
 }
 
+// A name two stars bring in is one binding: TypeScript rejects stars that bring in different ones (TS2308)
 for (const [outputPath, originalCode] of originalCodeByOutput) {
   const claimedNames = new Set(ownExportsByOutput.get(outputPath));
   const rewrittenCode = originalCode.replace(STAR_REEXPORT, (_statement, specifier) => {
