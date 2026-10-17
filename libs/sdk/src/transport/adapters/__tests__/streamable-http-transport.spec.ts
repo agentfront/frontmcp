@@ -259,6 +259,30 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
     });
   });
 
+  describe('response Content-Type', () => {
+    it("drops the host's default Content-Type before the MCP transport writes its response", async () => {
+      const mockHandleRequest = jest.fn().mockResolvedValue(undefined);
+      Object.getPrototypeOf(Object.getPrototypeOf(transport)).handleRequest = mockHandleRequest;
+      const res = { headersSent: false, removeHeader: jest.fn() };
+
+      await transport.handleRequest({}, res, {});
+
+      expect(res.removeHeader).toHaveBeenCalledWith('Content-Type');
+      expect(res.removeHeader.mock.invocationCallOrder[0]).toBeLessThan(mockHandleRequest.mock.invocationCallOrder[0]);
+    });
+
+    it('leaves a response whose headers are already sent alone', async () => {
+      const mockHandleRequest = jest.fn().mockResolvedValue(undefined);
+      Object.getPrototypeOf(Object.getPrototypeOf(transport)).handleRequest = mockHandleRequest;
+      const res = { headersSent: true, removeHeader: jest.fn() };
+
+      await transport.handleRequest({}, res, {});
+
+      expect(res.removeHeader).not.toHaveBeenCalled();
+      expect(mockHandleRequest).toHaveBeenCalledWith({}, res, {});
+    });
+  });
+
   describe('cold start recreation', () => {
     it('should recreate transport from stored session', () => {
       // Simulate cold start: new transport instance

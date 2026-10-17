@@ -22,6 +22,7 @@ import { randomUUID } from '@frontmcp/utils';
 import { type Scope } from '../scope/scope.instance';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { importWithRequireFallback } from '../utils/dynamic-import.utils';
+import { mcpTransportBodyLimit } from './body-limit';
 import { buildScopedServerOptions, type ScopedServerOptions } from './build-scoped-server-options';
 import { type PersistentSessionOwnerStore } from './persistent-session-owner';
 
@@ -82,7 +83,11 @@ async function wireServer(
     mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as never);
   }
 
-  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator, enableJsonResponse });
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator,
+    enableJsonResponse,
+    maxRequestBodySize: mcpTransportBodyLimit(scope.metadata.http?.bodyLimit),
+  });
   await mcpServer.connect(transport);
   return { mcpServer, transport } as unknown as WebStandardMcpPair;
 }

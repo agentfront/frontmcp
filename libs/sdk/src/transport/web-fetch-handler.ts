@@ -32,6 +32,7 @@ import { type Scope } from '../scope/scope.instance';
 import { resolveHttpCors } from '../server/middleware/cors-env';
 import { resolveSecurityHeaders } from '../server/middleware/csp.middleware';
 import { compileHostValidation, validateHostHeaders } from '../server/security/host-validation';
+import { parseByteLimit } from './body-limit';
 import { flowErrorToHttpOutput } from './flow-error-output';
 import { serveHttpRouteWeb } from './web-http-route';
 import { renderHttpOutputToWebResponse } from './web-response.renderer';
@@ -467,19 +468,6 @@ const WELL_KNOWN_SEGMENT = /\/\.well-known\/[^/]+/;
  */
 function scopePathOf(pathname: string): string {
   return pathname.replace(WELL_KNOWN_SEGMENT, '') || '/';
-}
-
-const DEFAULT_BODY_LIMIT_BYTES = 4 * 1024 * 1024;
-const BYTE_UNITS: Record<string, number> = { b: 1, kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3 };
-
-/** Parse `http.bodyLimit` (`'4mb'`, `'512kb'`, or a byte count) the way `bytes`/body-parser does. */
-function parseByteLimit(limit: number | string | undefined): number {
-  if (typeof limit === 'number' && Number.isFinite(limit) && limit >= 0) return limit;
-  if (typeof limit === 'string') {
-    const match = /^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)?$/i.exec(limit.trim());
-    if (match) return Math.floor(Number(match[1]) * BYTE_UNITS[(match[2] ?? 'b').toLowerCase()]);
-  }
-  return DEFAULT_BODY_LIMIT_BYTES;
 }
 
 function payloadTooLarge(limit: number, length?: number): Response {

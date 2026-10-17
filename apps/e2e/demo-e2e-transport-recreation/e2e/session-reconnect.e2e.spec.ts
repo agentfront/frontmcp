@@ -84,7 +84,10 @@ async function sendToolsList(
   return { status: response.status, body, responseSessionId: response.headers.get('mcp-session-id') };
 }
 
-async function sendNotificationInitialized(baseUrl: string, sessionId: string): Promise<{ status: number }> {
+async function sendNotificationInitialized(
+  baseUrl: string,
+  sessionId: string,
+): Promise<{ status: number; contentType: string | null; body: string }> {
   const response = await fetch(`${baseUrl}/`, {
     method: 'POST',
     headers: {
@@ -94,7 +97,7 @@ async function sendNotificationInitialized(baseUrl: string, sessionId: string): 
     },
     body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
   });
-  return { status: response.status };
+  return { status: response.status, contentType: response.headers.get('content-type'), body: await response.text() };
 }
 
 async function sendToolCall(
@@ -415,7 +418,8 @@ test.describe('Session Management E2E', () => {
       expect(init1.status).toBe(200);
       const sessionId = init1.sessionId!;
       const notif1 = await sendNotificationInitialized(server.info.baseUrl, sessionId);
-      expect(notif1.status).toBe(202);
+      // An empty 202 must not claim a JSON body: clients that parse by Content-Type would fail on it.
+      expect(notif1).toEqual({ status: 202, contentType: null, body: '' });
 
       // Step 2: Use the session
       const list1 = await sendToolsList(server.info.baseUrl, sessionId);

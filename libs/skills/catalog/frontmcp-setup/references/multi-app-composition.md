@@ -134,17 +134,17 @@ export default class Server {}
 
 `app.remote(url, options?)` accepts a URL and optional `RemoteUrlAppOptions`:
 
-| Option             | Type                           | Description                                                                                                                          |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `name`             | `string`                       | Override the auto-derived app name (defaults to hostname)                                                                            |
-| `namespace`        | `string`                       | Namespace prefix for tools, resources, and prompts                                                                                   |
-| `description`      | `string`                       | Human-readable description                                                                                                           |
-| `standalone`       | `boolean \| 'includeInParent'` | Scope isolation mode (default: `false`)                                                                                              |
-| `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback, MCP revision                                                                                |
-| `remoteAuth`       | `RemoteAuthConfig`             | Auth config: `'static'`, `'forward'` (transparent servers only), or `'oauth'`; requests carrying credentials do not follow redirects |
-| `refreshInterval`  | `number`                       | Interval (ms) to refresh capabilities from remote                                                                                    |
-| `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities (default: 60000)                                                                                    |
-| `filter`           | `AppFilterConfig`              | Include/exclude filter for primitives                                                                                                |
+| Option             | Type                           | Description                                                                                                                                            |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`             | `string`                       | Override the auto-derived app name (defaults to hostname)                                                                                              |
+| `namespace`        | `string`                       | Namespace prefix for tools, resources, and prompts                                                                                                     |
+| `description`      | `string`                       | Human-readable description                                                                                                                             |
+| `standalone`       | `boolean \| 'includeInParent'` | Scope isolation mode (default: `false`)                                                                                                                |
+| `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback, MCP revision                                                                                                  |
+| `remoteAuth`       | `RemoteAuthConfig`             | Auth config: `'static'`, `'forward'` (transparent servers only), or `'oauth'`; requests carrying credentials never follow a redirect to another origin |
+| `refreshInterval`  | `number`                       | Interval (ms) to refresh capabilities from remote                                                                                                      |
+| `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities (default: 60000)                                                                                                      |
+| `filter`           | `AppFilterConfig`              | Include/exclude filter for primitives                                                                                                                  |
 
 `RemoteTransportOptions` fields:
 
@@ -169,6 +169,8 @@ Each remote tool, resource, resource template and prompt is listed once; when `c
 - `{ mode: 'oauth' }` -- no gateway credentials; the gateway runs no OAuth flow against the remote, so this only fits a remote that serves it without credentials
 
 A call the remote refuses with HTTP `401` fails with `RemoteAuthError` (`REMOTE_AUTH_ERROR`, JSON-RPC `-32001`), whatever the mode.
+
+On the default `'legacy'` revision, a redirect from the remote is followed only when it stays on the remote's origin (same scheme, host and port, or `http` to `https` on the same host) and keeps the request's method (`307` or `308`, or any redirect of a `GET`), with or without credentials. Any other redirect fails the request with `Redirect to <url> not followed`: point the remote's `url` at its final address. Up to 1.10.2 a request without credentials followed every redirect and a request with credentials followed none.
 
 `filter` matches the remote's entry names before the namespace prefix; resource templates match under `resources`.
 
