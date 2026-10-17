@@ -140,6 +140,32 @@ describe('web-fetch handler: http.bodyLimit', () => {
   });
 });
 
+describe('web-fetch handler: http.bodyLimit above the MCP transport default', () => {
+  const mcpTransportDefaultBytes = 4 * 1024 * 1024;
+  let instance: FrontMcpInstance;
+  let handler: WebFetchHandler;
+
+  beforeAll(async () => {
+    ({ instance, handler } = await build({ http: { entryPath: '/mcp', bodyLimit: '8mb' } }));
+  });
+  afterAll(async () => instance?.shutdown());
+
+  it('accepts a body over 4 MiB that the configured limit allows', async () => {
+    const pad = 'x'.repeat(mcpTransportDefaultBytes + 1024);
+    const body = JSON.stringify({ ...INITIALIZE, params: { ...INITIALIZE.params, _meta: { pad } } });
+    const res = await handler(post(body));
+    const text = await res.text();
+    expect({ status: res.status, text: res.status === 200 ? '' : text }).toEqual({ status: 200, text: '' });
+  });
+
+  it('still rejects a body over the configured limit', async () => {
+    const res = await handler(post(JSON.stringify({ ...INITIALIZE, pad: 'x'.repeat(9 * 1024 * 1024) })));
+    expect(res.status).toBe(413);
+    const body = (await res.json()) as { error: { data: { limit: number } } };
+    expect(body.error.data.limit).toBe(8 * 1024 * 1024);
+  });
+});
+
 describe('web-fetch handler: health config', () => {
   it('serves the configured healthzPath and no longer the default', async () => {
     const { instance, handler } = await build({ http: { entryPath: '/mcp' }, health: { healthzPath: '/live' } });
