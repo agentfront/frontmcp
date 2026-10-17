@@ -87,6 +87,39 @@ describe('McpClientService — remoteAuth and retries', () => {
     for (const [, init] of credentialedCalls) expect(init?.redirect).toBe('manual');
   });
 
+  it('follows a redirect only within the remote origin, so credentials never leave it', async () => {
+    const { fetchMock } = fakeMcpServer();
+    const serveMcp = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      if (url.pathname === '/moved') return new Response(null, { status: 307, headers: { location: '/mcp' } });
+      if (url.pathname === '/elsewhere') {
+        return new Response(null, { status: 307, headers: { location: 'http://other.test/mcp' } });
+      }
+      if (url.host !== 'remote.test') return new Response(null, { status: 500 });
+      return serveMcp ? serveMcp(input, init) : new Response(null, { status: 500 });
+    });
+    const staticAuth = { mode: 'static' as const, credentials: { type: 'bearer' as const, value: 'static-token' } };
+
+    await service.connect(connectRequest({ url: 'http://remote.test/moved', auth: staticAuth }));
+    await expect(service.callTool('upstream', 'echo', {})).resolves.toEqual(expect.objectContaining({}));
+
+    await expect(
+      service.connect(
+        connectRequest({
+          appId: 'redirected',
+          url: 'http://remote.test/elsewhere',
+          auth: staticAuth,
+          transportOptions: { fallbackToSSE: false },
+        }),
+      ),
+    ).rejects.toThrow('Redirect to http://other.test/mcp not followed');
+    const hosts = fetchMock.mock.calls.map(
+      ([input]) => new URL(input instanceof Request ? input.url : String(input)).host,
+    );
+    expect(hosts).not.toContain('other.test');
+  });
+
   it('sends static credentials and transportOptions.headers with every request', async () => {
     const { requests } = fakeMcpServer();
 

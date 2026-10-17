@@ -9,6 +9,7 @@
  * session recreation, avoiding the need to access private properties.
  */
 import { StreamableHTTPServerTransport, WebStandardStreamableHTTPServerTransport } from '@frontmcp/protocol';
+
 import { InvalidTransportSessionError } from '../../errors/transport.errors';
 
 export interface StreamableHTTPServerTransportOptions {
@@ -31,7 +32,7 @@ export interface StreamableHTTPServerTransportOptions {
    * and varies between SDK versions. The actual type is defined internally by
    * StreamableHTTPServerTransport.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   eventStore?: any;
 
   /**
@@ -96,7 +97,7 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
   get isInitialized(): boolean {
     // Access internal MCP SDK property - may change between SDK versions.
     // Uses optional chaining with fallback for safety.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     return (this as any)._webStandardTransport?._initialized ?? false;
   }
 
@@ -130,7 +131,7 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
 
     // Access the internal WebStandardTransport
     // Note: This accesses MCP SDK internals which may change between versions
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const webTransport = (this as any)._webStandardTransport;
     if (!webTransport) {
       // Transport not ready yet - store for deferred application
@@ -154,7 +155,6 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
    * This is the inverse of setInitializationState().
    */
   resetForReinitialization(): void {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const webTransport = (this as any)._webStandardTransport;
     if (!webTransport) {
       this._pendingInitState = undefined;
@@ -179,7 +179,7 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
    * @param sessionId - The session ID to set
    * @throws Error if the MCP SDK version is incompatible
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private _applyInitState(webTransport: any, sessionId: string): void {
     // Verify _initialized field exists (SDK version safety check)
     // Note: sessionId is only assigned during initialization request processing,
@@ -200,9 +200,8 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
    * 1. Recreate the internal transport for stateless mode (MCP SDK 1.26.0 single-use guard)
    * 2. Apply any pending initialization state before processing
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   override async handleRequest(req: any, res: any, body?: any): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const oldWebTransport = (this as any)._webStandardTransport;
 
     // MCP SDK 1.26.0 enforces single-use for stateless transports.
@@ -219,19 +218,21 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
       fresh.onclose = oldWebTransport.onclose;
       fresh.onerror = oldWebTransport.onerror;
       await fresh.start();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       (this as any)._webStandardTransport = fresh;
     }
 
     // Apply deferred initialization state before processing request
     if (this._pendingInitState) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const webTransport = (this as any)._webStandardTransport;
       if (webTransport) {
         this._applyInitState(webTransport, this._pendingInitState);
         this._pendingInitState = undefined;
       }
     }
+    // The MCP transport types every body it writes. The host's default `application/json` would
+    // otherwise stay on its bodyless `202 Accepted`, which @hono/node-server 2 no longer replaces.
+    if (!res.headersSent) res.removeHeader?.('Content-Type');
     return super.handleRequest(req, res, body);
   }
 }
