@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/skills",
-  "version": "1.10.2",
+  "version": "1.10.3",
   "description": "FrontMCP's skills catalog: SKILL.md instructions that teach coding agents to build, test and deploy FrontMCP servers",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/cli#skills",
