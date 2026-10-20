@@ -10,6 +10,8 @@
  *
  * Every earlier revision continues down its original flow untouched.
  *
+ * stdio runs it too (`StdioRevisionRouter`); `ServerRequestTokens.stdio` waives the HTTP-only header rules.
+ *
  * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http
  */
 import { isAnonymousSubject } from '@frontmcp/auth';
@@ -29,6 +31,7 @@ import {
   type Authorization,
   type FlowPlan,
   type FlowRunOptions,
+  type StdioRequestOrigin,
 } from '../../common';
 import { lookupTool } from '../../common/utils/tool-lookup.utils';
 import { FrontMcpContextStorage } from '../../context';
@@ -263,20 +266,20 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     const body = (request.body ?? {}) as Record<string, unknown>;
     const scope = this.scope as unknown as Scope;
 
-    // Strict only when the CLIENT declared this revision. When the SERVER
-    // defaulted to it (`transport.defaultProtocolVersion`, the Worker default),
-    // the caller never agreed to mirror headers — holding it to SEP-2243 would
-    // turn a previously-working call into a 400.
-    const strictHeaders = declaresProtocol20260728({
+    const clientDeclaredRevision = declaresProtocol20260728({
       headers: request.headers as Record<string, unknown> | undefined,
       body,
     });
 
+    // Strict only when the CLIENT declared this revision over HTTP. When the SERVER
+    // defaulted to it (`transport.defaultProtocolVersion`, the Worker default),
+    // the caller never agreed to mirror headers — holding it to SEP-2243 would
+    // turn a previously-working call into a 400. stdio has no header layer at all.
     const result = validate20260728Request({
       headers: request.headers as Record<string, unknown> | undefined,
       body,
       lookupToolSchema: (toolName) => this.findToolSchema(scope, toolName),
-      strictHeaders,
+      strictHeaders: clientDeclaredRevision && !this.stdioOrigin,
     });
 
     if (!result.ok) {
@@ -286,7 +289,12 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     }
 
     this.state.set('version', result.version);
-    this.state.set('clientDeclaredRevision', strictHeaders);
+    this.state.set('clientDeclaredRevision', clientDeclaredRevision);
+  }
+
+  /** Set when the request arrived over stdio rather than HTTP. */
+  private get stdioOrigin(): StdioRequestOrigin | undefined {
+    return this.rawInput.request[ServerRequestTokens.stdio] as StdioRequestOrigin | undefined;
   }
 
   /**
@@ -378,12 +386,15 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     }
     const requested: SubscriptionFilter = parsedParams.data.notifications;
 
-    // Client disconnect is the only way a listen stream ends from the client
-    // side in this revision (there is no unsubscribe RPC), so tie the registry
-    // listeners' lifetime to the response socket.
+    // The client ends a listen stream by disconnecting (HTTP) or by cancelling
+    // the request (stdio); there is no unsubscribe RPC. Tie the registry
+    // listeners' lifetime to whichever applies.
     const controller = new AbortController();
     const abort = () => controller.abort();
     (response as unknown as { on?: (event: string, cb: () => void) => void })?.on?.('close', abort);
+    const stdioSignal = this.stdioOrigin?.signal;
+    if (stdioSignal?.aborted) abort();
+    else stdioSignal?.addEventListener('abort', abort, { once: true });
 
     const { acknowledged, stream } = createSubscriptionStream({
       scope: this.scope as unknown as Scope,
@@ -434,6 +445,7 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     const params = (body['params'] as Record<string, unknown> | undefined) ?? {};
     const meta = (params['_meta'] as Record<string, unknown> | undefined) ?? {};
     const auth = request[ServerRequestTokens.auth] as Authorization | undefined;
+    const stdio = this.stdioOrigin;
 
     const clientCapabilities =
       (meta[MCP_20260728_META.clientCapabilities] as Record<string, unknown> | undefined) ?? {};
@@ -479,8 +491,11 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
             // context's `sessionId`; the request context does not vouch for it (#629).
             sessionId: auth.session?.id ?? this.tryGetContext()?.sessionId,
           }
-        : undefined,
+        : // A stdio caller presents no credential, so the handlers get only the per-request id.
+          stdio && { sessionId: this.tryGetContext()?.sessionId },
       isAnonymous: this.state.required.isAnonymous,
+      transportPrincipal: stdio?.principal,
+      signal: stdio?.signal,
       clientDeclaredRevision: this.state.clientDeclaredRevision !== false,
       // The instructions `initialize` sends: the server's, the channel hint and the skill catalog, for this caller
       composeInstructions: (caller?: { authInfo?: unknown }) =>
@@ -489,11 +504,13 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       traceContext: extractTraceContext(meta),
     } satisfies Parameters<typeof dispatch20260728>[0];
 
-    // When the client opted into request-scoped notifications AND accepts SSE,
-    // the response becomes a stream so log/progress frames can arrive while the
-    // work is still running. Otherwise the answer is a single JSON object —
-    // both framings are required to be supported by the client.
-    if (sink.active && acceptsEventStream(request.headers as Record<string, unknown> | undefined)) {
+    // When the client opted into request-scoped notifications AND accepts SSE
+    // (always, over stdio's one shared channel), the response becomes a stream so
+    // log/progress frames can arrive while the work is still running. Otherwise
+    // the answer is a single JSON object — both framings are required to be
+    // supported by the client.
+    const streams = stdio !== undefined || acceptsEventStream(request.headers as Record<string, unknown> | undefined);
+    if (sink.active && streams) {
       this.respond({
         kind: 'sse',
         status: 200,
