@@ -140,7 +140,7 @@ describe('workspace generator', () => {
 
     const mcpJson = readJson(tree, 'my-project/.mcp.json');
     expect(mcpJson.mcpServers['frontmcp-docs']).toBeDefined();
-    expect(mcpJson.mcpServers['frontmcp-docs']).toEqual({ type: 'http', url: 'https://frontmcp.dev/mcp' });
+    expect(mcpJson.mcpServers['frontmcp-docs']).toEqual({ type: 'http', url: 'https://mcp.frontmcp.dev' });
   });
 
   it('should include workspace name in CLAUDE.md', async () => {

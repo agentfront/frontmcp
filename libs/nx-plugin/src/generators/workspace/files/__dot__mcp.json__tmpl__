@@ -2,7 +2,7 @@
   "mcpServers": {
     "frontmcp-docs": {
       "type": "http",
-      "url": "https://frontmcp.dev/mcp"
+      "url": "https://mcp.frontmcp.dev"
     }
   }
 }
