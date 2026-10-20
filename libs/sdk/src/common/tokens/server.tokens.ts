@@ -2,6 +2,14 @@ import { type Authorization, type RawMetadataShape } from '../types';
 import { type HttpRequestIntent } from '../utils';
 import { tokenFactory } from './base.tokens';
 
+/** Where a request that arrived over stdio (or the dev bridge's IPC channel) came from. */
+export interface StdioRequestOrigin {
+  /** Names the connection: only the process that spawned the server can reach it, so it identifies the caller. */
+  principal: string;
+  /** Aborts when the client cancels the request with `notifications/cancelled`, or the connection closes. */
+  signal: AbortSignal;
+}
+
 interface ServerRequestTokenValue {
   intent: HttpRequestIntent;
   auth: Authorization;
@@ -51,6 +59,8 @@ interface ServerRequestTokenValue {
    * served where it arrived and never relayed again.
    */
   relayedFrom: string | undefined;
+  /** Set on an MCP 2026-07-28 request that arrived over stdio: no header rules apply, and notifications stream. */
+  stdio: StdioRequestOrigin | undefined;
 }
 
 export const ServerRequestTokens = {
@@ -64,4 +74,5 @@ export const ServerRequestTokens = {
   webEnv: tokenFactory.meta('webEnv'),
   webTransport: tokenFactory.meta('webTransport'),
   relayedFrom: tokenFactory.meta('relayedFrom'),
+  stdio: tokenFactory.meta('stdio'),
 } satisfies RawMetadataShape<ServerRequestTokenValue>;

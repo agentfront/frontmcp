@@ -397,7 +397,9 @@ export interface TransportOptionsInterface {
    *   deployment needs no session storage (on Cloudflare, no Durable Object).
    * - `'legacy'` — the session/`initialize` pipeline, as before.
    *
-   * @default '2026-07-28' on V8-isolate runtimes (Cloudflare Workers), `'legacy'` elsewhere
+   * Over stdio it applies until the connection sends `initialize`, which makes it a session.
+   *
+   * @default '2026-07-28' on V8-isolate runtimes (Cloudflare Workers), `'legacy'` elsewhere (stdio included)
    */
   defaultProtocolVersion?: '2026-07-28' | 'legacy';
 
