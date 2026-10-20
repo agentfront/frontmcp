@@ -89,7 +89,7 @@ frontmcp dev --stdio --serve          # stdio-over-pipe (no HTTP listener)
 
 A `2026-07-28` client needs `--serve`: the HTTP-loopback bridge forwards its messages without the mirrored request headers, so the server refuses them with `-32020`.
 
-Wire the client at the bridge:
+Wire the client at the bridge (for a `2026-07-28` client, add `"--serve"` to `args`):
 
 ```json
 {
