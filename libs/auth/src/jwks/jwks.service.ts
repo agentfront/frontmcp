@@ -1,5 +1,5 @@
 // auth/jwks/jwks.service.ts
-import { createLocalJWKSet, decodeProtectedHeader, jwtVerify, type JSONWebKeySet, type JWK } from 'jose';
+import type { JSONWebKeySet, JWK } from 'jose';
 
 import {
   bytesToHex,
@@ -13,6 +13,7 @@ import {
 
 import { resolveAndCheckHostname } from '../cimd/cimd.validator';
 import { noopAuthLogger, type AuthLogger } from '../common/auth-logger.interface';
+import { loadJose } from './jose.loader';
 import { type JwksServiceOptions, type ProviderVerifyRef, type VerifyResult } from './jwks.types';
 import { normalizeIssuer, trimSlash } from './jwks.utils';
 
@@ -138,6 +139,7 @@ export class JwksService {
    */
   async verifyTransparentToken(token: string, candidates: ProviderVerifyRef[]): Promise<VerifyResult> {
     if (!candidates?.length) return { ok: false, error: 'no_providers' };
+    const { createLocalJWKSet, decodeProtectedHeader, jwtVerify } = await loadJose();
 
     // Helpful only for error messages
     let kid: string | undefined;
