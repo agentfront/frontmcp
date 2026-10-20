@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/react",
-  "version": "1.10.8",
+  "version": "1.10.9-rc.1",
   "description": "Run a FrontMCP server inside a React app: provider, hooks, components and AI SDK integration",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/react",
@@ -94,9 +94,9 @@
     "node": ">=24.0.0"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.10.8",
-    "@frontmcp/sdk": "1.10.8",
-    "@frontmcp/utils": "1.10.8",
+    "@frontmcp/lazy-zod": "1.10.9-rc.1",
+    "@frontmcp/sdk": "1.10.9-rc.1",
+    "@frontmcp/utils": "1.10.9-rc.1",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
     "react-router-dom": "^7.0.0"
@@ -110,8 +110,8 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "1.10.8",
-    "@frontmcp/utils": "1.10.8"
+    "@frontmcp/sdk": "1.10.9-rc.1",
+    "@frontmcp/utils": "1.10.9-rc.1"
   },
   "devDependencies": {
     "typescript": "^5.9.3"
