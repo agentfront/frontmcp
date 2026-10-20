@@ -289,6 +289,8 @@ export const transportOptionsSchema = z.object({
    * friends), where statelessness is the natural fit and sessions cost a
    * Durable Object; and to `'legacy'` everywhere else, so existing Node
    * deployments are untouched.
+   *
+   * Over stdio (`'legacy'` by default) it applies until the connection sends `initialize`.
    */
   defaultProtocolVersion: z.enum(['2026-07-28', 'legacy']).optional(),
 

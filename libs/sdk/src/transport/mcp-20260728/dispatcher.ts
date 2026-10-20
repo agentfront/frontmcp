@@ -61,6 +61,8 @@ export interface DispatchOptions {
   authInfo?: Record<string, unknown>;
   /** True when the caller is unauthenticated, which makes results publicly cacheable. */
   isAnonymous: boolean;
+  /** The caller's principal when the transport identifies it (stdio: the connection); it owns the caller's tasks. */
+  transportPrincipal?: string;
   signal?: AbortSignal;
   /** Lazily composed instructions for `server/discover`, for the calling context. */
   composeInstructions?: McpHandlerOptions['composeInstructions'];
@@ -137,8 +139,7 @@ function shouldCreateTask(params: {
   method: string;
   params: Record<string, unknown>;
   clientCapabilities: Record<string, unknown>;
-  authInfo: Record<string, unknown> | undefined;
-  isAnonymous: boolean;
+  taskPrincipal: string;
 }): TaskDecision {
   if (params.method !== 'tools/call') return { kind: 'skip' };
   if (!params.scope.taskStore) return { kind: 'skip' };
@@ -164,7 +165,7 @@ function shouldCreateTask(params: {
     return { kind: 'skip' };
   }
 
-  const ownership = resolveTaskOwner(resolveTaskPrincipal(params.authInfo, params.isAnonymous));
+  const ownership = resolveTaskOwner(params.taskPrincipal);
   if (!ownership.ok) return { kind: 'refuse', reason: ownership.reason };
 
   return { kind: 'create', owner: ownership.owner };
@@ -279,6 +280,7 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
     frontmcpContext,
     authInfo,
     isAnonymous,
+    transportPrincipal,
     signal,
     composeInstructions,
     notificationSink,
@@ -286,6 +288,7 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
   } = options;
 
   const method = body['method'] as string;
+  const taskPrincipal = transportPrincipal ?? resolveTaskPrincipal(authInfo, isAnonymous);
   const params = (body['params'] as Record<string, unknown> | undefined) ?? {};
   const cacheScope = resolveCacheScope(isAnonymous, isShapedPerCaller(scope, method));
   const serverInfo = scope.metadata.info as Implementation;
@@ -314,7 +317,7 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
       };
     }
 
-    const ownership = resolveTaskOwner(resolveTaskPrincipal(authInfo, isAnonymous));
+    const ownership = resolveTaskOwner(taskPrincipal);
     if (!ownership.ok) {
       return { kind: 'error', status: 200, error: { code: -32602, message: ownership.reason } };
     }
@@ -395,7 +398,7 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
   // MAY hand back a task handle whenever the work is long-running, gated only on
   // the CLIENT declaring the extension. Reuse the existing task-creation stage by
   // supplying the augmentation it still keys off internally.
-  const taskDecision = shouldCreateTask({ scope, method, params, clientCapabilities, authInfo, isAnonymous });
+  const taskDecision = shouldCreateTask({ scope, method, params, clientCapabilities, taskPrincipal });
   if (taskDecision.kind === 'refuse') {
     return { kind: 'error', status: 200, error: { code: -32602, message: taskDecision.reason } };
   }
