@@ -392,7 +392,9 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     const controller = new AbortController();
     const abort = () => controller.abort();
     (response as unknown as { on?: (event: string, cb: () => void) => void })?.on?.('close', abort);
-    this.stdioOrigin?.signal.addEventListener('abort', abort, { once: true });
+    const stdioSignal = this.stdioOrigin?.signal;
+    if (stdioSignal?.aborted) abort();
+    else stdioSignal?.addEventListener('abort', abort, { once: true });
 
     const { acknowledged, stream } = createSubscriptionStream({
       scope: this.scope as unknown as Scope,

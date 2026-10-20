@@ -472,6 +472,30 @@ describe('StdioRevisionRouter', () => {
       expect(stdio.written).toHaveLength(writtenBefore + 1);
       expect(stdio.written.some((message) => isResponse(message) && message.id === listen.id)).toBe(false);
     });
+
+    it('writes nothing for a listen cancelled before its stream opens, and releases its listener', async () => {
+      const releases: jest.Mock[] = [];
+      const subscribe = scope.resources.subscribe.bind(scope.resources);
+      const subscribeSpy = jest.spyOn(scope.resources, 'subscribe').mockImplementation((options, callback) => {
+        const release = jest.fn(subscribe(options, callback));
+        releases.push(release);
+        return release;
+      });
+      const { stdio } = await connect(scope);
+      const listen = modernRequest('subscriptions/listen', { notifications: { resourceSubscriptions: [NOTE_URI] } });
+
+      try {
+        stdio.receive(listen);
+        stdio.receive({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: listen.id } });
+        await settle();
+      } finally {
+        subscribeSpy.mockRestore();
+      }
+
+      expect(releases).toHaveLength(1);
+      expect(releases[0]).toHaveBeenCalledTimes(1);
+      expect(stdio.written).toEqual([]);
+    });
   });
 
   describe('tasks extension', () => {
