@@ -1,5 +1,3 @@
-import { jwtVerify, SignJWT } from 'jose';
-
 import {
   createSecureStore,
   createTokenStorageAdapter,
@@ -67,6 +65,7 @@ import {
 import { installContextExtensions } from '../../context/context-extension';
 import { JwtSecretRequiredError, JwtSecretWeakError } from '../../errors';
 import type ProviderRegistry from '../../provider/provider.registry';
+import { importWithRequireFallback } from '../../utils/dynamic-import.utils';
 import { CimdService } from '../cimd';
 import { createCredentialsProviders } from '../credentials';
 import { credentialsContextExtension } from '../credentials/credentials.context-extension';
@@ -84,6 +83,20 @@ import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow
 import WellKnownPrmFlow from '../flows/well-known.prm.flow';
 import { createSecureStoreProviders } from '../secure-store';
 import { secureStoreContextExtension } from '../secure-store/secure-store.context-extension';
+
+let jose: Promise<typeof import('jose')> | undefined;
+
+/** `jose`, loaded with the first token this server signs or verifies rather than when the SDK loads. */
+function loadJose(): Promise<typeof import('jose')> {
+  jose ??= importWithRequireFallback(
+    () => import('jose'),
+    () => require('jose') as typeof import('jose'),
+  ).catch((error: unknown) => {
+    jose = undefined;
+    throw error;
+  });
+  return jose;
+}
 
 /**
  * Options type for LocalPrimaryAuth - can be public, orchestrated local, or orchestrated remote
@@ -969,6 +982,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * @param options.issuer   The issuer to name (`iss`): {@link issuerFor} the request. Default: the boot-time issuer.
    */
   async signAnonymousJwt(options: { audience?: string; issuer?: string } = {}) {
+    const { SignJWT } = await loadJose();
     const jwt = new SignJWT({ sub: `anon:${randomUUID()}`, anonymous: true, scope: this.anonymousScopes().join(' ') })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt()
@@ -1017,6 +1031,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     expectedIssuer?: string | readonly string[],
   ): Promise<VerifyResult> {
     try {
+      const { jwtVerify } = await loadJose();
       const { payload, protectedHeader } = await jwtVerify(token, this.secret, {
         algorithms: ['HS256'],
         issuer:
@@ -1099,6 +1114,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       }
     }
 
+    const { SignJWT } = await loadJose();
     const jwt = new SignJWT(claims)
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt()

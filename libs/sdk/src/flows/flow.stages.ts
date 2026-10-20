@@ -17,6 +17,9 @@ const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 const CACHE: WeakMap<Function, StageMap<any>> = new WeakMap();
 
+/** The `next` a stage body or a will/did hook gets: nothing wraps it. */
+const NO_NEXT = async () => undefined;
+
 export function sortStageMap<C>(table: StageMap<C>) {
   for (const key of Object.keys(table)) {
     table[key].sort((a, b) => a._priority - b._priority || a._order - b._order);
@@ -68,7 +71,7 @@ export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
     const entry: StageEntry<C> = {
       _priority: m.priority ?? 0,
       _order: order++,
-      method: async (ctx: any, next = async () => undefined) => {
+      method: async (ctx: any, next = NO_NEXT) => {
         const skipHook = () => (m.type === 'around' ? next() : undefined);
         const target = m.static ? (FlowClass as any) : ctx;
         const impl =
@@ -113,7 +116,7 @@ export function mergeHookMetasIntoStageMap<C>(
     const entry: StageEntry<C> = {
       _priority: m.priority ?? 0,
       _order: order++,
-      method: async (ctx: any, next = async () => undefined) => {
+      method: async (ctx: any, next = NO_NEXT) => {
         const skipHook = () => (m.type === 'around' ? next() : undefined);
         const target = m.target;
         if (!target) {

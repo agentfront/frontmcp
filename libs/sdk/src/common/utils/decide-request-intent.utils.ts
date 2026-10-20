@@ -142,7 +142,10 @@ function tryDecodeTransportType(sessionId?: string): string | undefined {
   if (!sessionId) return;
   try {
     const b64 = sessionId.replace(/-/g, '+').replace(/_/g, '/');
-    const obj = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+    const json = Buffer.from(b64, 'base64').toString('utf8');
+    // Only a JSON object can carry `transportType`; skipping the rest avoids a thrown SyntaxError per request.
+    if (json.trimStart()[0] !== '{') return;
+    const obj = JSON.parse(json);
     return obj?.transportType;
   } catch {
     return;
