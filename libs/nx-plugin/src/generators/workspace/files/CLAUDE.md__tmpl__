@@ -213,4 +213,4 @@ async execute(input) {
 
 ## Documentation
 
-This workspace includes a `.mcp.json` that configures the **frontmcp-docs** MCP server. AI coding agents can use the `SearchAgentFront` tool to search the full FrontMCP documentation at any time.
+This workspace includes a `.mcp.json` that configures the **frontmcp-docs** MCP server (`https://mcp.frontmcp.dev`), with FrontMCP's documentation for the release this workspace uses. Call `resolve_version` with the workspace's lockfile first, then use `lookup_api` for a decorator, option or error code, `search_docs` for anything else, `get_page` to read a section, `get_example` for runnable code, and `whats_changed` before an upgrade.
