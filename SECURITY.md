@@ -6,7 +6,7 @@ FrontMCP takes security seriously. We appreciate your efforts to responsibly dis
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, please report them via email to: **[david@frontegg.com](mailto:david@frontegg.com)**
+Instead, report them privately on GitHub, with [Report a vulnerability](https://github.com/agentfront/frontmcp/security/advisories/new) on this repository's Security tab, or by email to **[david@frontegg.com](mailto:david@frontegg.com)**.
 
 When reporting a vulnerability, please include:
 
@@ -24,31 +24,12 @@ When reporting a vulnerability, please include:
 
 ## Supported Versions
 
-| Package                        | Version | Supported |
-| ------------------------------ | ------- | --------- |
-| @frontmcp/sdk                  | 1.0.x   | Yes       |
-| @frontmcp/auth                 | 1.0.x   | Yes       |
-| @frontmcp/utils                | 1.0.x   | Yes       |
-| @frontmcp/adapters             | 1.0.x   | Yes       |
-| @frontmcp/plugins              | 1.0.x   | Yes       |
-| frontmcp                       | 1.0.x   | Yes       |
-| @frontmcp/di                   | 1.0.x   | Yes       |
-| @frontmcp/testing              | 1.0.x   | Yes       |
-| @frontmcp/ui                   | 1.0.x   | Yes       |
-| @frontmcp/uipack               | 1.0.x   | Yes       |
-| @frontmcp/guard                | 1.0.x   | Yes       |
-| @frontmcp/protocol             | 1.0.x   | Yes       |
-| @frontmcp/observability        | 1.0.x   | Yes       |
-| @frontmcp/storage-sqlite       | 1.0.x   | Yes       |
-| @frontmcp/skills               | 1.0.x   | Yes       |
-| @frontmcp/nx                   | 1.0.x   | Yes       |
-| @frontmcp/react                | 1.0.x   | Yes       |
-| @frontmcp/plugin-cache         | 1.0.x   | Yes       |
-| @frontmcp/plugin-codecall      | 1.0.x   | Yes       |
-| @frontmcp/plugin-dashboard     | 1.0.x   | Yes       |
-| @frontmcp/plugin-remember      | 1.0.x   | Yes       |
-| @frontmcp/plugin-feature-flags | 1.0.x   | Yes       |
-| @frontmcp/plugin-approval      | 1.0.x   | Yes       |
+Every `@frontmcp/*` package and the `frontmcp` CLI are released together, at the same version.
+
+| Version                  | Supported |
+| ------------------------ | --------- |
+| The latest minor release | Yes       |
+| Earlier minor releases   | No        |
 
 **Policy**: Only the latest minor version receives security updates. We recommend always using the latest version.
 
