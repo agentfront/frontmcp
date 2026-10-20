@@ -67,4 +67,4 @@ npx nx run-many -t test
 
 - [FrontMCP Documentation](https://frontmcp.dev)
 - [MCP Specification](https://modelcontextprotocol.io)
-- AI coding agents can use the `frontmcp-docs` MCP server configured in `.mcp.json`, with the docs for the FrontMCP release this workspace uses ([Docs for Your Agent](https://frontmcp.dev/learn/docs-for-your-agent))
+- AI coding agents can use the `frontmcp-docs` MCP server configured in `.mcp.json`, with the docs for the FrontMCP release this workspace uses: `resolve_version` with the lockfile first, then `lookup_api`, `search_docs`, `get_page`, `get_example` and `whats_changed` ([Docs for Your Agent](https://frontmcp.dev/learn/docs-for-your-agent))

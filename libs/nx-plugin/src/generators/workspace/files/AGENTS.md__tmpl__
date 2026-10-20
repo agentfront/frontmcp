@@ -49,4 +49,4 @@ See `CLAUDE.md` for the full list of 19 generators.
 
 ## Documentation Access
 
-The `.mcp.json` file configures a `frontmcp-docs` MCP server with FrontMCP's documentation for the release this workspace uses. Call `resolve_version` with the workspace's lockfile first, then `lookup_api` for a decorator, option or error code, `search_docs` for anything else, `get_page` to read a section, and `whats_changed` before an upgrade.
+The `.mcp.json` file configures a `frontmcp-docs` MCP server with FrontMCP's documentation for the release this workspace uses. Call `resolve_version` with the workspace's lockfile first, then `lookup_api` for a decorator, option or error code, `search_docs` for anything else, `get_page` to read a section, `get_example` for runnable code, and `whats_changed` before an upgrade.
