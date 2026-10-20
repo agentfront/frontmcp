@@ -1,7 +1,7 @@
 {
   "name": "@frontmcp/sdk",
   "version": "1.10.5",
-  "description": "TypeScript framework for building MCP servers: tools, resources and prompts as decorated classes, with transports, sessions, auth and dependency injection",
+  "description": "The TypeScript framework for MCP servers: typed tools with Zod, dependency injection, auth, testing, agents and jobs, and builds for Node, Vercel, AWS Lambda and Cloudflare Workers.",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/sdk",
   "license": "Apache-2.0",
