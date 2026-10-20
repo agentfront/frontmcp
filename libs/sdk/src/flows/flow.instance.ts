@@ -502,12 +502,17 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     // Robust list runner (doesn't skip mid-run insertions)
     const runList = async (key: string, opts?: { ignoreRespond?: boolean }): Promise<StageResult> => {
-      const getList = () => ((stages as any)[key] ?? []) as StageMap<any>[string];
       const seen = new Set<any>();
 
       while (true) {
-        const list = getList();
-        const item = list.find((e) => !seen.has(e));
+        const list = ((stages as any)[key] ?? []) as StageMap<any>[string];
+        let item: StageMap<any>[string][number] | undefined;
+        for (const entry of list) {
+          if (!seen.has(entry)) {
+            item = entry;
+            break;
+          }
+        }
         if (!item) break;
         seen.add(item);
 
@@ -555,7 +560,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       }
 
       // 2) stage, wrapped by its Around hooks
-      const bodyOutcome = await runAroundChain(stageName);
+      const bodyOutcome = hasEntries(keys.around)
+        ? await runAroundChain(stageName)
+        : await runList(stageName, { ignoreRespond: false });
       if (bodyOutcome.outcome !== 'ok' && bodyOutcome.outcome !== 'respond') {
         // fail/abort/next/handled/unknown → do NOT run did
         return bodyOutcome;
