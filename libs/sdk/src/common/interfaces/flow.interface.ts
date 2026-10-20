@@ -18,6 +18,14 @@ export type FlowExecuteStagesOf<N extends FlowName> = ExtendFlows[N]['executeSta
 
 export type FlowControlType = 'respond' | 'fail' | 'abort' | 'next' | 'handled';
 
+function setStackTraceLimit(limit: number): void {
+  try {
+    Error.stackTraceLimit = limit;
+  } catch {
+    // Frozen intrinsics: the stack is captured as before.
+  }
+}
+
 export class FlowControl extends Error {
   /**
    * `instanceof FlowControl` also recognises the signal of another copy of the SDK in the process, such
@@ -31,7 +39,12 @@ export class FlowControl extends Error {
     public readonly type: FlowControlType,
     public readonly output: any,
   ) {
+    // A respond, next or handled signal is not an error: capturing a stack for each one costs every request.
+    const stackTraceLimit = Error.stackTraceLimit;
+    const skipStack = typeof stackTraceLimit === 'number' && type !== 'fail' && type !== 'abort';
+    if (skipStack) setStackTraceLimit(0);
     super();
+    if (skipStack) setStackTraceLimit(stackTraceLimit);
   }
 
   static respond<T>(output: T): never {
