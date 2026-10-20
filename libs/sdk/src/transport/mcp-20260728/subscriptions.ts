@@ -157,7 +157,8 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
     notify?.();
   };
 
-  signal?.addEventListener('abort', cleanup, { once: true });
+  if (signal?.aborted) cleanup();
+  else signal?.addEventListener('abort', cleanup, { once: true });
 
   async function* generate(): AsyncIterable<Uint8Array> {
     try {

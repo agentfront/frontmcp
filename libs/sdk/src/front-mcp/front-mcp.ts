@@ -678,6 +678,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * transport and returns only when the connection closes. **No TCP port is
    * bound** — the HTTP server is disabled for this entry point (#451).
    *
+   * One connection serves every revision: `initialize` opens a session, a 2026-07-28 request is served statelessly.
+   *
    * Accepts either a `@FrontMcp`-decorated class or the same config object you
    * pass to `@FrontMcp()` (#450).
    *
@@ -893,7 +895,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // `frontmcp dev --stdio --serve` forks us with an IPC channel instead of
       // giving us the real stdin/stdout.
       const { IpcServerTransport, isIpcStdioRequested } = await import('../transport/ipc-server.transport.js');
-      const transport = isIpcStdioRequested() ? new IpcServerTransport() : new StdioServerTransport();
+      const { StdioRevisionRouter } = await import('../transport/stdio-revision-router.js');
+      const stdioTransport = isIpcStdioRequested() ? new IpcServerTransport() : new StdioServerTransport();
+      // The router serves MCP 2026-07-28 messages itself and passes the rest to the session-era server.
+      const transport = new StdioRevisionRouter(stdioTransport, { scope, principal: sessionId });
       startupCleanups.push(() => transport.close());
       await mcpServer.connect(transport);
       // The transport now owns stdin/stdout — the guard must stay set even on a

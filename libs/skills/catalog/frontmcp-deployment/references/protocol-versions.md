@@ -6,8 +6,8 @@ description: Serve MCP protocol revision 2026-07-28 alongside every earlier revi
 # MCP Protocol Versions
 
 FrontMCP serves **every MCP revision from `2024-11-05` through `2026-07-28`** on
-the same endpoint. The revision is selected per request — there is no
-configuration switch and no server-side flag to flip.
+the same endpoint, over Streamable HTTP and over stdio. The revision is selected
+per request — there is no configuration switch and no server-side flag to flip.
 
 `initialize` answers with the requested revision when it is one of these (other
 than `2026-07-28`, which has no `initialize`), and with `2025-11-25` otherwise, so
@@ -47,6 +47,31 @@ A request is served as `2026-07-28` when ANY of these is true:
 Everything else — including every `initialize` and every request carrying
 `Mcp-Session-Id` — takes the session pipeline unchanged.
 
+## Over stdio
+
+`FrontMcpInstance.runStdio()` and a `--stdio` / `FRONTMCP_STDIO=1` server serve
+both eras on one connection, choosing per message by the same rules (stdio has no
+headers, so `_meta` and the method decide):
+
+- `initialize` makes the connection a session (`2024-11-05` … `2025-11-25`),
+  exactly as before.
+- A message declaring `2026-07-28` in `_meta`, `server/discover` or
+  `subscriptions/listen` is served statelessly: `resultType`, `serverInfo`,
+  cache hints, `-32021`, `-32022`, MRTR, request-scoped notifications and the
+  tasks extension, as over HTTP. A session-era connection can send these too.
+- The mirrored-header rules (`-32020`) and HTTP statuses do not apply.
+- Request-scoped `notifications/message` and `notifications/progress` are
+  written to stdout before the result, only when the request asked for them.
+- `notifications/cancelled` naming a 2026-07-28 request aborts it (the tool's
+  `this.signal`) and the server writes nothing more for it; for a
+  `subscriptions/listen` request it ends the subscription.
+- A connection that opened with a `2026-07-28` message gets no session
+  broadcasts (`notifications/tools/list_changed`, channel events) outside a
+  `subscriptions/listen` it opened.
+
+Up to 1.10.3, stdio served only the `initialize` revisions: `server/discover`
+answered `-32601`, and a `2026-07-28` request was answered as a 2025-era one.
+
 ## Default for unversioned requests
 
 A bare JSON-RPC call naming no revision (no `initialize`, no `Mcp-Session-Id`,
@@ -55,7 +80,10 @@ no `MCP-Protocol-Version`) falls back to:
 | Runtime                                | Default        |
 | -------------------------------------- | -------------- |
 | Cloudflare Workers / other V8 isolates | `'2026-07-28'` |
-| Node and everything else               | `'legacy'`     |
+| Node, stdio and everything else        | `'legacy'`     |
+
+Over stdio the option decides only until the connection sends `initialize`:
+after it, a message naming no revision belongs to that session.
 
 Override per server:
 
@@ -91,7 +119,7 @@ contract.
 
 ## Mirrored request headers
 
-The server validates that headers agree with the body and rejects a mismatch
+Streamable HTTP only; stdio carries everything in the body. The server validates that headers agree with the body and rejects a mismatch
 with `400` + `-32020`. Annotate a tool argument to have it mirrored:
 
 ```ts
@@ -153,7 +181,7 @@ A client opts in per request:
 ```
 
 `this.notify()` and `this.progress()` then stream on that request's own SSE
-response, terminated by the final result. Omit `logLevel` and the server emits
+response (over stdio, as lines before the result), terminated by the final result. Omit `logLevel` and the server emits
 no `notifications/message` at all.
 
 ## Tasks extension
@@ -186,6 +214,8 @@ was the tool's raw error. Under 2025-11-25 the same task is still `failed` and
 
 Tasks require an **authenticated** caller — without protocol sessions an
 anonymous task cannot be scoped to its creator, so a public server refuses.
+Over stdio the connection identifies the caller (only the process that spawned
+the server can reach it), so its tasks belong to that connection.
 
 A caller may have at most `tasks.maxConcurrentPerSession` (default 16) tasks
 unfinished (`working` or `input_required`) at once: counted per authenticated
@@ -257,7 +287,7 @@ Skills over MCP (`skill://` resources plus `skills/search` / `skills/load` /
 ❌ Performing side effects before the first `elicit()` — the tool is replayed
 ❌ Expecting `Mcp-Session-Id` to be echoed — sessions are gone
 ❌ Calling `tasks/list` or `tasks/result` — both removed (`404` + `-32601`)
-❌ Omitting `Mcp-Method`/`Mcp-Name` headers once you declare 2026 — `-32020`
+❌ Omitting `Mcp-Method`/`Mcp-Name` headers once you declare 2026 over HTTP — `-32020`
 ❌ Assuming a Worker still mints `Mcp-Session-Id` — it defaults to stateless
 
 ## Related
