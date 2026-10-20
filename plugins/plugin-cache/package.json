@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugin-cache",
-  "version": "1.10.3",
+  "version": "1.10.4",
   "description": "Cache plugin for FrontMCP: answers repeated tool calls from memory, Redis or Vercel KV instead of running the tool again",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -50,8 +50,8 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "1.10.3",
-    "@frontmcp/utils": "1.10.3",
+    "@frontmcp/sdk": "1.10.4",
+    "@frontmcp/utils": "1.10.4",
     "ioredis": "^5.8.0"
   },
   "peerDependencies": {
