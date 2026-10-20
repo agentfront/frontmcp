@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugins",
-  "version": "1.10.6",
+  "version": "1.10.7",
   "description": "Meta-package that installs and re-exports the FrontMCP cache, CodeCall, dashboard and Remember plugins",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/plugins",
@@ -51,15 +51,15 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@frontmcp/plugin-cache": "1.10.6",
-    "@frontmcp/plugin-codecall": "1.10.6",
-    "@frontmcp/plugin-dashboard": "1.10.6",
-    "@frontmcp/plugin-remember": "1.10.6"
+    "@frontmcp/plugin-cache": "1.10.7",
+    "@frontmcp/plugin-codecall": "1.10.7",
+    "@frontmcp/plugin-dashboard": "1.10.7",
+    "@frontmcp/plugin-remember": "1.10.7"
   },
   "peerDependencies": {
-    "@frontmcp/sdk": "1.10.6"
+    "@frontmcp/sdk": "1.10.7"
   },
   "devDependencies": {
-    "@frontmcp/sdk": "1.10.6"
+    "@frontmcp/sdk": "1.10.7"
   }
 }
