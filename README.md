@@ -24,6 +24,8 @@
 
 <br>
 
+**FrontMCP is the TypeScript framework for MCP servers.** You write tools, resources and prompts as typed classes with Zod schemas, and FrontMCP serves them over the Model Context Protocol, with dependency injection, authentication, testing, agents and jobs, on Node, Vercel, AWS Lambda and Cloudflare Workers. It serves MCP 2026-07-28, the stateless revision, and the earlier ones. The docs, examples and a browser playground are at [frontmcp.dev](https://frontmcp.dev).
+
 ## Write a tool. Ship a server.
 
 Classes in, protocol out. FrontMCP handles transport, DI, sessions, auth and execution flow, and the same server runs locally and in production unchanged.
