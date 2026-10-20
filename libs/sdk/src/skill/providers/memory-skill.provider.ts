@@ -1,11 +1,12 @@
 // file: libs/sdk/src/skill/providers/memory-skill.provider.ts
 
-import { TFIDFVectoria, type DocumentMetadata } from 'vectoriadb';
+import type { DocumentMetadata, TFIDFVectoria } from 'vectoriadb';
 
 import { sha256Hex } from '@frontmcp/utils';
 
 import { type SkillContent } from '../../common/interfaces';
 import { type SkillMetadata, type SkillVisibility } from '../../common/metadata';
+import { importWithRequireFallback } from '../../utils/dynamic-import.utils';
 import { type SkillIndexCache, type SkillIndexScoring } from '../skill-index-cache.interface';
 import {
   type MutableSkillStorageProvider,
@@ -179,6 +180,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
 
   /** The search index, created the first time a search needs it. */
   private vectorDB?: TFIDFVectoria<SkillDocumentMetadata>;
+  private vectorDBLoading?: Promise<TFIDFVectoria<SkillDocumentMetadata>>;
   private skills: Map<string, SkillContent> = new Map();
   private defaultTopK: number;
   private defaultMinScore: number;
@@ -208,7 +210,12 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     this.indexCache = options.indexCache;
   }
 
-  private createVectorDB(): TFIDFVectoria<SkillDocumentMetadata> {
+  private async createVectorDB(): Promise<TFIDFVectoria<SkillDocumentMetadata>> {
+    // Loaded with the first search, so a server that never searches skills never loads it.
+    const { TFIDFVectoria } = await importWithRequireFallback(
+      () => import('vectoriadb'),
+      () => require('vectoriadb') as typeof import('vectoriadb'),
+    );
     // `scoring` is read by newer vectoriadb versions; older ones ignore the
     // extra field and use cosine. Built as a typed variable (not an object
     // literal) so passing it to the older constructor type isn't an excess-
@@ -251,9 +258,9 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
    */
   private async ensureIndexed(): Promise<void> {
     if (this.indexReady) return;
-    const db = this.db();
     // A mutation while this build awaits leaves the index stale for the next search.
     const version = this.skillsVersion;
+    const db = await this.db();
 
     if (this.indexCache && isSnapshotCapable(db)) {
       const key = await this.computeIndexKey();
@@ -324,9 +331,17 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     return sha256Hex(canonical);
   }
 
-  private db(): TFIDFVectoria<SkillDocumentMetadata> {
-    this.vectorDB ??= this.createVectorDB();
-    return this.vectorDB;
+  private async db(): Promise<TFIDFVectoria<SkillDocumentMetadata>> {
+    if (this.vectorDB) return this.vectorDB;
+    // Concurrent first searches share one DB.
+    this.vectorDBLoading ??= this.createVectorDB().then(
+      (db) => (this.vectorDB ??= db),
+      (error: unknown) => {
+        this.vectorDBLoading = undefined;
+        throw error;
+      },
+    );
+    return this.vectorDBLoading;
   }
 
   /**
@@ -393,7 +408,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
 
     // Search using TF-IDF. Ensure the index is built/restored exactly once for
     // the current document set (cold-start fast path via the snapshot cache).
-    const db = this.db();
+    const db = await this.db();
     await this.ensureIndexed();
     let results = await db.search(query, {
       topK,
