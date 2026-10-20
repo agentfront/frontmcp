@@ -31,6 +31,8 @@ import type ProviderRegistry from '../provider/provider.registry';
 import { toolClassHooksJoin } from './flows/call-tool.flow';
 import { buildParsedToolResult } from './tool.utils';
 
+const looseArgumentsSchema = z.looseObject({});
+
 /**
  * Concrete implementation of a tool that can be executed.
  *
@@ -51,6 +53,7 @@ export class ToolInstance<
   readonly scope: ScopeEntry;
   /** The hook registry for this tool's scope (captured at construction) */
   readonly hooks: HookRegistry;
+  private _inputObjectSchema?: { shape: z.ZodRawShape; schema: z.ZodObject<z.ZodRawShape> };
 
   constructor(record: ToolRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
@@ -191,13 +194,22 @@ export class ToolInstance<
 
     if (isRemoteTool || hasRawJsonSchema) {
       // Pass through all arguments without stripping unknown keys
-      return z.looseObject({}).parse(input.arguments ?? {});
+      return looseArgumentsSchema.parse(input.arguments ?? {});
     }
 
     // For local tools, use strict validation
-    const inputSchema = z.object(this.inputSchema);
-    return inputSchema.parse(input.arguments);
+    return this.inputObjectSchema().parse(input.arguments);
   }
+
+  /** `z.object(inputSchema)`, built once per shape: building one per call recompiles its parser every call. */
+  private inputObjectSchema(): z.ZodObject<z.ZodRawShape> {
+    const shape = this.inputSchema as z.ZodRawShape;
+    if (this._inputObjectSchema?.shape !== shape) {
+      this._inputObjectSchema = { shape, schema: z.object(shape) };
+    }
+    return this._inputObjectSchema.schema;
+  }
+
   /**
    * Turn the raw tool function result into an MCP-compliant CallToolResult:
    *   - `content`: list of ContentBlocks (text / image / audio / resource / resource_link)
