@@ -63,9 +63,24 @@ interface StageResult {
 }
 
 const CAP = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
-const WILL = (s: string) => `will${CAP(s)}`;
-const DID = (s: string) => `did${CAP(s)}`;
-const AROUND = (s: string) => `around${CAP(s)}`;
+
+interface StageKeys {
+  will: string;
+  did: string;
+  around: string;
+}
+
+// Stage names come from flow plans, so this stays as small as the set of stages.
+const stageKeysByName = new Map<string, StageKeys>();
+
+function stageKeysOf(stage: string): StageKeys {
+  let keys = stageKeysByName.get(stage);
+  if (!keys) {
+    keys = { will: `will${CAP(stage)}`, did: `did${CAP(stage)}`, around: `around${CAP(stage)}` };
+    stageKeysByName.set(stage, keys);
+  }
+  return keys;
+}
 
 function parseTypedKey(k: string): { base: string; type?: 'will' | 'did' | 'around' } {
   const lc = k.toLowerCase();
@@ -76,6 +91,30 @@ function parseTypedKey(k: string): { base: string; type?: 'will' | 'did' | 'arou
   return { base: k };
 }
 
+const stageBasesByGroup = new WeakMap<readonly string[], string[]>();
+
+/** The base stages a plan group runs, in order: a typed key runs with its base, and a repeated base runs once. */
+function stageBasesOf(group: readonly string[]): string[] {
+  let bases = stageBasesByGroup.get(group);
+  if (!bases) {
+    const seen = new Set<string>();
+    bases = [];
+    for (const rawKey of group) {
+      const { base, type } = parseTypedKey(rawKey);
+      if (type || seen.has(base)) continue;
+      seen.add(base);
+      bases.push(base);
+    }
+    stageBasesByGroup.set(group, bases);
+  }
+  return bases;
+}
+
+/** The order after the last entry of a stage map, where hooks merged into it start. */
+function nextStageOrder<C>(stages: StageMap<C>): number {
+  return Math.max(0, ...Object.values(stages).flatMap((list) => list.map((e) => e._order ?? 0))) + 1;
+}
+
 export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   readonly deps: Reference[];
   readonly globalProviders: ProviderRegistry;
@@ -84,6 +123,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   private stages: StageMap<FlowType>;
   private hooks: HookRegistry;
   private readonly logger: FrontMcpLogger;
+  private baseStageOrderEnd?: number;
 
   constructor(scope: ScopeEntry, record: FlowRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
     super(scope, record);
@@ -359,12 +399,13 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       mergedDeps.set(token, instance as Type);
     }
 
-    // Clone stages so we can merge injections safely per run.
+    // The class's stage map is shared by every run: a run that merges hooks clones it first.
     const baseStages = this.stages;
-    const stages: StageMap<any> = cloneStageMap(baseStages);
+    let stages: StageMap<any> = baseStages;
+    let ownsStages = false;
 
     // Compute next order base after any class-defined entries.
-    let orderBase = Math.max(0, ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0))) + 1;
+    let orderBase = (this.baseStageOrderEnd ??= nextStageOrder(baseStages));
 
     const hookOwnerId = await (FlowClass as typeof FlowBase).resolveHookOwnerId?.(input, scope);
     // The entry class's `static` hooks need no instance, so they join from the first stage (#701).
@@ -409,6 +450,10 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
       if (metas.length) {
         const start = opts?.orderStart ?? orderBase;
+        if (!ownsStages) {
+          stages = cloneStageMap(baseStages);
+          ownsStages = true;
+        }
         mergeHookMetasIntoStageMap(FlowClass, stages, metas, start, runHook);
         if (opts?.orderStart === undefined) orderBase += metas.length;
       }
@@ -431,7 +476,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     await materializeAndMerge(initialInjectedHooks, { orderStart: -1_000_000 });
 
     // Refresh order base to be after everything currently present
-    orderBase = Math.max(0, ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0))) + 1;
+    if (ownsStages) orderBase = nextStageOrder(stages);
 
     // The target entry's static hooks follow the registry's hooks of the same priority, as its
     // instance hooks do when the stage that builds the instance appends them.
@@ -451,6 +496,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       }
       return { outcome: 'unknown_error', control: e as Error };
     };
+
+    // Whether any stage body or hook is registered under `key` right now.
+    const hasEntries = (key: string): boolean => (stages[key]?.length ?? 0) > 0;
 
     // Robust list runner (doesn't skip mid-run insertions)
     const runList = async (key: string, opts?: { ignoreRespond?: boolean }): Promise<StageResult> => {
@@ -476,7 +524,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // Each Around hook's next() runs the next Around hook, and the innermost one runs the stage body.
     // next() rejects when the body fails, so an Around hook can catch, retry or rethrow.
     const runAroundChain = async (stageName: string, index = 0): Promise<StageResult> => {
-      const around = ((stages as any)[AROUND(stageName)] ?? [])[index] as StageMap<any>[string][number] | undefined;
+      const around = ((stages as any)[stageKeysOf(stageName).around] ?? [])[index] as
+        | StageMap<any>[string][number]
+        | undefined;
       if (!around) return runList(stageName, { ignoreRespond: false });
 
       let innerResult: StageResult = { outcome: 'ok' };
@@ -494,10 +544,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     };
 
     // Run exactly one stage in order: will → around(stage) → did (did runs once)
+    // An empty hook list is skipped without a call: running it would only return 'ok'.
     const runOneStage = async (stageName: string, stopOnRespond: boolean): Promise<StageResult> => {
+      const keys = stageKeysOf(stageName);
       // 1) willStage
-      {
-        const res = await runList(WILL(stageName));
+      if (hasEntries(keys.will)) {
+        const res = await runList(keys.will);
         if (res.outcome === 'respond' && stopOnRespond) return res;
         if (res.outcome !== 'ok' && res.outcome !== 'respond') return res;
       }
@@ -510,8 +562,8 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       }
 
       // 3) didStage (run once regardless of body respond)
-      {
-        const res = await runList(DID(stageName), { ignoreRespond: true });
+      if (hasEntries(keys.did)) {
+        const res = await runList(keys.did, { ignoreRespond: true });
         if (res.outcome !== 'ok' && res.outcome !== 'respond') return res;
       }
 
@@ -528,17 +580,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     ): Promise<StageResult> => {
       if (!group || group.length === 0) return { outcome: 'ok' };
 
-      const seenBase = new Set<string>();
-      for (const rawKey of group) {
-        const { base, type } = parseTypedKey(rawKey);
-        if (type) {
-          // Soft warning once per typed key occurrence (optional)
-          // console.warn(`[flow] Ignoring typed stage "${rawKey}" in plan; hooks will run with base "${base}".`);
-          continue; // Do not run typed keys as standalone stages
-        }
-        if (seenBase.has(base)) continue;
-        seenBase.add(base);
-
+      for (const base of stageBasesOf(group)) {
         const res = await runOneStage(base, stopOnRespond);
         if (res.outcome === 'respond') {
           if (stopOnRespond) return res;
