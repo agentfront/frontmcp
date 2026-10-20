@@ -87,6 +87,8 @@ frontmcp dev --stdio                  # HTTP loopback under the hood
 frontmcp dev --stdio --serve          # stdio-over-pipe (no HTTP listener)
 ```
 
+A `2026-07-28` client needs `--serve`: the HTTP-loopback bridge forwards its messages without the mirrored request headers, so the server refuses them with `-32020`.
+
 Wire the client at the bridge:
 
 ```json
@@ -125,6 +127,9 @@ The most common transport. The MCP client spawns your server as a child process 
 - All logs are automatically redirected to stderr and `~/.frontmcp/logs/`
 - stdout contains ONLY MCP JSON-RPC protocol messages
 - One client per process (no multiplexing)
+- Every MCP revision on one connection: `initialize` clients (`2024-11-05` …
+  `2025-11-25`) and `2026-07-28` clients (`server/discover`, per-request `_meta`);
+  see `protocol-versions`
 - **Stdio binds no TCP port** — the HTTP server is disabled, so multiple stdio
   instances of the same server run without an `EADDRINUSE` conflict
 
