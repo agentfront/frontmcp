@@ -196,7 +196,7 @@ FrontMCP auto-generates AI configuration files at the workspace root:
 | -------------- | ---------------------------------------------------------------------------------------------------------- |
 | `CLAUDE.md`    | Instructions for Claude Code / Claude AI                                                                   |
 | `AGENTS.md`    | Instructions for agent-based AI tools                                                                      |
-| `.mcp.json`    | MCP servers for AI IDEs: `frontmcp-docs`, FrontMCP's docs at `https://frontmcp.dev/mcp` (`"type": "http"`) |
+| `.mcp.json`    | MCP servers for AI IDEs: `frontmcp-docs`, FrontMCP's docs at `https://mcp.frontmcp.dev` (`"type": "http"`) |
 | `.cursorrules` | Rules for Cursor AI editor                                                                                 |
 
 These files are regenerated when you run generators or modify your workspace structure. They help AI tools understand your project layout and coding conventions.
