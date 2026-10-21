@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugin-approval",
-  "version": "1.10.9-rc.4",
+  "version": "1.10.9-rc.5",
   "description": "Approval plugin for FrontMCP: refuses to run marked tools until an approval is recorded for the caller",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -51,13 +51,13 @@
     }
   },
   "dependencies": {
-    "@frontmcp/utils": "1.10.9-rc.4",
+    "@frontmcp/utils": "1.10.9-rc.5",
     "ioredis": "^5.8.0",
     "reflect-metadata": "^0.2.2"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.10.9-rc.4",
-    "@frontmcp/sdk": "1.10.9-rc.4",
+    "@frontmcp/lazy-zod": "1.10.9-rc.5",
+    "@frontmcp/sdk": "1.10.9-rc.5",
     "@vercel/kv": "^2.0.0 || ^3.0.0"
   },
   "peerDependenciesMeta": {
@@ -66,7 +66,7 @@
     }
   },
   "devDependencies": {
-    "@frontmcp/sdk": "1.10.9-rc.4",
+    "@frontmcp/sdk": "1.10.9-rc.5",
     "reflect-metadata": "^0.2.2"
   }
 }
