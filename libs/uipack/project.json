@@ -95,7 +95,8 @@
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/uipack/dist/package.json",
-          "node scripts/inject-esm-require-banner.js libs/uipack/dist/esm"
+          "node scripts/inject-esm-require-banner.js libs/uipack/dist/esm",
+          "node scripts/escape-non-ascii.mjs libs/uipack/dist"
         ],
         "parallel": false
       }

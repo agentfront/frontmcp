@@ -56,7 +56,8 @@
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/auth/dist/package.json",
-          "node scripts/inject-esm-require-banner.js libs/auth/dist/esm"
+          "node scripts/inject-esm-require-banner.js libs/auth/dist/esm",
+          "node scripts/escape-non-ascii.mjs libs/auth/dist"
         ],
         "parallel": false
       }

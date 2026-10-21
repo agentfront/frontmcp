@@ -55,7 +55,8 @@
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/edge/dist/package.json",
-          "node scripts/inject-esm-require-banner.js libs/edge/dist/esm"
+          "node scripts/inject-esm-require-banner.js libs/edge/dist/esm",
+          "node scripts/escape-non-ascii.mjs libs/edge/dist"
         ],
         "parallel": false
       }

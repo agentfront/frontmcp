@@ -34,7 +34,11 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build-tsc"],
       "options": {
-        "command": "node scripts/strip-dist-from-pkg.js libs/cli/dist/package.json"
+        "commands": [
+          "node scripts/strip-dist-from-pkg.js libs/cli/dist/package.json",
+          "node scripts/escape-non-ascii.mjs libs/cli/dist"
+        ],
+        "parallel": false
       }
     },
     "inspect": {

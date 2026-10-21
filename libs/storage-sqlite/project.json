@@ -63,7 +63,8 @@
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/storage-sqlite/dist/package.json",
-          "node scripts/inject-esm-require-banner.js libs/storage-sqlite/dist/esm"
+          "node scripts/inject-esm-require-banner.js libs/storage-sqlite/dist/esm",
+          "node scripts/escape-non-ascii.mjs libs/storage-sqlite/dist"
         ],
         "parallel": false
       }

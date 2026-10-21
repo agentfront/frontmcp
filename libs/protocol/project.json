@@ -93,7 +93,11 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build-cjs", "build-esm"],
       "options": {
-        "command": "node scripts/strip-dist-from-pkg.js libs/protocol/dist/package.json && node scripts/fix-protocol-esm-reexports.js"
+        "commands": [
+          "node scripts/strip-dist-from-pkg.js libs/protocol/dist/package.json && node scripts/fix-protocol-esm-reexports.js",
+          "node scripts/escape-non-ascii.mjs libs/protocol/dist"
+        ],
+        "parallel": false
       }
     },
     "test": {
