@@ -34,6 +34,7 @@
         ],
         "assets": ["libs/utils/README.md", "libs/utils/CHANGELOG.md", "LICENSE", "libs/utils/package.json"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -78,6 +79,7 @@
           "libs/utils/src/path/browser-path.ts"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },

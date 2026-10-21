@@ -4,6 +4,8 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "declaration": true,
+    "sourceMap": false,
+    "inlineSources": false,
     "types": ["node"],
     "paths": { "@frontmcp/lazy-zod": ["libs/lazy-zod/dist/index.d.ts"] }
   },

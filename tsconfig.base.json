@@ -117,7 +117,8 @@
       "#langchain-openai": ["libs/sdk/src/agent/adapters/polyfills/node-langchain-openai.ts"],
       "#langchain-anthropic": ["libs/sdk/src/agent/adapters/polyfills/node-langchain-anthropic.ts"],
       "#sse-transport": ["libs/sdk/src/transport/adapters/polyfills/node-sse-transport.ts"],
-      "#express-host": ["libs/sdk/src/server/adapters/polyfills/node-express-host.ts"]
+      "#express-host": ["libs/sdk/src/server/adapters/polyfills/node-express-host.ts"],
+      "#import-computed": ["libs/sdk/src/esm-loader/import-computed.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

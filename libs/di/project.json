@@ -20,6 +20,7 @@
         "platform": "node",
         "assets": ["libs/di/README.md", "libs/di/CHANGELOG.md", "LICENSE", "libs/di/package.json"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -42,6 +43,7 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },

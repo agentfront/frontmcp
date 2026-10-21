@@ -28,6 +28,7 @@
         "platform": "node",
         "assets": ["libs/guard/README.md", "libs/guard/CHANGELOG.md", "LICENSE", "libs/guard/package.json"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -49,6 +50,7 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },
