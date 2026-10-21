@@ -76,7 +76,8 @@
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js plugins/plugin-approval/dist/package.json",
-          "node scripts/inject-esm-require-banner.js plugins/plugin-approval/dist/esm"
+          "node scripts/inject-esm-require-banner.js plugins/plugin-approval/dist/esm",
+          "node scripts/escape-non-ascii.mjs plugins/plugin-approval/dist"
         ],
         "parallel": false
       }
