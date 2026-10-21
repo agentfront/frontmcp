@@ -50,6 +50,7 @@
     }
   },
   "dependencies": {
+    "@enclave-vm/ast": "^2.17.0",
     "@frontmcp/sdk": "1.10.9",
     "@frontmcp/utils": "1.10.9",
     "ioredis": "^5.8.0"
