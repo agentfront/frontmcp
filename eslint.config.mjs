@@ -63,6 +63,7 @@ export default [
             '@frontmcp/uipack',
             '@frontmcp/uipack/*',
             '@frontmcp/protocol',
+            '@frontmcp/protocol/client',
             '@frontmcp/testing',
             '@frontmcp/observability',
             '^#(mcp-.+|crypto-.+|async-.+|event-.+|langchain-.+|sse-.+|express-.+|server-.+|stdio-.+|env|runtime-context|path|client|import-computed|js-yaml|semver|uipack-render)$',

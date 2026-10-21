@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
-import { Client, type CallToolResult } from '@frontmcp/protocol';
+import { type CallToolResult } from '@frontmcp/protocol';
+import { Client } from '@frontmcp/protocol/client';
 import { App, createInMemoryServer, FrontMcpInstance, LogLevel, Tool, ToolContext } from '@frontmcp/sdk';
 
 import CodeCallPlugin from '../codecall.plugin';

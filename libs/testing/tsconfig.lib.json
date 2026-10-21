@@ -13,7 +13,8 @@
       "@frontmcp/sdk/*": ["libs/sdk/dist/*/index.d.ts"],
       "@frontmcp/ui": ["libs/ui/dist/index.d.ts"],
       "@frontmcp/ui/*": ["libs/ui/dist/*/index.d.ts"],
-      "@frontmcp/protocol": ["libs/protocol/dist/index.d.ts"]
+      "@frontmcp/protocol": ["libs/protocol/dist/index.d.ts"],
+      "@frontmcp/protocol/client": ["libs/protocol/dist/clients.d.ts"]
     }
   },
   "include": ["src/**/*.ts"],

@@ -89,8 +89,8 @@ const mockMcpClient = {
   getPrompt: jest.fn().mockResolvedValue({ messages: [] }),
 };
 
-jest.mock('@frontmcp/protocol', () => ({
-  ...jest.requireActual('@frontmcp/protocol'),
+jest.mock('@frontmcp/protocol/client', () => ({
+  ...jest.requireActual('@frontmcp/protocol/client'),
   Client: jest.fn().mockImplementation(() => mockMcpClient),
 }));
 
@@ -120,7 +120,7 @@ describe('connect utilities', () => {
 
     it('should use default clientInfo when not provided', async () => {
       const { connect } = await import('../connect');
-      const { Client } = await import('@frontmcp/protocol');
+      const { Client } = await import('@frontmcp/protocol/client');
       const config = createTestConfig();
 
       await connect(config);
@@ -133,7 +133,7 @@ describe('connect utilities', () => {
 
     it('should pass custom clientInfo to MCP client', async () => {
       const { connect } = await import('../connect');
-      const { Client } = await import('@frontmcp/protocol');
+      const { Client } = await import('@frontmcp/protocol/client');
       const config = createTestConfig();
 
       await connect(config, {
@@ -242,7 +242,7 @@ describe('connect utilities', () => {
 
     it('should pass capabilities to MCP client', async () => {
       const { connect } = await import('../connect');
-      const { Client } = await import('@frontmcp/protocol');
+      const { Client } = await import('@frontmcp/protocol/client');
       const config = createTestConfig();
 
       // Note: ClientCapabilities uses 'roots', not 'tools' (tools is a ServerCapability)
@@ -262,7 +262,7 @@ describe('connect utilities', () => {
   describe('connectOpenAI', () => {
     it('should use OpenAI client info', async () => {
       const { connectOpenAI } = await import('../connect');
-      const { Client } = await import('@frontmcp/protocol');
+      const { Client } = await import('@frontmcp/protocol/client');
       const config = createTestConfig();
 
       await connectOpenAI(config);
@@ -295,7 +295,7 @@ describe('connect utilities', () => {
   describe('connectClaude', () => {
     it('should use Claude client info', async () => {
       const { connectClaude } = await import('../connect');
-      const { Client } = await import('@frontmcp/protocol');
+      const { Client } = await import('@frontmcp/protocol/client');
       const config = createTestConfig();
 
       await connectClaude(config);
@@ -307,7 +307,7 @@ describe('connect utilities', () => {
   describe('connectLangChain', () => {
     it('should use LangChain client info', async () => {
       const { connectLangChain } = await import('../connect');
-      const { Client } = await import('@frontmcp/protocol');
+      const { Client } = await import('@frontmcp/protocol/client');
       const config = createTestConfig();
 
       await connectLangChain(config);
@@ -319,7 +319,7 @@ describe('connect utilities', () => {
   describe('connectVercelAI', () => {
     it('should use Vercel AI client info', async () => {
       const { connectVercelAI } = await import('../connect');
-      const { Client } = await import('@frontmcp/protocol');
+      const { Client } = await import('@frontmcp/protocol/client');
       const config = createTestConfig();
 
       await connectVercelAI(config);

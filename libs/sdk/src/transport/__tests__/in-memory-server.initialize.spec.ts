@@ -4,7 +4,7 @@
  */
 import 'reflect-metadata';
 
-import { Client } from '@frontmcp/protocol';
+import { Client } from '@frontmcp/protocol/client';
 
 import { App, LogLevel, Tool, ToolContext } from '../../common';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';

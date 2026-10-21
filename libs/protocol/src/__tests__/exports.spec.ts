@@ -12,6 +12,7 @@ import * as browserStreamableHttp from '../browser-mcp-streamable-http';
 import * as browserServerTypes from '../browser-server-types';
 import { StdioClientTransport as BrowserStdioClientTransport } from '../browser-stdio-client';
 import { StdioServerTransport as BrowserStdioServerTransport } from '../browser-stdio-server';
+import * as clients from '../clients';
 import { InMemoryTransport } from '../in-memory';
 import * as protocol from '../index';
 import { Server as NodeServer } from '../node-mcp-server';
@@ -38,8 +39,13 @@ describe('@frontmcp/protocol exports', () => {
     expect(protocol.LATEST_PROTOCOL_VERSION).toBe(LATEST_PROTOCOL_VERSION);
     expect(protocol.PROTOCOL_2026_07_28).toBe('2026-07-28');
     expect(protocol.StdioServerTransport).toBe(SdkStdioServerTransport);
-    expect(typeof protocol.Client).toBe('function');
-    expect(typeof protocol.StreamableHTTPClientTransport).toBe('function');
+  });
+
+  it('serves the MCP client and its transports from the client subpath, not the root', () => {
+    for (const name of ['Client', 'StreamableHTTPClientTransport', 'SSEClientTransport', 'StdioClientTransport']) {
+      expect(typeof (clients as Record<string, unknown>)[name]).toBe('function');
+      expect(name in protocol).toBe(false);
+    }
   });
 
   it('gives browsers stand-ins that say what is not available', () => {

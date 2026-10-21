@@ -6,7 +6,6 @@
 import {
   type AuthInfo,
   type CallToolResult,
-  type Client,
   type GetPromptResult,
   type Prompt,
   type ReadResourceResult,
@@ -16,6 +15,7 @@ import {
   type Tool,
   type Transport,
 } from '@frontmcp/protocol';
+import { type Client } from '@frontmcp/protocol/client';
 
 // ═══════════════════════════════════════════════════════════════════
 // CONNECTION TYPES
