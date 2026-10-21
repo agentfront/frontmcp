@@ -19,9 +19,6 @@ export * from './auth-types';
 // Shared protocol types (Transport, RequestHandlerExtra)
 export * from './shared';
 
-// MCP Client
-export * from '#client';
-
 // Stdio transport
 export * from './stdio';
 
