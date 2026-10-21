@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/uipack",
-  "version": "1.10.9-rc.5",
+  "version": "1.10.9",
   "description": "React-free core that builds FrontMCP widget pages: HTML shell with CSP and bridge, template rendering, CDN import resolution",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/ui/components#frontmcpuipack",
@@ -66,7 +66,7 @@
     "typescript": "^5.9.3"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.10.9-rc.5",
+    "@frontmcp/lazy-zod": "1.10.9",
     "esbuild": ">=0.27.0 <1"
   },
   "peerDependenciesMeta": {
