@@ -115,13 +115,15 @@ export class TransportService {
    */
   private readonly creationMutex: Map<string, Promise<Transporter>> = new Map();
 
-  // The Streamable HTTP transport class loads with the first transporter, so a stdio server never loads it.
+  // The Streamable HTTP transport class loads with the first session that uses it, so stdio and SSE servers never load it.
   private async newLocalTransporter(
     key: TransportKey,
     res: ServerResponse,
     onDispose: () => void,
   ): Promise<LocalTransporter> {
-    await loadStreamableHttpTransport();
+    if (key.type === 'streamable-http' || key.type === 'stateless-http') {
+      await loadStreamableHttpTransport();
+    }
     return new LocalTransporter(this.scope, key, res, onDispose);
   }
 
