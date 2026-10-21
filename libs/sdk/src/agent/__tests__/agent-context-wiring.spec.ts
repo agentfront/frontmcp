@@ -2,12 +2,12 @@ import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
 import {
-  Client,
   LoggingMessageNotificationSchema,
   MCP_20260728_META,
   type CallToolResult,
   type Progress,
 } from '@frontmcp/protocol';
+import { Client } from '@frontmcp/protocol/client';
 
 import {
   createTestFetchServer,

@@ -82,6 +82,17 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/esm/index.mjs"
       }
+    },
+    "./client": {
+      "development": "./src/clients.ts",
+      "require": {
+        "types": "./dist/clients.d.ts",
+        "default": "./dist/clients.js"
+      },
+      "import": {
+        "types": "./dist/clients.d.ts",
+        "default": "./dist/esm/clients.mjs"
+      }
     }
   },
   "devDependencies": {

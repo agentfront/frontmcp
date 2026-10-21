@@ -79,14 +79,14 @@ const mockMcpClient = {
 
 // MockClient defined inside the mock factory to avoid hoisting issues
 // (jest.mock is hoisted, but accessing outer variables before they're defined causes errors)
-jest.mock('@frontmcp/protocol', () => ({
-  ...jest.requireActual('@frontmcp/protocol'),
+jest.mock('@frontmcp/protocol/client', () => ({
+  ...jest.requireActual('@frontmcp/protocol/client'),
   Client: jest.fn().mockImplementation(() => mockMcpClient),
 }));
 
 // Import the mocked Client to use in tests for assertions
 
-const { Client: MockClient } = require('@frontmcp/protocol');
+const { Client: MockClient } = require('@frontmcp/protocol/client');
 
 describe('DirectClientImpl', () => {
   // Minimal mock scope
