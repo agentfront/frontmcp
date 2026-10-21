@@ -157,6 +157,9 @@ jobs:
         if: steps.build.outcome == 'failure'
         run: npx nx run-many -t build --parallel 5
 
+      - name: Check the published JavaScript is ASCII-only
+        run: node scripts/escape-non-ascii.mjs --check libs/*/dist plugins/*/dist
+
       - name: Save Nx cache
         if: always()
         uses: ./.github/actions/nx-cache-save

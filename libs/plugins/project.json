@@ -68,7 +68,11 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build-cjs", "build-esm"],
       "options": {
-        "command": "node scripts/strip-dist-from-pkg.js libs/plugins/dist/package.json"
+        "commands": [
+          "node scripts/strip-dist-from-pkg.js libs/plugins/dist/package.json",
+          "node scripts/escape-non-ascii.mjs libs/plugins/dist"
+        ],
+        "parallel": false
       }
     },
     "test": {

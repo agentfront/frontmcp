@@ -150,7 +150,8 @@
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/sdk/dist/package.json",
-          "node scripts/inject-esm-require-banner.js libs/sdk/dist/esm libs/sdk/dist/browser"
+          "node scripts/inject-esm-require-banner.js libs/sdk/dist/esm libs/sdk/dist/browser",
+          "node scripts/escape-non-ascii.mjs libs/sdk/dist"
         ],
         "parallel": false
       }
