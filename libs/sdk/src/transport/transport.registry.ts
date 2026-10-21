@@ -1095,26 +1095,7 @@ export class TransportService {
    * All anonymous requests share the same transport instance.
    */
   async getOrCreateAnonymousStatelessTransport(type: TransportType, res: ServerResponse): Promise<Transporter> {
-    const key = this.keyOf(type, '__anonymous__', STATELESS_SESSION_ID);
-    const existing = this.lookupLocal(key);
-    if (existing) return existing;
-
-    // Create shared transport for all anonymous requests
-    const transporter = await this.newLocalTransporter(key, res, () => {
-      this.evictLocal(key);
-      if (this.distributed && this.bus) {
-        this.bus.revoke(key).catch(() => void 0);
-      }
-    });
-
-    await transporter.ready();
-    this.insertLocal(key, transporter);
-
-    if (this.distributed && this.bus) {
-      await this.bus.advertise(key);
-    }
-
-    return transporter;
+    return this.getOrCreateStatelessTransport(this.keyOf(type, '__anonymous__', STATELESS_SESSION_ID), res);
   }
 
   /**
@@ -1126,11 +1107,28 @@ export class TransportService {
     token: string,
     res: ServerResponse,
   ): Promise<Transporter> {
-    const key = this.keyOf(type, token, STATELESS_SESSION_ID);
+    return this.getOrCreateStatelessTransport(this.keyOf(type, token, STATELESS_SESSION_ID), res);
+  }
+
+  /** Concurrent first requests share one creation, so a second transport never replaces the first and gets evicted with it. */
+  private async getOrCreateStatelessTransport(key: TransportKey, res: ServerResponse): Promise<Transporter> {
     const existing = this.lookupLocal(key);
     if (existing) return existing;
 
-    // Create singleton transport for this token
+    const mutexKey = JSON.stringify({ t: key.type, h: key.tokenHash, s: key.sessionId });
+    const pendingCreation = this.creationMutex.get(mutexKey);
+    if (pendingCreation) return pendingCreation;
+
+    const creationPromise = this.doCreateStatelessTransport(key, res);
+    this.creationMutex.set(mutexKey, creationPromise);
+    try {
+      return await creationPromise;
+    } finally {
+      this.creationMutex.delete(mutexKey);
+    }
+  }
+
+  private async doCreateStatelessTransport(key: TransportKey, res: ServerResponse): Promise<Transporter> {
     const transporter = await this.newLocalTransporter(key, res, () => {
       this.evictLocal(key);
       if (this.distributed && this.bus) {
