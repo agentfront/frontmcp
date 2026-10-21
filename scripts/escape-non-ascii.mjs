@@ -27,8 +27,11 @@ function rewrite(file) {
   const source = readFileSync(file, 'utf8');
   if (!NON_ASCII.test(source)) return false;
   const escaped = escapeNonAscii(source);
+  // esbuild keeps regular-expression literals and tagged templates as written, so it can't confirm an escape there.
   if (compiledProgram(escaped, file) !== compiledProgram(source, file)) {
-    throw new Error(`${file}: escaping its non-ASCII characters may change the program; escape them in the source`);
+    throw new Error(
+      `${file}: escaping its non-ASCII characters may change the program (in a regular-expression literal or a tagged template); write them as \\uXXXX escapes in the source`,
+    );
   }
   writeFileSync(file, escaped);
   return true;

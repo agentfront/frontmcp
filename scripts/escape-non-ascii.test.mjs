@@ -65,6 +65,17 @@ test('refuses a raw template, whose text an escape would change', async () => {
   assert.equal(await fs.readFile(path.join(dir, 'index.js'), 'utf8'), body);
 });
 
+test('refuses a regular-expression literal, which esbuild keeps as written', async () => {
+  const body = 'module.exports = /café/.test("café");\n';
+  const dir = await distWith({ 'index.js': body });
+
+  const res = run(dir);
+
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /index\.js: .*regular-expression literal.*write them as \\uXXXX escapes in the source/);
+  assert.equal(await fs.readFile(path.join(dir, 'index.js'), 'utf8'), body);
+});
+
 test('--check fails on a non-ASCII file and passes once it is escaped', async () => {
   const dir = await distWith({
     'nested/index.cjs': '/* ══ */ module.exports = 1;\n',
