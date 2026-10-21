@@ -1901,25 +1901,25 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@enclave-vm/ast@npm:2.16.0, @enclave-vm/ast@npm:^2.16.0":
-  version: 2.16.0
-  resolution: "@enclave-vm/ast@npm:2.16.0"
+"@enclave-vm/ast@npm:2.17.0, @enclave-vm/ast@npm:^2.17.0":
+  version: 2.17.0
+  resolution: "@enclave-vm/ast@npm:2.17.0"
   dependencies:
     "@types/estree": "npm:1.0.8"
     acorn: "npm:8.15.0"
     acorn-walk: "npm:8.3.4"
     astring: "npm:1.9.0"
-  checksum: 10c0/69e83783d0fcdd6588df1ee433ee8eb292cd1aef843cbd8bc5a3afd7731157791f7c2f141104a7176120f87d54b40d9d368ca6d24deb5088d4230d58d2f14c3b
+  checksum: 10c0/72110f04fbffbc4bd887d21b1a04f29afd92fc8797ae20cb4526b1479d82a46e64472266669ebd94dc09d89f2bca808a99938718fbd41ea9653ad7028f3b0bc3
   languageName: node
   linkType: hard
 
-"@enclave-vm/core@npm:^2.16.0":
-  version: 2.16.0
-  resolution: "@enclave-vm/core@npm:2.16.0"
+"@enclave-vm/core@npm:^2.17.0":
+  version: 2.17.0
+  resolution: "@enclave-vm/core@npm:2.17.0"
   dependencies:
     "@babel/standalone": "npm:^7.29.0"
-    "@enclave-vm/ast": "npm:2.16.0"
-    "@enclave-vm/types": "npm:2.16.0"
+    "@enclave-vm/ast": "npm:2.17.0"
+    "@enclave-vm/types": "npm:2.17.0"
     "@types/estree": "npm:1.0.8"
     acorn: "npm:8.15.0"
     acorn-walk: "npm:8.3.4"
@@ -1933,16 +1933,16 @@ __metadata:
       optional: true
     vectoriadb:
       optional: true
-  checksum: 10c0/d8aeed3bb7661ff56d17d1d8e84c24dcf271e8232322c6ded43b1c74161c719183ee6fa113ff2e2af7e81d05bb6b7e0356d325354ee552b0616708b259a2f915
+  checksum: 10c0/e156029da4b748560d9a61ccba213b5a44de8f4c6c601db7dfa849ec6410a82dc9e4bb1583477f67d2bb4bf00b6d0350e8e6714d8a4e7d60db383c299b38ea7e
   languageName: node
   linkType: hard
 
-"@enclave-vm/types@npm:2.16.0":
-  version: 2.16.0
-  resolution: "@enclave-vm/types@npm:2.16.0"
+"@enclave-vm/types@npm:2.17.0":
+  version: 2.17.0
+  resolution: "@enclave-vm/types@npm:2.17.0"
   dependencies:
     zod: "npm:^4.3.6"
-  checksum: 10c0/4092e3c7c4818ba8d10f6e0c2a699020b406cfcd8ca2a604110678975c53930beb7533f67608172e3c45841479dbaccc4066a8c61c3ee6370e6743fd97075a6d
+  checksum: 10c0/e657863b13ee3705bdbad997f28314e58098d577358d86b9f23c0dc186647a609d16e0ff298dced211fb6cdec06100d9b505bb80bf6a9bc0c959db73a5a2c153
   languageName: node
   linkType: hard
 
@@ -2556,8 +2556,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-codecall@workspace:plugins/plugin-codecall"
   dependencies:
-    "@enclave-vm/ast": "npm:^2.16.0"
-    "@enclave-vm/core": "npm:^2.16.0"
+    "@enclave-vm/ast": "npm:^2.17.0"
+    "@enclave-vm/core": "npm:^2.17.0"
     "@frontmcp/protocol": "npm:1.10.9-rc.1"
     "@frontmcp/sdk": "npm:1.10.9-rc.1"
     acorn: "npm:^8.15.0"
@@ -2769,7 +2769,7 @@ __metadata:
     "@anthropic-ai/sdk": "npm:^0.104.1"
     "@emotion/react": "npm:^11.14.0"
     "@emotion/styled": "npm:^11.14.1"
-    "@enclave-vm/core": "npm:^2.16.0"
+    "@enclave-vm/core": "npm:^2.17.0"
     "@eslint/js": "npm:^10.0.1"
     "@huggingface/transformers": "npm:^3.2.2"
     "@ianvs/prettier-plugin-sort-imports": "npm:^4.7.1"
@@ -2991,7 +2991,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/utils@workspace:libs/utils"
   dependencies:
-    "@enclave-vm/ast": "npm:^2.16.0"
+    "@enclave-vm/ast": "npm:^2.17.0"
     "@noble/ciphers": "npm:^2.1.1"
     "@noble/hashes": "npm:^2.0.1"
     "@types/node": "npm:^24.0.0"
