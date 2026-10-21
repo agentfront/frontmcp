@@ -9,9 +9,9 @@
  * @module skill/skill-md-parser
  */
 
-import * as yaml from 'js-yaml';
-
 import { readFile } from '@frontmcp/utils';
+
+import * as yaml from '#js-yaml';
 
 import type {
   SkillExample,
