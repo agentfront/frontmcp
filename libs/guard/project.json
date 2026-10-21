@@ -28,6 +28,7 @@
         "platform": "node",
         "assets": ["libs/guard/README.md", "libs/guard/CHANGELOG.md", "LICENSE", "libs/guard/package.json"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -49,6 +50,7 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },
@@ -60,7 +62,11 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build-cjs", "build-esm"],
       "options": {
-        "command": "node scripts/strip-dist-from-pkg.js libs/guard/dist/package.json"
+        "commands": [
+          "node scripts/strip-dist-from-pkg.js libs/guard/dist/package.json",
+          "node scripts/escape-non-ascii.mjs libs/guard/dist"
+        ],
+        "parallel": false
       }
     },
     "test": {

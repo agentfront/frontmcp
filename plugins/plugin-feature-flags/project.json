@@ -26,6 +26,7 @@
           "plugins/plugin-feature-flags/package.json"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -56,6 +57,7 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },
@@ -78,7 +80,8 @@
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js plugins/plugin-feature-flags/dist/package.json",
-          "node scripts/inject-esm-require-banner.js plugins/plugin-feature-flags/dist/esm"
+          "node scripts/inject-esm-require-banner.js plugins/plugin-feature-flags/dist/esm",
+          "node scripts/escape-non-ascii.mjs plugins/plugin-feature-flags/dist"
         ],
         "parallel": false
       }

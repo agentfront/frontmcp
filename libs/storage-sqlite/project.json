@@ -28,6 +28,7 @@
         "platform": "node",
         "assets": ["libs/storage-sqlite/README.md", "LICENSE", "libs/storage-sqlite/package.json"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -50,6 +51,7 @@
         "platform": "node",
         "skipTypeCheck": true,
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },
@@ -63,7 +65,8 @@
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/storage-sqlite/dist/package.json",
-          "node scripts/inject-esm-require-banner.js libs/storage-sqlite/dist/esm"
+          "node scripts/inject-esm-require-banner.js libs/storage-sqlite/dist/esm",
+          "node scripts/escape-non-ascii.mjs libs/storage-sqlite/dist"
         ],
         "parallel": false
       }

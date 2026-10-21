@@ -34,6 +34,7 @@
         ],
         "assets": ["libs/utils/README.md", "libs/utils/CHANGELOG.md", "LICENSE", "libs/utils/package.json"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -78,6 +79,7 @@
           "libs/utils/src/path/browser-path.ts"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },
@@ -99,7 +101,8 @@
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/utils/dist/package.json",
-          "node scripts/inject-esm-require-banner.js libs/utils/dist/esm"
+          "node scripts/inject-esm-require-banner.js libs/utils/dist/esm",
+          "node scripts/escape-non-ascii.mjs libs/utils/dist"
         ],
         "parallel": false
       }

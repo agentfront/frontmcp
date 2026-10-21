@@ -26,6 +26,7 @@
           "libs/observability/package.json"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -59,6 +60,7 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },
@@ -84,7 +86,8 @@
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/observability/dist/package.json",
-          "node scripts/inject-esm-require-banner.js libs/observability/dist/esm"
+          "node scripts/inject-esm-require-banner.js libs/observability/dist/esm",
+          "node scripts/escape-non-ascii.mjs libs/observability/dist"
         ],
         "parallel": false
       }

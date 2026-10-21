@@ -11,6 +11,7 @@ import { InvalidTransportSessionError, SessionClaimConflictError } from '../erro
 import type { ClaimedSessionInfo } from '../ha';
 import type { ClientCapabilities } from '../notification/notification.service';
 import type { Scope } from '../scope';
+import { loadStreamableHttpTransport } from './adapters/transport.streamable-http.adapter';
 import HandleMcp20260728Flow from './flows/handle.mcp-20260728.flow';
 import HandleSseFlow from './flows/handle.sse.flow';
 import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
@@ -113,6 +114,18 @@ export class TransportService {
    * Key: JSON-encoded {t: type, h: tokenHash, s: sessionId}, Value: Promise that resolves when creation completes
    */
   private readonly creationMutex: Map<string, Promise<Transporter>> = new Map();
+
+  // The Streamable HTTP transport class loads with the first session that uses it, so stdio and SSE servers never load it.
+  private async newLocalTransporter(
+    key: TransportKey,
+    res: ServerResponse,
+    onDispose: () => void,
+  ): Promise<LocalTransporter> {
+    if (key.type === 'streamable-http' || key.type === 'stateless-http') {
+      await loadStreamableHttpTransport();
+    }
+    return new LocalTransporter(this.scope, key, res, onDispose);
+  }
 
   /**
    * Get the default TTL for session persistence.
@@ -847,7 +860,7 @@ export class TransportService {
     const defaultTtlMs = this.getDefaultTtlMs();
 
     // Create new transport
-    const transporter = new LocalTransporter(this.scope, key, res, () =>
+    const transporter = await this.newLocalTransporter(key, res, () =>
       this.onSessionTransportDisposed(key, sessionId, sessionStore),
     );
 
@@ -944,7 +957,7 @@ export class TransportService {
     const sessionStore = this.sessionStore;
     const defaultTtlMs = this.getDefaultTtlMs();
 
-    const transporter = new LocalTransporter(this.scope, key, res, () =>
+    const transporter = await this.newLocalTransporter(key, res, () =>
       this.onSessionTransportDisposed(key, sessionId, sessionStore),
     );
 
@@ -1082,26 +1095,7 @@ export class TransportService {
    * All anonymous requests share the same transport instance.
    */
   async getOrCreateAnonymousStatelessTransport(type: TransportType, res: ServerResponse): Promise<Transporter> {
-    const key = this.keyOf(type, '__anonymous__', STATELESS_SESSION_ID);
-    const existing = this.lookupLocal(key);
-    if (existing) return existing;
-
-    // Create shared transport for all anonymous requests
-    const transporter = new LocalTransporter(this.scope, key, res, () => {
-      this.evictLocal(key);
-      if (this.distributed && this.bus) {
-        this.bus.revoke(key).catch(() => void 0);
-      }
-    });
-
-    await transporter.ready();
-    this.insertLocal(key, transporter);
-
-    if (this.distributed && this.bus) {
-      await this.bus.advertise(key);
-    }
-
-    return transporter;
+    return this.getOrCreateStatelessTransport(this.keyOf(type, '__anonymous__', STATELESS_SESSION_ID), res);
   }
 
   /**
@@ -1113,12 +1107,29 @@ export class TransportService {
     token: string,
     res: ServerResponse,
   ): Promise<Transporter> {
-    const key = this.keyOf(type, token, STATELESS_SESSION_ID);
+    return this.getOrCreateStatelessTransport(this.keyOf(type, token, STATELESS_SESSION_ID), res);
+  }
+
+  /** Concurrent first requests share one creation, so a second transport never replaces the first and gets evicted with it. */
+  private async getOrCreateStatelessTransport(key: TransportKey, res: ServerResponse): Promise<Transporter> {
     const existing = this.lookupLocal(key);
     if (existing) return existing;
 
-    // Create singleton transport for this token
-    const transporter = new LocalTransporter(this.scope, key, res, () => {
+    const mutexKey = JSON.stringify({ t: key.type, h: key.tokenHash, s: key.sessionId });
+    const pendingCreation = this.creationMutex.get(mutexKey);
+    if (pendingCreation) return pendingCreation;
+
+    const creationPromise = this.doCreateStatelessTransport(key, res);
+    this.creationMutex.set(mutexKey, creationPromise);
+    try {
+      return await creationPromise;
+    } finally {
+      this.creationMutex.delete(mutexKey);
+    }
+  }
+
+  private async doCreateStatelessTransport(key: TransportKey, res: ServerResponse): Promise<Transporter> {
+    const transporter = await this.newLocalTransporter(key, res, () => {
       this.evictLocal(key);
       if (this.distributed && this.bus) {
         this.bus.revoke(key).catch(() => void 0);

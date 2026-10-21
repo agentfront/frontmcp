@@ -31,6 +31,7 @@
           "libs/uipack/src/adapters/index.ts"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -72,6 +73,7 @@
           "libs/uipack/src/adapters/index.ts"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },
@@ -95,7 +97,8 @@
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/uipack/dist/package.json",
-          "node scripts/inject-esm-require-banner.js libs/uipack/dist/esm"
+          "node scripts/inject-esm-require-banner.js libs/uipack/dist/esm",
+          "node scripts/escape-non-ascii.mjs libs/uipack/dist"
         ],
         "parallel": false
       }

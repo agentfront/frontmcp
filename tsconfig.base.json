@@ -104,6 +104,7 @@
       "#server-types": ["libs/protocol/src/node-server-types.ts"],
       "#stdio-client": ["libs/protocol/src/node-stdio-client.ts"],
       "#stdio-server": ["libs/protocol/src/node-stdio-server.ts"],
+      "#client": ["libs/protocol/src/client.ts"],
 
       "#crypto-provider": ["libs/utils/src/crypto/node.ts"],
       "#async-context": ["libs/utils/src/async-context/node-async-context.ts"],
@@ -116,7 +117,8 @@
       "#langchain-openai": ["libs/sdk/src/agent/adapters/polyfills/node-langchain-openai.ts"],
       "#langchain-anthropic": ["libs/sdk/src/agent/adapters/polyfills/node-langchain-anthropic.ts"],
       "#sse-transport": ["libs/sdk/src/transport/adapters/polyfills/node-sse-transport.ts"],
-      "#express-host": ["libs/sdk/src/server/adapters/polyfills/node-express-host.ts"]
+      "#express-host": ["libs/sdk/src/server/adapters/polyfills/node-express-host.ts"],
+      "#import-computed": ["libs/sdk/src/esm-loader/import-computed.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

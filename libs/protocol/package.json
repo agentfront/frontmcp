@@ -30,8 +30,10 @@
   },
   "imports": {
     "#mcp-streamable-http": {
+      "types": "./src/node-mcp-streamable-http.ts",
       "worker": "./src/node-mcp-streamable-http.ts",
       "browser": "./src/browser-mcp-streamable-http.ts",
+      "require": "./src/lazy-mcp-streamable-http.ts",
       "default": "./src/node-mcp-streamable-http.ts"
     },
     "#mcp-server": {
@@ -53,6 +55,14 @@
       "worker": "./src/browser-stdio-server.ts",
       "browser": "./src/browser-stdio-server.ts",
       "default": "./src/node-stdio-server.ts"
+    },
+    "#client": {
+      "types": "./src/client.ts",
+      "worker": "./src/client.ts",
+      "browser": "./src/client.ts",
+      "require": "./src/lazy-client.ts",
+      "import": "./src/client.ts",
+      "default": "./src/client.ts"
     }
   },
   "type": "commonjs",

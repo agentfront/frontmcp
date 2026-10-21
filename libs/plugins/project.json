@@ -22,6 +22,7 @@
         "platform": "node",
         "assets": ["libs/plugins/README.md", "LICENSE", "libs/plugins/package.json"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -50,6 +51,7 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },
@@ -68,7 +70,11 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build-cjs", "build-esm"],
       "options": {
-        "command": "node scripts/strip-dist-from-pkg.js libs/plugins/dist/package.json"
+        "commands": [
+          "node scripts/strip-dist-from-pkg.js libs/plugins/dist/package.json",
+          "node scripts/escape-non-ascii.mjs libs/plugins/dist"
+        ],
+        "parallel": false
       }
     },
     "test": {

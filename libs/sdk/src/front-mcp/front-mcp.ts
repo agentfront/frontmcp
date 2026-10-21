@@ -1,3 +1,4 @@
+import { McpServer, StdioServerTransport } from '@frontmcp/protocol';
 import { getEnv, isEdgeRuntime, randomUUID } from '@frontmcp/utils';
 
 import {
@@ -25,7 +26,6 @@ import { type FrontMcpServerInstance } from '../server/server.instance';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task/task-scope.helper';
 import type { FetchHandlerCtx, WebFetchHandler } from '../transport/web-fetch-handler';
-import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { markDirectOnly } from './direct-only.flag';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 import { DEFAULT_SHUTDOWN_DEADLINE_MS, exitOnShutdownSignals } from './shutdown-signals';
@@ -763,12 +763,6 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // prior attempt's scopes (sqlite/redis/channels), MCP server, and transport.
     const startupCleanups: Array<() => Promise<void> | void> = [];
     try {
-      // Dynamically import to avoid bundling issues
-      const { StdioServerTransport, McpServer } = await importWithRequireFallback(
-        () => import('@frontmcp/protocol'),
-        () => require('@frontmcp/protocol') as typeof import('@frontmcp/protocol'),
-      );
-
       // Parse config: disable the HTTP server, route console logging to
       // stderr, and keep file logging. `serve: false` selects the no-op
       // server so no Express adapter is constructed and no TCP port can ever

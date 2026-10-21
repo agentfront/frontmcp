@@ -27,6 +27,7 @@
           "plugins/plugin-codecall/package.json"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -59,6 +60,7 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },
@@ -81,7 +83,11 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build-cjs", "build-esm"],
       "options": {
-        "command": "node scripts/strip-dist-from-pkg.js plugins/plugin-codecall/dist/package.json"
+        "commands": [
+          "node scripts/strip-dist-from-pkg.js plugins/plugin-codecall/dist/package.json",
+          "node scripts/escape-non-ascii.mjs plugins/plugin-codecall/dist"
+        ],
+        "parallel": false
       }
     },
     "test": {
