@@ -6,6 +6,8 @@
 
 import {
   Client,
+  ElicitRequestSchema,
+  ResourceUpdatedNotificationSchema,
   type CallToolResult,
   type CompleteResult,
   type ElicitRequestParams,
@@ -29,7 +31,6 @@ import {
   SkillsLoadResultSchema,
   SkillsSearchResultSchema,
 } from '../transport/mcp-handlers/skills-mcp.types';
-import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type {
   CallToolOptions,
   ClientInfo,
@@ -172,12 +173,9 @@ export class DirectClientImpl implements DirectClient {
         },
       };
 
-      // Connect MCP client
-      // Note: Using 'any' cast for clientTransport to handle ESM/CJS type incompatibility
-      // between dynamic imports from @frontmcp/protocol
       const mcpClient = new Client(clientInfo, clientCapabilities);
 
-      await mcpClient.connect(clientTransport as any);
+      await mcpClient.connect(clientTransport);
 
       // Get server info from handshake
       const serverInfo = mcpClient.getServerVersion();
@@ -220,12 +218,6 @@ export class DirectClientImpl implements DirectClient {
    */
   private async setupNotificationHandlers(mcpClient: any): Promise<void> {
     try {
-      // Dynamic import to handle ESM/CJS compatibility
-      const { ResourceUpdatedNotificationSchema, ElicitRequestSchema } = await importWithRequireFallback(
-        () => import('@frontmcp/protocol'),
-        () => require('@frontmcp/protocol') as typeof import('@frontmcp/protocol'),
-      );
-
       // Handler for resource updated notifications
       if (typeof mcpClient.setNotificationHandler === 'function') {
         mcpClient.setNotificationHandler(
