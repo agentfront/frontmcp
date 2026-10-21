@@ -58,6 +58,7 @@ const EXPECT = {
     '#server-types': 'node',
     '#stdio-client': 'stub',
     '#stdio-server': 'stub',
+    '#client': 'node',
   },
   'libs/sdk': {
     '#sse-transport': 'stub',

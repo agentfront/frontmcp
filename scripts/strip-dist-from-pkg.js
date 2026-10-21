@@ -60,7 +60,8 @@ if (pkg.exports) {
 // Fix imports map deeply (strip "./dist/" + remove "development")
 if (pkg.imports) {
   const cleaned = walk(pkg.imports);
-  if (cleaned !== undefined) pkg.imports = withEsmBrowserTargets(cleaned, path.dirname(pkgPath));
+  const distDir = path.dirname(pkgPath);
+  if (cleaned !== undefined) pkg.imports = withEsmImportTargets(withEsmBrowserTargets(cleaned, distDir), distDir);
   else delete pkg.imports;
 }
 
@@ -86,6 +87,21 @@ function withEsmBrowserTargets(imports, distDir) {
     out[specifier] =
       target.endsWith('.js') && fs.existsSync(path.join(distDir, esmTarget))
         ? { ...entry, browser: { import: esmTarget, default: target } }
+        : entry;
+  }
+  return out;
+}
+
+// An `import` target is built as CommonJS (.js) next to its ESM twin (esm/*.mjs); an ESM importer gets the twin.
+function withEsmImportTargets(imports, distDir) {
+  const out = {};
+  for (const [specifier, entry] of Object.entries(imports)) {
+    const target = entry?.import;
+    const esmTarget =
+      typeof target === 'string' ? target.replace(/^\.\//, './esm/').replace(/\.js$/, '.mjs') : undefined;
+    out[specifier] =
+      esmTarget && target.endsWith('.js') && fs.existsSync(path.join(distDir, esmTarget))
+        ? { ...entry, import: esmTarget }
         : entry;
   }
   return out;
