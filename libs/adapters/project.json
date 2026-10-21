@@ -29,6 +29,7 @@
         "assets": ["libs/adapters/README.md", "LICENSE", "libs/adapters/package.json"],
         "additionalEntryPoints": ["libs/adapters/src/openapi/index.ts", "libs/adapters/src/skills/index.ts"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -64,6 +65,7 @@
         "platform": "node",
         "additionalEntryPoints": ["libs/adapters/src/openapi/index.ts", "libs/adapters/src/skills/index.ts"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },

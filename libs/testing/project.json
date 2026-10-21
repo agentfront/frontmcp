@@ -29,6 +29,7 @@
           "libs/testing/src/perf/perf-setup.ts"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -75,6 +76,7 @@
           "libs/testing/src/perf/perf-setup.ts"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },

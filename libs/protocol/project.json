@@ -34,6 +34,7 @@
         ],
         "assets": ["libs/protocol/README.md", "libs/protocol/CHANGELOG.md", "LICENSE", "libs/protocol/package.json"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -79,6 +80,7 @@
           "libs/protocol/src/lazy-client.ts"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },

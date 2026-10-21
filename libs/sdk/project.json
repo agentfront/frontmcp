@@ -22,6 +22,7 @@
         "platform": "node",
         "assets": ["libs/sdk/README.md", "LICENSE", "libs/sdk/package.json"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": { ".js": ".js" },
           "external": [
             "@frontmcp/sdk",
@@ -44,7 +45,8 @@
             "cors",
             "raw-body",
             "content-type",
-            "@vercel/kv"
+            "@vercel/kv",
+            "#import-computed"
           ]
         }
       }
@@ -64,6 +66,7 @@
         "platform": "node",
         "skipTypeCheck": true,
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": { ".js": ".mjs" },
           "external": [
             "@frontmcp/sdk",
@@ -86,7 +89,8 @@
             "cors",
             "raw-body",
             "content-type",
-            "@vercel/kv"
+            "@vercel/kv",
+            "#import-computed"
           ]
         }
       }
@@ -129,7 +133,8 @@
             "cors",
             "raw-body",
             "content-type",
-            "@vercel/kv"
+            "@vercel/kv",
+            "#import-computed"
           ]
         }
       }
@@ -149,6 +154,8 @@
       "dependsOn": ["build-cjs", "build-esm", "build-browser", "build-browser-esm"],
       "options": {
         "commands": [
+          "npx esbuild libs/sdk/src/esm-loader/import-computed.ts --format=cjs --platform=node --outfile=libs/sdk/dist/esm-loader/import-computed.js",
+          "npx esbuild libs/sdk/src/esm-loader/import-computed.ts --format=esm --platform=node --outfile=libs/sdk/dist/esm/esm-loader/import-computed.mjs",
           "node scripts/strip-dist-from-pkg.js libs/sdk/dist/package.json",
           "node scripts/inject-esm-require-banner.js libs/sdk/dist/esm libs/sdk/dist/browser",
           "node scripts/escape-non-ascii.mjs libs/sdk/dist"

@@ -27,6 +27,7 @@
           "libs/react/src/api/index.ts"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -68,6 +69,7 @@
           "libs/react/src/api/index.ts"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },

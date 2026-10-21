@@ -35,6 +35,10 @@
       "worker": "./src/server/adapters/polyfills/browser-express-host.ts",
       "browser": "./src/server/adapters/polyfills/browser-express-host.ts",
       "default": "./src/server/adapters/polyfills/node-express-host.ts"
+    },
+    "#import-computed": {
+      "import": "./src/esm-loader/import-computed.ts",
+      "default": "./src/esm-loader/import-computed.ts"
     }
   },
   "type": "commonjs",

@@ -27,6 +27,7 @@
           "plugins/plugin-webmcp/package.json"
         ],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -57,6 +58,7 @@
         "thirdParty": false,
         "platform": "neutral",
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },
