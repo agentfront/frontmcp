@@ -62,6 +62,7 @@ test('refuses a raw template, whose text an escape would change', async () => {
 
   assert.notEqual(res.status, 0);
   assert.match(res.stderr, /index\.js: escaping its non-ASCII characters may change the program/);
+  assert.match(res.stderr, /In a tagged template, an escape changes the raw text the tag reads/);
   assert.equal(await fs.readFile(path.join(dir, 'index.js'), 'utf8'), body);
 });
 

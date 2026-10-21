@@ -30,7 +30,7 @@ function rewrite(file) {
   // esbuild keeps regular-expression literals and tagged templates as written, so it can't confirm an escape there.
   if (compiledProgram(escaped, file) !== compiledProgram(source, file)) {
     throw new Error(
-      `${file}: escaping its non-ASCII characters may change the program (in a regular-expression literal or a tagged template); write them as \\uXXXX escapes in the source`,
+      `${file}: escaping its non-ASCII characters may change the program. In a regular-expression literal, write them as \\uXXXX escapes in the source. In a tagged template, an escape changes the raw text the tag reads, so write the template without them (with String.raw, an interpolation such as \${'\\u2014'} keeps the result).`,
     );
   }
   writeFileSync(file, escaped);
