@@ -11,6 +11,7 @@ import { InvalidTransportSessionError, SessionClaimConflictError } from '../erro
 import type { ClaimedSessionInfo } from '../ha';
 import type { ClientCapabilities } from '../notification/notification.service';
 import type { Scope } from '../scope';
+import { loadStreamableHttpTransport } from './adapters/transport.streamable-http.adapter';
 import HandleMcp20260728Flow from './flows/handle.mcp-20260728.flow';
 import HandleSseFlow from './flows/handle.sse.flow';
 import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
@@ -113,6 +114,16 @@ export class TransportService {
    * Key: JSON-encoded {t: type, h: tokenHash, s: sessionId}, Value: Promise that resolves when creation completes
    */
   private readonly creationMutex: Map<string, Promise<Transporter>> = new Map();
+
+  // The Streamable HTTP transport class loads with the first transporter, so a stdio server never loads it.
+  private async newLocalTransporter(
+    key: TransportKey,
+    res: ServerResponse,
+    onDispose: () => void,
+  ): Promise<LocalTransporter> {
+    await loadStreamableHttpTransport();
+    return new LocalTransporter(this.scope, key, res, onDispose);
+  }
 
   /**
    * Get the default TTL for session persistence.
@@ -847,7 +858,7 @@ export class TransportService {
     const defaultTtlMs = this.getDefaultTtlMs();
 
     // Create new transport
-    const transporter = new LocalTransporter(this.scope, key, res, () =>
+    const transporter = await this.newLocalTransporter(key, res, () =>
       this.onSessionTransportDisposed(key, sessionId, sessionStore),
     );
 
@@ -944,7 +955,7 @@ export class TransportService {
     const sessionStore = this.sessionStore;
     const defaultTtlMs = this.getDefaultTtlMs();
 
-    const transporter = new LocalTransporter(this.scope, key, res, () =>
+    const transporter = await this.newLocalTransporter(key, res, () =>
       this.onSessionTransportDisposed(key, sessionId, sessionStore),
     );
 
@@ -1087,7 +1098,7 @@ export class TransportService {
     if (existing) return existing;
 
     // Create shared transport for all anonymous requests
-    const transporter = new LocalTransporter(this.scope, key, res, () => {
+    const transporter = await this.newLocalTransporter(key, res, () => {
       this.evictLocal(key);
       if (this.distributed && this.bus) {
         this.bus.revoke(key).catch(() => void 0);
@@ -1118,7 +1129,7 @@ export class TransportService {
     if (existing) return existing;
 
     // Create singleton transport for this token
-    const transporter = new LocalTransporter(this.scope, key, res, () => {
+    const transporter = await this.newLocalTransporter(key, res, () => {
       this.evictLocal(key);
       if (this.distributed && this.bus) {
         this.bus.revoke(key).catch(() => void 0);

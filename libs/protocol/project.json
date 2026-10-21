@@ -30,7 +30,8 @@
           "libs/protocol/src/node-stdio-server.ts",
           "libs/protocol/src/browser-stdio-server.ts",
           "libs/protocol/src/client.ts",
-          "libs/protocol/src/lazy-client.ts"
+          "libs/protocol/src/lazy-client.ts",
+          "libs/protocol/src/lazy-mcp-streamable-http.ts"
         ],
         "assets": ["libs/protocol/README.md", "libs/protocol/CHANGELOG.md", "LICENSE", "libs/protocol/package.json"],
         "esbuildOptions": {
@@ -77,7 +78,8 @@
           "libs/protocol/src/node-stdio-server.ts",
           "libs/protocol/src/browser-stdio-server.ts",
           "libs/protocol/src/client.ts",
-          "libs/protocol/src/lazy-client.ts"
+          "libs/protocol/src/lazy-client.ts",
+          "libs/protocol/src/lazy-mcp-streamable-http.ts"
         ],
         "esbuildOptions": {
           "minifyWhitespace": true,
