@@ -821,6 +821,23 @@ describe('TransportService', () => {
       expect(transport1).toBe(transport2);
     });
 
+    it('creates one transport when the first requests for a stateless key arrive together', async () => {
+      const { LocalTransporter } = jest.requireMock('../transport.local') as { LocalTransporter: jest.Mock };
+
+      const [anonymous1, anonymous2] = await Promise.all([
+        service.getOrCreateAnonymousStatelessTransport('stateless-http', mockResponse as never),
+        service.getOrCreateAnonymousStatelessTransport('stateless-http', mockResponse as never),
+      ]);
+      const [authenticated1, authenticated2] = await Promise.all([
+        service.getOrCreateAuthenticatedStatelessTransport('stateless-http', 'test-token', mockResponse as never),
+        service.getOrCreateAuthenticatedStatelessTransport('stateless-http', 'test-token', mockResponse as never),
+      ]);
+
+      expect(anonymous1).toBe(anonymous2);
+      expect(authenticated1).toBe(authenticated2);
+      expect(LocalTransporter).toHaveBeenCalledTimes(2);
+    });
+
     it('should create different transports for different tokens', async () => {
       const transport1 = await service.getOrCreateAuthenticatedStatelessTransport(
         'stateless-http',
