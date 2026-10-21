@@ -4,7 +4,13 @@
  * Isolates the semver dependency to a single file for easier maintenance.
  */
 
-import * as semver from 'semver';
+import semverCompare from 'semver/functions/compare.js';
+import semverGt from 'semver/functions/gt.js';
+import semverRcompare from 'semver/functions/rcompare.js';
+import semverSatisfies from 'semver/functions/satisfies.js';
+import semverValid from 'semver/functions/valid.js';
+import semverMaxSatisfying from 'semver/ranges/max-satisfying.js';
+import semverValidRange from 'semver/ranges/valid.js';
 
 /**
  * Check if a range string is a dist-tag (not a semver range).
@@ -14,7 +20,7 @@ import * as semver from 'semver';
  * must be guarded separately before calling this function.
  */
 function isDistTag(range: string): boolean {
-  return /^[a-zA-Z][a-zA-Z0-9]*$/.test(range) && semver.validRange(range) === null;
+  return /^[a-zA-Z][a-zA-Z0-9]*$/.test(range) && semverValidRange(range) === null;
 }
 
 /**
@@ -26,7 +32,7 @@ function isDistTag(range: string): boolean {
  */
 export function satisfiesRange(version: string, range: string): boolean {
   if (range === 'latest' || isDistTag(range)) return true;
-  return semver.satisfies(version, range);
+  return semverSatisfies(version, range);
 }
 
 /**
@@ -38,10 +44,10 @@ export function satisfiesRange(version: string, range: string): boolean {
  */
 export function maxSatisfying(versions: string[], range: string): string | null {
   if (range === 'latest' || isDistTag(range)) {
-    const sorted = versions.filter((v) => semver.valid(v)).sort(semver.rcompare);
+    const sorted = versions.filter((v) => semverValid(v)).sort(semverRcompare);
     return sorted[0] ?? null;
   }
-  return semver.maxSatisfying(versions, range);
+  return semverMaxSatisfying(versions, range);
 }
 
 /**
@@ -49,14 +55,14 @@ export function maxSatisfying(versions: string[], range: string): string | null 
  */
 export function isValidRange(range: string): boolean {
   if (range === 'latest' || isDistTag(range)) return true;
-  return semver.validRange(range) !== null;
+  return semverValidRange(range) !== null;
 }
 
 /**
  * Check if a string is a valid semver version.
  */
 export function isValidVersion(version: string): boolean {
-  return semver.valid(version) !== null;
+  return semverValid(version) !== null;
 }
 
 /**
@@ -66,12 +72,12 @@ export function isValidVersion(version: string): boolean {
  * - positive if v1 > v2
  */
 export function compareVersions(v1: string, v2: string): number {
-  return semver.compare(v1, v2);
+  return semverCompare(v1, v2);
 }
 
 /**
  * Check if v1 is greater than v2.
  */
 export function isNewerVersion(v1: string, v2: string): boolean {
-  return semver.gt(v1, v2);
+  return semverGt(v1, v2);
 }
