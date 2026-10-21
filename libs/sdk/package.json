@@ -39,6 +39,21 @@
     "#import-computed": {
       "import": "./src/esm-loader/import-computed.ts",
       "default": "./src/esm-loader/import-computed.ts"
+    },
+    "#js-yaml": {
+      "types": "./src/third-party/js-yaml.ts",
+      "require": "./src/third-party/lazy-js-yaml.ts",
+      "default": "./src/third-party/js-yaml.ts"
+    },
+    "#semver": {
+      "types": "./src/third-party/semver.ts",
+      "require": "./src/third-party/lazy-semver.ts",
+      "default": "./src/third-party/semver.ts"
+    },
+    "#uipack-render": {
+      "types": "./src/third-party/uipack-render.ts",
+      "require": "./src/third-party/lazy-uipack-render.ts",
+      "default": "./src/third-party/uipack-render.ts"
     }
   },
   "type": "commonjs",
