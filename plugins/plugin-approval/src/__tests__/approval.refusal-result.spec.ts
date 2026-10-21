@@ -7,7 +7,8 @@
  */
 import 'reflect-metadata';
 
-import { Client, type CallToolResult } from '@frontmcp/protocol';
+import { type CallToolResult } from '@frontmcp/protocol';
+import { Client } from '@frontmcp/protocol/client';
 import { App, createInMemoryServer, FrontMcpInstance, LogLevel, Tool, ToolContext } from '@frontmcp/sdk';
 
 import { ApprovalPlugin } from '../index';

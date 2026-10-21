@@ -63,7 +63,7 @@ export interface InMemoryServerResult {
  *
  * @example
  * ```typescript
- * import { Client } from '@frontmcp/protocol';
+ * import { Client } from '@frontmcp/protocol/client';
  * import { FrontMcpInstance, createInMemoryServer } from '@frontmcp/sdk';
  *
  * // Create a FrontMCP instance

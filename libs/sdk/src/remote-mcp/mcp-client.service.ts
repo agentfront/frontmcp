@@ -5,9 +5,6 @@
 
 import { decodeJwtPayloadSafe } from '@frontmcp/auth';
 import {
-  Client,
-  SSEClientTransport,
-  StreamableHTTPClientTransport,
   type AuthInfo,
   type CallToolResult,
   type GetPromptResult,
@@ -18,6 +15,7 @@ import {
   type Tool,
   type Transport,
 } from '@frontmcp/protocol';
+import { Client, SSEClientTransport, StreamableHTTPClientTransport } from '@frontmcp/protocol/client';
 
 import { type FrontMcpLogger } from '../common';
 import { listAllPages } from '../common/utils/list-all-pages.utils';

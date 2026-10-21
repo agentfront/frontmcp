@@ -54,7 +54,7 @@ export type {
  * @example
  * ```typescript
  * import { createInMemoryServer } from '@frontmcp/sdk';
- * import { Client } from '@frontmcp/protocol';
+ * import { Client } from '@frontmcp/protocol/client';
  *
  * const { clientTransport, setAuthInfo, close } = await createInMemoryServer(scope, {
  *   authInfo: { token: 'jwt-token' }

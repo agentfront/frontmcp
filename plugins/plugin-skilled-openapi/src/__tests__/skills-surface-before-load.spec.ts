@@ -13,7 +13,7 @@
  */
 import 'reflect-metadata';
 
-import { Client } from '@frontmcp/protocol';
+import { Client } from '@frontmcp/protocol/client';
 import { createInMemoryServer, FrontMcpInstance, LogLevel, z } from '@frontmcp/sdk';
 
 import { SkilledOpenApiPlugin } from '../index';

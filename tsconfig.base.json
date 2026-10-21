@@ -87,6 +87,7 @@
       "@frontmcp/ui/universal": ["libs/ui/src/universal/index.ts"],
       "@frontmcp/ui/bundler": ["libs/ui/src/bundler/index.ts"],
       "@frontmcp/protocol": ["libs/protocol/src/index.ts"],
+      "@frontmcp/protocol/client": ["libs/protocol/src/clients.ts"],
       "@frontmcp/auth": ["libs/auth/src/index.ts"],
       "@frontmcp/guard": ["libs/guard/src/index.ts"],
       "@frontmcp/observability": ["libs/observability/src/index.ts"],
