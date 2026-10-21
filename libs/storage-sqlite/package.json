@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/storage-sqlite",
-  "version": "1.10.9",
+  "version": "1.10.10",
   "description": "SQLite storage for FrontMCP: sessions, background tasks, elicitations and stream events in a local file, without Redis",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://frontmcp.dev/reference/deployment/sqlite",
@@ -46,11 +46,11 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@frontmcp/utils": "1.10.9",
+    "@frontmcp/utils": "1.10.10",
     "better-sqlite3": "^12.6.2"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.10.9"
+    "@frontmcp/lazy-zod": "1.10.10"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
