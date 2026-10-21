@@ -55,7 +55,6 @@
           "libs/ui/src/auth/vanilla/index.ts"
         ],
         "esbuildOptions": {
-          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -149,7 +148,6 @@
           "libs/ui/src/auth/vanilla/index.ts"
         ],
         "esbuildOptions": {
-          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },
