@@ -53,6 +53,14 @@
       "worker": "./src/browser-stdio-server.ts",
       "browser": "./src/browser-stdio-server.ts",
       "default": "./src/node-stdio-server.ts"
+    },
+    "#client": {
+      "types": "./src/client.ts",
+      "worker": "./src/client.ts",
+      "browser": "./src/client.ts",
+      "require": "./src/lazy-client.ts",
+      "import": "./src/client.ts",
+      "default": "./src/client.ts"
     }
   },
   "type": "commonjs",

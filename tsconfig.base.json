@@ -104,6 +104,7 @@
       "#server-types": ["libs/protocol/src/node-server-types.ts"],
       "#stdio-client": ["libs/protocol/src/node-stdio-client.ts"],
       "#stdio-server": ["libs/protocol/src/node-stdio-server.ts"],
+      "#client": ["libs/protocol/src/client.ts"],
 
       "#crypto-provider": ["libs/utils/src/crypto/node.ts"],
       "#async-context": ["libs/utils/src/async-context/node-async-context.ts"],
