@@ -3,11 +3,25 @@ import { type RequestId } from '@frontmcp/protocol';
 
 import { type ServerResponse } from '../../common';
 import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult } from '../../elicitation/elicitation.types';
-import { ElicitationTimeoutError, InvalidInputError } from '../../errors';
+import { ElicitationTimeoutError, InternalMcpError, InvalidInputError } from '../../errors';
 import { type AuthenticatedServerRequest } from '../../server/server.types';
 import { rpcRequest } from '../transport.error';
-import { RecreateableSSEServerTransport } from './sse-transport';
+import type { RecreateableSSEServerTransport } from './sse-transport';
 import { LocalTransportAdapter } from './transport.local.adapter';
+
+let RecreateableTransport: typeof RecreateableSSEServerTransport | undefined;
+
+// The SSE transport reads POST bodies with raw-body and content-type, which a stdio server never needs.
+export async function loadSseTransport(): Promise<void> {
+  RecreateableTransport ??= (await import('./sse-transport.js')).RecreateableSSEServerTransport;
+}
+
+function sseTransportClass(): typeof RecreateableSSEServerTransport {
+  if (!RecreateableTransport) {
+    throw new InternalMcpError('The SSE transport was used before loadSseTransport() loaded it');
+  }
+  return RecreateableTransport;
+}
 
 export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSEServerTransport> {
   sessionId: string;
@@ -26,7 +40,8 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
   override createTransport(sessionId: string, res: ServerResponse): RecreateableSSEServerTransport {
     this.sessionId = sessionId;
     this.logger.info(`new transport session: ${sessionId.slice(0, 40)}`);
-    const transport = new RecreateableSSEServerTransport(`${this.scope.fullPath}/message`, res, {
+    const SseTransport = sseTransportClass();
+    const transport = new SseTransport(`${this.scope.fullPath}/message`, res, {
       sessionId: sessionId,
     });
     this.configureTransportHandlers(transport);
@@ -48,7 +63,8 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
   ): RecreateableSSEServerTransport {
     this.sessionId = sessionId;
     this.logger.info(`recreating transport session: ${sessionId.slice(0, 40)}, lastEventId: ${lastEventId ?? 'none'}`);
-    const transport = new RecreateableSSEServerTransport(`${this.scope.fullPath}/message`, res, {
+    const SseTransport = sseTransportClass();
+    const transport = new SseTransport(`${this.scope.fullPath}/message`, res, {
       sessionId: sessionId,
       initialEventId: lastEventId,
     });
