@@ -30,8 +30,10 @@
   },
   "imports": {
     "#mcp-streamable-http": {
+      "types": "./src/node-mcp-streamable-http.ts",
       "worker": "./src/node-mcp-streamable-http.ts",
       "browser": "./src/browser-mcp-streamable-http.ts",
+      "require": "./src/lazy-mcp-streamable-http.ts",
       "default": "./src/node-mcp-streamable-http.ts"
     },
     "#mcp-server": {

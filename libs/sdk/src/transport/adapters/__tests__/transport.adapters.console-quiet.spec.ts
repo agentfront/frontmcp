@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import { TransportStreamableHttpAdapter } from '../transport.streamable-http.adapter';
+import { loadStreamableHttpTransport, TransportStreamableHttpAdapter } from '../transport.streamable-http.adapter';
 
 const capturedOptions: Array<{ onsessioninitialized?: (sessionId: string | undefined) => void }> = [];
 
@@ -22,6 +22,8 @@ function makeAdapter(type: 'streamable-http' | 'stateless-http') {
 
 describe('transport adapters write lifecycle lines to the logger, not the console', () => {
   let consoleLog: jest.SpyInstance;
+
+  beforeAll(() => loadStreamableHttpTransport());
 
   beforeEach(() => {
     capturedOptions.length = 0;
