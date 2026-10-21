@@ -5,7 +5,6 @@
  */
 
 import {
-  Client,
   ElicitRequestSchema,
   ResourceUpdatedNotificationSchema,
   type CallToolResult,
@@ -20,6 +19,7 @@ import {
   type ReadResourceResult,
   type ServerCapabilities,
 } from '@frontmcp/protocol';
+import { Client } from '@frontmcp/protocol/client';
 import { fileExists, pathResolve, randomUUID } from '@frontmcp/utils';
 
 import { listAllPages } from '../common/utils/list-all-pages.utils';

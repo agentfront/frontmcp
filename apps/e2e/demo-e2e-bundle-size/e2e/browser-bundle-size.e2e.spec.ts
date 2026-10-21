@@ -24,11 +24,18 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_560_000 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_570_000 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_315_000 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_322_000 },
 ];
 
-const VITE_INITIAL_CHUNK_MAX_BYTES = 1_180_000;
+const VITE_INITIAL_CHUNK_MAX_BYTES = 960_000;
+
+// Packages create() never needs: the JavaScript parser behind @enclave-vm/ast (#885) and the MCP client (#886)
+const NEVER_BUNDLED: Record<string, RegExp> = {
+  'JavaScript parser': /(^|\/)node_modules\/(acorn|acorn-walk|astring)\//,
+  'MCP client':
+    /(^|\/)node_modules\/@modelcontextprotocol\/sdk\/dist\/esm\/client\/|^libs\/protocol\/dist\/esm\/clients?\.mjs$/,
+};
 
 const sdkModule = (pattern: string) => new RegExp(`^libs/sdk/dist/browser/(${pattern})`);
 
@@ -51,7 +58,7 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   observability: sdkModule('scope/(observability-scope\\.helper|tracer-provider\\.utils)'),
   'remote and esm entries': sdkModule('remote-mcp/|esm-loader/(?!package-specifier)'),
   skills:
-    /^libs\/sdk\/dist\/browser\/skill\/(providers\/|session\/|hooks\/|sep-2640\/(?!sep-2640\.constants)|flows\/(?!filter-skills\.flow)|skill-md-parser)|\/node_modules\/(js-yaml|vectoriadb)\//,
+    /^libs\/sdk\/dist\/browser\/skill\/(providers\/|session\/|hooks\/|sep-2640\/(?!sep-2640\.constants)|flows\/(?!filter-skills\.flow)|skill-md-parser)|(^|\/)node_modules\/(js-yaml|vectoriadb)\//,
   tasks: sdkModule(
     'task/(store/(?!task-backend\\.utils)|flows/|task\\.registry|helpers/(task-runner|cli-task-runner))',
   ),
@@ -85,6 +92,16 @@ describe('the browser bundle of create()', () => {
         `${label} is ${bundle.bytes.toLocaleString('en-US')} bytes, over its ${maxBytes.toLocaleString('en-US')} budget. Largest inputs:\n${topInputs(bundle)}`,
       );
     }
+  });
+
+  it.each(BUDGETS)('leaves the JavaScript parser and the MCP client out of $label', ({ entry }) => {
+    const bundle = bundles.get(entry) as BrowserBundle;
+    const leaks = leakedFeatures(bundle.metafile, NEVER_BUNDLED);
+    const leaked = [...leaks.keys()].sort();
+    const importChains = Object.fromEntries(
+      leaked.map((name) => [name, importChain(bundle.metafile, bundle.entryInput, (leaks.get(name) as string[])[0])]),
+    );
+    expect({ leaked, importChains }).toEqual({ leaked: [], importChains: {} });
   });
 
   it('reaches no feature module its config does not use', async () => {

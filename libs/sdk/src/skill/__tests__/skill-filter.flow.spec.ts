@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
-import { Client, InMemoryTransport, type ReadResourceResult } from '@frontmcp/protocol';
+import { InMemoryTransport, type ReadResourceResult } from '@frontmcp/protocol';
+import { Client } from '@frontmcp/protocol/client';
 
 import {
   createTestFetchServer,
