@@ -20,7 +20,7 @@ export * from './auth-types';
 export * from './shared';
 
 // MCP Client
-export * from './client';
+export * from '#client';
 
 // Stdio transport
 export * from './stdio';
