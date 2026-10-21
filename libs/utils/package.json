@@ -28,7 +28,7 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@enclave-vm/ast": "^2.16.0",
+    "@enclave-vm/ast": "^2.17.0",
     "@noble/ciphers": "^2.1.1",
     "@noble/hashes": "^2.0.1"
   },
