@@ -20,6 +20,7 @@
         "platform": "node",
         "assets": ["libs/lazy-zod/README.md", "libs/lazy-zod/CHANGELOG.md", "LICENSE", "libs/lazy-zod/package.json"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -42,6 +43,7 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },

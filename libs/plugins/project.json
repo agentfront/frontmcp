@@ -22,6 +22,7 @@
         "platform": "node",
         "assets": ["libs/plugins/README.md", "LICENSE", "libs/plugins/package.json"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -50,6 +51,7 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },

@@ -65,7 +65,7 @@ export default [
             '@frontmcp/protocol',
             '@frontmcp/testing',
             '@frontmcp/observability',
-            '^#(mcp-.+|crypto-.+|async-.+|event-.+|langchain-.+|sse-.+|express-.+|server-.+|stdio-.+|env|runtime-context|path|client)$',
+            '^#(mcp-.+|crypto-.+|async-.+|event-.+|langchain-.+|sse-.+|express-.+|server-.+|stdio-.+|env|runtime-context|path|client|import-computed)$',
           ],
           depConstraints: [
             {

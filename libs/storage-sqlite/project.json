@@ -28,6 +28,7 @@
         "platform": "node",
         "assets": ["libs/storage-sqlite/README.md", "LICENSE", "libs/storage-sqlite/package.json"],
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".js"
           },
@@ -50,6 +51,7 @@
         "platform": "node",
         "skipTypeCheck": true,
         "esbuildOptions": {
+          "minifyWhitespace": true,
           "outExtension": {
             ".js": ".mjs"
           },
