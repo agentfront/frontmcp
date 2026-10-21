@@ -131,6 +131,23 @@ test('#681: a browser subpath import resolves to its ESM twin for an ESM importe
   });
 });
 
+test('an import subpath target resolves to its ESM twin, and the require target stays CommonJS', async () => {
+  const { pkg } = await runOnDist(
+    {
+      name: 'x',
+      imports: {
+        '#client': { require: './src/lazy-client.ts', import: './src/client.ts', default: './src/client.ts' },
+      },
+    },
+    ['client.js', 'lazy-client.js', 'esm/client.mjs'],
+  );
+  assert.deepEqual(pkg.imports['#client'], {
+    require: './lazy-client.js',
+    import: './esm/client.mjs',
+    default: './client.js',
+  });
+});
+
 test('#681: a browser subpath import without an ESM twin is left as it is', async () => {
   const { pkg } = await runOnDist(
     { name: 'x', imports: { '#host': { browser: './src/host/browser.ts', default: './src/host/node.ts' } } },

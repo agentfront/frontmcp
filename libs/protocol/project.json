@@ -28,7 +28,9 @@
           "libs/protocol/src/node-stdio-client.ts",
           "libs/protocol/src/browser-stdio-client.ts",
           "libs/protocol/src/node-stdio-server.ts",
-          "libs/protocol/src/browser-stdio-server.ts"
+          "libs/protocol/src/browser-stdio-server.ts",
+          "libs/protocol/src/client.ts",
+          "libs/protocol/src/lazy-client.ts"
         ],
         "assets": ["libs/protocol/README.md", "libs/protocol/CHANGELOG.md", "LICENSE", "libs/protocol/package.json"],
         "esbuildOptions": {
@@ -42,7 +44,8 @@
             "#mcp-server",
             "#server-types",
             "#stdio-client",
-            "#stdio-server"
+            "#stdio-server",
+            "#client"
           ]
         }
       },
@@ -71,7 +74,9 @@
           "libs/protocol/src/node-stdio-client.ts",
           "libs/protocol/src/browser-stdio-client.ts",
           "libs/protocol/src/node-stdio-server.ts",
-          "libs/protocol/src/browser-stdio-server.ts"
+          "libs/protocol/src/browser-stdio-server.ts",
+          "libs/protocol/src/client.ts",
+          "libs/protocol/src/lazy-client.ts"
         ],
         "esbuildOptions": {
           "outExtension": {
@@ -84,7 +89,8 @@
             "#mcp-server",
             "#server-types",
             "#stdio-client",
-            "#stdio-server"
+            "#stdio-server",
+            "#client"
           ]
         }
       }
@@ -95,6 +101,7 @@
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/protocol/dist/package.json && node scripts/fix-protocol-esm-reexports.js",
+          "node scripts/inject-esm-require-banner.js libs/protocol/dist/esm",
           "node scripts/escape-non-ascii.mjs libs/protocol/dist"
         ],
         "parallel": false
