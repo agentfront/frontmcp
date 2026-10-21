@@ -20,11 +20,22 @@
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
+        "additionalEntryPoints": [
+          "libs/sdk/src/third-party/js-yaml.ts",
+          "libs/sdk/src/third-party/lazy-js-yaml.ts",
+          "libs/sdk/src/third-party/semver.ts",
+          "libs/sdk/src/third-party/lazy-semver.ts",
+          "libs/sdk/src/third-party/uipack-render.ts",
+          "libs/sdk/src/third-party/lazy-uipack-render.ts"
+        ],
         "assets": ["libs/sdk/README.md", "LICENSE", "libs/sdk/package.json"],
         "esbuildOptions": {
           "minifyWhitespace": true,
           "outExtension": { ".js": ".js" },
           "external": [
+            "#js-yaml",
+            "#semver",
+            "#uipack-render",
             "@frontmcp/sdk",
             "@frontmcp/utils",
             "@frontmcp/di",

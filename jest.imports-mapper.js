@@ -26,4 +26,7 @@ module.exports = {
   '^#sse-transport$': path.resolve(root, 'libs/sdk/src/transport/adapters/polyfills/node-sse-transport.ts'),
   '^#express-host$': path.resolve(root, 'libs/sdk/src/server/adapters/polyfills/node-express-host.ts'),
   '^#import-computed$': path.resolve(root, 'libs/sdk/src/esm-loader/import-computed.ts'),
+  '^#js-yaml$': path.resolve(root, 'libs/sdk/src/third-party/js-yaml.ts'),
+  '^#semver$': path.resolve(root, 'libs/sdk/src/third-party/semver.ts'),
+  '^#uipack-render$': path.resolve(root, 'libs/sdk/src/third-party/uipack-render.ts'),
 };

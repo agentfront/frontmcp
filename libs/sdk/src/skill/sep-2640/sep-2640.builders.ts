@@ -8,7 +8,7 @@
  *   guidance in the SEP.
  */
 
-import * as yaml from 'js-yaml';
+import * as yaml from '#js-yaml';
 
 import type { SkillContent } from '../../common/interfaces';
 import type { SkillMetadata } from '../../common/metadata';
