@@ -3,13 +3,20 @@ import { type RequestId } from '@frontmcp/protocol';
 
 import { type ServerResponse } from '../../common';
 import { type ElicitOptions, type ElicitResult } from '../../elicitation';
-import { ElicitationTimeoutError } from '../../errors';
+import { ElicitationTimeoutError, InternalMcpError } from '../../errors';
 import { type AuthenticatedServerRequest } from '../../server/server.types';
 import { createSessionScopedEventStore } from '../event-stores/session-scoped.event-store';
 import { rpcRequest } from '../transport.error';
 import { STATELESS_SESSION_ID, type TransportType } from '../transport.types';
-import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
+import type { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
 import { LocalTransportAdapter } from './transport.local.adapter';
+
+let RecreateableTransport: typeof RecreateableStreamableHTTPServerTransport | undefined;
+
+// Its base class, the MCP SDK's Node HTTP transport, loads @hono/node-server and undici, which a stdio server never needs.
+export async function loadStreamableHttpTransport(): Promise<void> {
+  RecreateableTransport ??= (await import('./streamable-http-transport.js')).RecreateableStreamableHTTPServerTransport;
+}
 
 /**
  * Resolves the session ID generator for the transport.
@@ -43,7 +50,12 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
 
     const isStateless = this.key.type === 'stateless-http';
 
-    return new RecreateableStreamableHTTPServerTransport({
+    if (!RecreateableTransport) {
+      throw new InternalMcpError(
+        'The Streamable HTTP transport was used before loadStreamableHttpTransport() loaded it',
+      );
+    }
+    return new RecreateableTransport({
       sessionIdGenerator,
       isStateless,
       onsessionclosed: () => {
@@ -83,7 +95,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
 
     // Debug: log transport state
     this.logger.verbose('[StreamableHttpAdapter] transport state before handleRequest', {
-      isRecreatable: this.transport instanceof RecreateableStreamableHTTPServerTransport,
+      isRecreatable: RecreateableTransport !== undefined && this.transport instanceof RecreateableTransport,
 
       hasWebTransport: !!(this.transport as any)._webStandardTransport,
 

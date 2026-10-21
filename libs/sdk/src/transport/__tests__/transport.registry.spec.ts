@@ -6,6 +6,7 @@
 import { sha256Hex } from '@frontmcp/utils';
 
 import type { TransportPersistenceConfigInput } from '../../common';
+import { loadStreamableHttpTransport } from '../adapters/transport.streamable-http.adapter';
 import { TransportService } from '../transport.registry';
 
 // Mock dependencies
@@ -30,6 +31,11 @@ jest.mock('@frontmcp/auth', () => {
     getMachineId: jest.fn().mockReturnValue('test-machine-id'),
   };
 });
+
+jest.mock('../adapters/transport.streamable-http.adapter', () => ({
+  ...jest.requireActual('../adapters/transport.streamable-http.adapter'),
+  loadStreamableHttpTransport: jest.fn().mockResolvedValue(undefined),
+}));
 
 // Mock the flows to prevent them from actually registering
 jest.mock('../flows/handle.streamable-http.flow', () => ({}));
@@ -333,6 +339,15 @@ describe('TransportService', () => {
         mockResponse as never,
       );
       expect(transport1).not.toBe(transport2);
+    });
+
+    it('loads the Streamable HTTP transport only for the session types that use it', async () => {
+      await service.createTransporter('sse', 'test-token', 'session-sse', mockResponse as never);
+      expect(loadStreamableHttpTransport).not.toHaveBeenCalled();
+
+      await service.createTransporter('streamable-http', 'test-token', 'session-http', mockResponse as never);
+      await service.createTransporter('stateless-http', 'test-token', 'session-stateless', mockResponse as never);
+      expect(loadStreamableHttpTransport).toHaveBeenCalledTimes(2);
     });
 
     it('should persist session to Redis for streamable-http', async () => {

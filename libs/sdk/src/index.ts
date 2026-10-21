@@ -512,8 +512,8 @@ export { HostServerAdapter } from './server/adapters/base.host.adapter';
 export type { Scope } from './scope/scope.instance';
 
 // In-memory server for MCP SDK Client integration
-export { createInMemoryServer } from './transport';
-export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transport';
+export { createInMemoryServer } from './transport/in-memory-server';
+export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transport/in-memory-server';
 
 // Web-standard fetch handler (Cloudflare Workers / Deno / Bun) — no Express/Node shim
 export {
@@ -522,14 +522,14 @@ export {
   runHttpRequestFlowWeb,
   startupFailureResponse,
   type DeferredServerBuild,
-} from './transport';
+} from './transport/web-fetch-handler';
 export type {
   WebFetchHandler,
   CreateWebFetchHandlerOptions,
   WebFetchCorsOptions,
   WebFetchSessionRouter,
   FetchHandlerCtx,
-} from './transport';
+} from './transport/web-fetch-handler';
 
 // MCP protocol 2026-07-28 — client + protocol helpers.
 //
@@ -546,12 +546,13 @@ export { PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
 
 // Web-standard MCP transport helpers — stateless runner + persistent (Durable
 // Object) session builder, for the Cloudflare DO session host.
-export { runWebStandardMcp, buildPersistentWebStandardMcp } from './transport';
-export type { WebStandardMcpPair, RunWebStandardMcpOptions, PersistentSessionOwnerStore } from './transport';
+export { runWebStandardMcp, buildPersistentWebStandardMcp } from './transport/web-standard-mcp';
+export type { WebStandardMcpPair, RunWebStandardMcpOptions } from './transport/web-standard-mcp';
+export type { PersistentSessionOwnerStore } from './transport/persistent-session-owner';
 
 // Transport types
-export type { TransportType, TransportKey } from './transport';
-export { STATELESS_SESSION_ID } from './transport';
+export type { TransportType, TransportKey } from './transport/transport.types';
+export { STATELESS_SESSION_ID } from './transport/transport.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MCP Apps (ext-apps) Support
