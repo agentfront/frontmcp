@@ -4,13 +4,15 @@
  * Isolates the semver dependency to a single file for easier maintenance.
  */
 
-import semverCompare from 'semver/functions/compare.js';
-import semverGt from 'semver/functions/gt.js';
-import semverRcompare from 'semver/functions/rcompare.js';
-import semverSatisfies from 'semver/functions/satisfies.js';
-import semverValid from 'semver/functions/valid.js';
-import semverMaxSatisfying from 'semver/ranges/max-satisfying.js';
-import semverValidRange from 'semver/ranges/valid.js';
+import {
+  compare as semverCompare,
+  gt as semverGt,
+  maxSatisfying as semverMaxSatisfying,
+  rcompare as semverRcompare,
+  satisfies as semverSatisfies,
+  valid as semverValid,
+  validRange as semverValidRange,
+} from '#semver';
 
 /**
  * Check if a range string is a dist-tag (not a semver range).

@@ -118,7 +118,10 @@
       "#langchain-anthropic": ["libs/sdk/src/agent/adapters/polyfills/node-langchain-anthropic.ts"],
       "#sse-transport": ["libs/sdk/src/transport/adapters/polyfills/node-sse-transport.ts"],
       "#express-host": ["libs/sdk/src/server/adapters/polyfills/node-express-host.ts"],
-      "#import-computed": ["libs/sdk/src/esm-loader/import-computed.ts"]
+      "#import-computed": ["libs/sdk/src/esm-loader/import-computed.ts"],
+      "#js-yaml": ["libs/sdk/src/third-party/js-yaml.ts"],
+      "#semver": ["libs/sdk/src/third-party/semver.ts"],
+      "#uipack-render": ["libs/sdk/src/third-party/uipack-render.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

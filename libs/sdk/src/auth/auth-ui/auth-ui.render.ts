@@ -38,12 +38,9 @@
  *
  * @packageDocumentation
  */
-import {
-  createResolverWithOverrides,
-  renderComponent,
-  type ShellConfig,
-  type ShellMountDescriptor,
-} from '@frontmcp/uipack';
+import type { ShellConfig, ShellMountDescriptor } from '@frontmcp/uipack';
+
+import { createResolverWithOverrides, renderComponent } from '#uipack-render';
 
 import { AUTH_FLOW_GLOBAL_KEY, AUTH_MOUNT_ID, type AuthFlowState, type AuthSlot } from './auth-ui.contract';
 import { type AuthUiRegistry } from './auth-ui.registry';

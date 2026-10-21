@@ -1,7 +1,7 @@
-import * as yaml from 'js-yaml';
-
 import { type z } from '@frontmcp/lazy-zod';
 import { fileExists, getCwd, pathResolve, readFile } from '@frontmcp/utils';
+
+import * as yaml from '#js-yaml';
 
 import { ConfigValidationError } from './config.service';
 import {
