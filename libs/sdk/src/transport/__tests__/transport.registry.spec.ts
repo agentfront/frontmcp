@@ -6,6 +6,7 @@
 import { sha256Hex } from '@frontmcp/utils';
 
 import type { TransportPersistenceConfigInput } from '../../common';
+import { loadSseTransport } from '../adapters/transport.sse.adapter';
 import { loadStreamableHttpTransport } from '../adapters/transport.streamable-http.adapter';
 import { TransportService } from '../transport.registry';
 
@@ -31,6 +32,11 @@ jest.mock('@frontmcp/auth', () => {
     getMachineId: jest.fn().mockReturnValue('test-machine-id'),
   };
 });
+
+jest.mock('../adapters/transport.sse.adapter', () => ({
+  ...jest.requireActual('../adapters/transport.sse.adapter'),
+  loadSseTransport: jest.fn().mockResolvedValue(undefined),
+}));
 
 jest.mock('../adapters/transport.streamable-http.adapter', () => ({
   ...jest.requireActual('../adapters/transport.streamable-http.adapter'),
@@ -348,6 +354,15 @@ describe('TransportService', () => {
       await service.createTransporter('streamable-http', 'test-token', 'session-http', mockResponse as never);
       await service.createTransporter('stateless-http', 'test-token', 'session-stateless', mockResponse as never);
       expect(loadStreamableHttpTransport).toHaveBeenCalledTimes(2);
+    });
+
+    it('loads the SSE transport only for SSE sessions', async () => {
+      await service.createTransporter('streamable-http', 'test-token', 'session-http', mockResponse as never);
+      await service.createTransporter('stateless-http', 'test-token', 'session-stateless', mockResponse as never);
+      expect(loadSseTransport).not.toHaveBeenCalled();
+
+      await service.createTransporter('sse', 'test-token', 'session-sse', mockResponse as never);
+      expect(loadSseTransport).toHaveBeenCalledTimes(1);
     });
 
     it('should persist session to Redis for streamable-http', async () => {

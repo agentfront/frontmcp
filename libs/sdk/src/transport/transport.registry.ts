@@ -11,6 +11,7 @@ import { InvalidTransportSessionError, SessionClaimConflictError } from '../erro
 import type { ClaimedSessionInfo } from '../ha';
 import type { ClientCapabilities } from '../notification/notification.service';
 import type { Scope } from '../scope';
+import { loadSseTransport } from './adapters/transport.sse.adapter';
 import { loadStreamableHttpTransport } from './adapters/transport.streamable-http.adapter';
 import HandleMcp20260728Flow from './flows/handle.mcp-20260728.flow';
 import HandleSseFlow from './flows/handle.sse.flow';
@@ -115,7 +116,7 @@ export class TransportService {
    */
   private readonly creationMutex: Map<string, Promise<Transporter>> = new Map();
 
-  // The Streamable HTTP transport class loads with the first session that uses it, so stdio and SSE servers never load it.
+  // Each transport class loads with the first session that uses it, so a stdio server loads neither.
   private async newLocalTransporter(
     key: TransportKey,
     res: ServerResponse,
@@ -123,6 +124,8 @@ export class TransportService {
   ): Promise<LocalTransporter> {
     if (key.type === 'streamable-http' || key.type === 'stateless-http') {
       await loadStreamableHttpTransport();
+    } else if (key.type === 'sse') {
+      await loadSseTransport();
     }
     return new LocalTransporter(this.scope, key, res, onDispose);
   }
