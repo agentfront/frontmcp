@@ -6,7 +6,15 @@
  */
 
 import { toJSONSchema, type ZodType } from '@frontmcp/lazy-zod';
-import { type AuthInfo, type Transport } from '@frontmcp/protocol';
+import {
+  ElicitResultSchema,
+  ErrorCode,
+  InMemoryTransport,
+  McpError,
+  McpServer,
+  type AuthInfo,
+  type Transport,
+} from '@frontmcp/protocol';
 import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
 import { type ElicitOptions, type ElicitResult } from '../elicitation';
@@ -14,7 +22,6 @@ import { ELICITATION_META_KEY } from '../elicitation/elicitation-meta';
 import { ElicitationTimeoutError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
-import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import { buildScopedServerOptions } from './build-scoped-server-options';
 
 /**
@@ -103,11 +110,6 @@ export async function createInMemoryServer(
   scope: Scope,
   options?: CreateInMemoryServerOptions,
 ): Promise<InMemoryServerResult> {
-  // Dynamically import to avoid bundling issues
-  const { ElicitResultSchema, ErrorCode, InMemoryTransport, McpError, McpServer } = await importWithRequireFallback(
-    () => import('@frontmcp/protocol'),
-    () => require('@frontmcp/protocol') as typeof import('@frontmcp/protocol'),
-  );
   const { createMcpHandlers } = await import('./mcp-handlers/index.js');
 
   const sessionId = options?.sessionId ?? `in-memory:${randomUUID()}`;
