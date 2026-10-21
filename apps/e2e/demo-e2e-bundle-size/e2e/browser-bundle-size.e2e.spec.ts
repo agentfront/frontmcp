@@ -34,7 +34,7 @@ const VITE_INITIAL_CHUNK_MAX_BYTES = 960_000;
 const NEVER_BUNDLED: Record<string, RegExp> = {
   'JavaScript parser': /(^|\/)node_modules\/(acorn|acorn-walk|astring)\//,
   'MCP client':
-    /(^|\/)node_modules\/@modelcontextprotocol\/sdk\/dist\/esm\/client\/|^libs\/protocol\/dist\/esm\/client\.mjs$/,
+    /(^|\/)node_modules\/@modelcontextprotocol\/sdk\/dist\/esm\/client\/|^libs\/protocol\/dist\/esm\/clients?\.mjs$/,
 };
 
 const sdkModule = (pattern: string) => new RegExp(`^libs/sdk/dist/browser/(${pattern})`);
