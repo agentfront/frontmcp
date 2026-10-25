@@ -449,8 +449,8 @@ export function decideIntent(req: ServerRequest, cfg: Config): Decision {
 
   const { key, channel, flags, init } = computeBitmap(req, cfg);
 
-  // Optional strict Accept validation for POST (incl. /message)
-  if (method === 'POST') {
+  // A legacy SSE /message post is answered on its SSE stream, so its Accept header has no bearing on routing.
+  if (method === 'POST' && channel !== CH_POST_MESSAGE) {
     const accept = h(req, 'accept');
     const acceptsSSE = wantsSSE(accept);
     const acceptsJSON = wantsJSON(accept) || (!accept && cfg.tolerateMissingAccept);
