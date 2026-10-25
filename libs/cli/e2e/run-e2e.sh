@@ -65,7 +65,7 @@ echo ""
 # Check if verdaccio is installed
 if ! command -v verdaccio &> /dev/null; then
   echo "⚠️  Verdaccio not found. Installing..."
-  npm install -g verdaccio
+  npm install -g verdaccio@6
 fi
 
 # Start Verdaccio
