@@ -44,8 +44,9 @@ jobs:
         with:
           node-version: ${{ steps.node-version.outputs.version }}
 
+      # Verdaccio 7 answers 401 to the placeholder token run-e2e.sh publishes with; 6 accepts it.
       - name: Install Verdaccio globally
-        run: npm install -g verdaccio
+        run: npm install -g verdaccio@6
 
       - name: Run Package E2E Tests
         run: |
