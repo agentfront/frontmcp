@@ -9,7 +9,17 @@ import {
   rpc20260728,
   type TestFetchServer,
 } from '../../__test-utils__/helpers/mcp-20260728.helpers';
-import { App, LogLevel, Prompt, PromptContext, Resource, ResourceContext } from '../../common';
+import { App, LogLevel, Prompt, PromptContext, Resource, ResourceContext, Tool, ToolContext } from '../../common';
+
+let toolRuns = 0;
+
+@Tool({ name: 'count_runs', description: 'Counts how often it runs', inputSchema: {} })
+class CountRunsTool extends ToolContext {
+  async execute() {
+    toolRuns += 1;
+    return { content: [{ type: 'text' as const, text: String(toolRuns) }] };
+  }
+}
 
 @Prompt({ name: 'greeting', arguments: [{ name: 'visitor', required: true }] })
 class GreetingPrompt extends PromptContext {
@@ -25,7 +35,13 @@ class ShelfResource extends ResourceContext {
   }
 }
 
-@App({ id: 'request-errors', name: 'request-errors', prompts: [GreetingPrompt], resources: [ShelfResource] })
+@App({
+  id: 'request-errors',
+  name: 'request-errors',
+  tools: [CountRunsTool],
+  prompts: [GreetingPrompt],
+  resources: [ShelfResource],
+})
 class RequestErrorsApp {}
 
 function loggedLines(spy: jest.SpyInstance): string[] {
@@ -65,6 +81,39 @@ describe('web-fetch handler: client mistakes are answered without server errors'
     expect(message.error?.code).toBe(-32602);
     expect(message.error?.message).toContain('params.name');
     expect(loggedLines(consoleError)).toEqual([]);
+  });
+
+  it.each([
+    ['not an object', 'invalid'],
+    ['an answer that is not an object', { confirm: 'yes' }],
+  ])(
+    'answers inputResponses that is %s with Invalid params, without running the tool',
+    async (_label, inputResponses) => {
+      const runsBefore = toolRuns;
+
+      const { message } = await rpc20260728(server.handler, 'tools/call', {
+        name: 'count_runs',
+        arguments: {},
+        inputResponses,
+      });
+
+      expect(message.error?.code).toBe(-32602);
+      expect(message.error?.message).toContain('params.inputResponses');
+      expect(toolRuns).toBe(runsBefore);
+    },
+  );
+
+  it('runs the tool for well-formed inputResponses', async () => {
+    const runsBefore = toolRuns;
+
+    const { message } = await rpc20260728(server.handler, 'tools/call', {
+      name: 'count_runs',
+      arguments: {},
+      inputResponses: { confirm: { action: 'accept', content: {} } },
+    });
+
+    expect(message.error).toBeUndefined();
+    expect(toolRuns).toBe(runsBefore + 1);
   });
 
   it.each([

@@ -8,6 +8,7 @@
  * and result decoration.
  */
 import { isAnonymousSubject } from '@frontmcp/auth';
+import { z } from '@frontmcp/lazy-zod';
 import {
   MCP_20260728_ERROR_CODES,
   MCP_20260728_REMOVED_METHODS,
@@ -227,11 +228,18 @@ function methodOfSchema(schema: unknown): string | undefined {
   return Array.isArray(values) && typeof values[0] === 'string' ? values[0] : undefined;
 }
 
+/** `inputResponses` arrives only on 2026-07-28 requests, so no upstream request schema checks it. */
+const MRTR_PARAMS_SCHEMA = z.object({
+  params: z.object({ inputResponses: z.record(z.string(), z.record(z.string(), z.unknown())).optional() }).optional(),
+});
+
 /** Name what a request gets wrong for its method, or `undefined` when it fits the handler's request schema. */
 function describeInvalidParams(schema: McpHandler['requestSchema'], body: Record<string, unknown>): string | undefined {
-  const parsed = schema.safeParse(body);
-  if (parsed.success) return undefined;
-  const problems = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
+  const issues = [schema.safeParse(body), MRTR_PARAMS_SCHEMA.safeParse(body)].flatMap((parsed) =>
+    parsed.success ? [] : parsed.error.issues,
+  );
+  if (issues.length === 0) return undefined;
+  const problems = issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
   return `Invalid params: ${problems.join('; ')}`;
 }
 
