@@ -25,6 +25,8 @@ import { mcpTransportBodyLimit } from './body-limit';
 import { buildScopedServerOptions, type ScopedServerOptions } from './build-scoped-server-options';
 import { type PersistentSessionOwnerStore } from './persistent-session-owner';
 
+const STATELESS_METHODS = ['POST', 'DELETE'];
+
 /** A persistent MCP server + transport bound to one session (Durable Object). */
 export interface WebStandardMcpPair {
   mcpServer: { close(): Promise<void> };
@@ -115,7 +117,7 @@ export async function runWebStandardMcp(
   }
 
   // A server built for one request can never write to a standalone GET stream, so it offers none, as the spec allows.
-  if (request.method === 'GET') return methodNotAllowed();
+  if (!STATELESS_METHODS.includes(request.method)) return methodNotAllowed();
 
   // Stateless mode — fresh server + transport for this one request.
   const sessionId = `web:${randomUUID()}`;
@@ -145,5 +147,6 @@ export async function runWebStandardMcp(
 
 function methodNotAllowed(): Response {
   const error = { code: -32000, message: 'Method not allowed.' };
-  return Response.json({ jsonrpc: '2.0', error, id: null }, { status: 405, headers: { allow: 'POST, DELETE' } });
+  const headers = { allow: STATELESS_METHODS.join(', ') };
+  return Response.json({ jsonrpc: '2.0', error, id: null }, { status: 405, headers });
 }

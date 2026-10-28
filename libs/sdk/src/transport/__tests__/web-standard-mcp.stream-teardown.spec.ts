@@ -4,6 +4,8 @@
  */
 import 'reflect-metadata';
 
+import { McpServer } from '@frontmcp/protocol';
+
 import { App } from '../../common/decorators/app.decorator';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
@@ -61,35 +63,56 @@ describe('runWebStandardMcp stateless stream teardown', () => {
     await instance?.shutdown();
   });
 
-  it('settles the waitUntil teardown once the streamed reply has been read', async () => {
+  let serverClose: jest.SpyInstance;
+
+  beforeEach(() => {
+    serverClose = jest.spyOn(McpServer.prototype, 'close');
+  });
+
+  afterEach(() => {
+    serverClose.mockRestore();
+  });
+
+  it('closes the server once the streamed reply has been read', async () => {
     const { ctx, pending } = recordingCtx();
 
     const response = await handler(streamedInitialize(), ctx);
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/event-stream');
+    expect(serverClose).not.toHaveBeenCalled();
     expect(await response.text()).toContain('"serverInfo"');
     expect(pending).toHaveLength(1);
     expect(await settles(pending[0])).toBe(true);
+    expect(serverClose).toHaveBeenCalledTimes(1);
   });
 
-  it('settles the waitUntil teardown when the client cancels the stream', async () => {
+  it('closes the server when the client cancels the stream', async () => {
     const { ctx, pending } = recordingCtx();
 
     const response = await handler(streamedInitialize(), ctx);
+    expect(serverClose).not.toHaveBeenCalled();
     await response.body?.cancel();
 
     expect(pending).toHaveLength(1);
     expect(await settles(pending[0])).toBe(true);
+    expect(serverClose).toHaveBeenCalledTimes(1);
   });
 
-  it('answers a standalone GET stream with 405 instead of a stream no request can write to', async () => {
-    const { ctx, pending } = recordingCtx();
+  it.each(['GET', 'PUT'])(
+    'answers %s with 405 and the methods it serves, without building a server',
+    async (method) => {
+      const { ctx, pending } = recordingCtx();
 
-    const response = await handler(new Request(WORKER_URL, { headers: { accept: 'text/event-stream' } }), ctx);
+      const response = await handler(
+        new Request(WORKER_URL, { method, headers: { accept: 'text/event-stream' } }),
+        ctx,
+      );
 
-    expect(response.status).toBe(405);
-    expect(response.headers.get('allow')).toBe('POST, DELETE');
-    expect(pending).toHaveLength(0);
-  });
+      expect(response.status).toBe(405);
+      expect(response.headers.get('allow')).toBe('POST, DELETE');
+      expect(pending).toHaveLength(0);
+      expect(serverClose).not.toHaveBeenCalled();
+    },
+  );
 });
