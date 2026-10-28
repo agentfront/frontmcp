@@ -114,35 +114,36 @@ export async function runWebStandardMcp(
     return options.persistent.transport.handleRequest(request, { authInfo: options.authInfo as AuthInfo | undefined });
   }
 
+  // A server built for one request can never write to a standalone GET stream, so it offers none, as the spec allows.
+  if (request.method === 'GET') return methodNotAllowed();
+
   // Stateless mode — fresh server + transport for this one request.
   const sessionId = `web:${randomUUID()}`;
-  // A GET opens the server→client SSE stream; a POST may stream SSE when allowed
-  // AND the client accepts text/event-stream. Otherwise the POST is buffered JSON.
+  // A POST may stream SSE when allowed AND the client accepts text/event-stream. Otherwise it is buffered JSON.
   const accept = request.headers.get('accept') ?? '';
-  const wantsStream = request.method === 'GET' || (options.sse && accept.includes('text/event-stream'));
+  const wantsStream = options.sse && accept.includes('text/event-stream');
 
   const { mcpServer, transport } = await wireServer(scope, options.serverOptions, sessionId, undefined, !wantsStream);
   const response = await transport.handleRequest(request, {
     authInfo: options.authInfo as AuthInfo | undefined,
   });
 
-  // SSE bodies keep producing after this returns — keep the server alive until
-  // the transport closes (held open via `ctx.waitUntil`). Buffered JSON is fully
-  // materialized, so close right away.
-  if (response.headers.get('content-type')?.includes('text/event-stream')) {
-    const closed = new Promise<void>((resolve) => {
-      const prev = transport.onclose;
-      transport.onclose = () => {
-        prev?.();
-        resolve();
-      };
-    });
-    const teardown = closed.then(() => mcpServer.close().catch(() => undefined));
-    if (options.ctx?.waitUntil) options.ctx.waitUntil(teardown);
-    else void teardown;
-  } else {
+  if (!response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
     void mcpServer.close().catch(() => undefined);
+    return response;
   }
 
-  return response;
+  // The transport ends the stream after the last reply but never closes, so the server is released when the body ends.
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const teardown = response.body
+    .pipeTo(writable)
+    .catch(() => undefined)
+    .then(() => mcpServer.close().catch(() => undefined));
+  options.ctx?.waitUntil?.(teardown);
+  return new Response(readable, response);
+}
+
+function methodNotAllowed(): Response {
+  const error = { code: -32000, message: 'Method not allowed.' };
+  return Response.json({ jsonrpc: '2.0', error, id: null }, { status: 405, headers: { allow: 'POST, DELETE' } });
 }
