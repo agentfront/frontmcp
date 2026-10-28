@@ -41,6 +41,7 @@ describe('initializeRequestHandler', () => {
 
   // Mock notification service
   const mockNotifications = {
+    getRegisteredServer: jest.fn(),
     setClientCapabilities: jest.fn(),
     setClientInfo: jest.fn(),
   };
@@ -112,6 +113,7 @@ describe('initializeRequestHandler', () => {
     mockDetectPlatformFromCapabilities.mockReturnValue(undefined);
     mockResolvePlatformType.mockReturnValue(undefined);
     mockUpdateSessionPayload.mockReturnValue(true);
+    mockNotifications.getRegisteredServer.mockReturnValue({});
   });
 
   // ============================================
@@ -409,6 +411,25 @@ describe('initializeRequestHandler', () => {
         name: 'TestApp',
         version: '3.0.0',
       });
+    });
+
+    it('keeps no client details in the notification service for a session with no registered server', async () => {
+      mockNotifications.getRegisteredServer.mockReturnValue(undefined);
+      const handler = initializeRequestHandler(handlerOptions);
+      const request = createRequest({
+        capabilities: { roots: { listChanged: true } },
+        clientInfo: { name: 'WorkerClient', version: '1.0.0' },
+      });
+
+      await handler.handler(request, createContext() as any);
+
+      expect(mockNotifications.getRegisteredServer).toHaveBeenCalledWith('test-session-id-123');
+      expect(mockNotifications.setClientCapabilities).not.toHaveBeenCalled();
+      expect(mockNotifications.setClientInfo).not.toHaveBeenCalled();
+      expect(mockTransportService.updateStoredSessionCapabilities).toHaveBeenCalledWith(
+        'test-session-id-123',
+        expect.objectContaining({ roots: { listChanged: true } }),
+      );
     });
   });
 

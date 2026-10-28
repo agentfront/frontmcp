@@ -65,6 +65,8 @@ const stateSchema = z.object({
   isUIResource: z.boolean().default(false),
   // Pre-resolved UI resource result (if isUIResource is true)
   uiResourceResult: outputSchema.optional(),
+  // Why the flow failed, set by the flow runner before the finalize stage
+  flowError: z.instanceof(Error).optional(),
 });
 
 const plan = {
@@ -431,6 +433,11 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
+
+    if (this.state.flowError) {
+      this.logger.verbose('finalize: skipping, an earlier stage failed');
+      return;
+    }
 
     // Handle UI resources - return the pre-resolved result
     if (this.state.isUIResource) {
