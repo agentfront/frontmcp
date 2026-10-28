@@ -61,6 +61,8 @@ const stateSchema = z.object({
   // z.any() used because prompt output type varies by prompt implementation
   rawOutput: z.any().optional(),
   output: outputSchema,
+  // Why the flow failed, set by the flow runner before the finalize stage
+  flowError: z.instanceof(Error).optional(),
 });
 
 const plan = {
@@ -395,7 +397,12 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
-    const { prompt, rawOutput, input } = this.state;
+    const { prompt, rawOutput, input, flowError } = this.state;
+
+    if (flowError) {
+      this.logger.verbose('finalize: skipping, an earlier stage failed');
+      return;
+    }
 
     if (!prompt) {
       this.logger.error('finalize: prompt not found in state');
