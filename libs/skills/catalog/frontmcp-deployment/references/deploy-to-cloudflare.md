@@ -270,7 +270,7 @@ createEdgeMcp({
 ```
 
 - **CORS** ← `http.cors` (`false` disables; a function `origin` is unsupported on the worker — use `true` / string / `string[]`).
-- **SSE** ← derived from the transport protocol (streaming under `legacy`/`modern`, buffered JSON under `stateless-api`); server→client `GET` streams are always honored.
+- **SSE** ← derived from the transport protocol (streaming under `legacy`/`modern`, buffered JSON under `stateless-api`). The server→client `GET` stream is served only with stateful sessions (below); a stateless worker answers `GET` with `405`.
 - A trailing slash is normalized (`/mcp/` matches `/mcp`); `/healthz` + `/readyz` always answer a liveness 200 regardless of `entryPath`.
 
 ## Workers Limitations
@@ -278,7 +278,7 @@ createEdgeMcp({
 - **Bundle size**: Workers have a 1 MB compressed / 10 MB uncompressed limit (paid plan: 10 MB / 30 MB). Review dependencies and remove unused packages to reduce bundle size.
 - **CPU time**: 10 ms CPU time on free plan, 30 seconds on paid. Long-running operations must be optimized or use Durable Objects.
 - **No native modules**: `better-sqlite3` and other native Node.js modules are not available. Use KV, D1, or Upstash Redis for storage.
-- **Streaming**: Streamable HTTP works, including SSE responses (`POST` with `Accept: text/event-stream`) and the server→client SSE `GET` stream. The worker uses the SDK's `WebStandardStreamableHTTPServerTransport` — which **is** the standard Streamable HTTP transport (the Node `StreamableHTTPServerTransport` is a thin `req`/`res` wrapper over it, so there's one engine). **Server→client notifications** on the standalone `GET` stream require **stateful sessions** — set `sessions: {}` and bind the `SessionDurableObject` (Durable Object) per `Mcp-Session-Id`. Without it the worker is stateless and the `GET` stream can't deliver pushed notifications. A stateless worker also returns no `Mcp-Session-Id` to a session-based (2025-06-18) client; each of its requests is served on its own.
+- **Streaming**: Streamable HTTP works, including SSE responses (`POST` with `Accept: text/event-stream`) and, with stateful sessions, the server→client SSE `GET` stream. The worker uses the SDK's `WebStandardStreamableHTTPServerTransport` — which **is** the standard Streamable HTTP transport (the Node `StreamableHTTPServerTransport` is a thin `req`/`res` wrapper over it, so there's one engine). **Server→client notifications** on the standalone `GET` stream require **stateful sessions** — set `sessions: {}` and bind the `SessionDurableObject` (Durable Object) per `Mcp-Session-Id`. Without it the worker is stateless and answers `GET` with `405`, as the spec allows for a server that offers no `GET` stream. A stateless worker also returns no `Mcp-Session-Id` to a session-based (2025-06-18) client; each of its requests is served on its own.
 
 ### Stateful sessions (Durable Object)
 
