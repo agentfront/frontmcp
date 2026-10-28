@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/utils",
-  "version": "1.10.12",
+  "version": "1.10.13",
   "description": "Shared helpers for FrontMCP: URI templates, naming, cross-platform crypto and PKCE, key-value storage, file system and environment detection",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -33,7 +33,7 @@
     "@noble/hashes": "^2.0.1"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.10.12",
+    "@frontmcp/lazy-zod": "1.10.13",
     "@upstash/redis": "^1.34.0",
     "@vercel/kv": "^2.0.0 || ^3.0.0",
     "ioredis": "^5.0.0"
