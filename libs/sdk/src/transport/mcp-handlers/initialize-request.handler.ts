@@ -84,6 +84,9 @@ export default function initializeRequestHandler({
       );
 
       if (sessionId) {
+        // A server built for one request, as on a Worker, has no registered session to keep client details on
+        const hasRegisteredServer = scope.notifications.getRegisteredServer(sessionId) !== undefined;
+
         // Store client capabilities if provided
         if (request.params.capabilities) {
           // Map MCP client capabilities to our ClientCapabilities interface
@@ -97,7 +100,7 @@ export default function initializeRequestHandler({
             // Include elicitation capability for interactive user input support
             elicitation: request.params.capabilities.elicitation as ClientCapabilities['elicitation'],
           };
-          scope.notifications.setClientCapabilities(sessionId, clientCapabilities);
+          if (hasRegisteredServer) scope.notifications.setClientCapabilities(sessionId, clientCapabilities);
 
           // Persist capabilities to session store for recreation after transport eviction/restart
           await scope.transportService?.updateStoredSessionCapabilities(
@@ -114,11 +117,12 @@ export default function initializeRequestHandler({
         if (request.params.clientInfo) {
           const { name: clientName, version: clientVersion } = request.params.clientInfo;
 
-          // Try to store in notification service (may fail for HTTP transports without registered server)
-          scope.notifications.setClientInfo(sessionId, {
-            name: clientName,
-            version: clientVersion,
-          });
+          if (hasRegisteredServer) {
+            scope.notifications.setClientInfo(sessionId, {
+              name: clientName,
+              version: clientVersion,
+            });
+          }
 
           // Decide the platform here (don't rely on setClientInfo's return): a configured
           // `platformDetection.mappings` entry wins, then the MCP Apps capability, then the

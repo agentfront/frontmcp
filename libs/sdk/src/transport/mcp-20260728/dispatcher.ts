@@ -8,6 +8,7 @@
  * and result decoration.
  */
 import { isAnonymousSubject } from '@frontmcp/auth';
+import { z } from '@frontmcp/lazy-zod';
 import {
   MCP_20260728_ERROR_CODES,
   MCP_20260728_REMOVED_METHODS,
@@ -23,7 +24,7 @@ import { type TaskRecord } from '../../task/task.types';
 import { buildScopedServerOptions } from '../build-scoped-server-options';
 import { createMcpHandlers } from '../mcp-handlers';
 import { toSdkMcpError } from '../mcp-handlers/mcp-error.utils';
-import { type McpHandlerOptions } from '../mcp-handlers/mcp-handlers.types';
+import { type McpHandler, type McpHandlerOptions } from '../mcp-handlers/mcp-handlers.types';
 import { buildDiscoverResult } from './discover';
 import { buildInputRequiredResult, MrtrExchange } from './mrtr';
 import { type RequestNotificationSink } from './request-notifications';
@@ -227,6 +228,21 @@ function methodOfSchema(schema: unknown): string | undefined {
   return Array.isArray(values) && typeof values[0] === 'string' ? values[0] : undefined;
 }
 
+/** `inputResponses` arrives only on 2026-07-28 requests, so no upstream request schema checks it. */
+const MRTR_PARAMS_SCHEMA = z.object({
+  params: z.object({ inputResponses: z.record(z.string(), z.record(z.string(), z.unknown())).optional() }).optional(),
+});
+
+/** Name what a request gets wrong for its method, or `undefined` when it fits the handler's request schema. */
+function describeInvalidParams(schema: McpHandler['requestSchema'], body: Record<string, unknown>): string | undefined {
+  const issues = [schema.safeParse(body), MRTR_PARAMS_SCHEMA.safeParse(body)].flatMap((parsed) =>
+    parsed.success ? [] : parsed.error.issues,
+  );
+  if (issues.length === 0) return undefined;
+  const problems = issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
+  return `Invalid params: ${problems.join('; ')}`;
+}
+
 /**
  * Map a thrown error onto a JSON-RPC error payload.
  *
@@ -358,6 +374,11 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
   const handler = handlers.find((entry) => methodOfSchema(entry.requestSchema) === method);
   if (!handler) {
     return { kind: 'error', status: 404, error: { code: -32601, message: `Method not found: ${method}` } };
+  }
+
+  const invalidParams = describeInvalidParams(handler.requestSchema, body);
+  if (invalidParams) {
+    return { kind: 'error', status: 200, error: { code: -32602, message: invalidParams } };
   }
 
   // Every request carries its own MRTR exchange: capabilities are per-request in
