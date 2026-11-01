@@ -36,7 +36,11 @@ function createHarness(options: { keyByIdentity?: boolean } = {}) {
   return { plugin, store };
 }
 
-function createFlowCtx(authInfo: unknown, sessionId = 'session-1'): FlowCtxOf<'tools:call-tool'> {
+function createFlowCtx(
+  authInfo: unknown,
+  sessionId = 'session-1',
+  verifiedSessionId?: string,
+): FlowCtxOf<'tools:call-tool'> {
   return {
     state: {
       tool: {
@@ -49,7 +53,7 @@ function createFlowCtx(authInfo: unknown, sessionId = 'session-1'): FlowCtxOf<'t
         input: {},
         output: { email: 'someone@example.com' },
         authInfo,
-        tryGetContext: () => ({ sessionId, authInfo }),
+        tryGetContext: () => ({ sessionId, verifiedSessionId, authInfo }),
         respond: jest.fn(),
       },
     },
@@ -95,10 +99,19 @@ describe('CachePlugin — caller identity in the key (GHSA-r6v6-p4r8-p936)', () 
   it('separates two anonymous sessions', async () => {
     const { plugin, store } = createHarness();
 
-    await plugin.willWriteCache(createFlowCtx(undefined, 'session-1'));
-    await plugin.willReadCache(createFlowCtx(undefined, 'session-2'));
+    await plugin.willWriteCache(createFlowCtx({ clientId: 'anon:first' }, 'session-1', 'session-1'));
+    await plugin.willReadCache(createFlowCtx({ clientId: 'anon:second' }, 'session-2', 'session-2'));
 
     expect(store.getValue.mock.calls[0][0]).not.toBe(store.setValue.mock.calls[0][0]);
+  });
+
+  it('keys an anonymous caller in a verified session by that session', async () => {
+    const { plugin, store } = createHarness();
+
+    await plugin.willWriteCache(createFlowCtx({ clientId: 'anon:first' }, 'session-1', 'session-1'));
+    await plugin.willReadCache(createFlowCtx({ clientId: 'anon:first' }, 'session-1', 'session-1'));
+
+    expect(store.getValue.mock.calls[0][0]).toBe(store.setValue.mock.calls[0][0]);
   });
 
   it('still separates different inputs for the same caller', async () => {
@@ -142,22 +155,29 @@ describe('CachePlugin — caller identity in the key (GHSA-r6v6-p4r8-p936)', () 
     expect(store.setValue.mock.calls[0][0]).not.toBe(store.setValue.mock.calls[1][0]);
   });
 
-  it('gives a call with no identity at all its own key rather than a shared one', async () => {
+  it('neither reads nor stores an entry for a call with no identity at all', async () => {
     const { plugin, store } = createHarness();
 
-    // No authInfo and no session: two such calls must not collide, because a shared
-    // identity-less bucket would serve one caller's response to another.
-    const first = createFlowCtx(undefined, '');
-    // @ts-expect-error an identity-less context, which the SDK's context type does not allow
-    toolContextOf(first).tryGetContext = () => ({ sessionId: undefined, authInfo: undefined });
-    const second = createFlowCtx(undefined, '');
-    // @ts-expect-error an identity-less context, which the SDK's context type does not allow
-    toolContextOf(second).tryGetContext = () => ({ sessionId: undefined, authInfo: undefined });
+    // A shared identity-less bucket would serve one caller's response to another, and a key of
+    // its own could never be built again, so such a call skips the cache.
+    const ctx = createFlowCtx(undefined);
 
-    await plugin.willWriteCache(first);
-    await plugin.willWriteCache(second);
+    await plugin.willReadCache(ctx);
+    await plugin.willWriteCache(ctx);
 
-    expect(store.setValue.mock.calls[0][0]).not.toBe(store.setValue.mock.calls[1][0]);
+    expect(store.getValue).not.toHaveBeenCalled();
+    expect(store.setValue).not.toHaveBeenCalled();
+    expect(toolContextOf(ctx).respond).not.toHaveBeenCalled();
+  });
+
+  it('does not key by an anonymous subject or client id, which is minted per request', async () => {
+    const { plugin, store } = createHarness();
+
+    await plugin.willReadCache(createFlowCtx({ extra: { sub: 'anon:1' }, clientId: 'anon:1' }));
+    await plugin.willWriteCache(createFlowCtx({ extra: { sub: 'anon:1' }, clientId: 'anon:1' }));
+
+    expect(store.getValue).not.toHaveBeenCalled();
+    expect(store.setValue).not.toHaveBeenCalled();
   });
 
   it('keys by the client id the SDK sets from the verified subject', async () => {
@@ -179,7 +199,7 @@ describe('CachePlugin — caller identity in the key (GHSA-r6v6-p4r8-p936)', () 
     await plugin.willWriteCache(createFlowCtx({ clientId: '' }, STATELESS_SESSION_ID));
     await plugin.willWriteCache(createFlowCtx({ clientId: '' }, STATELESS_SESSION_ID));
 
-    expect(store.setValue.mock.calls[0][0]).not.toBe(store.setValue.mock.calls[1][0]);
+    expect(store.setValue).not.toHaveBeenCalled();
   });
 
   it('keys array and nested-object arguments stably, whatever the key order', async () => {

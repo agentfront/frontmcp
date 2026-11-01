@@ -69,9 +69,10 @@ with object keys sorted. A result the tool returns with `isError: true` isn't st
 With `keyByIdentity: true`, the default, each caller gets their own entries: a signed-in user is keyed by their token's
 subject, so one user never gets another user's cached answer.
 
-- **Without authentication, MCP 2026-07-28 clients never get a cached answer.** FrontMCP gives an anonymous caller a
-  new identity on every request, so the plugin stores an entry on every call and never reads one back. There's no
-  error or warning.
+- **A caller with no identity skips the cache.** A caller without a token subject, a client id or a session the server
+  verified, such as an MCP 2026-07-28 client without authentication, runs the tool on every call, and the plugin
+  neither reads nor stores an entry for it. An anonymous id (`anon:…`) counts as no identity. There's no error or
+  warning.
 - **For tools whose answer is the same for everyone** (exchange rates, a public catalog), set
   `keyByIdentity: false`. Every caller then shares one entry per tool and arguments, so never use it for tools whose
   answer depends on the caller's account, tenant or permissions.

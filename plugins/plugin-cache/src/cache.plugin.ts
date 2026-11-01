@@ -3,6 +3,7 @@ import {
   FrontMcpConfig,
   FrontMcpContextStorage,
   getGlobalStoreConfig,
+  isAnonymousSubject,
   isVercelKvProvider,
   Plugin,
   ToolHook,
@@ -10,7 +11,7 @@ import {
   type FrontMcpConfigType,
   type ProviderType,
 } from '@frontmcp/sdk';
-import { randomUUID, sha256Hex } from '@frontmcp/utils';
+import { sha256Hex } from '@frontmcp/utils';
 
 import { CachePluginConfigurationError } from './cache.errors';
 import { CacheStoreToken } from './cache.symbol';
@@ -230,8 +231,10 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
       return;
     }
 
-    const cacheStore = this.get(CacheStoreToken);
     const hash = this.buildCacheKey(tool.fullName, toolContext);
+    if (hash === undefined) return;
+
+    const cacheStore = this.get(CacheStoreToken);
     const cached = await cacheStore.getValue(hash);
 
     if (cached !== undefined && cached !== null) {
@@ -295,11 +298,11 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
       return;
     }
 
-    const cacheStore = this.get(CacheStoreToken);
-    const ttl = this.getTtl(cache);
-
     const hash = this.buildCacheKey(tool.fullName, toolContext);
-    await cacheStore.setValue(hash, toolContext.output, ttl);
+    if (hash === undefined) return;
+
+    const cacheStore = this.get(CacheStoreToken);
+    await cacheStore.setValue(hash, toolContext.output, this.getTtl(cache));
   }
 
   /**
@@ -311,8 +314,10 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
    *
    * The session is the last resort rather than the first choice, because an authenticated
    * caller can hold several sessions and should share their own cached entries across them.
+   *
+   * Undefined for a caller with none of these: no later call could build its key again.
    */
-  private resolveCallerIdentity(toolContext: unknown): string {
+  private resolveCallerIdentity(toolContext: unknown): string | undefined {
     const ctx = toolContext as {
       authInfo?: { extra?: Record<string, unknown>; clientId?: string };
       tryGetContext?: () => {
@@ -324,28 +329,29 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     const requestContext = ctx.tryGetContext?.();
     const authInfo = ctx.authInfo ?? requestContext?.authInfo;
 
+    // An `anon:` id is minted per request or per session, so it names no one; the session below still can.
     const subject = authInfo?.extra?.['sub'] ?? authInfo?.extra?.['userId'];
-    if (typeof subject === 'string' && subject) return `user:${subject}`;
-    if (authInfo?.clientId) return `client:${authInfo.clientId}`;
+    if (!isAnonymousSubject(subject)) return `user:${subject}`;
+    if (!isAnonymousSubject(authInfo?.clientId)) return `client:${authInfo?.clientId}`;
 
     // Stateless, per-request and unaccepted client session ids identify no one; only a verified session does.
     const sessionId = requestContext?.verifiedSessionId;
     if (sessionId) return `session:${sessionId}`;
 
-    // No identity at all: give this call its own key rather than one shared with every other
-    // identity-less caller. A cache miss is the safe failure here.
-    return `anonymous:${randomUUID()}`;
+    return undefined;
   }
 
   /**
-   * Build the storage key for a tool call.
+   * Build the storage key for a tool call, or undefined when the caller has no identity to key by:
+   * such a call is neither served from the cache nor stored in it.
    *
    * Read and write both go through here. They used to build the key at two separate call
    * sites, and a key that differs between them silently disables the cache rather than
    * failing visibly.
    */
-  private buildCacheKey(toolFullName: string, toolContext: { input?: unknown }): string {
+  private buildCacheKey(toolFullName: string, toolContext: { input?: unknown }): string | undefined {
     const identity = this.options.keyByIdentity === false ? 'shared' : this.resolveCallerIdentity(toolContext);
+    if (identity === undefined) return undefined;
 
     // Digest rather than concatenate: `hashObject` joined keys and values with `:` and `;`,
     // so distinct inputs could produce the same string, and the key grew with the payload.

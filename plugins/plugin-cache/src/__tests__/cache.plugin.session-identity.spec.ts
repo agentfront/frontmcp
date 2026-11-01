@@ -62,7 +62,8 @@ describe('CachePlugin — session identity (#597)', () => {
     await plugin.willWriteCache(flowCtxWithoutPrincipal(presented));
     await plugin.willReadCache(flowCtxWithoutPrincipal(presented));
 
-    expect(store.getValue.mock.calls[0][0]).not.toBe(store.setValue.mock.calls[0][0]);
+    expect(store.getValue).not.toHaveBeenCalled();
+    expect(store.setValue).not.toHaveBeenCalled();
   });
 });
 
