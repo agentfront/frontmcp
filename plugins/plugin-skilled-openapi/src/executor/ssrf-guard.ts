@@ -26,11 +26,11 @@
 // forms that carry an IPv4 address (translated, compatible, NAT64, 6to4); each
 // is judged by the IPv4 address it reaches.
 //
-// The IP is checked but NOT pinned into the actual fetch in v1.2 OSS — under
-// undici this requires a custom Dispatcher and is left for v1.2.x. The
-// OS-level resolver typically reuses the same IP for the immediately-following
-// fetch, so in practice this catches direct attacks; targeted DNS-rebinding
-// against a tight time window is the documented residual risk (B5).
+// A resolved name's addresses are returned with the result, and on Node.js the
+// request connects to those addresses only (`pinned-fetch.ts`), so it reaches
+// the addresses checked here rather than the answer of a second lookup.
+
+import type { LookupAddress } from 'node:dns';
 
 import { classifyIpAddress, parseIpv4, type IpAddressClassification, type IpAddressRange } from '@frontmcp/utils';
 
@@ -39,6 +39,8 @@ import type { OutboundOptions } from '../skilled-openapi.types';
 export interface SsrfCheckResult {
   ok: boolean;
   reason?: string;
+  /** For a hostname resolved here, the addresses it resolved to, all checked: the ones to connect to. */
+  addresses?: LookupAddress[];
 }
 
 // ALWAYS forbidden, regardless of `allowPrivateNetworks`. These ranges host
@@ -172,7 +174,7 @@ export async function checkOutboundUrl(
   // lazily — only when we actually need to resolve — so a V8-isolate runtime
   // (Cloudflare Worker), where `node:dns` is absent and egress is already
   // platform-sandboxed, never loads it at module-eval.
-  let addresses: Array<{ address: string; family: number }>;
+  let addresses: LookupAddress[];
   try {
     const { promises: dns } = await import('node:dns');
     addresses = await dns.lookup(literal.address, { all: true });
@@ -194,5 +196,5 @@ export async function checkOutboundUrl(
     }
   }
 
-  return { ok: true };
+  return { ok: true, addresses };
 }
