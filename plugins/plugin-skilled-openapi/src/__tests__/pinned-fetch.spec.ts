@@ -323,6 +323,18 @@ describe('executeOperation without an injected fetch', () => {
     expect(received).toHaveLength(0);
   });
 
+  it('reports a 204 answer as a success', async () => {
+    jest.spyOn(dns.promises, 'lookup').mockResolvedValue(LOOPBACK as never);
+    respond = (response) => {
+      response.statusCode = 204;
+      response.end();
+    };
+
+    const result = await getInvoice();
+
+    expect(result).toMatchObject({ ok: true, status: 204, data: null });
+  });
+
   it('closes the connection of a response over maxResponseBytes', async () => {
     jest.spyOn(dns.promises, 'lookup').mockResolvedValue(LOOPBACK as never);
     respond = (response) => {
