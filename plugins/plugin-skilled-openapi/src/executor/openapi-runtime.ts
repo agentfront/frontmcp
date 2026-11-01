@@ -330,8 +330,9 @@ export async function executeOperation(args: {
         }
       }
       const buf = Buffer.concat(chunks.map((c) => Buffer.from(c)));
-      // Re-create Response so parseResponse can do its own content-type handling.
-      const synthetic = new Response(buf, {
+      // Re-create Response so parseResponse can do its own content-type handling. One without a body
+      // (a 204 or 205) stays without one: `Response` refuses even an empty body for those statuses.
+      const synthetic = new Response(response.body === null ? null : buf, {
         status: response.status,
         headers: response.headers,
       });
