@@ -265,6 +265,20 @@ describe('executeOperation', () => {
     expect(result.status).toBe(502);
   });
 
+  it.each([204, 205])('reports a %i answer as a success with no data, whatever its content-type', async (status) => {
+    const result = await executeOperation({
+      entry: buildEntry(),
+      bundleId: 'acme',
+      input: { id: '1' },
+      deps: buildDeps({
+        fetchImpl: (async () =>
+          new Response(null, { status, headers: { 'content-type': 'application/json' } })) as never,
+      }),
+    });
+
+    expect(result).toEqual({ ok: true, status, contentType: 'application/json', data: null, responseBytes: 0 });
+  });
+
   it('truncates / refuses responses larger than maxResponseBytes', async () => {
     const result = await executeOperation({
       entry: buildEntry(),
