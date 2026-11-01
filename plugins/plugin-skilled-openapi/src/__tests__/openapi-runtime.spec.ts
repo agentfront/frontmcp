@@ -265,16 +265,18 @@ describe('executeOperation', () => {
     expect(result.status).toBe(502);
   });
 
-  it.each([204, 205])('reports a %i answer, which has no body, as a success', async (status) => {
+  it.each([204, 205])('reports a %i answer as a success with no data, whatever its content-type', async (status) => {
     const result = await executeOperation({
       entry: buildEntry(),
       bundleId: 'acme',
       input: { id: '1' },
-      deps: buildDeps({ fetchImpl: (async () => new Response(null, { status })) as never }),
+      deps: buildDeps({
+        fetchImpl: (async () =>
+          new Response(null, { status, headers: { 'content-type': 'application/json' } })) as never,
+      }),
     });
 
-    expect(result).toMatchObject({ ok: true, status, data: '', responseBytes: 0 });
-    expect(result.error).toBeUndefined();
+    expect(result).toEqual({ ok: true, status, contentType: 'application/json', data: null, responseBytes: 0 });
   });
 
   it('truncates / refuses responses larger than maxResponseBytes', async () => {

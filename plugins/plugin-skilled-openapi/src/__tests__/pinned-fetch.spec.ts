@@ -332,7 +332,7 @@ describe('executeOperation without an injected fetch', () => {
 
     const result = await getInvoice();
 
-    expect(result).toMatchObject({ ok: true, status: 204, data: '' });
+    expect(result).toMatchObject({ ok: true, status: 204, data: null });
   });
 
   it('closes the connection of a response over maxResponseBytes', async () => {

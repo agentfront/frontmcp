@@ -312,6 +312,10 @@ export async function executeOperation(args: {
         );
       }
       const contentType = response.headers.get('content-type') ?? undefined;
+      // A bodyless answer (204, 205, HEAD) has no data to parse or check against the output schema.
+      if (response.body === null) {
+        return { ok: response.ok, status: response.status, contentType, data: null, responseBytes: 0 };
+      }
       const reader = response.body?.getReader();
       let received = 0;
       const chunks: Uint8Array[] = [];
@@ -330,9 +334,8 @@ export async function executeOperation(args: {
         }
       }
       const buf = Buffer.concat(chunks.map((c) => Buffer.from(c)));
-      // Re-create Response so parseResponse can do its own content-type handling. One without a body
-      // (a 204 or 205) stays without one: `Response` refuses even an empty body for those statuses.
-      const synthetic = new Response(response.body === null ? null : buf, {
+      // Re-create Response so parseResponse can do its own content-type handling.
+      const synthetic = new Response(buf, {
         status: response.status,
         headers: response.headers,
       });
