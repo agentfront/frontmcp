@@ -113,6 +113,14 @@ describe('executeSkillAction', () => {
     expect(res.error).toMatch(/output schema/);
   });
 
+  it('reports a bodyless JSON answer (a 204) as a success, without checking it against the output schema', async () => {
+    mockExecuteOperation.mockResolvedValue({ ok: true, status: 204, data: null, contentType: 'application/json' });
+
+    const res = await executeSkillAction({ entry: makeEntry(), input: { id: 1 }, authInfo: {}, deps: makeDeps() });
+
+    expect(res).toEqual({ ok: true, status: 204, contentType: 'application/json' });
+  });
+
   it('passes an upstream ok:false envelope through unchanged (no output validation)', async () => {
     mockExecuteOperation.mockResolvedValue({ ok: false, status: 404, error: 'not found' });
     const res = await executeSkillAction({ entry: makeEntry(), input: { id: 1 }, authInfo: {}, deps: makeDeps() });

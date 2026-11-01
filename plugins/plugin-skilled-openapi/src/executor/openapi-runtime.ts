@@ -312,6 +312,10 @@ export async function executeOperation(args: {
         );
       }
       const contentType = response.headers.get('content-type') ?? undefined;
+      // A bodyless answer (204, 205, HEAD) has no data to parse or check against the output schema.
+      if (response.body === null) {
+        return { ok: response.ok, status: response.status, contentType, data: null, responseBytes: 0 };
+      }
       const reader = response.body?.getReader();
       let received = 0;
       const chunks: Uint8Array[] = [];
