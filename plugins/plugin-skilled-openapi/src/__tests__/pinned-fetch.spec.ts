@@ -14,6 +14,7 @@ import { pinnedFetch } from '../executor/pinned-fetch';
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 
 const LOOPBACK = [{ address: '127.0.0.1', family: 4 }];
+const JSON_BODY = Buffer.from(JSON.stringify({ id: 'inv_1' }));
 
 interface ReceivedRequest {
   method?: string;
@@ -157,6 +158,41 @@ describe('pinnedFetch', () => {
     const response = await pinnedFetch(LOOPBACK)(`http://api.pinned.test:${port}/`);
 
     await expect(response.text()).resolves.toBe(expected);
+  });
+
+  it.each([
+    [
+      'decodes a chain of codings, last applied first',
+      'gzip, br',
+      zlib.brotliCompressSync(zlib.gzipSync(JSON_BODY)),
+      JSON_BODY,
+    ],
+    [
+      'leaves a body as sent when a coding is unknown',
+      'gzip, compress',
+      zlib.gzipSync(JSON_BODY),
+      zlib.gzipSync(JSON_BODY),
+    ],
+  ])('%s', async (_label, encoding, body, expected) => {
+    respond = (response) => {
+      response.setHeader('content-encoding', encoding);
+      response.end(body);
+    };
+
+    const response = await pinnedFetch(LOOPBACK)(`http://api.pinned.test:${port}/`);
+
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(expected);
+  });
+
+  it('refuses a response with more content codings than fetch allows', async () => {
+    respond = (response) => {
+      response.setHeader('content-encoding', 'gzip, gzip, gzip, gzip, gzip, gzip');
+      response.end('');
+    };
+
+    await expect(pinnedFetch(LOOPBACK)(`http://api.pinned.test:${port}/`)).rejects.toThrow(
+      'too many content-encodings in response: 6, at most 5',
+    );
   });
 
   it('fails reading a body that does not decode', async () => {

@@ -8,11 +8,16 @@ import type * as Zlib from 'node:zlib';
 /** Statuses the Fetch API gives no body, as it does a HEAD response; `new Response` refuses one with a body. */
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
+/** The most content codings a response may list, as `fetch` allows. */
+const MAX_CONTENT_CODINGS = 5;
+
+type DecoderFactory = (zlib: typeof Zlib) => Stream.Transform;
+
 /**
  * The content codings `fetch` decodes, and the decoder for each, flushing as `fetch` does so that an
  * empty or truncated body yields what it holds rather than an error.
  */
-const DECODERS = new Map<string, (zlib: typeof Zlib) => Stream.Transform>([
+const DECODERS = new Map<string, DecoderFactory>([
   ['gzip', (zlib) => zlib.createGunzip(zlibSyncFlush(zlib))],
   ['x-gzip', (zlib) => zlib.createGunzip(zlibSyncFlush(zlib))],
   ['deflate', (zlib) => zlib.createInflate(zlibSyncFlush(zlib))],
@@ -93,15 +98,27 @@ export function pinnedFetch(addresses: readonly LookupAddress[]): typeof fetch {
   }) as typeof fetch;
 }
 
-/** The body with its `content-encoding` undone, as `fetch` gives it; an unknown coding is left as sent. */
+/**
+ * The body with its `content-encoding` codings undone, last applied first, as `fetch` gives it. A list
+ * with a coding `fetch` does not decode is left as sent, and one longer than `fetch` allows is refused.
+ */
 function decodeBody(incoming: Http.IncomingMessage, stream: typeof Stream, zlib: typeof Zlib): Stream.Readable {
-  const encoding = incoming.headers['content-encoding']?.trim().toLowerCase() ?? '';
-  const createDecoder = DECODERS.get(encoding);
-  if (!createDecoder) return incoming;
-  const decoder = createDecoder(zlib);
-  // A failure destroys the decoder with its error, which the body's reader then gets.
-  stream.pipeline(incoming, decoder, () => undefined);
-  return decoder;
+  const codings = (incoming.headers['content-encoding'] ?? '')
+    .split(',')
+    .map((coding) => coding.trim().toLowerCase())
+    .filter((coding) => coding.length > 0);
+  if (codings.length > MAX_CONTENT_CODINGS) {
+    incoming.destroy();
+    throw new Error(`too many content-encodings in response: ${codings.length}, at most ${MAX_CONTENT_CODINGS}`);
+  }
+  const decoderFactories = codings.reverse().map((coding) => DECODERS.get(coding));
+  const decodable = decoderFactories.every((factory): factory is DecoderFactory => factory !== undefined);
+  if (codings.length === 0 || !decodable) return incoming;
+
+  const decoders = decoderFactories.map((createDecoder) => createDecoder(zlib));
+  // A failure destroys every stage with its error, which the body's reader then gets from the last.
+  stream.pipeline([incoming, ...decoders], () => undefined);
+  return decoders[decoders.length - 1];
 }
 
 /** A `lookup` for the connection that answers with `addresses`, in whichever shape it asks for. */
