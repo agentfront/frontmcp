@@ -6,6 +6,7 @@
 import * as dns from 'node:dns';
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http';
 import * as net from 'node:net';
+import * as zlib from 'node:zlib';
 
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
 import { executeOperation, type OpenApiRuntimeDeps } from '../executor/openapi-runtime';
@@ -90,6 +91,7 @@ describe('pinnedFetch', () => {
           'content-type': 'application/json',
           'content-length': '14',
           accept: '*/*',
+          'accept-encoding': 'gzip, deflate',
           'user-agent': 'node',
         }),
       },
@@ -124,6 +126,34 @@ describe('pinnedFetch', () => {
     ).text();
 
     expect(received[0].headers).toMatchObject({ accept: 'application/xml', 'user-agent': 'billing-client' });
+  });
+
+  it.each([
+    ['gzip', zlib.gzipSync],
+    ['x-gzip', zlib.gzipSync],
+    ['deflate', zlib.deflateSync],
+    ['br', zlib.brotliCompressSync],
+  ])('decodes a %s body', async (encoding, compress) => {
+    respond = (response) => {
+      response.setHeader('content-type', 'application/json');
+      response.setHeader('content-encoding', encoding);
+      response.end(compress(Buffer.from(JSON.stringify({ id: 'inv_1' }))));
+    };
+
+    const response = await pinnedFetch(LOOPBACK)(`http://api.pinned.test:${port}/`);
+
+    await expect(response.json()).resolves.toEqual({ id: 'inv_1' });
+  });
+
+  it('fails reading a body that does not decode', async () => {
+    respond = (response) => {
+      response.setHeader('content-encoding', 'gzip');
+      response.end('not gzip');
+    };
+
+    const response = await pinnedFetch(LOOPBACK)(`http://api.pinned.test:${port}/`);
+
+    await expect(response.text()).rejects.toThrow();
   });
 
   it('returns a 204 with no body', async () => {
