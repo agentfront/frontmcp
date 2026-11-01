@@ -5,16 +5,30 @@ import type * as Http from 'node:http';
 import type * as Stream from 'node:stream';
 import type * as Zlib from 'node:zlib';
 
-/** Statuses the Fetch API gives no body; `new Response` refuses one with a body. */
+/** Statuses the Fetch API gives no body, as it does a HEAD response; `new Response` refuses one with a body. */
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
-/** The content codings `fetch` decodes, and the decoder for each. */
+/**
+ * The content codings `fetch` decodes, and the decoder for each, flushing as `fetch` does so that an
+ * empty or truncated body yields what it holds rather than an error.
+ */
 const DECODERS = new Map<string, (zlib: typeof Zlib) => Stream.Transform>([
-  ['gzip', (zlib) => zlib.createGunzip()],
-  ['x-gzip', (zlib) => zlib.createGunzip()],
-  ['deflate', (zlib) => zlib.createInflate()],
-  ['br', (zlib) => zlib.createBrotliDecompress()],
+  ['gzip', (zlib) => zlib.createGunzip(zlibSyncFlush(zlib))],
+  ['x-gzip', (zlib) => zlib.createGunzip(zlibSyncFlush(zlib))],
+  ['deflate', (zlib) => zlib.createInflate(zlibSyncFlush(zlib))],
+  [
+    'br',
+    (zlib) =>
+      zlib.createBrotliDecompress({
+        flush: zlib.constants.BROTLI_OPERATION_FLUSH,
+        finishFlush: zlib.constants.BROTLI_OPERATION_FLUSH,
+      }),
+  ],
 ]);
+
+function zlibSyncFlush(zlib: typeof Zlib): Zlib.ZlibOptions {
+  return { flush: zlib.constants.Z_SYNC_FLUSH, finishFlush: zlib.constants.Z_SYNC_FLUSH };
+}
 
 /**
  * `fetch` that connects only to `addresses`, the DNS answer the outbound check judged. `fetch`
@@ -69,7 +83,7 @@ export function pinnedFetch(addresses: readonly LookupAddress[]): typeof fetch {
     for (let index = 0; index < incoming.rawHeaders.length; index += 2) {
       responseHeaders.append(incoming.rawHeaders[index], incoming.rawHeaders[index + 1]);
     }
-    if (NULL_BODY_STATUSES.has(status)) {
+    if (NULL_BODY_STATUSES.has(status) || init.method?.toUpperCase() === 'HEAD') {
       incoming.resume();
       return new Response(null, { status, headers: responseHeaders });
     }

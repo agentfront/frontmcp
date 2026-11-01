@@ -145,6 +145,20 @@ describe('pinnedFetch', () => {
     await expect(response.json()).resolves.toEqual({ id: 'inv_1' });
   });
 
+  it.each([
+    ['empty', Buffer.alloc(0), ''],
+    ['truncated', zlib.gzipSync(Buffer.from('{"id":"inv_1"}')).subarray(0, -6), '{"id":"inv_1"}'],
+  ])('reads an %s gzip body as fetch does', async (_label, body, expected) => {
+    respond = (response) => {
+      response.setHeader('content-encoding', 'gzip');
+      response.end(body);
+    };
+
+    const response = await pinnedFetch(LOOPBACK)(`http://api.pinned.test:${port}/`);
+
+    await expect(response.text()).resolves.toBe(expected);
+  });
+
   it('fails reading a body that does not decode', async () => {
     respond = (response) => {
       response.setHeader('content-encoding', 'gzip');
@@ -166,6 +180,20 @@ describe('pinnedFetch', () => {
 
     expect(response.status).toBe(204);
     expect(response.body).toBeNull();
+  });
+
+  it('returns a HEAD response with no body, whatever its content-encoding', async () => {
+    respond = (response) => {
+      response.setHeader('content-encoding', 'gzip');
+      response.setHeader('content-length', '120');
+      response.end();
+    };
+
+    const response = await pinnedFetch(LOOPBACK)(`http://api.pinned.test:${port}/`, { method: 'HEAD' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toBeNull();
+    await expect(response.text()).resolves.toBe('');
   });
 
   it('returns a redirect as it is, without following it', async () => {
