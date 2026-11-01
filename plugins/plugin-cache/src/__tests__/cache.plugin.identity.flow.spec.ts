@@ -80,6 +80,12 @@ describe('CachePlugin — caller identity through tools:call-tool (GHSA-r6v6-p4r
     await expect(getProfile(server, caller('alice', 'session-two'))).resolves.toMatchObject({ execution: 1 });
   });
 
+  it('serves an anonymous caller their entry within their session', async () => {
+    await getProfile(server, caller('anon:first'));
+
+    await expect(getProfile(server, caller('anon:first'))).resolves.toMatchObject({ execution: 1 });
+  });
+
   it('keeps anonymous callers apart', async () => {
     await getProfile(server, caller('anon:first'));
 

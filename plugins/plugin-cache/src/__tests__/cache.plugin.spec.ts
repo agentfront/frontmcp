@@ -436,7 +436,8 @@ describe('CachePlugin', () => {
     }
 
     beforeEach(() => {
-      plugin = new CachePlugin({ type: 'memory', toolPatterns: ['test:*'] });
+      // These contexts carry no caller, so key without one; the identity specs cover keying by caller.
+      plugin = new CachePlugin({ type: 'memory', toolPatterns: ['test:*'], keyByIdentity: false });
       mockCacheStore = {
         getValue: jest.fn(),
         setValue: jest.fn(),
@@ -714,7 +715,8 @@ describe('CachePlugin', () => {
     let mockCacheStore: any;
 
     beforeEach(() => {
-      plugin = new CachePlugin({ type: 'memory', toolPatterns: ['test:*'] });
+      // These contexts carry no caller, so key without one; the identity specs cover keying by caller.
+      plugin = new CachePlugin({ type: 'memory', toolPatterns: ['test:*'], keyByIdentity: false });
       mockCacheStore = {
         getValue: jest.fn(),
         setValue: jest.fn(),

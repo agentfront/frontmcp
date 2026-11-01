@@ -642,11 +642,12 @@ response to everyone else.
 
 The identity is the subject your auth layer puts in `authInfo.extra` (`sub` / `userId`), then
 the client id, then the session. For a request the SDK verified, the client id is the token's
-`sub`, or `anon:<id>` for an anonymous session. Only a session the server verified
+`sub`. An anonymous subject or client id (`anon:<id>`, which the SDK makes up for one session or
+for each request without one) counts as none. Only a session the server verified
 (`FrontMcpContext.verifiedSessionId`) is an identity: the session id the stateless HTTP transport
 gives every request, the fresh per-request id of a request without `mcp-session-id`, and an
-`mcp-session-id` the server did not accept are not. A call with no identity at all gets a key of
-its own rather than one shared with every other identity-less caller.
+`mcp-session-id` the server did not accept are not. A call with no identity at all skips the
+cache: the tool runs, and the plugin neither reads nor stores an entry for it.
 
 Set `keyByIdentity: false` **only** when every caller would get byte-identical output: public
 reference data, a currency table, a static document.
