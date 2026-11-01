@@ -27,7 +27,7 @@ import {
 } from '@frontmcp/adapters/openapi';
 import type { AuthBinding } from '@frontmcp/adapters/skills';
 import type { FrontMcpLogger } from '@frontmcp/sdk';
-import { isRedirectResponse } from '@frontmcp/utils';
+import { isEdgeRuntime, isRedirectResponse } from '@frontmcp/utils';
 
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import type { OutboundOptions } from '../skilled-openapi.types';
@@ -35,7 +35,8 @@ import { callerTokenRefusal } from './caller-token';
 import type { CredentialResolver } from './credential-resolver';
 import { proxiedFetch } from './egress-proxy';
 import { withHostConcurrency } from './host-concurrency';
-import { checkOutboundUrl } from './ssrf-guard';
+import { pinnedFetch } from './pinned-fetch';
+import { checkOutboundUrl, type SsrfCheckResult } from './ssrf-guard';
 
 /** Caller-supplied input. Flat keys match `mapper[].inputKey`. */
 export type OperationInput = Record<string, unknown>;
@@ -260,7 +261,7 @@ export async function executeOperation(args: {
 
   let fetchImpl: typeof fetch;
   try {
-    fetchImpl = deps.fetchImpl ?? (outbound.egressProxy ? await proxiedFetch(outbound.egressProxy) : fetch);
+    fetchImpl = deps.fetchImpl ?? (await outboundFetch(outbound, ssrf));
   } catch (e) {
     return failure(0, `egress proxy unavailable: ${(e as Error).message}`);
   }
@@ -321,6 +322,7 @@ export async function executeOperation(args: {
           if (value) {
             received += value.byteLength;
             if (received > maxBytes) {
+              await reader.cancel();
               return failure(response.status, `response exceeded maxResponseBytes (${maxBytes})`);
             }
             chunks.push(value);
@@ -343,12 +345,21 @@ export async function executeOperation(args: {
         responseBytes: received,
       };
     } catch (e) {
-      const err = e as Error;
-      return failure(0, err.name === 'AbortError' ? `timeout after ${timeoutMs}ms` : err.message);
+      return failure(0, ac.signal.aborted ? `timeout after ${timeoutMs}ms` : (e as Error).message);
     } finally {
       clearTimeout(timer);
     }
   });
+}
+
+/**
+ * The `fetch` a request goes out with: through the egress proxy when one is set, else to the
+ * addresses the outbound check resolved and judged. A Worker resolves and connects on the platform.
+ */
+async function outboundFetch(outbound: OutboundOptions, ssrf: SsrfCheckResult): Promise<typeof fetch> {
+  if (outbound.egressProxy) return proxiedFetch(outbound.egressProxy);
+  if (ssrf.addresses?.length && !isEdgeRuntime()) return pinnedFetch(ssrf.addresses);
+  return fetch;
 }
 
 function failure(status: number, error: string): ExecutionResult {
