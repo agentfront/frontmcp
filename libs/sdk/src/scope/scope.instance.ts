@@ -50,6 +50,7 @@ import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
 import { isDirectOnly } from '../front-mcp/direct-only.flag';
 import type { HaManager } from '../ha';
 import type { HealthService } from '../health';
+import { checkHookOrder, hookRunsOf } from '../hooks/hook-order';
 import HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils';
 import { type JobExecutionManager } from '../job/execution/job-execution.manager';
@@ -695,6 +696,9 @@ export class Scope extends ScopeEntry {
 
     // Fail-fast: entries with metadata only a plugin enforces (`approval`, `featureFlag`, ...) that no such plugin covers
     this.validateEnforcedMetadata();
+
+    // Fail-fast on hooks whose before/after order each other in a cycle; warn about a target no hook matches
+    checkHookOrder(hookRunsOf(this.scopeHooks), (message) => this.logger.warn(message));
 
     // One warning per tool whose declared outputSchema tools/list has to leave out
     for (const message of describeUnlistedOutputSchemas(this)) this.logger.warn(message);

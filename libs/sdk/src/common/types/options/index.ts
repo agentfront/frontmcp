@@ -21,3 +21,4 @@ export * from './registry';
 export * from './lifecycle';
 export * from './clients';
 export * from './offload';
+export * from './devtools';

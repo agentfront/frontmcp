@@ -29,7 +29,7 @@ import {
   type Tracer,
 } from '@opentelemetry/api';
 
-import { FlowControl, InternalMcpError, toMcpError } from '@frontmcp/sdk';
+import { addHookObserver, FlowControl, InternalMcpError, toMcpError, type HookObserver } from '@frontmcp/sdk';
 import { sha256Hex } from '@frontmcp/utils';
 
 import { FrontMcpAttributes, McpAttributes, type TracingOptions } from '../otel/otel.types';
@@ -844,19 +844,17 @@ export function onAgentDidExecuteEnrich(flowCtx: any): void {
 // Hook Observation (requestLogs' hooks_triggered, tracing.hookSpans)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Where the SDK's flow runner looks for the request's hook observer, on its FrontMcpContext. */
-const HOOK_OBSERVER_KEY = Symbol.for('frontmcp:hook-observer');
+/** Set on a request whose hooks this plugin already observes, so a request gets one observer from it. */
+const OBSERVED_KEY = Symbol.for('frontmcp:observability:hook-observer');
 
-/** Wraps each hook a plugin, app or entry injected into a flow of the request: `run` runs the hook. */
-export type HookObserver = (
-  hook: { flowName: string; stage: string; target: unknown; flowContext: unknown },
-  run: () => Promise<void>,
-) => Promise<void>;
+export type { HookObserver };
 
-/** Installs `observer` for the request the flow `flowCtx` serves, unless one watches it already. */
+/** Adds `observer` to the hook observers of the request the flow `flowCtx` serves, unless this plugin added one. */
 export function installHookObserver(flowCtx: FlowContextLike, observer: HookObserver): void {
   const ctx = extractContext(flowCtx);
-  if (ctx && !ctx.get?.(HOOK_OBSERVER_KEY)) ctx.set?.(HOOK_OBSERVER_KEY, observer);
+  if (!ctx?.get || !ctx.set || ctx.get(OBSERVED_KEY)) return;
+  ctx.set(OBSERVED_KEY, true);
+  addHookObserver({ get: (key) => ctx.get?.(key), set: (key, value) => ctx.set?.(key, value) }, observer);
 }
 
 /** Runs one hook inside a `hook <stage>` span, a child of its flow's span. `fail` and `abort` end it as an error; other control-flow signals end it OK. */

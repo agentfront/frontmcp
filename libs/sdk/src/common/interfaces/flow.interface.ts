@@ -127,6 +127,9 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
     scope: ScopeEntry,
   ) => Token | undefined | Promise<Token | undefined>;
 
+  /** The run's answer carries the dev hook trace, `_meta['frontmcp/trace']`, when the server has it on. */
+  static readonly tracesHooksInAnswer?: boolean;
+
   protected input: FlowInputOf<N>;
   state: FlowStateOf<N> = FlowState.create({});
   scopeLogger: FrontMcpLogger;

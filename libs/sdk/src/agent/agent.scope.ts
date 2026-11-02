@@ -19,6 +19,7 @@ import {
 } from '../common';
 import { FlowExitedWithoutOutputError } from '../errors';
 import FlowRegistry from '../flows/flow.registry';
+import { checkHookOrder, hookRunsOf } from '../hooks/hook-order';
 import HookRegistry from '../hooks/hook.registry';
 import PluginRegistry from '../plugin/plugin.registry';
 import GetPromptFlow from '../prompt/flows/get-prompt.flow';
@@ -240,6 +241,8 @@ export class AgentScope {
     // tools, so the agent's model can call them, and their exported resources and prompts to this scope.
     this.agentAgents = new AgentRegistry(this.agentProviders, this.metadata.agents ?? [], this.agentOwner);
     await this.agentAgents.ready;
+
+    checkHookOrder(hookRunsOf(this.agentHooks), (message) => this.logger.warn(message));
 
     this.logger.info(
       `AgentScope initialized with ${toolTypes.length} tool(s), ${this.metadata.plugins?.length ?? 0} plugin(s)`,

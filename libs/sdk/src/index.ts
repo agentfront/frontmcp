@@ -41,6 +41,16 @@ export {
 } from './answer';
 export { fileSignal, SURFACE_META_KEY, surfaceHash, type FileSignalOptions, type LiveSurface } from './surface';
 export * from './errors';
+export {
+  addHookObserver,
+  HOOK_OBSERVER_KEY,
+  HOOK_TRACE_META_KEY,
+  type HookObserver,
+  type HookObserverHost,
+  type HookTraceEntry,
+  type HookTraceOutcome,
+  type ObservedHook,
+} from './hooks/hook-observers';
 export * from './elicitation';
 export * from './task';
 export { default as LoggerRegistry } from './logger/logger.registry';
@@ -452,6 +462,16 @@ export type {
   ConfigResolutionContext,
   ConfigResolver,
 } from './builtin/config';
+
+// CallRecorderPlugin - records client calls as redacted JSONL for replaySession() (built-in)
+export { CallRecorderPlugin } from './builtin/call-recorder';
+export type {
+  CallRecorderPluginOptions,
+  CallRecorderPluginOptionsInput,
+  CallRecord,
+  CallRecordError,
+  RecordedMethod,
+} from './builtin/call-recorder';
 
 // Config resolver functions
 export {

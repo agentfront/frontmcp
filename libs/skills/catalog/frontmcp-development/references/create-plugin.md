@@ -184,6 +184,15 @@ class MyServer {}
 - `'app'` (default): the hooks run for the entries of the app (or server) that installs the plugin.
 - `'server'`: the hooks run for every app's entries, even when the plugin is declared on a single `@App`. Its providers and context extensions stay with the app that installs it. A standalone app (`standalone: true`) cannot install a server-scoped plugin (`InvalidPluginScopeError`).
 
+One hook can widen its own reach instead, with its `appliesTo` option (see `create-plugin-hooks`, "HookOptions"):
+
+- `'uncovered-apps'`: also the entries of the apps that have no instance of the same hook, for gates an entry's metadata asks for (approval, feature flags).
+- `'all-apps'`: the entries of every app, like a `scope: 'server'` plugin's hooks, while the plugin's other hooks keep to its app. Use it for a single hook that guards or watches every app, such as a setup gate. It reads and can change every app's calls, so treat it like a server-level plugin.
+
+Either way, the hooks reach only the apps that share a scope with the installing app: a standalone app, or each app of a `splitByApp` server, is a scope of its own. Install the plugin on the server (`@FrontMcp({ plugins })`) to reach every scope.
+
+To run a hook before or after another plugin's, name that plugin in the hook's `before` or `after` (`{ before: ['setup-gate'] }`) rather than choosing a priority on the other side of its number, and pick priorities from the `HookPhase` bands (`resolve`, `guard`, `observe`, `shape`). See `create-plugin-hooks`, "Hook Order".
+
 ## Step 2: Add Providers
 
 Plugins contribute injectable services via `providers`, and make them visible to the host app with `exports`:
@@ -621,6 +630,7 @@ plugins/
 | Exporting a provider           | `providers: [auditLoggerProvider], exports: [auditLoggerProvider]`                                   | `exports: [AuditLoggerToken]` (a bare token)                          | `exports` takes the provider definitions from `providers`; a bare token throws at decoration       |
 | Caller identity in a tool      | `this.auth.user.sub`                                                                                 | `this.scope.userId`                                                   | `this.scope` is the server scope; the user is on `this.auth`                                       |
 | Plugin scope                   | `scope: 'app'` (default) for app-scoped behavior                                                     | `scope: 'server'` when hooks should only apply to one app             | Server scope fires hooks for every app's entries, even when declared on one `@App`; default to app |
+| Ordering against a plugin      | `@ToolHook.Will('execute', { priority: HookPhase.guard, before: ['setup-gate'] })`                   | `priority: 9999` because the other plugin uses `10000`                | `before` / `after` say what the order depends on, and a cycle or a typo is reported at startup     |
 | Dynamic options                | Extend `DynamicPlugin<TOptions, TInput>` with `static dynamicProviders()`                            | Constructing providers in the constructor body                        | `dynamicProviders` runs before instantiation, enabling proper DI wiring                            |
 | Nested plugin needs options    | Nested `Plugin.init({ inject: () => [HostToken], useFactory })` injecting a `dynamicProviders` token | Resolving the host's option-derived provider by reading global state  | Option-derived providers are registered before nested plugins are built                            |
 

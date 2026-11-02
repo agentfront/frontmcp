@@ -76,14 +76,8 @@
           "name": "output-schema",
           "description": "Define the tool's output contract — Zod shape, primitives, media, multi-content arrays."
         },
-        {
-          "name": "quick-start",
-          "description": "60-second tour — minimal tool, schemas, registration, calling it."
-        },
-        {
-          "name": "registration",
-          "description": "@App({ tools }) vs @FrontMcp({ tools }), multi-app composition."
-        },
+        { "name": "quick-start", "description": "60-second tour — minimal tool, schemas, registration, calling it." },
+        { "name": "registration", "description": "@App({ tools }) vs @FrontMcp({ tools }), multi-app composition." },
         {
           "name": "remote-and-esm",
           "description": "Tool.esm / Tool.remote — load tools from npm packages or remote MCP servers."
@@ -92,10 +86,7 @@
           "name": "testing",
           "description": "Per-tool unit tests — pointer to the dedicated `testing` skill for the canonical patterns."
         },
-        {
-          "name": "throttling",
-          "description": "rateLimit, concurrency, timeout — semantics, interaction, defaults."
-        },
+        { "name": "throttling", "description": "rateLimit, concurrency, timeout — semantics, interaction, defaults." },
         {
           "name": "ui-widgets",
           "description": "@Tool({ ui }) — template formats, trusted markup (html / escapeStringResults), servingMode, host-detect resourceMode, CSP, ignored options, MCP Apps spec."
@@ -3643,18 +3634,6 @@
               ]
             },
             {
-              "name": "unix-socket-daemon",
-              "description": "Configure a FrontMCP daemon that listens on a unix socket and uses SQLite for persistent storage.",
-              "level": "advanced",
-              "tags": ["setup", "unix-socket", "sqlite", "session", "transport", "database"],
-              "features": [
-                "`http.unixSocket` for unix socket transport instead of TCP port",
-                "`transport: { protocol: 'modern' }` for Streamable HTTP with strict sessions",
-                "`ttlCleanupIntervalMs: 15000` for more aggressive cleanup on high-throughput daemons",
-                "Absolute path for the database file in system-level storage (`/var/lib/`)"
-              ]
-            },
-            {
               "name": "multi-process-storage",
               "description": "Share counters and a lock between several local processes through one SQLite file.",
               "level": "intermediate",
@@ -3664,6 +3643,18 @@
                 "`incr` stays exact and an `ifNotExists` lock has one holder across processes on the same file",
                 "`createStorage({ type: 'sqlite' })` gives scripts and `throttle.storage` the same file",
                 "Waiting for another process's lock does not block the event loop"
+              ]
+            },
+            {
+              "name": "unix-socket-daemon",
+              "description": "Configure a FrontMCP daemon that listens on a unix socket and uses SQLite for persistent storage.",
+              "level": "advanced",
+              "tags": ["setup", "unix-socket", "sqlite", "session", "transport", "database"],
+              "features": [
+                "`http.unixSocket` for unix socket transport instead of TCP port",
+                "`transport: { protocol: 'modern' }` for Streamable HTTP with strict sessions",
+                "`ttlCleanupIntervalMs: 15000` for more aggressive cleanup on high-throughput daemons",
+                "Absolute path for the database file in system-level storage (`/var/lib/`)"
               ]
             }
           ]
@@ -3681,6 +3672,24 @@
       "bundle": ["recommended", "full"],
       "priority": 10,
       "references": [
+        {
+          "name": "replay-calls",
+          "description": "Record the calls clients make with CallRecorderPlugin, then replay them against a new build with replaySession() or frontmcp test --replay",
+          "examples": [
+            {
+              "name": "record-and-replay",
+              "description": "Record calls against one version of a server with `CallRecorderPlugin`, replay them against the next with `replaySession()`, and assert on what changed.",
+              "level": "intermediate",
+              "tags": ["testing", "replay", "regression", "e2e"],
+              "features": [
+                "Turning on `CallRecorderPlugin` from an env var, so only a recording run writes the JSONL file",
+                "Recording through a real `McpTestClient`, and stopping the server so the last lines are written",
+                "Replaying with `replaySession()` and ignoring volatile fields with `**.` globs",
+                "Asserting on `report.differences` and failing a spec with `toMatchRecording()`"
+              ]
+            }
+          ]
+        },
         {
           "name": "setup-testing",
           "description": "Configure Jest, write unit and E2E tests, and enforce 95%+ coverage for FrontMCP applications",

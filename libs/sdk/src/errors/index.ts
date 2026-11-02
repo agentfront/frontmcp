@@ -194,6 +194,7 @@ export {
   DuplicateAppIdError,
   FlowNotRegisteredError,
   UnsupportedHookOwnerKindError,
+  HookOrderCycleError,
 } from './registry.errors';
 
 // Export provider errors
@@ -310,6 +311,7 @@ export {
   EnclaveExecutionError,
   FlowInputMissingError,
   DynamicJobDirectExecutionError,
+  CallRecorderConfigurationError,
 } from './sdk.errors';
 export * from './job.errors';
 export * from './plugin.errors';

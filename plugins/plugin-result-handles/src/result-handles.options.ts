@@ -90,7 +90,8 @@ const resultHandlesOptionsSchema = z
 
 /** The plugin's options with their defaults, or a {@link ResultHandlesConfigurationError} naming each problem. */
 export function parseResultHandlesOptions(input: ResultHandlesPluginOptionsInput): ResultHandlesPluginOptions {
-  const result = resultHandlesOptionsSchema.safeParse(input);
+  const { providers, ...options } = input as ResultHandlesPluginOptionsInput & { providers?: unknown };
+  const result = resultHandlesOptionsSchema.safeParse(Array.isArray(providers) ? options : input);
   if (result.success) return result.data;
   const problems = result.error.issues.map((issue) =>
     issue.path.length > 0 ? `${issue.path.join('.')}: ${issue.message}` : issue.message,

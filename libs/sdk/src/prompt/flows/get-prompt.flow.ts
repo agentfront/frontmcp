@@ -118,6 +118,8 @@ function findPromptForGet(prompts: ScopeEntry['prompts'], name: string): PromptE
   access: 'authorized',
 })
 export default class GetPromptFlow extends FlowBase<typeof name> {
+  static override readonly tracesHooksInAnswer = true;
+
   static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const promptName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
     if (typeof promptName !== 'string') return undefined;
@@ -443,5 +445,12 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     // Respond with the properly formatted MCP result
     this.respond(parseResult.data);
     this.logger.verbose('finalize:done');
+  }
+
+  /** Answer the prompt. The answer becomes `state.output`, as in the tool and resource flows. */
+  override respond(output: z.infer<typeof outputSchema>): never {
+    const answer = outputSchema.parse(output);
+    this.state.set('output', answer);
+    throw FlowControl.respond(answer);
   }
 }

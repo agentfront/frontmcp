@@ -93,6 +93,40 @@ class TwoTextsTool extends ToolContext {
   }
 }
 
+@Tool({ name: 'rows_and_summary', inputSchema: {} })
+class RowsAndSummaryTool extends ToolContext {
+  async execute() {
+    const data = { rows: rows(100), total: 100 };
+    return {
+      content: [
+        { type: 'text', text: JSON.stringify(data) },
+        { type: 'text', text: 'Exported 100 rows from the archive.' },
+      ],
+      structuredContent: data,
+    };
+  }
+}
+
+@Tool({ name: 'rows_with_note', inputSchema: {} })
+class RowsWithNoteTool extends ToolContext {
+  async execute() {
+    return {
+      content: [{ type: 'text', text: 'Rows past 100 are in the archive.' }],
+      structuredContent: { rows: rows(100), total: 100 },
+    };
+  }
+}
+
+@Tool({ name: 'echoed_object', inputSchema: {} })
+class EchoedObjectTool extends ToolContext {
+  async execute() {
+    return {
+      content: [{ type: 'text', text: 'Echoed the request.' }],
+      structuredContent: { content: { toString: 1, rows: rows(100) } },
+    };
+  }
+}
+
 @Tool({ name: 'chart', inputSchema: {} })
 class ChartTool extends ToolContext {
   async execute() {
@@ -143,6 +177,9 @@ const foldPolicy = jest.fn((toolName: string, _answer: unknown, _context: FoldCo
     LongTextTool,
     RowsTextTool,
     TwoTextsTool,
+    RowsAndSummaryTool,
+    RowsWithNoteTool,
+    EchoedObjectTool,
     ChartTool,
     FailingRowsTool,
     RowCountTool,
@@ -322,6 +359,15 @@ describe('ResultHandlesPlugin', () => {
       const client = await open();
       expect((await call(client, 'chart')).content[0]?.type).toBe('image');
       expect((await call(client, 'two_texts')).content).toHaveLength(2);
+      const withSummary = await call(client, 'rows_and_summary');
+      expect(textAt(withSummary, 1)).toBe('Exported 100 rows from the archive.');
+      expect(withSummary.structuredContent).toEqual({ rows: rows(100), total: 100 });
+      const withNote = await call(client, 'rows_with_note');
+      expect(textAt(withNote, 0)).toBe('Rows past 100 are in the archive.');
+      expect(withNote.structuredContent).toEqual({ rows: rows(100), total: 100 });
+      const echoed = await call(client, 'echoed_object');
+      expect(echoed.isError).toBeFalsy();
+      expect(textAt(echoed, 0)).toBe('Echoed the request.');
       const failing = await call(client, 'failing_rows');
       expect(failing.isError).toBe(true);
       expect(JSON.parse(textAt(failing, 0))).toHaveLength(100);

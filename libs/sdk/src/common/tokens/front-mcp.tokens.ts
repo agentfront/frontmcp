@@ -25,6 +25,8 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   // provider lifecycle hooks (onShutdown timeout)
   lifecycle: tokenFactory.meta('lifecycle'),
   offload: tokenFactory.meta('offload'),
+  // development aids (hook trace)
+  devtools: tokenFactory.meta('devtools'),
   // global scoped tools (shared across apps)
   tools: tokenFactory.meta('tools'),
   // global scoped resources (shared across apps)
