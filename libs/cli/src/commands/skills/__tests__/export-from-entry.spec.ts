@@ -199,6 +199,14 @@ describe('frontmcp skills export --from-entry', () => {
     expect(await fileExists(path.join(project, 'out/.claude/skills/greeting'))).toBe(false);
   });
 
+  it('keeps the copies of the other skills, and finds no drift in them, when --name comes with --all', async () => {
+    await run({ providers: ['claude'] });
+
+    expect(await run({ all: true, name: 'inline', providers: ['claude'] })).toBe(0);
+    expect(await fileExists(path.join(project, '.claude/skills/greeting/SKILL.md'))).toBe(true);
+    expect(await run({ all: true, name: 'inline', check: true, providers: ['claude'] })).toBe(0);
+  });
+
   it('skips a skill whose content could not be loaded or whose name is not a folder name, and exits 1', async () => {
     mockExtract.mockResolvedValue(
       schema({
