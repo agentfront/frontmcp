@@ -1,11 +1,11 @@
 ---
 name: create-plugin-hooks
-description: Intercept and extend FrontMCP flows using before, after, around, and stage hook decorators
+description: Intercept and extend FrontMCP flows using before, after, around, finally, and stage hook decorators
 ---
 
 # Creating Plugins with Flow Lifecycle Hooks
 
-Plugins intercept and extend FrontMCP flows using lifecycle hook decorators. Every flow (tool calls, resource reads, prompt gets, etc.) is composed of **stages**, and hooks let you run logic before, after, around, or as part of any stage.
+Plugins intercept and extend FrontMCP flows using lifecycle hook decorators. Every flow (tool calls, resource reads, prompt gets, etc.) is composed of **stages**, and hooks let you run logic before, after, around, or as part of any stage, or after it whatever its outcome.
 
 ## When to Use This Skill
 
@@ -14,6 +14,7 @@ Plugins intercept and extend FrontMCP flows using lifecycle hook decorators. Eve
 - Adding before/after logic to tool execution (logging, metrics, input enrichment)
 - Implementing authorization checks that intercept flows before they reach the tool
 - Wrapping stage execution with caching, retry, or timing logic via `@Around`
+- Closing what a hook opened (a span, a timer, a lock) after a stage, whether it succeeded or failed, via `@Finally`
 
 ### Recommended
 
@@ -27,28 +28,64 @@ Plugins intercept and extend FrontMCP flows using lifecycle hook decorators. Eve
 - You want to use an existing official plugin that already provides hooks (see `official-plugins`)
 - You are building a simple tool with no cross-cutting concerns (see `create-tool`)
 
-> **Decision:** Use this skill when you need to intercept or wrap flow stages with `@Will`, `@Did`, `@Around`, or `@Stage` decorators.
+> **Decision:** Use this skill when you need to intercept or wrap flow stages with `@Will`, `@Did`, `@Around`, `@Finally`, or `@Stage` decorators.
 
 ## Hook Decorator Types
 
-FrontMCP provides four hook decorators obtained via `FlowHooksOf(flowName)`:
+FrontMCP provides five hook decorators obtained via `FlowHooksOf(flowName)`:
 
-| Decorator | Timing                                           | Use Case                                       |
-| --------- | ------------------------------------------------ | ---------------------------------------------- |
-| `@Will`   | **Before** a stage runs                          | Validate input, inject headers, check auth     |
-| `@Did`    | **After** a stage completes                      | Log results, emit metrics, transform output    |
-| `@Stage`  | **Joins** a stage, alongside the flow's own step | Extra work in the stage, ending the flow early |
-| `@Around` | **Wraps** a stage (before + after)               | Caching, timing, retry, skipping the stage     |
+| Decorator  | Timing                                                   | Use Case                                         |
+| ---------- | -------------------------------------------------------- | ------------------------------------------------ |
+| `@Will`    | **Before** a stage runs                                  | Validate input, inject headers, check auth       |
+| `@Did`     | **After** a stage succeeds; skipped when it fails        | Log results, emit metrics, transform output      |
+| `@Stage`   | **Joins** a stage, alongside the flow's own step         | Extra work in the stage, ending the flow early   |
+| `@Around`  | **Wraps** a stage (before + after)                       | Caching, timing, retry, skipping the stage       |
+| `@Finally` | **After** a stage, whatever its outcome; can't change it | Close spans, timers or locks; record the failure |
 
 ### FlowHooksOf API
 
 ```typescript
 import { FlowHooksOf } from '@frontmcp/sdk';
 
-const { Stage, Will, Did, Around } = FlowHooksOf('tools:call-tool');
+const { Stage, Will, Did, Around, Finally } = FlowHooksOf('tools:call-tool');
 ```
 
-`FlowHooksOf(flowName)` returns an object with all four decorator factories bound to the specified flow.
+`FlowHooksOf(flowName)` returns an object with all five decorator factories bound to the specified flow.
+
+### `@Did` Runs on Success, `@Finally` Always Runs
+
+A stage runs its `@Will` hooks, then its body (wrapped by its `@Around` hooks), then its `@Did` hooks, then its `@Finally` hooks.
+
+- `@Did` runs only when the stage succeeded. When a `@Will` hook, the body or an `@Around` hook fails, the stage's `@Did` hooks are skipped. So a `@Did` hook that closes what a `@Will` hook opened (a span, a timer, a lock) leaks it on every failure.
+- `@Finally` runs after the stage on every outcome: when it succeeded or responded, when it failed, when a `@Will` hook failed or responded in its place, when an `@Around` hook failed, and when `finalize` refused an answer the tool's output schema rejects (`InvalidOutputError`). Read the failure from `ctx.state.flowError`: the first error the run failed with (what a stage or hook threw or passed to `ctx.fail()`; a `FlowControl.abort(reason)` reads as `Flow aborted: <reason>`), typed on `tools:call-tool`, `resources:read-resource`, `prompts:get-prompt` and `jobs:execute-job`.
+- A `@Finally` hook cannot change the outcome. If it calls `ctx.respond()` or `ctx.fail()`, or throws, the flow logs a warning and goes on as if it had not: the client gets the same answer or the same error, the values the hook set on `ctx.state` before it responded, failed or threw are put back (a job's answer, for one; an object it changed in place is not), and the stage's other `@Finally` hooks still run. A `@Finally` hook that returns normally keeps what it set on `ctx.state`, like any other hook: on `jobs:execute-job`, setting `state.answer` before `updateRunState` changes the result the run records and returns.
+- `@Finally` hooks of one stage run in `priority` order, like every other hook. A stage the flow never reaches (because an earlier stage failed) runs none of its hooks, `@Finally` included: hook `finalize` to see the end of every call.
+
+```typescript
+import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
+
+const { Will, Finally } = ToolHook;
+
+@Plugin({ name: 'execute-timer' })
+export class ExecuteTimerPlugin {
+  private readonly startedAt = new WeakMap<FlowCtxOf<'tools:call-tool'>, number>();
+
+  @Will('execute')
+  start(ctx: FlowCtxOf<'tools:call-tool'>) {
+    this.startedAt.set(ctx, Date.now());
+  }
+
+  @Finally('execute')
+  stop(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const startedAt = this.startedAt.get(ctx);
+    if (startedAt === undefined) return;
+    const outcome = ctx.state.flowError ? `failed: ${ctx.state.flowError.message}` : 'succeeded';
+    ctx.logger.info(`execute ${outcome} in ${Date.now() - startedAt}ms`);
+  }
+}
+```
+
+Up to 1.10.15 there was no `@Finally`: a failure in `finalize` (an output schema refusing the answer) skipped the stage's `@Did` hooks and left `state.flowError` unset.
 
 ### What `@Stage` Does
 
@@ -56,7 +93,7 @@ A `@Stage('execute')` hook does not replace the flow's own `execute` step: it ad
 
 To keep the flow's own step from running:
 
-- Call `ctx.respond(result)` from the `@Stage` (or a `@Will`) hook. The flow ends with that result: it skips the rest of the stage and the main stages after it, while the stage's `@Did` hooks and the cleanup stages (in `tools:call-tool`: `releaseSemaphore`, `releaseQuota`, `applyUI`, `finalize`) still run. In `tools:call-tool`, `result` is a complete MCP `CallToolResult`; it does not go through the tool's output schema.
+- Call `ctx.respond(result)` from the `@Stage` (or a `@Will`) hook. The flow ends with that result: it skips the rest of the stage and the main stages after it, while the stage's `@Finally` hooks (and its `@Did` hooks, when a `@Stage` hook answered) and the cleanup stages (in `tools:call-tool`: `releaseSemaphore`, `releaseQuota`, `applyUI`, `finalize`) still run. In `tools:call-tool`, `result` is a complete MCP `CallToolResult`; it does not go through the tool's output schema.
 - Or use an `@Around` hook that does not call `next()`. The stage is skipped and the flow goes on; in `tools:call-tool`, set `ctx.state.required.toolContext.output`, and the result is validated and formatted like the tool's own.
 
 ## Available Flow Names
@@ -189,7 +226,7 @@ import {
 Usage:
 
 ```typescript
-const { Will, Did, Around, Stage } = ToolHook;
+const { Will, Did, Around, Finally, Stage } = ToolHook;
 ```
 
 > **Note:** Other flows (e.g., `skills:filter`, transport flows) can be hooked by passing the flow name to `FlowHooksOf('flow:name')`. Prefer the pre-built exports above when one is available: exporting them is also what puts a flow's types in the published package, which is why `FlowHooksOf('prompts:get-prompt')`, `'prompts:list-prompts'` and `'completion:complete'` did not typecheck in consumer projects up to 1.8.7.
@@ -217,8 +254,8 @@ A hook method on a plugin or provider receives the running flow as its first arg
 | `rawInput`        | The input the flow was started with; for `tools:call-tool`, the MCP `request` and its `ctx`                                                             |
 | `logger`          | The flow's logger (the tool, resource and prompt flows define one; every flow has `scopeLogger`)                                                        |
 | `get(token)`      | Resolves a provider registered on the server, or a context-scoped provider of the current call                                                          |
-| `respond(output)` | Ends the flow with this output                                                                                                                          |
-| `fail(error)`     | Ends the flow with this error (an `Error`, such as an MCP error class)                                                                                  |
+| `respond(output)` | Ends the flow with this output (ignored in a `@Finally` hook)                                                                                           |
+| `fail(error)`     | Ends the flow with this error (an `Error`, such as an MCP error class; ignored in a `@Finally` hook)                                                    |
 
 The flow has no `toolName`, `elapsed` or `tryGet`, and its `input` is protected. In `tools:call-tool`, read the tool name and arguments from `ctx.state.required.input` (`name`, `arguments`), the tool entry from `ctx.state.tool`, and the tool instance from `ctx.state.toolContext` (set from `createToolCallContext` on). The state accepts only the keys the flow declares: `ctx.state.set('startedAt', Date.now())` does not compile.
 
@@ -255,7 +292,7 @@ export class TimingPlugin {
 
 ## HookOptions
 
-All four decorators accept an optional options object:
+All five decorators accept an optional options object:
 
 ```typescript
 @Will('execute', {
@@ -265,7 +302,7 @@ All four decorators accept an optional options object:
 })
 ```
 
-- **priority** (`number`) - Execution order when multiple hooks target the same stage. Lower values run first, for `@Will`, `@Did`, `@Around` and `@Stage` alike. Default: `0`.
+- **priority** (`number`) - Execution order when multiple hooks target the same stage. Lower values run first, for `@Will`, `@Did`, `@Around`, `@Finally` and `@Stage` alike. Default: `0`.
 - **filter** (`(ctx) => boolean`) - A predicate that receives the flow context. Return `false` to skip this hook for the current invocation.
 - **appliesTo** (`'own-app' | 'uncovered-apps'`) - A hook of a plugin installed on an app runs, in `tools/call`, `resources/read`, `prompts/get` and `completion/complete`, only for that app's entries (`'own-app'`), unless the plugin has `scope: 'server'`. With `'uncovered-apps'` it also runs for the entries of any app that has no instance of the same hook (same class and method) of its own or from a server-level plugin. Use it for gates an entry's metadata asks for (approval, feature flags), so the entry is not left ungated when the plugin sits on another app. Server-level plugins' hooks, and list-flow hooks, already run for every app.
 
@@ -452,6 +489,7 @@ class ProcessOrderTool extends ToolContext {
 
 - `@Will('execute')` on a tool class runs **before** the `execute()` method of that specific tool
 - `@Did('execute')` runs **after** `execute()` completes successfully
+- `@Finally('execute')` runs **after** `execute()` whether it succeeded or failed
 - `@Will('validateInput')` runs before input validation — useful for input enrichment
 - `@Did('validateOutput')` runs after output validation — useful for output transformation
 - The hook has full access to `this` (the tool context) including `this.input`, `this.get()`, `this.fail()`
@@ -464,7 +502,7 @@ parseInput → ensureRemoteCapabilities → findTool → checkToolAuthorization 
   → validateInput → execute → validateOutput → releaseSemaphore → releaseQuota → applyUI → finalize
 ```
 
-A tool-class hook declared as an instance method runs on the tool instance, which `createToolCallContext` builds. So it can hook `Did`/`Stage` on `createToolCallContext` and any hook on a later stage. The same holds for `@Resource` (`createResourceContext`), `@Prompt` (`createPromptContext`) and `@Agent` (`createAgentContext`) classes.
+A tool-class hook declared as an instance method runs on the tool instance, which `createToolCallContext` builds. So it can hook `Did`/`Stage`/`Finally` on `createToolCallContext` and any hook on a later stage. The same holds for `@Resource` (`createResourceContext`), `@Prompt` (`createPromptContext`) and `@Agent` (`createAgentContext`) classes.
 
 To hook an earlier stage (`parseInput`, `findTool`, `checkToolAuthorization`, `checkEntryAuthorities`, and `findResource`, `findPrompt`, `findAgent`, `checkAgentAuthorization`), declare the hook as a `static` method. It runs without an instance -- `this` is the class, and the flow context is its argument, as for every hook -- and joins only the calls for its own entry, from their first stage:
 
@@ -493,6 +531,7 @@ An instance method on an earlier stage, or `Will`/`Around` on `createToolCallCon
 | Hook decorator source | `const { Will, Did } = ToolHook;` or `FlowHooksOf('tools:call-tool')` | Importing `Will` directly from `@frontmcp/sdk`                         | Decorators must be bound to a specific flow via `FlowHooksOf` or pre-built exports |
 | Hook priority         | `@Will('execute', { priority: -100 })` for early hooks                | Relying on array order without priority                                | Multiple hooks on the same stage need explicit priority; lower runs first          |
 | Around next()         | `await next();`                                                       | Forgetting to call `next()` in `@Around`                               | Omitting `next()` skips the wrapped stage; its `@Did` hooks still run              |
+| Cleanup after a stage | `@Finally('execute')` closes the span or timer `@Will` opened         | Closing it in `@Did('execute')`                                        | `@Did` is skipped when the stage fails; `@Finally` runs on every outcome           |
 | Around error recovery | `catch { ctx.state.required.toolContext.output = fallback; }`         | Catching a rejected `next()` without setting the output                | Returning normally handles the failure: the stage counts as successful             |
 | Filter predicate      | `filter: (ctx) => ctx.state.required.input.name !== 'health_check'`   | Checking tool name inside the hook body and returning early            | A filtered-out hook is skipped cleanly; for `@Around`, the stage still runs        |
 | Tool-level hooks      | `@Will('execute')` on a `@Tool` class (scoped to that tool)           | `@Will('execute')` on a `@Plugin` class expecting tool-scoped behavior | Plugin hooks fire for every tool of the app; tool-level hooks only for that tool   |
@@ -508,21 +547,24 @@ An instance method on an earlier stage, or `Will`/`Around` on `createToolCallCon
 ### Runtime
 
 - [ ] `@Will` hook fires before the targeted stage
-- [ ] `@Did` hook fires after the targeted stage completes
+- [ ] `@Did` hook fires after the targeted stage succeeds
+- [ ] `@Finally` hook fires after the targeted stage on success and on failure, and reads the failure from `ctx.state.flowError`
 - [ ] `@Around` hook calls `next()` and the wrapped stage executes
 - [ ] A `@Stage` hook meant to stand in for the stage ends the flow with `ctx.respond()` and a valid result for the flow
 - [ ] Hook `filter` correctly skips invocations for excluded tools
 
 ## Troubleshooting
 
-| Problem                                       | Cause                                               | Solution                                                                                                                                     |
-| --------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hook never fires                              | Plugin not registered in `plugins` array            | Add plugin class to `@App` or `@FrontMcp` `plugins` array                                                                                    |
-| `InvalidHookFlowError` at startup             | Entry-class hook that could never run               | Make early-stage hooks `static`; move list-flow hooks (and a `@Job` hook for a flow other than `jobs:execute-job`) to a plugin or a provider |
-| Hook fires for wrong flow                     | Used wrong flow name in `FlowHooksOf`               | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)                                                                       |
-| `@Around` skips the stage entirely            | `next()` not called inside the around handler       | Always `await next()` to execute the wrapped stage                                                                                           |
-| Multiple hooks execute in wrong order         | Priorities not set or conflicting                   | Set explicit `priority` values; lower numbers execute first                                                                                  |
-| The tool still runs despite a plugin `@Stage` | `@Stage` adds a step; it does not replace the stage | End the flow with `ctx.respond(result)`, or use `@Around` without calling `next()`                                                           |
+| Problem                                           | Cause                                               | Solution                                                                                                                                     |
+| ------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hook never fires                                  | Plugin not registered in `plugins` array            | Add plugin class to `@App` or `@FrontMcp` `plugins` array                                                                                    |
+| `InvalidHookFlowError` at startup                 | Entry-class hook that could never run               | Make early-stage hooks `static`; move list-flow hooks (and a `@Job` hook for a flow other than `jobs:execute-job`) to a plugin or a provider |
+| Hook fires for wrong flow                         | Used wrong flow name in `FlowHooksOf`               | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)                                                                       |
+| `@Around` skips the stage entirely                | `next()` not called inside the around handler       | Always `await next()` to execute the wrapped stage                                                                                           |
+| Multiple hooks execute in wrong order             | Priorities not set or conflicting                   | Set explicit `priority` values; lower numbers execute first                                                                                  |
+| The tool still runs despite a plugin `@Stage`     | `@Stage` adds a step; it does not replace the stage | End the flow with `ctx.respond(result)`, or use `@Around` without calling `next()`                                                           |
+| A span or timer opened in `@Will` stays open      | It is closed in `@Did`, which a failed stage skips  | Close it in `@Finally` on the same stage                                                                                                     |
+| `ctx.respond()` in a `@Finally` hook does nothing | `@Finally` cannot change a stage's outcome          | Answer from `@Will`, `@Stage` or `@Around`; the flow logs a warning for each ignored `@Finally` response or throw                            |
 
 ## Examples
 

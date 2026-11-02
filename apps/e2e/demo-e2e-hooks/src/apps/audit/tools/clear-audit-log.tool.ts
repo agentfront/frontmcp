@@ -2,6 +2,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { auditLog } from '../data/audit-log';
+import { finallyLog } from '../data/finally-log';
 
 const inputSchema = {};
 
@@ -15,13 +16,14 @@ type Output = z.infer<typeof outputSchema>;
 
 @Tool({
   name: 'clear-audit-log',
-  description: 'Clear all audit log entries',
+  description: 'Clear all audit log and Finally log entries',
   inputSchema,
   outputSchema,
 })
 export default class ClearAuditLogTool extends ToolContext {
   async execute(_input: Input): Promise<Output> {
     auditLog.clear();
+    finallyLog.clear();
 
     return {
       success: true,
