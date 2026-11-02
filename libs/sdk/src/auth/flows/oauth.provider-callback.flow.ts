@@ -32,7 +32,7 @@ import {
   type ProviderTokens,
   type ProviderUserInfo,
 } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import {
   base64urlEncode,
   generateCodeVerifier,

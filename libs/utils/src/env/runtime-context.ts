@@ -15,7 +15,7 @@
  *   - `surface` (per-call axis: mcp / cli / agent / job / http-trigger / webmcp)
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { getNodeEnv, isEdgeRuntime, isServerless } from '#env';
 

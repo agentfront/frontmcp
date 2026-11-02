@@ -7,7 +7,7 @@ import {
   type RateLimitConfig,
   type TimeoutConfig,
 } from '@frontmcp/guard';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils';
 
 import { type AdapterType } from '../interfaces/adapter.interface';

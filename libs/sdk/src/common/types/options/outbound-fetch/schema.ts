@@ -1,7 +1,7 @@
 // common/types/options/outbound-fetch/schema.ts
 // Zod schema for outbound `this.fetch()` configuration
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { RawZodShape } from '../../common.types';
 import type { OutboundFetchOptionsInterface } from './interfaces';

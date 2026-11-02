@@ -1,7 +1,7 @@
 // file: libs/sdk/src/resource/flows/read-resource.flow.ts
 
 import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { ReadResourceRequestSchema, ReadResourceResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import { randomBytes } from '@frontmcp/utils';
 

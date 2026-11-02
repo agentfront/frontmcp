@@ -56,7 +56,7 @@
  * That's it. No pages with complex consent screens are required; reuse your normal /oauth/authorize
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
 import {

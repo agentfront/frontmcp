@@ -1,7 +1,7 @@
 // options/transparent.schema.ts
 // Transparent mode - Pass-through OAuth tokens from remote provider
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { RawZodShape } from '../common/zod-utils';
 import type { TransparentAuthOptionsInterface } from './interfaces';

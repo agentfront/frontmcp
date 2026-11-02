@@ -1,5 +1,5 @@
 // file: libs/sdk/src/common/metadata/output-policy.ts
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { isDevelopment } from '@frontmcp/utils';
 
 /**

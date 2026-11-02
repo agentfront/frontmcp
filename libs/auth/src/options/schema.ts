@@ -1,7 +1,7 @@
 // options/schema.ts
 // Unified auth options schema combining all modes
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { AuthOptionsInterface } from './interfaces';
 import { localAuthSchema, remoteAuthSchema } from './orchestrated.schema';

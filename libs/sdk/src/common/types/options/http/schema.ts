@@ -2,7 +2,7 @@
 // Zod schema for HTTP configuration. Uses lazy-zod so the schema tree is
 // not constructed at module load when nothing parses it.
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { getEnv } from '@frontmcp/utils';
 
 import type { HttpMethod, ServerRequestHandler } from '../../../interfaces';

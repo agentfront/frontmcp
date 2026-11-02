@@ -1,7 +1,7 @@
 // options/shared.schemas.ts
 // Shared configuration schemas used across auth modes
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { jsonWebKeySetSchema, jwkSchema } from '../common/jwt.types';
 import { redisConfigSchema, type RedisConfig } from '../session/transport-session.types';
