@@ -188,6 +188,12 @@ describe('cacheScope of anonymous 2026-07-28 results', () => {
     },
   );
 
+  it.each(RESULTS)('%s is private on a server with clients profiles', async (method) => {
+    const server = await createTestFetchServer(config({}, { clients: { 'text-agent*': { structured: 'text' } } }));
+
+    expect(await cacheScopeOf(server, method)).toBe('private');
+  });
+
   it.each(RESULTS)('%s stays public when nothing shapes it per caller', async (method) => {
     const server = await createTestFetchServer(config({}));
 

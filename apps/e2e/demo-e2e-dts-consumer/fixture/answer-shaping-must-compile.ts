@@ -4,11 +4,14 @@ import {
   App,
   BUDGET_META_KEY,
   FrontMcp,
+  Plugin,
   Tool,
   ToolContext,
+  ToolHook,
   z,
   type BudgetNote,
   type ClientProfile,
+  type FlowCtxOf,
   type OutputBudget,
 } from '@frontmcp/sdk';
 
@@ -22,7 +25,16 @@ export class EventsTool extends ToolContext {
   }
 }
 
-@App({ name: 'Events', tools: [EventsTool], output: { budget } })
+// A hook before the budget reads whether a client made the call, as the answer stages do.
+@Plugin({ name: 'answer-tagger' })
+export class AnswerTagger {
+  @ToolHook.Will('fitAnswer')
+  tag(ctx: FlowCtxOf<'tools:call-tool'>): void {
+    if (ctx.isClientCall() && ctx.state.output) ctx.respond({ ...ctx.state.output, _meta: { tagged: true } });
+  }
+}
+
+@App({ name: 'Events', tools: [EventsTool], plugins: [AnswerTagger], output: { budget } })
 export class EventsApp {}
 
 @FrontMcp({

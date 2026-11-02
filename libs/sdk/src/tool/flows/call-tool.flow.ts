@@ -18,6 +18,7 @@ import {
   fitToolAnswer,
   measureAnswer,
   meteringEnabled,
+  outputSchemaMismatch,
   recordAnswerCost,
   shapeToolAnswer,
 } from '../../answer';
@@ -251,6 +252,9 @@ const resolvedTools = new ResolvedEntries<ToolEntry>();
 
 /** The undeclared key paths already reported per tool, so the 'warn' policy names each one once. */
 const reportedUndeclaredKeyPaths = new WeakMap<CallToolEntry, Set<string>>();
+
+/** Tools whose answer the budget left whole because a cut broke the outputSchema, so it is logged once. */
+const reportedUnfittedTools = new WeakSet<CallToolEntry>();
 
 /** The aliases each tool was already called by, so a call by an alias is logged once. */
 const loggedAliasCalls = new WeakMap<ToolEntry, Set<string>>();
@@ -1695,19 +1699,34 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     });
 
     // Respond with the properly formatted MCP result; the stages after this one may replace it
-    this.state.set('output', result);
     this.respond(result);
     this.logger.verbose('finalize:done');
   }
 
-  /** Fit the answer to `output.budget` (Tool > App > server). A plugin can replace this stage. */
+  /**
+   * Fit the answer to `output.budget` (Tool > App > server), unless the cut breaks the outputSchema
+   * the client validates `structuredContent` against. A plugin can replace this stage.
+   */
   @Stage('fitAnswer')
   async fitAnswer() {
     const { tool, output } = this.state;
     if (!tool || !output || !this.isClientCall()) return;
     const budget = resolveOutputBudget(...toolOutputPolicies(tool, this.scope));
     const fitted = budget && fitToolAnswer(output, budget);
-    if (fitted) this.answerWith(fitted);
+    if (!fitted) return;
+    const mismatch =
+      fitted.structuredContent !== output.structuredContent && this.clientValidatesStructuredContent(tool)
+        ? outputSchemaMismatch(tool.getRawOutputSchema() as Record<string, unknown>, fitted.structuredContent)
+        : undefined;
+    if (mismatch === undefined) {
+      this.respond(fitted);
+    } else if (!reportedUnfittedTools.has(tool)) {
+      reportedUnfittedTools.add(tool);
+      this.logger.warn(
+        `Tool "${tool.metadata.name}" answered over its ${budget.maxBytes}-byte output.budget and was sent whole: ` +
+          `the cut answer breaks its outputSchema (${mismatch}). Loosen the schema, or raise or turn off the budget.`,
+      );
+    }
   }
 
   /** Shape the answer for the caller's `clients` profile: text, `structuredContent` or both. */
@@ -1717,7 +1736,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (!tool || !output || uiResult || !this.isClientCall()) return;
     const mode = this.callerProfile()?.structured;
     const shaped = mode && shapeToolAnswer(output, mode, this.listsOutputSchema(tool));
-    if (shaped) this.answerWith(shaped);
+    if (shaped) this.respond(shaped);
   }
 
   /** Count what the answer costs on `/metrics`, per tool and per client platform. */
@@ -1734,13 +1753,18 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
   }
 
-  private answerWith(output: z.infer<typeof outputSchema>): void {
-    this.state.set('output', output);
-    this.respond(output);
+  /**
+   * Answer the call. Each answer, a stage's or a hook's (an `Around('finalize')` that redacts it),
+   * becomes `state.output`, which the stages after `finalize` fit, shape and count.
+   */
+  override respond(output: z.infer<typeof outputSchema>): never {
+    const answer = outputSchema.parse(output);
+    this.state.set('output', answer);
+    throw FlowControl.respond(answer);
   }
 
   /** Whether a client called the tool, rather than a tool, agent or job in process (`this.callTool()`). */
-  private isClientCall(): boolean {
+  isClientCall(): boolean {
     const callerCtx = this.input.ctx as { internalCall?: boolean; agentPrivateCall?: boolean } | undefined;
     return !(callerCtx?.internalCall || callerCtx?.agentPrivateCall || getRunningTool());
   }
@@ -1766,6 +1790,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       authInfo: this.state.authInfo,
       notifications: this.scope.notifications,
     });
+  }
+
+  /** Whether the caller is listed the tool's `outputSchema` and gets `structuredContent`, so it may validate it. */
+  private clientValidatesStructuredContent(tool: CallToolEntry): boolean {
+    return this.listsOutputSchema(tool) && this.callerProfile()?.structured !== 'text';
   }
 
   /** Whether `tools/list` lists the tool's `outputSchema`, so a client can read `structuredContent` alone. */

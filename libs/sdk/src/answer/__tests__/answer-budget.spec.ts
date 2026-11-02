@@ -1,6 +1,12 @@
 import type { CallToolResult, ReadResourceResult } from '@frontmcp/protocol';
 
-import { BUDGET_META_KEY, fitJsonToBudget, fitResourceAnswer, fitToolAnswer } from '../answer-budget';
+import {
+  BUDGET_META_KEY,
+  fitJsonToBudget,
+  fitResourceAnswer,
+  fitToolAnswer,
+  outputSchemaMismatch,
+} from '../answer-budget';
 
 const bytesOf = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
 
@@ -197,6 +203,33 @@ describe('answer budget', () => {
 
     it('returns undefined for a read within the budget', () => {
       expect(fitResourceAnswer({ contents: [{ uri: 'a://b', text: 'small' }] }, { maxBytes: 20_000 })).toBeUndefined();
+    });
+  });
+
+  describe('outputSchemaMismatch', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        items: { type: 'array', items: { type: 'object' }, minItems: 3 },
+        point: { type: 'array', prefixItems: [{ type: 'number' }, { type: 'number' }], minItems: 2, maxItems: 2 },
+      },
+      required: ['items'],
+      additionalProperties: false,
+    };
+
+    it('accepts a cut that keeps the schema, with keys the answer keeps', () => {
+      expect(outputSchemaMismatch(schema, { items: [{}, {}, {}], point: [1, 2], kept: true })).toBeUndefined();
+    });
+
+    it('names the path a cut breaks: fewer items than minItems, or a shortened tuple', () => {
+      expect(outputSchemaMismatch(schema, { items: [{}] })).toMatch(/^\$\.items: /);
+      expect(outputSchemaMismatch(schema, { items: [{}, {}, {}], point: [1] })).toMatch(/^\$\.point\b/);
+    });
+
+    it('reports a schema it cannot check', () => {
+      expect(outputSchemaMismatch({ type: 'object', properties: { a: { $ref: '#/$defs/missing' } } }, {})).toMatch(
+        /^the schema could not be checked: /,
+      );
     });
   });
 });

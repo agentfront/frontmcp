@@ -135,15 +135,17 @@ const LIVE_LIST_ENTRIES: Record<
  * Whether a cacheable result may differ from one caller to another, even between anonymous callers.
  *
  * It may when the scope evaluates `authorities` rules, which filter lists and gate reads for the
- * caller, or when any hook runs in a flow that builds the result: feature flags, skill visibility
- * and custom filters all decide there, for the caller. So does a list or read of entries whose
- * `enabled` is a source. Methods not listed count as per-caller.
+ * caller, when `clients` profiles shape results for the caller's `clientInfo.name`, or when any
+ * hook runs in a flow that builds the result: feature flags, skill visibility and custom filters
+ * all decide there, for the caller. So does a list or read of entries whose `enabled` is a source.
+ * Methods not listed count as per-caller.
  */
 export function isShapedPerCaller(
-  scope: Pick<ScopeEntry, 'hooks' | 'authoritiesEngine' | 'tools' | 'resources' | 'prompts'>,
+  scope: Pick<ScopeEntry, 'hooks' | 'authoritiesEngine' | 'metadata' | 'tools' | 'resources' | 'prompts'>,
   method: string,
 ): boolean {
   if (scope.authoritiesEngine) return true;
+  if (Object.keys(scope.metadata.clients ?? {}).length > 0) return true;
   const flows = RESULT_SHAPING_FLOWS[method];
   if (!flows) return true;
   if (flows.some((flow) => scope.hooks.getFlowHooks(flow).length > 0)) return true;

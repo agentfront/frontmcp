@@ -25,6 +25,8 @@ export interface ClientNameSources {
 
 const SUMMARY_KEYS = 12;
 const SHORT_STRING = 40;
+/** Longer names match no profile: a glob with several `*` backtracks on a long name a client picks. */
+const MAX_CLIENT_NAME_LENGTH = 256;
 
 const compiledProfiles = new WeakMap<ClientProfilesOptionsInterface, Array<[RegExp, ClientProfile]>>();
 
@@ -39,12 +41,15 @@ function compile(clients: ClientProfilesOptionsInterface): Array<[RegExp, Client
   return compiled;
 }
 
-/** The profile of the first `clients` glob that matches the client name, without regard to case. */
+/**
+ * The profile of the first `clients` glob that matches the client name, without regard to case.
+ * A name over 256 characters matches none.
+ */
 export function resolveClientProfile(
   clients: ClientProfilesOptionsInterface | undefined,
   clientName: string | undefined,
 ): ClientProfile | undefined {
-  if (!clients || clientName === undefined) return undefined;
+  if (!clients || clientName === undefined || clientName.length > MAX_CLIENT_NAME_LENGTH) return undefined;
   const lowerName = clientName.toLowerCase();
   return compile(clients).find(([matcher]) => matcher.test(lowerName))?.[1];
 }

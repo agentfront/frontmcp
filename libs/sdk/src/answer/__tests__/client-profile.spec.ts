@@ -28,6 +28,13 @@ describe('client profiles', () => {
       expect(resolveClientProfile(clients, undefined)).toBeUndefined();
       expect(resolveClientProfile({ 'codex*': { structured: 'text' } }, 'cursor')).toBeUndefined();
     });
+
+    it('matches no profile for a client name over 256 characters, so a long name cannot stall the glob', () => {
+      expect(resolveClientProfile({ '*a*b*': { structured: 'text' } }, `${'a'.repeat(256)}b`)).toBeUndefined();
+      expect(resolveClientProfile({ '*a*b*': { structured: 'text' } }, `${'a'.repeat(255)}b`)).toEqual({
+        structured: 'text',
+      });
+    });
   });
 
   describe('callerClientName', () => {
