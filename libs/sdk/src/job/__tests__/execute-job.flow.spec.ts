@@ -510,14 +510,14 @@ describe('jobs:execute-job flow (#700)', () => {
     );
   });
 
-  it('records an attempt a hook ended without an answer as failed', async () => {
+  it('records an attempt a hook aborted as failed, with the reason it gave', async () => {
     await expect(manager.executeJob(jobNamed('aborted_job'), {})).rejects.toBeInstanceOf(FlowControl);
 
     const [run] = await manager.listRuns({ jobId: 'aborted_job' });
     expect(run).toEqual(
       expect.objectContaining({
         state: 'failed',
-        error: expect.objectContaining({ message: 'The job attempt ended before it produced a result' }),
+        error: expect.objectContaining({ message: 'Flow aborted: stopped by a hook' }),
       }),
     );
   });
