@@ -3,7 +3,18 @@
 
 import * as path from 'path';
 
-import { cp, ensureDir, fileExists, readdir, readFile, readFileBuffer, rm, stat, writeFile } from '@frontmcp/utils';
+import {
+  copyFile,
+  ensureDir,
+  fileExists,
+  readdir,
+  readFile,
+  readFileBuffer,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from '@frontmcp/utils';
 
 import { c } from '../../core/colors';
 import { resolveEntry } from '../../shared/fs';
@@ -33,7 +44,12 @@ interface SkillCopy {
   name: string;
   hash: string;
   skillMd: string;
-  resourceDirs: Array<{ kind: string; source: string }>;
+  /** The instruction file and resource folders the copy is made from, which an export never replaces. */
+  sources: string[];
+  /** Each resource file by its path in the copy (`references/tone.md`), with the real path it is read from. */
+  files: Map<string, string>;
+  /** Resource paths left out: links that lead outside their folder, or nowhere. */
+  leftOut: string[];
 }
 
 const RESOURCE_KINDS = ['references', 'examples', 'scripts', 'assets'] as const;
@@ -46,6 +62,33 @@ function markerLine(source: string, hash: string): string {
 function readMarker(skillMd: string): { source: string; hash: string } | undefined {
   const match = MARKER_PATTERN.exec(skillMd);
   return match ? { source: match[1], hash: match[2] } : undefined;
+}
+
+const withLf = (text: string) => text.replace(/\r\n/g, '\n');
+
+/** True for `parent` itself and any path inside it. */
+function isWithin(child: string, parent: string): boolean {
+  const relative = path.relative(parent, child);
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+/** Files under `root` with their real paths, following links that stay inside it; the others are in `outside`. */
+async function filesUnder(root: string): Promise<{ files: Array<{ name: string; real: string }>; outside: string[] }> {
+  const realRoot = await realpath(root);
+  const files: Array<{ name: string; real: string }> = [];
+  const outside: string[] = [];
+  const walk = async (dir: string, realDir: string, prefix: string, ancestors: ReadonlySet<string>): Promise<void> => {
+    const within = new Set(ancestors).add(realDir);
+    for (const name of (await readdir(dir)).sort()) {
+      const full = path.join(dir, name);
+      const real = await realpath(full).catch(() => undefined);
+      if (!real || !isWithin(real, realRoot)) outside.push(`${prefix}${name}`);
+      else if (!(await stat(real)).isDirectory()) files.push({ name: `${prefix}${name}`, real });
+      else if (!within.has(real)) await walk(full, real, `${prefix}${name}/`, within);
+    }
+  };
+  await walk(root, realRoot, '', new Set());
+  return { files, outside };
 }
 
 /** Put the marker on the line after the frontmatter, where agents skip it and people see it first. */
@@ -78,38 +121,44 @@ async function renderCopy(
   if ('skipReason' in instructions) return instructions;
   const composed = composeSkillMd(
     { name: skill.name, description: skill.description, tags: skill.tags, license: skill.license },
-    instructions.body,
+    withLf(instructions.body),
   );
+  const sources: string[] = [];
+  if (asset.instructionFile && (await fileExists(asset.instructionFile))) sources.push(asset.instructionFile);
+  const files = new Map<string, string>();
+  const leftOut: string[] = [];
+  for (const kind of RESOURCE_KINDS) {
+    const dir = asset.resourceDirs?.[kind];
+    if (!dir || !(await fileExists(dir))) continue;
+    sources.push(dir);
+    const listed = await filesUnder(dir);
+    for (const file of listed.files) files.set(`${kind}/${file.name}`, file.real);
+    leftOut.push(...listed.outside.map((name) => `${kind}/${name}`));
+  }
   return {
     name: skill.name,
     hash: skill.hash,
     skillMd: `${withMarker(composed.trimEnd() + toolsSection(skill, manifest), markerLine(source, skill.hash))}\n`,
-    resourceDirs: RESOURCE_KINDS.flatMap((kind) => {
-      const dir = asset.resourceDirs?.[kind];
-      return dir ? [{ kind, source: dir }] : [];
-    }),
+    sources,
+    files,
+    leftOut,
   };
 }
 
-/** Every file under a directory, as sorted paths relative to it with `/` separators. */
-async function filesUnder(dir: string, prefix = ''): Promise<string[]> {
-  const files: string[] = [];
-  for (const name of (await readdir(dir)).sort()) {
-    const full = path.join(dir, name);
-    if ((await stat(full)).isDirectory()) files.push(...(await filesUnder(full, `${prefix}${name}/`)));
-    else files.push(`${prefix}${name}`);
+/** Why `targetDir` may not be written: it holds the skill's source, or (unless checking) it is not an export. */
+async function refusalOf(copy: SkillCopy, targetDir: string, check: boolean): Promise<string | undefined> {
+  const realTarget = await realpath(targetDir).catch(() => undefined);
+  if (!realTarget) return undefined;
+  for (const source of copy.sources) {
+    const realSource = await realpath(source);
+    if (isWithin(realSource, realTarget) || isWithin(realTarget, realSource)) {
+      return "holds the skill's own source; export it to another folder with --out";
+    }
   }
-  return files;
-}
-
-async function expectedFiles(copy: SkillCopy): Promise<Map<string, Buffer>> {
-  const files = new Map<string, Buffer>([['SKILL.md', Buffer.from(copy.skillMd)]]);
-  for (const { kind, source } of copy.resourceDirs) {
-    if (!(await fileExists(source))) continue;
-    for (const file of await filesUnder(source))
-      files.set(`${kind}/${file}`, await readFileBuffer(path.join(source, file)));
-  }
-  return files;
+  if (check) return undefined;
+  const skillMdPath = path.join(targetDir, 'SKILL.md');
+  if ((await fileExists(skillMdPath)) && readMarker(await readFile(skillMdPath))) return undefined;
+  return 'was not written by frontmcp skills export; move it away to export the skill there';
 }
 
 /** Why the copy in `targetDir` differs from what export writes, or undefined when it is the same. */
@@ -119,15 +168,21 @@ async function driftOf(copy: SkillCopy, targetDir: string): Promise<string | und
   const recorded = readMarker(await readFile(skillMdPath));
   if (!recorded) return 'not written by frontmcp skills export';
   if (recorded.hash !== copy.hash) return 'stale: the skill changed in the source since this copy was exported';
-  const expected = await expectedFiles(copy);
   const actual = await filesUnder(targetDir);
-  for (const file of actual) {
-    const content = expected.get(file);
-    if (!content) return `modified: ${file} is not in the source`;
-    if (!content.equals(await readFileBuffer(path.join(targetDir, file))))
-      return `modified: ${file} differs from the source`;
+  if (actual.outside.length > 0) return `modified: ${actual.outside[0]} is not in the source`;
+  for (const file of actual.files) {
+    if (file.name === 'SKILL.md') {
+      if (withLf(await readFile(file.real)) !== copy.skillMd) return 'modified: SKILL.md differs from the source';
+      continue;
+    }
+    const source = copy.files.get(file.name);
+    if (!source) return `modified: ${file.name} is not in the source`;
+    if (!(await readFileBuffer(source)).equals(await readFileBuffer(file.real))) {
+      return `modified: ${file.name} differs from the source`;
+    }
   }
-  const missing = [...expected.keys()].find((file) => !actual.includes(file));
+  const copied = new Set(actual.files.map((file) => file.name));
+  const missing = [...copy.files.keys()].find((name) => !copied.has(name));
   return missing ? `modified: ${missing} is missing` : undefined;
 }
 
@@ -135,8 +190,10 @@ async function writeCopy(copy: SkillCopy, targetDir: string): Promise<void> {
   await rm(targetDir, { recursive: true, force: true });
   await ensureDir(targetDir);
   await writeFile(path.join(targetDir, 'SKILL.md'), copy.skillMd);
-  for (const { kind, source } of copy.resourceDirs) {
-    if (await fileExists(source)) await cp(source, path.join(targetDir, kind), { recursive: true });
+  for (const [name, source] of copy.files) {
+    const target = path.join(targetDir, ...name.split('/'));
+    await ensureDir(path.dirname(target));
+    await copyFile(source, target);
   }
 }
 
@@ -161,6 +218,8 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
   const outDir = path.resolve(cwd, options.outDir ?? '.');
   const entry = await resolveEntry(cwd, options.entry);
   const source = path.relative(cwd, entry).split(path.sep).join('/');
+  // Relative to the export folder, so two entries exporting to one folder never take each other's copies for orphans
+  const markerSource = path.relative(outDir, entry).split(path.sep).join('/');
 
   let schema: Awaited<ReturnType<typeof extractProjectSchema>>;
   try {
@@ -199,11 +258,16 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
       skipped++;
       continue;
     }
-    const copy = await renderCopy(skill, assets.get(skill.name), manifest, source);
+    const copy = await renderCopy(skill, assets.get(skill.name), manifest, markerSource);
     if ('skipReason' in copy) {
       console.error(c('red', `  Skipped ${skill.name}: ${copy.skipReason}`));
       skipped++;
       continue;
+    }
+    if (!options.check) {
+      for (const file of copy.leftOut) {
+        console.log(c('yellow', `  left out ${file} of ${copy.name}: it links outside the skill, or to nothing`));
+      }
     }
     copies.push(copy);
   }
@@ -216,6 +280,12 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
     for (const copy of copies) {
       const targetDir = path.join(base, copy.name);
       const label = path.relative(cwd, targetDir);
+      const refusal = await refusalOf(copy, targetDir, options.check === true);
+      if (refusal) {
+        console.error(c('red', `  Skipped ${copy.name}: ${label} ${refusal}`));
+        skipped++;
+        continue;
+      }
       if (options.check) {
         const reason = await driftOf(copy, targetDir);
         if (reason) drift.push(`${label}: ${reason}`);
@@ -225,7 +295,7 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
       }
     }
     if (!options.all) continue;
-    for (const orphan of await orphansOf(base, source, kept)) {
+    for (const orphan of await orphansOf(base, markerSource, kept)) {
       const label = path.relative(cwd, orphan);
       if (options.check) {
         drift.push(`${label}: removed from the source`);

@@ -1,7 +1,8 @@
+import { symlinkSync } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { ensureDir, fileExists, mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
+import { ensureDir, fileExists, lstat, mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
 
 import type { ExtractedSchema } from '../../build/exec/cli-runtime/schema-extractor';
 import { exportSkillsFromEntry } from '../export-from-entry';
@@ -137,6 +138,7 @@ describe('frontmcp skills export --from-entry', () => {
     );
     expect(errors()).toContain(`drift: ${path.join('.codex', 'skills', 'inline')}: missing`);
 
+    await rm(path.join(project, '.claude/skills/greeting'), { recursive: true, force: true });
     await run();
     mockExtract.mockResolvedValue(schema({ hash: 'c3' }));
     expect(await run({ check: true, providers: ['claude'] })).toBe(1);
@@ -210,6 +212,95 @@ describe('frontmcp skills export --from-entry', () => {
     expect(await run({ providers: ['claude'] })).toBe(1);
     expect(errors()).toContain('Skipped greeting: its instructions could not be loaded');
     expect(errors()).toContain('Invalid plugin name "../escape"');
+  });
+
+  it('refuses to export a skill into the folder that holds its own source, and leaves the source alone', async () => {
+    const sourceDir = path.join(project, '.claude/skills/greeting');
+    await ensureDir(path.join(sourceDir, 'references'));
+    await writeFile(path.join(sourceDir, 'SKILL.md'), '## Greeting\n\nSay hello.\n');
+    await writeFile(path.join(sourceDir, 'references', 'tone.md'), 'Be kind.');
+    const own = schema();
+    own.skillAssets[0] = {
+      skillName: 'greeting',
+      instructionFile: path.join(sourceDir, 'SKILL.md'),
+      resourceDirs: { references: path.join(sourceDir, 'references') },
+    };
+    mockExtract.mockResolvedValue(own);
+
+    expect(await run({ providers: ['claude'] })).toBe(1);
+    expect(errors()).toContain(
+      `Skipped greeting: ${path.join('.claude', 'skills', 'greeting')} holds the skill's own source`,
+    );
+    expect(await readFile(path.join(sourceDir, 'SKILL.md'))).toBe('## Greeting\n\nSay hello.\n');
+    expect(await readFile(path.join(sourceDir, 'references', 'tone.md'))).toBe('Be kind.');
+    expect(await fileExists(path.join(project, '.claude/skills/inline/SKILL.md'))).toBe(true);
+  });
+
+  it('leaves a folder of the same name that it did not write, and exits 1', async () => {
+    await ensureDir(path.join(project, '.claude/skills/greeting'));
+    await writeFile(path.join(project, '.claude/skills/greeting/SKILL.md'), 'written by hand');
+
+    expect(await run({ providers: ['claude'] })).toBe(1);
+    expect(errors()).toContain(
+      `Skipped greeting: ${path.join('.claude', 'skills', 'greeting')} was not written by frontmcp skills export`,
+    );
+    expect(await readFile(path.join(project, '.claude/skills/greeting/SKILL.md'))).toBe('written by hand');
+  });
+
+  it('writes LF line endings, and passes --check on a copy checked out with CRLF', async () => {
+    await writeFile(path.join(project, 'src', 'greeting.md'), '## Greeting\r\n\r\nSay hello.\r\n');
+    await run({ providers: ['claude'] });
+    const skillMdPath = path.join(project, '.claude/skills/greeting/SKILL.md');
+    expect(await readFile(skillMdPath)).not.toContain('\r');
+
+    await writeFile(skillMdPath, (await readFile(skillMdPath)).replace(/\n/g, '\r\n'));
+    expect(await run({ check: true, providers: ['claude'] })).toBe(0);
+  });
+
+  it('copies a link inside a resource folder as a file, leaves out one that leads out of it, and passes --check', async () => {
+    await writeFile(path.join(project, 'secret.txt'), 'not for agents');
+    symlinkSync(path.join('..', '..', 'secret.txt'), path.join(project, 'src', 'refs', 'secret.md'));
+    symlinkSync('tone.md', path.join(project, 'src', 'refs', 'tone-again.md'));
+    symlinkSync('.', path.join(project, 'src', 'refs', 'loop'));
+
+    expect(await run({ providers: ['claude'] })).toBe(0);
+    const references = path.join(project, '.claude/skills/greeting/references');
+    expect(await fileExists(path.join(references, 'secret.md'))).toBe(false);
+    expect((await lstat(path.join(references, 'tone-again.md'))).isSymbolicLink()).toBe(false);
+    expect(await readFile(path.join(references, 'tone-again.md'))).toBe('Be kind.');
+    expect((console.log as jest.Mock).mock.calls.map((call) => String(call[0])).join('\n')).toContain(
+      'left out references/secret.md of greeting: it links outside the skill',
+    );
+    expect(await run({ check: true, providers: ['claude'] })).toBe(0);
+  });
+
+  it('reports a broken link in a copy as drift instead of failing', async () => {
+    await run({ providers: ['claude'] });
+    symlinkSync(path.join(project, 'gone.md'), path.join(project, '.claude/skills/greeting/references/gone.md'));
+
+    expect(await run({ check: true, providers: ['claude'] })).toBe(1);
+    expect(errors()).toContain('modified: references/gone.md is not in the source');
+  });
+
+  it('keeps the copies another entry exported to the same folder', async () => {
+    for (const app of ['a', 'b']) {
+      await ensureDir(path.join(project, 'apps', app, 'src'));
+      await writeFile(path.join(project, 'apps', app, 'src', 'main.ts'), 'export default {};');
+    }
+    jest.spyOn(process, 'cwd').mockReturnValue(path.join(project, 'apps', 'a'));
+    mockExtract.mockResolvedValue(
+      schema({ skills: [{ name: 'greeting', description: 'Greet', tools: [], hash: 'a1' }] }),
+    );
+    expect(await run({ providers: ['claude'], outDir: '../..' })).toBe(0);
+
+    jest.spyOn(process, 'cwd').mockReturnValue(path.join(project, 'apps', 'b'));
+    mockExtract.mockResolvedValue(schema({ skills: [{ name: 'inline', description: 'Own', tools: [], hash: 'b2' }] }));
+    expect(await run({ providers: ['claude'], outDir: '../..' })).toBe(0);
+
+    expect(await readFile(path.join(project, '.claude/skills/greeting/SKILL.md'))).toContain(
+      'generated by frontmcp skills export from apps/a/src/main.ts',
+    );
+    expect(await fileExists(path.join(project, '.claude/skills/inline/SKILL.md'))).toBe(true);
   });
 
   it('refuses no selection, an unknown skill, no skills, and an entry without a manifest', async () => {
