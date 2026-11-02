@@ -7,7 +7,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
 
-import { fileExists, readFile } from '@frontmcp/utils';
+import { fileExists, readFile, writeFile } from '@frontmcp/utils';
 
 import {
   createScratchProject,
@@ -74,6 +74,20 @@ function eventsServerFiles(): Record<string, string> {
   };
 }
 
+/** The same server with no `observability` config: it installs ObservabilityPlugin itself and prints its request logs. */
+function ownPluginMain(): string {
+  const main = eventsServerFiles()['src/main.ts'];
+  return main
+    .replace(
+      "import { App, FrontMcp, LogLevel } from '@frontmcp/sdk';",
+      "import { App, FrontMcp, LogLevel } from '@frontmcp/sdk';\nimport { ObservabilityPlugin } from '@frontmcp/observability';",
+    )
+    .replace(
+      /\n {2}observability: .*\n/,
+      "\n  plugins: [ObservabilityPlugin.init({ tracing: false, requestLogs: { onRequestComplete: () => console.error('[request-log] written') } })],\n",
+    );
+}
+
 async function readEvents(file: string): Promise<DevEvent[]> {
   if (!(await fileExists(file))) return [];
   return (await readFile(file))
@@ -108,6 +122,25 @@ describe('frontmcp dev — dev events', () => {
     projectDir = await createScratchProject('dev-events', eventsServerFiles());
   });
 
+  /** Starts `frontmcp dev` on the scratch project and waits until it listens; `output()` is what it printed so far. */
+  async function startDev(): Promise<{ port: number; output: () => string }> {
+    const port = await freePort();
+    let output = '';
+    dev = spawn(process.execPath, [FRONTMCP_BIN, 'dev', '--port', String(port), '--entry', 'src/main.ts'], {
+      cwd: projectDir,
+      env: envWithoutPort(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    dev.stdout?.on('data', (chunk: Buffer) => (output += chunk.toString()));
+    dev.stderr?.on('data', (chunk: Buffer) => (output += chunk.toString()));
+    try {
+      await waitFor(() => isListening(port), 60_000, `the dev server on port ${port}`);
+    } catch (err) {
+      throw new Error(`${(err as Error).message}\noutput:\n${output}`, { cause: err });
+    }
+    return { port, output: () => output };
+  }
+
   afterEach(async () => {
     dev?.kill('SIGTERM');
     if (dev && dev.exitCode === null) await new Promise((resolve) => dev?.once('exit', resolve));
@@ -120,20 +153,11 @@ describe('frontmcp dev — dev events', () => {
   it(
     'writes call timings, failures and stalls to .frontmcp/dev-events.jsonl',
     async () => {
-      const port = await freePort();
-      let output = '';
-      dev = spawn(process.execPath, [FRONTMCP_BIN, 'dev', '--port', String(port), '--entry', 'src/main.ts'], {
-        cwd: projectDir,
-        env: envWithoutPort(),
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      dev.stdout?.on('data', (chunk: Buffer) => (output += chunk.toString()));
-      dev.stderr?.on('data', (chunk: Buffer) => (output += chunk.toString()));
+      const { port, output } = await startDev();
       const eventsFile = path.join(projectDir, '.frontmcp', 'dev-events.jsonl');
 
       try {
-        await waitFor(() => isListening(port), 60_000, `the dev server on port ${port}`);
-        expect(output).toMatch(/events: \.frontmcp[\\/]dev-events\.jsonl/);
+        expect(output()).toMatch(/events: \.frontmcp[\\/]dev-events\.jsonl/);
 
         const client = McpJsonRpcClient.forPort(port, '/');
         await client.initialize();
@@ -148,7 +172,33 @@ describe('frontmcp dev — dev events', () => {
         );
         expectCallsAndStall(await readEvents(eventsFile));
       } catch (err) {
-        throw new Error(`${(err as Error).message}\noutput:\n${output}`, { cause: err });
+        throw new Error(`${(err as Error).message}\noutput:\n${output()}`, { cause: err });
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'keeps an ObservabilityPlugin the server installs itself, and writes each call event once',
+    async () => {
+      await writeFile(path.join(projectDir, 'src', 'main.ts'), ownPluginMain());
+      const { port, output } = await startDev();
+      const eventsFile = path.join(projectDir, '.frontmcp', 'dev-events.jsonl');
+
+      try {
+        const client = McpJsonRpcClient.forPort(port, '/');
+        await client.initialize();
+        await client.callTool('hello', { name: 'events' });
+
+        await waitFor(async () => output().includes('[request-log] written'), 30_000, "the server's own request log");
+        await waitFor(
+          async () => (await readEvents(eventsFile)).some((event) => event.type === 'call'),
+          30_000,
+          'a call event in the dev events file',
+        );
+        expect((await readEvents(eventsFile)).filter((event) => event.entry === 'hello:hello')).toHaveLength(1);
+      } catch (err) {
+        throw new Error(`${(err as Error).message}\noutput:\n${output()}`, { cause: err });
       }
     },
     TEST_TIMEOUT,

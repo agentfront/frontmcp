@@ -436,7 +436,8 @@ events never hold a call's input or answer.
 | `--no-events`          | Write no events.                                                     |
 
 - The events are recorded by `@frontmcp/observability`; install it (`npm i @frontmcp/observability`). Without an
-  `observability` config the server loads it for the events only, with tracing and logging off.
+  `observability` config the server loads it for the events only, with tracing and logging off; a server or app that
+  installs `ObservabilityPlugin` itself gets the events from that plugin instead, with its own options.
 - Under `frontmcp dev --stdio --serve` the server sends the events to the bridge over its IPC channel and the bridge
   writes the file.
 - Events are queued (1000 at most) and written off the call path: a call never waits for them, events past the bound

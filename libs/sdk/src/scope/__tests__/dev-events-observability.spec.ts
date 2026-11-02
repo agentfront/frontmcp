@@ -1,7 +1,14 @@
 import 'reflect-metadata';
 
+import { DynamicPlugin, Plugin } from '../../common';
 import { observabilityOptionsSchema } from '../../common/types/options/observability';
 import { devEventsObservabilityConfig } from '../dev-events-observability';
+
+@Plugin({ name: 'observability' })
+class InstalledObservability extends DynamicPlugin<{ tracing?: boolean }> {}
+
+@Plugin({ name: 'audit' })
+class Audit {}
 
 jest.mock('../optional-dependency.util', () => ({
   requireOptionalModule: () => {
@@ -19,18 +26,25 @@ describe('devEventsObservabilityConfig', () => {
 
   it('asks for dev events only, with tracing and logging off, when frontmcp dev started the server', () => {
     process.env['FRONTMCP_DEV_EVENTS_FILE'] = '/work/.frontmcp/dev-events.jsonl';
-    expect(devEventsObservabilityConfig()).toEqual({ tracing: false, logging: false });
+    expect(devEventsObservabilityConfig([Audit])).toEqual({ tracing: false, logging: false });
 
     delete process.env['FRONTMCP_DEV_EVENTS_FILE'];
     process.env['FRONTMCP_DEV_EVENTS_IPC'] = '1';
-    expect(devEventsObservabilityConfig()).toEqual({ tracing: false, logging: false });
+    expect(devEventsObservabilityConfig([])).toEqual({ tracing: false, logging: false });
+  });
+
+  it('asks for nothing when the server or an app installs ObservabilityPlugin itself', () => {
+    process.env['FRONTMCP_DEV_EVENTS_FILE'] = '/work/.frontmcp/dev-events.jsonl';
+
+    expect(devEventsObservabilityConfig([Audit, InstalledObservability])).toBeUndefined();
+    expect(devEventsObservabilityConfig([InstalledObservability.init({ tracing: false })])).toBeUndefined();
   });
 
   it('asks for nothing outside frontmcp dev', () => {
     delete process.env['FRONTMCP_DEV_EVENTS_FILE'];
     delete process.env['FRONTMCP_DEV_EVENTS_IPC'];
 
-    expect(devEventsObservabilityConfig()).toBeUndefined();
+    expect(devEventsObservabilityConfig([])).toBeUndefined();
   });
 });
 

@@ -609,9 +609,15 @@ export class Scope extends ScopeEntry {
     // These call providers.getRegistries('AppRegistry') during initialize(),
     // so AppRegistry must be fully ready before they start.
     const serverPlugins = [...(this.metadata.plugins ?? [])];
+    const appPlugins = this.scopeApps
+      .getApps()
+      .flatMap((app) => ('plugins' in app.metadata ? (app.metadata.plugins ?? []) : []));
 
     // Auto-load ObservabilityPlugin when observability config is present, or for frontmcp dev's events.
-    const impliedObservability = this.metadata.observability === undefined ? devEventsObservabilityConfig() : undefined;
+    const impliedObservability =
+      this.metadata.observability === undefined
+        ? devEventsObservabilityConfig([...serverPlugins, ...appPlugins])
+        : undefined;
     const observabilityConfig = this.metadata.observability ?? impliedObservability;
     if (observabilityConfig) {
       const { observabilityPlugins } = await import('./observability-scope.helper.js');
@@ -741,10 +747,7 @@ export class Scope extends ScopeEntry {
 
     // A plugin that registers skills at runtime (`@Plugin({ dynamicSkills: true })`) serves skills from
     // startup, before its first skill exists, so it gets the skill session manager and tool guard too.
-    const dynamicSkills = pluginsRegisterDynamicSkills([
-      ...serverPlugins,
-      ...this.scopeApps.getApps().flatMap((app) => ('plugins' in app.metadata ? (app.metadata.plugins ?? []) : [])),
-    ]);
+    const dynamicSkills = pluginsRegisterDynamicSkills([...serverPlugins, ...appPlugins]);
 
     // Initialize skill session manager if skills are available, or a plugin registers them at runtime
     if (this.scopeSkills.hasAny() || dynamicSkills) {
