@@ -7,7 +7,7 @@ tags: [telemetry, plugin, hooks, cache, audit]
 features:
   - 'Plugin hooks can access toolCtx.telemetry to add events to the active span'
   - 'Events from plugins appear in the same trace as the tool execution'
-  - "One `@ToolHook.Around('execute')` hook records success and failure: the flow state has no `error` key, and a `Did` hook runs only after a successful execute"
+  - "One `@ToolHook.Around('execute')` hook records success and failure while the execute span is open: a `Did` hook runs only after a successful execute"
   - 'Graceful degradation when observability is not enabled'
 ---
 
@@ -94,7 +94,7 @@ tool my_tool
 
 - Plugin hooks can access toolCtx.telemetry to add events to the active span
 - Events from plugins appear in the same trace as the tool execution
-- One `@ToolHook.Around('execute')` hook records success and failure: the flow state has no `error` key, and a `Did` hook runs only after a successful execute
+- One `@ToolHook.Around('execute')` hook records success and failure while the execute span is open: a `Did` hook runs only after a successful execute
 - Graceful degradation when observability is not enabled
 
 ## Related

@@ -1,6 +1,6 @@
 /**
- * A stage runs its will and did hooks only when it has some, and reads each list when the stage starts, so hooks a
- * run adds (the tool class's own, joined at `createToolCallContext`) still run on stages that had none before.
+ * A stage runs its will, did and finally hooks only when it has some, and reads each list when the stage starts, so
+ * hooks a run adds (the tool class's own, joined at `createToolCallContext`) still run on stages that had none before.
  */
 import 'reflect-metadata';
 
@@ -25,6 +25,11 @@ class StageTracePlugin {
     await next();
     trace.push('plugin around validateInput: after');
   }
+
+  @ToolHook.Finally('validateInput')
+  finallyValidateInput() {
+    trace.push('plugin finally validateInput');
+  }
 }
 
 @Tool({ name: 'echo', inputSchema: {} })
@@ -42,6 +47,11 @@ class EchoTool extends ToolContext {
   @ToolHook.Did('validateOutput')
   didValidateOutput() {
     trace.push('tool did validateOutput');
+  }
+
+  @ToolHook.Finally('validateOutput')
+  finallyValidateOutput() {
+    trace.push('tool finally validateOutput');
   }
 
   @ToolHook.Will('finalize')
@@ -81,8 +91,10 @@ describe('flow stage hook lists', () => {
         'tool will checkToolCredentials',
         'plugin around validateInput: before',
         'plugin around validateInput: after',
+        'plugin finally validateInput',
         'execute',
         'tool did validateOutput',
+        'tool finally validateOutput',
         'tool will finalize',
       ]);
     }

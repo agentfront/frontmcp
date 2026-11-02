@@ -7,7 +7,19 @@ import {
   rpc20260728,
   type TestFetchServer,
 } from '../../../__test-utils__/helpers/mcp-20260728.helpers';
-import { App, Tool, ToolContext } from '../../../common';
+import { App, FlowHooksOf, Plugin, Tool, ToolContext, type FlowCtxOf } from '../../../common';
+import { InvalidOutputError } from '../../../errors';
+
+const ToolHook = FlowHooksOf('tools:call-tool');
+const finalizeFailures: unknown[] = [];
+
+@Plugin({ name: 'refusal-probe' })
+class RefusalProbe {
+  @ToolHook.Finally('finalize')
+  record(ctx: FlowCtxOf<'tools:call-tool'>) {
+    finalizeFailures.push(ctx.state.flowError);
+  }
+}
 
 @Tool({
   name: 'get_invoice',
@@ -37,7 +49,12 @@ class LabelRatioTool extends ToolContext {
   }
 }
 
-@App({ id: 'billing', name: 'Billing', tools: [GetInvoiceTool, MeasureRatioTool, LabelRatioTool] })
+@App({
+  id: 'billing',
+  name: 'Billing',
+  tools: [GetInvoiceTool, MeasureRatioTool, LabelRatioTool],
+  plugins: [RefusalProbe],
+})
 class BillingApp {}
 
 describe('tools/call output schema enforcement', () => {
@@ -71,6 +88,16 @@ describe('tools/call output schema enforcement', () => {
 
     expect(result['structuredContent'] ?? {}).not.toHaveProperty('internalCostCenter');
     expect(content.map((block) => block.text ?? '').join('\n')).not.toContain('CC-7731');
+  });
+
+  it('records the refusal as state.flowError for the Finally hooks of finalize', async () => {
+    finalizeFailures.length = 0;
+
+    await callGetInvoice();
+    await rpc20260728(server.handler, 'tools/call', { name: 'measure_ratio', arguments: {} });
+
+    expect(finalizeFailures).toEqual([expect.any(InvalidOutputError), expect.any(InvalidOutputError)]);
+    expect((finalizeFailures[1] as InvalidOutputError).details?.reason).toBe('non-finite-number');
   });
 
   describe('non-finite numbers', () => {

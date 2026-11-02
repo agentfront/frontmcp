@@ -1,5 +1,6 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 
+import { ObservabilityProbeApp, recordRequestLog } from './apps/observability-probe';
 import { ParentApp } from './apps/parent';
 
 const port = parseInt(process.env['PORT'] ?? '3104', 10);
@@ -14,11 +15,12 @@ const port = parseInt(process.env['PORT'] ?? '3104', 10);
  * Telemetry must activate (or, if the module genuinely fails to load, the SDK
  * must say so accurately rather than claim it isn't installed).
  *
- * Uses the issue's exact config shape.
+ * Uses the issue's exact config shape, plus a request-log callback and a probe app that reports the spans and
+ * request logs of a call whose answer its output schema refuses.
  */
 @FrontMcp({
   info: { name: 'Demo E2E Observability', version: '0.1.0' },
-  apps: [ParentApp],
+  apps: [ParentApp, ObservabilityProbeApp],
   logging: { level: LogLevel.Info },
   http: { port },
   auth: { mode: 'public', sessionTtl: 3600, anonymousScopes: ['anonymous'] },
@@ -26,7 +28,7 @@ const port = parseInt(process.env['PORT'] ?? '3104', 10);
   observability: {
     tracing: true,
     logging: { sinks: [{ type: 'stdout' }] },
-    requestLogs: true,
+    requestLogs: { onRequestComplete: recordRequestLog },
   },
 })
 export default class Server {}

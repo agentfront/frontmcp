@@ -68,6 +68,7 @@ interface StageKeys {
   will: string;
   did: string;
   around: string;
+  finally: string;
 }
 
 // Stage names come from flow plans, so this stays as small as the set of stages.
@@ -76,7 +77,12 @@ const stageKeysByName = new Map<string, StageKeys>();
 function stageKeysOf(stage: string): StageKeys {
   let keys = stageKeysByName.get(stage);
   if (!keys) {
-    keys = { will: `will${CAP(stage)}`, did: `did${CAP(stage)}`, around: `around${CAP(stage)}` };
+    keys = {
+      will: `will${CAP(stage)}`,
+      did: `did${CAP(stage)}`,
+      around: `around${CAP(stage)}`,
+      finally: `finally${CAP(stage)}`,
+    };
     stageKeysByName.set(stage, keys);
   }
   return keys;
@@ -500,8 +506,20 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // Whether any stage body or hook is registered under `key` right now.
     const hasEntries = (key: string): boolean => (stages[key]?.length ?? 0) > 0;
 
+    // A Finally hook cannot respond or fail its stage: what it throws is logged and dropped.
+    const ignoreFinallyThrow = (key: string, thrown: unknown) => {
+      const description = thrown instanceof FlowControl ? `FlowControl '${thrown.type}'` : String(thrown);
+      this.logger.warn(`Ignored a throw from a Finally hook of '${key}': it cannot change the stage's outcome`, {
+        flow: name,
+        thrown: description,
+      });
+    };
+
     // Robust list runner (doesn't skip mid-run insertions)
-    const runList = async (key: string, opts?: { ignoreRespond?: boolean }): Promise<StageResult> => {
+    const runList = async (
+      key: string,
+      opts?: { ignoreRespond?: boolean; ignoreThrows?: boolean },
+    ): Promise<StageResult> => {
       const seen = new Set<any>();
 
       while (true) {
@@ -519,6 +537,10 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         try {
           await item.method(context);
         } catch (e: any) {
+          if (opts?.ignoreThrows) {
+            ignoreFinallyThrow(key, e);
+            continue;
+          }
           if (e instanceof FlowControl && e.type === 'respond' && opts?.ignoreRespond) continue;
           return toStageResult(e);
         }
@@ -548,9 +570,19 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       return FAILED_OUTCOMES.has(innerResult.outcome) ? { outcome: 'ok' } : innerResult;
     };
 
+    // `state.flowError` keeps the run's first failure, always an Error, for the stages and hooks after it
+    const recordFailure = (control: unknown) => {
+      if (context.state.get('flowError' as never)) return;
+      const flowError =
+        control instanceof Error
+          ? control
+          : new InternalMcpError(`Flow failed with a non-Error value: ${String(control)}`);
+      context.state.set('flowError' as never, flowError as never);
+    };
+
     // Run exactly one stage in order: will → around(stage) → did (did runs once)
     // An empty hook list is skipped without a call: running it would only return 'ok'.
-    const runOneStage = async (stageName: string, stopOnRespond: boolean): Promise<StageResult> => {
+    const runStageSteps = async (stageName: string, stopOnRespond: boolean): Promise<StageResult> => {
       const keys = stageKeysOf(stageName);
       // 1) willStage
       if (hasEntries(keys.will)) {
@@ -578,6 +610,15 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       return { outcome: 'ok' };
     };
 
+    // Then the stage's Finally hooks run, whatever its outcome, with its failure recorded for them.
+    const runOneStage = async (stageName: string, stopOnRespond: boolean): Promise<StageResult> => {
+      const result = await runStageSteps(stageName, stopOnRespond);
+      if (result.outcome === 'fail' || result.outcome === 'unknown_error') recordFailure(result.control);
+      const finallyKey = stageKeysOf(stageName).finally;
+      if (hasEntries(finallyKey)) await runList(finallyKey, { ignoreThrows: true });
+      return result;
+    };
+
     // IMPORTANT: ignore typed stage names in plan arrays.
     // Only base stage names in the plan drive execution; typed hooks run *with* their base.
     const runStageGroup = async (
@@ -597,15 +638,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         }
       }
       return { outcome: 'ok' };
-    };
-
-    // The error and finalize stages read why the flow failed from `state.flowError`, always an Error
-    const recordFailure = (control: unknown) => {
-      const flowError =
-        control instanceof Error
-          ? control
-          : new InternalMcpError(`Flow failed with a non-Error value: ${String(control)}`);
-      context.state.set('flowError' as never, flowError as never);
     };
 
     const runErrorStage = async () => {
@@ -638,7 +670,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       if (pre.outcome === 'respond') {
         const post = await runStageGroup((plan as any).post, false);
         if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
-          recordFailure(post.control);
           try {
             await runErrorStage();
           } finally {
@@ -657,7 +688,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         return responded;
       }
       if (pre.outcome === 'unknown_error' || pre.outcome === 'fail') {
-        recordFailure(pre.control);
         try {
           await runErrorStage();
         } finally {
@@ -681,7 +711,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       if (exec.outcome === 'respond') {
         // continue to post + finalize
       } else if (exec.outcome === 'unknown_error' || exec.outcome === 'fail') {
-        recordFailure(exec.control);
         try {
           await runErrorStage();
         } finally {
@@ -702,7 +731,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       const post = await runStageGroup((plan as any).post, false);
       this.logger.verbose(`run: POST completed, outcome=${post.outcome}`);
       if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
-        recordFailure(post.control);
         try {
           await runErrorStage();
         } finally {
