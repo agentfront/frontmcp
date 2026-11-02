@@ -86,12 +86,14 @@ What `handle()` returns becomes the response:
   name: 'board',
   providers: [BoardService],
   tools: [AddCardTool],
-  routes: [BoardPage, AddCardRoute, HomePage],
+  routes: [BoardEvents, BoardPage, AddCardRoute, HomePage],
 })
 class BoardApp {}
 ```
 
-A route belongs to its app's scope: a `standalone` or `splitByApp` app's routes get that app's providers. Paths are
+The first route whose method and path match a request answers it, in the order `routes` lists them, so list a
+literal path (`/board/events`, Step 4) before a parameter route it would also match (`/board/:id`). A route belongs to
+its app's scope: a `standalone` or `splitByApp` app's routes get that app's providers. Paths are
 absolute (not under the app's MCP path), and both adapters serve a route wherever its path is.
 
 ### Step 3: Turn on people auth
@@ -134,15 +136,15 @@ down, and on a people route when the person's session expires or ends (checked b
 
 ## `@HttpRoute` Options
 
-| Field             | Type                                              | Default                                             | Notes                                                                                       |
-| ----------------- | ------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `method`          | `'GET' \| 'POST' \| 'PUT' \| 'PATCH' \| 'DELETE'` | Required                                            |                                                                                             |
-| `path`            | `string` or `() => string`                        | Required                                            | Express style (`/board/:id`). A function is called once at startup, for a path from options |
-| `auth`            | `'people' \| 'public'`                            | `'people'` with `http.auth.people`, else `'public'` |                                                                                             |
-| `sse.store`       | anything with `subscribe(topic, listener)`        | Required with `sse`                                 | A `resourceStore()`; a key's topic is its name                                              |
-| `sse.topics`      | `string[]`                                        | Required with `sse`, at least one                   |                                                                                             |
-| `sse.coalesceMs`  | `number`                                          | `50`                                                |                                                                                             |
-| `sse.heartbeatMs` | `number`                                          | `15000`                                             |                                                                                             |
+| Field             | Type                                              | Default                                             | Notes                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `method`          | `'GET' \| 'POST' \| 'PUT' \| 'PATCH' \| 'DELETE'` | Required                                            |                                                                                                                                                                                   |
+| `path`            | `string` or `() => string`                        | Required                                            | Literal segments and `:name` parameters (`/board/:id`); Express wildcards and groups (`*`, `()`, `{}`) are refused. A function is called once at startup, for a path from options |
+| `auth`            | `'people' \| 'public'`                            | `'people'` with `http.auth.people`, else `'public'` |                                                                                                                                                                                   |
+| `sse.store`       | anything with `subscribe(topic, listener)`        | Required with `sse`                                 | A `resourceStore()`; a key's topic is its name                                                                                                                                    |
+| `sse.topics`      | `string[]`                                        | Required with `sse`, at least one                   |                                                                                                                                                                                   |
+| `sse.coalesceMs`  | `number`                                          | `50`                                                |                                                                                                                                                                                   |
+| `sse.heartbeatMs` | `number`                                          | `15000`                                             |                                                                                                                                                                                   |
 
 An SSE route must be `GET`. An invalid option throws `InvalidDecoratorMetadataError` when the class is decorated, for
 example `@HttpRoute invalid metadata for "path": path must start with "/" and hold no query, fragment or whitespace`.
