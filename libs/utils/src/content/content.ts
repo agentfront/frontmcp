@@ -150,14 +150,15 @@ export function findDroppedKeys(original: unknown, parsed: unknown): string[] {
 
   function walk(source: unknown, target: unknown, path: string): void {
     if (Array.isArray(source)) {
-      if (Array.isArray(target)) source.forEach((item, index) => walk(item, target[index], `${path}[]`));
+      source.forEach((item, index) => walk(item, Array.isArray(target) ? target[index] : undefined, `${path}[]`));
       return;
     }
-    if (!isPlainRecord(source) || !isPlainRecord(target)) return;
+    if (!isPlainRecord(source)) return;
+    const targetRecord = isPlainRecord(target) ? target : {};
     for (const [key, value] of Object.entries(source)) {
       if (value === undefined) continue;
       const keyPath = path ? `${path}.${key}` : key;
-      if (Object.prototype.hasOwnProperty.call(target, key)) walk(value, target[key], keyPath);
+      if (Object.prototype.hasOwnProperty.call(targetRecord, key)) walk(value, targetRecord[key], keyPath);
       else droppedPaths.add(keyPath);
     }
   }

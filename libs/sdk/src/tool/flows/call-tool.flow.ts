@@ -143,6 +143,8 @@ const stateSchema = z.object({
   // Store the raw executed output for plugins to see
   rawOutput: z.any().optional(),
   output: outputSchema,
+  // The run's first failure, set by the flow runner for the stages and Finally hooks after it
+  flowError: z.instanceof(Error).optional(),
   // UI result from applyUI stage (if UI config exists)
   uiResult: z.any().optional() as z.ZodType<ToolResponseContent | undefined>,
   // UI metadata from rendering (merged into _meta)
@@ -259,6 +261,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   }
 
   logger = this.scopeLogger.child('CallToolFlow');
+
+  /** The tool's name (its `id`, else its `name`) once `findTool` resolved it, else the name the call asks for. */
+  get toolName(): string {
+    return this.state.tool?.name ?? (this.state.input ?? this.input.request.params).name;
+  }
+
+  /** The arguments the call passes to the tool, as `Will` hooks left them. */
+  get toolInput(): Record<string, unknown> | undefined {
+    return (this.state.input ?? this.input.request.params).arguments;
+  }
 
   @Stage('parseInput')
   async parseInput() {

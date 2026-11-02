@@ -43,6 +43,14 @@ describe('toPassOutputSchemaWhole', () => {
     );
   });
 
+  it('fails an answer whose keys parsing loses by coercing their object to a primitive', () => {
+    const coercing = z.object({ payload: z.coerce.string() });
+
+    expect(() => expect({ payload: { secret: 'x' } }).toPassOutputSchemaWhole(coercing)).toThrow(
+      'drops keys it does not declare: payload.secret',
+    );
+  });
+
   it('fails for a schema with a transform, whose output cannot be compared key by key', () => {
     const renaming = z.object({ a: z.string() }).transform((value) => ({ renamed: value.a }));
 

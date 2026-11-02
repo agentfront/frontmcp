@@ -1854,7 +1854,7 @@
         },
         {
           "name": "create-plugin-hooks",
-          "description": "Intercept and extend FrontMCP flows using before, after, around, and stage hook decorators",
+          "description": "Intercept and extend FrontMCP flows using before, after, around, finally, and stage hook decorators",
           "examples": [
             {
               "name": "basic-logging-plugin",
@@ -1865,7 +1865,7 @@
                 "Using `ToolHook` pre-built export instead of calling `FlowHooksOf('tools:call-tool')` directly",
                 "Destructuring `Will` and `Did` decorators from the hook object",
                 "Setting `priority: -100` on `@Will` so the logging hook runs before the stage's other `@Will` hooks (lower runs first)",
-                "Reading the tool name and arguments from `ctx.state.required.input` and logging with `ctx.logger`",
+                "Reading the tool name and arguments from `ctx.toolName` and `ctx.toolInput` and logging with `ctx.logger`",
                 "Registering a plugin in the `plugins` array of `@App`"
               ]
             },
@@ -2692,7 +2692,7 @@
               "features": [
                 "Plugin hooks can access toolCtx.telemetry to add events to the active span",
                 "Events from plugins appear in the same trace as the tool execution",
-                "One `@ToolHook.Around('execute')` hook records success and failure: the flow state has no `error` key, and a `Did` hook runs only after a successful execute",
+                "One `@ToolHook.Around('execute')` hook records success and failure while the execute span is open: a `Did` hook runs only after a successful execute",
                 "Graceful degradation when observability is not enabled"
               ]
             },

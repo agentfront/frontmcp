@@ -33,13 +33,7 @@ export function cloneStageMap<C>(table: StageMap<C>): StageMap<C> {
 }
 
 export function resolveStageKey(type: HookMetadata['type'], stage: string) {
-  return type === 'will'
-    ? `will${cap(stage)}`
-    : type === 'did'
-      ? `did${cap(stage)}`
-      : type === 'around'
-        ? `around${cap(stage)}`
-        : stage;
+  return type === 'stage' ? stage : `${type}${cap(stage)}`;
 }
 
 export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
