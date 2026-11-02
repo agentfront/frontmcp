@@ -42,4 +42,12 @@ describe('toPassOutputSchemaWhole', () => {
       'Expected the answer not to pass its output schema whole',
     );
   });
+
+  it('fails for a schema with a transform, whose output cannot be compared key by key', () => {
+    const renaming = z.object({ a: z.string() }).transform((value) => ({ renamed: value.a }));
+
+    expect(() => expect({ a: 'x' }).toPassOutputSchemaWhole(renaming)).toThrow(
+      /cannot compare keys through a transform/,
+    );
+  });
 });

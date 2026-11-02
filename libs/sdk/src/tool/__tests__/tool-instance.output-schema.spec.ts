@@ -173,4 +173,32 @@ describe('ToolInstance.parseOutput and undeclared keys', () => {
       note: 'n/a',
     });
   });
+
+  describe('with a transform, whose output cannot be compared with the answer key by key', () => {
+    const renamingSchema = z.object({ a: z.string() }).transform((value) => ({ renamed: value.a }));
+    const droppingSchema = z
+      .object({ id: z.string(), internal: z.string() })
+      .transform(({ internal: _internal, ...rest }) => rest);
+
+    it.each(['warn', 'keep', 'fail'] as const)(
+      "returns the transformed output and strips an undeclared key under '%s'",
+      (undeclaredKeys) => {
+        const { tool } = toolWithOutput(renamingSchema);
+        const onUndeclaredKeys = jest.fn();
+
+        const result = tool.parseOutput({ a: 'x', extra: 1 }, { undeclaredKeys, onUndeclaredKeys });
+
+        expect(result.structuredContent).toEqual({ renamed: 'x' });
+        expect(onUndeclaredKeys).not.toHaveBeenCalled();
+      },
+    );
+
+    it("never puts back a key the transform dropped under 'keep'", () => {
+      const { tool } = toolWithOutput(droppingSchema);
+
+      const result = tool.parseOutput({ id: '1', internal: 'secret' }, { undeclaredKeys: 'keep' });
+
+      expect(result.structuredContent).toEqual({ id: '1' });
+    });
+  });
 });

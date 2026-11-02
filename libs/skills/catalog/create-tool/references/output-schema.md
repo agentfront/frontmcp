@@ -187,7 +187,7 @@ class GetInvoiceTool extends ToolContext {
 }
 ```
 
-A call that renders the tool's UI (`@Tool({ ui })`) sends declared keys only, whatever the policy: the widget, the text content and `structuredContent` are built from the declared fields.
+A call that renders the tool's UI (`@Tool({ ui })`) sends declared keys only, whatever the policy: the widget, the text content and `structuredContent` are built from the declared fields. An `outputSchema` with a transform anywhere (`.transform()`, `z.preprocess()`, `.pipe()`) is always stripped too: its output cannot be compared with the answer key by key, so `'warn'`, `'keep'` and `'fail'` do not apply to it.
 
 To check in a test that an answer has no undeclared keys, use the `@frontmcp/testing` matcher:
 
@@ -197,6 +197,8 @@ import { expect } from '@frontmcp/testing';
 expect(await tool.execute({ id: 'INV-1' })).toPassOutputSchemaWhole(outputSchema);
 // fails with: … parsing drops keys it does not declare: costCenter, lines[].margin
 ```
+
+The matcher fails for a schema with a transform, for the same reason; assert on the parsed answer there.
 
 ## Why this matters
 

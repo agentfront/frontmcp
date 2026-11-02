@@ -19,7 +19,7 @@
 
 import type { MatcherFunction } from 'expect';
 
-import { z, type ZodRawShape, type ZodType } from '@frontmcp/lazy-zod';
+import { hasTransform, z, type ZodRawShape, type ZodType } from '@frontmcp/lazy-zod';
 import type { Prompt, Resource, ResourceTemplate, Tool } from '@frontmcp/protocol';
 import { findDroppedKeys } from '@frontmcp/utils';
 
@@ -208,6 +208,14 @@ const toPassOutputSchemaWhole: MatcherFunction<[outputSchema: ZodType | ZodRawSh
   outputSchema,
 ) {
   const schema = outputSchema instanceof z.ZodType ? outputSchema : z.object(outputSchema);
+  if (hasTransform(schema)) {
+    return {
+      pass: false,
+      message: () =>
+        'toPassOutputSchemaWhole cannot compare keys through a transform (.transform(), z.preprocess(), .pipe()): ' +
+        'assert on the parsed answer instead',
+    };
+  }
   const parsed = schema.safeParse(received);
   if (!parsed.success) {
     const [firstIssue] = parsed.error.issues;

@@ -93,7 +93,8 @@ export interface McpMatchers<R = unknown> {
   /**
    * Check that a tool's answer passes its output schema whole: it matches the schema, and parsing
    * drops no key the schema does not declare. The failure message names the undeclared keys, which
-   * the server would strip, warn about or refuse, per its `output.undeclaredKeys` policy.
+   * the server would strip, warn about or refuse, per its `output.undeclaredKeys` policy. A schema with
+   * a transform (`.transform()`, `z.preprocess()`, `.pipe()`) cannot be compared key by key and fails.
    * @param outputSchema - The tool's `outputSchema`: a Zod schema or a raw shape
    *
    * @example

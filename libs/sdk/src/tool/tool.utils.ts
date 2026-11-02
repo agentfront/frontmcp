@@ -1,6 +1,6 @@
 // file: libs/sdk/src/tool/tool.utils.ts
 import { depsOfClass, depsOfFunc, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
-import { z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from '@frontmcp/lazy-zod';
+import { hasTransform, z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from '@frontmcp/lazy-zod';
 import {
   type AudioContent,
   type ContentBlock,
@@ -397,11 +397,12 @@ function parseSingleValue(
 /**
  * The value an output schema accepts, with undeclared keys handled per `options.undeclaredKeys`,
  * or an InvalidOutputError naming the first mismatch or the undeclared keys `'fail'` refuses.
+ * A schema with a transform is always stripped: its output cannot be compared with the answer key by key.
  */
 function parseAgainstOutputSchema(schema: z.ZodType, value: unknown, options: OutputParseOptions = {}): unknown {
   const declared = parseDeclaredOutput(schema, value);
   const policy = options.undeclaredKeys ?? 'strip';
-  if (policy === 'strip') return declared;
+  if (policy === 'strip' || hasTransform(schema)) return declared;
   const undeclaredKeys = findDroppedKeys(value, declared);
   if (undeclaredKeys.length === 0) return declared;
   switch (policy) {
