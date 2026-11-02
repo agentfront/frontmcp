@@ -50,6 +50,7 @@ const fixtureFiles = [
   'shared-server-must-compile.ts',
   'durable-jobs-must-compile.ts',
   'build-manifest-must-compile.ts',
+  'persistent-questions-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -224,6 +225,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types this.offload() from the offloaded function, @Resource({ worker }) and the offload option', () => {
     expect(describeEach(inFixtureFile('offload-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types persist, questionInboxLink, the question errors and elicitation.persistent', () => {
+    expect(describeEach(inFixtureFile('persistent-questions-must-compile.ts'))).toEqual([]);
   });
 
   it('types FrontMcpInstance.runShared(), its options and errors, and the shared:identify flow', () => {
