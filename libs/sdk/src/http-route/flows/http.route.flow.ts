@@ -53,28 +53,18 @@ const name = 'http:route' as const;
 const { Stage } = FlowHooksOf(name);
 
 const MUTATIONS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-const OUTPUT_KINDS = new Set([
-  'redirect',
-  'json',
-  'text',
-  'html',
-  'binary',
-  'image',
-  'stream',
-  'sse',
-  'jsonrpc',
-  'problem',
-  'empty',
-]);
+/** A `next` or `consumed` output would leave the request unanswered: a route's value is sent as JSON instead. */
+function isResponse(result: object): result is HttpOutput {
+  const kind = (result as { kind?: unknown }).kind;
+  return kind !== 'next' && kind !== 'consumed' && httpOutputSchema.safeParse(result).success;
+}
 
 function toHttpOutput(result: HttpRouteResult): HttpOutput {
   if (result === undefined) return httpRespond.noContent();
-  if (typeof result === 'string')
+  if (typeof result === 'string') {
     return { kind: 'text', status: 200, body: result, contentType: 'text/plain; charset=utf-8' };
-  const kind = (result as { kind?: unknown }).kind;
-  if (typeof kind === 'string' && OUTPUT_KINDS.has(kind) && httpOutputSchema.safeParse(result).success) {
-    return result as HttpOutput;
   }
+  if (isResponse(result)) return result;
   return {
     kind: 'json',
     status: 200,
@@ -113,11 +103,9 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
   @Stage('findRoute')
   async findRoute() {
     const match = this.scope.httpRouteTable?.match(this.httpRequest);
-    if (!match) this.next();
-    else {
-      this.httpRequest.params = { ...match.params, ...this.httpRequest.params };
-      this.state.set('route', match.route);
-    }
+    if (!match) return this.next();
+    this.httpRequest.params = { ...match.params, ...this.httpRequest.params };
+    this.state.set('route', match.route);
   }
 
   @Stage('acquireQuota')
@@ -147,8 +135,8 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
 
   @Stage('handle')
   async handle() {
-    const { route, person } = this.state;
-    if (!route) return this.next();
+    const { route } = this.state.required;
+    const { person } = this.state;
     const sessionKey = this.tryGetContext()?.sessionId ?? 'anonymous';
     const views = await route.providers.buildViews(sessionKey, new Map(this.deps), this.scope.providers);
     const context = new route.target({

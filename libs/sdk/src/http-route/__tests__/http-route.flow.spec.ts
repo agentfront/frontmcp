@@ -479,6 +479,24 @@ describe('the http:route flow', () => {
   });
 });
 
+describe('the session cookie over https', () => {
+  it('is Secure', async () => {
+    const { handler, instance } = await createTestFetchServer(CONFIG);
+    const { code } = (instance.getScopes()[0] as Scope).providers.get(LoopbackTokenAuth).createCode();
+
+    const login = await handler(
+      new Request('https://localhost/_frontmcp/people/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: 'https://localhost' },
+        body: JSON.stringify({ code }),
+      }),
+    );
+
+    expect(login.headers.get('set-cookie')).toMatch(/; HttpOnly; Secure; SameSite=Strict$/);
+    await instance.shutdown();
+  });
+});
+
 describe('bad sign-in codes', () => {
   it('lock the client out, with 429, even from a good code', async () => {
     const harness = await startWebFetch(CONFIG);
