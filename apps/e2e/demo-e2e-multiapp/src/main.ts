@@ -2,6 +2,7 @@ import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 
 import { CalendarApp } from './apps/calendar';
 import { NotesApp } from './apps/notes';
+import { ReviewApp } from './apps/review';
 import { TasksApp } from './apps/tasks';
 import ServerInfoTool from './shared/server-info.tool';
 import ServerStatusResource from './shared/server-status.resource';
@@ -10,7 +11,7 @@ const port = parseInt(process.env['PORT'] ?? '3104', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E MultiApp', version: '0.1.0' },
-  apps: [NotesApp, TasksApp, CalendarApp],
+  apps: [NotesApp, TasksApp, CalendarApp, ReviewApp],
   tools: [ServerInfoTool],
   resources: [ServerStatusResource],
   logging: { level: LogLevel.Warn },

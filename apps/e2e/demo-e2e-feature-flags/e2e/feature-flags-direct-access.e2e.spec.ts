@@ -30,6 +30,15 @@ test.describe('Feature Flags Direct Access E2E (GHSA-gf7p-j3hr-h5h4)', () => {
       expect(content.error?.message).toContain('disabled by feature flag');
       expect(JSON.stringify(content.raw ?? {})).not.toContain('leaked');
     });
+
+    test('carries a remedy that names the flag in data.remedy', async ({ mcp }) => {
+      const content = await mcp.resources.read('flags://hidden-report');
+
+      expect(content.error?.data).toMatchObject({
+        code: 'FEATURE_FLAG_DISABLED',
+        remedy: { say: 'Turn on the feature flag "flag-for-hidden-resource" to use this resource.' },
+      });
+    });
   });
 
   test.describe('Disabled resource template', () => {
@@ -54,6 +63,9 @@ test.describe('Feature Flags Direct Access E2E (GHSA-gf7p-j3hr-h5h4)', () => {
 
       expect(result.isError).toBe(true);
       expect(result.error?.message).toContain('disabled by feature flag');
+      expect(result.error?.data).toMatchObject({
+        remedy: { say: 'Turn on the feature flag "flag-for-prompt" to use this prompt.' },
+      });
     });
   });
 

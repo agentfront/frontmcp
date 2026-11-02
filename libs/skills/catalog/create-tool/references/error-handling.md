@@ -1,6 +1,6 @@
 ---
 name: error-handling
-description: this.fail, MCP error classes, error flow — when to throw vs fail.
+description: this.fail, MCP error classes, refused() and remedies, error flow — when to throw vs fail.
 ---
 
 # Error handling
@@ -62,7 +62,7 @@ All from `@frontmcp/sdk`. The two roots: `PublicMcpError` (message reaches the c
 | `InvalidInputError`     | `'INVALID_INPUT'`                        | 400  | Cross-field / business-rule input invalid (Zod handles per-field) |
 | `InvalidMethodError`    | `'INVALID_METHOD'`                       | 400  | Wrong protocol method called                                      |
 | `UnauthorizedError`     | `'UNAUTHORIZED'` (-32001 JSON-RPC)       | 401  | Missing credentials                                               |
-| `EntryUnavailableError` | `'FORBIDDEN'` (-32003 JSON-RPC)          | 403  | `availableWhen` mismatch at call time                             |
+| `EntryUnavailableError` | `'ENTRY_UNAVAILABLE'` (-32003 JSON-RPC)  | 403  | `availableWhen` mismatch at call time                             |
 | `RateLimitError`        | `'RATE_LIMIT_EXCEEDED'`                  | 429  | Rate-limit fired                                                  |
 | `QuotaExceededError`    | `'QUOTA_EXCEEDED'`                       | 429  | Quota-style limit fired                                           |
 | `PayloadTooLargeError`  | `'PAYLOAD_TOO_LARGE'`                    | 413  | Body limit exceeded                                               |
@@ -102,6 +102,30 @@ this.fail(new QuotaExceededError(0));
 ```
 
 The `data` payload lets you surface structured info to the client (rate-limit remaining, validation field errors, etc.) without leaking internals.
+
+## Refusals that carry a remedy
+
+When the caller can get past a refusal, say how. `refused(message, { code?, status?, remedy? })` builds a `PublicMcpError` (`'REFUSED'` and 403 unless you pass others) whose `remedy` is `{ say, tool?, args? }`: what to do and, when a tool does it, that tool and its arguments.
+
+```typescript
+import { refused } from '@frontmcp/sdk';
+
+if (!settings.reviewsEnabled) {
+  this.fail(
+    refused('Reviews are off', {
+      code: 'FEATURE_OFF',
+      remedy: { say: 'Turn on Reviews in Settings', tool: 'settings_set', args: { feature: 'reviews' } },
+    }),
+  );
+}
+```
+
+| Answer                                                | Where the remedy goes                                                                                                             |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `tools/call` (`isError: true` result)                 | A last line of the text, `To fix: Turn on Reviews in Settings (call settings_set with {"feature":"reviews"})`, and `_meta.remedy` |
+| JSON-RPC error (`resources/read`, `prompts/get`, ...) | `data.remedy`                                                                                                                     |
+
+A subclass passes its remedy as the fifth argument of `PublicMcpError`: `super(message, code, status, undefined, { say: '...' })`. Built-in refusals with a remedy: `EntryUnavailableError` names the environment the entry's `availableWhen` asks for (`Run the server where env is production to use this tool.`), and the feature-flag plugin's `FEATURE_FLAG_DISABLED` names the flag to turn on.
 
 ## `PublicMcpError` vs raw `Error`
 

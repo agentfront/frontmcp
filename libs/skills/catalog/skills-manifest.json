@@ -54,7 +54,7 @@
         },
         {
           "name": "error-handling",
-          "description": "this.fail, MCP error classes, error flow — when to throw vs fail."
+          "description": "this.fail, MCP error classes, refused() and remedies, error flow — when to throw vs fail."
         },
         {
           "name": "execution-context",

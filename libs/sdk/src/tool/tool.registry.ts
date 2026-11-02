@@ -15,12 +15,14 @@ import {
 import { logAvailabilityFiltering } from '../common/availability';
 import { resolveToolVisibility } from '../common/metadata/tool.metadata';
 import { externalEntryAfterStartup } from '../common/utils/external-entry.utils';
+import { describeToolAliasConflicts } from '../common/utils/tool-lookup.utils';
 import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.utils';
 import {
   EntryValidationError,
   NameDisambiguationError,
   RegistryDefinitionNotFoundError,
   RegistryGraphEntryNotFoundError,
+  ToolAliasConflictError,
 } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
@@ -164,6 +166,7 @@ export default class ToolRegistry extends RegistryAbstract<
 
     // Build effective indexes from (locals + already adopted children)
     this.reindex();
+    assertNoAliasConflicts(this.listAllInstances());
 
     // Log availability filtering results at boot time.
     // This is a REGISTRY-LEVEL concern — not HTTP/flow-level auth or rule-based filtering.
@@ -589,6 +592,12 @@ export default class ToolRegistry extends RegistryAbstract<
     return undefined;
   }
 
+  /** The tools of the scope this registry's tools join, when that is another registry (an app's joins the scope's). */
+  private scopeToolsBeside(): readonly ToolEntry[] {
+    const scopeTools: ToolRegistry | undefined = this.providers.getActiveScope().tools;
+    return scopeTools && scopeTools !== this ? scopeTools.listAllInstances() : [];
+  }
+
   /** True if this registry (or adopted children) has any tools. */
   hasAny(): boolean {
     return this.listAllIndexed().length > 0 || this.tokens.size > 0;
@@ -721,6 +730,7 @@ export default class ToolRegistry extends RegistryAbstract<
     if (this.instances.has(token as Token<ToolInstance>)) {
       return; // Already registered, skip silently
     }
+    assertNoAliasConflicts([...this.listAllInstances(), ...this.scopeToolsBeside(), tool]);
 
     // Add to instances map - the type guard ensures tool has the required properties
     this.instances.set(token as Token<ToolInstance>, tool as ToolInstance);
@@ -773,6 +783,11 @@ export default class ToolRegistry extends RegistryAbstract<
       },
     };
   }
+}
+
+function assertNoAliasConflicts(tools: readonly ToolEntry[]): void {
+  const conflicts = describeToolAliasConflicts(tools);
+  if (conflicts.length > 0) throw new ToolAliasConflictError(conflicts);
 }
 
 /* -------------------- lineage utility -------------------- */

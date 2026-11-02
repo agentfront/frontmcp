@@ -222,6 +222,16 @@ describe('FeatureFlagPlugin through real flows (GHSA-gf7p-j3hr-h5h4)', () => {
       expect(result).toContain('disabled by feature flag');
     });
 
+    it('refuses tools/call with a remedy that names the flag', async () => {
+      const result = (await client.callTool('disabled_tool', {})) as {
+        content?: Array<{ text?: string }>;
+        _meta?: Record<string, unknown>;
+      };
+
+      expect(result.content?.[0]?.text).toContain('To fix: Turn on the feature flag "flag-off" to use this tool.');
+      expect(result._meta?.['remedy']).toEqual({ say: 'Turn on the feature flag "flag-off" to use this tool.' });
+    });
+
     it('refuses tools/call on a disabled tool an adapter of the app provides', async () => {
       const result = JSON.stringify(await client.callTool('disabled_adapter_tool', {}));
 
@@ -247,6 +257,15 @@ describe('FeatureFlagPlugin through real flows (GHSA-gf7p-j3hr-h5h4)', () => {
 
     it('refuses resources/read on a disabled resource', async () => {
       expect(await errorMessageOf(client.readResource('flags://disabled'))).toContain('disabled by feature flag');
+    });
+
+    it('refuses resources/read with data.remedy naming the flag', async () => {
+      const refusal = await client.readResource('flags://disabled').then(
+        () => undefined,
+        (error: unknown) => error as { data?: Record<string, unknown> },
+      );
+
+      expect(refusal?.data?.['remedy']).toEqual({ say: 'Turn on the feature flag "flag-off" to use this resource.' });
     });
 
     it('reads an enabled resource', async () => {

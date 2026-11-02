@@ -36,7 +36,12 @@ import {
 } from '../../common';
 import { callSurfaceOf, entryUnavailableError, isOfferedOnSurface } from '../../common/availability';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
-import { lookupTool, ownerQualifiedName, toolNameCandidates } from '../../common/utils/tool-lookup.utils';
+import {
+  lookupTool,
+  ownerQualifiedName,
+  toolAliasesOf,
+  toolNameCandidates,
+} from '../../common/utils/tool-lookup.utils';
 import { runOnSurface } from '../../context/call-surface';
 import { getRunningTool, runAsTool } from '../../context/running-tool';
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
@@ -229,6 +234,9 @@ const resolvedTools = new ResolvedEntries<ToolEntry>();
 /** The undeclared key paths already reported per tool, so the 'warn' policy names each one once. */
 const reportedUndeclaredKeyPaths = new WeakMap<CallToolEntry, Set<string>>();
 
+/** The aliases each tool was already called by, so a call by an alias is logged once. */
+const loggedAliasCalls = new WeakMap<ToolEntry, Set<string>>();
+
 /** Answers keyed by ids yield new key paths forever, so a tool stops reporting after this many. */
 const MAX_REPORTED_UNDECLARED_KEY_PATHS = 100;
 
@@ -358,7 +366,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // request name, log a one-time deprecation hint so callers can migrate
     // off the legacy spelling.
     const exactNames = [name, ownerQualifiedName(name)];
-    if (tool && !exactNames.includes(tool.fullName) && !exactNames.includes(tool.name)) {
+    if (tool && toolAliasesOf(tool).includes(name)) {
+      this.logAliasCall(tool, name);
+    } else if (tool && !exactNames.includes(tool.fullName) && !exactNames.includes(tool.name)) {
       const [, alias] = toolNameCandidates(name);
       this.logger.warn(
         `findTool: tool "${name}" resolved via legacy name alias to "${alias}". ` +
@@ -374,7 +384,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // This is a REGISTRY-LEVEL constraint (availableWhen), not HTTP/flow-level auth.
       // A tool the caller's surface isn't offered is never reported as existing (see below).
       const allUnfiltered = this.scope.tools.listAllInstances();
-      const unavailable = allUnfiltered.find((t) => exactNames.includes(t.fullName) || exactNames.includes(t.name));
+      const unavailable = allUnfiltered.find(
+        (t) => exactNames.includes(t.fullName) || exactNames.includes(t.name) || toolAliasesOf(t).includes(name),
+      );
       if (unavailable && isOfferedOnSurface(unavailable.metadata.availableWhen, callSurface)) {
         // Issue #417 — the structured error names the axes that blocked the call, judged for the
         // call's own surface (none for in-process dispatch), as the prompt and resource flows do.
@@ -416,6 +428,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.state.set('tool', tool);
     this.logger.verbose(`findTool: tool "${name}" found`);
     this.logger.verbose('findTool:done');
+  }
+
+  private logAliasCall(tool: ToolEntry, alias: string): void {
+    const loggedAliases = loggedAliasCalls.get(tool) ?? new Set<string>();
+    if (loggedAliases.has(alias)) return;
+    loggedAliases.add(alias);
+    loggedAliasCalls.set(tool, loggedAliases);
+    this.logger.info(`findTool: tool "${alias}" is an alias of "${tool.name}"; call "${tool.name}" instead.`);
   }
 
   /**
