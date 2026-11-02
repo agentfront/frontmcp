@@ -16,6 +16,7 @@ import {
   JobRunNotFoundError,
   JobTimeoutError,
 } from '../../errors';
+import { outlasts } from '../../provider/provider.lifecycle';
 import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
 import { type JobAdmission } from '../job-admission';
 import {
@@ -106,6 +107,8 @@ export class JobExecutionManager {
   private readonly scope?: ScopeEntry;
   private readonly options: JobExecutionManagerOptions;
   private readonly activeRuns = new Map<string, ActiveRun>();
+  /** The last write this process queued for each run, so the next one waits for it. */
+  private readonly runWrites = new Map<string, Promise<unknown>>();
 
   /**
    * @param scope - The scope the manager serves. A background run without a caller context gets a
@@ -280,29 +283,32 @@ export class JobExecutionManager {
    * @throws JobRunFinishedError for a run that already ended
    */
   async cancel(runId: string): Promise<void> {
-    const record = await this.stateStore.getRun(runId);
-    if (!record) throw new JobRunNotFoundError(runId);
-    if ('workflowName' in record) throw new JobRunNotCancellableError(runId);
-    if (FINISHED_JOB_STATES.has(record.state)) throw new JobRunFinishedError(runId, record.state);
-
     const reason = new JobCancelledError(runId);
-    await this.stateStore.requestCancel(runId);
-    await this.updateState(runId, {
-      state: 'cancelled',
-      error: { message: reason.message, name: reason.name },
-      completedAt: Date.now(),
+    await this.withRunLock(runId, async () => {
+      const record = await this.stateStore.getRun(runId);
+      if (!record) throw new JobRunNotFoundError(runId);
+      if ('workflowName' in record) throw new JobRunNotCancellableError(runId);
+      if (FINISHED_JOB_STATES.has(record.state)) throw new JobRunFinishedError(runId, record.state);
+      await this.stateStore.requestCancel?.(runId);
+      await this.write(runId, cancelledUpdate(reason));
     });
     this.activeRuns.get(runId)?.controller.abort(reason);
   }
 
   /**
    * Interrupt every run this manager is executing, as the scope shuts down: each is aborted with
-   * `JobInterruptedError`, runs its job's `cleanup`, and ends as `interrupted` before this resolves.
+   * `JobInterruptedError`, runs its job's `cleanup`, and ends as `interrupted`. With `timeoutMs`, waits
+   * for them at most that long.
    */
-  async dispose(): Promise<void> {
+  async dispose(timeoutMs?: number): Promise<void> {
     const runs = [...this.activeRuns.entries()];
     for (const [runId, run] of runs) run.controller.abort(new JobInterruptedError(runId));
-    await Promise.all(runs.map(([, run]) => run.settled));
+    const ended = () => Promise.all(runs.map(([, run]) => run.settled));
+    if (timeoutMs === undefined) {
+      await ended();
+    } else if (await outlasts(ended, timeoutMs)) {
+      this.logger.warn(`The interrupted job runs did not end within ${timeoutMs} ms`);
+    }
   }
 
   /**
@@ -354,7 +360,7 @@ export class JobExecutionManager {
 
   private async abortIfCancelled(runId: string, controller: AbortController): Promise<void> {
     try {
-      if (await this.stateStore.isCancelRequested(runId)) controller.abort(new JobCancelledError(runId));
+      if (await this.cancelRequested(runId)) controller.abort(new JobCancelledError(runId));
     } catch (error) {
       this.logger.warn(`Could not read whether run ${runId} was cancelled: ${toJobError(error).message}`);
     }
@@ -368,8 +374,15 @@ export class JobExecutionManager {
     signal: AbortSignal,
   ): Promise<InlineJobResult> {
     // A run cancelled before it started never starts
-    if (await this.stateStore.isCancelRequested(runId)) throw new JobCancelledError(runId);
-    await this.updateState(runId, { state: 'running' });
+    const started = await this.withRunLock(runId, async () => {
+      if (await this.cancelRequested(runId)) return false;
+      await this.write(runId, { state: 'running' });
+      return true;
+    });
+    if (!started) {
+      await this.notify({ type: 'job:status', runId, state: 'cancelled', jobName: job.name });
+      throw new JobCancelledError(runId);
+    }
     await this.notify({ type: 'job:status', runId, state: 'running', jobName: job.name });
 
     const retryConfig = job.metadata.retry ?? {};
@@ -426,40 +439,42 @@ export class JobExecutionManager {
 
   /** Write how an attempt ended to the run record, and send the run's status notification. */
   private async recordAttempt(job: JobEntry, runId: string, outcome: JobAttemptOutcome): Promise<void> {
+    const state = await this.withRunLock(runId, () => this.writeOutcome(runId, outcome));
+    if (!state) return;
+    const attempt = state === 'retrying' ? { attempt: outcome.attempt } : {};
+    await this.notify({ type: 'job:status', runId, state, jobName: job.name, ...attempt });
+  }
+
+  /** Write how an attempt ended, answering the state written; a cancel written to the store wins over it. */
+  private async writeOutcome(runId: string, outcome: JobAttemptOutcome): Promise<JobExecutionState | undefined> {
+    if (await this.cancelRequested(runId)) {
+      if (outcome.state === 'retrying') return undefined;
+      await this.write(runId, { ...cancelledUpdate(new JobCancelledError(runId)), attempt: outcome.attempt });
+      return 'cancelled';
+    }
     switch (outcome.state) {
       case 'completed':
-        // A cancel written to the store before the attempt ended wins: the run stays cancelled
-        if (await this.stateStore.isCancelRequested(runId)) return;
-        await this.updateState(runId, {
+        await this.write(runId, {
           state: 'completed',
           result: outcome.result,
           completedAt: Date.now(),
           attempt: outcome.attempt,
           logs: [...outcome.logs],
         });
-        await this.notify({ type: 'job:status', runId, state: 'completed', jobName: job.name });
-        return;
+        return 'completed';
       case 'retrying':
-        await this.updateState(runId, { state: 'retrying', attempt: outcome.attempt });
-        await this.notify({
-          type: 'job:status',
-          runId,
-          state: 'retrying',
-          jobName: job.name,
-          attempt: outcome.attempt,
-        });
-        return;
+        await this.write(runId, { state: 'retrying', attempt: outcome.attempt });
+        return 'retrying';
       case 'failed': {
         const { error } = outcome;
         const state = finishedStateOf(error);
-        await this.updateState(runId, {
+        await this.write(runId, {
           state,
           error: { message: error.message, name: error.name, stack: error.stack },
           completedAt: Date.now(),
           attempt: outcome.attempt,
         });
-        await this.notify({ type: 'job:status', runId, state, jobName: job.name });
-        return;
+        return state;
       }
     }
   }
@@ -541,10 +556,35 @@ export class JobExecutionManager {
 
   // ---- Helpers ----
 
-  /** Write to the run record, and tell the subscribers to `job://runs/{runId}`. */
-  private async updateState(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
+  /** Write to the run record once this process's earlier writes to it landed (see {@link write}). */
+  private updateState(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
+    return this.withRunLock(runId, () => this.write(runId, updates));
+  }
+
+  /** Write to the run record, and tell the subscribers to `job://runs/{runId}`; callers hold the run's lock. */
+  private async write(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
     await this.stateStore.updateRun(runId, updates);
     this.scope?.resources.notifyContentChanged(jobRunUri(runId));
+  }
+
+  /**
+   * Run `task` once the writes this process queued for the run before it are done. A store's update reads
+   * the run and writes it back, so two writes that overlap would lose one of them.
+   */
+  private withRunLock<T>(runId: string, task: () => Promise<T>): Promise<T> {
+    const queued = (this.runWrites.get(runId) ?? Promise.resolve()).then(task);
+    const done = queued.catch(() => undefined);
+    this.runWrites.set(runId, done);
+    void done.then(() => {
+      if (this.runWrites.get(runId) === done) this.runWrites.delete(runId);
+    });
+    return queued;
+  }
+
+  /** Whether the run was cancelled: the store's cancel request, or its state on a store that keeps none. */
+  private async cancelRequested(runId: string): Promise<boolean> {
+    if (this.stateStore.isCancelRequested) return this.stateStore.isCancelRequested(runId);
+    return (await this.stateStore.getRun(runId))?.state === 'cancelled';
   }
 
   private async notify(data: Record<string, unknown>): Promise<void> {
@@ -584,6 +624,7 @@ function withBackgroundContext<Options extends ExecuteJobOptions>(opts: Options,
  */
 class RunRecorder implements JobRunRecorder {
   private readonly recorded = new Set<number>();
+  private finished = false;
 
   constructor(
     readonly runId: string,
@@ -592,11 +633,13 @@ class RunRecorder implements JobRunRecorder {
     private readonly writeProgress: (progress: JobRunProgress) => Promise<void>,
   ) {}
 
-  recordProgress(progress: JobRunProgress): Promise<void> {
-    return this.writeProgress(progress);
+  async recordProgress(progress: JobRunProgress): Promise<void> {
+    // A run that ended keeps what it last reported
+    if (!this.finished) await this.writeProgress(progress);
   }
 
   async recordAttempt(outcome: JobAttemptOutcome): Promise<void> {
+    if (outcome.state !== 'retrying') this.finished = true;
     await this.write(outcome);
     this.recorded.add(outcome.attempt);
   }
@@ -604,6 +647,11 @@ class RunRecorder implements JobRunRecorder {
   async ensureRecorded(outcome: JobAttemptOutcome): Promise<void> {
     if (!this.recorded.has(outcome.attempt)) await this.recordAttempt(outcome);
   }
+}
+
+/** What a cancel writes to the run record. */
+function cancelledUpdate(reason: JobCancelledError): Partial<JobRunRecord> {
+  return { state: 'cancelled', error: { message: reason.message, name: reason.name }, completedAt: Date.now() };
 }
 
 /** The state a run ends in when its last attempt failed with `error`. */

@@ -109,6 +109,19 @@ describe('JobAdmission', () => {
     expect(admitted).toBe(true);
   });
 
+  it("reads the memory the process may still use, which counts a container's limit", async () => {
+    const availableMemory = jest.spyOn(process, 'availableMemory').mockReturnValue(100 * 1024 * 1024);
+    try {
+      const refused = new JobAdmission({ memoryMb: 200, maxWaitMs: 100 }).slot().acquire('build');
+      const assertion = expect(refused).rejects.toThrow(/200 MB free.*100 MB/);
+      await jest.advanceTimersByTimeAsync(100);
+
+      await assertion;
+    } finally {
+      availableMemory.mockRestore();
+    }
+  });
+
   it('refuses an attempt while too little memory is free, saying how much', async () => {
     const admission = new JobAdmission({ memoryMb: 512, maxWaitMs: 100 }, { freeMemoryMb: () => 128 });
 

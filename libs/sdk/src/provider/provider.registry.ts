@@ -136,7 +136,8 @@ export default class ProviderRegistry
   private readonly heldEntries: LifecycleEntry[] = [];
   /** Each instance's shared lifecycle in this tree: the first holder bootstraps and readies it, the last shuts it down. */
   private readonly sharedLifecycles: WeakMap<object, SharedLifecycle>;
-  private readonly shutdownHookTimeoutMs: number;
+  /** How long each shutdown hook may run (`lifecycle.shutdownHookTimeoutMs`), in ms. */
+  readonly shutdownHookTimeoutMs: number;
   private readyHooksRun?: Promise<void>;
   private shutdownHooksRun?: Promise<void>;
 

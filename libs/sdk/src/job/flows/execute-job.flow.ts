@@ -33,6 +33,7 @@ import {
 } from '../job-attempt';
 import { jobContextProviders } from '../job-context-providers';
 import { JobPermissionGuard } from '../job-permission.guard';
+import { type JobRunProgress } from '../store/job-state.interface';
 
 /** How long a job's `cleanup` may take when it sets no `timeoutMs`. */
 const DEFAULT_CLEANUP_TIMEOUT_MS = 3_000;
@@ -229,7 +230,7 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
       contextProviders,
       attempt,
       signal: attemptAbort.signal,
-      onProgress: ctx.run?.recordProgress?.bind(ctx.run),
+      onProgress: progressUntilAborted(ctx.run, attemptAbort.signal),
     });
     // `authorities.pipes` may be async: run them before any hook or execute() reads `this.auth`.
     await jobContext.loadAuthContext();
@@ -363,4 +364,16 @@ function abortControllerFollowing(signal: AbortSignal | undefined): AbortControl
   if (signal?.aborted) controller.abort(signal.reason);
   signal?.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
   return controller;
+}
+
+/** What the attempt's `this.progress()` keeps on its run, until the attempt is aborted; a workflow step keeps none. */
+function progressUntilAborted(
+  run: JobRunRecorder | undefined,
+  signal: AbortSignal,
+): ((progress: JobRunProgress) => Promise<void>) | undefined {
+  const record = run?.recordProgress?.bind(run);
+  if (!record) return undefined;
+  return async (progress) => {
+    if (!signal.aborted) await record(progress);
+  };
 }

@@ -268,9 +268,9 @@ class ImportCsvJob extends JobContext {
 
 ## Timeouts, Cancel and Cleanup
 
-**Timeouts.** Each attempt may run `timeout` ms (the job's own, else `jobs.defaultTimeoutMs`, default `300000`; `0` turns it off). Past it the attempt is aborted with `JobTimeoutError` (code `JOB_TIMEOUT`): `this.signal` aborts, the job's `cleanup` runs, and the attempt fails. A timeout is retried when `retry` leaves attempts; a run whose last attempt timed out ends as `timed_out`. Up to 1.10 a plain `execute_job` had no timeout at all. The timer starts when `execute()` does, so time spent waiting for [admission](#admission) does not count.
+**Timeouts.** Each attempt may run `timeout` ms (the job's own, else `jobs.defaultTimeoutMs`, default `300000`; `0` turns it off). Past it the attempt is aborted with `JobTimeoutError` (code `JOB_TIMEOUT`): `this.signal` aborts, the job's `cleanup` runs, and the attempt fails. A timeout is retried when `retry` leaves attempts; a run whose last attempt timed out ends as `timed_out`. Up to 1.10 a plain `execute_job` had no timeout at all, although the 5-minute default was documented (only workflow steps applied it): a job that runs longer now sets its own `timeout`, or `0` for none, or the server sets `jobs.defaultTimeoutMs`. The timer starts when `execute()` does, so time spent waiting for [admission](#admission) does not count. The abort does not stop `execute()`: an attempt that ignores `this.signal` keeps running after its run moved on (a retry can start beside it), its result is dropped, and what it reports with `this.progress()` is no longer kept on the run.
 
-**Cancel.** `cancel_job({ runId })` writes the cancel to the job store first, where every process sharing the store reads it, marks the run `cancelled`, and then aborts the run's `this.signal` with `JobCancelledError` (code `JOB_CANCELLED`). A run in another process is aborted within about a second, when that process next reads the store. A cancelled run is never retried, and an inline `execute_job` that is cancelled fails with `JOB_CANCELLED`. Once a cancel is written, the run stays `cancelled` even if its attempt finishes right after. The caller who started the run may cancel it, and so may a caller who passes the job's `delete` rule (see [Permissions](#permissions)); for anyone else the run reads as unknown. Refusals carry a remedy:
+**Cancel.** `cancel_job({ runId })` writes the cancel to the job store first, where every process sharing the store reads it, marks the run `cancelled`, and then aborts the run's `this.signal` with `JobCancelledError` (code `JOB_CANCELLED`). A run in another process is aborted within about a second, when that process next reads the store. A cancelled run is never retried, and an inline `execute_job` that is cancelled fails with `JOB_CANCELLED`. Once a cancel is written, the run stays `cancelled` however its attempt ends after it, in this process or another one. The caller who started the run may cancel it, and so may a caller who passes the job's `delete` rule (see [Permissions](#permissions)); for anyone else the run reads as unknown. Refusals carry a remedy:
 
 | Code                      | When                                         | Remedy                               |
 | ------------------------- | -------------------------------------------- | ------------------------------------ |
@@ -278,7 +278,7 @@ class ImportCsvJob extends JobContext {
 | `JOB_RUN_FINISHED`        | The run already ended                        | `get_job_status` with the `runId`    |
 | `JOB_RUN_NOT_CANCELLABLE` | A workflow run (only job runs are cancelled) | `get_workflow_status`                |
 
-**Cleanup.** `@Job({ cleanup })` runs when an attempt is interrupted (`'interrupt'`: the server shut down), times out (`'timeout'`) or is cancelled (`'cancel'`), after `this.signal` aborted, with the attempt's instance. It never runs for an attempt that ends on its own. It has its own time limit (3000 ms, or `{ run, timeoutMs }`), and a cleanup that throws or outlasts it is logged without changing how the run ends. At shutdown every active run is interrupted, runs its cleanup and ends as `interrupted` before the stores close.
+**Cleanup.** `@Job({ cleanup })` runs when an attempt is interrupted (`'interrupt'`: the server shut down), times out (`'timeout'`) or is cancelled (`'cancel'`), after `this.signal` aborted, with the attempt's instance. It never runs for an attempt that ends on its own. It has its own time limit (3000 ms, or `{ run, timeoutMs }`), and a cleanup that throws or outlasts it is logged without changing how the run ends. At shutdown every active run is interrupted, runs its cleanup and ends as `interrupted` before the stores close; the shutdown waits for them at most `lifecycle.shutdownHookTimeoutMs` (default 3000 ms), however long a cleanup's own limit is.
 
 ```typescript
 import { Job, JobContext, z, type JobCleanup } from '@frontmcp/sdk';
@@ -309,7 +309,7 @@ class BuildProjectJob extends JobContext {
 
 ## Admission
 
-`@FrontMcp({ jobs: { admission: { concurrency, memoryMb, maxWaitMs } } })` bounds when job attempts (and workflow steps) start in this process: at most `concurrency` run at once, and each claims `memoryMb` of free system memory, so one starts only once that much is free beyond what the running ones claimed. Waiting attempts start in the order they arrived. One that waits `maxWaitMs` (default `600000`) is refused with `JobAdmissionTimeoutError` (code `JOB_ADMISSION_TIMEOUT`, with a remedy) and not retried: an inline call fails with it, and a background run ends as `failed`. A cancel or shutdown stops the wait. Admission is the `admit` stage of `jobs:execute-job`, so a hook can observe or replace it.
+`@FrontMcp({ jobs: { admission: { concurrency, memoryMb, maxWaitMs } } })` bounds when job attempts (and workflow steps) start in this process: at most `concurrency` run at once, and each claims `memoryMb` of the memory the process may still use (`process.availableMemory()`: the free system memory, or what is left under a container's memory limit), so one starts only once that much is available beyond what the running ones claimed. Waiting attempts start in the order they arrived. One that waits `maxWaitMs` (default `600000`) is refused with `JobAdmissionTimeoutError` (code `JOB_ADMISSION_TIMEOUT`, with a remedy) and not retried: an inline call fails with it, and a background run ends as `failed`. A cancel or shutdown stops the wait. An attempt frees its slot when it ends, however it ends; an attempt aborted by a timeout or a cancel ends at once, so a job that ignores `this.signal` keeps running outside the limits. Admission is the `admit` stage of `jobs:execute-job`, so a hook can observe or replace it.
 
 ```typescript
 @FrontMcp({
@@ -520,8 +520,8 @@ import { FrontMcp } from '@frontmcp/sdk';
         provider: 'redis',
         host: 'localhost',
         port: 6379,
-        keyPrefix: 'mcp:jobs:',
       },
+      keyPrefix: 'mcp:jobs:',
     },
   },
 })
@@ -543,7 +543,7 @@ For one machine, keep runs in a SQLite file (needs `@frontmcp/storage-sqlite`); 
 class MyLocalServer {}
 ```
 
-A server with a top-level `sqlite` (or `redis`) and no `jobs.store` keeps its runs there too. Up to 1.10 jobs ignored both and stayed in memory.
+A server with a top-level `sqlite` (or `redis`) and no `jobs.store` keeps its runs there too. Up to 1.10 jobs ignored both and stayed in memory. On the top-level `redis`, the jobs' keys start with its `keyPrefix` followed by `jobs:` (`mcp:jobs:` by default; `jobs.store.keyPrefix` overrides it), so servers that share one Redis keep their runs and dynamic job definitions apart once each sets its own `redis.keyPrefix`. In Redis and SQLite a run record expires 24 hours after the run's last write.
 
 `store.redis` takes the same connection fields as the server's `redis` option (`host`, `port`, `password`, `db`, `tls`, or a `url` they fill in; a field that contradicts the `url` stops startup), and the job stores connect with all of them. Up to 1.9.2 they used the `url` alone, or `host` and `port` alone, dropping the separate `password`, `db` and `tls` fields, beside a `url` too; values written in the `url` itself were kept.
 
@@ -719,8 +719,8 @@ class DataApp {}
         provider: 'redis',
         host: 'localhost',
         port: 6379,
-        keyPrefix: 'mcp:jobs:',
       },
+      keyPrefix: 'mcp:jobs:',
     },
   },
 })

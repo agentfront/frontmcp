@@ -149,10 +149,10 @@ describe.each(stateBackends)('%s job state store', (_backend, open) => {
   it('records a cancel request any process can read', async () => {
     await store.createRun(run('r1'));
 
-    expect(await store.isCancelRequested('r1')).toBe(false);
-    await store.requestCancel('r1');
-    expect(await store.isCancelRequested('r1')).toBe(true);
-    expect(await store.isCancelRequested('r2')).toBe(false);
+    expect(await store.isCancelRequested?.('r1')).toBe(false);
+    await store.requestCancel?.('r1');
+    expect(await store.isCancelRequested?.('r1')).toBe(true);
+    expect(await store.isCancelRequested?.('r2')).toBe(false);
   });
 });
 
@@ -161,12 +161,12 @@ describe('sqlite job state store across processes', () => {
     const first = (await createJobStateStore({ sqlite: { path: dbPath } })).store;
     await first.createRun(run('r1'));
     await first.updateRun('r1', { state: 'running' });
-    await first.requestCancel('r1');
+    await first.requestCancel?.('r1');
     await first.dispose();
 
     const second = (await createJobStateStore({ sqlite: { path: dbPath } })).store;
     expect(await second.getRun('r1')).toEqual(expect.objectContaining({ state: 'running', revision: 2 }));
-    expect(await second.isCancelRequested('r1')).toBe(true);
+    expect(await second.isCancelRequested?.('r1')).toBe(true);
     await second.dispose();
   });
 

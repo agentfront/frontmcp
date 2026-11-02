@@ -80,8 +80,11 @@ export interface JobStateStore {
     limit?: number;
   }): Promise<(JobRunRecord | WorkflowRunRecord)[]>;
   cleanup(olderThanMs: number): Promise<number>;
-  /** Record that the run was cancelled, where every process sharing the store reads it; a run never loses it. */
-  requestCancel(runId: string): Promise<void>;
-  isCancelRequested(runId: string): Promise<boolean>;
+  /**
+   * Record that the run was cancelled, where every process sharing the store reads it; a run never loses it.
+   * A store without it is read for a run whose state is `cancelled`.
+   */
+  requestCancel?(runId: string): Promise<void>;
+  isCancelRequested?(runId: string): Promise<boolean>;
   dispose(): Promise<void>;
 }

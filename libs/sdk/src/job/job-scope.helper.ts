@@ -6,6 +6,7 @@ import {
   completionOutputText,
   type ScopeCompletionEvents,
 } from '../channel/sources/completion-events';
+import { type JobCompletionEvent } from '../channel/sources/job-completion.source';
 import { type EntryOwnerRef, type RedisOptionsInput } from '../common';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
@@ -69,7 +70,8 @@ const CANCEL_POLL_MS = 1_000;
 
 /**
  * The store jobs use: `jobs.store` when it names a backend, else the server's top-level `redis` (unless it
- * is Vercel KV, which has no key listing), else its top-level `sqlite`, else memory (undefined).
+ * is Vercel KV, which has no key listing) with keys under its `keyPrefix` + `jobs:`, else its top-level
+ * `sqlite`, else memory (undefined).
  */
 export function resolveJobsStore(
   store: JobsStoreConfig | undefined,
@@ -78,7 +80,10 @@ export function resolveJobsStore(
   if (store?.redis || store?.sqlite) return store;
   const redis = topLevel.redis;
   const vercelKv = redis !== undefined && 'provider' in redis && redis.provider === 'vercel-kv';
-  if (redis && !vercelKv) return { ...store, redis };
+  if (redis && !vercelKv) {
+    const keyPrefix = store?.keyPrefix ?? (redis.keyPrefix === undefined ? undefined : `${redis.keyPrefix}jobs:`);
+    return { ...store, redis, ...(keyPrefix === undefined ? {} : { keyPrefix }) };
+  }
   if (topLevel.sqlite) return { ...store, sqlite: topLevel.sqlite };
   return store;
 }
@@ -171,7 +176,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
   );
   // At shutdown the runs left are interrupted (their cleanup runs) before the stores close
   scope.onDispose(async () => {
-    await executionManager.dispose();
+    await executionManager.dispose(providers.shutdownHookTimeoutMs);
     await stateStore.dispose();
     await definitionStore.dispose();
   });
@@ -215,7 +220,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
 }
 
 /**
- * Publish a finished job or workflow run (a `completed` or `failed` status notification) as a job
+ * Publish a finished job or workflow run (the status notification of a run that ended) as a job
  * completion, read from its run record. The event names the session that ran it, if any.
  */
 async function publishJobCompletion(
@@ -225,7 +230,8 @@ async function publishJobCompletion(
 ): Promise<void> {
   const { type, state, runId } = data;
   if (type !== 'job:status' && type !== 'workflow:status') return;
-  if ((state !== 'completed' && state !== 'failed') || typeof runId !== 'string') return;
+  const status = completionStatusOf(state);
+  if (!status || typeof runId !== 'string') return;
 
   const run = await stateStore.getRun(runId);
   if (!run) return;
@@ -233,10 +239,27 @@ async function publishJobCompletion(
   completions.jobs.emit({
     jobName: workflowName ?? run.jobName,
     jobId: run.jobId,
-    status: state === 'completed' ? 'success' : 'error',
+    status,
     ...(run.completedAt !== undefined ? { durationMs: run.completedAt - run.startedAt } : {}),
-    ...(state === 'completed' ? { output: completionOutputText(run.result) } : { error: run.error?.message }),
+    ...(status === 'success' ? { output: completionOutputText(run.result) } : { error: run.error?.message }),
     attempt: run.attempt,
     ...(run.sessionId ? { sessionId: run.sessionId } : {}),
   });
+}
+
+/** How a run that ended in `state` reads as a job completion; undefined while it has not ended. */
+function completionStatusOf(state: unknown): JobCompletionEvent['status'] | undefined {
+  switch (state) {
+    case 'completed':
+      return 'success';
+    case 'failed':
+    case 'interrupted':
+      return 'error';
+    case 'timed_out':
+      return 'timeout';
+    case 'cancelled':
+      return 'cancelled';
+    default:
+      return undefined;
+  }
 }

@@ -16,6 +16,19 @@ describe('resolveJobsStore', () => {
     expect(resolveJobsStore({ keyPrefix: 'j:' }, { redis, sqlite })).toEqual({ redis, keyPrefix: 'j:' });
   });
 
+  it("keeps the jobs' keys under the top-level redis key prefix, unless jobs.store sets its own", () => {
+    const tenantRedis = { ...redis, keyPrefix: 'tenant-a:' };
+
+    expect(resolveJobsStore(undefined, { redis: tenantRedis })).toEqual({
+      redis: tenantRedis,
+      keyPrefix: 'tenant-a:jobs:',
+    });
+    expect(resolveJobsStore({ keyPrefix: 'j:' }, { redis: tenantRedis })).toEqual({
+      redis: tenantRedis,
+      keyPrefix: 'j:',
+    });
+  });
+
   it('falls back to the top-level sqlite when no redis is configured', () => {
     expect(resolveJobsStore(undefined, { sqlite })).toEqual({ sqlite });
   });

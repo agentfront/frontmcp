@@ -18,7 +18,7 @@ export interface JobAdmissionOptions {
   maxWaitMs?: number;
 }
 
-/** The free system memory in MB; replaceable for tests. */
+/** The memory the process may still use, in MB; replaceable for tests. */
 export interface JobAdmissionProbes {
   freeMemoryMb?: () => number;
 }
@@ -137,7 +137,11 @@ export class JobAdmission {
   }
 }
 
+/** What the process may still allocate: a container's memory limit counts, beside the free system memory. */
 function systemFreeMemoryMb(): number {
+  if (typeof process !== 'undefined' && typeof process.availableMemory === 'function') {
+    return process.availableMemory() / BYTES_PER_MB;
+  }
   const { freemem } = require('node:os') as typeof import('node:os');
   return freemem() / BYTES_PER_MB;
 }

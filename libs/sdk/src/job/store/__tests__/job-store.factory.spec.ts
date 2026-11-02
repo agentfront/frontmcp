@@ -2,6 +2,7 @@ import { StorageConfigError } from '@frontmcp/utils';
 
 import { createJobDefinitionStore } from '../job-definition-store.factory';
 import { createJobStateStore } from '../job-state-store.factory';
+import { RedisJobStateStore, type RedisStateStoreLike } from '../redis-job-state.store';
 
 const createRedisClient = jest.fn((_options: Record<string, unknown>): unknown => ({}));
 
@@ -52,6 +53,17 @@ describe('job store factories with Redis', () => {
     await expect(createJobDefinitionStore({ redis: contradicting })).rejects.toThrow(StorageConfigError);
   });
 
+  it('closes the client the state store connected when the store is disposed', async () => {
+    const quit = jest.fn(async () => 'OK');
+    createRedisClient.mockReturnValue({ quit });
+    const { store } = await createJobStateStore({ redis: { provider: 'redis', ...connection } });
+
+    await store.dispose();
+    await store.dispose();
+
+    expect(quit).toHaveBeenCalledTimes(1);
+  });
+
   it('still falls back to memory when the client cannot be created', async () => {
     createRedisClient.mockImplementation(() => {
       throw new Error('ioredis is required for Redis storage adapter');
@@ -59,5 +71,34 @@ describe('job store factories with Redis', () => {
 
     expect((await createJobStateStore({ redis: { provider: 'redis', ...connection } })).type).toBe('memory');
     expect((await createJobDefinitionStore({ redis: connection })).type).toBe('memory');
+  });
+});
+
+describe('RedisJobStateStore', () => {
+  it('expires the index sets of a run with the run, so they do not outlive it', async () => {
+    const expire = jest.fn(async () => 1);
+    const client = {
+      set: jest.fn(async () => 'OK'),
+      sadd: jest.fn(async () => 1),
+      expire,
+    };
+    const store = new RedisJobStateStore(client as unknown as RedisStateStoreLike, undefined, 'p:', 60);
+
+    await store.createRun({
+      runId: 'r1',
+      jobId: 'report',
+      jobName: 'report',
+      sessionId: 's1',
+      state: 'pending',
+      input: {},
+      startedAt: 1,
+      attempt: 1,
+      maxAttempts: 1,
+      logs: [],
+      background: true,
+    });
+
+    expect(expire).toHaveBeenCalledWith('p:idx:jobId:report', 60);
+    expect(expire).toHaveBeenCalledWith('p:idx:sessionId:s1', 60);
   });
 });

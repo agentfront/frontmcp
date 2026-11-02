@@ -11,6 +11,7 @@ import {
   type JobCleanup,
   type JobExecutionState,
   type JobRunRecord,
+  type JobStateStore,
 } from '@frontmcp/sdk';
 
 export const removed: string[] = [];
@@ -65,6 +66,30 @@ export class DurableJobsServer {}
 export function isSettled(run: JobRunRecord): boolean {
   const settled: JobExecutionState[] = ['completed', 'failed', 'cancelled', 'timed_out', 'interrupted'];
   return settled.includes(run.state) && (run.revision ?? 0) > 0 && run.updatedAt !== undefined;
+}
+
+/** A store written before cancel requests: `cancel_job` reads a cancelled run's state from it instead. */
+export class LegacyRunStore implements JobStateStore {
+  private readonly runs = new Map<string, JobRunRecord>();
+  async createRun(record: JobRunRecord) {
+    this.runs.set(record.runId, record);
+  }
+  async updateRun(runId: string, updates: Partial<JobRunRecord>) {
+    const run = this.runs.get(runId);
+    if (run) this.runs.set(runId, { ...run, ...updates, runId });
+  }
+  async getRun(runId: string) {
+    return this.runs.get(runId) ?? null;
+  }
+  async listRuns() {
+    return [...this.runs.values()];
+  }
+  async cleanup() {
+    return 0;
+  }
+  async dispose() {
+    this.runs.clear();
+  }
 }
 
 @Job({

@@ -11,6 +11,8 @@ import * as path from 'path';
 
 import { z } from '@frontmcp/lazy-zod';
 
+import { completionEventsOf } from '../../channel/sources/completion-events';
+import { type JobCompletionEvent } from '../../channel/sources/job-completion.source';
 import { App, Job, JobContext, LogLevel, Workflow, type JobCleanup } from '../../common';
 import { type DirectAuthContext, type DirectMcpServer } from '../../direct/direct.types';
 import {
@@ -24,8 +26,9 @@ import {
 } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
-import { type JobExecutionManager } from '../execution/job-execution.manager';
-import { type JobRunRecord } from '../store/job-state.interface';
+import { JobExecutionManager } from '../execution/job-execution.manager';
+import { type JobRunRecord, type JobStateStore, type WorkflowRunRecord } from '../store/job-state.interface';
+import { MemoryJobStateStore } from '../store/memory-job-state.store';
 
 const entered: string[] = [];
 const cleanups: string[] = [];
@@ -165,6 +168,61 @@ class GuardedHangJob extends JobContext {
   }
 }
 
+let openFailGate: () => void = () => undefined;
+let failGate: Promise<void> = Promise.resolve();
+
+@Job({ name: 'gated_fail_job', inputSchema: tagged, outputSchema: {}, timeout: 0 })
+class GatedFailJob extends JobContext {
+  async execute({ tag }: { tag: string }): Promise<Record<string, never>> {
+    entered.push(tag);
+    await failGate;
+    throw new Error('the job failed on its own');
+  }
+}
+
+@Job({ name: 'boom_job', inputSchema: tagged, outputSchema: {}, timeout: 0 })
+class BoomJob extends JobContext {
+  async execute(_input: { tag: string }): Promise<Record<string, never>> {
+    throw new Error('boom');
+  }
+}
+
+@Job({ name: 'parting_progress_job', inputSchema: {}, outputSchema: { ok: z.boolean() }, timeout: 0 })
+class PartingProgressJob extends JobContext {
+  async execute() {
+    void this.progress(1, 1, 'last words');
+    return { ok: true };
+  }
+}
+
+let chatter = false;
+
+@Job({ name: 'chatty_hang_job', inputSchema: tagged, outputSchema: {}, timeout: 30 })
+class ChattyHangJob extends JobContext {
+  async execute({ tag }: { tag: string }): Promise<Record<string, never>> {
+    entered.push(tag);
+    for (let step = 1; chatter; step++) {
+      await this.progress(step, undefined, `still going ${step}`);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    return {};
+  }
+}
+
+@Job({
+  name: 'slow_cleanup_hang_job',
+  inputSchema: tagged,
+  outputSchema: {},
+  timeout: 0,
+  cleanup: { run: () => new Promise<void>(() => undefined), timeoutMs: 60_000 },
+})
+class SlowCleanupHangJob extends JobContext {
+  async execute({ tag }: { tag: string }): Promise<Record<string, never>> {
+    entered.push(tag);
+    return new Promise(() => undefined);
+  }
+}
+
 @Workflow({ name: 'gated_flow', steps: [{ id: 'wait', jobName: 'progress_job', timeout: 60_000 }] })
 class GatedFlow {}
 
@@ -183,6 +241,11 @@ class GatedFlow {}
     SlowRetryJob,
     ProgressJob,
     GuardedHangJob,
+    GatedFailJob,
+    BoomJob,
+    PartingProgressJob,
+    ChattyHangJob,
+    SlowCleanupHangJob,
   ],
 })
 class DurableApp {}
@@ -205,11 +268,42 @@ async function waitFor(check: () => boolean | Promise<boolean>, what: string, ti
   }
 }
 
+function scopeOf(server: DirectMcpServer): Scope {
+  return (server as unknown as { scope: Scope }).scope;
+}
+
 function managerOf(server: DirectMcpServer): JobExecutionManager {
-  const scope = (server as unknown as { scope: Scope }).scope;
-  const manager = (scope as unknown as { _jobExecutionManager?: JobExecutionManager })._jobExecutionManager;
+  const manager = (scopeOf(server) as unknown as { _jobExecutionManager?: JobExecutionManager })._jobExecutionManager;
   if (!manager) throw new Error('jobs are not enabled');
   return manager;
+}
+
+function jobOf(server: DirectMcpServer, name: string) {
+  const job = scopeOf(server).jobs?.findByName(name);
+  if (!job) throw new Error(`${name} is not registered`);
+  return job;
+}
+
+/** A store whose progress writes read the run, wait, then write it back whole, as a slow read-modify-write does. */
+class SlowProgressStore extends MemoryJobStateStore {
+  override async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
+    if (!('progress' in updates)) return super.updateRun(runId, updates);
+    const before = await this.getRun(runId);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    if (before) await super.updateRun(runId, { ...before, ...updates });
+  }
+}
+
+/** A JobStateStore written before cancel requests existed: it has none of their methods. */
+function withoutCancelRequests(store: MemoryJobStateStore): JobStateStore {
+  return {
+    createRun: (record) => store.createRun(record),
+    updateRun: (runId, updates) => store.updateRun(runId, updates),
+    getRun: (runId) => store.getRun(runId),
+    listRuns: (opts) => store.listRuns(opts),
+    cleanup: (olderThanMs) => store.cleanup(olderThanMs),
+    dispose: () => store.dispose(),
+  };
 }
 
 async function startRun(
@@ -369,6 +463,19 @@ describe('durable jobs', () => {
       await expect(inline).rejects.toBeInstanceOf(JobCancelledError);
     });
 
+    it('cancels a run on a store that keeps no cancel requests of its own', async () => {
+      const store = new MemoryJobStateStore();
+      const scope = scopeOf(server);
+      const manager = new JobExecutionManager(withoutCancelRequests(store), scope.logger, undefined, scope);
+      const started = await manager.executeJob(jobOf(server, 'hang_job'), { tag: 'c6' }, { background: true });
+      await waitFor(() => entered.includes('c6'), 'the job to start');
+
+      await manager.cancel(started.runId);
+
+      await waitFor(() => cleanups.includes('c6:cancel'), 'the cleanup');
+      expect((await store.getRun(started.runId))?.state).toBe('cancelled');
+    });
+
     it('refuses to cancel a workflow run', async () => {
       closeGate();
       const response = await server.callTool(
@@ -429,6 +536,56 @@ describe('durable jobs', () => {
 
       expect((await finished(server, failing.runId)).state).toBe('timed_out');
       expect((await finished(server, stuck.runId)).state).toBe('timed_out');
+    });
+  });
+
+  describe('writes to a run', () => {
+    it('keeps the final state when a progress write the job did not wait for is still in flight', async () => {
+      const store = new SlowProgressStore();
+      const scope = scopeOf(server);
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope);
+
+      const { runId } = await manager.executeJob(jobOf(server, 'parting_progress_job'), {});
+      await new Promise((resolve) => setTimeout(resolve, 60));
+
+      expect(await store.getRun(runId)).toEqual(
+        expect.objectContaining({ state: 'completed', progress: { progress: 1, total: 1, message: 'last words' } }),
+      );
+    });
+
+    it('drops what an attempt reports after it was aborted', async () => {
+      chatter = true;
+      try {
+        const started = await startRun(server, 'chatty_hang_job', { tag: 'p1' });
+        const run = await finished(server, started.runId);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(await managerOf(server).getStatus(started.runId)).toEqual(
+          expect.objectContaining({ state: 'timed_out', revision: run.revision }),
+        );
+      } finally {
+        chatter = false;
+      }
+    });
+
+    it('publishes a run that timed out or was cancelled as a job completion', async () => {
+      const events: JobCompletionEvent[] = [];
+      const unsubscribe = completionEventsOf(scopeOf(server)).jobs.subscribe((event) => events.push(event));
+      try {
+        const timedOut = await startRun(server, 'signal_job', { tag: 'e1' });
+        await finished(server, timedOut.runId);
+        const cancelled = await startRun(server, 'hang_job', { tag: 'e2' });
+        await waitFor(() => entered.includes('e2'), 'the job to start');
+        await server.callTool('cancel_job', { runId: cancelled.runId }, { authContext: alice });
+        await waitFor(() => events.length >= 2, 'the completions');
+
+        expect(events.map((event) => [event.jobName, event.status])).toEqual([
+          ['signal_job', 'timeout'],
+          ['hang_job', 'cancelled'],
+        ]);
+      } finally {
+        unsubscribe();
+      }
     });
   });
 
@@ -542,6 +699,42 @@ describe('admission', () => {
     }
   });
 
+  it('frees the slot of an attempt that throws, times out, is cancelled or is interrupted', async () => {
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'durable-slots', version: '1.0.0' },
+      apps: [DurableApp],
+      logging: { level: LogLevel.Off },
+      jobs: { enabled: true, admission: { concurrency: 1, maxWaitMs: 200 } },
+    });
+    const call = (name: string, tag: string) =>
+      server.callTool('execute_job', { name, input: { tag } }, { authContext: alice });
+    const expectSlotFree = async () =>
+      expect((await call('quick_job', 'next')).structuredContent).toEqual(
+        expect.objectContaining({ state: 'completed' }),
+      );
+    try {
+      await expect(call('boom_job', 'l1')).rejects.toThrow('boom');
+      await expectSlotFree();
+
+      await expect(call('retry_timeout_job', 'l2')).rejects.toBeInstanceOf(JobTimeoutError);
+      await expectSlotFree();
+
+      const cancelled = await startRun(server, 'hang_job', { tag: 'l3' });
+      await waitFor(() => entered.includes('l3'), 'the job to start');
+      await server.callTool('cancel_job', { runId: cancelled.runId }, { authContext: alice });
+      await finished(server, cancelled.runId);
+      await expectSlotFree();
+
+      const interrupted = await startRun(server, 'hang_job', { tag: 'l4' });
+      await waitFor(() => entered.includes('l4'), 'the job to start');
+      await managerOf(server).dispose();
+      expect((await finished(server, interrupted.runId)).state).toBe('interrupted');
+      await expectSlotFree();
+    } finally {
+      await server.dispose();
+    }
+  });
+
   it('refuses an attempt while less memory is free than memoryMb', async () => {
     const server = await FrontMcpInstance.createDirect({
       info: { name: 'durable-memory', version: '1.0.0' },
@@ -556,6 +749,25 @@ describe('admission', () => {
     } finally {
       await server.dispose();
     }
+  });
+});
+
+describe('shutdown', () => {
+  it('waits for the interrupted runs and their cleanups at most lifecycle.shutdownHookTimeoutMs', async () => {
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'durable-shutdown', version: '1.0.0' },
+      apps: [DurableApp],
+      logging: { level: LogLevel.Off },
+      lifecycle: { shutdownHookTimeoutMs: 100 },
+      jobs: { enabled: true },
+    });
+    await startRun(server, 'slow_cleanup_hang_job', { tag: 's1' });
+    await waitFor(() => entered.includes('s1'), 'the job to start');
+
+    const disposing = Date.now();
+    await server.dispose();
+
+    expect(Date.now() - disposing).toBeLessThan(1_500);
   });
 });
 
@@ -619,22 +831,55 @@ describe('jobs on the top-level sqlite store', () => {
       await second.dispose();
     }
   });
+
+  it('keeps a run cancelled when its attempt ends on its own after another process cancelled it', async () => {
+    failGate = new Promise((resolve) => {
+      openFailGate = resolve;
+    });
+    const first = await open();
+    const second = await open();
+    try {
+      const inline = first.callTool(
+        'execute_job',
+        { name: 'gated_fail_job', input: { tag: 'x2' } },
+        { authContext: alice },
+      );
+      await waitFor(() => entered.includes('x2'), 'the job to start');
+      const [run] = await managerOf(first).listRuns({ jobId: 'gated_fail_job', state: 'running' });
+
+      await second.callTool('cancel_job', { runId: run.runId }, { authContext: alice });
+      openFailGate();
+      await inline.catch(() => undefined);
+
+      expect((await managerOf(first).getStatus(run.runId))?.state).toBe('cancelled');
+    } finally {
+      await first.dispose();
+      await second.dispose();
+    }
+  });
 });
 
 describe('@Job({ cleanup }) validation', () => {
+  const probeJob = () =>
+    class extends JobContext {
+      async execute(): Promise<Record<string, never>> {
+        return {};
+      }
+    };
+
   it.each([
     ['a string', 'rm -rf /tmp'],
     ['a zero time limit', { run: () => undefined, timeoutMs: 0 }],
   ])('refuses %s at decoration', (_case, cleanup) => {
     const decorate = () =>
-      Job({ name: 'bad_cleanup', inputSchema: {}, outputSchema: {}, cleanup: cleanup as never })(class {});
+      Job({ name: 'bad_cleanup', inputSchema: {}, outputSchema: {}, cleanup: cleanup as never })(probeJob());
 
     expect(decorate).toThrow();
   });
 
   it('accepts a function and a { run, timeoutMs } cleanup', () => {
     const decorate = (cleanup: unknown) => () =>
-      Job({ name: 'good_cleanup', inputSchema: {}, outputSchema: {}, cleanup: cleanup as never })(class {});
+      Job({ name: 'good_cleanup', inputSchema: {}, outputSchema: {}, cleanup: cleanup as never })(probeJob());
 
     expect(decorate(() => undefined)).not.toThrow();
     expect(decorate({ run: () => undefined, timeoutMs: 500 })).not.toThrow();

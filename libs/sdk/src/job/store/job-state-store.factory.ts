@@ -53,7 +53,9 @@ export async function createJobStateStore(
       const { url, host, port, password, db, tls } = options.redis;
       const client = createRedisClient({ url, host, port, password, db, tls, label: 'JobStateStore', logger });
       return {
-        store: new RedisJobStateStore(client as unknown as RedisStateStoreLike, logger, keyPrefix, ttlSeconds),
+        store: new RedisJobStateStore(client as unknown as RedisStateStoreLike, logger, keyPrefix, ttlSeconds, {
+          ownsClient: true,
+        }),
         type: 'redis',
       };
     } catch (err) {
