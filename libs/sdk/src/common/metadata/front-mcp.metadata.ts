@@ -64,6 +64,7 @@ import {
 import { legacySessionOptionsSchema } from '../types/options/session/schema';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
+import { MAX_JOB_TIMER_MS, timerLimitMessage } from './job.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import type { WidgetServingMode } from './tool-ui.metadata';
 import { widgetServingModeSchema } from './ui-serving-mode';
@@ -747,7 +748,12 @@ export const frontMcpBaseSchema = z.object({
         })
         .refine((store) => !(store.redis && store.sqlite), { message: 'jobs.store takes redis or sqlite, not both' })
         .optional(),
-      defaultTimeoutMs: z.number().int().nonnegative().optional(),
+      defaultTimeoutMs: z
+        .number()
+        .int()
+        .nonnegative()
+        .max(MAX_JOB_TIMER_MS, timerLimitMessage('jobs.defaultTimeoutMs'))
+        .optional(),
       runner: z
         .enum(['inline', 'worker', 'detached'], { message: "jobs.runner must be 'inline', 'worker' or 'detached'" })
         .optional(),

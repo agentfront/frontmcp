@@ -25,8 +25,8 @@ npm install @frontmcp/plugins
 Add the `DashboardApp` to your FrontMCP server:
 
 ```typescript
-import { FrontMcp } from '@frontmcp/sdk';
 import { DashboardApp } from '@frontmcp/plugins';
+import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
@@ -42,8 +42,8 @@ Access the dashboard at: `http://localhost:3000/dashboard`
 For more control, use the plugin directly:
 
 ```typescript
-import { FrontMcp } from '@frontmcp/sdk';
 import { DashboardPlugin } from '@frontmcp/plugins';
+import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
@@ -61,15 +61,15 @@ class MyServer {}
 
 ### DashboardPluginOptions
 
-| Option           | Type      | Default      | Description                                                              |
-| ---------------- | --------- | ------------ | ------------------------------------------------------------------------ |
+| Option           | Type      | Default      | Description                                                                                             |
+| ---------------- | --------- | ------------ | ------------------------------------------------------------------------------------------------------- |
 | `enabled`        | `boolean` | auto         | Enable/disable the page, the MCP endpoint and its tools. Auto-detects: enabled in dev, disabled in prod |
-| `basePath`       | `string`  | `/dashboard` | Where the page is served. The MCP endpoint stays at the dashboard app's route (`/dashboard`) |
-| `auth.enabled`   | `boolean` | `false`      | Require the token for the page and the MCP endpoint                      |
-| `auth.token`     | `string`  | -            | Secret token for authentication                                          |
-| `cdn.entrypoint` | `string`  | -            | Custom CDN URL for external dashboard UI                                 |
-| `cdn.react`      | `string`  | esm.sh       | React CDN URL                                                            |
-| `cdn.xyflow`     | `string`  | esm.sh       | XYFlow (React Flow) CDN URL                                              |
+| `basePath`       | `string`  | `/dashboard` | Where the page is served. The MCP endpoint stays at the dashboard app's route (`/dashboard`)            |
+| `auth.enabled`   | `boolean` | `false`      | Require the token for the page and the MCP endpoint                                                     |
+| `auth.token`     | `string`  | -            | Secret token for authentication                                                                         |
+| `cdn.entrypoint` | `string`  | -            | Custom CDN URL for external dashboard UI                                                                |
+| `cdn.react`      | `string`  | esm.sh       | React CDN URL                                                                                           |
+| `cdn.xyflow`     | `string`  | esm.sh       | XYFlow (React Flow) CDN URL                                                                             |
 
 ### Authentication Example
 
@@ -181,7 +181,8 @@ libs/plugins/src/dashboard/
 ├── dashboard.types.ts           # Zod schemas and types
 ├── dashboard.symbol.ts          # DI tokens
 ├── app/
-│   └── dashboard.app.ts         # DashboardApp with HTTP middleware
+│   ├── dashboard.app.ts         # DashboardApp and its MCP endpoint gate
+│   └── dashboard-page.route.ts  # The page, an @HttpRoute at basePath
 ├── providers/
 │   └── graph-data.provider.ts   # Extracts graph from all scopes
 ├── tools/

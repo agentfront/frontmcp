@@ -13,7 +13,17 @@ import { z } from '@frontmcp/lazy-zod';
 
 import { completionEventsOf } from '../../channel/sources/completion-events';
 import { type JobCompletionEvent } from '../../channel/sources/job-completion.source';
-import { App, Job, JobContext, LogLevel, Workflow, type JobCleanup } from '../../common';
+import {
+  App,
+  Job,
+  JobContext,
+  LogLevel,
+  LogTransport,
+  LogTransportInterface,
+  Workflow,
+  type JobCleanup,
+  type LogRecord,
+} from '../../common';
 import { type DirectAuthContext, type DirectMcpServer } from '../../direct/direct.types';
 import {
   JobAdmissionTimeoutError,
@@ -771,6 +781,15 @@ describe('shutdown', () => {
   });
 });
 
+const sqliteWarnings: string[] = [];
+
+@LogTransport({ name: 'SqliteWarnings', description: 'Keeps warnings for assertions' })
+class SqliteWarningCapture extends LogTransportInterface {
+  log(record: LogRecord): void {
+    if (record.level === LogLevel.Warn) sqliteWarnings.push(record.message);
+  }
+}
+
 describe('jobs on the top-level sqlite store', () => {
   let dir: string;
 
@@ -790,6 +809,21 @@ describe('jobs on the top-level sqlite store', () => {
       sqlite: { path: path.join(dir, 'state.sqlite') },
     });
   }
+
+  it('counts its jobs as a consumer of the top-level sqlite, so it does not call the block unused', async () => {
+    sqliteWarnings.length = 0;
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'durable-sqlite-jobs-only', version: '1.0.0' },
+      apps: [DurableApp],
+      logging: { level: LogLevel.Warn, enableConsole: false, transports: [SqliteWarningCapture] },
+      sqlite: { path: path.join(dir, 'state.sqlite') },
+      transport: { persistence: false },
+      tasks: { enabled: false },
+    });
+    await server.dispose();
+
+    expect(sqliteWarnings.filter((message) => message.includes('no subsystem consumes it'))).toEqual([]);
+  });
 
   it('interrupts the runs left at shutdown, runs their cleanup, and keeps the record for the next server', async () => {
     const first = await open();

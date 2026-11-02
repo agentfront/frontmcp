@@ -15,7 +15,7 @@
 import type { Readable, Writable } from 'node:stream';
 
 import { makeDevError } from './errors';
-import type { BridgeLogger } from './log';
+import type { BridgeLogger } from './types';
 
 export interface JsonRpcFrame {
   jsonrpc: '2.0';

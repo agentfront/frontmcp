@@ -187,6 +187,28 @@ describe('resourceStore()', () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
+    it('reads nothing for a change queued before it unsubscribed, so a closed store stays closed', async () => {
+      const store = open();
+      const board = store.key<Board>('board', { initial: { open: 0 } });
+      const unsubscribe = board.subscribe(jest.fn());
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      let finishRead: () => void = () => undefined;
+      const get = jest.spyOn(board, 'get').mockImplementationOnce(async () => {
+        await new Promise<void>((resolve) => (finishRead = resolve));
+        return { value: { open: 0 }, revision: 0 };
+      });
+
+      await store.publish('board');
+      await until(() => get.mock.calls.length === 1);
+      await store.publish('board');
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      unsubscribe();
+      finishRead();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      expect(get).toHaveBeenCalledTimes(1);
+    });
+
     it('does not tell a key listener of a topic change that left the revision as it was', async () => {
       const store = open();
       const board = store.key<Board>('board', { initial: { open: 0 } });

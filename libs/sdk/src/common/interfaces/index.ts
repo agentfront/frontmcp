@@ -38,5 +38,6 @@ export * from './job.interface';
 export * from './workflow.interface';
 export * from './channel.interface';
 export * from './duty.interface';
+export * from './http-route.interface';
 
 export * from './internal';

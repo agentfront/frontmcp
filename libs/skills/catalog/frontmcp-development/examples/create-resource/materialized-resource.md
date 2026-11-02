@@ -8,7 +8,7 @@ features:
   - 'Declaring a `resourceStore()` on SQLite once, in a module the server and the writers import'
   - 'Serving a key with `@Resource({ from })` and `MaterializedResourceContext`'
   - 'Writing atomically with `set()` and `update()` from a tool and from another process'
-  - 'Subscribers get `notifications/resources/updated` on every revision change'
+  - 'Subscribers get `notifications/resources/updated` after a revision change, and read the latest value'
 ---
 
 # Materialized Resource
@@ -69,7 +69,7 @@ await boardStore.close();
 - Declaring a `resourceStore()` on SQLite once, in a module the server and the writers import
 - Serving a key with `@Resource({ from })` and `MaterializedResourceContext`
 - Writing atomically with `set()` and `update()` from a tool and from another process
-- Subscribers get `notifications/resources/updated` on every revision change
+- Subscribers get `notifications/resources/updated` after a revision change, and read the latest value
 
 ## Notes
 

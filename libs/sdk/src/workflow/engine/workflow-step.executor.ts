@@ -28,6 +28,8 @@ export interface WorkflowStepExecutorExtra {
   workflowRunId?: string;
   /** The scope's admission (`jobs.admission`); each step attempt waits for a slot. */
   admission?: JobAdmission;
+  /** The timeout of a step whose job sets none (`jobs.defaultTimeoutMs`); unset, 300000 ms. `0` sets no limit. */
+  defaultTimeoutMs?: number;
 }
 
 /**
@@ -58,7 +60,7 @@ export class WorkflowStepExecutor {
     const maxAttempts = retryConfig.maxAttempts ?? 3;
 
     // Determine timeout (step override or job default)
-    const timeout = step.timeout ?? job.metadata.timeout ?? 300000;
+    const timeout = step.timeout ?? job.metadata.timeout ?? this.extra.defaultTimeoutMs ?? 300_000;
 
     let lastError: Error | undefined;
 
@@ -98,11 +100,14 @@ export class WorkflowStepExecutor {
     const abandon = new AbortController();
 
     return new Promise<unknown>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        const timedOut = new WorkflowJobTimeoutError(job.name, timeout);
-        abandon.abort(timedOut);
-        reject(timedOut);
-      }, timeout);
+      const timer =
+        timeout > 0
+          ? setTimeout(() => {
+              const timedOut = new WorkflowJobTimeoutError(job.name, timeout);
+              abandon.abort(timedOut);
+              reject(timedOut);
+            }, timeout)
+          : undefined;
 
       runJobAttemptFlow({
         job,

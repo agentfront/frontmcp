@@ -46,6 +46,8 @@ const fixtureFiles = [
   'materialized-resources-must-compile.ts',
   'duties-must-compile.ts',
   'offload-must-compile.ts',
+  'http-routes-must-compile.ts',
+  'shared-server-must-compile.ts',
   'durable-jobs-must-compile.ts',
   'job-runners-must-compile.ts',
   'build-manifest-must-compile.ts',
@@ -217,8 +219,16 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('duties-must-compile.ts'))).toEqual([]);
   });
 
+  it('types @HttpRoute, HttpRouteContext, SSE routes, HttpRouteHook and http.auth.people', () => {
+    expect(describeEach(inFixtureFile('http-routes-must-compile.ts'))).toEqual([]);
+  });
+
   it('types this.offload() from the offloaded function, @Resource({ worker }) and the offload option', () => {
     expect(describeEach(inFixtureFile('offload-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types FrontMcpInstance.runShared(), its options and errors, and the shared:identify and shared:drain flows', () => {
+    expect(describeEach(inFixtureFile('shared-server-must-compile.ts'))).toEqual([]);
   });
 
   it('types @Job({ cleanup }), jobs.store.sqlite, jobs.defaultTimeoutMs, jobs.admission, CancelJobTool, the run states and a store without cancel requests', () => {

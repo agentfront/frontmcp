@@ -73,9 +73,17 @@ export interface JobCleanupOptions {
   timeoutMs?: number;
 }
 
+/** The longest delay `setTimeout` keeps: a longer one fires after 1 ms, so a job would time out at once. */
+export const MAX_JOB_TIMER_MS = 2_147_483_647;
+
+export const timerLimitMessage = (field: string) => `${field} must be at most ${MAX_JOB_TIMER_MS} ms (about 24.8 days)`;
+
 const jobCleanupSchema = z.union([
   z.function(),
-  z.object({ run: z.function(), timeoutMs: z.number().int().positive().optional() }),
+  z.object({
+    run: z.function(),
+    timeoutMs: z.number().int().positive().max(MAX_JOB_TIMER_MS, timerLimitMessage('cleanup.timeoutMs')).optional(),
+  }),
 ]);
 
 // ============================================
@@ -182,7 +190,7 @@ export const frontMcpJobMetadataSchema = z
     description: z.string().optional(),
     inputSchema: z.instanceof(Object),
     outputSchema: z.instanceof(Object),
-    timeout: z.number().int().min(0).optional(),
+    timeout: z.number().int().min(0).max(MAX_JOB_TIMER_MS, timerLimitMessage('timeout')).optional(),
     cleanup: jobCleanupSchema.optional(),
     runner: jobRunnerSchema.optional(),
     retry: jobRetryConfigSchema.optional(),

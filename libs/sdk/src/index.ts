@@ -21,6 +21,7 @@ import { FlowHooksOf } from './common';
 
 export { FrontMcpInstance, FrontMcpConfig } from './front-mcp';
 export type { ConfigOrServerClass } from './front-mcp';
+export type { SharedServerOptions, SharedServerTransport } from './shared/shared-server.options';
 export { assertStaticStartupConfig } from './front-mcp/static-startup.check';
 export { registerOptionalModule } from './scope/optional-dependency.util';
 export {
@@ -383,6 +384,12 @@ export type { OpenAIAdapterConfig, OpenAIApiMode, AnthropicAdapterConfig } from 
 export const ToolHook = /* @__PURE__ */ FlowHooksOf('tools:call-tool');
 export const ListToolsHook = /* @__PURE__ */ FlowHooksOf('tools:list-tools');
 export const HttpHook = /* @__PURE__ */ FlowHooksOf('http:request');
+// `@HttpRoute` requests: checkIpFilter, findRoute, acquireQuota, checkSameOrigin, authenticatePerson, handle
+export const HttpRouteHook = /* @__PURE__ */ FlowHooksOf('http:route');
+export type { default as HttpRouteFlow } from './http-route/flows/http.route.flow';
+// People sign-in for `@HttpRoute` pages: a tool hands a person a sign-in link with `this.get(LoopbackTokenAuth).createCode()`
+export { LoopbackTokenAuth, PEOPLE_SESSION_COOKIE } from '@frontmcp/auth';
+export type { PeopleAuthOption, PeopleSession } from '@frontmcp/auth';
 
 // Custom authorization-UI primitives (#469) are configured via the `auth.ui`
 // slot→file map + `auth.extras` name→handler map on the auth config — there is
@@ -439,6 +446,8 @@ export type { default as ServerCardFlow } from './mcp-registry/flows/server-card
 export type { default as ElicitationRequestFlow } from './elicitation/flows/elicitation-request.flow';
 export type { default as ElicitationResultFlow } from './elicitation/flows/elicitation-result.flow';
 export type { default as SetLevelFlow } from './logging/flows/set-level.flow';
+export type { default as SharedIdentifyFlow } from './shared/flows/shared.identify.flow';
+export type { default as SharedDrainFlow } from './shared/flows/shared.drain.flow';
 export type { default as SubscribeResourceFlow } from './resource/flows/subscribe-resource.flow';
 export type { default as UnsubscribeResourceFlow } from './resource/flows/unsubscribe-resource.flow';
 export type { default as HttpIpFilterFlow } from './scope/flows/http.ip-filter.flow';

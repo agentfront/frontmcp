@@ -27,3 +27,4 @@ export * from './channel.metadata';
 export * from './app-filter.metadata';
 export * from './remote-primitive.metadata';
 export * from './duty.metadata';
+export * from './http-route.metadata';
