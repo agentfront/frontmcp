@@ -64,6 +64,7 @@ class Server {}
 interface ElicitationOptionsInput {
   enabled?: boolean; // default: false
   redis?: RedisOptionsInput; // storage for elicitation state
+  persistent?: boolean | { ttlMs?: number; storage?: StorageConfig }; // questions that outlive the session
 }
 ```
 
@@ -120,6 +121,69 @@ class DeleteRecordsTool extends ToolContext {
 5. `this.elicit()` returns the user's response
 6. Tool continues execution with the response
 
+## Persistent Questions (Outlive the Session)
+
+A question can wait longer than the call that asked it: a person answers it later in the **inbox** (a web page, or
+`frontmcp inbox`), and the answer reaches the waiting call, or the next call of the same caller that asks it.
+
+```typescript
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
+  http: { port: 3000, auth: { people: 'loopback-token' } }, // the inbox is a people route
+  elicitation: { enabled: true, persistent: true }, // or { ttlMs: 86_400_000, storage: { type: 'sqlite', sqlite: { path } } }
+})
+class Server {}
+```
+
+```typescript
+import { questionInboxLink, Tool, ToolContext, z } from '@frontmcp/sdk';
+
+@Tool({ name: 'approve_deploy', inputSchema: { version: z.string() } })
+class ApproveDeployTool extends ToolContext {
+  async execute(input: { version: string }) {
+    const answer = await this.elicit(`Deploy ${input.version}?`, z.object({ approve: z.boolean() }), {
+      ttl: 60_000, // how long THIS call waits
+      persist: { key: `deploy-${input.version}` }, // keep the question (default: elicitation.persistent.ttlMs, 24 h)
+    });
+    return { approved: answer.status === 'accept' && answer.content?.approve === true };
+  }
+}
+
+// A one-time sign-in link to the inbox of the caller: give it to the person who answers
+@Tool({ name: 'inbox_link', inputSchema: {} })
+class InboxLinkTool extends ToolContext {
+  async execute() {
+    return questionInboxLink(this); // { code, expiresAt, loginPath: '/_frontmcp/people/login?code=…&next=/_frontmcp/inbox' }
+  }
+}
+```
+
+- **Who a question belongs to (its subject):** `principal:<sub>` for a signed-in caller (a reconnect, or any session of
+  that user, gets the answer), else `session:<id>` for the verified session. An anonymous caller with neither is refused
+  (`ElicitationNotSupportedError`).
+- **Who may answer:** only a person signed in **for that subject**: `questionInboxLink(this)` (or
+  `LoopbackTokenAuth.createCode({ subject })`) makes a code bound to the caller's subject, and the session it buys sees
+  and answers that subject's questions only. Another subject, and a person signed in with the startup token, get an
+  empty inbox and `404` for any question id.
+- **The inbox (people routes):** `GET /_frontmcp/inbox` (a page), `GET /_frontmcp/questions` (JSON),
+  `GET /_frontmcp/questions/events` (SSE of the same view, updated on every change),
+  `POST /_frontmcp/questions/:id/answer` with `{ "action": "accept" | "decline" | "cancel", "content"?: {...} }`. They run
+  through the `http:route` flow, so the answer route gets the same-origin check (`403` from another site). An accept is
+  validated against the question's schema (`400`); a second answer gets `409`.
+- **The CLI:** `frontmcp inbox <sign-in link>` spends the link's one-time code like a browser, lists the questions (and
+  asks on a terminal); `--answer <id> --content '{"approve":true}'` (or `--decline` / `--cancel`) answers one. Each run
+  needs a fresh link.
+- **Delivery, once:** the waiting call gets the answer; when it stopped waiting (its `ttl` passed, or the session ended),
+  it fails with `QuestionPendingError` (`408`) and the answer waits for the next call that asks the same key. When a newer
+  call of the subject asks while one waits, the newer one waits for it and the older fails with
+  `QuestionSupersededError`. Each answer is handed to one call only.
+- **Storage:** `persistent.storage` (memory, redis or sqlite), else the server's `redis`, else its `sqlite`, else
+  `questions.sqlite` in `$FRONTMCP_HOME` (`~/.frontmcp`, made owner-only). Serverless and edge need one named. With
+  `MCP_ELICITATION_SECRET` (or `MCP_SESSION_SECRET` / `MCP_SERVER_SECRET`) set, questions and answers are encrypted at
+  rest with a key derived from the subject. An invalid `persistent` fails startup with `InvalidQuestionStoreError`.
+- `persist.ttlMs` must be longer than the call's `ttl`; URL mode cannot be persisted (`INVALID_INPUT`).
+
 ## Notes
 
 - When `enabled: false` (default), `this.elicit()` is not available — keeps resource overhead low
@@ -146,6 +210,7 @@ frontmcp dev
 | Schema for confirmation      | Use `{ confirmed: { type: 'boolean' } }` in `requestedSchema`           | Using a plain string prompt without a schema                     | Structured schemas let the client render proper UI controls (checkboxes, dropdowns) instead of free-text input   |
 | Redis for production         | Set `elicitation: { enabled: true, redis: { provider: 'redis', ... } }` | Using in-memory elicitation state in a multi-instance deployment | In-memory state is per-process; if the response arrives at a different instance, the elicitation context is lost |
 | Enabled flag                 | Explicitly set `elicitation: { enabled: true }`                         | Omitting the `enabled` field and expecting elicitation to work   | Elicitation is disabled by default (`enabled: false`) to minimize resource overhead                              |
+| Answer after a disconnect    | `persist: { key }` with `elicitation.persistent`, answered in the inbox | A long `ttl` alone                                               | A plain question dies with its session; a persistent one waits in the store for the next call of the caller      |
 
 ## Verification Checklist
 
@@ -176,6 +241,8 @@ frontmcp dev
 | Elicitation works locally but fails in production | In-memory store loses state across multiple server instances                | Configure `elicitation.redis` to share elicitation state via Redis                                  |
 | User sees raw JSON instead of a form              | The MCP client renders the `requestedSchema` as raw data rather than a form | Use standard JSON Schema types (`boolean`, `string`, `enum`) that clients can render as UI controls |
 | Tool hangs indefinitely waiting for user response | No timeout configured and user never responds                               | Implement a timeout or cancellation mechanism in the tool logic to handle non-responsive users      |
+| `QuestionPendingError` from a persistent question | The call stopped waiting before anyone answered                             | Answer in the inbox, then call again with the same `persist.key`: that call gets the answer         |
+| The inbox is empty for the person                 | They signed in with the startup token, or for another caller                | Sign in with `questionInboxLink(this)` from a call of the caller that asked                         |
 
 ## Examples
 
@@ -183,6 +250,7 @@ frontmcp dev
 | ----------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------- |
 | [`basic-confirmation-gate`](../examples/configure-elicitation/basic-confirmation-gate.md)             | Basic        | Request user confirmation before executing a destructive action.                    |
 | [`distributed-elicitation-redis`](../examples/configure-elicitation/distributed-elicitation-redis.md) | Intermediate | Configure elicitation with Redis storage for multi-instance production deployments. |
+| [`persistent-questions-inbox`](../examples/configure-elicitation/persistent-questions-inbox.md)       | Advanced     | Keep a question for its caller past the session, answered in the inbox or the CLI.  |
 
 > See all examples in [`examples/configure-elicitation/`](../examples/configure-elicitation/)
 

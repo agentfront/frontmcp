@@ -164,7 +164,9 @@ app) serve one path, the first scope's serves it on every adapter.
 2. **A one-time code.** A CLI or another local process trades the token for a code:
    `POST /_frontmcp/people/code` with `Authorization: Bearer <token>` answers
    `{ "code", "expiresAt", "loginPath": "/_frontmcp/people/login?code=…" }`. A tool in the server needs no token:
-   `this.get(LoopbackTokenAuth).createCode()`.
+   `this.get(LoopbackTokenAuth).createCode()`. `createCode({ subject })` signs the person in for that MCP subject:
+   `this.person.subject` on their routes, which is how the persistent-question inbox shows a person only their own
+   caller's questions (`questionInboxLink(this)` makes such a code for the calling user).
 3. **The sign-in page.** The person opens `/_frontmcp/people/login?code=<code>&next=/board`. The page signs nothing in:
    its form posts the code back from the server's own origin.
 4. **The cookie.** `POST /_frontmcp/people/login` (a form, or JSON `{ "code", "next" }`) spends the code and sets

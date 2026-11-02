@@ -475,6 +475,8 @@ http: {
 
 The sign-in routes are `POST /_frontmcp/people/code` (with `Authorization: Bearer <token>`), and
 `GET`/`POST /_frontmcp/people/login`. An invalid `http.auth.people` fails startup with `InvalidPeopleAuthOptionsError`.
+With `elicitation.persistent` on too, the question inbox joins them: `GET /_frontmcp/inbox`, `GET /_frontmcp/questions`
+(and `/events`), `POST /_frontmcp/questions/:id/answer` (see `configure-elicitation`).
 
 ## Forwarded Request Headers
 
