@@ -19,8 +19,9 @@ import {
   type ReadResourceResult,
   type ServerCapabilities,
 } from '@frontmcp/protocol';
-import { Client } from '@frontmcp/protocol/client';
 import { fileExists, pathResolve, randomUUID } from '@frontmcp/utils';
+
+import { loadProtocolClient } from '#protocol-client';
 
 import { listAllPages } from '../common/utils/list-all-pages.utils';
 import { ELICITATION_META_KEY } from '../elicitation/elicitation-meta';
@@ -173,6 +174,7 @@ export class DirectClientImpl implements DirectClient {
         },
       };
 
+      const { Client } = await loadProtocolClient();
       const mcpClient = new Client(clientInfo, clientCapabilities);
 
       await mcpClient.connect(clientTransport);

@@ -61,6 +61,7 @@ On Cloudflare Workers `require()` cannot reach bundled modules, so `frontmcp bui
 | Node.js gauges     | `frontmcp_nodejs_eventloop_lag_seconds{quantile}`, `frontmcp_nodejs_active_handles`, `frontmcp_nodejs_active_requests`, `frontmcp_nodejs_open_fds` (Linux only) |
 | Framework counters | `frontmcp_skills_bundle_pulls_total`, `frontmcp_skills_signature_*_total`, `frontmcp_skills_replay_*_total`, `frontmcp_skills_audit_*_total`                    |
 | Answer cost        | `frontmcp_tool_answer_bytes_total`, `frontmcp_tool_answer_estimated_tokens_total`, `frontmcp_tool_answer_duplicated_bytes_total`, each `{tool, client}`         |
+| Event-loop stalls  | `frontmcp_event_loop_stall_seconds_total{cause, entry}` with `observability.stalls` on (see `stall-detection`), served under the `process` category             |
 | Custom counters    | Anything emitted via `createCounter('my_total').inc()` from `@frontmcp/observability`                                                                           |
 
 ### Answer cost

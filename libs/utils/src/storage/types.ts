@@ -282,6 +282,24 @@ export interface StorageAdapter {
    */
   expireIfEquals?(key: string, expectedValue: string, ttlSeconds: number): Promise<boolean>;
 
+  /**
+   * Atomically replace a key's value only while it still holds `expectedValue` (compare-and-set).
+   * Like a plain `set(key, value)`, the key has no TTL afterwards.
+   *
+   * @param key - Storage key
+   * @param expectedValue - The exact value the key must hold
+   * @param value - The value to store
+   * @returns true if this call stored `value`, false if the key was missing or held another value
+   * @throws StorageNotSupportedError if the backend has no atomic compare-and-set
+   */
+  setIfEquals?(key: string, expectedValue: string, value: string): Promise<boolean>;
+
+  /**
+   * A number that changes whenever another connection commits a write (SQLite's `PRAGMA data_version`),
+   * so a change feed can tell cheaply that another process wrote. Only the SQLite adapter has it.
+   */
+  dataVersion?(): Promise<number>;
+
   // ============================================
   // Pub/Sub (Optional)
   // ============================================
@@ -307,6 +325,14 @@ export interface StorageAdapter {
    * @throws StorageNotSupportedError if adapter doesn't support pub/sub
    */
   subscribe(channel: string, handler: MessageHandler): Promise<Unsubscribe>;
+
+  /**
+   * Call `listener` each time the pub/sub connection is back after it was lost. The messages published while it
+   * was down were missed, so a subscriber that must not miss a change re-reads the state. Only Redis has it.
+   *
+   * @returns The function that stops calling `listener`
+   */
+  onPubSubReconnect?(listener: () => void): () => void;
 
   /**
    * Check if this adapter supports pub/sub.
@@ -362,6 +388,9 @@ export interface NamespacedStorage extends StorageAdapter {
 
   /** {@link StorageAdapter.expireIfEquals}; throws StorageNotSupportedError when the adapter has none. */
   expireIfEquals(key: string, expectedValue: string, ttlSeconds: number): Promise<boolean>;
+
+  /** {@link StorageAdapter.setIfEquals}; throws StorageNotSupportedError when the adapter has none. */
+  setIfEquals(key: string, expectedValue: string, value: string): Promise<boolean>;
 
   /**
    * Get the underlying root adapter (for advanced use).

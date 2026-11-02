@@ -21,7 +21,7 @@ import {
 import 'reflect-metadata';
 
 import { JwksService } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { OrchestratorJwksNotAvailableError } from '../../errors/auth-internal.errors';
 

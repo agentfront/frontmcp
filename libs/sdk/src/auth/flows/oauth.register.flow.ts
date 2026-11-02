@@ -32,7 +32,7 @@
  */
 
 import { isLoopbackRedirectUri, type RegisteredClient } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { base64urlEncode, randomBytes, randomUUID } from '@frontmcp/utils';
 
 import {

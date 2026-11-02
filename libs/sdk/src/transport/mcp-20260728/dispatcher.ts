@@ -8,7 +8,7 @@
  * and result decoration.
  */
 import { isAnonymousSubject } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import {
   MCP_20260728_ERROR_CODES,
   MCP_20260728_REMOVED_METHODS,

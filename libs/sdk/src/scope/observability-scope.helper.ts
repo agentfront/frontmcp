@@ -10,6 +10,8 @@ export interface ObservabilityScopeOptions {
   config: Exclude<ObservabilityOptionsInput, false | undefined>;
   logger: FrontMcpLogger;
   globalProviders: ProviderRegistry;
+  /** The config is the one `frontmcp dev` implies for dev events, not one the server set. */
+  implied?: boolean;
 }
 
 /** The ObservabilityPlugin `observability` asks for, wired to the SDK logger and tracing; none if it fails to load. */
@@ -17,6 +19,7 @@ export function observabilityPlugins({
   config: observabilityConfig,
   logger,
   globalProviders,
+  implied = false,
 }: ObservabilityScopeOptions): PluginType[] {
   const plugins: PluginType[] = [];
   let ObservabilityPluginModule: any;
@@ -30,7 +33,12 @@ export function observabilityPlugins({
     // mismatch, e.g. tsx + yarn resolving the source entry). Re-probe with the
     // runtime resolver so the warning matches reality and is debuggable (#453).
     const probe = probeOptionalDependency('@frontmcp/observability', err, require.resolve);
-    if (probe.status === 'not-installed') {
+    if (probe.status === 'not-installed' && implied) {
+      logger.info(
+        'frontmcp dev writes call timings, failures and stalls to its events file with @frontmcp/observability; ' +
+          'install it to get them: npm install @frontmcp/observability',
+      );
+    } else if (probe.status === 'not-installed') {
       logger.warn(
         'observability config is set but @frontmcp/observability is not installed. ' +
           'Install it with: npm install @frontmcp/observability',
@@ -147,6 +155,8 @@ export function observabilityPlugins({
         }
       }
     } catch (e) {
+      // Options @frontmcp/observability refuses fail the boot, as an invalid config does.
+      if ((e as { code?: unknown } | undefined)?.code === 'OBSERVABILITY_CONFIGURATION') throw e;
       logger.warn('observability: plugin initialization failed', {
         error: e instanceof Error ? e.message : 'Unknown error',
       });

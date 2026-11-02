@@ -1,6 +1,6 @@
 ---
 name: frontmcp-observability
-description: 'Use when adding tracing, structured logging, metrics, or monitoring to a FrontMCP server. Covers zero-config OpenTelemetry distributed tracing across all flows; the this.telemetry API for custom spans, events, and attributes in tools, plugins, agents, and skills; structured JSON logging with trace correlation and configurable sinks (Winston, Pino, stdout); the off-by-default /metrics endpoint (process and framework metrics, Prometheus-compatible); vendor integrations (Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend); and testing spans, log correlation, and instrumentation. Triggers: observability, telemetry, tracing, logging, monitoring, OpenTelemetry, OTel, spans, metrics, Prometheus, Datadog, Coralogix, Logz.io, Grafana, Winston, Pino.'
+description: 'Use when adding tracing, structured logging, metrics, or monitoring to a FrontMCP server. Covers zero-config OpenTelemetry distributed tracing across all flows; the this.telemetry API for custom spans, events, and attributes in tools, plugins, agents, and skills; structured JSON logging with trace correlation and configurable sinks (Winston, Pino, stdout); the off-by-default /metrics endpoint (process and framework metrics, Prometheus-compatible); event-loop stall detection that names the calls in flight; vendor integrations (Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend); and testing spans, log correlation, and instrumentation. Triggers: observability, telemetry, tracing, logging, monitoring, OpenTelemetry, OTel, spans, metrics, Prometheus, event loop stall, blocked event loop, Datadog, Coralogix, Logz.io, Grafana, Winston, Pino.'
 tags: [router, observability, telemetry, tracing, logging, monitoring, opentelemetry, otel, spans]
 category: observability
 targets: [all]
@@ -55,6 +55,7 @@ Router for adding observability to FrontMCP servers. Covers distributed tracing 
 | Connect Coralogix, Datadog, Logz.io, Grafana       | `references/vendor-integrations.md`   |
 | Test that spans and logs are correct               | `references/testing-observability.md` |
 | Expose Prometheus `/metrics` endpoint              | `references/metrics-endpoint.md`      |
+| Find the tool that blocks the event loop           | `references/stall-detection.md`       |
 
 ## Step 2: Enable Observability
 
@@ -92,6 +93,7 @@ Follow the scenario routing table above to find the right reference for your use
 | Connect to monitoring platforms       | `references/vendor-integrations.md`   | Coralogix, Datadog, Logz.io, Grafana — OTLP and direct                      |
 | Test spans and log entries            | `references/testing-observability.md` | `createTestTracer()`, `assertSpanExists()`, integration test patterns       |
 | Expose Prometheus `/metrics` endpoint | `references/metrics-endpoint.md`      | Off-by-default Prometheus scrape endpoint with process + framework counters |
+| Find what blocks the event loop       | `references/stall-detection.md`       | `observability.stalls`: calls in flight per stall, GC apart, stall counter  |
 
 ## Common Patterns
 
@@ -195,6 +197,12 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 | Example                                                                             | Level | Description                                                          |
 | ----------------------------------------------------------------------------------- | ----- | -------------------------------------------------------------------- |
 | [`enable-metrics-endpoint`](./examples/metrics-endpoint/enable-metrics-endpoint.md) | Basic | Turn on the /metrics endpoint with defaults and scrape it with curl. |
+
+### `stall-detection`
+
+| Example                                                                      | Level | Description                                                                         |
+| ---------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------- |
+| [`find-a-blocking-tool`](./examples/stall-detection/find-a-blocking-tool.md) | Basic | Turn on stall detection and see the warning name a tool that blocks the event loop. |
 
 ## Accessing This Skill
 

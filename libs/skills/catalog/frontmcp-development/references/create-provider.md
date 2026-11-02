@@ -363,6 +363,10 @@ class SearchIndex implements OnBootstrap, OnReady, OnShutdown {
 class Server {}
 ```
 
+Each process runs its own `onReady()` timer, which suits a per-process cache. Work that must run in one process of the
+machine or project at a time (pruning a shared cache, compacting a file) belongs in a `@Duty` provider instead (see
+`create-duty`).
+
 `lifecycle.exitWhenOrphaned` decides whether the server also shuts down this way when it is orphaned: its parent process exits or, under stdio, stdin ends. It is on by default for `runStdio()`, so a stdio server whose client dies runs `onShutdown()` and exits 0 instead of running on; `false` turns it off. It is off by default for the HTTP server and `runUnixSocket()`, whose daemons usually outlive the process that started them; `true` turns it on.
 
 | Setup need                                         | Pattern                                                               | Cleanup        |
@@ -400,6 +404,7 @@ try {
 - It builds the server-level `providers`, then the `providers` of each local `@App` in `apps`. Remote apps, plugins and the other options of a server config are ignored.
 - `get(token)` looks at the server-level providers first, then each app's in order, and throws `ProviderNotAvailableError` when nothing registers the token; `tryGet(token)` returns `undefined` instead. A CONTEXT-scoped provider throws `ProviderScopedAccessError`: only a request builds it.
 - `onReady()` never runs: nothing is served. `FrontMcpLogger` can be injected, and `FrontMcpConfig` is the object you passed; `Scope` cannot, since there is none.
+- A `@Duty` provider is built but never started, so scripts and workers don't run duties. `runDuties: true` starts them (each duty's own `onReady()` first) and needs `info: { name }`, the server's name, so they share its leases; `dispose()` stops them (see `create-duty`).
 - A failing `onBootstrap()` rejects with `ProviderBootstrapError` after the providers that bootstrapped are shut down.
 - It runs in Node, and in the browser when the providers do.
 - Import the config from a module without `@FrontMcp`: importing a decorated class starts the server.

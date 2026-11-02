@@ -15,7 +15,7 @@
  * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http
  */
 import { isAnonymousSubject } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { MCP_20260728_META, type LoggingLevel, type SubscriptionFilter } from '@frontmcp/protocol';
 import { runRequestExclusive } from '@frontmcp/utils';
 
@@ -50,6 +50,7 @@ import {
   validate20260728Request,
   type JsonRpcErrorPayload,
 } from '../mcp-20260728';
+import { mcpRequestSurface } from '../mcp-handlers/mcp-surface';
 
 export const plan = {
   pre: ['parseInput', 'validate', 'router'],
@@ -384,7 +385,12 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       );
       return;
     }
-    const requested: SubscriptionFilter = parsedParams.data.notifications;
+    const auth = request[ServerRequestTokens.auth] as Authorization | undefined;
+    const mayRead = this.resourceReadCheck(auth ? authInfoFromAuthorization(auth) : {});
+    const requested: SubscriptionFilter = {
+      ...parsedParams.data.notifications,
+      resourceSubscriptions: await this.readableUris(parsedParams.data.notifications.resourceSubscriptions, mayRead),
+    };
 
     // The client ends a listen stream by disconnecting (HTTP) or by cancelling
     // the request (stdio); there is no unsubscribe RPC. Tie the registry
@@ -402,6 +408,8 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       requested,
       channels: await this.listenedChannels((body['params'] as { _meta?: Record<string, unknown> } | undefined)?._meta),
       signal: controller.signal,
+      // An update of a URI no resource is named by belongs to the acknowledged resource it sits under.
+      mayReceiveUpdate: async (uri) => !this.scope.resources.findResourceForUri(uri) || mayRead(uri),
     });
 
     this.log.info('handleSubscriptions: stream opened', {
@@ -422,6 +430,36 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
         Connection: 'keep-alive',
       },
     });
+  }
+
+  /**
+   * Whether the caller of this request may subscribe to `uri`: the `resources:subscribe` flow's checks (availability,
+   * `enabled`, authorities), run in this request's context whenever it is called, as `resources/read` would run them.
+   */
+  private resourceReadCheck(authInfo: object): (uri: string) => Promise<boolean> {
+    const runInRequest = this.buildContextRunner();
+    const ctx = { authInfo, surface: mcpRequestSurface(this.scope) };
+    return async (uri) => {
+      let allowed = false;
+      await runInRequest(async () => {
+        const request = { method: 'resources/subscribe' as const, params: { uri } };
+        allowed = await this.scope.runFlow('resources:subscribe', { request, ctx }).then(
+          () => true,
+          () => false,
+        );
+      });
+      return allowed;
+    };
+  }
+
+  /** The requested resource subscriptions the caller may read; a refused one is left out of the acknowledgement. */
+  private async readableUris(
+    uris: string[] | undefined,
+    mayRead: (uri: string) => Promise<boolean>,
+  ): Promise<string[] | undefined> {
+    if (!uris) return undefined;
+    const allowed = await Promise.all(uris.map(mayRead));
+    return uris.filter((_uri, index) => allowed[index]);
   }
 
   /**

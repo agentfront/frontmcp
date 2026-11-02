@@ -38,10 +38,13 @@ const fixtureFiles = [
   'providers-must-compile.ts',
   'tool-aliases-must-compile.ts',
   'answer-shaping-must-compile.ts',
+  'stalls-dev-events-must-compile.ts',
   'call-recorder-must-compile.ts',
   'hook-ordering-must-compile.ts',
   'hook-ordering-must-fail.ts',
   'live-surface-must-compile.ts',
+  'materialized-resources-must-compile.ts',
+  'duties-must-compile.ts',
   'offload-must-compile.ts',
   'build-manifest-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
@@ -173,6 +176,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('answer-shaping-must-compile.ts'))).toEqual([]);
   });
 
+  it('types observability.stalls and observability.devEvents, and a provider injecting FRONTMCP_LOGGER', () => {
+    expect(describeEach(inFixtureFile('stalls-dev-events-must-compile.ts'))).toEqual([]);
+  });
+
   it('types CallRecorderPlugin.init() options, on an app and on the server, and the CallRecord lines', () => {
     expect(describeEach(inFixtureFile('call-recorder-must-compile.ts'))).toEqual([]);
   });
@@ -198,6 +205,14 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types enabled as a boolean or an EnabledSource such as fileSignal(), and the surface key', () => {
     expect(describeEach(inFixtureFile('live-surface-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types resourceStore(), its keys and snapshots, @Resource({ from }) and MaterializedResourceContext', () => {
+    expect(describeEach(inFixtureFile('materialized-resources-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types @Duty, its metadata and run context, and createContainer({ runDuties, info })', () => {
+    expect(describeEach(inFixtureFile('duties-must-compile.ts'))).toEqual([]);
   });
 
   it('types this.offload() from the offloaded function, @Resource({ worker }) and the offload option', () => {

@@ -7,7 +7,7 @@
  * @module elicitation/helpers/validate-elicitation-content
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 /**
  * Validation result interface.

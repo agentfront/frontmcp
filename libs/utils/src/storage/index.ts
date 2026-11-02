@@ -29,6 +29,10 @@ export type {
 // Factory
 export { createStorage, createMemoryStorage, getDetectedStorageType } from './factory';
 
+// Change feed
+export { createChangeFeed, DEFAULT_CHANGE_FEED_COALESCE_MS, DEFAULT_CHANGE_FEED_POLL_INTERVAL_MS } from './change-feed';
+export type { ChangeFeed, ChangeFeedKind, ChangeFeedOptions } from './change-feed';
+
 // Redis client helpers
 export { attachRedisErrorListener, DEFAULT_REDIS_ERROR_LOG_INTERVAL_MS } from './redis-error-listener';
 export type { RedisErrorListenerOptions, ErrorEmitterClient } from './redis-error-listener';

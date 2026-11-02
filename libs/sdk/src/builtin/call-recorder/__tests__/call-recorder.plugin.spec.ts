@@ -251,6 +251,19 @@ async function session(
   }
 }
 
+/** Resolves once `condition` holds, checking every 10 ms; rejects naming `what` after 5 s. */
+async function waitUntil(condition: () => boolean | Promise<boolean>, what: string): Promise<void> {
+  const deadline = Date.now() + 5000;
+  while (!(await condition())) {
+    if (Date.now() > deadline) throw new Error(`Timed out after 5 s waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+function completeLinesIn(file: string): number {
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').length - 1 : 0;
+}
+
 function recordsIn(file: string): CallRecord[] {
   if (!fs.existsSync(file)) return [];
   return fs
@@ -342,9 +355,7 @@ describe('CallRecorderPlugin', () => {
           ctx,
         })) as unknown as { status: string }
       ).status;
-    for (let attempt = 0; attempt < 100 && (await statusOf()) === 'working'; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await waitUntil(async () => (await statusOf()) !== 'working', 'the task to finish');
     await server.instance.shutdown();
 
     const records = recordsIn(file);
@@ -546,7 +557,7 @@ describe('CallRecorderPlugin', () => {
     const file = path.join(dir, 'calls.jsonl');
     await session({ path: file, maxBytes: 4096 }, async (client) => {
       await client.callTool('lookup', { key: 'a' });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await waitUntil(() => completeLinesIn(file) === 1, 'the first record');
       fs.appendFileSync(file, `${'x'.repeat(4096 - fs.statSync(file).size - 20)}\n`);
       await client.callTool('lookup', { key: 'b' });
     });
@@ -559,7 +570,7 @@ describe('CallRecorderPlugin', () => {
     const file = path.join(dir, 'calls.jsonl');
     await session({ path: file, maxBytes: 1 }, async (client) => {
       await client.callTool('lookup', { key: 'a' });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await waitUntil(() => warnings.some((message) => message.includes('maxBytes')), 'the maxBytes warning');
       await client.callTool('lookup', { key: 'b' });
     });
 

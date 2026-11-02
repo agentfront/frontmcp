@@ -4,7 +4,7 @@
  * Defines the contract that npm packages must follow to be loadable by FrontMCP.
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import {
   isDecoratedAgentClass,

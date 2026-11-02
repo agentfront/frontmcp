@@ -1,5 +1,5 @@
 import { type Type } from '@frontmcp/di';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { isPackageSpecifier } from '../../esm-loader/package-specifier';
 import type { AdapterType, AgentType, PluginType, ProviderType } from '../interfaces';

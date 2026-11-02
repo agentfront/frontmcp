@@ -24,12 +24,15 @@
     "providers-must-compile.ts",
     "tool-aliases-must-compile.ts",
     "answer-shaping-must-compile.ts",
+    "stalls-dev-events-must-compile.ts",
     "live-surface-must-compile.ts",
     "offload-must-compile.ts",
     "build-manifest-must-compile.ts",
     "call-recorder-must-compile.ts",
     "hook-ordering-must-compile.ts",
     "hook-ordering-must-fail.ts",
-    "live-surface-must-compile.ts"
+    "live-surface-must-compile.ts",
+    "materialized-resources-must-compile.ts",
+    "duties-must-compile.ts"
   ]
 }

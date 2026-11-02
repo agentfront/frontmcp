@@ -1,9 +1,11 @@
 // ──── Plugin ────
-export { ObservabilityPlugin, sessionTracingId, reportStartup } from './plugin';
+export { ObservabilityPlugin, ObservabilityConfigurationError, sessionTracingId, reportStartup } from './plugin';
 export type {
   ObservabilityPluginOptions,
   ObservabilityPluginOptionsInput,
   ObservabilityLoggingOptions,
+  DevEventsOptions,
+  StallDetectionOptions,
 } from './plugin';
 
 // ──── OpenTelemetry ────
@@ -119,6 +121,22 @@ export type { GaugeSnapshotEntry, RenderOptions } from './prometheus';
 
 // ──── Process-stats collector (issue #397) ────
 export { ProcessStatsCollector } from './process-stats';
+
+// ──── Stall detection ────
+export { CallMonitor, StallDetector, InFlightCalls, STALL_SECONDS_COUNTER, describeStall, countStall } from './stalls';
+export type {
+  CallIdentity,
+  CallMethod,
+  CallRecord,
+  GcPause,
+  StallDetectorOptions,
+  StallReport,
+  StalledCall,
+} from './stalls';
+
+// ──── frontmcp dev event stream ────
+export { DevEventStream, JsonlFileSink, IpcDevEventSink } from './dev-events';
+export type { DevEvent, DevCallEvent, DevStallEvent, DevEventSink } from './dev-events';
 
 // ──── Testing Utilities ────
 export {

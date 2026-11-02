@@ -4,7 +4,7 @@
  * Detects unique auth providers across nested apps and determines
  * if orchestrated mode is required at the parent scope level.
  */
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { AuthOptions } from '../options/schema';
 import { staticAuthOptionsSchema } from '../options/static.schema';

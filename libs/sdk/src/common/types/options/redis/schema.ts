@@ -1,7 +1,7 @@
 // common/types/options/redis/schema.ts
 // Zod schema for Redis/storage configuration
 
-import { NEVER, z } from '@frontmcp/lazy-zod';
+import { NEVER, internalZ as z } from '@frontmcp/lazy-zod';
 import { describeRedisUrlConflicts, mergeRedisUrlFields } from '@frontmcp/utils';
 
 import type { PubsubOptionsInterface, RedisOptionsInterface } from './interfaces';

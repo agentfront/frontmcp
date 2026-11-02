@@ -1,6 +1,6 @@
 // file: libs/sdk/src/skill/flows/filter-skills.flow.ts
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions, type SkillEntry } from '../../common';
 import { InvalidInputError } from '../../errors';

@@ -24,8 +24,8 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_323_440 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_330_310 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_329_120 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_335_996 },
 ];
 
 const VITE_INITIAL_CHUNK_MAX_BYTES = 960_000;
@@ -46,6 +46,7 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   ),
   channels: sdkModule('channel/(?!channel\\.utils)'),
   'distributed transport': sdkModule('ha/|transport/(bus|relay|event-stores)/'),
+  duties: sdkModule('duty/'),
   elicitation: sdkModule('elicitation/(store|flows)/|elicitation/send-elicitation-result\\.tool'),
   health: sdkModule('health/'),
   'http transport': sdkModule(

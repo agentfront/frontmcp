@@ -1,7 +1,7 @@
 // common/types/options/server-info/schema.ts
 // Zod schema for server info configuration
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { IconSchema } from '@frontmcp/protocol';
 
 import { type RawZodShape } from '../../common.types';

@@ -1,7 +1,7 @@
 // common/types/options/session/schema.ts
 // Zod schema for session configuration
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { aiPlatformTypeSchema } from '../../auth/session.types';
 import { type RawZodShape } from '../../common.types';

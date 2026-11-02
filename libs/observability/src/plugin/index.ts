@@ -4,6 +4,8 @@ export type {
   ObservabilityPluginOptionsInput,
   ObservabilityLoggingOptions,
 } from './observability.plugin.types';
+export { ObservabilityConfigurationError } from './observability.errors';
+export type { DevEventsOptions, StallDetectionOptions } from './observability.options';
 export {
   sessionTracingId,
   SPAN_KEY,
