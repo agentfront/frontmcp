@@ -41,18 +41,21 @@ export function ownerQualifiedName(name: string): string | undefined {
   return separator > 0 ? `${name.slice(0, separator)}:${name.slice(separator + 1)}` : undefined;
 }
 
+/** A tool, or the names of one about to be built, as alias conflicts are read from it. */
+export type ToolAliasCandidate = Pick<ToolEntry, 'name' | 'fullName' | 'metadata'>;
+
 /**
  * One line per alias that is also the name of a tool in `tools` or the alias of another one, which would make a call
  * by that name reach a tool its caller did not mean.
  */
-export function describeToolAliasConflicts(tools: readonly ToolEntry[]): string[] {
+export function describeToolAliasConflicts(tools: readonly ToolAliasCandidate[]): string[] {
   const uniqueTools = [...new Set(tools)];
-  const toolByName = new Map<string, ToolEntry>();
+  const toolByName = new Map<string, ToolAliasCandidate>();
   for (const tool of uniqueTools) {
     toolByName.set(tool.name, tool);
     toolByName.set(tool.fullName, tool);
   }
-  const toolByAlias = new Map<string, ToolEntry>();
+  const toolByAlias = new Map<string, ToolAliasCandidate>();
   const conflicts: string[] = [];
   for (const tool of uniqueTools) {
     for (const alias of toolAliasesOf(tool)) {

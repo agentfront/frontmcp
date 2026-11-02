@@ -26,13 +26,14 @@ const CLIENT_ADDRESS_HEADERS = [
 /** Prefixes of header families `http.forwardHeaders` never keeps. */
 const REFUSED_PREFIXES = ['proxy-', 'x-forwarded-'];
 
-/** The headers `http.forwardHeaders` never keeps: credentials, `proxy-*`, hop-by-hop and client-address headers. */
+/** The headers `http.forwardHeaders` never keeps: credentials, `proxy-*`, hop-by-hop, length and client-address headers. */
 const REFUSED_HEADERS = [
   'authorization',
   'cookie',
   'set-cookie',
   'proxy-authorization',
   'proxy-authenticate',
+  'content-length',
   ...HOP_BY_HOP_HEADERS,
   ...CLIENT_ADDRESS_HEADERS,
 ];
@@ -49,10 +50,13 @@ export function isRefusedForwardHeader(name: string): boolean {
   return REFUSED_PREFIXES.some((prefix) => lowerName.startsWith(prefix)) || REFUSED_HEADERS.includes(lowerName);
 }
 
-/** The refused headers an `http.forwardHeaders` glob would match. */
+/** The refused headers an `http.forwardHeaders` glob would match, a refused family (`proxy-*`) included. */
 export function refusedHeadersMatchedBy(glob: string): string[] {
-  const matcher = globToRegex(glob.toLowerCase());
-  return REFUSED_HEADERS.filter((name) => matcher.test(name));
+  const lowerGlob = glob.toLowerCase();
+  const literalStart = lowerGlob.split(/[*?]/)[0];
+  const families = REFUSED_PREFIXES.filter((prefix) => literalStart.startsWith(prefix)).map((prefix) => `${prefix}*`);
+  const matcher = globToRegex(lowerGlob);
+  return [...families, ...REFUSED_HEADERS.filter((name) => matcher.test(name))];
 }
 
 /**

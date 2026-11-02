@@ -108,7 +108,7 @@ const forwardHeaderGlobSchema = z
       code: 'custom',
       message:
         `http.forwardHeaders: "${glob}" matches ${refused.join(', ')}. FrontMCP never forwards ` +
-        'authorization, cookie, proxy-*, hop-by-hop or client-address (host, forwarded, x-forwarded-*, x-real-ip) ' +
+        'authorization, cookie, proxy-*, hop-by-hop, content-length or client-address (host, forwarded, x-forwarded-*, x-real-ip) ' +
         'headers; name the application headers to keep instead.',
     });
   });
