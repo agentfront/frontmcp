@@ -117,6 +117,16 @@ class RowsWithNoteTool extends ToolContext {
   }
 }
 
+@Tool({ name: 'echoed_object', inputSchema: {} })
+class EchoedObjectTool extends ToolContext {
+  async execute() {
+    return {
+      content: [{ type: 'text', text: 'Echoed the request.' }],
+      structuredContent: { content: { toString: 1, rows: rows(100) } },
+    };
+  }
+}
+
 @Tool({ name: 'chart', inputSchema: {} })
 class ChartTool extends ToolContext {
   async execute() {
@@ -169,6 +179,7 @@ const foldPolicy = jest.fn((toolName: string, _answer: unknown, _context: FoldCo
     TwoTextsTool,
     RowsAndSummaryTool,
     RowsWithNoteTool,
+    EchoedObjectTool,
     ChartTool,
     FailingRowsTool,
     RowCountTool,
@@ -354,6 +365,9 @@ describe('ResultHandlesPlugin', () => {
       const withNote = await call(client, 'rows_with_note');
       expect(textAt(withNote, 0)).toBe('Rows past 100 are in the archive.');
       expect(withNote.structuredContent).toEqual({ rows: rows(100), total: 100 });
+      const echoed = await call(client, 'echoed_object');
+      expect(echoed.isError).toBeFalsy();
+      expect(textAt(echoed, 0)).toBe('Echoed the request.');
       const failing = await call(client, 'failing_rows');
       expect(failing.isError).toBe(true);
       expect(JSON.parse(textAt(failing, 0))).toHaveLength(100);
