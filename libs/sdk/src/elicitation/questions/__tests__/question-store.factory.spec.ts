@@ -134,19 +134,11 @@ describe('openPersistentQuestions', () => {
 
 describe('elicitation.persistent options', () => {
   it.each([[true], [false], [{ ttlMs: 1000 }], [{ storage: { type: 'sqlite', sqlite: { path: '/q.sqlite' } } }]])(
-    'lets the server metadata hold %j',
+    'lets the server metadata hold %j, checked when the server opens the store',
     (persistent) => {
       expect(elicitationOptionsSchema.safeParse({ enabled: true, persistent }).success).toBe(true);
     },
   );
-
-  it('refuses a value that is neither a switch nor settings', () => {
-    const result = elicitationOptionsSchema.safeParse({ enabled: true, persistent: 'yes' });
-
-    expect(result.error?.issues.map((issue) => issue.message)).toEqual([
-      'elicitation.persistent must be true, false or an object of settings',
-    ]);
-  });
 
   it.each([
     [true, {}],
@@ -160,6 +152,7 @@ describe('elicitation.persistent options', () => {
     [{ ttlMs: 1.5 }, 'elicitation.persistent: ttlMs must be a whole number of milliseconds'],
     [{ storage: { type: 'upstash' } }, "elicitation.persistent: storage.type must be 'memory', 'redis' or 'sqlite'"],
     [{ ttl: 5 }, 'elicitation.persistent: Unrecognized key: "ttl"'],
+    ['yes', 'elicitation.persistent: it must be true, false or an object of settings'],
   ])('fails the boot on %j', async (persistent, message) => {
     const opening = openPersistentQuestions({ persistent, logger });
 

@@ -15,19 +15,26 @@ import { type QuestionStore } from './question.store';
 export const DEFAULT_QUESTION_TTL_MS = 86_400_000;
 
 const persistentQuestionsOptionsSchema = z
-  .object({
-    ttlMs: z
-      .number({ message: 'ttlMs must be a number of milliseconds' })
-      .int('ttlMs must be a whole number of milliseconds')
-      .positive('ttlMs must be greater than 0')
-      .optional(),
-    storage: z
-      .object({
-        type: z.enum(['memory', 'redis', 'sqlite'], { message: "storage.type must be 'memory', 'redis' or 'sqlite'" }),
-      })
-      .passthrough()
-      .optional(),
-  } satisfies RawZodShape<PersistentQuestionsOptionsInterface>)
+  .object(
+    {
+      ttlMs: z
+        .number({ message: 'ttlMs must be a number of milliseconds' })
+        .int('ttlMs must be a whole number of milliseconds')
+        .positive('ttlMs must be greater than 0')
+        .optional(),
+      storage: z
+        .object({
+          type: z.enum(['memory', 'redis', 'sqlite'], {
+            message: "storage.type must be 'memory', 'redis' or 'sqlite'",
+          }),
+        })
+        .passthrough()
+        .optional(),
+    } satisfies RawZodShape<PersistentQuestionsOptionsInterface>,
+    {
+      error: (issue) => (issue.code === 'invalid_type' ? 'it must be true, false or an object of settings' : undefined),
+    },
+  )
   .strict();
 
 /** `elicitation.persistent`, checked: `true` is the defaults; a mistake fails the boot. */
