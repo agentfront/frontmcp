@@ -6,6 +6,7 @@ import {
   Adapter,
   App,
   DynamicAdapter,
+  FlowHooksOf,
   LogLevel,
   LogTransport,
   LogTransportInterface,
@@ -20,6 +21,8 @@ import { connect } from '../../direct/connect';
 import { type DirectMcpServer } from '../../direct/direct.types';
 import { ToolAliasConflictError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
+
+const CallToolHook = FlowHooksOf('tools:call-tool');
 
 @Tool({ name: 'get_ticket', inputSchema: { id: z.string() } })
 class GetTicketTool extends ToolContext {
@@ -361,6 +364,57 @@ describe('tool alias conflicts', () => {
     expect(result.structuredContent).toEqual({ tool: 'count_orders' });
     const { tools } = await server.listTools();
     expect(tools.map((tool) => tool.name)).not.toContain('feed_orders');
+    await server.dispose();
+  });
+  it('builds nothing from a refused adapter update, so a later update runs its tool hooks once', async () => {
+    const hookRuns: string[] = [];
+
+    @Tool({ name: 'count_stock', inputSchema: {} })
+    class CountStockTool extends ToolContext {
+      async execute() {
+        return {};
+      }
+    }
+
+    @Tool({ name: 'feed_stock', aliases: ['count_stock'], inputSchema: {} })
+    class FeedStockTool extends ToolContext {
+      async execute() {
+        return {};
+      }
+
+      @CallToolHook.Will('execute')
+      record() {
+        hookRuns.push('feed_stock');
+      }
+    }
+
+    let publish: (response: FrontMcpAdapterResponse) => void = () => undefined;
+
+    @Adapter({ name: 'stock-feed' })
+    class StockFeedAdapter extends DynamicAdapter<{ name: string }> {
+      constructor(readonly options: { name: string }) {
+        super();
+      }
+      async fetch(): Promise<FrontMcpAdapterResponse> {
+        return { tools: [CountStockTool] };
+      }
+      onUpdate(callback: (response: FrontMcpAdapterResponse) => void): () => void {
+        publish = callback;
+        return () => undefined;
+      }
+    }
+
+    @App({ id: 'stock', name: 'Stock', adapters: [StockFeedAdapter.init({ name: 'stock-feed' })] })
+    class StockApp {}
+
+    const server = await FrontMcpInstance.createDirect(serverWith(StockApp));
+
+    expect(() => publish({ tools: [CountStockTool, FeedStockTool] })).toThrow(ToolAliasConflictError);
+    publish({ tools: [FeedStockTool] });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await server.callTool('feed_stock', {});
+
+    expect(hookRuns).toEqual(['feed_stock']);
     await server.dispose();
   });
 });
