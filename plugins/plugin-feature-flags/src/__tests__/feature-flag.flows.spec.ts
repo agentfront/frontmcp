@@ -62,7 +62,7 @@ class EnabledTool extends ToolContext {
   }
 }
 
-@Tool({ name: 'disabled_tool', inputSchema: {}, featureFlag: 'flag-off' })
+@Tool({ name: 'disabled_tool', aliases: ['legacy.disabled'], inputSchema: {}, featureFlag: 'flag-off' })
 class DisabledTool extends ToolContext {
   async execute() {
     return { ran: 'disabled_tool' };
@@ -220,6 +220,14 @@ describe('FeatureFlagPlugin through real flows (GHSA-gf7p-j3hr-h5h4)', () => {
 
       expect(result).toContain('"isError":true');
       expect(result).toContain('disabled by feature flag');
+    });
+
+    it('refuses tools/call on a disabled tool called by its alias', async () => {
+      const result = JSON.stringify(await client.callTool('legacy.disabled', {}));
+
+      expect(result).toContain('"isError":true');
+      expect(result).toContain('disabled by feature flag');
+      expect(result).not.toContain('"ran"');
     });
 
     it('refuses tools/call with a remedy that names the flag', async () => {
