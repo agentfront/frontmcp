@@ -224,6 +224,7 @@ class StoredResourceKey<T> implements ResourceKey<T> {
       () => -1,
     );
     const check = async (revision: number): Promise<number> => {
+      if (!active) return revision;
       let snapshot: ResourceSnapshot<T>;
       try {
         snapshot = await this.get();
