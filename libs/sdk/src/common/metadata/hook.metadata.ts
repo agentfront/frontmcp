@@ -4,7 +4,8 @@ import { type EntryOwnerRef } from '../entries/base.entry';
 import { type ProviderRegistryInterface } from '../interfaces/internal';
 import { type FlowName } from './flow.metadata';
 
-export type HookStageType = 'stage' | 'will' | 'did' | 'around';
+/** A `did` hook runs only when its stage succeeds; a `finally` hook runs on every outcome and cannot change it. */
+export type HookStageType = 'stage' | 'will' | 'did' | 'around' | 'finally';
 export type HookPriority = number;
 
 /**

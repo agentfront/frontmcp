@@ -151,7 +151,7 @@ export function WillHookOf<Name extends FlowName>(flow: Name) {
 }
 
 /**
- * Creates a typed Did hook decorator (runs after stage)
+ * Creates a typed Did hook decorator (runs after the stage succeeds, and not when it fails)
  */
 export function DidHookOf<Name extends FlowName>(flow: Name) {
   type T = ExtendFlows[Name]['stage'];
@@ -175,10 +175,22 @@ export function AroundHookOf<Name extends FlowName>(name: Name) {
 }
 
 /**
+ * Creates a typed Finally hook decorator (runs after the stage whatever its outcome; cannot change it)
+ */
+export function FinallyHookOf<Name extends FlowName>(name: Name) {
+  type T = ExtendFlows[Name]['stage'];
+  type Ctx = ExtendFlows[Name]['ctx'];
+  const base = make(name, 'finally');
+  return function (stage: T, opts: HookOptions<Ctx> = {}) {
+    return base<Ctx, T>(stage, opts);
+  };
+}
+
+/**
  * Creates all hook decorators for a specific flow
  * @example
  * ```typescript
- * const { Stage, Will, Did, Around } = FlowHooksOf('http:request');
+ * const { Stage, Will, Did, Around, Finally } = FlowHooksOf('http:request');
  *
  * class HttpRequestFlow {
  *   @Stage('checkAuthorization')
@@ -195,5 +207,6 @@ export function FlowHooksOf<Name extends FlowName>(name: Name) {
     Will: WillHookOf(name),
     Did: DidHookOf(name),
     Around: AroundHookOf(name),
+    Finally: FinallyHookOf(name),
   };
 }
