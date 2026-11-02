@@ -22,6 +22,7 @@ export type HookPriority = number;
 export type HookAppliesTo = 'own-app' | 'uncovered-apps';
 
 export interface HookOptions<Ctx> {
+  /** Lowest runs first (default 0), and the lowest Around is outermost; ties run plugin and provider hooks in registration order, then the flow's own step, then the entry class's hooks. */
   priority?: HookPriority;
   filter?: (ctx: Ctx) => boolean | Promise<boolean>;
   appliesTo?: HookAppliesTo;

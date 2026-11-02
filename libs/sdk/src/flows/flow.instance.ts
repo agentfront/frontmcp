@@ -1,5 +1,8 @@
 import 'reflect-metadata';
 
+import { tokenName } from '@frontmcp/di';
+import { isDebug, isDevelopment } from '@frontmcp/utils';
+
 import {
   FlowControl,
   FlowEntry,
@@ -9,6 +12,7 @@ import {
   type FlowInputOf,
   type FlowName,
   type FlowOutputOf,
+  type FlowPhase,
   type FlowPlan,
   type FlowRecord,
   type FlowStagesOf,
@@ -36,6 +40,7 @@ import { matchMountedPath } from './flow.http-path';
 import {
   cloneStageMap,
   collectFlowHookMap,
+  describeHookOrder,
   mergeHookMetasIntoStageMap,
   type HookRunner,
   type StageMap,
@@ -118,6 +123,8 @@ function stageBasesOf(group: readonly string[]): string[] {
   return bases;
 }
 
+const FLOW_PHASES: readonly FlowPhase[] = ['pre', 'execute', 'post', 'finalize', 'error'];
+
 /** The order after the last entry of a stage map, where hooks merged into it start. */
 function nextStageOrder<C>(stages: StageMap<C>): number {
   return Math.max(0, ...Object.values(stages).flatMap((list) => list.map((e) => e._order ?? 0))) + 1;
@@ -132,6 +139,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   private hooks: HookRegistry;
   private readonly logger: FrontMcpLogger;
   private baseStageOrderEnd?: number;
+  /** In dev mode or with DEBUG only: per hook owner, the entry classes (`undefined`: none) whose hook order is logged. */
+  private readonly loggedHookOrders =
+    isDevelopment() || isDebug() ? new Map<string | undefined, Set<Token | undefined>>() : undefined;
 
   constructor(scope: ScopeEntry, record: FlowRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
     super(scope, record);
@@ -490,6 +500,8 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // instance hooks do when the stage that builds the instance appends them.
     await materializeAndMerge(entryStaticHooks);
 
+    if (this.loggedHookOrders) this.logHookOrderOnce(this.loggedHookOrders, stages, hookOwnerId, entryClass);
+
     let responded: FlowOutputOf<Name> | undefined;
 
     const toStageResult = (e: unknown): StageResult => {
@@ -755,5 +767,37 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     await runFinalizeStage();
 
     return responded;
+  }
+
+  /** Logs the order the run's hooks resolve to, on the first run for its hook owner and its entry class's hooks. */
+  private logHookOrderOnce(
+    logged: Map<string | undefined, Set<Token | undefined>>,
+    stages: StageMap<FlowType>,
+    ownerId: string | undefined,
+    entryClass: Token | undefined,
+  ): void {
+    const entryHooks = entryClass
+      ? this.hooks.getClsHooks(entryClass).filter((hook) => hook.metadata.flow === this.name)
+      : [];
+    const entryKey = entryHooks.length > 0 ? entryClass : undefined;
+    const loggedEntries = logged.get(ownerId) ?? new Set<Token | undefined>();
+    if (loggedEntries.has(entryKey)) return;
+    logged.set(ownerId, loggedEntries.add(entryKey));
+
+    // The entry's instance hooks join when its context is built: merge them where they will land.
+    const resolved = cloneStageMap(stages);
+    const instanceHooks = entryHooks.filter((hook) => !hook.metadata.static).map((hook) => hook.metadata);
+    mergeHookMetasIntoStageMap(this.FlowClass, resolved, instanceHooks, nextStageOrder(stages));
+    const stageNames = FLOW_PHASES.flatMap((phase) => {
+      const group = this.plan[phase];
+      return group ? stageBasesOf(group) : [];
+    });
+    const lines = describeHookOrder(stageNames, this.stages, resolved, this.FlowClass.name);
+    if (lines.length === 0) return;
+
+    const owner = ownerId === undefined ? '' : ` for '${ownerId}'`;
+    const entry = entryKey === undefined ? '' : ` and ${tokenName(entryKey)}`;
+    const header = `Hook order of '${this.name}'${owner}${entry}, lowest priority first (an around hook wraps what its brackets hold):`;
+    this.logger.info([header, ...lines].join('\n'));
   }
 }

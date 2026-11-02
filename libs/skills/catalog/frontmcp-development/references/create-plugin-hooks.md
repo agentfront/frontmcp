@@ -59,7 +59,7 @@ A stage runs its `@Will` hooks, then its body (wrapped by its `@Around` hooks), 
 - `@Did` runs only when the stage succeeded. When a `@Will` hook, the body or an `@Around` hook fails, the stage's `@Did` hooks are skipped. So a `@Did` hook that closes what a `@Will` hook opened (a span, a timer, a lock) leaks it on every failure.
 - `@Finally` runs after the stage on every outcome: when it succeeded or responded, when it failed, when a `@Will` hook failed or responded in its place, when an `@Around` hook failed, and when `finalize` refused an answer the tool's output schema rejects (`InvalidOutputError`). Read the failure from `ctx.error`: the first error the run failed with (what a stage or hook threw, or passed to `ctx.fail()`), `undefined` while the run has none. It is `ctx.state.flowError`, which the state types only on `tools:call-tool`, `resources:read-resource`, `prompts:get-prompt` and `jobs:execute-job`; `ctx.error` is typed on every flow.
 - A `@Finally` hook cannot change the outcome. If it calls `ctx.respond()` or `ctx.fail()`, or throws, the flow logs a warning and goes on as if it had not: the client gets the same answer or the same error, and the stage's other `@Finally` hooks still run.
-- `@Finally` hooks of one stage run in `priority` order, like every other hook. A stage the flow never reaches (because an earlier stage failed) runs none of its hooks, `@Finally` included: hook `finalize` to see the end of every call.
+- `@Finally` hooks of one stage run in `priority` order, lowest first, like every other hook (see [Hook Order](#hook-order)). A stage the flow never reaches (because an earlier stage failed) runs none of its hooks, `@Finally` included: hook `finalize` to see the end of every call.
 
 ```typescript
 import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
@@ -89,12 +89,57 @@ Up to 1.10.15 there was no `@Finally`: a failure in `finalize` (an output schema
 
 ### What `@Stage` Does
 
-A `@Stage('execute')` hook does not replace the flow's own `execute` step: it adds a step to that stage, and the flow's own step still runs. The steps of a stage run in `priority` order (lower first). At equal priority, a plugin's or provider's step runs before the flow's own step, and a step declared on a `@Tool` class runs after it. The value a `@Stage` method returns is ignored.
+A `@Stage('execute')` hook does not replace the flow's own `execute` step: it adds a step to that stage, and the flow's own step still runs. The steps of a stage run in `priority` order (lower first). At equal priority, a plugin's or provider's step runs before the flow's own step, and a step declared on a `@Tool` class runs after it (see [Hook Order](#hook-order)). The value a `@Stage` method returns is ignored.
 
 To keep the flow's own step from running:
 
 - Call `ctx.respond(result)` from the `@Stage` (or a `@Will`) hook. The flow ends with that result: it skips the rest of the stage and the main stages after it, while the stage's `@Finally` hooks (and its `@Did` hooks, when a `@Stage` hook answered) and the cleanup stages (in `tools:call-tool`: `releaseSemaphore`, `releaseQuota`, `applyUI`, `finalize`) still run. In `tools:call-tool`, `result` is a complete MCP `CallToolResult`; it does not go through the tool's output schema.
 - Or use an `@Around` hook that does not call `next()`. The stage is skipped and the flow goes on; in `tools:call-tool`, set `ctx.state.required.toolContext.output`, and the result is validated and formatted like the tool's own.
+
+## Hook Order
+
+Hooks on one stage run in `priority` order, **lowest first**; the default is `0`, and a higher number does not run earlier. A stage runs its `@Will` hooks, then its steps (the flow's own step and the `@Stage` hooks) wrapped by its `@Around` hooks, then its `@Did` hooks, then its `@Finally` hooks, each list in `priority` order.
+
+- **Ties.** At equal priority, the hooks of plugins and providers run in the order they were registered (an app's plugins in the order its `plugins` array lists them), then the flow's own step, then the hooks declared on the entry class (`@Tool`, `@Resource`, `@Prompt`, `@Agent`, `@Job`): its `static` hooks, then its instance hooks.
+- **Around nesting.** The `@Around` hook with the lowest priority is the outermost: its code before `next()` runs first and its code after `next()` runs last. The `@Around` hooks of a stage wrap all of its steps, but not its `@Will`, `@Did` or `@Finally` hooks.
+
+Two plugins on the same stage, where the feature gate must refuse before the setup gate runs:
+
+```typescript
+import { App, FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
+
+@Plugin({ name: 'setup-gate' })
+export class SetupGatePlugin {
+  @ToolHook.Will('execute', { priority: 10 })
+  requireSetup(ctx: FlowCtxOf<'tools:call-tool'>) {
+    // refuse when the account is not set up
+  }
+}
+
+@Plugin({ name: 'feature-gate' })
+export class FeatureGatePlugin {
+  @ToolHook.Will('execute', { priority: -10 })
+  refuseDisabled(ctx: FlowCtxOf<'tools:call-tool'>) {
+    // refuse when the feature is disabled
+  }
+}
+
+@App({ name: 'billing', plugins: [SetupGatePlugin, FeatureGatePlugin], tools: [InvoiceTool] })
+export class BillingApp {}
+```
+
+`refuseDisabled` (`-10`) runs before `requireSetup` (`10`), though its plugin is listed second. At equal priorities, `requireSetup` would run first, because its plugin is listed first.
+
+### Seeing the Resolved Order
+
+With `NODE_ENV=development`, or `DEBUG=1`, a flow logs at info level the order its hooks resolve to, on its first run for each hook owner (the app of the entry the run is for) and for each entry class that declares hooks of its own. It is logged once, not per request, and nothing is built outside dev mode. Each line is a stage that has hooks, with its steps in the order they run, as `type Class.method (priority)`; an `@Around` hook's brackets hold what it wraps:
+
+```text
+[FlowInstance] INFO Hook order of 'tools:call-tool' for 'billing', lowest priority first (an around hook wraps what its brackets hold):
+  execute: will FeatureGatePlugin.refuseDisabled (-10) → will SetupGatePlugin.requireSetup (10) → stage CallToolFlow.execute (0)
+```
+
+The print is new in 1.10.16.
 
 ## Available Flow Names
 
@@ -351,7 +396,7 @@ All five decorators accept an optional options object:
 })
 ```
 
-- **priority** (`number`) - Execution order when multiple hooks target the same stage. Lower values run first, for `@Will`, `@Did`, `@Around`, `@Finally` and `@Stage` alike. Default: `0`.
+- **priority** (`number`) - Execution order when multiple hooks target the same stage. Lower values run first, for `@Will`, `@Did`, `@Around`, `@Finally` and `@Stage` alike, and the lowest `@Around` is the outermost. Default: `0`. Ties and an example: [Hook Order](#hook-order).
 - **filter** (`(ctx) => boolean`) - A predicate that receives the flow context, typed like the hook's (`ctx.toolName`, `ctx.request`, ...). Return `false` to skip this hook for the current invocation.
 - **appliesTo** (`'own-app' | 'uncovered-apps'`) - A hook of a plugin installed on an app runs, in `tools/call`, `resources/read`, `prompts/get` and `completion/complete`, only for that app's entries (`'own-app'`), unless the plugin has `scope: 'server'`. With `'uncovered-apps'` it also runs for the entries of any app that has no instance of the same hook (same class and method) of its own or from a server-level plugin. Use it for gates an entry's metadata asks for (approval, feature flags), so the entry is not left ungated when the plugin sits on another app. Server-level plugins' hooks, and list-flow hooks, already run for every app.
 
@@ -468,7 +513,7 @@ import { LoggingPlugin } from './plugins/logging.plugin';
 export class MyApp {}
 ```
 
-Plugins are initialized in array order. Hook priority determines execution order within the same stage.
+Plugins are initialized in array order. Hook priority determines execution order within the same stage, lowest first; at equal priority, hooks run in array order (see [Hook Order](#hook-order)).
 
 Hooks declared on an app's providers, on its plugins (including plugins nested inside them), and on those plugins' providers run only for that app's tools, resources and prompts (`tools:call-tool`, `resources:read-resource`, `prompts:get-prompt`, `completion:complete`), including the ones its adapters and plugins provide, such as the tools an OpenAPI adapter generates. Plugins and providers registered on the server (`@FrontMcp({ plugins, providers })`) apply to every app. So do the hooks of a plugin declared with `scope: 'server'`, those on its providers included, even when it is installed on one app; its providers and context extensions still stay with that app, and each app that installs it adds another copy of its hooks that runs for every app. Up to 1.9.0 those hooks ran only for the installing app. Resources and prompts the server serves outside every app, such as the SEP-2640 `skill://` resources, run every app's hooks.
 
@@ -610,7 +655,7 @@ An instance method on an earlier stage, or `Will`/`Around` on `createToolCallCon
 | `InvalidHookFlowError` at startup                                   | Entry-class hook that could never run                                                                                                    | Make early-stage hooks `static`; move list-flow hooks (and a `@Job` hook for a flow other than `jobs:execute-job`) to a plugin or a provider |
 | Hook fires for wrong flow                                           | Used wrong flow name in `FlowHooksOf`                                                                                                    | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)                                                                       |
 | `@Around` skips the stage entirely                                  | `next()` not called inside the around handler                                                                                            | Always `await next()` to execute the wrapped stage                                                                                           |
-| Multiple hooks execute in wrong order                               | Priorities not set or conflicting                                                                                                        | Set explicit `priority` values; lower numbers execute first                                                                                  |
+| Multiple hooks execute in wrong order                               | Priorities not set, or set as if a higher number ran first                                                                               | Lower numbers execute first: give the hook that must run first the lowest `priority`; run with `NODE_ENV=development` to log the order       |
 | The tool still runs despite a plugin `@Stage`                       | `@Stage` adds a step; it does not replace the stage                                                                                      | End the flow with `ctx.respond(result)`, or use `@Around` without calling `next()`                                                           |
 | A span or timer opened in `@Will` stays open                        | It is closed in `@Did`, which a failed stage skips                                                                                       | Close it in `@Finally` on the same stage                                                                                                     |
 | `ctx.respond()` in a `@Finally` hook does nothing                   | `@Finally` cannot change a stage's outcome                                                                                               | Answer from `@Will`, `@Stage` or `@Around`; the flow logs a warning for each ignored `@Finally` response or throw                            |
