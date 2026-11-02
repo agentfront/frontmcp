@@ -104,6 +104,11 @@ export class StallDetector {
     this.calls = new InFlightCalls(this.now);
   }
 
+  /** Whether it samples: started, on a runtime that measures the loop delay, and not stopped. */
+  get running(): boolean {
+    return this.timer !== undefined;
+  }
+
   start(): void {
     if (this.histogram) return;
     this.histogram = this.createHistogram();

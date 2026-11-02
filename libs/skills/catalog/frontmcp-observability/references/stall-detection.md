@@ -92,7 +92,7 @@ each call, with the same fields as the report (`type: "stall"`, `stallMs`, `gcMs
   `resources:read-resource` and `prompts:get-prompt`, and each call is reported by `Finally` hooks on `finalize`. The
   hooks exist only when `stalls` or dev events are on.
 - A stall is reported on the sample after the one that measured it, so the GC pauses of the stall have been delivered.
-- Node.js only: where `perf_hooks` is missing (edge runtimes) the detector does nothing.
+- Node.js only: where `perf_hooks` is missing (edge runtimes) the detector does nothing, and keeps no calls in flight.
 
 The detector names the calls in flight; it does not profile them. When several calls run during a stall, all are named.
 

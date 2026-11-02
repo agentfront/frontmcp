@@ -178,11 +178,13 @@ describe('StallDetector', () => {
 
   it('samples on an unref-ed interval no longer than the threshold, and stops cleanly', () => {
     const h = harness(50);
+    expect(h.detector.running).toBe(true);
     h.block(80);
     jest.advanceTimersByTime(50);
     expect(h.histogram.reset).toHaveBeenCalledTimes(1);
 
     h.detector.stop();
+    expect(h.detector.running).toBe(false);
     expect(h.reports).toHaveLength(1);
     expect(h.histogram.disable).toHaveBeenCalled();
     expect(h.stopGc).toHaveBeenCalled();
@@ -195,6 +197,7 @@ describe('StallDetector', () => {
     const onStall = jest.fn();
     const detector = new StallDetector({ thresholdMs: 200, onStall, histogram: () => undefined });
     detector.start();
+    expect(detector.running).toBe(false);
     jest.advanceTimersByTime(1_000);
     detector.sample();
     detector.stop();

@@ -29,13 +29,22 @@ const toolFlow = (state: Record<string, unknown> = {}) => ({
   request: { sessionId: 'session-1' },
 });
 
-const stallsOnly = (thresholdMs = 200) => new CallMonitor({ thresholdMs }, false, logger());
+const started: CallMonitor[] = [];
+
+/** A monitor with stall detection only, started as the server starts it when it serves. */
+function stallsOnly(thresholdMs = 200): CallMonitor {
+  const monitor = new CallMonitor({ thresholdMs }, false, logger());
+  monitor.onReady();
+  started.push(monitor);
+  return monitor;
+}
 
 describe('CallMonitor', () => {
   const env = { ...process.env };
 
-  afterEach(() => {
+  afterEach(async () => {
     process.env = { ...env };
+    await Promise.all(started.splice(0).map((monitor) => monitor.onShutdown()));
   });
 
   it('is a provider of ObservabilityPlugin only when stalls or dev events are on, built from the SDK logger', () => {
@@ -92,6 +101,22 @@ describe('CallMonitor', () => {
     await monitor.trackPromptExecution({ state: { prompt: { fullName: 'docs:summary' } } }, record);
 
     expect(seen).toEqual(['resources/read docs:readme', 'prompts/get docs:summary']);
+  });
+
+  it('keeps no call in flight while the detector is not sampling: before the server serves and after shutdown', async () => {
+    const monitor = new CallMonitor({ thresholdMs: 200 }, false, logger());
+    const seen: number[] = [];
+    const record = async () => {
+      seen.push(monitor.stalls?.calls.running().length ?? -1);
+    };
+
+    await monitor.trackToolExecution(toolFlow(), record);
+    monitor.onReady();
+    await monitor.trackToolExecution(toolFlow(), record);
+    await monitor.onShutdown();
+    await monitor.trackToolExecution(toolFlow(), record);
+
+    expect(seen).toEqual([0, 1, 0]);
   });
 
   it('runs execute untracked without a stall detector or a resolved entry', async () => {

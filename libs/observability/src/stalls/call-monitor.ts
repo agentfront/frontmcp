@@ -143,7 +143,8 @@ export class CallMonitor {
   private track(ctx: unknown, method: CallMethod, next: () => Promise<void>): Promise<void> {
     const flow = ctx as CallFlowContext;
     const entry = resolvedEntryOf(flow, method);
-    if (!this.stalls || !entry) return next();
+    // Calls are pruned only by the sampler, so none is kept while it does not run.
+    if (!this.stalls?.running || !entry) return next();
     return this.stalls.calls.track({ method, entry, ...sessionOf(flow) }, next, () => flow.state?.abandonedExecution);
   }
 
