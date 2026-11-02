@@ -505,4 +505,24 @@ describe('internalZ', () => {
       expect(held).not.toContain(options);
     }
   });
+
+  it('lets a built chained stand-in go of the stand-in it was chained on', () => {
+    const parent = internalZ.object({ a: internalZ.string() });
+    const extended = parent.extend({ b: internalZ.number() });
+
+    extended.parse({ a: 'x', b: 1 });
+
+    expect(Object.values(targetOf(extended))).not.toContain(targetOf(parent));
+  });
+
+  it('builds from the same arguments when a build that threw is tried again', () => {
+    const shape = { a: internalZ.string() };
+    const conflicting = { message: 'm', error: 'e' };
+    const object = internalZ.object(shape, conflicting);
+    const optional = internalZ.object(shape, conflicting).optional();
+
+    for (const schema of [object, optional, object, optional]) {
+      expect(() => schema.parse({ a: 1 })).toThrow('Cannot specify both `message` and `error` params');
+    }
+  });
 });

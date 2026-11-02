@@ -22,9 +22,9 @@ abstract class InternalLazySchema extends LazyZodSchema {
   }
 
   private static buildOnce(this: InternalLazySchema): ZodTypeAny {
-    const args = this.args;
+    const built = this.buildWith(this.args);
     this.args = NO_ARGS;
-    return this.buildWith(args);
+    return built;
   }
 
   protected abstract buildWith(args: readonly unknown[]): ZodTypeAny;
@@ -54,18 +54,23 @@ class FactoryStandIn extends InternalLazySchema {
 }
 
 class ChainedStandIn extends InternalLazySchema {
+  private parent: InternalLazySchema | undefined;
+
   constructor(
-    private readonly parent: InternalLazySchema,
+    parent: InternalLazySchema,
     private readonly method: string,
     args: readonly unknown[],
     builtWithParent: boolean,
   ) {
     super(args, builtWithParent);
+    this.parent = parent;
   }
 
   protected buildWith(args: readonly unknown[]): ZodTypeAny {
-    const real = this.parent.materialize() as unknown as Record<string, SchemaFactory>;
-    return real[this.method](...args.map(withBuiltChildren));
+    const real = (this.parent as InternalLazySchema).materialize() as unknown as Record<string, SchemaFactory>;
+    const built = real[this.method](...args.map(withBuiltChildren));
+    this.parent = undefined;
+    return built;
   }
 }
 
