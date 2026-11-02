@@ -59,5 +59,10 @@ export function ensureSocketsDir(): void {
   fs.mkdirSync(PM_DIRS.sockets, { recursive: true, mode: 0o700 });
   const rootMode = fs.statSync(PM_DIRS.root).mode & 0o7777;
   if (rootMode & GROUP_OR_OTHER_WRITE) fs.chmodSync(PM_DIRS.root, rootMode & ~GROUP_OR_OTHER_WRITE);
+  if (fs.lstatSync(PM_DIRS.sockets).isSymbolicLink()) {
+    throw new Error(
+      `Refusing to use ${PM_DIRS.sockets}: it is a symlink. Replace it with a directory only you can write to.`,
+    );
+  }
   fs.chmodSync(PM_DIRS.sockets, 0o700);
 }

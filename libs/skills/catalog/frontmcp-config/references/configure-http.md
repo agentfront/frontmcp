@@ -196,9 +196,10 @@ browser sends one on every cross-site `POST`. Rejecting the absent case breaks e
 
 ### No CORS Headers (Default)
 
-When `cors` is not specified, the server sends **no CORS headers**. A cross-origin request still
-reaches the server and is served normally — the browser simply refuses to let the calling page read
-the response. Non-browser clients are unaffected: CORS is a browser rule, **not server-side access
+When `cors` is not specified, the server sends **no CORS headers**. On a loopback bind, the derived
+`Origin` check ([DNS Rebinding Protection](#dns-rebinding-protection)) refuses a request from another
+site with `403`. Otherwise a cross-origin request reaches the server and is served normally — the
+browser simply refuses to let the calling page read the response. Non-browser clients are unaffected: CORS is a browser rule, **not server-side access
 control**. If you need to keep callers out, use authentication.
 
 `cors: {}` and `cors: { origin: false }` behave identically to omitting the option — the middleware
@@ -489,15 +490,16 @@ Windows named pipes are not checked):
   `SocketPermissionError`. Where the umask cannot be set (a worker thread, or a cluster worker,
   whose socket the primary binds), the socket's directory must be owner-only (`0700`) instead, or
   startup fails with `SocketPermissionError` before binding.
-- The directory, and every directory above it, must belong to you (or root), and must not be
-  writable by the group or others unless it has the sticky bit (as `/tmp` does): otherwise another
-  user could rename it and put their own socket at the path. The sticky bit does not bind a
-  directory's owner, so a sticky directory another user owns is refused too. Otherwise startup fails
-  with `UnsafeSocketDirectoryError`, which names the directory and its mode. `frontmcp socket` and
+- The directory, and every directory above it (along the path as given and along the path its
+  symlinks lead to), must belong to you (or root), and must not be writable by the group or others
+  unless it has the sticky bit (as `/tmp` does): otherwise another user could rename it and put
+  their own socket at the path. The sticky bit does not bind a directory's owner, so a sticky
+  directory another user owns is refused too. Otherwise startup fails with
+  `UnsafeSocketDirectoryError`, which names the directory and its mode. `frontmcp socket` and
   `frontmcp start --socket` create `~/.frontmcp/sockets` as `0700` and take group and other write
-  away from `~/.frontmcp`. Prefer it (or another directory
-  only you can write to) over `/tmp`: while your server is down, another user can create a socket at
-  a predictable `/tmp` path and your clients connect to theirs.
+  away from `~/.frontmcp`. Prefer it (or another directory only you can write to) over `/tmp`:
+  while your server is down, another user can create a socket at a predictable `/tmp` path and your
+  clients connect to theirs.
 - A socket a crashed server left behind is removed and replaced. A live socket (a server answers on
   it) fails with `SocketInUseError` and that server keeps serving. A path that is not a socket, or a
   socket another user owns, fails with `SocketPathConflictError` and is left in place.

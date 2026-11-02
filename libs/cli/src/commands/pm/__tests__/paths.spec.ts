@@ -109,6 +109,18 @@ describe('pm sockets directory', () => {
     },
   );
 
+  posixIt('refuses a symlinked sockets directory, and leaves the directory it points to as it was', () => {
+    const paths = pathsUnder(home);
+    const elsewhere = path.join(home, 'elsewhere');
+    fs.mkdirSync(elsewhere, { mode: 0o755 });
+    fs.chmodSync(elsewhere, 0o755);
+    fs.mkdirSync(paths.PM_DIRS.root, { recursive: true });
+    fs.symlinkSync(elsewhere, paths.PM_DIRS.sockets);
+
+    expect(() => paths.ensureSocketsDir()).toThrow(paths.PM_DIRS.sockets);
+    expect(fs.statSync(elsewhere).mode & 0o777).toBe(0o755);
+  });
+
   posixIt('tightens a sockets directory an earlier version created with the default mode', () => {
     const paths = pathsUnder(home);
     fs.mkdirSync(paths.PM_DIRS.sockets, { recursive: true, mode: 0o775 });

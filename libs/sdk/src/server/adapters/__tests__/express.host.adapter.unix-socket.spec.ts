@@ -201,6 +201,20 @@ describe('ExpressHostAdapter on a Unix socket', () => {
     expect(fs.existsSync(socketPath)).toBe(false);
   });
 
+  posixIt('refuses a socket reached through a symlink whose target sits in a directory others can write', async () => {
+    const shared = path.join(directory, 'shared');
+    fs.mkdirSync(path.join(shared, 'socks'), { recursive: true, mode: 0o700 });
+    fs.chmodSync(shared, 0o777);
+    fs.symlinkSync(path.join(shared, 'socks'), path.join(directory, 'link'));
+    socketPath = path.join(directory, 'link', 's.sock');
+
+    const failure = start();
+
+    await expect(failure).rejects.toBeInstanceOf(UnsafeSocketDirectoryError);
+    await expect(failure).rejects.toThrow(`under ${path.join(fs.realpathSync(directory), 'shared')} (mode 0777)`);
+    expect(fs.existsSync(socketPath)).toBe(false);
+  });
+
   posixIt('replaces a stale socket a crashed server left behind', async () => {
     leaveStaleSocket(socketPath);
     expect(fs.lstatSync(socketPath).isSocket()).toBe(true);
