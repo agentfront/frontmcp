@@ -46,15 +46,22 @@ jest.mock('../../exec/cli-runtime/schema-extractor', () => ({
   SYSTEM_TOOL_NAMES: new Set<string>(),
 }));
 
+jest.mock('../../server-manifest', () => ({
+  ...jest.requireActual('../../server-manifest'),
+  serverManifestOf: jest.fn(),
+}));
+
 import { buildMcpb } from '../index';
 import { validateMcpb } from '../validate';
 import { loadExecConfig } from '../../exec/config';
 import { bundleWithEsbuild } from '../../exec/esbuild-bundler';
 import { extractSchemas } from '../../exec/cli-runtime/schema-extractor';
+import { serverManifestOf } from '../../server-manifest';
 
 const mockLoadExecConfig = loadExecConfig as jest.Mock;
 const mockBundleWithEsbuild = bundleWithEsbuild as jest.Mock;
 const mockExtractSchemas = extractSchemas as jest.Mock;
+const mockServerManifestOf = serverManifestOf as jest.Mock;
 
 describe('buildMcpb integration', () => {
   let tmp: string;
@@ -173,6 +180,33 @@ describe('buildMcpb integration', () => {
 
     // Stage dir cleaned up
     expect(fs.existsSync(path.join(projectRoot, 'dist', 'mcpb', '__stage'))).toBe(false);
+  });
+
+  it('ships the server manifest in the archive, next to the server it describes', async () => {
+    const serverManifest = { manifestVersion: 1, tools: [{ name: 'greet', description: 'Say hi' }], skills: [] };
+    mockServerManifestOf.mockResolvedValue(serverManifest);
+
+    await buildMcpb({ _: [], outDir: 'dist/mcpb' });
+
+    const validation = await validateMcpb(path.join(projectRoot, 'dist', 'mcpb', 'demo-app-1.2.3.mcpb'));
+    expect(validation.errors).toEqual([]);
+    expect(validation.entries).toContain('server/frontmcp.manifest.json');
+    expect(mockServerManifestOf).toHaveBeenCalledWith(expect.any(String), '/fake/src/main.ts');
+  });
+
+  it('stages the server manifest only when one was built and --no-manifest is not set', async () => {
+    const staged = path.join(projectRoot, 'dist', 'mcpb', '__stage', 'server', 'frontmcp.manifest.json');
+    const serverManifest = { manifestVersion: 1, tools: [], skills: [] };
+    mockServerManifestOf.mockResolvedValue(serverManifest);
+    await buildMcpb({ _: [], outDir: 'dist/mcpb', stageOnly: true });
+    expect(JSON.parse(fs.readFileSync(staged, 'utf8'))).toEqual(serverManifest);
+
+    await buildMcpb({ _: [], outDir: 'dist/mcpb', stageOnly: true, manifest: false });
+    expect(fs.existsSync(staged)).toBe(false);
+
+    mockServerManifestOf.mockResolvedValue(undefined);
+    await buildMcpb({ _: [], outDir: 'dist/mcpb', stageOnly: true });
+    expect(fs.existsSync(staged)).toBe(false);
   });
 
   it('leaves the stage directory intact when --stage-only is set', async () => {

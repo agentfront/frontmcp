@@ -40,6 +40,7 @@ import { stageMcpbDirectory, writeManifest } from './stage';
 import { createDeterministicZip } from './zip';
 import { ARCHIVE_SIZE_ERROR, ARCHIVE_SIZE_WARN } from './constants';
 import { getSelfVersion } from '../../../core/version';
+import { serverManifestOf, writeServerManifest } from '../server-manifest';
 
 export interface BuildMcpbOptions extends ParsedArgs {
   /** Resolved MCPB deployment config (from frontmcp.config if present). */
@@ -213,6 +214,12 @@ export async function buildMcpb(
     iconPath: iconAbsPath,
     binaries,
   });
+  // The server manifest ships next to the server it describes, from the extraction frontmcp build writes it with
+  const serverManifest = opts.manifest === false ? undefined : await serverManifestOf(cwd, entry);
+  if (serverManifest) {
+    await writeServerManifest(path.join(stageDir, 'server'), serverManifest);
+    console.log(`${c('green', '[build:mcpb]')} staged server/frontmcp.manifest.json`);
+  }
   if (stageResult.skillAssetCount > 0) {
     console.log(`${c('green', '[build:mcpb]')} copied ${stageResult.skillAssetCount} skill asset(s) to server/_skills/`);
   }

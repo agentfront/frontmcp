@@ -5,7 +5,7 @@ import { ensureDir, writeFile } from '@frontmcp/utils';
 import { c } from '../../core/colors';
 import { resolveEntry } from '../../shared/fs';
 import { extractProjectSchema } from '../skills/from-entry';
-import type { ExtractedSchema } from './exec/cli-runtime/schema-extractor';
+import type { ExtractedManifest, ExtractedSchema } from './exec/cli-runtime/schema-extractor';
 
 /** The file every target's output directory gets. */
 export const SERVER_MANIFEST_FILE = 'frontmcp.manifest.json';
@@ -31,6 +31,20 @@ function extractionOf(entry: string, cwd: string): Promise<ExtractedSchema> {
   return extraction;
 }
 
+/** The manifest of the server at `entry` (absolute), from the build's one extraction; none when it failed. */
+export async function serverManifestOf(cwd: string, entry: string): Promise<ExtractedManifest | undefined> {
+  const schema = await extractionOf(entry, cwd).catch(() => undefined);
+  return schema?.manifest;
+}
+
+/** Write `frontmcp.manifest.json` into `dir`, and return its path. */
+export async function writeServerManifest(dir: string, manifest: ExtractedManifest): Promise<string> {
+  await ensureDir(dir);
+  const manifestPath = path.join(dir, SERVER_MANIFEST_FILE);
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  return manifestPath;
+}
+
 function report(message: string, strict: boolean | undefined): void {
   if (strict) {
     console.log(c('red', message));
@@ -54,9 +68,7 @@ export async function emitServerManifest(options: EmitServerManifestOptions): Pr
     return;
   }
 
-  await ensureDir(options.outDir);
-  const manifestPath = path.join(options.outDir, SERVER_MANIFEST_FILE);
-  await writeFile(manifestPath, `${JSON.stringify(schema.manifest, null, 2)}\n`);
+  const manifestPath = await writeServerManifest(options.outDir, schema.manifest);
   console.log(c('green', `  Wrote ${path.relative(options.cwd, manifestPath)}`));
 
   const findings = schema.manifestFindings ?? [];
