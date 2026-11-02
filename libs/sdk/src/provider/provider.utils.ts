@@ -22,11 +22,13 @@ interface ProviderLike {
 }
 
 function collectProviderMetadata(cls: Type): ProviderMetadata {
-  return Object.entries(FrontMcpProviderTokens).reduce((metadata, [key, token]) => {
-    return Object.assign(metadata, {
+  const metadata = Object.entries(FrontMcpProviderTokens).reduce((collected, [key, token]) => {
+    return Object.assign(collected, {
       [key]: getMetadata(token, cls),
     });
   }, {} as ProviderMetadata);
+  metadata.name ??= tokenName(cls);
+  return metadata;
 }
 
 /**

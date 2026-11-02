@@ -6,7 +6,7 @@ import { FrontMcpProviderTokens } from '../tokens';
 /**
  * Decorator that marks a class as a McpProvider module and provides metadata
  */
-function FrontMcpProvider(providedMetadata: ProviderMetadata): ClassDecorator {
+function FrontMcpProvider(providedMetadata: ProviderMetadata = {}): ClassDecorator {
   return (target: Function) => {
     const metadata = frontMcpProviderMetadataSchema.parse(providedMetadata);
 

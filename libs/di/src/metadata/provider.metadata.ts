@@ -36,8 +36,9 @@ export interface ProviderMetadata {
 
   /**
    * Human-readable name for the provider.
+   * @default the token's name: the class name, the symbol's description or the string token
    */
-  name: string;
+  name?: string;
 
   /**
    * Optional description of what the provider does.

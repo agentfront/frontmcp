@@ -469,7 +469,7 @@ class GitHubAdapter {
 
 | Field          | Description                                                                                                               |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `name`         | Provider name (required)                                                                                                  |
+| `name?`        | Provider name, shown in logs and errors; defaults to the class name                                                       |
 | `id?`          | Optional stable identifier                                                                                                |
 | `description?` | Human-readable description                                                                                                |
 | `scope?`       | `ProviderScope.GLOBAL` (default) or `ProviderScope.CONTEXT` (`SESSION` and `REQUEST` are deprecated aliases of `CONTEXT`) |

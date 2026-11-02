@@ -105,7 +105,7 @@ export const annotatedFrontMcpProvidersSchema = z.custom<ProviderType>(
   {
     message:
       'providers items must be classes annotated with @Provider() | @FrontMcpProvider(), ' +
-      'or { provide, name, useValue | useClass | useFactory } objects.',
+      'or { provide, useValue | useClass | useFactory } objects.',
   },
 );
 

@@ -1,7 +1,7 @@
 /**
  * `@FrontMcp`, `@App`, `@Plugin` and `@Agent` take the value and class providers `ProviderType`
- * describes (`{ provide, name, useValue }`, `{ provide, name, useClass }`), as `dynamicProviders()`
- * and the provider registry already do, and still refuse one without a `name`.
+ * describes (`{ provide, useValue }`, `{ provide, useClass }`), as `dynamicProviders()` and the
+ * provider registry already do. `name` is optional.
  */
 import 'reflect-metadata';
 
@@ -87,24 +87,24 @@ describe('value and class providers in decorator metadata', () => {
     }).not.toThrow();
   });
 
-  it('still require a name', () => {
+  it('take value and class providers without a name', () => {
     expect(() => {
-      @App({
-        name: 'unnamed-value',
-        // @ts-expect-error -- a value provider without `name` is refused at runtime
-        providers: [{ provide: API_URL, useValue: 'https://api.example.com' }],
-      })
+      @App({ name: 'unnamed-value', providers: [{ provide: API_URL, useValue: 'https://api.example.com' }] })
       class UnnamedValueApp {}
       return UnnamedValueApp;
-    }).toThrow(InvalidDecoratorMetadataError);
+    }).not.toThrow();
     expect(() => {
-      @Plugin({
-        name: 'unnamed-class',
-        // @ts-expect-error -- a class provider without `name` is refused at runtime
-        providers: [{ provide: GREETER, useClass: Greeter }],
-      })
+      @Plugin({ name: 'unnamed-class', providers: [{ provide: GREETER, useClass: Greeter }] })
       class UnnamedClassPlugin {}
       return UnnamedClassPlugin;
+    }).not.toThrow();
+  });
+
+  it('refuse an empty name', () => {
+    expect(() => {
+      @App({ name: 'empty-name', providers: [{ name: '', provide: API_URL, useValue: 'https://api.example.com' }] })
+      class EmptyNameApp {}
+      return EmptyNameApp;
     }).toThrow(InvalidDecoratorMetadataError);
   });
 
