@@ -53,12 +53,25 @@ export function consumePendingTC39Hooks(method: Function): HookMetadata[] {
   return pendingHookRegistry.consume(method);
 }
 
+/** The method a Stage, Will, Did or Finally hook decorates: the runner calls it with the flow (`FlowCtxOf<Name>`). */
+export type FlowHookMethod<Ctx> = (ctx: Ctx) => unknown;
+
+/** The method an Around hook decorates: `next()` runs the rest of the stage, and rejects when it fails. */
+export type AroundFlowHookMethod<Ctx> = (ctx: Ctx, next: () => Promise<void>) => unknown;
+
+/** A hook decorator: the method's parameter must be the flow's ctx or a structural subset of it, or be omitted. */
+export type FlowHookDecorator<Method> = <T extends Method>(
+  target: object,
+  propertyKey: string | symbol,
+  descriptor: TypedPropertyDescriptor<T>,
+) => void;
+
 /**
  * Base factory for creating hook decorators
  * Works with both legacy TypeScript and TC39 Stage 3 decorators
  */
 function make(flow: FlowName, type: HookStageType) {
-  return function <Ctx = unknown, T extends string = string>(stage: T, opts: HookOptions<Ctx> = {}): MethodDecorator {
+  return function <Ctx, T extends string, Method>(stage: T, opts: HookOptions<Ctx> = {}): FlowHookDecorator<Method> {
     return (target: any, keyOrContext: any, _desc?: PropertyDescriptor): any => {
       const { priority = 0, filter, ...rest } = opts;
 
@@ -134,7 +147,7 @@ export function StageHookOf<Name extends FlowName>(flow: Name) {
   type Ctx = ExtendFlows[Name]['ctx'];
   const base = make(flow, 'stage');
   return function (stage: T, opts: HookOptions<Ctx> = {}) {
-    return base<Ctx, T>(stage, opts);
+    return base<Ctx, T, FlowHookMethod<Ctx>>(stage, opts);
   };
 }
 
@@ -146,7 +159,7 @@ export function WillHookOf<Name extends FlowName>(flow: Name) {
   type Ctx = ExtendFlows[Name]['ctx'];
   const base = make(flow, 'will');
   return function (stage: T, opts: HookOptions<Ctx> = {}) {
-    return base<Ctx, T>(stage, opts);
+    return base<Ctx, T, FlowHookMethod<Ctx>>(stage, opts);
   };
 }
 
@@ -158,7 +171,7 @@ export function DidHookOf<Name extends FlowName>(flow: Name) {
   type Ctx = ExtendFlows[Name]['ctx'];
   const base = make(flow, 'did');
   return function (stage: T, opts: HookOptions<Ctx> = {}) {
-    return base<Ctx, T>(stage, opts);
+    return base<Ctx, T, FlowHookMethod<Ctx>>(stage, opts);
   };
 }
 
@@ -170,7 +183,7 @@ export function AroundHookOf<Name extends FlowName>(name: Name) {
   type Ctx = ExtendFlows[Name]['ctx'];
   const base = make(name, 'around');
   return function (stage: T, opts: HookOptions<Ctx> = {}) {
-    return base<Ctx, T>(stage, opts);
+    return base<Ctx, T, AroundFlowHookMethod<Ctx>>(stage, opts);
   };
 }
 
@@ -182,7 +195,7 @@ export function FinallyHookOf<Name extends FlowName>(name: Name) {
   type Ctx = ExtendFlows[Name]['ctx'];
   const base = make(name, 'finally');
   return function (stage: T, opts: HookOptions<Ctx> = {}) {
-    return base<Ctx, T>(stage, opts);
+    return base<Ctx, T, FlowHookMethod<Ctx>>(stage, opts);
   };
 }
 
