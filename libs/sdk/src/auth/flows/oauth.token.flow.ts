@@ -571,3 +571,5 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
     return computeResource(this.rawInput.request, this.scope.entryPath, this.scope.routeBase);
   }
 }
+
+export { OauthTokenFlow };

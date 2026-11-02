@@ -37,6 +37,7 @@ import { bindContextHookTargets, staticHooksFor } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
 import { writeHttpResponse } from '../server/server.validation';
 import { flowErrorToHttpOutput } from '../transport/flow-error-output';
+import { deferredFlowLoader } from './deferred-flow';
 import { matchMountedPath } from './flow.http-path';
 import {
   cloneStageMap,
@@ -47,6 +48,7 @@ import {
   type StageEntry,
   type StageMap,
 } from './flow.stages';
+import { collectFlowMetadata } from './flow.utils';
 
 /**
  * Where a request's hook observer lives on its `FrontMcpContext`: `@frontmcp/observability` installs one to
@@ -170,6 +172,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   readonly globalProviders: ProviderRegistry;
   private plan: FlowPlan<never>;
   private FlowClass: FlowType;
+  private flowClassLoad?: Promise<void>;
   private stages: StageMap<FlowType>;
   private hooks: HookRegistry;
   private readonly logger: FrontMcpLogger;
@@ -283,8 +286,22 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     return Promise.resolve();
   }
 
+  /** Loads the class of a flow registered with `deferredFlow`, and takes its metadata, plan and stages. */
+  private loadFlowClass(): Promise<void> {
+    const load = deferredFlowLoader(this.FlowClass);
+    if (!load) return Promise.resolve();
+    this.flowClassLoad ??= load().then((flowClass) => {
+      Object.assign(this.metadata, collectFlowMetadata(flowClass));
+      this.plan = this.metadata.plan;
+      this.stages = collectFlowHookMap(flowClass);
+      this.FlowClass = flowClass;
+    });
+    return this.flowClassLoad;
+  }
+
   async canActivate(request: ServerRequest): Promise<boolean> {
     if (this.method && request.method !== this.method) return false;
+    await this.loadFlowClass();
 
     const canActivate = this.metadata.middleware?.canActivate ?? [];
     if ((this.FlowClass as any)['canActivate']) {
@@ -379,6 +396,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
   async run(input: FlowInputOf<Name>, deps: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {
     this.logger.verbose(`run: starting flow '${this.name}'`);
+    await this.loadFlowClass();
     const scope = this.globalProviders.getActiveScope();
 
     // Build provider views for scoped DI

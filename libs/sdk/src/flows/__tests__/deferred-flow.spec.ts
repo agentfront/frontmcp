@@ -1,0 +1,115 @@
+/**
+ * A deferred flow is registered under its name and route like any flow, and its class loads the first time a request
+ * reaches the route or the flow runs (#950). Hooks on its stages run as they do on a flow registered by its class.
+ */
+import 'reflect-metadata';
+
+import { z, ZodError } from '@frontmcp/lazy-zod';
+
+import {
+  Flow,
+  FlowBase,
+  FlowHooksOf,
+  LogLevel,
+  Plugin,
+  type FlowPlan,
+  type FlowRunOptions,
+  type FlowType,
+  type ServerRequest,
+} from '../../common';
+import { FrontMcpInstance } from '../../front-mcp/front-mcp';
+import type { Scope } from '../../scope/scope.instance';
+import { deferredFlow } from '../deferred-flow';
+
+const name = 'test:deferred-greet' as const;
+const inputSchema = z.object({ name: z.string() });
+const outputSchema = z.object({ message: z.string() });
+const stateSchema = z.object({});
+const plan = { execute: ['greet'] } as const satisfies FlowPlan<string>;
+
+declare global {
+  interface ExtendFlows {
+    'test:deferred-greet': FlowRunOptions<
+      GreetFlow,
+      typeof plan,
+      typeof inputSchema,
+      typeof outputSchema,
+      typeof stateSchema
+    >;
+  }
+}
+
+const GreetHook = FlowHooksOf(name);
+
+@Flow({ name, plan, inputSchema, outputSchema, access: 'public', middleware: { method: 'POST', path: '/greet' } })
+class GreetFlow extends FlowBase<typeof name> {
+  @GreetHook.Stage('greet')
+  async greet() {
+    this.respond({ message: `Hello, ${this.input.name}` });
+  }
+}
+
+const hooked: string[] = [];
+
+@Plugin({ name: 'greet-hooks' })
+class GreetHooksPlugin {
+  @GreetHook.Will('greet')
+  willGreet() {
+    hooked.push('will greet');
+  }
+}
+
+function request(method: ServerRequest['method'], path: string): ServerRequest {
+  return { method, path, url: path, headers: {}, query: {}, body: undefined } as ServerRequest;
+}
+
+describe('deferredFlow', () => {
+  let scope: Scope;
+  let load: jest.Mock<Promise<FlowType>, []>;
+
+  beforeEach(async () => {
+    hooked.length = 0;
+    load = jest.fn(async () => GreetFlow);
+    const frontMcp = await FrontMcpInstance.createForGraph({
+      info: { name: 'deferred-flow', version: '1.0.0' },
+      apps: [],
+      plugins: [GreetHooksPlugin],
+      logging: { level: LogLevel.Off },
+    });
+    scope = frontMcp.getScopes()[0] as Scope;
+    await scope.registryFlows(deferredFlow({ name, middleware: { method: 'POST', path: '/greet' } }, load));
+  });
+
+  it('registers the flow without loading its class', () => {
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('loads its class once when it runs, and runs its stages and hooks', async () => {
+    const [first, second] = await Promise.all([
+      scope.runFlowForOutput(name, { name: 'Ada' }),
+      scope.runFlowForOutput(name, { name: 'Lin' }),
+    ]);
+
+    expect(first).toEqual({ message: 'Hello, Ada' });
+    expect(second).toEqual({ message: 'Hello, Lin' });
+    expect(hooked).toEqual(['will greet', 'will greet']);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('validates input with the schema of the class it loads', async () => {
+    await expect(scope.runFlowForOutput(name, { name: 42 } as never)).rejects.toThrow(ZodError);
+  });
+
+  it('leaves its class unloaded for a request to another route or with another method', async () => {
+    await scope.findHttpFlowName(request('POST', '/elsewhere'));
+    await scope.findHttpFlowName(request('GET', '/greet'));
+
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('loads its class to answer a request to its route', async () => {
+    await expect(scope.findHttpFlowName(request('POST', '/greet'))).resolves.toBe(name);
+
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+});

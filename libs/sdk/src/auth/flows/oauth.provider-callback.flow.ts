@@ -1074,3 +1074,5 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
 function timingSafeEqualStr(a: string, b: string): boolean {
   return timingSafeEqual(sha256(a), sha256(b));
 }
+
+export { OauthProviderCallbackFlow };

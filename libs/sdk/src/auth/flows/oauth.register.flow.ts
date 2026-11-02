@@ -381,3 +381,5 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
     // no-op; httpRespond.json enforces shape
   }
 }
+
+export { OauthRegisterFlow };
