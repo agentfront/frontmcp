@@ -13,6 +13,7 @@ export type { JsonRpcFrame, StdioFramer, StdioFramerOptions } from './stdio-fram
 export type { BridgeLogger } from './types';
 export { createHttpUpstream, createPipeUpstream } from './upstream-client';
 export type {
+  HttpUpstreamClient,
   HttpUpstreamOptions,
   PipeUpstreamOptions,
   UpstreamClient,

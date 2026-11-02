@@ -129,6 +129,7 @@ export type {
   StdioFramer,
   StdioFramerOptions,
   BridgeLogger,
+  HttpUpstreamClient,
   HttpUpstreamOptions,
   PipeUpstreamOptions,
   UpstreamClient,

@@ -21,6 +21,7 @@ import { FlowHooksOf } from './common';
 
 export { FrontMcpInstance, FrontMcpConfig } from './front-mcp';
 export type { ConfigOrServerClass } from './front-mcp';
+export type { SharedServerOptions, SharedServerTransport } from './shared/shared-server.options';
 export { assertStaticStartupConfig } from './front-mcp/static-startup.check';
 export { registerOptionalModule } from './scope/optional-dependency.util';
 export {
@@ -410,6 +411,7 @@ export type { default as ServerCardFlow } from './mcp-registry/flows/server-card
 export type { default as ElicitationRequestFlow } from './elicitation/flows/elicitation-request.flow';
 export type { default as ElicitationResultFlow } from './elicitation/flows/elicitation-result.flow';
 export type { default as SetLevelFlow } from './logging/flows/set-level.flow';
+export type { default as SharedIdentifyFlow } from './shared/flows/shared.identify.flow';
 export type { default as SubscribeResourceFlow } from './resource/flows/subscribe-resource.flow';
 export type { default as UnsubscribeResourceFlow } from './resource/flows/unsubscribe-resource.flow';
 export type { default as HttpIpFilterFlow } from './scope/flows/http.ip-filter.flow';

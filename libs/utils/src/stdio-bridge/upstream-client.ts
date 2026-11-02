@@ -42,6 +42,7 @@ export interface UpstreamClientOptions {
 }
 
 const SESSION_HEADER = 'mcp-session-id';
+const END_SESSION_TIMEOUT_MS = 2_000;
 let reinitCounter = 0;
 
 /** Id for a bridge-originated `initialize`, never colliding with client ids. */
@@ -73,7 +74,12 @@ export interface HttpUpstreamOptions extends UpstreamClientOptions {
   fetch?: typeof fetch;
 }
 
-export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient {
+export interface HttpUpstreamClient extends UpstreamClient {
+  /** End the MCP session the server issued (`DELETE` with its id); the next `initialize` starts a new one. */
+  endSession(): Promise<void>;
+}
+
+export function createHttpUpstream(options: HttpUpstreamOptions): HttpUpstreamClient {
   const { log, url, onFrame } = options;
   // Track every in-flight request — `close()` must abort all of them,
   // not just whichever happened to be assigned last. A shared scalar
@@ -176,6 +182,21 @@ export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient
       const result = resultOf(response, 'initialize');
       if (initialized) await post(initializedNotification(), onFrame);
       return result;
+    },
+    async endSession() {
+      const ending = sessionId;
+      if (!ending) return;
+      sessionId = undefined;
+      try {
+        const res = await (options.fetch ?? fetch)(url, {
+          method: 'DELETE',
+          headers: { ...options.headers, [SESSION_HEADER]: ending },
+          signal: AbortSignal.timeout(END_SESSION_TIMEOUT_MS),
+        });
+        await res.body?.cancel();
+      } catch (err) {
+        log.warn('http-upstream-end-session-failed', { error: (err as Error).message });
+      }
     },
     close: async () => {
       for (const ac of abortControllers) ac.abort();

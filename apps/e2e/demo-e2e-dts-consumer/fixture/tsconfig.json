@@ -31,6 +31,7 @@
     "hook-ordering-must-compile.ts",
     "hook-ordering-must-fail.ts",
     "live-surface-must-compile.ts",
-    "duties-must-compile.ts"
+    "duties-must-compile.ts",
+    "shared-server-must-compile.ts"
   ]
 }

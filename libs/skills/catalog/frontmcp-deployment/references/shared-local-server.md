@@ -1,0 +1,164 @@
+---
+name: shared-local-server
+description: Serve every stdio session of a server on one machine from one shared local process with FrontMCP's FrontMcpInstance.runShared - one start per key, an owner-only Unix socket or loopback HTTP with a token, and a server identity proof before the token is sent
+---
+
+# Shared Local Server
+
+An MCP client starts a stdio server per session: three Claude Code windows run three copies of your server, each
+with its own caches, connections and background work. `FrontMcpInstance.runShared(config, { key })` makes each of
+those processes a thin stdio session of **one** server process per key on the machine. The first session finds no
+server and starts one; every later session attaches to it.
+
+## When to Use This Skill
+
+### Must Use
+
+- Several stdio sessions of the same server should share one process: one warm cache, one database connection, one
+  login, one set of background workers
+- A stdio server is expensive to start, and sessions come and go
+
+### Recommended
+
+- Local tools that hold state across sessions (an index of the project, a browser, a device connection)
+
+### Skip When
+
+- One session per process is fine: use `runStdio()` (see `mcp-client-integration`)
+- The server is deployed remotely, or several machines share it: run an HTTP server (see `deploy-to-node`)
+- Live reload while you develop: use `frontmcp dev --stdio` (see `mcp-client-integration`)
+
+> **Decision:** use `runShared()` when the same server runs as a stdio process in more than one session on one
+> machine, and those sessions should see the same server.
+
+## Setup
+
+Keep the config in a module of its own (no decorated `@FrontMcp` class in the entry's import graph, as for
+`runStdio()`), and give the shared entry a key:
+
+```typescript
+// src/shared.ts
+import { FrontMcpInstance } from '@frontmcp/sdk';
+
+import { serverConfig } from './server-config';
+
+FrontMcpInstance.runShared(serverConfig, { key: 'my-server' }).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+```
+
+Point every MCP client at that entry, exactly like a stdio server:
+
+```json
+{
+  "mcpServers": {
+    "my-server": { "command": "node", "args": ["/abs/path/dist/shared.js"] }
+  }
+}
+```
+
+Starting the server takes the start lock in a SQLite file, so install `@frontmcp/storage-sqlite` next to
+`@frontmcp/sdk`. A session that finds its server running doesn't open it.
+
+## Options
+
+| Option      | Type                | Default                        | Meaning                                                                        |
+| ----------- | ------------------- | ------------------------------ | ------------------------------------------------------------------------------ |
+| `key`       | `string`            | required                       | Names the server: sessions with the same key on this machine share one process |
+| `transport` | `'unix'` / `'http'` | `'unix'` (`'http'` on Windows) | An owner-only Unix socket, or loopback HTTP on `127.0.0.1` with a token        |
+
+`key` is 1 to 64 letters, digits, `.`, `_` or `-`, starting with a letter or digit. Invalid options reject with
+`InvalidSharedServerOptionsError` (`INVALID_SHARED_SERVER_OPTIONS`) before anything starts, for example
+`runShared() options are invalid: key: key must be 1 to 64 letters, digits, ".", "_" or "-", starting with a letter or digit`,
+`runShared() options are invalid: transport: transport must be 'unix' or 'http'`, or, on Windows,
+`runShared() options are invalid: transport: a Unix socket can't be kept owner-only on Windows; use transport 'http'`.
+
+## How it works
+
+1. **Attach.** A session reads the server's record, `~/.frontmcp/shared/<key>/server.json` (under `FRONTMCP_HOME`
+   when set), and challenges the endpoint it names with a fresh random nonce. The server answers with an HMAC of the
+   nonce bound to its endpoint (the socket path, or `http://127.0.0.1:<port>`), keyed by a key derived from the secret
+   in the record. Only when the proof verifies (compared in constant time) does the session send the token, also
+   derived from that secret, as `Authorization: Bearer` on every MCP request. Over loopback HTTP it challenges the
+   server again before each request, so a process that takes the port of a server that stopped gets none.
+2. **Start.** When no server proves its identity, the session takes the key's start lock (a lease in
+   `~/.frontmcp/shared/<key>/start-lock.sqlite`, set only when absent, with a 10 s TTL it renews while it waits), checks
+   once more, and runs its own entry again, detached, as the server (the process gets `FRONTMCP_SHARED_SERVE=<key>`).
+   Sessions started together wait for that one server; a launcher that dies stops renewing the lock and another takes
+   it over. A session gives up after 60 s, or as soon as the server it started exits.
+3. **Serve.** The server generates a fresh secret, listens, and only then writes the record. It serves the config
+   through the normal HTTP flows (`http:request`, `session:verify`, the MCP handlers, every hook), with `auth`
+   replaced by static-token auth for that token and `http` replaced by the shared endpoint, so a configured `auth`,
+   `http.routes` or CORS does not apply to it. The identity challenge is its own flow, `shared:identify`
+   (`POST /.well-known/frontmcp-shared-server`), hookable like any other.
+4. **Bridge.** The session is the same stdio bridge `frontmcp dev --stdio` uses: newline-delimited JSON-RPC on
+   stdin/stdout, frames buffered while the session attaches, the server's `mcp-session-id` reused on every request.
+   When stdin ends or the client goes away, the session ends its MCP session on the server and exits; the server keeps
+   running for the other sessions.
+
+## Files and security
+
+| Path (under `~/.frontmcp/shared/<key>/`) | Mode   | Holds                                                         |
+| ---------------------------------------- | ------ | ------------------------------------------------------------- |
+| the folder                               | `0700` | created owner-only                                            |
+| `server.json`                            | `0600` | transport, port, MCP path, pid, and the secret, written whole |
+| `server.sock`                            | `0600` | the Unix socket (transport `'unix'`)                          |
+| `start-lock.sqlite`                      | `0600` | the start lock                                                |
+
+- A folder that the group or others can write to, or that belongs to another user, or one above it that does (unless
+  sticky, like `/tmp`), is refused with `UnsafeSharedServerDirectoryError` (`UNSAFE_SHARED_SERVER_DIRECTORY`):
+  `Refusing to keep the shared server's files under <path> (mode <mode>): <reason>. Set FRONTMCP_HOME to a folder only you can write to.`
+  A `server.json` that is a link, belongs to another user, or that the group or others can read is refused the same
+  way.
+- **Other users** can't reach the Unix socket at all. On loopback HTTP they can connect, but every MCP request needs
+  the token; a process that takes the port of a server that stopped, before a session attaches or while sessions are
+  attached, gets challenges it can't answer, and never a request or the token. A proof replayed from an earlier
+  challenge, made with an earlier server's key, or bound to another endpoint is refused.
+- **Web pages** can't reach the socket. On loopback HTTP the server accepts only the loopback names as `Host` (DNS
+  rebinding) and refuses every request that carries an `Origin`.
+- **Same-user processes** can read the record, as they can read everything else of yours: the shared server trusts
+  them like any stdio server does.
+- **A stale socket** a crashed server left is removed by the next server that starts; a live one that doesn't prove
+  its identity is never replaced.
+- The secret and the token are never logged, put in an argument or passed in the environment.
+- On Windows the files are kept private by your profile folder's permissions; modes aren't checked there.
+
+## Errors
+
+| Error                              | Code                             | When                                                                                   |
+| ---------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------- |
+| `InvalidSharedServerOptionsError`  | `INVALID_SHARED_SERVER_OPTIONS`  | `key` or `transport` is invalid                                                        |
+| `UnsafeSharedServerDirectoryError` | `UNSAFE_SHARED_SERVER_DIRECTORY` | another user could replace or read the server's files                                  |
+| `SharedServerStartError`           | `SHARED_SERVER_START_FAILED`     | `The shared server "<key>" did not start: <reason>` (it exited, or none proved itself) |
+| `SharedServerIdentityError`        | `SHARED_SERVER_IDENTITY_REFUSED` | `The process at <endpoint> did not prove it is the shared server` (loopback HTTP)      |
+
+A session that can't attach answers the requests it holds with `dev_reload_deadline` (`-32097`), carrying the reason
+in `error.data.error`, writes `[frontmcp shared] error attach-failed …` to stderr, and `runShared()` rejects. A request
+the session can't send (its server stopped, or `SharedServerIdentityError`) is answered with `dev_server_unreachable`
+(`-32099`).
+
+## Limits
+
+- The server runs until it gets `SIGTERM` or `SIGINT`; stop it with the pid in `server.json`. A session whose server
+  stopped answers `dev_server_unreachable` (`-32099`) until its client restarts it.
+- The server runs with the environment and working folder of the session that started it.
+- Sessions speak to the server over streamable HTTP like `frontmcp dev --stdio` without `--serve`, so a client on MCP
+  `2026-07-28` isn't served yet.
+- A key names one server per user on the machine: give each server its own key, since a session attaches to whichever
+  server of its key runs.
+
+## Troubleshooting
+
+| Problem                                                  | Fix                                                                                                                                    |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `did not start: it exited with code 1`                   | Run the entry with `FRONTMCP_SHARED_SERVE=<key>` in a terminal to see why the server can't start; its log is under `~/.frontmcp/logs/` |
+| `the sqlite type needs @frontmcp/storage-sqlite`         | Install `@frontmcp/storage-sqlite`: the start lock lives in SQLite                                                                     |
+| `Unix socket … is already in use by a running server`    | A process that is not the server listens on the socket: stop it (the pid of the real server is in `server.json`)                       |
+| `the process at … did not prove it is the shared server` | Something else answers on the recorded endpoint; the session sent it nothing and starts a server of its own. Check what listens there  |
+| `Refusing to keep the shared server's files under …`     | Make the folder (and those above it) writable by you only, or set `FRONTMCP_HOME` to such a folder                                     |
+
+## Reference
+
+- [MCP clients](https://frontmcp.dev/reference/deployment/mcp-clients)
+- Related: `mcp-client-integration`, `deploy-to-node`

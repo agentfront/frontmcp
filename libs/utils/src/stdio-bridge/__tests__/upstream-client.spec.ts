@@ -45,8 +45,14 @@ async function startServer(options: { sse?: boolean } = {}): Promise<{
     let body = '';
     req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
-      const frame = JSON.parse(body) as JsonRpcFrame;
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
+      if (req.method === 'DELETE') {
+        seen.push({ method: 'DELETE', sessionId });
+        res.statusCode = sessionId && known.delete(sessionId) ? 200 : 404;
+        res.end();
+        return;
+      }
+      const frame = JSON.parse(body) as JsonRpcFrame;
       seen.push({ method: frame.method, sessionId });
       if (frame.method === 'initialize') {
         const id = `session-${++issued}`;
@@ -175,6 +181,42 @@ describe('createHttpUpstream', () => {
     } finally {
       await server.close();
     }
+  });
+
+  it('ends the session the server issued, once', async () => {
+    const server = await startServer();
+    try {
+      const upstream = createHttpUpstream({ url: server.url, log: silentLog(), onFrame: () => undefined });
+      await upstream.endSession();
+      await upstream.send(initialize);
+      await upstream.endSession();
+      await upstream.endSession();
+
+      expect(server.seen).toEqual([
+        { method: 'initialize', sessionId: undefined },
+        { method: 'DELETE', sessionId: 'session-1' },
+      ]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('only logs a session it could not end', async () => {
+    const log = silentLog();
+    const upstream = createHttpUpstream({
+      url: 'http://127.0.0.1:9/',
+      log,
+      onFrame: () => undefined,
+      fetch: async (_input, init) => {
+        if (init?.method === 'DELETE') throw new Error('connection refused');
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: {} }), {
+          headers: { 'content-type': 'application/json', 'mcp-session-id': 'session-9' },
+        });
+      },
+    });
+    await upstream.send(initialize);
+    await expect(upstream.endSession()).resolves.toBeUndefined();
+    expect(log.warn).toHaveBeenCalledWith('http-upstream-end-session-failed', { error: 'connection refused' });
   });
 
   it('rejects a non-OK response so the bridge answers the client', async () => {
