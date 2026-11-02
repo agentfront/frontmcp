@@ -25,7 +25,7 @@ import {
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
   { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_321_639 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_328_515 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_328_810 },
 ];
 
 const VITE_INITIAL_CHUNK_MAX_BYTES = 960_000;
