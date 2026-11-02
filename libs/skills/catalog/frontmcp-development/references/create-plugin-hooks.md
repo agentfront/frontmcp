@@ -93,8 +93,12 @@ A `@Stage('execute')` hook does not replace the flow's own `execute` step: it ad
 
 To keep the flow's own step from running:
 
-- Call `ctx.respond(result)` from the `@Stage` (or a `@Will`) hook. The flow ends with that result: it skips the rest of the stage and the main stages after it, while the stage's `@Finally` hooks (and its `@Did` hooks, when a `@Stage` hook answered) and the cleanup stages (in `tools:call-tool`: `releaseSemaphore`, `releaseQuota`, `applyUI`, `finalize`) still run. In `tools:call-tool`, `result` is a complete MCP `CallToolResult`; it does not go through the tool's output schema.
+- Call `ctx.respond(result)` from the `@Stage` (or a `@Will`) hook. The flow ends with that result: it skips the rest of the stage and the main stages after it, while the stage's `@Finally` hooks (and its `@Did` hooks, when a `@Stage` hook answered) and the cleanup stages (in `tools:call-tool`: `releaseSemaphore`, `releaseQuota`, `applyUI`, `finalize`, `fitAnswer`, `shapeAnswer`, `meterAnswer`) still run. In `tools:call-tool`, `result` is a complete MCP `CallToolResult`; it does not go through the tool's output schema.
 - Or use an `@Around` hook that does not call `next()`. The stage is skipped and the flow goes on; in `tools:call-tool`, set `ctx.state.required.toolContext.output`, and the result is validated and formatted like the tool's own.
+
+Each answer the flow sends, the tool's from `finalize` or a hook's `ctx.respond(result)` (an `@Around('finalize')` hook that replaces it after `next()` included), becomes `ctx.state.output` in `tools:call-tool` and `resources:read-resource`. The stages after `finalize` work on it: `fitAnswer` (`output.budget`), `shapeAnswer` (`clients` profiles) and `meterAnswer` (the `/metrics` answer cost). Hook `Did('meterAnswer')` to see the answer the client receives.
+
+These stages shape only a client's answer, not the one a tool gets from `this.callTool()`; a hook on them checks the same with `ctx.isClientCall()`. A `Will('fitAnswer')` hook that answers with `ctx.respond(result)` replaces the answer before the budget fits it, as `@frontmcp/plugin-result-handles` does to fold a large answer (see `result-handles-plugin`).
 
 ## Hook Order
 
@@ -132,16 +136,121 @@ export class BillingApp {}
 
 `refuseDisabled` (`-10`) runs before `requireSetup` (`10`), though its plugin is listed second. At equal priorities, `requireSetup` would run first, because its plugin is listed first.
 
+### Named Bands: `HookPhase`
+
+`HookPhase` names the priorities of what a hook does on its stage, in run order. Use them instead of picking numbers, and add to one to run between two bands (`HookPhase.guard + 10`):
+
+| Band                | Priority | For hooks that                                                         |
+| ------------------- | -------- | ---------------------------------------------------------------------- |
+| `HookPhase.resolve` | `-100`   | fill in what later hooks read: a resolved name, a tenant, defaults     |
+| (default)           | `0`      | everything else                                                        |
+| `HookPhase.guard`   | `100`    | refuse a call: approval, feature flags, a setup gate                   |
+| `HookPhase.observe` | `300`    | watch a call the guards let through: timing, audit                     |
+| `HookPhase.shape`   | `500`    | rewrite what the stage hands on, such as folding or trimming an answer |
+
+The built-in plugins keep their priorities: the approval check runs at `HookPhase.guard` (`100`), the feature-flag gates at `50` (just before it), CodeCall's refusal of a hidden tool on `Did('findTool')` at `10`, and the cache plugin at `1000`, after every band (a cached answer is served only once every guard ran). The observability plugin opens its spans in `@Will` hooks at `-1000` and closes them in `@Did` and `@Finally` hooks at `1000`, outside every band, so its spans cover all of them.
+
+```typescript
+import { HookPhase, Plugin, ToolHook } from '@frontmcp/sdk';
+
+@Plugin({ name: 'setup-gate' })
+export class SetupGatePlugin {
+  @ToolHook.Will('execute', { priority: HookPhase.guard + 10 })
+  requireSetup() {
+    // runs after approval, at HookPhase.guard
+  }
+}
+```
+
+### Ordering Against Another Hook: `before` and `after`
+
+When a hook must run before or after a particular plugin, say so instead of choosing a number on the other side of its priority:
+
+```typescript
+@Plugin({ name: 'feature-gate' })
+export class FeatureGatePlugin {
+  @ToolHook.Will('execute', { priority: HookPhase.guard, before: ['setup-gate'] })
+  refuseDisabled(ctx: FlowCtxOf<'tools:call-tool'>) {
+    // refuse when the feature is disabled, before the setup gate asks for setup
+  }
+}
+```
+
+- **Targets.** Each entry of `before` or `after` is the `name` of a plugin (`'setup-gate'`), or the name of the class that declares the hook (`'SetupGatePlugin'`, a provider or an entry class such as `'InvoiceTool'`), naming every hook it has on the stage; add `.method` to name one (`'setup-gate.requireSetup'`). Prefer the plugin name: a bundler that minifies class names changes the class name, not the plugin's.
+- **Scope.** A constraint relates hooks of the same flow, stage and type: a `@Will('execute')` hook's `before` orders it among the `@Will('execute')` hooks. The flow's own steps are not hooks and cannot be named.
+- **Precedence.** Constraints come first, then priority, then registration order. The hook that declares a constraint is the one that moves: with `before`, it takes the place of the earliest hook it names; with `after`, it waits until the hooks it names have run. The hooks it names, and every hook no constraint relates, keep their priority order, so an `observe` hook with `before: ['tenant-resolver']` runs just ahead of the resolver and never pulls a `guard` hook ahead of it. For `@Around` hooks, `before` makes the hook wrap its target, `after` makes it run inside it.
+- **Errors.** Constraints that form a cycle (`a` before `b`, `b` before `a`) stop the server at startup with a `HookOrderCycleError` (code `HOOK_ORDER_CYCLE`) that names the hooks in the cycle, in its message and in `hooks`. The check relates the hooks one call can run together: all of a scope's plugin, provider and app hooks (a call naming an unknown tool runs every app's), with the ones an agent inherits through `execution.inheritPlugins`, and the hooks of one entry class at a time, since two entry classes never share a call. A target that matches no hook on the stage logs one warning at startup (`Hook feature-gate.refuseDisabled (will 'execute' of 'tools:call-tool') names 'setup-gate' in before, but no hook on that stage matches it, so it changes nothing. ...`), and the hook keeps its place by priority. A constraint never relates a hook to itself, or to another instance of the same hook (the same plugin installed on two apps).
+- **Validation.** `before` and `after` must be arrays of non-empty strings with no surrounding spaces, and `appliesTo` one of its values: anything else throws `InvalidDecoratorMetadataError` where the hook is declared.
+
 ### Seeing the Resolved Order
 
-With `NODE_ENV=development`, or `DEBUG=1`, a flow logs at info level the order its hooks resolve to, on its first run for each hook owner (the app of the entry the run is for) and for each entry class that declares hooks of its own. It is logged once, not per request, and nothing is built for it unless the server runs in dev mode or with `DEBUG` set. Each line is a stage that has hooks, with its steps in the order they run, as `type Class.method (priority)`; an `@Around` hook's brackets hold what it wraps:
+With `NODE_ENV=development`, or `DEBUG=1`, a flow logs at info level the order its hooks resolve to, on its first run for each hook owner (the app of the entry the run is for) and for each entry class that declares hooks of its own. It is logged once, not per request, and nothing is built for it unless the server runs in dev mode or with `DEBUG` set. Each line is a stage that has hooks, with its steps in the order they run, as `type Class.method (priority)`, followed by the step's `before` and `after` when it has some; an `@Around` hook's brackets hold what it wraps:
 
 ```text
 [FlowInstance] INFO Hook order of 'tools:call-tool' for 'billing', lowest priority first (an around hook wraps what its brackets hold):
-  execute: will FeatureGatePlugin.refuseDisabled (-10) → will SetupGatePlugin.requireSetup (10) → stage CallToolFlow.execute (0)
+  execute: will FeatureGatePlugin.refuseDisabled (100, before setup-gate) → will SetupGatePlugin.requireSetup (110) → stage CallToolFlow.execute (0)
 ```
 
-The print is new in 1.10.16.
+The print is new in 1.10.16; its `before` and `after`, `HookPhase`, the hook trace below and `appliesTo: 'all-apps'` are new in 1.11.
+
+### Tracing a Call in Dev Mode: `_meta['frontmcp/trace']`
+
+With `NODE_ENV=development`, every tool, resource and prompt answer carries the hooks that ran for the call in `_meta['frontmcp/trace']` (`HOOK_TRACE_META_KEY`), in the order they started:
+
+```json
+{
+  "frontmcp/trace": [
+    {
+      "owner": "feature-gate",
+      "method": "refuseDisabled",
+      "stage": "execute",
+      "type": "will",
+      "ms": 0.041,
+      "outcome": "ok"
+    },
+    {
+      "owner": "setup-gate",
+      "method": "requireSetup",
+      "stage": "execute",
+      "type": "will",
+      "ms": 0.012,
+      "outcome": "ok"
+    }
+  ]
+}
+```
+
+- `owner` is the plugin's `name`, else the name of the class that declares the hook; `outcome` is `ok`, `respond`, `fail`, `abort`, `next`, `handled` or `error` (a thrown `Error`). An `@Around` hook's `ms` includes what it wraps.
+- It lists the hooks of plugins, providers, apps and entry classes, not the flow's own steps, and never a hook's arguments, the call's input or its answer.
+- It is added once the answer is final, after the answer budget (`output.budget`) and the cost meter, so neither counts it and an answer is fitted the same with or without it.
+- `@FrontMcp({ devtools: { hookTrace: true } })` turns it on outside dev mode (a staging server, say), and `hookTrace: false` turns it off in dev mode. A value that is not a boolean stops the server at startup. Outside dev mode, without `hookTrace: true`, answers never carry it.
+
+### Watching Every Hook: Hook Observers
+
+The trace is built by a hook observer, a function that wraps every hook a request runs (`hook.stage` is the key the hook runs under, such as `willExecute`). Add one to a request's `FrontMcpContext` with `addHookObserver()`, from a hook that runs early in the request (for HTTP, `http:request` runs first):
+
+```typescript
+import { addHookObserver, FRONTMCP_CONTEXT, HttpHook, Plugin, type FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({ name: 'hook-timer' })
+export class HookTimerPlugin {
+  @HttpHook.Will('traceRequest', { priority: -2000 })
+  watch(ctx: FlowCtxOf<'http:request'>) {
+    addHookObserver(ctx.get(FRONTMCP_CONTEXT), async (hook, run) => {
+      const startedAt = performance.now();
+      try {
+        await run();
+      } finally {
+        console.log(
+          `${hook.owner}.${hook.method} on ${hook.flowName}:${hook.stage}: ${performance.now() - startedAt}ms`,
+        );
+      }
+    });
+  }
+}
+```
+
+Every observer wraps the hook, the first added outermost; the observability plugin adds its own (request logs' `hooks_triggered`, `tracing.hookSpans`) next to any other. Whatever an observer does, the hook runs once and settles as it would unobserved: what an observer throws is logged once, as a warning, and ignored. Up to 1.10, a request had a single observer slot, and a second observer was dropped.
 
 ## Available Flow Names
 
@@ -205,6 +314,8 @@ Besides flow hooks, the scope (`ScopeEntry`) takes two lifecycle callbacks:
 - **`scope.onDispose(callback: () => void | Promise<void>): () => void`** runs `callback` when the scope is disposed: on `SIGTERM`/`SIGINT` for an HTTP, Unix socket or stdio server, and in direct mode too. Callbacks run once, in reverse order of registration, each awaited; the shutdown deadline (5s under stdio, 10s otherwise) still exits a process whose callback hangs. The returned function removes the callback.
 
 Use them for warming caches, starting background indexing, or releasing timers and connections. A plugin reaches the scope from a factory provider: `ScopeEntry` is a DI token, so `inject: () => [ScopeEntry]` hands the factory the scope it is built in. The plugin's providers are built while the server starts up, before it listens, so the callback is registered in time.
+
+A provider can also implement `onBootstrap()`, `onReady()` and `onShutdown()` itself, a plugin's providers included; see `create-provider` (Provider Lifecycle). `onReady()` runs on every transport, stdio and direct mode included, where `onServerStarted()` does not.
 
 ```typescript
 import { Plugin, ScopeEntry } from '@frontmcp/sdk';
@@ -322,7 +433,7 @@ The entry flows also name their entry:
 
 - `sessionId`: the session the server verified for the request; `undefined` for a request without one (the stateless transports, MCP 2026-07-28, an `mcp-session-id` the server did not accept).
 - `clientInfo`: the client's `name` and `version`, sent with the request (MCP 2026-07-28 `_meta`) or at its session's `initialize`.
-- `metadata`: the request's `userAgent`, `contentType`, `accept`, `clientIp` and `customHeaders` (its `x-frontmcp-*` headers).
+- `metadata`: the request's `userAgent`, `contentType`, `accept`, `clientIp` and `customHeaders` (its `x-frontmcp-*` headers, and those `http.forwardHeaders` keeps).
 - `protocol`: the transport the session was opened over (`'streamable-http'`, `'legacy-sse'`, ...), when the session records it; an anonymous session (`auth.mode: 'public'`) does not.
 
 The flow has no `elapsed` or `tryGet`, and its `input`, `scope` and `tryGetContext()` are protected: read the request through `ctx.request`. In `tools:call-tool`, the tool entry is `ctx.state.tool` (set by `findTool`) and the tool instance `ctx.state.toolContext` (set from `createToolCallContext` on); to rewrite the call's name or arguments, set `ctx.state.input`. The state accepts only the keys the flow declares: `ctx.state.set('startedAt', Date.now())` does not compile.
@@ -392,15 +503,21 @@ All five decorators accept an optional options object:
 
 ```typescript
 @Will('execute', {
-  priority: 10, // Lower runs first (default: 0)
+  priority: HookPhase.guard, // Lower runs first (default: 0)
+  before: ['setup-gate'], // Runs before these hooks of the stage, whatever their priority
+  after: ['tenant-resolver.resolve'], // Runs after these
   filter: (ctx) => ctx.toolName !== 'health_check', // Predicate to skip
   appliesTo: 'own-app', // Reach of an app plugin's hook (default: 'own-app')
 })
 ```
 
-- **priority** (`number`) - Execution order when multiple hooks target the same stage. Lower values run first, for `@Will`, `@Did`, `@Around`, `@Finally` and `@Stage` alike, and the lowest `@Around` is the outermost. Default: `0`. Ties and an example: [Hook Order](#hook-order).
+- **priority** (`number`) - Execution order when multiple hooks target the same stage. Lower values run first, for `@Will`, `@Did`, `@Around`, `@Finally` and `@Stage` alike, and the lowest `@Around` is the outermost. Default: `0`. Use the [`HookPhase`](#named-bands-hookphase) bands rather than bare numbers. Ties and an example: [Hook Order](#hook-order).
+- **before** / **after** (`string[]`) - Plugin names or class names, each optionally followed by `.method`, of the hooks of the same stage and type this one runs before or after. They take precedence over `priority`; a cycle stops the server at startup and a target that matches nothing logs a warning. See [Ordering Against Another Hook](#ordering-against-another-hook-before-and-after).
 - **filter** (`(ctx) => boolean`) - A predicate that receives the flow context, typed like the hook's (`ctx.toolName`, `ctx.request`, ...). Return `false` to skip this hook for the current invocation.
-- **appliesTo** (`'own-app' | 'uncovered-apps'`) - A hook of a plugin installed on an app runs, in `tools/call`, `resources/read`, `prompts/get` and `completion/complete`, only for that app's entries (`'own-app'`), unless the plugin has `scope: 'server'`. With `'uncovered-apps'` it also runs for the entries of any app that has no instance of the same hook (same class and method) of its own or from a server-level plugin. Use it for gates an entry's metadata asks for (approval, feature flags), so the entry is not left ungated when the plugin sits on another app. Server-level plugins' hooks, and list-flow hooks, already run for every app.
+- **appliesTo** (`'own-app' | 'uncovered-apps' | 'all-apps'`) - A hook of a plugin installed on an app runs, in `tools/call`, `resources/read`, `prompts/get` and `completion/complete`, only for that app's entries (`'own-app'`), unless the plugin has `scope: 'server'`. Server-level plugins' hooks, and list-flow hooks, already run for every app.
+  - `'uncovered-apps'`: it also runs for the entries of any app that has no instance of the same hook (same class and method) of its own or from a server-level plugin. Use it for gates an entry's metadata asks for (approval, feature flags), so the entry is not left ungated when the plugin sits on another app, while an app that installs the gate itself keeps its own instance.
+  - `'all-apps'`: it runs for the entries of every app, and the tools the server declares, like a server-level plugin's hook, even for an app with its own instance of the same hook (then both run). Use it for one hook that guards or watches every app, such as a setup gate, while the plugin and its other hooks stay on the app that installs it. Such a hook reads, and can change, every app's calls (their arguments and answers, remote apps' included), so grant it only to a plugin you would install on the server.
+  - `@Plugin({ scope: 'server' })` instead makes every hook of the plugin run for every app, and a standalone app cannot install it (`InvalidPluginScopeError`). Both reach only the apps that share a scope with the app that installs the plugin: a standalone app, or each app of a `splitByApp` server, is a scope of its own. A plugin installed on the server (`@FrontMcp({ plugins })`) reaches every scope.
 
 ## Examples
 
@@ -517,7 +634,7 @@ export class MyApp {}
 
 Plugins are initialized in array order. Hook priority determines execution order within the same stage, lowest first; at equal priority, hooks run in array order (see [Hook Order](#hook-order)).
 
-Hooks declared on an app's providers, on its plugins (including plugins nested inside them), and on those plugins' providers run only for that app's tools, resources and prompts (`tools:call-tool`, `resources:read-resource`, `prompts:get-prompt`, `completion:complete`), including the ones its adapters and plugins provide, such as the tools an OpenAPI adapter generates. Plugins and providers registered on the server (`@FrontMcp({ plugins, providers })`) apply to every app. So do the hooks of a plugin declared with `scope: 'server'`, those on its providers included, even when it is installed on one app; its providers and context extensions still stay with that app, and each app that installs it adds another copy of its hooks that runs for every app. Up to 1.9.0 those hooks ran only for the installing app. Resources and prompts the server serves outside every app, such as the SEP-2640 `skill://` resources, run every app's hooks.
+Hooks declared on an app's providers, on its plugins (including plugins nested inside them), and on those plugins' providers run only for that app's tools, resources and prompts (`tools:call-tool`, `resources:read-resource`, `prompts:get-prompt`, `completion:complete`), including the ones its adapters and plugins provide, such as the tools an OpenAPI adapter generates, unless the hook sets [`appliesTo`](#hookoptions). Plugins and providers registered on the server (`@FrontMcp({ plugins, providers })`) apply to every app. So do the hooks of a plugin declared with `scope: 'server'`, those on its providers included, even when it is installed on one app; its providers and context extensions still stay with that app, and each app that installs it adds another copy of its hooks that runs for every app. Up to 1.9.0 those hooks ran only for the installing app. Resources and prompts the server serves outside every app, such as the SEP-2640 `skill://` resources, run every app's hooks.
 
 A hook declared on a `CONTEXT`-scoped provider (`@Provider({ name, scope: ProviderScope.CONTEXT })`, a class provider) runs on the instance built for the request or session -- the same instance the request's tools get from `this.get()`. Up to 1.8.7, hooks on server-level and `CONTEXT`-scoped providers were never registered.
 
@@ -594,6 +711,7 @@ class ProcessOrderTool extends ToolContext {
 parseInput → ensureRemoteCapabilities → findTool → checkToolAuthorization → checkEntryAuthorities
   → createTaskIfRequested → createToolCallContext → checkToolCredentials → acquireQuota → acquireSemaphore
   → validateInput → execute → validateOutput → releaseSemaphore → releaseQuota → applyUI → finalize
+  → fitAnswer → shapeAnswer → meterAnswer
 ```
 
 A tool-class hook declared as an instance method runs on the tool instance, which `createToolCallContext` builds. So it can hook `Did`/`Stage`/`Finally` on `createToolCallContext` and any hook on a later stage. The same holds for `@Resource` (`createResourceContext`), `@Prompt` (`createPromptContext`) and `@Agent` (`createAgentContext`) classes.
@@ -651,17 +769,19 @@ An instance method on an earlier stage, or `Will`/`Around` on `createToolCallCon
 
 ## Troubleshooting
 
-| Problem                                                             | Cause                                                                                                                                    | Solution                                                                                                                                     |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hook never fires                                                    | Plugin not registered in `plugins` array                                                                                                 | Add plugin class to `@App` or `@FrontMcp` `plugins` array                                                                                    |
-| `InvalidHookFlowError` at startup                                   | Entry-class hook that could never run                                                                                                    | Make early-stage hooks `static`; move list-flow hooks (and a `@Job` hook for a flow other than `jobs:execute-job`) to a plugin or a provider |
-| Hook fires for wrong flow                                           | Used wrong flow name in `FlowHooksOf`                                                                                                    | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)                                                                       |
-| `@Around` skips the stage entirely                                  | `next()` not called inside the around handler                                                                                            | Always `await next()` to execute the wrapped stage                                                                                           |
-| Multiple hooks execute in wrong order                               | Priorities not set, or set as if a higher number ran first                                                                               | Lower numbers execute first: give the hook that must run first the lowest `priority`; run with `NODE_ENV=development` to log the order       |
-| The tool still runs despite a plugin `@Stage`                       | `@Stage` adds a step; it does not replace the stage                                                                                      | End the flow with `ctx.respond(result)`, or use `@Around` without calling `next()`                                                           |
-| A span or timer opened in `@Will` stays open                        | It is closed in `@Did`, which a failed stage skips                                                                                       | Close it in `@Finally` on the same stage                                                                                                     |
-| `ctx.respond()` in a `@Finally` hook does nothing                   | `@Finally` cannot change a stage's outcome                                                                                               | Answer from `@Will`, `@Stage` or `@Around`; the flow logs a warning for each ignored `@Finally` response or throw                            |
-| `TS1241: Unable to resolve signature of method decorator` on a hook | The method's parameter asks for what the flow does not have: a missing or wrongly typed property, another flow's ctx, a second parameter | Type it `FlowCtxOf<'<flow-name>'>` and read the ctx members (`ctx.toolName`, `ctx.request`, ...); only `@Around` takes `next`                |
+| Problem                                                                       | Cause                                                                                                                                    | Solution                                                                                                                                         |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Hook never fires                                                              | Plugin not registered in `plugins` array                                                                                                 | Add plugin class to `@App` or `@FrontMcp` `plugins` array                                                                                        |
+| `InvalidHookFlowError` at startup                                             | Entry-class hook that could never run                                                                                                    | Make early-stage hooks `static`; move list-flow hooks (and a `@Job` hook for a flow other than `jobs:execute-job`) to a plugin or a provider     |
+| Hook fires for wrong flow                                                     | Used wrong flow name in `FlowHooksOf`                                                                                                    | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)                                                                           |
+| `@Around` skips the stage entirely                                            | `next()` not called inside the around handler                                                                                            | Always `await next()` to execute the wrapped stage                                                                                               |
+| Multiple hooks execute in wrong order                                         | Priorities not set, or set as if a higher number ran first                                                                               | Lower numbers execute first: use the `HookPhase` bands, or `before` / `after` the other plugin; run with `NODE_ENV=development` to log the order |
+| `HookOrderCycleError` at startup                                              | The `before` / `after` of two or more hooks on one stage contradict each other                                                           | Remove one of the constraints the error names, or let priority order one of the pairs                                                            |
+| Startup warning `names '...' in before, but no hook on that stage matches it` | The target is misspelled, its plugin is not installed, or it has no hook of that type on that stage                                      | Use the plugin's `name` or the class name, with `.method` for one hook, of a hook of the same flow, stage and type                               |
+| The tool still runs despite a plugin `@Stage`                                 | `@Stage` adds a step; it does not replace the stage                                                                                      | End the flow with `ctx.respond(result)`, or use `@Around` without calling `next()`                                                               |
+| A span or timer opened in `@Will` stays open                                  | It is closed in `@Did`, which a failed stage skips                                                                                       | Close it in `@Finally` on the same stage                                                                                                         |
+| `ctx.respond()` in a `@Finally` hook does nothing                             | `@Finally` cannot change a stage's outcome                                                                                               | Answer from `@Will`, `@Stage` or `@Around`; the flow logs a warning for each ignored `@Finally` response or throw                                |
+| `TS1241: Unable to resolve signature of method decorator` on a hook           | The method's parameter asks for what the flow does not have: a missing or wrongly typed property, another flow's ctx, a second parameter | Type it `FlowCtxOf<'<flow-name>'>` and read the ctx members (`ctx.toolName`, `ctx.request`, ...); only `@Around` takes `next`                    |
 
 ## Examples
 

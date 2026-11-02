@@ -91,7 +91,10 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
       readyArr.push(app.ready);
       this.logger?.verbose(`AppRegistry: registered ${rec.kind} app '${rec.metadata.name}'`);
     }
-    await Promise.all(readyArr);
+    // Every app finishes building before a failure is reported, so shutting down releases what they built
+    const settled = await Promise.allSettled(readyArr);
+    const failure = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failure) throw failure.reason;
     this.logger?.debug(`AppRegistry: initialization complete (${this.instances.size} app(s))`);
   }
 

@@ -12,15 +12,17 @@ import {
   ScopeEntry,
   ToolHook,
   type FlowCtxOf,
+  type FrontMcpContext,
   type HookGatedEntry,
+  type ListChangedKind,
   type PromptEntry,
   type ProviderType,
 } from '@frontmcp/sdk';
 
 import type { FeatureFlagAdapter } from './adapters/feature-flag-adapter.interface';
 import { StaticFeatureFlagAdapter } from './adapters/static.adapter';
-import { buildFeatureFlagContext } from './feature-flag.context';
 import { FeatureFlagConfigurationError, FeatureFlagDisabledError } from './feature-flag.errors';
+import { callerFlagContext, FeatureFlagSource, flagKeyOf, isRefEnabled } from './feature-flag.source';
 import { FeatureFlagAccessorToken, FeatureFlagAdapterToken, FeatureFlagConfigToken } from './feature-flag.symbols';
 import type {
   FeatureFlagContext,
@@ -78,6 +80,7 @@ function assertGateDefaultValue(gateDefaultValue: unknown): void {
 interface AdapterLifecycle {
   ready: Promise<void>;
   registrations: number;
+  stopFollowing?: () => void;
 }
 
 /** One lifecycle per adapter instance and scope: one plugin record in several apps shares its adapter. */
@@ -106,9 +109,25 @@ async function startAdapter(adapter: FeatureFlagAdapter, scope: ScopeEntry): Pro
     registeredLifecycle.registrations--;
     if (registeredLifecycle.registrations > 0) return;
     registeredScopes.delete(scope);
+    registeredLifecycle.stopFollowing?.();
     await adapter.destroy?.();
   });
   await registeredLifecycle.ready;
+  // Not when the scope was disposed meanwhile, which removed its lifecycle
+  if (registeredScopes.get(scope) !== registeredLifecycle || registeredLifecycle.stopFollowing) return;
+  registeredLifecycle.stopFollowing = adapter.subscribe?.(() => announceFlaggedLists(scope));
+}
+
+/** A flag flip changes the lists that hold an entry with a `featureFlag`: tell the connected clients, coalesced. */
+function announceFlaggedLists(scope: ScopeEntry): void {
+  const lists: Array<[ListChangedKind, ReadonlyArray<{ metadata: { featureFlag?: FeatureFlagRef } }>]> = [
+    ['tools', scope.tools.listAllInstances()],
+    ['resources', scope.resources.listAllInstances()],
+    ['prompts', scope.prompts.listAllInstances()],
+  ];
+  for (const [kind, entries] of lists) {
+    if (entries.some((entry) => entry.metadata.featureFlag)) scope.surface?.listChanged(kind);
+  }
 }
 
 /**
@@ -441,7 +460,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    * One implementation on purpose: the advisory existed because the tool path had a gate and
    * the other two did not, and three copies would drift apart the same way.
    *
-   * When the adapter throws, the gate answers {@link gateFallback}: the ref's `defaultValue`, then
+   * When the adapter throws, the gate answers the source's fallback: the ref's `defaultValue`, then
    * the plugin's `gateDefaultValue`, then `false`.
    */
   private async gateEntryExecution(kind: string, entry: { metadata?: unknown } | undefined): Promise<void> {
@@ -451,22 +470,10 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
     const ref = metadata?.featureFlag;
     if (!ref) return;
 
-    const key = typeof ref === 'string' ? ref : ref.key;
-
-    let enabled: boolean;
-    try {
-      // The same batch call the list hooks make, so the gate and the listing cannot reach
-      // different answers, and so an omitted (unknown) key falls back to the gate default
-      // rather than reading as a disable.
-      const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
-      const results = await adapter.evaluateFlags([key], this.currentFlagContext());
-      enabled = this.isRefEnabled(ref, results);
-    } catch {
-      enabled = this.gateFallback(ref);
-    }
-
-    if (!enabled) {
-      throw new FeatureFlagDisabledError(kind, metadata?.name, key);
+    // The same evaluation and fallback the list hooks use, so the gate and the listing cannot disagree
+    const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
+    if (!(await new FeatureFlagSource(adapter, ref, this.options).get(this.currentContext()))) {
+      throw new FeatureFlagDisabledError(kind, metadata?.name, flagKeyOf(ref));
     }
   }
 
@@ -535,37 +542,24 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    * context-scoped accessor reads, so hooks and `this.featureFlags` agree.
    */
   private currentFlagContext(): FeatureFlagContext {
+    return callerFlagContext(this.currentContext(), this.options);
+  }
+
+  /** The request's context, or `undefined` where no context storage is bound (unit tests, non-request paths). */
+  private currentContext(): FrontMcpContext | undefined {
     try {
-      const ctx = this.get(FrontMcpContextStorage)?.getStore();
-      if (!ctx) return {};
-      return buildFeatureFlagContext(ctx, this.options);
+      return this.get(FrontMcpContextStorage)?.getStore();
     } catch {
-      // No context storage bound (unit tests, non-request paths) — evaluate anonymously.
-      return {};
+      return undefined;
     }
   }
 
   /**
-   * Whether a gated entry's flag ref is enabled, given the adapter's batch answers.
-   *
-   * An answer from the adapter wins, `false` included: the operator disabled the flag. A key the
-   * adapter left out of its answers is one it does not know, and only then does
-   * {@link gateFallback} apply. Both the list hooks and `gateEntryExecution` go through here, so a
-   * capability cannot be listed and then refused on access.
+   * Whether a gated entry's flag ref is enabled, given the adapter's batch answers: the rule every
+   * {@link FeatureFlagSource} applies, so a capability cannot be listed and then refused on access. The
+   * plugin's `defaultValue` is for `this.featureFlags.isEnabled()` only (#719).
    */
   private isRefEnabled(ref: FeatureFlagRef, flagResults: Map<string, boolean>): boolean {
-    const key = typeof ref === 'string' ? ref : ref.key;
-    if (flagResults.has(key)) return flagResults.get(key) === true;
-    return this.gateFallback(ref);
-  }
-
-  /**
-   * What a gate answers when the adapter throws or does not know the flag: the ref's `defaultValue`,
-   * then the plugin's `gateDefaultValue`, then `false`, so gates fail closed unless one of them opts
-   * in. The plugin's `defaultValue` is for `this.featureFlags.isEnabled()` only (#719).
-   */
-  private gateFallback(ref: FeatureFlagRef): boolean {
-    const refDefault = typeof ref === 'object' ? ref.defaultValue : undefined;
-    return refDefault ?? this.options.gateDefaultValue ?? false;
+    return isRefEnabled(ref, flagResults, this.options.gateDefaultValue);
   }
 }

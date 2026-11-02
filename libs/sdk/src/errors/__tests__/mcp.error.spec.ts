@@ -4,6 +4,7 @@ import { ConcurrencyLimitError, ExecutionTimeoutError, GuardStorageUnavailableEr
 
 import {
   AuthorityDeniedMcpError,
+  EntryUnavailableError,
   formatMcpErrorResponse,
   GlobalConfigNotFoundError,
   GuardLimitMcpError,
@@ -11,6 +12,8 @@ import {
   InvalidOutputError,
   isClientFacingError,
   isPublicError,
+  PublicMcpError,
+  refused,
   toMcpError,
   ToolExecutionError,
   ToolNotFoundError,
@@ -321,5 +324,73 @@ describe('toMcpError with an authorities refusal', () => {
       expect(response._meta?.code).toBe('EXECUTION_TIMEOUT');
       expect(response.content[0].text).toContain('timed out after 50ms');
     });
+  });
+});
+
+describe('Remedies', () => {
+  const remedy = { say: 'Turn on Reviews in Settings', tool: 'settings_set', args: { feature: 'reviews' } };
+
+  it('builds a public refusal with refused(), a 403 REFUSED by default', () => {
+    const error = refused('Reviews are off', { remedy });
+
+    expect(error).toBeInstanceOf(PublicMcpError);
+    expect(error.message).toBe('Reviews are off');
+    expect(error.code).toBe('REFUSED');
+    expect(error.statusCode).toBe(403);
+    expect(error.remedy).toEqual(remedy);
+  });
+
+  it('takes the code and status a refusal names', () => {
+    const error = refused('Run setup first', { code: 'SETUP_REQUIRED', status: 412 });
+
+    expect(error.code).toBe('SETUP_REQUIRED');
+    expect(error.statusCode).toBe(412);
+    expect(error.remedy).toBeUndefined();
+  });
+
+  it('appends the remedy to a tool-call error result as a line, and keeps it in _meta', () => {
+    const response = formatMcpErrorResponse(refused('Reviews are off', { code: 'FEATURE_OFF', remedy }), false);
+
+    expect(response.isError).toBe(true);
+    expect(response.content).toHaveLength(1);
+    expect(response.content[0].text).toBe(
+      'Reviews are off\nTo fix: Turn on Reviews in Settings (call settings_set with {"feature":"reviews"})',
+    );
+    expect(response._meta?.code).toBe('FEATURE_OFF');
+    expect(response._meta?.remedy).toEqual(remedy);
+  });
+
+  it('writes a remedy without a tool as its sentence only, and one without args with the tool alone', () => {
+    const sayOnly = formatMcpErrorResponse(refused('Reviews are off', { remedy: { say: 'Ask an admin' } }), false);
+    const toolOnly = formatMcpErrorResponse(
+      refused('Reviews are off', { remedy: { say: 'Run setup', tool: 'setup_run' } }),
+      false,
+    );
+
+    expect(sayOnly.content[0].text).toBe('Reviews are off\nTo fix: Ask an admin');
+    expect(toolOnly.content[0].text).toBe('Reviews are off\nTo fix: Run setup (call setup_run)');
+  });
+
+  it('leaves an error result without a remedy as it was', () => {
+    const response = formatMcpErrorResponse(new PublicMcpError('Order is archived'), false);
+
+    expect(response.content[0].text).toBe('Order is archived');
+    expect(response._meta).not.toHaveProperty('remedy');
+  });
+
+  it('names the environment an unavailable entry needs', () => {
+    const error = new EntryUnavailableError('Tool', 'deploy', { env: ['production', 'staging'], os: ['linux'] }, {}, [
+      'env',
+      'os',
+    ]);
+
+    expect(error.remedy).toEqual({
+      say: 'Run the server where env is production or staging and os is linux to use this tool.',
+    });
+  });
+
+  it('gives no remedy for an entry no environment can offer', () => {
+    expect(new EntryUnavailableError('Tool', 'never', { env: [] }, {}, ['env']).remedy).toBeUndefined();
+    expect(new EntryUnavailableError('Prompt', 'brief').remedy).toBeUndefined();
   });
 });

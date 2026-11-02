@@ -273,8 +273,14 @@ export function buildTestChildEnv(params: {
  *   frontmcp test --verbose          # Show verbose output
  *   frontmcp test --timeout 60000    # Set test timeout (default: 60000ms)
  *   frontmcp test --no-env           # Skip .env loading for a hermetic run
+ *   frontmcp test --replay calls.jsonl  # Replay a call recording against the project server
  */
 export async function runTest(opts: ParsedArgs): Promise<void> {
+  const { replay } = opts;
+  if (replay !== undefined) {
+    const { runReplay } = await import('./replay.js');
+    return runReplay({ ...opts, replay });
+  }
   const cwd = process.cwd();
 
   // Issue #540 — load `.env` / `.env.local` the same way `dev` does, before

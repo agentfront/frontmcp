@@ -80,6 +80,9 @@ export const E2E_PORT_RANGES = {
   // Testing library E2E tests (50480-50499)
   'demo-e2e-testing': { start: 50480, size: 20 },
 
+  // Answer shaping E2E tests (50500-50509)
+  'demo-e2e-answer-shaping': { start: 50500, size: 10 },
+
   // Mock servers and utilities (50900-50999)
   'mock-oauth': { start: 50900, size: 10 },
   'mock-api': { start: 50910, size: 10 },

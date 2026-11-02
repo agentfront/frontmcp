@@ -28,6 +28,9 @@ export { default, default as FeatureFlagPlugin } from './feature-flag.plugin';
 // Errors
 export { FeatureFlagConfigurationError, FeatureFlagDisabledError } from './feature-flag.errors';
 
+// Flags as EnabledSources (`enabled: featureFlagSource(adapter, 'beta')`)
+export { featureFlagSource, FeatureFlagSource, type FeatureFlagSourceOptions } from './feature-flag.source';
+
 // Symbols (DI tokens)
 export { FeatureFlagAdapterToken, FeatureFlagConfigToken, FeatureFlagAccessorToken } from './feature-flag.symbols';
 

@@ -75,6 +75,7 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 | Configure multi-target deployments and frontmcp.config.ts      | `configure-deployment-targets`         | Typed config with defineConfig(), 9 deployment targets, JSON schema |
 | Add CSP, HSTS, X-Frame-Options, and other security headers     | `configure-security-headers`           | CSP directives, report-only mode, HSTS preload, custom headers      |
 | Configure skills HTTP, instructions injection, or audit log    | `configure-skills-http`                | Full `skillsConfig` reference: auth, cache, instructions, audit log |
+| Shape answers per MCP client (text, structuredContent, both)   | `configure-client-profiles`            | `clients` profiles: structured mode, annotations, instructions      |
 | Split apps into separate scopes (`splitByApp`)                 | `decorators-guide`                     | Per-app scope and basePath isolation on `@FrontMcp`                 |
 | Enable widget-to-host communication (ext-apps)                 | `decorators-guide`                     | `extApps` host capabilities, session validation, widget comms       |
 | Enable background jobs and workflows                           | `decorators-guide`                     | `jobs: { enabled: true, store? }` on `@FrontMcp`                    |
@@ -247,6 +248,12 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 | --------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------- |
 | [`csp-report-only`](./examples/configure-security-headers/csp-report-only.md)                 | Basic        | Test CSP policies in report-only mode to identify violations before enforcement                                        |
 | [`full-production-headers`](./examples/configure-security-headers/full-production-headers.md) | Intermediate | Complete security headers configuration for production with CSP enforcement, HSTS preload, and clickjacking protection |
+
+### `configure-client-profiles`
+
+| Example                                                                                  | Level        | Description                                                                                   |
+| ---------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------- |
+| [`coding-agent-profiles`](./examples/configure-client-profiles/coding-agent-profiles.md) | Intermediate | Send coding agents one copy of each answer, and keep numbers out of one client's annotations. |
 
 ## Accessing This Skill
 

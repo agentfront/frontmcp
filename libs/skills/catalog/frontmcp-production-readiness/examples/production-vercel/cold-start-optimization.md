@@ -11,7 +11,7 @@ tags:
   - cold
   - start
 features:
-  - Lazy-loading heavy SDKs via dynamic `import()` on **first use**, not at module scope (and not in a fictional `Provider.onInit`)
+  - Lazy-loading heavy SDKs via dynamic `import()` on **first use**, not at module scope or in `onBootstrap()`, which both run during the cold start
   - Caching expensive fetches (e.g., OpenAPI specs) across warm invocations
   - Keeping the module scope lightweight with no side effects
   - No `top-level await` and no heavy global initialization or network calls at import time (lightweight module-scope caching of cheap synchronous values like `cachedSpec` is fine)
@@ -21,7 +21,7 @@ features:
 
 Shows how to minimize cold start time by lazy-loading dependencies on first use, avoiding heavy initialization at module scope, and caching expensive operations across warm invocations.
 
-> `@Provider`-decorated classes do **not** have `onInit` / `onDestroy` lifecycle hooks. Initialize lazily on first method call inside the provider, or in the constructor if synchronous.
+> A provider's constructor and `onBootstrap()` both run during the cold start, before the first request is answered. Initialize heavy clients lazily on the first method call instead. A serverless handler is never shut down, so `onShutdown()` does not run here.
 
 ## Code
 
@@ -109,7 +109,7 @@ export default class FastStartServer {}
 
 ## What This Demonstrates
 
-- Lazy-loading heavy SDKs via dynamic `import()` on **first use**, not at module scope (and not in a fictional `Provider.onInit`)
+- Lazy-loading heavy SDKs via dynamic `import()` on **first use**, not at module scope or in `onBootstrap()`, which both run during the cold start
 - Caching expensive fetches (e.g., OpenAPI specs) across warm invocations
 - Keeping the module scope lightweight with no side effects
 - No `top-level await` and no heavy global initialization or network calls at import time (lightweight module-scope caching of cheap synchronous values like `cachedSpec` is fine)

@@ -2623,6 +2623,19 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@frontmcp/plugin-result-handles@workspace:plugins/plugin-result-handles":
+  version: 0.0.0-use.local
+  resolution: "@frontmcp/plugin-result-handles@workspace:plugins/plugin-result-handles"
+  dependencies:
+    "@frontmcp/sdk": "npm:1.10.16"
+    "@frontmcp/utils": "npm:1.10.16"
+    reflect-metadata: "npm:^0.2.2"
+  peerDependencies:
+    "@frontmcp/lazy-zod": 1.10.16
+    "@frontmcp/sdk": 1.10.16
+  languageName: unknown
+  linkType: soft
+
 "@frontmcp/plugin-skilled-openapi@npm:1.10.16, @frontmcp/plugin-skilled-openapi@workspace:plugins/plugin-skilled-openapi":
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-skilled-openapi@workspace:plugins/plugin-skilled-openapi"

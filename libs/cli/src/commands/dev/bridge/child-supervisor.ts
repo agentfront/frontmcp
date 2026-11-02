@@ -29,7 +29,8 @@ import { type ChildProcess } from 'node:child_process';
 import * as net from 'node:net';
 import { pathToFileURL } from 'node:url';
 
-import { processTreeSpawnOptions, stopProcessTree } from '../../../shared/process-tree';
+import { processTreeSpawnOptions, stopProcessTree } from '@frontmcp/utils';
+
 import { packageManagerCommand, spawnTool, type ToolCommand, type ToolHost } from '../../../shared/tool-command';
 import type { BridgeLogger } from './log';
 

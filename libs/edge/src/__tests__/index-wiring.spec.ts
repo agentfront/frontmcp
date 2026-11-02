@@ -75,8 +75,16 @@ function makeScope(skills?: Partial<FakeSkills>): { skills?: FakeSkills } {
 }
 
 /** A built instance whose only scope, and so its primary scope, is `scope`. */
-function builtInstance(scope?: unknown): { getScopes: () => unknown[]; getPrimaryScope: () => unknown } {
-  return { getScopes: () => (scope ? [scope] : []), getPrimaryScope: () => scope };
+function builtInstance(scope?: unknown): {
+  getScopes: () => unknown[];
+  getPrimaryScope: () => unknown;
+  emitProvidersReady: () => Promise<void>;
+} {
+  return {
+    getScopes: () => (scope ? [scope] : []),
+    getPrimaryScope: () => scope,
+    emitProvidersReady: async () => undefined,
+  };
 }
 
 function mockScopeBuild(scope: unknown): void {

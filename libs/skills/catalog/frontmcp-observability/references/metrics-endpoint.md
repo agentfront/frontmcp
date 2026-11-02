@@ -60,7 +60,26 @@ On Cloudflare Workers `require()` cannot reach bundled modules, so `frontmcp bui
 | Process gauges     | `frontmcp_process_resident_memory_bytes`, `frontmcp_process_heap_bytes`, `frontmcp_process_uptime_seconds`, `frontmcp_process_cpu_seconds_total{mode}`          |
 | Node.js gauges     | `frontmcp_nodejs_eventloop_lag_seconds{quantile}`, `frontmcp_nodejs_active_handles`, `frontmcp_nodejs_active_requests`, `frontmcp_nodejs_open_fds` (Linux only) |
 | Framework counters | `frontmcp_skills_bundle_pulls_total`, `frontmcp_skills_signature_*_total`, `frontmcp_skills_replay_*_total`, `frontmcp_skills_audit_*_total`                    |
+| Answer cost        | `frontmcp_tool_answer_bytes_total`, `frontmcp_tool_answer_estimated_tokens_total`, `frontmcp_tool_answer_duplicated_bytes_total`, each `{tool, client}`         |
 | Custom counters    | Anything emitted via `createCounter('my_total').inc()` from `@frontmcp/observability`                                                                           |
+
+### Answer cost
+
+Each `tools/call` answer a client receives adds to three counters, labelled `tool` (the tool's full name, `reports:big-report`) and `client`:
+
+- `frontmcp_tool_answer_bytes_total`: UTF-8 bytes of the answer as JSON (`content`, `structuredContent` and `_meta`), as sent after the answer budget and the client profile.
+- `frontmcp_tool_answer_estimated_tokens_total`: those bytes / 4, rounded up per answer. A rough estimate that fits English text and JSON; a tokenizer gives other numbers.
+- `frontmcp_tool_answer_duplicated_bytes_total`: bytes of text content that is exactly the JSON of `structuredContent`, so sent twice. A client profile with `structured: 'only'` or `'text'` removes them (see the client profiles reference in `frontmcp-config`).
+
+`client` is the platform detected from the client's `clientInfo` (`codex`, `claude-code`, `claude`, `openai`, `cursor`, `generic-mcp`, …, `unknown`), never the raw name, so a client cannot create new label values. Answers a tool gets from `this.callTool()` are not counted. The counters are kept only while `metrics.enabled` is `true` and `include` is unset, empty or names `tools`.
+
+```text
+frontmcp_tool_answer_bytes_total{client="codex",tool="reports:big-report"} 65912
+frontmcp_tool_answer_estimated_tokens_total{client="codex",tool="reports:big-report"} 16478
+frontmcp_tool_answer_duplicated_bytes_total{client="codex",tool="reports:big-report"} 0
+```
+
+The counting runs in the `meterAnswer` stage of `tools:call-tool`, which a plugin can hook.
 
 A gauge the runtime cannot measure is left out rather than reported as `0`: a Cloudflare Worker, which has no process, serves none of the process gauges. Up to 1.9.2 a Worker listed five `frontmcp_process_*` gauges, all `0`.
 
@@ -129,13 +148,14 @@ Keep label values bounded (status codes, enum members, tool names) — unbounded
 - [ ] `metrics: { enabled: true }` is set in `@FrontMcp({ ... })`
 - [ ] For internet-exposed deployments, `auth: 'token'` + `tokenEnv` are set AND the env var is exported in the deployment
 - [ ] `metrics.path` does NOT start with `/mcp`, `/sse`, or `/messages`
-- [ ] If using `include[]`, every category name is from the enum (`process` | `tools` | `resources` | `http` | `storage` | `skills` | `auth` | `sessions`). FrontMCP counts only the `skills` counters itself (no request, tool-call, error or duration counters), so `tools`, `http` and the rest match the counters you create with their prefixes (`frontmcp_tool_`, `frontmcp_http_`, …)
+- [ ] If using `include[]`, every category name is from the enum (`process` | `tools` | `resources` | `http` | `storage` | `skills` | `auth` | `sessions`). FrontMCP counts the `skills` counters and the `tools` answer-cost counters itself (no request, error or duration counters), so `http` and the rest match the counters you create with their prefixes (`frontmcp_http_`, …)
 
 ### Runtime
 
 - [ ] `curl http://<host>:<port>/metrics` returns 200 with Content-Type `text/plain; version=0.0.4; charset=utf-8`
 - [ ] On Node, output contains at least one `frontmcp_process_*` gauge (proves the process-stats collector ran; a Cloudflare Worker serves none)
 - [ ] Output contains every `frontmcp_skills_*_total` counter incremented since startup
+- [ ] After a `tools/call`, output contains `frontmcp_tool_answer_bytes_total{client="…",tool="…"}` (unless `include` leaves `tools` out)
 - [ ] When `auth: 'token'`, requests without `Authorization: Bearer …` return 401 and wrong tokens return 403
 - [ ] Default `@FrontMcp({})` (no `metrics:` key) → `GET /metrics` returns 404 (route was never registered)
 

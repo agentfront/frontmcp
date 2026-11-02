@@ -15,14 +15,14 @@ features:
   - 'Setting per-tool TTL via `@Tool({ cache: { ttl } })` metadata in seconds'
   - Using Redis-backed cache for multi-instance consistency
   - Configuring connection pool limits and timeouts to prevent resource exhaustion
-  - Providers do not implement `onInit` / `onDestroy` — initialize in the constructor and let framework shutdown handle cleanup
+  - The pool is created in the constructor and drained in `onShutdown()`, which framework shutdown runs
 ---
 
 # Caching and Performance Configuration
 
 Shows how to configure caching with the real `CachePlugin.init(...)` API and how to size connection pools so the server does not exhaust downstream resources.
 
-> Note: `@Provider`-decorated classes do **not** have `onInit` / `onDestroy` lifecycle hooks. Provider construction is the init step. Shutdown cleanup happens via the framework-managed `scope.shutdown()` path on SIGTERM/SIGINT (see `front-mcp.ts`); you do not need to wire your own shutdown hooks.
+> Note: a GLOBAL provider can implement `onBootstrap()`, `onReady()` and `onShutdown()`. On SIGTERM/SIGINT the framework stops accepting requests, lets the ones in flight finish, then runs every provider's `onShutdown()`; you do not need to wire your own signal handlers.
 
 ## Code
 
@@ -80,12 +80,11 @@ export class GetWeatherTool extends ToolContext {
 
 ```typescript
 // src/providers/db-connection.provider.ts
-import { Provider, ProviderScope } from '@frontmcp/sdk';
+import { Provider, ProviderScope, type OnShutdown } from '@frontmcp/sdk';
 
 // The class is its own DI token: list it in `providers` and resolve it with `this.get(DbConnectionProvider)`
 @Provider({ name: 'DbConnectionProvider', scope: ProviderScope.GLOBAL })
-export class DbConnectionProvider {
-  // Pool is created in the constructor — providers do not have onInit/onDestroy.
+export class DbConnectionProvider implements OnShutdown {
   private readonly pool: { query: Function; end: Function };
 
   constructor() {
@@ -101,6 +100,10 @@ export class DbConnectionProvider {
     return this.pool.query(sql, params); // Parameterized — no SQL injection
   }
 
+  async onShutdown(): Promise<void> {
+    await this.pool.end(); // Each hook gets `lifecycle.shutdownHookTimeoutMs` (default 3000 ms)
+  }
+
   private createPool(config: Record<string, unknown>): { query: Function; end: Function } {
     // Replace with your database driver (e.g., pg, mysql2)
     throw new Error('Implement with your database driver');
@@ -114,7 +117,7 @@ export class DbConnectionProvider {
 - Setting per-tool TTL via `@Tool({ cache: { ttl } })` metadata in seconds
 - Using Redis-backed cache for multi-instance consistency
 - Configuring connection pool limits and timeouts to prevent resource exhaustion
-- Providers do not implement `onInit` / `onDestroy` — initialize in the constructor and let framework shutdown handle cleanup
+- The pool is created in the constructor and drained in `onShutdown()`, which framework shutdown runs
 
 ## Related
 

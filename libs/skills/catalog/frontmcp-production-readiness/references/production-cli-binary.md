@@ -28,7 +28,7 @@ Checklist for publishing FrontMCP as a one-shot CLI binary — runs a command, p
 
 - [ ] MCP stdio transport works: reads JSON-RPC from stdin, writes to stdout
 - [ ] stderr is used for logging (not stdout — that's the MCP channel)
-- [ ] Handles EOF on stdin gracefully (clean exit)
+- [ ] EOF on stdin, or the parent process exiting, shuts the server down gracefully and exits 0: built into `runStdio()` (`lifecycle.exitWhenOrphaned`, on by default); no `process.stdin.on('end', () => process.exit())`, which would skip `onShutdown()`
 - [ ] Handles broken pipe on stdout gracefully (no crash)
 
 ## Exit Behavior

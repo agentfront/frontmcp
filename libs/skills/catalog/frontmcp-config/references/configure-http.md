@@ -65,6 +65,7 @@ Configure the HTTP server — port, CORS policy, unix sockets, entry path prefix
         },
       },
     ],
+    forwardHeaders: ['x-acme-*'], // default: none — only x-frontmcp-* headers reach customHeaders
   },
 })
 class Server {}
@@ -456,6 +457,31 @@ set their own content type **before** sending the body:
 > protocol stream and inflate token usage. The custom route delivers bytes on a
 > separate HTTP request the client fetches directly.
 
+## Forwarded Request Headers
+
+A tool reads the request's custom headers from `this.context.metadata.customHeaders`. By default only `x-frontmcp-*` headers are kept there. `http.forwardHeaders` keeps more: header names or globs (`*` any characters, `?` one), matched without regard to case. Names are stored lower-cased; a header name over 256 characters is never kept.
+
+```typescript
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
+  http: { forwardHeaders: ['x-acme-*', 'x-request-source'] },
+})
+class Server {}
+
+@Tool({ name: 'whoami', inputSchema: {} })
+class WhoAmITool extends ToolContext {
+  async execute() {
+    return { tenant: this.context.metadata.customHeaders['x-acme-tenant'] ?? null };
+  }
+}
+```
+
+- `authorization`, `cookie`, `set-cookie`, `proxy-*`, hop-by-hop headers (`connection`, `keep-alive`, `te`, `trailer`, `transfer-encoding`, `upgrade`), `content-length` (an outbound request's body has its own) and the client-address headers (`host`, `forwarded`, `x-forwarded-*`, `x-real-ip`, which a client could forge for an upstream that trusts this server) are never kept. A name or glob that matches one (`'authorization'`, `'proxy-*'`, `'x-forwarded-port'`, `'content-*'`, `'x-*'`, `'*'`) stops `@FrontMcp` at startup with `InvalidDecoratorMetadataError` (`@FrontMcp invalid metadata for "http"`), naming the header. Read the caller's identity from `this.auth` instead.
+- A direct call to a `FrontMcpInstance.createDirect()` server built from the same config keeps the same headers from `DirectCallOptions.metadata.customHeaders`. `create()` takes no `http` option, so its calls keep `x-frontmcp-*` only.
+- The debug request log still redacts credential-looking headers (`x-acme-api-key`, `x-acme-token`).
+- `this.fetch()` sends the kept headers upstream only to the origins `fetch.forwardCustomHeadersTo` lists; other origins get none of them.
+
 ## Entry Path Prefix
 
 Mount the MCP server under a URL prefix:
@@ -538,6 +564,8 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 - [ ] If `socketPath` is set, `port` is removed or commented out to avoid confusion
 - [ ] `entryPath` does not have a trailing slash
 
+- [ ] `forwardHeaders` names only application headers (`x-acme-*`), and `fetch.forwardCustomHeadersTo` lists every origin that should receive them
+
 ### Network Binding
 
 - [ ] If the server must be reachable from another host, `security.bindAddress` or `FRONTMCP_BIND_ADDRESS` is set — the default is loopback-only
@@ -566,20 +594,21 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 
 ## Troubleshooting
 
-| Problem                                               | Cause                                                                                                                         | Solution                                                                                                 |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `EADDRINUSE` on startup                               | Another process is already using the configured port                                                                          | Change the port, stop the other process, or use `port: 0` for a random available port                    |
-| CORS errors in the browser console                    | Origin not included in the `cors.origin` list or `credentials: true` with wildcard origin                                     | Add the frontend origin to the `origin` array and ensure credentials and origin settings are compatible  |
-| Unix socket file not created                          | Missing write permissions on the target directory                                                                             | Check directory permissions; a stale `.sock` file from a crashed run is replaced automatically           |
-| `UnsafeSocketDirectoryError` at startup               | The socket's directory, or one above it, belongs to another user, or is writable by the group or others and has no sticky bit | Use a directory only you can write to (`chmod 700 <dir>`), such as `~/.frontmcp/sockets`                 |
-| `SocketInUseError` / `SocketPathConflictError`        | A server already listens on the socket, or the path holds a regular file or another user's socket                             | Stop the other server or pick another `socketPath`; FrontMCP never removes these itself                  |
-| `403 Invalid Origin header` from a browser app        | A loopback server refuses an `Origin` that is not its own and not in `cors.origin`                                            | Add the app's origin to `cors.origin` (or set `dnsRebindingProtection.allowedOrigins`)                   |
-| Routes return 404 after setting `entryPath`           | Client is still requesting the root path without the prefix                                                                   | Update client base URL to include the entry path (e.g., `http://localhost:3000/api/mcp`)                 |
-| Server binds but external clients cannot connect      | The default bind address is `127.0.0.1`, which a published container port cannot reach                                        | Set `FRONTMCP_BIND_ADDRESS=all` in the container (or `http.security.bindAddress: 'all'` in the config)   |
-| `413 Payload Too Large` with JSON-RPC envelope        | Request body exceeded `bodyLimit` (default `'4mb'`)                                                                           | Raise `http.bodyLimit` to fit the payload, or move large blobs to a separate upload endpoint             |
-| Server throws at startup mentioning a "reserved" path | A custom `http.routes` path collides with the MCP entry path, `/oauth/*`, `/.well-known/*`, `/health`, or `/metrics`          | Rename the custom route to a non-reserved path                                                           |
-| Custom route returns JSON when HTML/bytes expected    | The Express adapter defaults responses to `application/json`                                                                  | Set `res.setHeader('Content-Type', ...)` (or `res.type(...)`) in the handler before sending the body     |
-| Custom `auth: true` route always returns `401`        | Auth mode has no anonymous fallback and the request carries no valid bearer token                                             | Send a valid `Authorization: Bearer <jwt>`, or use `auth` mode `public`/transparent-anon for open routes |
+| Problem                                                                    | Cause                                                                                                                                                                            | Solution                                                                                                 |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `EADDRINUSE` on startup                                                    | Another process is already using the configured port                                                                                                                             | Change the port, stop the other process, or use `port: 0` for a random available port                    |
+| CORS errors in the browser console                                         | Origin not included in the `cors.origin` list or `credentials: true` with wildcard origin                                                                                        | Add the frontend origin to the `origin` array and ensure credentials and origin settings are compatible  |
+| Unix socket file not created                                               | Missing write permissions on the target directory                                                                                                                                | Check directory permissions; a stale `.sock` file from a crashed run is replaced automatically           |
+| `UnsafeSocketDirectoryError` at startup                                    | The socket's directory, or one above it, belongs to another user, or is writable by the group or others and has no sticky bit                                                    | Use a directory only you can write to (`chmod 700 <dir>`), such as `~/.frontmcp/sockets`                 |
+| `SocketInUseError` / `SocketPathConflictError`                             | A server already listens on the socket, or the path holds a regular file or another user's socket                                                                                | Stop the other server or pick another `socketPath`; FrontMCP never removes these itself                  |
+| `403 Invalid Origin header` from a browser app                             | A loopback server refuses an `Origin` that is not its own and not in `cors.origin`                                                                                               | Add the app's origin to `cors.origin` (or set `dnsRebindingProtection.allowedOrigins`)                   |
+| Routes return 404 after setting `entryPath`                                | Client is still requesting the root path without the prefix                                                                                                                      | Update client base URL to include the entry path (e.g., `http://localhost:3000/api/mcp`)                 |
+| Server binds but external clients cannot connect                           | The default bind address is `127.0.0.1`, which a published container port cannot reach                                                                                           | Set `FRONTMCP_BIND_ADDRESS=all` in the container (or `http.security.bindAddress: 'all'` in the config)   |
+| `413 Payload Too Large` with JSON-RPC envelope                             | Request body exceeded `bodyLimit` (default `'4mb'`)                                                                                                                              | Raise `http.bodyLimit` to fit the payload, or move large blobs to a separate upload endpoint             |
+| Server throws at startup mentioning a "reserved" path                      | A custom `http.routes` path collides with the MCP entry path, `/oauth/*`, `/.well-known/*`, `/health`, or `/metrics`                                                             | Rename the custom route to a non-reserved path                                                           |
+| Custom route returns JSON when HTML/bytes expected                         | The Express adapter defaults responses to `application/json`                                                                                                                     | Set `res.setHeader('Content-Type', ...)` (or `res.type(...)`) in the handler before sending the body     |
+| `@FrontMcp invalid metadata for "http"` at startup naming `forwardHeaders` | A `forwardHeaders` name or glob matches `authorization`, `cookie`, `proxy-*`, a hop-by-hop header, `content-length` or a client-address header (`x-*` matches `x-forwarded-for`) | Name the application headers to keep (`x-acme-*`); read the caller's identity from `this.auth`           |
+| Custom `auth: true` route always returns `401`                             | Auth mode has no anonymous fallback and the request carries no valid bearer token                                                                                                | Send a valid `Authorization: Bearer <jwt>`, or use `auth` mode `public`/transparent-anon for open routes |
 
 ## Examples
 

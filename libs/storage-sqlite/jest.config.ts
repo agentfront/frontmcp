@@ -29,6 +29,7 @@ module.exports = {
     ...require('../../jest.imports-mapper'),
     '^@frontmcp/utils$': '<rootDir>/../utils/src/index.ts',
     '^@frontmcp/utils/crypto/node$': '<rootDir>/../utils/src/crypto/node.ts',
+    '^@frontmcp/guard$': '<rootDir>/../guard/src/index.ts',
   },
   coverageDirectory: '../../coverage/unit/storage-sqlite',
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/index.ts'],

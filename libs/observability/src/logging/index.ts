@@ -20,4 +20,4 @@ export type { ContextAccessor, ContextSnapshot } from './structured-log-transpor
 export { StdoutSink, ConsoleSink, WinstonSink, PinoSink, CallbackSink, OtlpSink } from './sinks';
 export type { OtlpSinkOptions } from './sinks';
 export { createSink, createSinks } from './sink.factory';
-export { redactFields } from './redaction';
+export { redactFields } from '@frontmcp/utils';

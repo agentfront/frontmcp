@@ -229,7 +229,8 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
   // MCP Inspector) accept the smaller CDN-loaded payload. This is the (B)
   // half of #456; the (A) half (`resourceMode: 'inline'` actually inlining
   // React) shipped in #454.
-  const resourceMode: 'cdn' | 'inline' = options.resourceMode ?? (platformType === 'claude' ? 'inline' : 'cdn');
+  const isClaude = platformType === 'claude' || platformType === 'claude-code';
+  const resourceMode: 'cdn' | 'inline' = options.resourceMode ?? (isClaude ? 'inline' : 'cdn');
 
   const shellConfig = {
     toolName,

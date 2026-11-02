@@ -228,6 +228,7 @@ export class ResourceInstance<
       providers,
       logger,
       authInfo,
+      signal: ctx.signal,
     };
 
     const record = this.record as ResourceRecord | ResourceTemplateRecord;

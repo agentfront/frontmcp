@@ -51,4 +51,4 @@ await semaphore.forceReset('my-tool:global');
 
 ## Storage Requirements
 
-The semaphore calls `mget`, `set` (with TTL and `ifNotExists`), `get`, `deleteIfEquals`, `expireIfEquals`, `keys`, `mdelete`, and optionally `publish`/`subscribe` on the storage adapter. `deleteIfEquals` and `expireIfEquals` must be atomic (memory, Redis, Upstash and Vercel KV); with an adapter that lacks them, `acquire()` throws `GuardStorageUnsupportedError` before it claims a slot.
+The semaphore calls `mget`, `set` (with TTL and `ifNotExists`), `get`, `deleteIfEquals`, `expireIfEquals`, `keys`, `mdelete`, and optionally `publish`/`subscribe` on the storage adapter. `deleteIfEquals` and `expireIfEquals` must be atomic (memory, Redis, Upstash, Vercel KV and SQLite); with an adapter that lacks them, `acquire()` throws `GuardStorageUnsupportedError` before it claims a slot.

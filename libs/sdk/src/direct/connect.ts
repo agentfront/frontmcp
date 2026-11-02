@@ -144,7 +144,9 @@ export async function connect(
     await Promise.all((instance.getScopes() as Scope[]).map((scope) => scope.dispose()));
   };
   try {
-    const scope = await endpointScope(await instancePromise, options?.app);
+    const instance = await instancePromise;
+    const scope = await endpointScope(instance, options?.app);
+    await instance.emitProvidersReady();
     return await DirectClientImpl.create(scope, options, release);
   } catch (error) {
     // Best-effort like a client's close(), which runs the same release: the caller needs this error

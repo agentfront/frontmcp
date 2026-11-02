@@ -29,7 +29,12 @@ import { createMcpServer } from '../transport/mcp-server.factory';
 import type { FetchHandlerCtx, WebFetchHandler } from '../transport/web-fetch-handler';
 import { markDirectOnly } from './direct-only.flag';
 import { createMcpGlobalProviders } from './front-mcp.providers';
-import { DEFAULT_SHUTDOWN_DEADLINE_MS, exitOnShutdownSignals, STDIO_SHUTDOWN_DEADLINE_MS } from './shutdown-signals';
+import {
+  DEFAULT_SHUTDOWN_DEADLINE_MS,
+  exitOnShutdownSignals,
+  STDIO_DRAIN_MS,
+  STDIO_SHUTDOWN_DEADLINE_MS,
+} from './shutdown-signals';
 
 /**
  * A `@FrontMcp`-decorated server class, or the raw config object it wraps.
@@ -110,7 +115,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   async initialize(): Promise<void> {
-    this.providers = new ProviderRegistry([...createMcpGlobalProviders(this.config)]);
+    this.providers = new ProviderRegistry([...createMcpGlobalProviders(this.config)], undefined, {
+      shutdownHookTimeoutMs: this.config.lifecycle?.shutdownHookTimeoutMs,
+    });
     await this.providers.ready;
 
     this.logger = new LoggerRegistry(this.providers);
@@ -145,6 +152,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     for (const scope of this.getScopes()) {
       await scope.emitServerStarted();
     }
+    await this.emitProvidersReady();
 
     // Issue #399 — dev bridge bootstrap sentinel. When `frontmcp dev
     // --stdio` spawns this process, it sets FRONTMCP_DEV_BOOTSTRAP_SENTINEL=1
@@ -188,6 +196,13 @@ export class FrontMcpInstance implements FrontMcpInterface {
    */
   getScopes(): ScopeEntry[] {
     return this.scopes.getScopes();
+  }
+
+  /** Run every provider's `onReady()`, once; a host built from `createForGraph()` calls it when it starts serving. */
+  async emitProvidersReady(): Promise<void> {
+    for (const scope of this.getScopes() as Scope[]) {
+      await scope.providers.runReadyHooks(scope.logger);
+    }
   }
 
   /**
@@ -356,7 +371,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
     await frontMcp.ready;
 
     await frontMcp.startOrRelease();
-    exitOnShutdownSignals(() => frontMcp.shutdown(), { logger: frontMcp.log });
+    exitOnShutdownSignals(() => frontMcp.shutdown(), {
+      logger: frontMcp.log,
+      whenOrphaned: parsedConfig.lifecycle?.exitWhenOrphaned ? {} : undefined,
+    });
     frontMcp.log?.info('FrontMCP bootstrap complete');
     return frontMcp;
   }
@@ -388,6 +406,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     await frontMcp.wireMetricsService(server);
 
     server.prepare();
+    await frontMcp.emitProvidersReady();
     frontMcp.log?.info('FrontMCP handler created (serverless mode)');
     return server.getHandler();
   }
@@ -441,6 +460,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // the Express host registers as a route.
       const metricsService = await frontMcp.createMetricsService();
       const metricsConfig = frontMcp.config.metrics;
+      await frontMcp.emitProvidersReady();
       frontMcp.log?.info('FrontMCP fetch handler created (web-standard transport)');
       return createServerFetchHandler(
         scope,
@@ -611,7 +631,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
       frontMcp.log?.info('FrontMCP direct server created');
       // Disposing the server tears down every scope of the instance, not only the one it serves
-      return new DirectMcpServerImpl(scope as Scope, () => frontMcp.shutdown(), { workerEnv });
+      const server = new DirectMcpServerImpl(scope as Scope, () => frontMcp.shutdown(), { workerEnv });
+      await frontMcp.emitProvidersReady();
+      return server;
     } catch (error) {
       // shutdown() logs any step that fails; the caller needs the reason no server was created
       await frontMcp.shutdown().catch(() => undefined);
@@ -630,7 +652,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * class — spreading a class yields no config) plus the socket path.
    *
    * SIGTERM and SIGINT run the graceful {@link shutdown} and exit, as `bootstrap()` does for
-   * the TCP server; `close()` runs the same shutdown without exiting.
+   * the TCP server; `close()` runs the same shutdown without exiting. With
+   * `lifecycle.exitWhenOrphaned: true` the parent process exiting does too.
    *
    * @example
    * ```typescript
@@ -675,7 +698,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // The graceful shutdown of the TCP server (#712). Closing the server removes its socket file, and the next
     // start clears one a crash left behind, so nothing here unlinks a path a replacement may already hold.
     const shutdown = () => frontMcp.shutdown();
-    const removeSignalHandlers = exitOnShutdownSignals(shutdown, { logger: frontMcp.log });
+    const removeSignalHandlers = exitOnShutdownSignals(shutdown, {
+      logger: frontMcp.log,
+      whenOrphaned: parsedConfig.lifecycle?.exitWhenOrphaned ? {} : undefined,
+    });
 
     const close = async () => {
       removeSignalHandlers();
@@ -692,6 +718,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * bound** — the HTTP server is disabled for this entry point (#451).
    *
    * One connection serves every revision: `initialize` opens a session, a 2026-07-28 request is served statelessly.
+   *
+   * When stdin ends or the parent process exits, the server shuts down as on SIGTERM and exits 0, so a client that
+   * dies leaves no orphan behind; when stdin ends, the requests in flight are answered first (for up to 2 seconds).
+   * `lifecycle: { exitWhenOrphaned: false }` turns that off.
    *
    * Accepts either a `@FrontMcp`-decorated class or the same config object you
    * pass to `@FrontMcp()` (#450).
@@ -844,8 +874,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // initialize-request.handler.ts): dynamic skill registrations after boot
       // are reflected, and the skill catalog only names skills the caller may
       // see. No caller exists yet here, so the McpServer seed carries none.
-      const composeInstructions = (caller?: { authInfo?: unknown }): Promise<string> =>
-        composeCallerInstructions(scope, { ctx: caller });
+      const composeInstructions = (caller?: { authInfo?: unknown }, clientName?: string): Promise<string> =>
+        composeCallerInstructions(scope, { ctx: caller, clientName });
       const instructions = '';
 
       const serverOptions = {
@@ -899,7 +929,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // giving us the real stdin/stdout.
       const { IpcServerTransport, isIpcStdioRequested } = await import('../transport/ipc-server.transport.js');
       const { StdioRevisionRouter } = await import('../transport/stdio-revision-router.js');
-      const stdioTransport = isIpcStdioRequested() ? new IpcServerTransport() : new StdioServerTransport();
+      const overIpc = isIpcStdioRequested();
+      const stdioTransport = overIpc ? new IpcServerTransport() : new StdioServerTransport();
       // The router serves MCP 2026-07-28 messages itself and passes the rest to the session-era server.
       const transport = new StdioRevisionRouter(stdioTransport, { scope, principal: sessionId });
       startupCleanups.push(() => transport.close());
@@ -916,11 +947,14 @@ export class FrontMcpInstance implements FrontMcpInterface {
         const channelNames = scope.channels.getChannelInstances().map((ch: { name: string }) => ch.name);
         scope.notifications.subscribeAllChannels(sessionId, channelNames);
       }
+      await frontMcp.emitProvidersReady();
 
       // The graceful shutdown of the HTTP and socket servers (#712): every scope is shut down, then
-      // disposed, so `onDispose` callbacks run under stdio too.
+      // disposed, so `onDispose` callbacks run under stdio too. It also runs when the client goes away.
       exitOnShutdownSignals(
-        async () => {
+        async (trigger) => {
+          // A client that closed stdin may still read the replies to the requests it sent before.
+          if (trigger === 'stdin-ended') await transport.whenIdle(STDIO_DRAIN_MS);
           scope.notifications.unregisterServer(sessionId);
           try {
             await frontMcp.shutdown();
@@ -928,7 +962,14 @@ export class FrontMcpInstance implements FrontMcpInterface {
             await mcpServer.close();
           }
         },
-        { logger: frontMcp.log, deadlineMs: STDIO_SHUTDOWN_DEADLINE_MS },
+        {
+          logger: frontMcp.log,
+          deadlineMs: STDIO_SHUTDOWN_DEADLINE_MS,
+          whenOrphaned:
+            parsedConfig.lifecycle?.exitWhenOrphaned === false
+              ? undefined
+              : { stdin: overIpc ? undefined : process.stdin },
+        },
       );
     } finally {
       if (!startupSucceeded) {

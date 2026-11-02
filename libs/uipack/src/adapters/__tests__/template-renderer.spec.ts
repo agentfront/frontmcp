@@ -172,6 +172,23 @@ describe('renderToolTemplate', () => {
       expect(opts.external).toEqual([]);
     });
 
+    it("auto-selects resourceMode:'inline' for Claude Code too, which was detected as 'claude' before", () => {
+      const esbuild = require('esbuild');
+      const buildSyncSpy = esbuild.buildSync as jest.Mock;
+      buildSyncSpy.mockClear();
+
+      renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: { file: '/app/widget.tsx' },
+        platformType: 'claude-code',
+      });
+
+      const opts = buildSyncSpy.mock.calls.at(-1)?.[0];
+      expect(opts.external).toEqual([]);
+    });
+
     it("respects an explicit resourceMode:'cdn' on Claude (user opt-out of auto-inline) (#456)", () => {
       const esbuild = require('esbuild');
       const buildSyncSpy = esbuild.buildSync as jest.Mock;

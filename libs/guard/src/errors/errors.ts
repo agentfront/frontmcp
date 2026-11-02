@@ -145,7 +145,7 @@ export class GuardStorageUnsupportedError extends GuardError {
     const reason = cause instanceof Error ? cause.message : 'it has no atomic compare-and-delete';
     super(
       'Concurrency limits need storage with an atomic compare-and-delete and compare-and-expire ' +
-        `(memory, Redis, Upstash or Vercel KV): ${reason}`,
+        `(memory, Redis, Upstash, Vercel KV or SQLite): ${reason}`,
       'GUARD_STORAGE_UNSUPPORTED',
       500,
     );
