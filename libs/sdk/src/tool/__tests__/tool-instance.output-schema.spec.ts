@@ -11,15 +11,13 @@ class AnswerTool extends ToolContext {
   }
 }
 
-function toolWithOutput(outputSchema: unknown): { tool: ToolInstance; warn: jest.Mock } {
-  const providers = createMockProviderRegistry();
-  const warn = providers.getActiveScope().logger.warn as jest.Mock;
+function toolWithOutput(outputSchema: unknown): { tool: ToolInstance } {
   const record = {
     kind: ToolKind.CLASS_TOKEN,
     provide: AnswerTool,
     metadata: { name: 'answer', inputSchema: {}, outputSchema } as unknown as ToolMetadata,
   } as unknown as ToolRecord;
-  return { tool: new ToolInstance(record, providers, createMockOwner()), warn };
+  return { tool: new ToolInstance(record, createMockProviderRegistry(), createMockOwner()) };
 }
 
 const documentHit = z.object({ kind: z.literal('document'), title: z.string() });
@@ -27,7 +25,7 @@ const personHit = z.object({ kind: z.literal('person'), name: z.string() });
 
 describe('ToolInstance output JSON Schema', () => {
   it('lists a union of object schemas as an object schema with anyOf', () => {
-    const { tool, warn } = toolWithOutput(z.union([documentHit, personHit]));
+    const { tool } = toolWithOutput(z.union([documentHit, personHit]));
 
     expect(tool.getOutputJsonSchema()).toMatchObject({
       type: 'object',
@@ -36,7 +34,7 @@ describe('ToolInstance output JSON Schema', () => {
         { type: 'object', required: ['kind', 'name'] },
       ],
     });
-    expect(warn).not.toHaveBeenCalled();
+    expect(tool.getUnlistedOutputSchemaReason()).toBeUndefined();
   });
 
   it('lists a discriminated union as an object schema with oneOf', () => {
@@ -54,25 +52,59 @@ describe('ToolInstance output JSON Schema', () => {
     expect(toolWithOutput(nested).tool.getOutputJsonSchema()).toMatchObject({ type: 'object' });
   });
 
+  it('lists a union whose members are object schemas registered with an id', () => {
+    const registeredUnion = z.union([
+      documentHit.meta({ id: 'ToolInstanceSpecDocument' }),
+      personHit.meta({ id: 'ToolInstanceSpecPerson' }),
+    ]);
+    const { tool } = toolWithOutput(registeredUnion);
+
+    expect(tool.getOutputJsonSchema()).toMatchObject({
+      type: 'object',
+      anyOf: [{ $ref: '#/$defs/ToolInstanceSpecDocument' }, { $ref: '#/$defs/ToolInstanceSpecPerson' }],
+      $defs: { ToolInstanceSpecDocument: { type: 'object' }, ToolInstanceSpecPerson: { type: 'object' } },
+    });
+    expect(tool.getUnlistedOutputSchemaReason()).toBeUndefined();
+  });
+
+  it('lists an object schema registered with an id', () => {
+    const { tool } = toolWithOutput(documentHit.meta({ id: 'ToolInstanceSpecHit' }));
+
+    expect(tool.getOutputJsonSchema()).toMatchObject({ type: 'object', $ref: '#/$defs/ToolInstanceSpecHit' });
+  });
+
+  it('leaves out a union of a registered object schema and a non-object member', () => {
+    const { tool } = toolWithOutput(z.union([documentHit.meta({ id: 'ToolInstanceSpecMixed' }), z.string()]));
+
+    expect(tool.getOutputJsonSchema()).toBeNull();
+    expect(tool.getUnlistedOutputSchemaReason()).toContain('not an object schema or a union of object schemas');
+  });
+
+  it('leaves out a recursive union instead of following its references forever', () => {
+    const recursiveUnion: z.ZodType = z.union([z.object({ leaf: z.string() }), z.lazy(() => recursiveUnion)]);
+    const outerUnion = z.union([z.object({ root: z.string() }), recursiveUnion]);
+
+    expect(toolWithOutput(recursiveUnion).tool.getOutputJsonSchema()).toBeNull();
+    expect(toolWithOutput(outerUnion).tool.getOutputJsonSchema()).toBeNull();
+    expect(toolWithOutput(outerUnion).tool.getUnlistedOutputSchemaReason()).toContain('not an object schema');
+  });
+
   it.each([
     ['a union with a non-object member', z.union([documentHit, z.string()])],
     ['a nullable object', documentHit.nullable()],
     ['an array of objects', z.array(documentHit)],
-  ])('leaves out %s and warns once, naming the tool', (_label, outputSchema) => {
-    const { tool, warn } = toolWithOutput(outputSchema);
+  ])('leaves out %s and says why', (_label, outputSchema) => {
+    const { tool } = toolWithOutput(outputSchema);
 
     expect(tool.getOutputJsonSchema()).toBeNull();
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toContain('"answer"');
-    expect(warn.mock.calls[0][0]).toContain('not an object schema or a union of object schemas');
+    expect(tool.getUnlistedOutputSchemaReason()).toBe('it is not an object schema or a union of object schemas');
   });
 
-  it('warns when the output schema cannot be converted to JSON Schema', () => {
-    const { tool, warn } = toolWithOutput(z.object({ at: z.date() }));
+  it('says why when the output schema cannot be converted to JSON Schema', () => {
+    const { tool } = toolWithOutput(z.object({ at: z.date() }));
 
     expect(tool.getOutputJsonSchema()).toBeNull();
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toContain('Date cannot be represented in JSON Schema');
+    expect(tool.getUnlistedOutputSchemaReason()).toContain('Date cannot be represented in JSON Schema');
   });
 
   it.each([
@@ -83,11 +115,11 @@ describe('ToolInstance output JSON Schema', () => {
     ['a multi-content array', ['string', 'image']],
     ['an empty raw shape', {}],
     ['no output schema', undefined],
-  ])('lists nothing for %s, by design and without a warning', (_label, outputSchema) => {
-    const { tool, warn } = toolWithOutput(outputSchema);
+  ])('lists nothing for %s, by design and with no reason to report', (_label, outputSchema) => {
+    const { tool } = toolWithOutput(outputSchema);
 
     expect(tool.getOutputJsonSchema()).toBeNull();
-    expect(warn).not.toHaveBeenCalled();
+    expect(tool.getUnlistedOutputSchemaReason()).toBeUndefined();
   });
 });
 

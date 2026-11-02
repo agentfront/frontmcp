@@ -6,14 +6,12 @@
  * Import this file or ensure it's included in your tsconfig to get type checking.
  */
 
-// Note: These imports are used for documentation/JSDoc purposes in the interface comments
-// The actual runtime types are in mcp-matchers.ts
 import type { ZodRawShape, ZodType } from '@frontmcp/lazy-zod';
 
 /**
- * Custom MCP matchers for Jest
+ * Custom MCP matchers for Jest: tool, resource, prompt and protocol results
  */
-export interface McpMatchers<R = unknown> {
+export interface McpResultMatchers<R = unknown> {
   // ═══════════════════════════════════════════════════════════════════
   // TOOL MATCHERS
   // ═══════════════════════════════════════════════════════════════════
@@ -221,7 +219,12 @@ export interface McpMatchers<R = unknown> {
    * ```
    */
   toHaveErrorCode(code: number): R;
+}
 
+/**
+ * Custom MCP matchers for Jest: rendered tool UI
+ */
+export interface McpUiMatchers<R = unknown> {
   // ═══════════════════════════════════════════════════════════════════
   // UI MATCHERS
   // ═══════════════════════════════════════════════════════════════════
@@ -317,6 +320,11 @@ export interface McpMatchers<R = unknown> {
   toHaveProperHtmlStructure(): R;
 }
 
+/**
+ * Custom MCP matchers for Jest
+ */
+export interface McpMatchers<R = unknown> extends McpResultMatchers<R>, McpUiMatchers<R> {}
+
 // ═══════════════════════════════════════════════════════════════════
 // JEST TYPE AUGMENTATION
 // ═══════════════════════════════════════════════════════════════════
@@ -326,13 +334,13 @@ export interface McpMatchers<R = unknown> {
 declare global {
   namespace jest {
     // Extend expect matchers
-    interface Matchers<R> extends McpMatchers<R> {}
+    interface Matchers<R> extends McpResultMatchers<R>, McpUiMatchers<R> {}
 
     // Extend asymmetric matchers (for expect.toContainTool etc.)
-    interface Expect extends McpMatchers<void> {}
+    interface Expect extends McpResultMatchers<void>, McpUiMatchers<void> {}
 
     // Extend inverse matchers (for expect.not.toContainTool etc.)
-    interface InverseAsymmetricMatchers extends McpMatchers<void> {}
+    interface InverseAsymmetricMatchers extends McpResultMatchers<void>, McpUiMatchers<void> {}
   }
 }
 /* eslint-enable @typescript-eslint/no-namespace */

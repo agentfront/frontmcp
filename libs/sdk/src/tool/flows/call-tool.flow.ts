@@ -33,7 +33,6 @@ import {
   type FlowRunOptions,
   type ScopeEntry,
   type Token,
-  type UndeclaredKeysPolicy,
 } from '../../common';
 import { callSurfaceOf, entryUnavailableError, isOfferedOnSurface } from '../../common/availability';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
@@ -73,6 +72,7 @@ import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
+import { toolOutputPolicies } from '../tool-output-policy';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
 import { evaluateToolCredentialGate } from './tool-credentials.gate';
@@ -224,8 +224,11 @@ const { Stage } = FlowHooksOf<'tools:call-tool'>(name);
 /** Tools `resolveHookOwnerId` found, reused by the same run's `findTool`. */
 const resolvedTools = new ResolvedEntries<ToolEntry>();
 
-/** The undeclared key sets already reported per tool, so the 'warn' policy logs each one once. */
-const reportedUndeclaredKeySets = new WeakMap<CallToolEntry, Set<string>>();
+/** The undeclared key paths already reported per tool, so the 'warn' policy names each one once. */
+const reportedUndeclaredKeyPaths = new WeakMap<CallToolEntry, Set<string>>();
+
+/** Answers keyed by ids yield new key paths forever, so a tool stops reporting after this many. */
+const MAX_REPORTED_UNDECLARED_KEY_PATHS = 100;
 
 @Flow({
   name,
@@ -1536,7 +1539,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     // Parse and construct the MCP-compliant output using safeParseOutput
-    const undeclaredKeys = this.undeclaredKeysPolicyFor(tool);
+    const undeclaredKeys = resolveUndeclaredKeysPolicy(...toolOutputPolicies(tool, this.scope));
     const parseResult = tool.safeParseOutput(rawOutput, {
       // A call that renders the tool's UI sends declared keys only, whatever the policy
       undeclaredKeys: uiResult && undeclaredKeys === 'keep' ? 'strip' : undeclaredKeys,
@@ -1631,22 +1634,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('finalize:done');
   }
 
-  /** The tool's `output.undeclaredKeys`, else its app's, else the server's, else the default. */
-  private undeclaredKeysPolicyFor(tool: CallToolEntry): UndeclaredKeysPolicy {
-    // The app is found the way tools/list finds it, so both flows resolve the same policy
-    const appMetadata = this.scope.apps.getApps().find((app) => app.id === tool.owner.id)?.metadata;
-    const appOutput = appMetadata && 'output' in appMetadata ? appMetadata.output : undefined;
-    return resolveUndeclaredKeysPolicy(tool.metadata.output, appOutput, this.scope.metadata.output);
-  }
-
   private warnUndeclaredKeysOnce(tool: CallToolEntry, keyPaths: string[]): void {
-    const keySet = keyPaths.join(', ');
-    const reportedKeySets = reportedUndeclaredKeySets.get(tool) ?? new Set<string>();
-    if (reportedKeySets.has(keySet)) return;
-    reportedUndeclaredKeySets.set(tool, reportedKeySets.add(keySet));
+    const reportedKeyPaths = reportedUndeclaredKeyPaths.get(tool) ?? new Set<string>();
+    reportedUndeclaredKeyPaths.set(tool, reportedKeyPaths);
+    const roomLeft = MAX_REPORTED_UNDECLARED_KEY_PATHS - reportedKeyPaths.size;
+    const newKeyPaths = keyPaths.filter((keyPath) => !reportedKeyPaths.has(keyPath)).slice(0, roomLeft);
+    if (newKeyPaths.length === 0) return;
+    newKeyPaths.forEach((keyPath) => reportedKeyPaths.add(keyPath));
     this.logger.warn(
       `Tool "${tool.metadata.name}" answered with keys its outputSchema does not declare, so they were stripped: ` +
-        `${keySet}. Declare them, or set output.undeclaredKeys to 'strip', 'keep' or 'fail'.`,
+        `${newKeyPaths.join(', ')}. Declare them, or set output.undeclaredKeys to 'strip', 'keep' or 'fail'.`,
     );
   }
 }

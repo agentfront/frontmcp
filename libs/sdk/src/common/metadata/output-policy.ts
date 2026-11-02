@@ -33,7 +33,7 @@ export type SchemaDescriptionFormat = (typeof SCHEMA_DESCRIPTION_FORMATS)[number
  * What `tools/call` does with keys an answer carries that its `outputSchema` does not declare.
  *
  * - `'strip'`: drop them.
- * - `'warn'`: drop them and log a warning once per tool and set of keys.
+ * - `'warn'`: drop them and log a warning naming each key once per tool (up to 100 keys per tool).
  * - `'keep'`: send them in `structuredContent` and the text content; `tools/list` then lists the
  *   schema's objects open to undeclared keys.
  * - `'fail'`: refuse the answer with `InvalidOutputError` naming the keys.

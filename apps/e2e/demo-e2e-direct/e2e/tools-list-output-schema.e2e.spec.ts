@@ -78,10 +78,35 @@ class ResolveDiscriminatedTool extends ToolContext {
   }
 }
 
+// Schemas registered with an id serialize to `$ref`s into `$defs`
+const registeredHit = z.union([
+  documentHit.meta({ id: 'ToolsListE2eDocumentHit' }),
+  personHit.meta({ id: 'ToolsListE2ePersonHit' }),
+]);
+
+@Tool({
+  name: 'lookup_registered',
+  description: 'Tool with a z.union() of objects registered with an id',
+  inputSchema: { name: z.string() },
+  outputSchema: registeredHit,
+})
+class LookupRegisteredTool extends ToolContext {
+  async execute(input: { name: string }) {
+    return { kind: 'person' as const, name: input.name };
+  }
+}
+
 @App({
   name: 'OutputSchema',
   description: 'Tools exercising outputSchema advertisement',
-  tools: [WeatherStructTool, ZodObjectOutTool, CountPrimitiveTool, SearchUnionTool, ResolveDiscriminatedTool],
+  tools: [
+    WeatherStructTool,
+    ZodObjectOutTool,
+    CountPrimitiveTool,
+    SearchUnionTool,
+    ResolveDiscriminatedTool,
+    LookupRegisteredTool,
+  ],
 })
 class OutputSchemaApp {}
 
@@ -159,6 +184,44 @@ describe('tools/list outputSchema advertisement (E2E)', () => {
         structuredContent?: unknown;
       };
 
+      expect(result.structuredContent).toEqual({ kind: 'person', name: 'Ada' });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('advertises a union of objects registered with an id, and an MCP client validates its answer', async () => {
+    const { tools } = await server.listTools();
+    const out = tools.find((t) => t.name === 'lookup_registered')?.outputSchema as
+      | (JsonSchemaLike & { $defs?: Record<string, JsonSchemaLike> })
+      | undefined;
+    expect(out?.type).toBe('object');
+    expect(Object.keys(out?.$defs ?? {})).toEqual(['ToolsListE2eDocumentHit', 'ToolsListE2ePersonHit']);
+
+    const client = await connect(outputSchemaServerConfig, { clientInfo: { name: 'schema-probe', version: '1.0.0' } });
+    try {
+      await client.listTools();
+      const result = (await client.callTool('lookup_registered', { name: 'Ada' })) as { structuredContent?: unknown };
+
+      expect(result.structuredContent).toEqual({ kind: 'person', name: 'Ada' });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('lists a union registered with an id that an MCP client compiles when elicitation wraps it', async () => {
+    const client = await connect(
+      { ...outputSchemaServerConfig, elicitation: { enabled: true } },
+      { clientInfo: { name: 'schema-probe', version: '1.0.0' } },
+    );
+    try {
+      const tools = (await client.listTools()) as Array<{ name: string; outputSchema?: unknown }>;
+      expect(tools.find((t) => t.name === 'lookup_registered')?.outputSchema).toMatchObject({
+        type: 'object',
+        $defs: { ToolsListE2eDocumentHit: { type: 'object' } },
+      });
+
+      const result = (await client.callTool('lookup_registered', { name: 'Ada' })) as { structuredContent?: unknown };
       expect(result.structuredContent).toEqual({ kind: 'person', name: 'Ada' });
     } finally {
       await client.close();

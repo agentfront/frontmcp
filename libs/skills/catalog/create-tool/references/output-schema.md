@@ -129,9 +129,9 @@ class AnalyzeImageTool extends ToolContext {
 
 Structured object outputs are converted to JSON Schema and advertised on the tool's `outputSchema` in `tools/list` — symmetric with how `inputSchema` is advertised:
 
-- **Advertised:** a Zod raw shape (`{ field: z.string() }`) or a top-level `z.object({...})` — these serialize to a `type: 'object'` JSON Schema. A `z.union([...])` or `z.discriminatedUnion(...)` whose members are all objects is advertised too, as `{ type: 'object', anyOf: [...] }` (or `oneOf` for a discriminated union), since MCP requires a top-level `type: 'object'`.
+- **Advertised:** a Zod raw shape (`{ field: z.string() }`) or a top-level `z.object({...})` — these serialize to a `type: 'object'` JSON Schema. A `z.union([...])` or `z.discriminatedUnion(...)` whose members are all objects is advertised too, as `{ type: 'object', anyOf: [...] }` (or `oneOf` for a discriminated union), since MCP requires a top-level `type: 'object'`. A member registered with an id (`.meta({ id })`) serializes to a `$ref` into `$defs` and counts as an object too.
 - **Not advertised, by design:** primitives (`'string'` / `'number'` / `'boolean'` / `'date'`, `z.string()`, …), media (`'image'` / `'audio'` / `'resource'` / `'resource_link'`), and multi-content arrays (`['string', 'image']`). These flow through `content` rather than `structuredContent`.
-- **Not advertised, with a startup warning:** any other Zod schema — an array (`z.array(...)`), a nullable object, a union with a non-object member, or a schema that has no JSON Schema form (a `z.date()` field). The server logs `Tool "<name>": tools/list leaves out its outputSchema because …` once at startup, naming the tool. Wrap the value in a `z.object({...})` to advertise it.
+- **Not advertised, with a startup warning:** any other Zod schema — an array (`z.array(...)`), a nullable object, a union with a non-object member, or a schema that has no JSON Schema form (a `z.date()` field). The server logs `Tool "<name>": tools/list leaves out its outputSchema because …` once at startup, naming the tool, unless the tool's `schemaMode` resolves to `'none'`. Wrap the value in a `z.object({...})` to advertise it.
 
 Runtime output validation still applies to every form. If a client reports _"Output schema recommended,"_ declare a structured object `outputSchema` (a raw shape, a `z.object`, or a union of `z.object`s) — that's the form that gets advertised.
 
@@ -156,7 +156,7 @@ output?: {
 
 `schemaDescriptionFormat` controls the rendering for `'description'` / `'both'`: `'summary'` (default) is a compact property list; `'jsonSchema'` is a fenced JSON Schema block.
 
-The effective value resolves with a **Tool > App > server > default** cascade — set a server-wide default on `@FrontMcp` and override per tool. This mirrors the OpenAPI adapter's `outputSchema.mode`.
+The effective value resolves with a **Tool > App > server > default** cascade — set a server-wide default on `@FrontMcp` and override per tool. A tool that a plugin or an adapter of an app contributes follows that app's `output`. This mirrors the OpenAPI adapter's `outputSchema.mode`.
 
 ```typescript
 // This tool folds its schema into the description instead of advertising `outputSchema`
@@ -175,7 +175,7 @@ The default (`'definition'`) preserves the current behavior described above — 
 | `undeclaredKeys` | Effect                                                                                                                                                        |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `'strip'`        | Drop them. **Default** outside development.                                                                                                                   |
-| `'warn'`         | Drop them and log a warning once per tool and set of keys. **Default** when `NODE_ENV=development`.                                                           |
+| `'warn'`         | Drop them and log a warning naming each key once per tool (up to 100 keys per tool). **Default** when `NODE_ENV=development`.                                 |
 | `'keep'`         | Send them in `structuredContent` and the text content. `tools/list` lists the schema's objects without `additionalProperties: false`, so clients accept them. |
 | `'fail'`         | Refuse the answer with `_meta.code: 'INVALID_OUTPUT'`; the error message in the server log names the keys. Nothing from the answer is sent.                   |
 
@@ -187,7 +187,9 @@ class GetInvoiceTool extends ToolContext {
 }
 ```
 
-A call that renders the tool's UI (`@Tool({ ui })`) sends declared keys only, whatever the policy: the widget, the text content and `structuredContent` are built from the declared fields. An `outputSchema` with a transform anywhere (`.transform()`, `z.preprocess()`, `.pipe()`) is always stripped too: its output cannot be compared with the answer key by key, so `'warn'`, `'keep'` and `'fail'` do not apply to it.
+A call that renders the tool's UI (`@Tool({ ui })`) sends declared keys only, whatever the policy: the widget, the text content and `structuredContent` are built from the declared fields. An `outputSchema` with a transform anywhere (`.transform()`, `z.preprocess()`, `.pipe()`) is always stripped too: its output cannot be compared with the answer key by key, so `'warn'`, `'keep'` and `'fail'` do not apply to it. A JSON Schema output (the OpenAPI adapter, a remote app) is not parsed, so its answer is sent as the upstream returned it, whatever the policy.
+
+A `z.union([...])` keeps the first member that matches, so a key that only a later member declares is stripped, and `'warn'` and `'fail'` report it. Put the widest member first, or use `z.discriminatedUnion(...)`, which picks the member by its discriminator.
 
 To check in a test that an answer has no undeclared keys, use the `@frontmcp/testing` matcher:
 

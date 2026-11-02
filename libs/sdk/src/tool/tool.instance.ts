@@ -108,14 +108,6 @@ export class ToolInstance<
       throw new InvalidHookFlowError(unreachableHooksMessage('Tool', className, unreachable));
     }
 
-    const unlistedOutputSchemaReason = this.getUnlistedOutputSchemaReason();
-    if (unlistedOutputSchemaReason) {
-      this.scope.logger.warn(
-        `Tool "${this.name}": tools/list leaves out its outputSchema because ${unlistedOutputSchemaReason}. ` +
-          'Declare a z.object() or a union of z.object() schemas to list it.',
-      );
-    }
-
     // Register valid hooks
     if (validHooks.length > 0) {
       await this.hooks.registerHooks(true, ...validHooks);

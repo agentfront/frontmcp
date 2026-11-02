@@ -55,20 +55,35 @@ type OutputJsonSchemaResolution = { schema: Record<string, unknown> | null; unli
 /** Zod output types that are primitive outputs: they flow through `content` and are never listed. */
 const PRIMITIVE_ZOD_OUTPUT_TYPES = new Set<unknown>(['string', 'number', 'boolean', 'bigint', 'date']);
 
+/** How zod refers to a schema registered with an id, or to a reused one: `#/$defs/<name>`. */
+const DEFINITION_REF_PREFIX = '#/$defs/';
+
 /**
  * The JSON Schema MCP accepts as a tool's `outputSchema`: an object schema as is, or a union
- * (`anyOf` / `oneOf`) whose members are all object schemas, typed `object` at the top level.
+ * (`anyOf` / `oneOf`) or `$ref` that resolves to object schemas only, typed `object` at the top level.
  */
 function asObjectOutputSchema(json: Record<string, unknown>): Record<string, unknown> | null {
   if (json['type'] === 'object') return json;
-  const members = json['anyOf'] ?? json['oneOf'];
-  if (!Array.isArray(members) || members.length === 0) return null;
-  return members.every(isObjectOutputSchema) ? { type: 'object', ...json } : null;
+  return isObjectSchema(json, json['$defs'], new Set()) ? { type: 'object', ...json } : null;
 }
 
-function isObjectOutputSchema(member: unknown): boolean {
+/** True for an object schema, a `#/$defs/` reference to one, or a union of those. */
+function isObjectSchema(schema: unknown, definitions: unknown, followedRefs: ReadonlySet<string>): boolean {
+  if (typeof schema !== 'object' || schema === null) return false;
+  const node = schema as Record<string, unknown>;
+  if (node['type'] === 'object') return true;
+  const ref = node['$ref'];
+  if (typeof ref === 'string') {
+    // Each `#/$defs/` reference is followed once: a recursive union can loop a validator forever
+    if (!ref.startsWith(DEFINITION_REF_PREFIX) || followedRefs.has(ref)) return false;
+    const definition = (definitions as Record<string, unknown> | undefined)?.[ref.slice(DEFINITION_REF_PREFIX.length)];
+    return isObjectSchema(definition, definitions, new Set([...followedRefs, ref]));
+  }
+  const members = node['anyOf'] ?? node['oneOf'];
   return (
-    typeof member === 'object' && member !== null && asObjectOutputSchema(member as Record<string, unknown>) !== null
+    Array.isArray(members) &&
+    members.length > 0 &&
+    members.every((member) => isObjectSchema(member, definitions, followedRefs))
   );
 }
 

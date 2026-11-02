@@ -13,6 +13,7 @@ import {
   LogLevel,
   LogTransport,
   LogTransportInterface,
+  Plugin,
   Tool,
   ToolContext,
   type LogRecord,
@@ -171,10 +172,38 @@ class GetPartnerQuoteTool extends ToolContext {
   }
 }
 
-@App({ id: 'quotes', name: 'Quotes', tools: [GetQuoteTool, GetStrictQuoteTool, ShowQuoteTool] })
+@Tool({
+  name: 'get_tagged_quote',
+  inputSchema: { tags: z.array(z.string()) },
+  outputSchema: { price: z.number() },
+  output: { undeclaredKeys: 'warn' },
+})
+class GetTaggedQuoteTool extends ToolContext {
+  async execute(input: { tags: string[] }) {
+    return { price: 10, ...Object.fromEntries(input.tags.map((tag) => [tag, true])) } as { price: number };
+  }
+}
+
+@App({ id: 'quotes', name: 'Quotes', tools: [GetQuoteTool, GetStrictQuoteTool, ShowQuoteTool, GetTaggedQuoteTool] })
 class QuotesApp {}
 
-@App({ id: 'partners', name: 'Partners', tools: [GetPartnerQuoteTool], output: { undeclaredKeys: 'keep' } })
+@Tool({ name: 'get_plugin_quote', inputSchema: {}, outputSchema: { price: z.number() } })
+class GetPluginQuoteTool extends ToolContext {
+  async execute() {
+    return quoteAnswer as { price: number };
+  }
+}
+
+@Plugin({ name: 'partner-pricing', tools: [GetPluginQuoteTool] })
+class PartnerPricingPlugin {}
+
+@App({
+  id: 'partners',
+  name: 'Partners',
+  tools: [GetPartnerQuoteTool],
+  plugins: [PartnerPricingPlugin],
+  output: { undeclaredKeys: 'keep' },
+})
 class PartnersApp {}
 
 describe('tools/call undeclared output keys', () => {
@@ -233,6 +262,38 @@ describe('tools/call undeclared output keys', () => {
     expect(warnings[0]).toContain('get_quote');
   });
 
+  async function callTaggedQuote(target: TestFetchServer, tags: string[]): Promise<void> {
+    await rpc20260728(target.handler, 'tools/call', { name: 'get_tagged_quote', arguments: { tags } });
+  }
+
+  function taggedQuoteWarnings(): string[] {
+    return quoteWarnings.filter((line) => line.includes('get_tagged_quote'));
+  }
+
+  it("names under 'warn' only the undeclared keys not reported before", async () => {
+    const server = await startServer();
+
+    await callTaggedQuote(server, ['rush']);
+    await callTaggedQuote(server, ['rush', 'gift']);
+    await callTaggedQuote(server, ['gift', 'rush']);
+
+    expect(taggedQuoteWarnings()).toHaveLength(2);
+    expect(taggedQuoteWarnings()[0]).toContain('stripped: rush.');
+    expect(taggedQuoteWarnings()[1]).toContain('stripped: gift.');
+  });
+
+  it("stops reporting under 'warn' once a tool has named 100 undeclared keys", async () => {
+    const server = await startServer();
+    const manyTags = Array.from({ length: 120 }, (_unused, index) => `tag${String(index).padStart(3, '0')}`);
+
+    await callTaggedQuote(server, manyTags);
+    await callTaggedQuote(server, ['late-tag']);
+
+    expect(taggedQuoteWarnings()).toHaveLength(1);
+    expect(taggedQuoteWarnings()[0]).toContain('tag099.');
+    expect(taggedQuoteWarnings()[0]).not.toContain('tag100');
+  });
+
   it("passes undeclared keys through under a server-level 'keep'", async () => {
     const server = await startServer({ undeclaredKeys: 'keep' });
 
@@ -255,6 +316,15 @@ describe('tools/call undeclared output keys', () => {
 
     expect(await callQuote(server, 'get_partner_quote')).toMatchObject({ structuredContent: quoteAnswer });
     expect(await callQuote(server, 'get_quote')).toMatchObject({ isError: true, code: 'INVALID_OUTPUT' });
+  });
+
+  it("applies an app's policy to a tool a plugin of that app contributes", async () => {
+    const server = await startServer({ undeclaredKeys: 'fail' });
+
+    expect(await callQuote(server, 'get_plugin_quote')).toMatchObject({
+      isError: false,
+      structuredContent: quoteAnswer,
+    });
   });
 
   it.each([
