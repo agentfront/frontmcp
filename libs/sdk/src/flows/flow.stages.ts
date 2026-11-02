@@ -1,19 +1,25 @@
 import { FrontMcpFlowHookTokens, type HookMetadata } from '../common';
 import { resolvePendingTC39HooksForClass } from '../common/decorators/hook.decorator';
+import { orderByConstraints } from '../hooks/hook-order';
 
 export type StageEntry<C> = {
   /** `next` is passed only to an Around hook: it runs the rest of the stage. */
   method: (ctx: C, next?: () => Promise<void>) => Promise<void>;
   /** The flow step or hook this entry runs. */
   hook: HookMetadata;
+  /** Set on the flow's own steps, which a hook's `before` or `after` cannot name. */
+  flowStep?: boolean;
   _priority: number;
   _order: number;
 };
 
 export type StageMap<C> = Record<string, StageEntry<C>[]>;
 
-/** Runs one hook a plugin, app or entry injected into a flow (`run`), so the run's observer can wrap it. */
-export type HookRunner = (hook: { stage: string; target: unknown }, run: () => Promise<void>) => Promise<void>;
+/** Runs one hook a plugin, app or entry injected into a flow (`run`), so the run's observers can wrap it. */
+export type HookRunner = (
+  hook: { stage: string; target: unknown; metadata: HookMetadata },
+  run: () => Promise<void>,
+) => Promise<void>;
 
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
@@ -22,9 +28,17 @@ const CACHE: WeakMap<Function, StageMap<any>> = new WeakMap();
 /** The `next` a stage body or a will/did hook gets: nothing wraps it. */
 const NO_NEXT = async () => undefined;
 
+/** Each list in priority order, then registration order, with the hooks its `before` / `after` options move. */
 export function sortStageMap<C>(table: StageMap<C>) {
   for (const key of Object.keys(table)) {
-    table[key].sort((a, b) => a._priority - b._priority || a._order - b._order);
+    const list = table[key];
+    list.sort((a, b) => a._priority - b._priority || a._order - b._order);
+    const ordered = orderByConstraints(
+      list,
+      (entry) => entry.hook,
+      (entry) => !entry.flowStep,
+    );
+    if (ordered !== list) list.splice(0, list.length, ...ordered);
   }
 }
 
@@ -66,6 +80,7 @@ export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
 
     const entry: StageEntry<C> = {
       hook: m,
+      flowStep: true,
       _priority: m.priority ?? 0,
       _order: order++,
       method: async (ctx: any, next = NO_NEXT) => {
@@ -129,7 +144,7 @@ export function mergeHookMetasIntoStageMap<C>(
         if (typeof impl !== 'function') return skipHook();
         if (m.filter && !(await m.filter(ctx))) return skipHook();
 
-        return runHook({ stage: resolved, target }, async () =>
+        return runHook({ stage: resolved, target, metadata: m }, async () =>
           m.type === 'around' ? impl.call(target, ctx, next) : impl.call(target, ctx),
         );
       },
@@ -143,13 +158,18 @@ export function mergeHookMetasIntoStageMap<C>(
 
 const HOOK_TYPES_IN_RUN_ORDER = ['will', 'around', 'stage', 'did', 'finally'] as const;
 
-/** `will SomePlugin.method (0)`: a step's type, the class that declares it, its method and its priority. */
+/** `will SomePlugin.method (0, before cache)`: a step's type, the class that declares it, its method, its priority and constraints. */
 function describeStep(hook: HookMetadata, flowClassName: string): string {
   // A plugin or provider hook's `target` is the instance its method runs on.
   const target: unknown = hook.target;
   const owner =
     typeof target === 'function' ? target.name : target && typeof target === 'object' ? target.constructor.name : '';
-  return `${hook.type} ${owner || flowClassName}.${hook.method} (${hook.priority ?? 0})`;
+  const placement = [
+    hook.priority ?? 0,
+    ...(hook.before ?? []).map((name) => `before ${name}`),
+    ...(hook.after ?? []).map((name) => `after ${name}`),
+  ];
+  return `${hook.type} ${owner || flowClassName}.${hook.method} (${placement.join(', ')})`;
 }
 
 /** One line per stage of `stages` that `resolved` adds a hook to over `base`, listing its steps in the order they run. */

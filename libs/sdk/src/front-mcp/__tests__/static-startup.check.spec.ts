@@ -60,6 +60,15 @@ class AnyAppApprovalPlugin {
   }
 }
 
+/** Enforces `approval` on the tools of every app, whichever app it is installed on. */
+@Plugin({ name: 'all-apps-approval', enforcesMetadata: ['approval'] })
+class AllAppsApprovalPlugin {
+  @ToolHook.Will('execute', { appliesTo: 'all-apps' })
+  gate() {
+    // enforcement itself is not under test here
+  }
+}
+
 /** Enforces `approval` on the tools of the app it is installed on only (the default `appliesTo`). */
 @Plugin({ name: 'own-app-approval', enforcesMetadata: ['approval'] })
 class OwnAppApprovalPlugin {
@@ -142,6 +151,15 @@ const ACCEPTED: Array<[string, FrontMcpConfigInput]> = [
     }),
   ],
   [
+    'an approval tool on an app a gate for all apps on another app covers',
+    server({
+      apps: [
+        app('billing', { tools: [tool('refund_invoice', APPROVAL)] }),
+        app('desk', { plugins: [AllAppsApprovalPlugin] }),
+      ],
+    }),
+  ],
+  [
     "an approval tool on an app a scope: 'server' plugin on another app covers",
     server({
       apps: [
@@ -171,6 +189,10 @@ const ACCEPTED: Array<[string, FrontMcpConfigInput]> = [
   [
     'a server-level approval tool, and a gate for uncovered apps on an app',
     server({ apps: [app('desk', { plugins: [AnyAppApprovalPlugin] })], tools: [tool('shared_refund', APPROVAL)] }),
+  ],
+  [
+    'a server-level approval tool, and a gate for all apps on an app',
+    server({ apps: [app('desk', { plugins: [AllAppsApprovalPlugin] })], tools: [tool('shared_refund', APPROVAL)] }),
   ],
   [
     'an approval tool on an app, and a gate for uncovered apps nested in a plugin value on another app',

@@ -14,8 +14,11 @@ import {
 } from '@opentelemetry/sdk-trace-base';
 
 import {
+  addHookObserver,
   App,
+  FRONTMCP_CONTEXT,
   FrontMcpInstance,
+  HttpHook,
   LogLevel,
   Plugin,
   PublicMcpError,
@@ -97,12 +100,27 @@ function toolCall(name: string): Request {
   });
 }
 
-async function serve(tracing: TracingOptions = {}, logs: RequestLog[] = []) {
+/** Watches the hooks of each request with an observer of its own, added before the observability plugin's. */
+const watchedHooks: string[] = [];
+
+@Plugin({ name: 'hook-watcher' })
+class HookWatcherPlugin {
+  @HttpHook.Will('traceRequest', { priority: -2000 })
+  watch(flowCtx: FlowCtxOf<'http:request'>) {
+    addHookObserver(flowCtx.get(FRONTMCP_CONTEXT), async (hook, run) => {
+      watchedHooks.push(`${hook.owner}.${hook.method}`);
+      await run();
+    });
+  }
+}
+
+async function serve(tracing: TracingOptions = {}, logs: RequestLog[] = [], watch = false) {
   return FrontMcpInstance.createFetchHandler({
     info: { name: 'desk', version: '1.0.0' },
     apps: [DeskApp],
     logging: { level: LogLevel.Off },
     plugins: [
+      ...(watch ? [HookWatcherPlugin] : []),
       AuditPlugin,
       ObservabilityPlugin.init({ tracing, requestLogs: { onRequestComplete: (log) => void logs.push(log) } }),
     ],
@@ -242,6 +260,20 @@ describe('request logs', () => {
         hooks_triggered: ['tools:call-tool:didExecute'],
       }),
     );
+  });
+});
+
+describe('next to another hook observer', () => {
+  it('still records the hooks that ran, and the other observer sees them too', async () => {
+    const logs: RequestLog[] = [];
+    watchedHooks.length = 0;
+    const handler = await serve({}, logs, true);
+
+    await handler(toolCall('ping'));
+    await settle();
+
+    expect(logs[0]).toEqual(expect.objectContaining({ hooks_triggered: ['tools:call-tool:didExecute'] }));
+    expect(watchedHooks).toContain('audit.audit');
   });
 });
 

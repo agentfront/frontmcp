@@ -270,6 +270,8 @@ const MAX_REPORTED_UNDECLARED_KEY_PATHS = 100;
   access: 'authorized',
 })
 export default class CallToolFlow extends FlowBase<typeof name> {
+  static override readonly tracesHooksInAnswer = true;
+
   static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const toolName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
     if (typeof toolName !== 'string') return undefined;

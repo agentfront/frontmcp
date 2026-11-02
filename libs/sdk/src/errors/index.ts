@@ -184,6 +184,7 @@ export {
   DuplicateAppIdError,
   FlowNotRegisteredError,
   UnsupportedHookOwnerKindError,
+  HookOrderCycleError,
 } from './registry.errors';
 
 // Export provider errors
