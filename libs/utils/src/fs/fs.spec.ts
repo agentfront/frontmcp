@@ -404,7 +404,16 @@ describe('FS Utils', () => {
   });
 
   describe('chmod', () => {
-    it('sets the permission bits', async () => {
+    const posixIt = process.platform === 'win32' ? it.skip : it;
+
+    it('resolves for an existing file', async () => {
+      const filePath = path.join(tempDir, 'chmod-any.txt');
+      await fs.promises.writeFile(filePath, 'content');
+
+      await expect(chmod(filePath, 0o600)).resolves.toBeUndefined();
+    });
+
+    posixIt('sets the permission bits, which Windows cannot set apart for owner, group and others', async () => {
       const filePath = path.join(tempDir, 'chmod.txt');
       await fs.promises.writeFile(filePath, 'content');
 

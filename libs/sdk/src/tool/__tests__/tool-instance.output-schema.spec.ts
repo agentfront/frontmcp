@@ -206,6 +206,28 @@ describe('ToolInstance.parseOutput and undeclared keys', () => {
     });
   });
 
+  describe('with an object schema that sets its own unknown-key handling, which wins over the policy', () => {
+    const policies = ['strip', 'warn', 'keep', 'fail'] as const;
+
+    it.each(policies)("lets z.strictObject() refuse an undeclared key under '%s'", (undeclaredKeys) => {
+      const { tool } = toolWithOutput(z.strictObject({ id: z.string() }));
+
+      const parsed = tool.safeParseOutput({ id: '1', extra: true }, { undeclaredKeys });
+
+      expect(parsed.success).toBe(false);
+      expect((parsed as { error: Error }).error).toBeInstanceOf(InvalidOutputError);
+    });
+
+    it.each(policies)("lets z.looseObject() keep an undeclared key under '%s'", (undeclaredKeys) => {
+      const { tool } = toolWithOutput(z.looseObject({ id: z.string() }));
+
+      expect(tool.parseOutput({ id: '1', extra: true }, { undeclaredKeys }).structuredContent).toEqual({
+        id: '1',
+        extra: true,
+      });
+    });
+  });
+
   it("refuses under 'keep' an undeclared key whose object the schema coerced to a primitive", () => {
     const { tool } = toolWithOutput({ payload: z.coerce.string() });
 

@@ -1823,8 +1823,10 @@ daemonCmd
     var socketDir = pathMod.join(FRONTMCP_HOME, 'sockets');
     fs.mkdirSync(pidDir, { recursive: true });
     fs.mkdirSync(logDir, { recursive: true });
-    // The server refuses a socket directory others can write to
+    // The server refuses a socket others could replace, through its directory or any above it
     fs.mkdirSync(socketDir, { recursive: true, mode: 0o700 });
+    var homeMode = fs.statSync(FRONTMCP_HOME).mode & 0o7777;
+    if (homeMode & 0o022) fs.chmodSync(FRONTMCP_HOME, homeMode & ~0o022);
     fs.chmodSync(socketDir, 0o700);
 
     var usePort = !!opts.port;

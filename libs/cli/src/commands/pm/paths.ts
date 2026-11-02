@@ -8,6 +8,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 const FRONTMCP_HOME = path.join(os.homedir(), '.frontmcp');
+const GROUP_OR_OTHER_WRITE = 0o022;
 
 export const PM_DIRS = {
   root: FRONTMCP_HOME,
@@ -53,8 +54,10 @@ export function ensurePmDirs(): void {
   ensureSocketsDir();
 }
 
-/** The server refuses a socket directory others can write to, so this one is owner-only (0700). */
+/** The server refuses a socket others could replace, so ~/.frontmcp is not writable by others and its sockets are owner-only. */
 export function ensureSocketsDir(): void {
   fs.mkdirSync(PM_DIRS.sockets, { recursive: true, mode: 0o700 });
+  const rootMode = fs.statSync(PM_DIRS.root).mode & 0o7777;
+  if (rootMode & GROUP_OR_OTHER_WRITE) fs.chmodSync(PM_DIRS.root, rootMode & ~GROUP_OR_OTHER_WRITE);
   fs.chmodSync(PM_DIRS.sockets, 0o700);
 }

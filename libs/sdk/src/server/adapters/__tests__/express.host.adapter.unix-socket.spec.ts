@@ -4,6 +4,7 @@
  * a file that is not a socket, or another user's socket.
  */
 import { spawnSync } from 'node:child_process';
+import cluster from 'node:cluster';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as net from 'node:net';
@@ -174,6 +175,32 @@ describe('ExpressHostAdapter on a Unix socket', () => {
     expect(await health(socketPath)).toBe(200);
   });
 
+  function nestSocketIn(name: string): string {
+    const nested = path.join(directory, name);
+    fs.mkdirSync(nested, { mode: 0o700 });
+    socketPath = path.join(nested, 's.sock');
+    return nested;
+  }
+
+  posixIt('refuses a socket whose parent directory the group or others can write, naming that directory', async () => {
+    nestSocketIn('private');
+    fs.chmodSync(directory, 0o777);
+
+    const failure = start();
+
+    await expect(failure).rejects.toBeInstanceOf(UnsafeSocketDirectoryError);
+    await expect(failure).rejects.toThrow(`under ${directory} (mode 0777)`);
+    expect(fs.existsSync(socketPath)).toBe(false);
+  });
+
+  posixIt('refuses a socket whose parent directory another user owns', async () => {
+    nestSocketIn('private');
+    ownDirectoryAs(fs.statSync(directory).uid + 1);
+
+    await expect(start()).rejects.toThrow('another user');
+    expect(fs.existsSync(socketPath)).toBe(false);
+  });
+
   posixIt('replaces a stale socket a crashed server left behind', async () => {
     leaveStaleSocket(socketPath);
     expect(fs.lstatSync(socketPath).isSocket()).toBe(true);
@@ -184,7 +211,10 @@ describe('ExpressHostAdapter on a Unix socket', () => {
   });
 
   posixIt('refuses to take over a live socket, and the server on it keeps serving', async () => {
-    const first = net.createServer((socket) => socket.end('first'));
+    const first = net.createServer((socket) => {
+      socket.on('error', () => undefined);
+      socket.end('first');
+    });
     await new Promise<void>((resolve) => first.listen(socketPath, resolve));
     try {
       await expect(start()).rejects.toBeInstanceOf(SocketInUseError);
@@ -246,6 +276,35 @@ describe('ExpressHostAdapter on a Unix socket', () => {
     }
 
     expect(fs.lstatSync(socketPath).mode & 0o777).toBe(0o600);
+  });
+
+  posixIt('refuses a directory others can enter where the umask cannot be set, before binding', async () => {
+    fs.chmodSync(directory, 0o755);
+    const umask = jest.spyOn(process, 'umask').mockImplementation(((mask?: number) => {
+      if (mask !== undefined) throw new Error('ERR_WORKER_UNSUPPORTED_OPERATION');
+      return 0o022;
+    }) as typeof process.umask);
+    try {
+      const failure = start();
+
+      await expect(failure).rejects.toBeInstanceOf(SocketPermissionError);
+      await expect(failure).rejects.toThrow('0755');
+    } finally {
+      umask.mockRestore();
+    }
+    expect(fs.existsSync(socketPath)).toBe(false);
+  });
+
+  posixIt('refuses a directory others can enter in a cluster worker, whose socket the primary binds', async () => {
+    fs.chmodSync(directory, 0o755);
+    const isWorker = Object.getOwnPropertyDescriptor(cluster, 'isWorker');
+    Object.defineProperty(cluster, 'isWorker', { value: true, configurable: true });
+    try {
+      await expect(start()).rejects.toBeInstanceOf(SocketPermissionError);
+    } finally {
+      if (isWorker) Object.defineProperty(cluster, 'isWorker', isWorker);
+    }
+    expect(fs.existsSync(socketPath)).toBe(false);
   });
 
   posixIt('goes on when the stale socket disappears before the probe', async () => {

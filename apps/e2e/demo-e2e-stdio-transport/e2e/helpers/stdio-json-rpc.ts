@@ -30,8 +30,9 @@ export class StdioJsonRpcProcess {
     });
   }
 
+  /** Run the entrypoint in this process's node, so a signal reaches the server itself and not a launcher shell. */
   static start(entrypointPath: string, cwd: string, env: Record<string, string> = {}): StdioJsonRpcProcess {
-    const child = spawn('npx', ['tsx', entrypointPath], {
+    const child = spawn(process.execPath, ['--import', 'tsx', entrypointPath], {
       cwd,
       env: { ...process.env, ...env } as Record<string, string>,
       stdio: ['pipe', 'pipe', 'pipe'],

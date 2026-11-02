@@ -83,6 +83,14 @@ export async function loadSecrets(configDir: string): Promise<Record<string, str
 }
 ```
 
+The server checks the socket's directory before it listens, so create it first. `frontmcp socket` does this for you:
+
+```bash
+mkdir -p ~/.frontmcp/sockets
+chmod go-w ~/.frontmcp
+chmod 700 ~/.frontmcp/sockets
+```
+
 ```typescript
 // src/main.ts
 import * as os from 'os';
