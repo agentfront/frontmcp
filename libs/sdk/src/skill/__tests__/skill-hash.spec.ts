@@ -31,8 +31,8 @@ describe('skill-hash', () => {
       jest.spyOn(String.prototype, 'localeCompare').mockImplementation(function (
         this: string,
         that: string,
-        locales?: string | string[],
-        options?: Intl.CollatorOptions,
+        locales?: Parameters<string['localeCompare']>[1],
+        options?: Parameters<string['localeCompare']>[2],
       ) {
         return localeCompare.call(this, that, locales ?? 'cs', options);
       });
