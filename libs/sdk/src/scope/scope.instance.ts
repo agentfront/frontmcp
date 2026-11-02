@@ -1921,6 +1921,7 @@ export class Scope extends ScopeEntry {
    */
   async dispose(): Promise<void> {
     await this.emitDispose();
+    await this.scopeProviders.runShutdownHooks(this.logger);
     this.scopeProviders.dispose();
     if (this.notificationService) {
       await this.notificationService.destroy();

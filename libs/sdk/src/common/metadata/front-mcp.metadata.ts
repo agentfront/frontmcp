@@ -18,6 +18,7 @@ import {
   extAppsOptionsSchema,
   healthOptionsSchema,
   httpOptionsSchema,
+  lifecycleOptionsSchema,
   loggingOptionsSchema,
   mcpRegistryOptionsSchema,
   metricsOptionsSchema,
@@ -36,6 +37,7 @@ import {
   type ExtAppsOptionsInput,
   type HealthOptionsInput,
   type HttpOptionsInput,
+  type LifecycleOptionsInput,
   type LoggingOptionsInput,
   type McpRegistryOptionsInput,
   type MetricsOptionsInput,
@@ -132,6 +134,12 @@ export interface FrontMcpBaseMetadata {
    * Additional providers that are available to all apps.
    */
   providers?: ProviderType[];
+
+  /**
+   * Provider lifecycle settings: how long each provider's `onShutdown()` may run.
+   * @default { shutdownHookTimeoutMs: 3000 }
+   */
+  lifecycle?: LifecycleOptionsInput;
 
   /**
    * Shared tools that are available to all apps, in every scope (each `splitByApp` or standalone app's too).
@@ -606,6 +614,7 @@ export const frontMcpBaseSchema = z.object({
   __sourceDir: z.string().optional(),
   instructions: z.string().optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
+  lifecycle: lifecycleOptionsSchema.optional(),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
   skills: z.array(annotatedFrontMcpSkillsSchema).optional().default([]),
@@ -834,6 +843,7 @@ const frontMcpLiteSchema = z.object({
   // Must round-trip through the lite parser so CLI/MCPB builds preserve it.
   instructions: z.string().optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
+  lifecycle: lifecycleOptionsSchema.optional(),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
   skills: z.array(annotatedFrontMcpSkillsSchema).optional().default([]),

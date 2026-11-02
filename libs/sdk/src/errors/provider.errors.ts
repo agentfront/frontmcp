@@ -62,6 +62,19 @@ export class ProviderConstructionError extends InternalMcpError {
 }
 
 /**
+ * Thrown when a provider's `onBootstrap()` fails; the server, or `createContainer()`, does not start.
+ */
+export class ProviderBootstrapError extends InternalMcpError {
+  readonly originalError?: Error;
+
+  constructor(tokenName: string, cause: unknown) {
+    const causeMsg = cause instanceof Error ? cause.message : String(cause);
+    super(`Provider "${tokenName}" failed in onBootstrap(): ${causeMsg}`, 'PROVIDER_BOOTSTRAP_FAILED');
+    this.originalError = cause instanceof Error ? cause : undefined;
+  }
+}
+
+/**
  * Thrown when a provider dependency cannot be resolved.
  */
 export class ProviderDependencyError extends InternalMcpError {

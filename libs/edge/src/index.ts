@@ -338,6 +338,7 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
     // KV before the handler serves traffic. Runs for the worker isolate AND each
     // session Durable Object isolate (both call buildScope), all sharing one KV.
     await wireSkillIndexCache(scope, config, env);
+    await instance.emitProvidersReady();
     return scope;
   };
 

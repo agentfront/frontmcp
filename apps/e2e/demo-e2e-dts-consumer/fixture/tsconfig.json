@@ -11,6 +11,7 @@
     "types": []
   },
   "files": [
+    "provider-lifecycle-must-compile.ts",
     "tool-must-fail.ts",
     "prompts-must-compile.ts",
     "hooks-must-compile.ts",

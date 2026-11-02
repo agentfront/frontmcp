@@ -13,7 +13,7 @@ Providers are singleton services — database pools, API clients, config objects
 
 - Multiple tools, resources, or agents need a shared database connection pool
 - API clients or external service connections must be singleton (not recreated per request)
-- You need async one-time setup before any tool runs (use `AsyncProvider({ useFactory })`)
+- You need async one-time setup before any tool runs (use `onBootstrap()` or `AsyncProvider({ useFactory })`)
 
 ### Recommended
 
@@ -27,7 +27,7 @@ Providers are singleton services — database pools, API clients, config objects
 - You need to build an executable action for AI clients (see `create-tool`)
 - You need autonomous LLM-driven orchestration (see `create-agent`)
 
-> **Decision:** Use this skill when you need a shared, singleton service that tools, resources, and agents access via `this.get(token)`. `@Provider` does **not** support `onInit`/`onDestroy` lifecycle hooks — use the constructor for sync setup, `AsyncProvider({ useFactory })` for async setup, and an explicit method (e.g., `close()`) plus the framework's shutdown path for cleanup.
+> **Decision:** Use this skill when you need a shared, singleton service that tools, resources, and agents access via `this.get(token)`. A GLOBAL provider can implement `onBootstrap()`, `onReady()` and `onShutdown()` (see [Provider Lifecycle](#provider-lifecycle)): do async setup in `onBootstrap()` or an `AsyncProvider({ useFactory })`, and release connections in `onShutdown()`. `onInit` / `onDestroy` are not hooks FrontMCP calls.
 
 ## Step 1: Define a Token
 
@@ -39,7 +39,6 @@ import type { Token } from '@frontmcp/di';
 // Define a typed token
 interface DatabaseService {
   query(sql: string, params?: unknown[]): Promise<unknown[]>;
-  close(): Promise<void>;
 }
 
 const DB_TOKEN: Token<DatabaseService> = Symbol('DatabaseService');
@@ -72,19 +71,17 @@ token, so the pool is guaranteed to be open by the time `this.get(...)` returns.
 ```typescript
 import { createPool, type Pool } from 'your-db-driver';
 
-import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
+import { AsyncProvider, ProviderScope, type OnShutdown } from '@frontmcp/sdk';
 
-class DatabasePool implements DatabaseService {
+class DatabasePool implements DatabaseService, OnShutdown {
   constructor(private readonly pool: Pool) {}
 
   async query(sql: string, params?: unknown[]) {
     return this.pool.query(sql, params);
   }
 
-  async close() {
-    // `@Provider` has no `onDestroy` hook. Expose explicit cleanup as a
-    // method and call it from the host (e.g., before `server.dispose()`)
-    // when the provider owns network/file handles that need to drain.
+  // Runs at shutdown, after the requests in flight and every provider that depends on this one
+  async onShutdown() {
     await this.pool.end();
   }
 }
@@ -275,7 +272,7 @@ const API_TOKEN: Token<ApiClient> = Symbol('ApiClient');
 
 @Provider({ name: 'ApiClientProvider' })
 class ApiClientProvider implements ApiClient {
-  // No `onInit` hook — read env in the constructor and fail fast on missing values.
+  // Read env in the constructor and fail fast on missing values.
   private readonly baseUrl: string;
   private readonly apiKey: string;
 
@@ -320,15 +317,89 @@ class CacheProvider extends Map<string, unknown> {
 
 ## Provider Lifecycle
 
-`@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. Choose the right setup pattern for your provider:
+A GLOBAL provider (a `@Provider` class, a `useClass` or `useValue` object, or the value an `AsyncProvider` factory returns) can implement any of three hooks. CONTEXT-scoped providers get none: a request builds them.
 
-| Setup need                                 | Pattern                                                               | Cleanup                                                 |
-| ------------------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------- |
-| Sync — read env, build a Map, etc.         | `@Provider({ name })` + constructor (throw on missing config)         | None / GC (or expose a `close()` and call from host)    |
-| Async — open a pool, fetch a remote schema | `AsyncProvider({ provide, name, scope, useFactory })` factory binding | Expose `close()`/`stop()`; framework dispose runs first |
-| Singleton with no setup (e.g., a `Map`)    | `@Provider({ name })` on the class                                    | None                                                    |
+| Hook            | Interface     | Runs                                                                                                                                                                                                                          | When it fails                                                                                                                                                                         |
+| --------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onBootstrap()` | `OnBootstrap` | Once the provider is built: after its dependencies' `onBootstrap()`, before any provider that depends on it is built, and before tools, resources and prompts are listed                                                      | Startup fails with `ProviderBootstrapError` (`PROVIDER_BOOTSTRAP_FAILED`), naming the provider, once the other apps finish building and every provider that bootstrapped is shut down |
+| `onReady()`     | `OnReady`     | Once the server serves: HTTP or Unix socket listening, stdio connected, before `createDirect()` or `connect()` returns, a serverless or fetch handler built (on the edge, by its first request). In dependency order, once    | Logged as an error; the server keeps serving and the other `onReady()` hooks still run                                                                                                |
+| `onShutdown()`  | `OnShutdown`  | At shutdown (SIGTERM / SIGINT, `shutdown()`, `dispose()`, `close()`), over HTTP or a socket after the requests in flight finish. In reverse order: an app's providers before the server's, a provider before its dependencies | Logged as a warning; after `lifecycle.shutdownHookTimeoutMs` (default 3000 ms) shutdown moves on                                                                                      |
 
-`AsyncProvider` factories are awaited in dependency order before any tool can resolve the bound token, so async setup completes before user code runs.
+```typescript
+import { FrontMcp, Provider, type OnBootstrap, type OnReady, type OnShutdown } from '@frontmcp/sdk';
+
+@Provider({ name: 'SearchIndex' })
+class SearchIndex implements OnBootstrap, OnReady, OnShutdown {
+  private refresh?: ReturnType<typeof setInterval>;
+
+  async onBootstrap() {
+    await this.load(); // a throw here stops the server from starting
+  }
+
+  onReady() {
+    this.refresh = setInterval(() => void this.load(), 60_000); // only once the server serves
+  }
+
+  async onShutdown() {
+    clearInterval(this.refresh);
+    await this.flush();
+  }
+
+  private async load() {
+    /* ... */
+  }
+
+  private async flush() {
+    /* ... */
+  }
+}
+
+@FrontMcp({
+  info: { name: 'search', version: '1.0.0' },
+  apps: [SearchApp],
+  providers: [SearchIndex],
+  lifecycle: { shutdownHookTimeoutMs: 10_000 }, // per onShutdown() hook
+})
+class Server {}
+```
+
+| Setup need                                         | Pattern                                                               | Cleanup        |
+| -------------------------------------------------- | --------------------------------------------------------------------- | -------------- |
+| Sync: read env, build a Map                        | `@Provider({ name })` + constructor (throw on missing config)         | None           |
+| Async: open a pool, fetch a remote schema          | `onBootstrap()`, or an `AsyncProvider({ provide, name, useFactory })` | `onShutdown()` |
+| Background work that should run only while serving | `onReady()`                                                           | `onShutdown()` |
+
+- Hooks are found by method name. A provider that already had a method called `onBootstrap`, `onReady` or `onShutdown` has it called since 1.11, with no arguments. That includes a third-party client registered with `useValue` or returned by a factory (an SDK's `onReady(callback)`, for example): wrap such a client in a provider class.
+- A `useValue` object registered in more than one place of a server runs its hooks once for that server. Its `onShutdown()` runs once every scope that holds it (each app of a `splitByApp` server) has shut down its own providers, so the providers that depend on it shut down first.
+- `onReady()` is awaited: `createDirect()`, `connect()` and the handlers return, and `bootstrap()` and `runStdio()` install their SIGTERM / SIGINT handlers, once every `onReady()` has settled. Start long work there without awaiting it, as `SearchIndex` does.
+- A host you assemble from `FrontMcpInstance.createForGraph()` runs the `onReady()` hooks itself, with `instance.emitProvidersReady()`.
+- Serverless and edge handlers are never shut down, so `onShutdown()` does not run there.
+- On SIGTERM the process still exits at the shutdown deadline (10 s, 5 s under stdio), whatever hooks are left.
+
+## Providers Without a Server: `createContainer()`
+
+`createContainer()` builds the provider graph a server would (same tokens, scopes and `onBootstrap()` order) without tools, resources, prompts, flows or a transport. Use it in scripts, migrations and tests that need a provider but not an MCP server.
+
+```typescript
+import { createContainer } from '@frontmcp/sdk';
+
+import { serverConfig } from './server-config'; // the object you pass to @FrontMcp, kept free of the decorator
+
+const container = await createContainer(serverConfig); // or { providers, apps, logging, lifecycle }
+try {
+  const db = container.get(DB_TOKEN);
+  await db.query('UPDATE users SET migrated = true');
+} finally {
+  await container.dispose(); // runs onShutdown(), the apps' providers first
+}
+```
+
+- It builds the server-level `providers`, then the `providers` of each local `@App` in `apps`. Remote apps, plugins and the other options of a server config are ignored.
+- `get(token)` looks at the server-level providers first, then each app's in order, and throws `ProviderNotAvailableError` when nothing registers the token; `tryGet(token)` returns `undefined` instead. A CONTEXT-scoped provider throws `ProviderScopedAccessError`: only a request builds it.
+- `onReady()` never runs: nothing is served. `FrontMcpLogger` can be injected, and `FrontMcpConfig` is the object you passed; `Scope` cannot, since there is none.
+- A failing `onBootstrap()` rejects with `ProviderBootstrapError` after the providers that bootstrapped are shut down.
+- It runs in Node, and in the browser when the providers do.
+- Import the config from a module without `@FrontMcp`: importing a decorated class starts the server.
 
 ## Nx Generator
 
@@ -354,7 +425,7 @@ frontmcp dev
 | --------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | Token definition      | `const DB: Token<DbService> = Symbol('DbService')` (typed Symbol)                                 | `const DB = 'database'` (string literal)                                | Typed `Token<T>` enables compile-time type checking on `this.get()`                          |
 | DI resolution         | `this.get(TOKEN)` with error handling                                                             | `this.tryGet(TOKEN)!` with non-null assertion                           | `get` throws a clear `ProviderNotAvailableError`; non-null assertions hide failures          |
-| Lifecycle             | `AsyncProvider({ useFactory })` for async setup; constructor for sync                             | Using `onInit()` / `onDestroy()` lifecycle hooks                        | `@Provider` has no lifecycle hooks; `AsyncProvider` factories are awaited before resolution  |
+| Lifecycle             | `onBootstrap()` or `AsyncProvider({ useFactory })` for async setup; `onShutdown()` for cleanup    | `onInit()` / `onDestroy()`, or a `close()` the host must remember       | FrontMCP calls `onBootstrap`, `onReady` and `onShutdown` in dependency order; no other names |
 | Registration scope    | Register at `@App` level for app-scoped, `@FrontMcp` for server-scoped                            | Registering same provider in multiple apps                              | Server-scoped providers are shared; duplicating causes multiple instances                    |
 | Config provider       | `readonly` properties from `process.env`                                                          | Mutable properties that change at runtime                               | Providers are singletons; mutable state can cause race conditions                            |
 | File layout           | `src/providers/<slug>/` folder with `index.ts` + `<slug>.provider.ts` + `<slug>.provider.spec.ts` | Flat `src/providers/<slug>.provider.ts` once helpers or a spec exist    | Co-locates source, tests, helpers; barrel hides internals — see [File Layout](#file-layout)  |
@@ -368,7 +439,7 @@ frontmcp dev
 - [ ] Token is defined with `Token<T>` using a `Symbol` and typed interface
 - [ ] Provider (class or `AsyncProvider` factory) is registered in `providers` array of `@App` or `@FrontMcp`
 - [ ] Sync setup happens in the constructor (throws fast on missing config)
-- [ ] Async setup uses `AsyncProvider({ useFactory })`; the framework awaits it before resolution
+- [ ] Async setup uses `onBootstrap()` or `AsyncProvider({ useFactory })`; the framework awaits it before resolution
 - [ ] Each provider lives in its own `src/providers/<slug>/` folder once it has a spec, helpers, or internal types (single-file is fine for trivial providers — see the [File Layout](#file-layout) rubric)
 
 ### Runtime
@@ -376,26 +447,29 @@ frontmcp dev
 - [ ] Server starts without provider initialization errors
 - [ ] `this.get(TOKEN)` resolves the provider in tools, resources, and agents
 - [ ] Provider is a singleton (same instance across all contexts)
-- [ ] Resource-owning providers expose an explicit `close()` / `stop()` method that the host calls before `server.dispose()`
+- [ ] Resource-owning providers release them in `onShutdown()`
+- [ ] A provider whose `onBootstrap()` throws stops startup with `ProviderBootstrapError` naming it
 - [ ] Missing provider throws `ProviderNotAvailableError` with a clear message
 
 ## Troubleshooting
 
-| Problem                                | Cause                                                   | Solution                                                                                      |
-| -------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `ProviderNotAvailableError` at runtime | Provider not registered in scope                        | Add provider (class or `AsyncProvider` factory) to `providers` array in `@App` or `@FrontMcp` |
-| Provider constructor throws at startup | Missing environment variable or unreachable service     | Validate env in the constructor; restart with the missing config supplied                     |
-| `AsyncProvider` factory rejects        | Async setup error (DB unreachable, schema fetch failed) | The factory error aborts boot — fix the dependency or wrap with retry inside `useFactory`     |
-| Multiple instances of same provider    | Registered in multiple apps instead of server level     | Move to `@FrontMcp` `providers` for shared, server-scoped access                              |
-| Type mismatch on `this.get(TOKEN)`     | Token typed with wrong interface                        | Ensure `Token<T>` generic matches the provider's implemented interface                        |
-| Resources leak on shutdown             | No explicit cleanup method exposed                      | Add a `close()` / `stop()` method and call it from the host before `server.dispose()`         |
+| Problem                                   | Cause                                                   | Solution                                                                                      |
+| ----------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `ProviderNotAvailableError` at runtime    | Provider not registered in scope                        | Add provider (class or `AsyncProvider` factory) to `providers` array in `@App` or `@FrontMcp` |
+| Provider constructor throws at startup    | Missing environment variable or unreachable service     | Validate env in the constructor; restart with the missing config supplied                     |
+| `AsyncProvider` factory rejects           | Async setup error (DB unreachable, schema fetch failed) | The factory error aborts boot — fix the dependency or wrap with retry inside `useFactory`     |
+| Multiple instances of same provider       | Registered in multiple apps instead of server level     | Move to `@FrontMcp` `providers` for shared, server-scoped access                              |
+| Type mismatch on `this.get(TOKEN)`        | Token typed with wrong interface                        | Ensure `Token<T>` generic matches the provider's implemented interface                        |
+| Resources leak on shutdown                | Nothing releases them                                   | Release them in `onShutdown()`                                                                |
+| `ProviderBootstrapError` at startup       | A provider's `onBootstrap()` threw                      | The message names the provider and the cause; fix it, or catch inside `onBootstrap()`         |
+| `onShutdown() did not finish within N ms` | The hook outlasted `lifecycle.shutdownHookTimeoutMs`    | Make the hook faster, or raise `lifecycle.shutdownHookTimeoutMs`                              |
 
 ## Examples
 
-| Example                                                                               | Level        | Description                                                                                                                                   |
-| ------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`basic-database-provider`](../examples/create-provider/basic-database-provider.md)   | Basic        | A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs. |
-| [`config-and-api-providers`](../examples/create-provider/config-and-api-providers.md) | Intermediate | A configuration provider and an HTTP API client provider, organized as one folder per provider with co-located specs and barrels.             |
+| Example                                                                               | Level        | Description                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-database-provider`](../examples/create-provider/basic-database-provider.md)   | Basic        | A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs, and closed in `onShutdown()`. |
+| [`config-and-api-providers`](../examples/create-provider/config-and-api-providers.md) | Intermediate | A configuration provider and an HTTP API client provider, organized as one folder per provider with co-located specs and barrels.                                           |
 
 > See all examples in [`examples/create-provider/`](../examples/create-provider/)
 

@@ -18,3 +18,4 @@ export * from './observability';
 export * from './health';
 export * from './metrics';
 export * from './registry';
+export * from './lifecycle';

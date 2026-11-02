@@ -106,7 +106,7 @@ After the common checklist, run the checklist for your deployment target.
 | --------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
 | Sessions disappear after a deploy             | Memory session store on a stateless platform     | Switch to Redis / Vercel KV; see `setup-redis` and `configure-session`                                |
 | Liveness probe passes while requests fail     | `/healthz` doesn't exercise the request path     | Add `/readyz` that checks dependencies (DB, Redis, downstream APIs); see `health-readiness-endpoints` |
-| Cold-start latency above SLA                  | Heavy provider construction at request time      | Construct shared clients in module scope or `onInit`; see `production-vercel` / `production-lambda`   |
+| Cold-start latency above SLA                  | Heavy provider construction at request time      | Build shared clients once, in a GLOBAL provider; see `production-vercel` / `production-lambda`        |
 | Rate-limit exceeded under normal load         | Global throttle too tight, no per-tool overrides | Tune `throttle.requestsPerSecond`; add per-tool overrides; see `configure-throttle`                   |
 | `frontmcp doctor` flags missing observability | Observability disabled or not wired              | Set `observability: true` in `@FrontMcp` and configure a sink; see `frontmcp-observability`           |
 | Browser build exceeds bundle budget           | Server-only deps imported into the browser entry | Split entries; gate Node-only imports behind `availableWhen.platform`; see `production-browser`       |
