@@ -1,4 +1,4 @@
-import { FrontMcpFlowHookTokens, FrontMcpLogger, PublicMcpError, type HookMetadata } from '@frontmcp/sdk';
+import { FRONTMCP_LOGGER, FrontMcpFlowHookTokens, PublicMcpError, type HookMetadata } from '@frontmcp/sdk';
 
 import type { DevEvent, DevEventSink } from '../dev-events/dev-event-stream';
 import ObservabilityPlugin from '../plugin/observability.plugin';
@@ -51,7 +51,7 @@ describe('CallMonitor', () => {
     expect(monitorProviderOf({})).toBeUndefined();
 
     const provider = monitorProviderOf({ stalls: { thresholdMs: 100 } });
-    expect(provider?.inject()).toEqual([FrontMcpLogger]);
+    expect(provider?.inject()).toEqual([FRONTMCP_LOGGER]);
     const monitor = provider?.useFactory(logger());
     expect(monitor?.stalls).toBeDefined();
     expect(monitor?.devEvents).toBeUndefined();

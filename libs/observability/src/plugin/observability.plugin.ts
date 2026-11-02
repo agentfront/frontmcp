@@ -5,7 +5,7 @@ import {
   DynamicPlugin,
   FlowHooksOf,
   FRONTMCP_CONTEXT,
-  FrontMcpLogger,
+  FRONTMCP_LOGGER,
   HttpHook,
   ListResourcesHook,
   ListResourceTemplatesHook,
@@ -14,6 +14,7 @@ import {
   ProviderScope,
   ResourceHook,
   ToolHook,
+  type FrontMcpLogger,
   type ProviderType,
 } from '@frontmcp/sdk';
 
@@ -1059,7 +1060,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
       providers.push({
         name: 'observability:call-monitor',
         provide: CallMonitor,
-        inject: () => [FrontMcpLogger] as const,
+        inject: () => [FRONTMCP_LOGGER] as const,
         useFactory: (logger: FrontMcpLogger) => new CallMonitor(stalls, devEvents, logger.child('CallMonitor')),
       });
     }

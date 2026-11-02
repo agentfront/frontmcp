@@ -168,7 +168,7 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('answer-shaping-must-compile.ts'))).toEqual([]);
   });
 
-  it('types observability.stalls and observability.devEvents with their file, sinks and queue bound', () => {
+  it('types observability.stalls and observability.devEvents, and a provider injecting FRONTMCP_LOGGER', () => {
     expect(describeEach(inFixtureFile('stalls-dev-events-must-compile.ts'))).toEqual([]);
   });
 

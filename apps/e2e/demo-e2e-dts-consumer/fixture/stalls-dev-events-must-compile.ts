@@ -1,6 +1,15 @@
 import 'reflect-metadata';
 
-import { App, FrontMcp, Tool, ToolContext } from '@frontmcp/sdk';
+import {
+  App,
+  AsyncProvider,
+  FrontMcp,
+  FRONTMCP_LOGGER,
+  Tool,
+  ToolContext,
+  type FrontMcpLogger,
+  type Token,
+} from '@frontmcp/sdk';
 
 @Tool({ name: 'ping', inputSchema: {} })
 export class PingTool extends ToolContext {
@@ -35,3 +44,11 @@ export class StallsServer {}
   observability: { stalls: true, devEvents: false },
 })
 export class StallsDefaultsServer {}
+
+const MONITOR_LOGGER: Token<FrontMcpLogger> = Symbol('MonitorLogger');
+
+export const monitorLogger = AsyncProvider({
+  provide: MONITOR_LOGGER,
+  inject: () => [FRONTMCP_LOGGER] as const,
+  useFactory: async (logger: FrontMcpLogger): Promise<FrontMcpLogger> => logger.child('Monitor'),
+});

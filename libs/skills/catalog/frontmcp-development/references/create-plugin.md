@@ -249,6 +249,8 @@ export default class ToolCatalogPlugin {}
 
 The factory runs while the scope initializes, before its tools are registered: read the registries when a method is called (as above), or wait for `scope.ready` before acting on them. Inside a hook, `flowCtx.get(ScopeEntry)` returns the same scope.
 
+For the server logger, inject `FRONTMCP_LOGGER` (`inject: () => [FRONTMCP_LOGGER] as const`, then `logger.child('MyPlugin')`). It is the same logger as `FrontMcpLogger`, under a `Symbol.for` token: a plugin package loaded by another copy of `@frontmcp/sdk` (the CommonJS build `require`s it from a server run as ESM) resolves it, where a class token like `FrontMcpLogger` is a different class in each copy.
+
 ## Step 3: Add Context Extensions
 
 Context extensions add properties to `ExecutionContextBase` so tools access plugin services via `this.propertyName`. Two parts are required:
