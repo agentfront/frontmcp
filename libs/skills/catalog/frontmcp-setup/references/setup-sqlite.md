@@ -227,10 +227,10 @@ sqlite: {
 
 ### Choosing a journal mode
 
-| Mode                                | Readers and the writer                                                                   | Files                                                                     | Use it for                                                                |
-| ----------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| WAL (`walMode: true`, default)      | Readers never wait for the writer, and the writer never waits for readers                | `-wal` and `-shm` beside the database while it is open; back up all three | Almost everything, and any file several processes write to                |
-| Rollback journal (`walMode: false`) | The writer waits for readers to finish before it commits; readers wait during the commit | A `-journal` file only while a write commits                              | Mostly-read files with rare writes, or a filesystem without shared memory |
+| Mode                                | Readers and the writer                                                                   | Files                                                                                                  | Use it for                                                                |
+| ----------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| WAL (`walMode: true`, default)      | Readers never wait for the writer, and the writer never waits for readers                | `-wal` and `-shm` beside the database while it is open; back it up with `VACUUM INTO`, not a file copy | Almost everything, and any file several processes write to                |
+| Rollback journal (`walMode: false`) | The writer waits for readers to finish before it commits; readers wait during the commit | A `-journal` file only while a write commits                                                           | Mostly-read files with rare writes, or a filesystem without shared memory |
 
 WAL needs a local filesystem: never put a WAL database on NFS, SMB or another network mount. A file once switched to WAL stays in WAL for every process that opens it, so `walMode: false` on one process does not switch it back.
 
@@ -340,7 +340,11 @@ or create the storage yourself:
 ```typescript
 import { createStorage } from '@frontmcp/utils';
 
-const storage = await createStorage({ type: 'sqlite', sqlite: { path: '/var/lib/my-server/app.sqlite' } });
+const storage = await createStorage({
+  type: 'sqlite',
+  sqlite: { path: '/var/lib/my-server/app.sqlite' },
+  fallback: 'error', // a lock in process memory would not be shared
+});
 await storage.set('lock:reindex', process.pid.toString(), { ifNotExists: true, ttlSeconds: 60 });
 ```
 

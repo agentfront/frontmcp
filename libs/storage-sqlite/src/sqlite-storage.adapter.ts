@@ -71,7 +71,7 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
     if (!this.connected) return false;
     try {
       // A cheap no-op query to confirm the handle is alive.
-      this.kv.has('__frontmcp_ping__');
+      await this.connection.read(() => this.kv.has('__frontmcp_ping__'));
       return true;
     } catch {
       return false;

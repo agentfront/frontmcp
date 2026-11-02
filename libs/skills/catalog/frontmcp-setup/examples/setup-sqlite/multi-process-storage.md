@@ -23,20 +23,26 @@ yarn add @frontmcp/storage-sqlite better-sqlite3
 
 ```typescript
 // src/tools/claim-reindex.tool.ts
-import { SqliteStorageToken, Tool, ToolContext, z } from '@frontmcp/sdk';
+import { SqliteStorageToken, Tool, ToolContext } from '@frontmcp/sdk';
+import { randomUUID } from '@frontmcp/utils';
 
 @Tool({
   name: 'claim_reindex',
   description: 'Run the reindex in this process unless another process already holds it',
-  inputSchema: { runId: z.string() },
+  inputSchema: {},
 })
 export class ClaimReindexTool extends ToolContext {
-  async execute({ runId }: { runId: string }) {
+  async execute() {
     const storage = this.get(SqliteStorageToken);
-    await storage.set('lock:reindex', runId, { ifNotExists: true, ttlSeconds: 300 });
-    const holder = await storage.get('lock:reindex');
-    const runs = await storage.incr('reindex:claims');
-    return { claimed: holder === runId, claims: runs };
+    const token = randomUUID();
+    await storage.set('lock:reindex', token, { ifNotExists: true, ttlSeconds: 300 });
+    if ((await storage.get('lock:reindex')) !== token) return { claimed: false };
+    try {
+      // Reindex here, within the 300 s the lock lasts.
+      return { claimed: true, claims: await storage.incr('reindex:claims') };
+    } finally {
+      await storage.deleteIfEquals('lock:reindex', token);
+    }
   }
 }
 ```
@@ -64,7 +70,11 @@ export default class Server {}
 // scripts/report.ts: the same file from a script, without a server
 import { createStorage } from '@frontmcp/utils';
 
-const storage = await createStorage({ type: 'sqlite', sqlite: { path: '/var/lib/indexer/state.sqlite' } });
+const storage = await createStorage({
+  type: 'sqlite',
+  sqlite: { path: '/var/lib/indexer/state.sqlite' },
+  fallback: 'error',
+});
 console.log('claims so far:', await storage.get('indexer:reindex:claims'));
 await storage.disconnect();
 ```

@@ -39,7 +39,7 @@ export function spawnWorker<Result>(script: string, env: Record<string, string> 
 
   const exited = new Promise<number | null>((resolve, reject) => {
     child.once('error', reject);
-    child.once('exit', (code) => resolve(code));
+    child.once('close', (code) => resolve(code));
   });
 
   const result = exited.then((code) => {
