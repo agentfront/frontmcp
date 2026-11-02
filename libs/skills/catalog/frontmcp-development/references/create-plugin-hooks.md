@@ -100,6 +100,8 @@ To keep the flow's own step from running:
 
 Hooks on one stage run in `priority` order, **lowest first**; the default is `0`, and a higher number does not run earlier. A stage runs its `@Will` hooks, then its steps (the flow's own step and the `@Stage` hooks) wrapped by its `@Around` hooks, then its `@Did` hooks, then its `@Finally` hooks, each list in `priority` order.
 
+One exception: an entry class's (`@Tool`, `@Resource`, `@Prompt`, `@Agent`, `@Job`) instance `@Stage` hooks on the stage that builds its instance (`createToolCallContext`, `createResourceContext`, `createPromptContext`, `createAgentContext`, `createJobContext`) join while that stage's own step runs, so they run right after the step, whatever their priority. The hook order print lists them there.
+
 - **Ties.** At equal priority, the hooks of plugins and providers run in the order they were registered (an app's plugins in the order its `plugins` array lists them), then the flow's own step, then the hooks declared on the entry class (`@Tool`, `@Resource`, `@Prompt`, `@Agent`, `@Job`): its `static` hooks, then its instance hooks.
 - **Around nesting.** The `@Around` hook with the lowest priority is the outermost: its code before `next()` runs first and its code after `next()` runs last. The `@Around` hooks of a stage wrap all of its steps, but not its `@Will`, `@Did` or `@Finally` hooks.
 

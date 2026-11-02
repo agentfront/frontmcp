@@ -31,6 +31,7 @@ import { FRONTMCP_CONTEXT, FrontMcpContextStorage, type FrontMcpContext } from '
 import { runAsFlow } from '../context/running-flow';
 import { InternalMcpError, PublicMcpError, RequestContextNotAvailableError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
+import { entryContextStageOf } from '../hooks/entry-class-hooks';
 import type HookRegistry from '../hooks/hook.registry';
 import { bindContextHookTargets, staticHooksFor } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
@@ -43,6 +44,7 @@ import {
   describeHookOrder,
   mergeHookMetasIntoStageMap,
   type HookRunner,
+  type StageEntry,
   type StageMap,
 } from './flow.stages';
 
@@ -139,7 +141,22 @@ function stageBasesOf(group: readonly string[]): string[] {
   return bases;
 }
 
-const FLOW_PHASES: readonly FlowPhase[] = ['pre', 'execute', 'post', 'finalize', 'error'];
+// The order a failed run reaches them in: its error stages run before its finalize stages.
+const FLOW_PHASES: readonly FlowPhase[] = ['pre', 'execute', 'post', 'error', 'finalize'];
+
+/** A stage's list with the hooks that joined it while `step` ran moved right after `step`, where they start. */
+function listJoinedAfterStep<C>(
+  list: StageEntry<C>[],
+  present: readonly StageEntry<C>[],
+  step: StageEntry<C>,
+): StageEntry<C>[] {
+  const stepIndex = list.indexOf(step);
+  if (stepIndex === -1) return list;
+  const joinedBefore = list.slice(0, stepIndex).filter((entry) => !present.includes(entry));
+  const rest = list.filter((entry) => !joinedBefore.includes(entry));
+  rest.splice(rest.indexOf(step) + 1, 0, ...joinedBefore);
+  return rest;
+}
 
 /** The order after the last entry of a stage map, where hooks merged into it start. */
 function nextStageOrder<C>(stages: StageMap<C>): number {
@@ -813,6 +830,11 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     const resolved = cloneStageMap(stages);
     const instanceHooks = entryHooks.filter((hook) => !hook.metadata.static).map((hook) => hook.metadata);
     mergeHookMetasIntoStageMap(this.FlowClass, resolved, instanceHooks, nextStageOrder(stages));
+    const contextStage = entryContextStageOf(this.name);
+    const contextStep = contextStage ? this.stages[contextStage]?.[0] : undefined;
+    if (contextStage && contextStep && resolved[contextStage]) {
+      resolved[contextStage] = listJoinedAfterStep(resolved[contextStage], stages[contextStage] ?? [], contextStep);
+    }
     const stageNames = FLOW_PHASES.flatMap((phase) => {
       const group = this.plan[phase];
       return group ? stageBasesOf(group) : [];

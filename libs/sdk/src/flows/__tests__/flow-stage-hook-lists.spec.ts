@@ -93,7 +93,24 @@ class GuardedTool extends ToolContext {
   }
 }
 
-@App({ id: 'stages', name: 'Stages', tools: [EchoTool, PlainTool, GuardedTool], plugins: [StageTracePlugin] })
+@Tool({ name: 'context-hooked', inputSchema: {} })
+class ContextHookedTool extends ToolContext {
+  async execute() {
+    return { content: [{ type: 'text' as const, text: 'ok' }] };
+  }
+
+  @ToolHook.Stage('createToolCallContext', { priority: -1 })
+  afterContext() {
+    trace.push('tool stage createToolCallContext');
+  }
+}
+
+@App({
+  id: 'stages',
+  name: 'Stages',
+  tools: [EchoTool, PlainTool, GuardedTool, ContextHookedTool],
+  plugins: [StageTracePlugin],
+})
 class StagesApp {}
 
 describe('flow stage hook lists', () => {
@@ -209,6 +226,15 @@ describe('the resolved hook order print', () => {
     ]);
     expect(callTool[2]).toContain(
       '  findTool: will GuardedTool.refuseNobody (0) → stage CallToolFlow.findTool (0) → did StageTracePlugin.didFindTool (0)',
+    );
+  });
+
+  it('lists an instance hook of the stage that builds the instance after that stage, where it runs', async () => {
+    const prints = await hookOrderPrints({ NODE_ENV: 'development' }, ['context-hooked']);
+
+    const callTool = prints.filter((message) => message.startsWith("Hook order of 'tools:call-tool'"));
+    expect(callTool[0]).toContain(
+      '  createToolCallContext: stage CallToolFlow.createToolCallContext (0) → stage ContextHookedTool.afterContext (-1)',
     );
   });
 
