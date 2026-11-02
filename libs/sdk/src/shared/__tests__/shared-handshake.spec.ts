@@ -1,4 +1,6 @@
 import * as fs from 'node:fs';
+import * as http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -53,6 +55,41 @@ describe('identifySharedServer', () => {
       stub = await startIdentityStub({ secret, behavior });
       await expect(identifySharedServer(stub.endpoint, proofKey)).resolves.toBe('refused');
       expectNoCredentialSent(stub);
+    },
+  );
+
+  it.each([
+    ['without a length', {}],
+    ['longer than a proof', { 'content-length': String(64 * 1024 * 1024) }],
+  ])(
+    'refuses an answer %s without reading it, so a squatter can not fill the memory of a session',
+    async (_, headers) => {
+      const total = 64 * 1024 * 1024;
+      const chunk = Buffer.alloc(1024 * 1024, 'a');
+      let sent = 0;
+      const flood = http.createServer((req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json', ...headers });
+        const pump = (): void => {
+          while (sent < total) {
+            sent += chunk.length;
+            if (!res.write(chunk)) {
+              res.once('drain', pump);
+              return;
+            }
+          }
+          res.end();
+        };
+        pump();
+      });
+      await new Promise<void>((resolve) => flood.listen(0, '127.0.0.1', resolve));
+      try {
+        const { port } = flood.address() as AddressInfo;
+        await expect(identifySharedServer(httpEndpoint(port), proofKey)).resolves.toBe('refused');
+        expect(sent).toBeLessThan(total);
+      } finally {
+        flood.closeAllConnections();
+        await new Promise<void>((resolve) => flood.close(() => resolve()));
+      }
     },
   );
 

@@ -7,6 +7,7 @@ import { unixSocketFetch } from './unix-socket-fetch';
 export const SHARED_IDENTIFY_PATH = '/.well-known/frontmcp-shared-server';
 
 const IDENTIFY_TIMEOUT_MS = 5_000;
+const MAX_ANSWER_BYTES = 1_024;
 
 export interface SharedEndpoint {
   /** What the server's proof is bound to: `unix:<socket path>`, or `http://127.0.0.1:<port>`. */
@@ -22,6 +23,16 @@ export function unixEndpoint(socketPath: string): SharedEndpoint {
 export function httpEndpoint(port: number): SharedEndpoint {
   const baseUrl = `http://127.0.0.1:${port}`;
   return { id: baseUrl, baseUrl, fetch: (input, init) => fetch(input, init) };
+}
+
+/** The answer's JSON, unless it does not say its length or is longer than a proof: it must not fill the memory. */
+async function readAnswer(response: Response): Promise<unknown> {
+  const length = Number(response.headers.get('content-length') ?? Number.NaN);
+  if (!(length <= MAX_ANSWER_BYTES)) {
+    await response.body?.cancel();
+    return undefined;
+  }
+  return response.json().catch(() => undefined);
 }
 
 /** `refused`: something answered, but it did not prove it holds the key. */
@@ -45,7 +56,7 @@ export async function identifySharedServer(endpoint: SharedEndpoint, proofKey: U
     await response.body?.cancel();
     return 'refused';
   }
-  const answer: unknown = await response.json().catch(() => undefined);
+  const answer = await readAnswer(response);
   const proof = typeof answer === 'object' && answer !== null ? (answer as { proof?: unknown }).proof : undefined;
   return verifySharedServerIdentity(proofKey, endpoint.id, nonce, proof) ? 'verified' : 'refused';
 }
