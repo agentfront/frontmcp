@@ -180,10 +180,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     return this.scopes.getScopes();
   }
 
-  /**
-   * Run every provider's `onReady()` once the server serves on its transport; later calls do nothing.
-   * @internal
-   */
+  /** Run every provider's `onReady()`, once; a host built from `createForGraph()` calls it when it starts serving. */
   async emitProvidersReady(): Promise<void> {
     for (const scope of this.getScopes() as Scope[]) {
       await scope.providers.runReadyHooks(scope.logger);

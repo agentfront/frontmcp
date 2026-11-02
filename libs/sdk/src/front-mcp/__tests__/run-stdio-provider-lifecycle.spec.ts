@@ -29,6 +29,14 @@ jest.mock('@frontmcp/protocol', () => {
 
 const phases: string[] = [];
 
+async function until(condition: () => boolean): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error('the stdio shutdown never exited');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 function recordingProvider(name: string) {
   @Provider({ name })
   class Recording implements OnReady, OnShutdown {
@@ -85,7 +93,7 @@ describe('runStdio provider lifecycle', () => {
       expect([...phases].sort()).toEqual(['ready:console', 'ready:stdio']);
 
       process.emit('SIGTERM');
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await until(() => exit.mock.calls.length > 0);
 
       expect(phases.slice(2).sort()).toEqual(['shutdown:console', 'shutdown:stdio']);
       expect(exit).toHaveBeenCalledWith(0);

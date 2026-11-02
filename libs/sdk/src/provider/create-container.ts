@@ -45,18 +45,13 @@ const createContainerOptionsSchema = z.object({
   lifecycle: lifecycleOptionsSchema.optional(),
 } satisfies RawZodShape<CreateContainerOptions>);
 
-/**
- * Build the provider graph a server would (same tokens, scopes and `onBootstrap()` order) and nothing else.
- * `onReady()` never runs: nothing is served. Accepts a `@FrontMcp` config object; its other options are ignored.
- */
+/** Build the providers a server would (same tokens, scopes and `onBootstrap()` order) and nothing else; no `onReady()`. */
 export async function createContainer(options: CreateContainerOptions): Promise<FrontMcpContainer> {
   const { providers, apps, logging, lifecycle } = createContainerOptionsSchema.parse(options);
   const root = new ProviderRegistry(
-    [{ name: 'frontmcp:config', provide: FrontMcpConfig, useValue: { logging } }],
+    [{ name: 'frontmcp:config', provide: FrontMcpConfig, useValue: { ...options, logging, lifecycle } }],
     undefined,
-    {
-      shutdownHookTimeoutMs: lifecycle?.shutdownHookTimeoutMs,
-    },
+    { shutdownHookTimeoutMs: lifecycle?.shutdownHookTimeoutMs },
   );
   await root.ready;
   const loggers = new LoggerRegistry(root);

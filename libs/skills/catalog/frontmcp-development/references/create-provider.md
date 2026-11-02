@@ -317,11 +317,11 @@ class CacheProvider extends Map<string, unknown> {
 
 A GLOBAL provider (a `@Provider` class, a `useClass` or `useValue` object, or the value an `AsyncProvider` factory returns) can implement any of three hooks. CONTEXT-scoped providers get none: a request builds them.
 
-| Hook            | Interface     | Runs                                                                                                                                                                                                    | When it fails                                                                                    |
-| --------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `onBootstrap()` | `OnBootstrap` | Once the provider is built: after its dependencies' `onBootstrap()`, before any provider that depends on it is built, and before tools, resources and prompts are listed                                | Startup fails with `ProviderBootstrapError` (`PROVIDER_BOOTSTRAP_FAILED`), naming the provider   |
-| `onReady()`     | `OnReady`     | Once the server serves: HTTP or Unix socket listening, stdio connected, `createDirect()` or `connect()` returned, serverless or fetch handler created. In dependency order, once                        | Logged as an error; the server keeps serving and the other `onReady()` hooks still run           |
-| `onShutdown()`  | `OnShutdown`  | At shutdown (SIGTERM / SIGINT, `shutdown()`, `dispose()`, `close()`), after the requests in flight finish. In reverse order: an app's providers before the server's, a provider before its dependencies | Logged as a warning; after `lifecycle.shutdownHookTimeoutMs` (default 3000 ms) shutdown moves on |
+| Hook            | Interface     | Runs                                                                                                                                                                                                                          | When it fails                                                                                    |
+| --------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `onBootstrap()` | `OnBootstrap` | Once the provider is built: after its dependencies' `onBootstrap()`, before any provider that depends on it is built, and before tools, resources and prompts are listed                                                      | Startup fails with `ProviderBootstrapError` (`PROVIDER_BOOTSTRAP_FAILED`), naming the provider   |
+| `onReady()`     | `OnReady`     | Once the server serves: HTTP or Unix socket listening, stdio connected, before `createDirect()` or `connect()` returns, a serverless or fetch handler built (on the edge, by its first request). In dependency order, once    | Logged as an error; the server keeps serving and the other `onReady()` hooks still run           |
+| `onShutdown()`  | `OnShutdown`  | At shutdown (SIGTERM / SIGINT, `shutdown()`, `dispose()`, `close()`), over HTTP or a socket after the requests in flight finish. In reverse order: an app's providers before the server's, a provider before its dependencies | Logged as a warning; after `lifecycle.shutdownHookTimeoutMs` (default 3000 ms) shutdown moves on |
 
 ```typescript
 import { FrontMcp, Provider, type OnBootstrap, type OnReady, type OnShutdown } from '@frontmcp/sdk';
@@ -367,8 +367,10 @@ class Server {}
 | Async: open a pool, fetch a remote schema          | `onBootstrap()`, or an `AsyncProvider({ provide, name, useFactory })` | `onShutdown()` |
 | Background work that should run only while serving | `onReady()`                                                           | `onShutdown()` |
 
-- Hooks are found by method name. A provider that already had a method called `onBootstrap`, `onReady` or `onShutdown` has it called since 1.11.
-- A `useValue` object registered in more than one place runs its hooks once.
+- Hooks are found by method name. A provider that already had a method called `onBootstrap`, `onReady` or `onShutdown` has it called since 1.11, with no arguments. That includes a third-party client registered with `useValue` or returned by a factory (an SDK's `onReady(callback)`, for example): wrap such a client in a provider class.
+- A `useValue` object registered in more than one place of a server runs its hooks once for that server.
+- `onReady()` is awaited: `createDirect()`, `connect()` and the handlers return, and `bootstrap()` and `runStdio()` install their SIGTERM / SIGINT handlers, once every `onReady()` has settled. Start long work there without awaiting it, as `SearchIndex` does.
+- A host you assemble from `FrontMcpInstance.createForGraph()` runs the `onReady()` hooks itself, with `instance.emitProvidersReady()`.
 - Serverless and edge handlers are never shut down, so `onShutdown()` does not run there.
 - On SIGTERM the process still exits at the shutdown deadline (10 s, 5 s under stdio), whatever hooks are left.
 
@@ -392,7 +394,7 @@ try {
 
 - It builds the server-level `providers`, then the `providers` of each local `@App` in `apps`. Remote apps, plugins and the other options of a server config are ignored.
 - `get(token)` looks at the server-level providers first, then each app's in order, and throws `ProviderNotAvailableError` when nothing registers the token; `tryGet(token)` returns `undefined` instead. A CONTEXT-scoped provider throws `ProviderScopedAccessError`: only a request builds it.
-- `onReady()` never runs: nothing is served. `FrontMcpLogger` can be injected; `Scope` cannot, since there is none.
+- `onReady()` never runs: nothing is served. `FrontMcpLogger` can be injected, and `FrontMcpConfig` is the object you passed; `Scope` cannot, since there is none.
 - A failing `onBootstrap()` rejects with `ProviderBootstrapError` after the providers that bootstrapped are shut down.
 - It runs in Node, and in the browser when the providers do.
 - Import the config from a module without `@FrontMcp`: importing a decorated class starts the server.

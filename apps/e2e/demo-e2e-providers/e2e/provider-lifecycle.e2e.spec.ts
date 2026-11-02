@@ -25,7 +25,11 @@ async function readJournal(path: string): Promise<string[]> {
 async function waitForPhase(path: string, phase: string): Promise<string[]> {
   const deadline = Date.now() + 30_000;
   for (;;) {
-    const phases = await readJournal(path);
+    // A read can land between the server truncating the journal and writing it again
+    const phases = await readJournal(path).catch((error: unknown) => {
+      if (error instanceof SyntaxError) return [];
+      throw error;
+    });
     if (phases.includes(phase)) return phases;
     if (Date.now() > deadline) throw new Error(`"${phase}" never recorded; journal: ${JSON.stringify(phases)}`);
     await new Promise((resolve) => setTimeout(resolve, 100));

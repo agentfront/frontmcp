@@ -3,14 +3,17 @@ import 'reflect-metadata';
 import {
   App,
   FrontMcpLogger,
+  getGlobalStoreConfig,
   LogLevel,
   Provider,
   ProviderScope,
+  type FrontMcpConfigType,
   type OnBootstrap,
   type OnReady,
   type OnShutdown,
 } from '../../common';
 import { ProviderBootstrapError, ProviderNotAvailableError, ProviderScopedAccessError } from '../../errors';
+import { FrontMcpConfig } from '../../front-mcp/front-mcp.tokens';
 import { createContainer } from '../create-container';
 
 const phases: string[] = [];
@@ -106,6 +109,37 @@ describe('createContainer', () => {
     const container = await createContainer(serverConfig);
 
     expect(container.get(Ledger).settings.region).toBe('eu');
+    await container.dispose();
+  });
+
+  it('gives a provider that injects FrontMcpConfig the server config it was given', async () => {
+    const STORE_OPTIONS = Symbol('STORE_OPTIONS');
+    const serverConfig = {
+      info: { name: 'billing', version: '1.0.0' },
+      apps: [BillingApp],
+      redis: { host: 'cache.internal', port: 6380 },
+      logging: quiet,
+      providers: [
+        Settings,
+        {
+          name: 'store-options',
+          provide: STORE_OPTIONS,
+          inject: () => [FrontMcpConfig] as const,
+          useFactory: (config: FrontMcpConfigType) => ({
+            server: config.info.name,
+            redis: getGlobalStoreConfig('Store', config),
+          }),
+        },
+      ],
+    };
+
+    const container = await createContainer(serverConfig);
+
+    expect(container.get(STORE_OPTIONS)).toEqual({
+      server: 'billing',
+      redis: { host: 'cache.internal', port: 6380 },
+    });
+    expect(container.get(FrontMcpConfig).logging).toEqual(expect.objectContaining({ level: LogLevel.Off }));
     await container.dispose();
   });
 
