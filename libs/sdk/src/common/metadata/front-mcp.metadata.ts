@@ -1,5 +1,5 @@
 import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { MAX_CONCURRENT_TASKS_PER_SESSION } from '../../task/task.types';
 import type { AdapterType, AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';

@@ -2,7 +2,7 @@
 
 import { AuthorityDeniedError, type AuthoritiesMetadata } from '@frontmcp/auth';
 import { type Token } from '@frontmcp/di';
-import { toJSONSchema, z } from '@frontmcp/lazy-zod';
+import { toJSONSchema, internalZ as z } from '@frontmcp/lazy-zod';
 import { type CallToolRequest, type CallToolResult, type TextContent, type Tool } from '@frontmcp/protocol';
 
 import { ConfigService } from '../builtin/config';

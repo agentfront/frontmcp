@@ -11,7 +11,7 @@ import { ConfigService } from './providers/config.service';
  * @example
  * ```typescript
  * import { FrontMcp, App, ConfigPlugin } from '@frontmcp/sdk';
- * import { z } from '@frontmcp/lazy-zod';
+ * import { internalZ as z } from '@frontmcp/lazy-zod';
  *
  * // Define configuration schema
  * const configSchema = z.object({

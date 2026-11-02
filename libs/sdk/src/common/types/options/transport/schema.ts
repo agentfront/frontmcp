@@ -3,7 +3,7 @@
 // Transport configuration schema with protocol presets and simplified structure.
 // Uses explicit interfaces from interfaces.ts for IDE autocomplete.
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { isServerless } from '@frontmcp/utils';
 
 import { type RawZodShape } from '../../common.types';

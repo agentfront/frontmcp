@@ -5,7 +5,7 @@
  * Returns full skill content with instructions and tool schemas.
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import {
   enforceGlobalRateLimit,

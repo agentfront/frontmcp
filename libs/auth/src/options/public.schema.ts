@@ -1,7 +1,7 @@
 // options/public.schema.ts
 // Public mode - No authentication required
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { jsonWebKeySetSchema, jwkSchema } from '../common/jwt.types';
 import type { RawZodShape } from '../common/zod-utils';

@@ -1,7 +1,7 @@
 // common/types/options/skills-http/schema.ts
 // Zod schema for skills HTTP configuration
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { ExternalSkillProviderBase } from '../../../../skill/providers/external-skill.provider';
 import type { RawZodShape } from '../../common.types';

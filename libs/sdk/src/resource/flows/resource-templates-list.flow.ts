@@ -12,7 +12,7 @@ import {
 
 import 'reflect-metadata';
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import {
   ListResourceTemplatesRequestSchema,
   ListResourceTemplatesResultSchema,

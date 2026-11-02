@@ -1,5 +1,5 @@
 import type { StoredSession } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { CallToolResultSchema, ElicitResultSchema, RequestSchema, type RequestId } from '@frontmcp/protocol';
 
 import { createSessionId } from '../../auth/session/utils/session-id.utils';

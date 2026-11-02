@@ -1,7 +1,7 @@
 // tools/flows/call-tool.flow.ts
 import { AuthorityDeniedError, resolveRequiredScopes, signIncrementalAuthTicket } from '@frontmcp/auth';
 import { ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import type { ToolResponseContent } from '@frontmcp/uipack/adapters';
 import {

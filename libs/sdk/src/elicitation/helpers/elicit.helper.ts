@@ -7,7 +7,7 @@
  * @module elicitation/helpers/elicit.helper
  */
 
-import { toJSONSchema, z, type ZodType } from '@frontmcp/lazy-zod';
+import { toJSONSchema, internalZ as z, type ZodType } from '@frontmcp/lazy-zod';
 import { awaitOutsideRequest, randomUUID } from '@frontmcp/utils';
 
 import { type FrontMcpContext } from '../../context';

@@ -15,7 +15,7 @@
  * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http
  */
 import { isAnonymousSubject } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { MCP_20260728_META, type LoggingLevel, type SubscriptionFilter } from '@frontmcp/protocol';
 import { runRequestExclusive } from '@frontmcp/utils';
 

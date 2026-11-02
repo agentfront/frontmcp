@@ -16,7 +16,7 @@ import {
 
 import 'reflect-metadata';
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { ListToolsRequestSchema, ListToolsResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import type { AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/adapters';
 import { isUIType, type UIType } from '@frontmcp/uipack/types';

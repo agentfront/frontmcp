@@ -1,6 +1,6 @@
 // file: libs/sdk/src/tool/tool.utils.ts
 import { depsOfClass, depsOfFunc, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
-import { hasTransform, z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from '@frontmcp/lazy-zod';
+import { hasTransform, internalZ as z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from '@frontmcp/lazy-zod';
 import {
   type AudioContent,
   type ContentBlock,

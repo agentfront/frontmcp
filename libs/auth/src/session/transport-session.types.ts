@@ -1,6 +1,6 @@
 // session/transport-session.types.ts
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 /**
  * Transport protocol types supported by MCP

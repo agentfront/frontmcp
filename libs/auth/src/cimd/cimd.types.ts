@@ -6,7 +6,7 @@
  *
  * @see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00
  */
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 // ============================================
 // CLIENT METADATA DOCUMENT SCHEMA
