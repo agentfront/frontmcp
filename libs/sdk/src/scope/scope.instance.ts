@@ -597,20 +597,12 @@ export class Scope extends ScopeEntry {
     // who sets both top-level `redis` and `sqlite` still gets the warning:
     // redis wins everywhere, the stores exist, but sqlite is effectively
     // unused.
-    if (this.metadata.sqlite) {
-      const transportUsedSqlite =
-        this.transportService?.isSessionStoreConfigured() === true &&
-        this.transportService.getBackendKind() === 'sqlite';
-      const tasksUsedSqlite = this.taskBackendType === 'sqlite';
-      const elicitationUsedSqlite = this.elicitationBackendType === 'sqlite';
-      if (!transportUsedSqlite && !tasksUsedSqlite && !elicitationUsedSqlite) {
-        this.logger.warn(
-          '[FrontMcp] Top-level `sqlite` config was provided but no subsystem consumes it ' +
-            '(transport persistence, tasks, and elicitation were all disabled or pre-configured with a different backend). ' +
-            'Sessions will use in-memory storage. Remove the `sqlite` block or enable one of the subsystems.',
-        );
-      }
-    }
+    // The jobs, registered below, may consume the top-level sqlite too: the unused warning waits for them
+    let topLevelSqliteUsed =
+      (this.transportService?.isSessionStoreConfigured() === true &&
+        this.transportService.getBackendKind() === 'sqlite') ||
+      this.taskBackendType === 'sqlite' ||
+      this.elicitationBackendType === 'sqlite';
 
     // ═══ BATCH 2: App-dependent registries (parallel) ═══
     // These call providers.getRegistries('AppRegistry') during initialize(),
@@ -884,6 +876,8 @@ export class Scope extends ScopeEntry {
         enabled: true,
         store: resolveJobsStore(jobsConfig?.store, { redis: this.metadata.redis, sqlite: resolvedTopLevelSqlite }),
       };
+      topLevelSqliteUsed ||=
+        Boolean(resolvedTopLevelSqlite) && effectiveConfig.store?.sqlite === resolvedTopLevelSqlite;
       const result = await registerJobCapabilities({
         providers: this.scopeProviders,
         flowRegistry: this.scopeFlows,
@@ -921,6 +915,14 @@ export class Scope extends ScopeEntry {
 
       this.logger.info(
         `Jobs system initialized: ${this._scopeJobs.getJobs().length} jobs, ${this._scopeWorkflows.getWorkflows().length} workflows`,
+      );
+    }
+
+    if (this.metadata.sqlite && !topLevelSqliteUsed) {
+      this.logger.warn(
+        '[FrontMcp] Top-level `sqlite` config was provided but no subsystem consumes it ' +
+          '(transport persistence, tasks, elicitation and jobs were all disabled or pre-configured with a different backend). ' +
+          'Sessions will use in-memory storage. Remove the `sqlite` block or enable one of the subsystems.',
       );
     }
 

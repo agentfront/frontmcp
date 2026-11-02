@@ -511,6 +511,7 @@ export class JobExecutionManager {
         authoritiesContextBuilder: opts.authoritiesContextBuilder,
         workflowRunId: runId,
         admission: this.options.admission,
+        defaultTimeoutMs: this.options.defaultTimeoutMs,
       });
 
       const result = await engine.execute(opts.workflowInput);

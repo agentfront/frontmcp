@@ -8,6 +8,7 @@
  * make the escape hatch impossible to use.
  */
 import { frontMcpMetadataSchema } from '../front-mcp.metadata';
+import { frontMcpJobMetadataSchema } from '../job.metadata';
 
 function parseJobs(jobs: Record<string, unknown>): Record<string, unknown> | undefined {
   const parsed = frontMcpMetadataSchema.parse({
@@ -76,5 +77,22 @@ describe('frontMcpMetadataSchema — durable jobs config', () => {
 
   it('refuses a negative default timeout', () => {
     expect(() => parseJobs({ enabled: true, defaultTimeoutMs: -1 })).toThrow();
+  });
+
+  it('refuses a default timeout past the longest timer Node.js keeps, which would fire at once', () => {
+    expect(parseJobs({ enabled: true, defaultTimeoutMs: 2_147_483_647 })?.['defaultTimeoutMs']).toBe(2_147_483_647);
+    expect(() => parseJobs({ enabled: true, defaultTimeoutMs: 2_147_483_648 })).toThrow(
+      'jobs.defaultTimeoutMs must be at most 2147483647 ms (about 24.8 days)',
+    );
+  });
+
+  it('refuses a job timeout or a cleanup timeout past that limit', () => {
+    const job = { name: 'long', inputSchema: {}, outputSchema: {} };
+    expect(() => frontMcpJobMetadataSchema.parse({ ...job, timeout: 2_147_483_648 })).toThrow(
+      'timeout must be at most 2147483647 ms (about 24.8 days)',
+    );
+    expect(() =>
+      frontMcpJobMetadataSchema.parse({ ...job, cleanup: { run: () => undefined, timeoutMs: 2_147_483_648 } }),
+    ).toThrow('cleanup.timeoutMs must be at most 2147483647 ms (about 24.8 days)');
   });
 });
