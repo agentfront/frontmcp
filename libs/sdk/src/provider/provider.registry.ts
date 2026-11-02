@@ -134,8 +134,8 @@ export default class ProviderRegistry
   /** Instances a registry of this tree runs the hooks of, so a value registered twice runs them once. */
   private readonly lifecycleClaims: WeakSet<object>;
   private readonly shutdownHookTimeoutMs: number;
-  private readyHooksRun = false;
-  private shutdownHooksRun = false;
+  private readyHooksRun?: Promise<void>;
+  private shutdownHooksRun?: Promise<void>;
 
   constructor(
     list: ProviderType[],
@@ -345,17 +345,23 @@ export default class ProviderRegistry
   }
 
   /** Run `onReady()` on the providers built here, then on those of the registries below, in build order; once. */
-  async runReadyHooks(logger: LifecycleLogger): Promise<void> {
-    if (this.readyHooksRun) return;
-    this.readyHooksRun = true;
+  runReadyHooks(logger: LifecycleLogger): Promise<void> {
+    this.readyHooksRun ??= this.readyHereAndBelow(logger);
+    return this.readyHooksRun;
+  }
+
+  /** Run `onShutdown()` on the providers of the registries below, then on those built here, in reverse order; once. */
+  runShutdownHooks(logger: LifecycleLogger): Promise<void> {
+    this.shutdownHooksRun ??= this.shutdownBelowAndHere(logger);
+    return this.shutdownHooksRun;
+  }
+
+  private async readyHereAndBelow(logger: LifecycleLogger): Promise<void> {
     await readyProviders(this.lifecycleEntries, logger);
     for (const child of [...this.childRegistries]) await child.runReadyHooks(logger);
   }
 
-  /** Run `onShutdown()` on the providers of the registries below, then on those built here, in reverse order; once. */
-  async runShutdownHooks(logger: LifecycleLogger): Promise<void> {
-    if (this.shutdownHooksRun) return;
-    this.shutdownHooksRun = true;
+  private async shutdownBelowAndHere(logger: LifecycleLogger): Promise<void> {
     for (const child of [...this.childRegistries].reverse()) await child.runShutdownHooks(logger);
     await shutdownProviders(this.lifecycleEntries, this.shutdownHookTimeoutMs, logger);
   }

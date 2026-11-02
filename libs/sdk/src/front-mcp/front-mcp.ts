@@ -939,7 +939,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
         try {
           scope.notifications.unregisterServer(sessionId);
           await scope.shutdown();
-          await scope.providers.runShutdownHooks(scope.logger);
+          for (const instanceScope of frontMcp.getScopes() as Scope[]) {
+            await instanceScope.providers.runShutdownHooks(instanceScope.logger);
+          }
           await mcpServer.close();
         } catch (err) {
           console.error('Error closing MCP server:', err);

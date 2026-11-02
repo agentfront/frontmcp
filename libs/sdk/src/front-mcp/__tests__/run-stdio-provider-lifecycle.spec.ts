@@ -29,17 +29,23 @@ jest.mock('@frontmcp/protocol', () => {
 
 const phases: string[] = [];
 
-@Provider({ name: 'stdio-pool' })
-class StdioPool implements OnReady, OnShutdown {
-  onReady() {
-    phases.push('ready');
+function recordingProvider(name: string) {
+  @Provider({ name })
+  class Recording implements OnReady, OnShutdown {
+    onReady() {
+      phases.push(`ready:${name}`);
+    }
+    async onShutdown() {
+      phases.push(`shutdown:${name}`);
+    }
   }
-  async onShutdown() {
-    phases.push('shutdown');
-  }
+  return Recording;
 }
 
-@App({ id: 'stdio', name: 'Stdio', providers: [StdioPool] })
+@App({ id: 'console', name: 'Console', standalone: true, providers: [recordingProvider('console')] })
+class ConsoleApp {}
+
+@App({ id: 'stdio', name: 'Stdio', providers: [recordingProvider('stdio')] })
 class StdioApp {}
 
 describe('runStdio provider lifecycle', () => {
@@ -68,20 +74,20 @@ describe('runStdio provider lifecycle', () => {
     }
   });
 
-  it('readies the providers once stdio is connected, and shuts them down on SIGTERM', async () => {
+  it("readies every scope's providers once stdio is connected, and shuts them all down on SIGTERM", async () => {
     const exit = jest.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
     try {
       await FrontMcpInstance.runStdio({
         info: { name: 'stdio-lifecycle', version: '1.0.0' },
-        apps: [StdioApp],
+        apps: [ConsoleApp, StdioApp],
         logging: { level: LogLevel.Off, enableConsole: false },
       });
-      expect(phases).toEqual(['ready']);
+      expect([...phases].sort()).toEqual(['ready:console', 'ready:stdio']);
 
       process.emit('SIGTERM');
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(phases).toEqual(['ready', 'shutdown']);
+      expect(phases.slice(2).sort()).toEqual(['shutdown:console', 'shutdown:stdio']);
       expect(exit).toHaveBeenCalledWith(0);
     } finally {
       exit.mockRestore();

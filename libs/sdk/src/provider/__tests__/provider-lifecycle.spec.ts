@@ -68,6 +68,39 @@ describe('Provider lifecycle hooks', () => {
     child.dispose();
   });
 
+  it('makes a caller that arrives during a run wait for that run to finish', async () => {
+    let finishReady: () => void = () => undefined;
+    let finishShutdown: () => void = () => undefined;
+    @Provider({ name: 'slow' })
+    class Slow implements OnReady, OnShutdown {
+      onReady() {
+        return new Promise<void>((resolve) => (finishReady = resolve));
+      }
+      onShutdown() {
+        return new Promise<void>((resolve) => (finishShutdown = resolve));
+      }
+    }
+    const registry = new ProviderRegistry([Slow]);
+    await registry.ready;
+    const settled: string[] = [];
+
+    void registry.runReadyHooks(silentLogger()).then(() => settled.push('first ready'));
+    const secondReady = registry.runReadyHooks(silentLogger()).then(() => settled.push('second ready'));
+    await Promise.resolve();
+    expect(settled).toEqual([]);
+    finishReady();
+    await secondReady;
+
+    void registry.runShutdownHooks(silentLogger()).then(() => settled.push('first shutdown'));
+    const secondShutdown = registry.runShutdownHooks(silentLogger()).then(() => settled.push('second shutdown'));
+    await Promise.resolve();
+    expect(settled).toEqual(['first ready', 'second ready']);
+    finishShutdown();
+    await secondShutdown;
+
+    expect(settled).toEqual(['first ready', 'second ready', 'first shutdown', 'second shutdown']);
+  });
+
   it('runs onShutdown in reverse order, the registries below first, once', async () => {
     const parent = new ProviderRegistry([recordingProvider('config'), recordingProvider('pool')]);
     await parent.ready;
