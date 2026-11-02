@@ -4,7 +4,7 @@
  */
 import 'reflect-metadata';
 
-import { isLazy } from '@frontmcp/lazy-zod';
+import { eagerZ, isLazy, toJSONSchema, z, ZodType } from '@frontmcp/lazy-zod';
 
 type Exports = Record<string, unknown>;
 type Def = Record<string, unknown> & { type: string };
@@ -48,11 +48,14 @@ const STRING_FORMATS: Record<string, string> = {
   datetime: '2020-01-01T00:00:00Z',
 };
 
-function sample(schema: unknown, depth: number): unknown {
-  if (depth > 6 || !isSchema(schema)) return undefined;
+/** The objects a sample is still filling in, so a recursive schema's sample can refer back to one: a cyclic input. */
+type Cycles = { open: Map<unknown, Record<string, unknown>>; closed: number };
+
+function sample(schema: unknown, depth: number, cycles?: Cycles): unknown {
+  if (depth > 10 || !isSchema(schema)) return undefined;
   const parser = schema as Parser;
   const def = parser._zod.def;
-  const child = (key: string): unknown => sample(def[key], depth + 1);
+  const child = (key: string): unknown => sample(def[key], depth + 1, cycles);
   switch (def.type) {
     case 'string':
       return STRING_FORMATS[parser.format ?? ''] ?? 'sample'.padEnd(parser.minLength ?? 0, 'x');
@@ -77,15 +80,13 @@ function sample(schema: unknown, depth: number): unknown {
     case 'array':
       return [child('element')];
     case 'object':
-      return Object.fromEntries(
-        Object.entries(def['shape'] as Record<string, unknown>).map(([key, value]) => [key, sample(value, depth + 1)]),
-      );
+      return sampleObject(parser, depth, cycles);
     case 'record':
       return { key: child('valueType') };
     case 'tuple':
-      return (def['items'] as unknown[]).map((item) => sample(item, depth + 1));
+      return (def['items'] as unknown[]).map((item) => sample(item, depth + 1, cycles));
     case 'union':
-      return sample((def['options'] as unknown[])[0], depth + 1);
+      return sampleUnion(def['options'] as unknown[], depth, cycles);
     case 'intersection':
       return { ...(child('left') as object), ...(child('right') as object) };
     case 'optional':
@@ -99,12 +100,43 @@ function sample(schema: unknown, depth: number): unknown {
     case 'pipe':
       return child('in');
     case 'lazy':
-      return sample(parser._zod.innerType, depth + 1);
+      return sample(parser._zod.innerType, depth + 1, cycles);
     case 'function':
       return () => undefined;
     default:
       return undefined;
   }
+}
+
+function sampleObject(parser: Parser, depth: number, cycles: Cycles | undefined): Record<string, unknown> {
+  const open = cycles?.open.get(parser._zod);
+  if (cycles && open) {
+    cycles.closed++;
+    return open;
+  }
+  const value: Record<string, unknown> = {};
+  cycles?.open.set(parser._zod, value);
+  for (const [key, field] of Object.entries(parser._zod.def['shape'] as Record<string, unknown>)) {
+    value[key] = sample(field, depth + 1, cycles);
+  }
+  cycles?.open.delete(parser._zod);
+  return value;
+}
+
+function sampleUnion(options: unknown[], depth: number, cycles: Cycles | undefined): unknown {
+  for (const option of cycles ? options : []) {
+    const closedBefore = cycles?.closed ?? 0;
+    const value = sample(option, depth + 1, cycles);
+    if ((cycles?.closed ?? 0) > closedBefore) return value;
+  }
+  return sample(options[0], depth + 1, cycles);
+}
+
+/** A sample of a recursive schema that refers back to itself, or `undefined` for a schema with no cycle to close. */
+function cyclicSample(schema: Parser): unknown {
+  const cycles: Cycles = { open: new Map(), closed: 0 };
+  const value = sample(schema, 0, cycles);
+  return cycles.closed > 0 ? value : undefined;
 }
 
 function inputsFor(schema: Parser): unknown[] {
@@ -116,6 +148,8 @@ function inputsFor(schema: Parser): unknown[] {
       inputs.push(rest, { ...base, [key]: typeof value === 'string' ? 42 : 'wrong' });
     }
   }
+  const cyclic = cyclicSample(schema);
+  if (cyclic !== undefined) inputs.push(cyclic);
   return inputs;
 }
 
@@ -142,6 +176,68 @@ async function outcome(schema: Parser, input: unknown): Promise<unknown> {
   }
 }
 
+function attempt(read: () => unknown): unknown {
+  try {
+    return { value: comparable(read()) };
+  } catch (error) {
+    return { threw: (error as Error).message };
+  }
+}
+
+type Derived = Record<string, () => Parser>;
+
+/** What a consumer builds from an exported schema: the derived schemas must validate like the ones `main` derives. */
+function derivedFrom(schema: Parser): Derived {
+  const derived: Derived = {
+    'optional()': () => (schema as unknown as eagerZ.ZodType).optional() as unknown as Parser,
+    'array()': () => (schema as unknown as eagerZ.ZodType).array() as unknown as Parser,
+    'or()': () => (schema as unknown as eagerZ.ZodType).or(z.null()) as unknown as Parser,
+    'z.object({ field })': () => z.object({ field: schema as unknown as eagerZ.ZodType }) as unknown as Parser,
+  };
+  if (schema._zod.def.type !== 'object') return derived;
+  const object = schema as unknown as eagerZ.ZodObject<eagerZ.ZodRawShape>;
+  const [firstKey] = Object.keys(object.shape);
+  const extra = { extra: z.string().optional() };
+  const objectDerived: Derived = {
+    'extend()': () => object.extend(extra) as unknown as Parser,
+    'merge()': () => object.merge(z.object(extra)) as unknown as Parser,
+    'partial()': () => object.partial() as unknown as Parser,
+    'strict()': () => object.strict() as unknown as Parser,
+    'z.object({ ...shape })': () => z.object({ ...object.shape, ...extra }) as unknown as Parser,
+  };
+  if (firstKey !== undefined) {
+    objectDerived['pick()'] = () => object.pick({ [firstKey]: true }) as unknown as Parser;
+    objectDerived['omit()'] = () => object.omit({ [firstKey]: true }) as unknown as Parser;
+  }
+  const discriminator = Object.keys(object.shape).find((key) => object.shape[key]._zod.def.type === 'literal');
+  if (discriminator !== undefined) {
+    objectDerived['z.discriminatedUnion()'] = () =>
+      z.discriminatedUnion(discriminator, [
+        object,
+        z.object({ [discriminator]: z.literal('another option') }),
+      ]) as unknown as Parser;
+  }
+  return { ...derived, ...objectDerived };
+}
+
+/** What a consumer reads from an exported schema without parsing with it. */
+function introspection(schema: Parser): Record<string, unknown> {
+  const zodSchema = schema as unknown as eagerZ.ZodType;
+  const shape = schema._zod.def.type === 'object' ? (schema as unknown as eagerZ.ZodObject).shape : undefined;
+  return {
+    type: attempt(() => schema._zod.def.type),
+    className: attempt(() => zodSchema.constructor.name),
+    isZodType: attempt(() => schema instanceof ZodType),
+    description: attempt(() => zodSchema.description),
+    meta: attempt(() => zodSchema.meta()),
+    isOptional: attempt(() => zodSchema.isOptional()),
+    isNullable: attempt(() => zodSchema.isNullable()),
+    shape: attempt(() => shape && Object.entries(shape).map(([key, field]) => [key, field._zod.def.type])),
+    jsonSchema: attempt(() => toJSONSchema(zodSchema)),
+    inputJsonSchema: attempt(() => toJSONSchema(zodSchema, { io: 'input' })),
+  };
+}
+
 const cases = ENTRY_POINTS.flatMap((entry) =>
   Object.keys(previous[entry])
     .filter((name) => isSchema(previous[entry][name]))
@@ -165,6 +261,45 @@ describe('exported schemas built with internalZ', () => {
     expect(isSchema(after)).toBe(true);
     for (const input of inputsFor(before)) {
       expect(await outcome(after, input)).toEqual(await outcome(before, input));
+    }
+  });
+
+  it('also gives each recursive schema a cyclic input, which only Zod’s memoizer parses', () => {
+    const recursive = cases.filter(({ entry, name }) => cyclicSample(previous[entry][name] as Parser) !== undefined);
+    expect(recursive.map(({ name }) => name)).toContain('authoritiesPolicySchema');
+  });
+
+  it.each(cases)('$entry $name composes and converts like before', async ({ entry, name }) => {
+    const before = previous[entry][name] as Parser;
+    const after = current[entry][name] as Parser;
+    expect(introspection(after)).toEqual(introspection(before));
+
+    const zodJsonSchema = (schema: Parser) => attempt(() => eagerZ.toJSONSchema(schema as unknown as eagerZ.ZodType));
+    const zodBefore = zodJsonSchema(before);
+    if (!('threw' in (zodBefore as object))) expect(zodJsonSchema(after)).toEqual(zodBefore);
+
+    const derivedBefore = derivedFrom(before);
+    const derivedAfter = derivedFrom(after);
+    expect(Object.keys(derivedAfter)).toEqual(Object.keys(derivedBefore));
+    const inputs = inputsFor(before);
+    for (const [label, derive] of Object.entries(derivedBefore)) {
+      const derivedOutcome = async (make: () => Parser, input: unknown) => {
+        try {
+          return await outcome(make(), input);
+        } catch (error) {
+          return { threw: (error as Error).message };
+        }
+      };
+      for (const input of [...inputs, [inputs[0]], { field: inputs[0] }]) {
+        expect({ label, outcome: await derivedOutcome(derivedAfter[label], input) }).toEqual({
+          label,
+          outcome: await derivedOutcome(derive, input),
+        });
+      }
+      expect({ label, jsonSchema: attempt(() => toJSONSchema(derivedAfter[label]() as never)) }).toEqual({
+        label,
+        jsonSchema: attempt(() => toJSONSchema(derive() as never)),
+      });
     }
   });
 });
