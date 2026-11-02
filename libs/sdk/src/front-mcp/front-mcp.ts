@@ -646,7 +646,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * class — spreading a class yields no config) plus the socket path.
    *
    * SIGTERM and SIGINT run the graceful {@link shutdown} and exit, as `bootstrap()` does for
-   * the TCP server; `close()` runs the same shutdown without exiting.
+   * the TCP server; `close()` runs the same shutdown without exiting. With
+   * `lifecycle.exitWhenOrphaned: true` the parent process exiting does too.
    *
    * @example
    * ```typescript
@@ -711,6 +712,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * bound** — the HTTP server is disabled for this entry point (#451).
    *
    * One connection serves every revision: `initialize` opens a session, a 2026-07-28 request is served statelessly.
+   *
+   * When stdin ends or the parent process exits, the server shuts down as on SIGTERM and exits 0, so a client that
+   * dies leaves no orphan behind; `lifecycle: { exitWhenOrphaned: false }` turns that off.
    *
    * Accepts either a `@FrontMcp`-decorated class or the same config object you
    * pass to `@FrontMcp()` (#450).

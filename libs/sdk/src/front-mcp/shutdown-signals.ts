@@ -1,3 +1,5 @@
+import type { Readable } from 'node:stream';
+
 import { watchParent, type ParentGoneReason } from '@frontmcp/utils';
 
 const SHUTDOWN_SIGNALS = ['SIGTERM', 'SIGINT'] as const;
@@ -25,7 +27,7 @@ export interface ShutdownSignalOptions {
   deadlineMs?: number;
   logger?: { error(message: string, error?: unknown): void; info?(message: string): void };
   /** Also shut down when the parent process exits or, when given, `stdin` ends (`lifecycle.exitWhenOrphaned`). */
-  whenOrphaned?: { stdin?: NodeJS.ReadableStream };
+  whenOrphaned?: { stdin?: Readable };
 }
 
 /**

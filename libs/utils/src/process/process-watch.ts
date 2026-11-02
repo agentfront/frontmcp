@@ -5,6 +5,8 @@
  * **Node.js only.**
  */
 
+import type { Readable } from 'stream';
+
 import { fileExistsSync } from '../fs/fs';
 import { isPidRunning, type ProcessTreeDeps } from './process-tree';
 
@@ -23,7 +25,7 @@ export interface WatchParentOptions {
   /** How often the parent is checked. @default 1000 */
   intervalMs?: number;
   /** A stream whose end also counts as the parent going away, such as `process.stdin` for a stdio server. */
-  stdin?: NodeJS.ReadableStream;
+  stdin?: Readable;
 }
 
 export interface WatchParentDeps extends Pick<ProcessTreeDeps, 'kill'> {
@@ -64,6 +66,7 @@ export function watchParent(options: WatchParentOptions, deps?: Partial<WatchPar
     report('stdin-ended');
   }
 
+  if (stdin?.readableEnded || stdin?.destroyed) queueMicrotask(onStdinEnded);
   stdin?.once('end', onStdinEnded);
   stdin?.once('close', onStdinEnded);
   if (parentPid > 1) {

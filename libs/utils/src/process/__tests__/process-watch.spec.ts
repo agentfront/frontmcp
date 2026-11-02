@@ -83,6 +83,19 @@ describe('watchParent', () => {
     expect(onGone).toHaveBeenCalledWith('stdin-ended');
   });
 
+  it('reports stdin that ended before the watch started', () => {
+    const stdin = new PassThrough();
+    stdin.destroy();
+    const onGone = jest.fn();
+    watchParent({ onGone, stdin }, { ppid: () => 4450, kill: jest.fn() });
+    expect(onGone).not.toHaveBeenCalled();
+
+    jest.runAllTicks();
+
+    expect(onGone).toHaveBeenCalledTimes(1);
+    expect(onGone).toHaveBeenCalledWith('stdin-ended');
+  });
+
   it('polls nothing when the parent is already init', () => {
     const kill = jest.fn();
     const onGone = jest.fn();
