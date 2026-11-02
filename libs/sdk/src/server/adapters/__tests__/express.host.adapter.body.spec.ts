@@ -1,5 +1,5 @@
 import * as http from 'node:http';
-import { deflateSync, gzipSync } from 'node:zlib';
+import { brotliCompressSync, deflateSync, gzipSync } from 'node:zlib';
 
 import type express from 'express';
 
@@ -90,6 +90,7 @@ const REQUESTS: Record<string, BodyRequest> = {
   'a quoted charset': text('{"a":1}', 'application/json; charset="utf-8"'),
   'an upper-case type': text('{"a":1}', 'APPLICATION/JSON'),
   'a byte order mark': { contentType: 'application/json', body: Buffer.concat([BOM, Buffer.from('{"a":1}')]) },
+  'two byte order marks': { contentType: 'application/json', body: Buffer.concat([BOM, BOM, Buffer.from('{"a":1}')]) },
   'whitespace before an array': text(' \n\t[1,2]'),
   'an empty body': text(''),
   'only whitespace': text('  \n'),
@@ -118,7 +119,9 @@ const REQUESTS: Record<string, BodyRequest> = {
   'charset=latin1': text('{"a":1}', 'application/json; charset=latin1'),
   'charset=utf8': text('{"a":1}', 'application/json; charset=utf8'),
   'charset=utf-9': text('{"a":1}', 'application/json; charset=utf-9'),
+  'a parameter other than charset': text('{"a":1}', 'application/json; foo=bar'),
   'a +json suffix type': text('[1]', 'application/json-patch+json'),
+  'a vendor +json type': text('[1]', 'application/vnd.api+json'),
   'JSON listed with text': text('{"a":1}', 'application/json, text/plain'),
   'JSON listed with a form': text('a=1', 'application/json, application/x-www-form-urlencoded'),
   'a form': text('a=1&b[c]=2', 'application/x-www-form-urlencoded'),
@@ -126,6 +129,7 @@ const REQUESTS: Record<string, BodyRequest> = {
   'no content type': { body: Buffer.from('{"a":1}') },
   gzip: { contentType: 'application/json', contentEncoding: 'gzip', body: gzipSync('{"a":1}') },
   deflate: { contentType: 'application/json', contentEncoding: 'deflate', body: deflateSync('{"a":1}') },
+  brotli: { contentType: 'application/json', contentEncoding: 'br', body: brotliCompressSync('{"a":1}') },
   'corrupt gzip': { contentType: 'application/json', contentEncoding: 'gzip', body: Buffer.from('{"a":1}') },
   'an unsupported encoding': { contentType: 'application/json', contentEncoding: 'compress', body: Buffer.from('{}') },
   'a body at the limit': text(`{"a":"${'x'.repeat(1016)}"}`),
@@ -165,6 +169,7 @@ const ANSWERS: Record<string, Answer> = {
   'a quoted charset': echo({ a: 1 }),
   'an upper-case type': echo({ a: 1 }),
   'a byte order mark': echo({ a: 1 }),
+  'two byte order marks': errorPage(400, 'Bad Request'),
   'whitespace before an array': echo([1, 2]),
   'an empty body': echo({}),
   'only whitespace': errorPage(400, 'Bad Request'),
@@ -183,7 +188,9 @@ const ANSWERS: Record<string, Answer> = {
   'charset=latin1': errorPage(415, 'Unsupported Media Type'),
   'charset=utf8': errorPage(415, 'Unsupported Media Type'),
   'charset=utf-9': errorPage(415, 'Unsupported Media Type'),
+  'a parameter other than charset': echo({ a: 1 }),
   'a +json suffix type': echo([1]),
+  'a vendor +json type': echo('<undefined>'),
   'JSON listed with text': echo({ a: 1 }),
   'JSON listed with a form': echo({ a: '1' }),
   'a form': echo({ a: '1', b: { c: '2' } }),
@@ -191,6 +198,7 @@ const ANSWERS: Record<string, Answer> = {
   'no content type': echo('<undefined>'),
   gzip: echo({ a: 1 }),
   deflate: echo({ a: 1 }),
+  brotli: echo({ a: 1 }),
   'corrupt gzip': errorPage(400, 'Bad Request'),
   'an unsupported encoding': errorPage(415, 'Unsupported Media Type'),
   'a body at the limit': echo({ a: 'x'.repeat(1016) }),
@@ -234,6 +242,11 @@ const ERRORS: Record<string, ErrorShape> = {
   'a number literal': parseFailed('SyntaxError', 'Unexpected token \'4\', "42" is not valid JSON', '42'),
   'a true literal': parseFailed('SyntaxError', 'Unexpected token \'t\', "true" is not valid JSON', 'true'),
   'a bare word': parseFailed('SyntaxError', 'Unexpected token \'x\', " x{}" is not valid JSON', ' x{}'),
+  'two byte order marks': parseFailed(
+    'SyntaxError',
+    'Unexpected token \'\ufeff\', "\ufeff{"a":1}" is not valid JSON',
+    '\ufeff{"a":1}',
+  ),
   'a truncated object': parseFailed('SyntaxError', 'Unexpected end of JSON input', '{"a":'),
   'an unquoted key': parseFailed(
     'SyntaxError',
