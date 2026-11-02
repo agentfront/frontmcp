@@ -17,11 +17,17 @@ export interface ResolvedSharedServerOptions {
   transport: SharedServerTransport;
 }
 
-const KEY_FORMAT = 'key must be 1 to 64 letters, digits, ".", "_" or "-", starting with a letter or digit';
+// Lowercase, and no trailing dot: a case-insensitive file system, or Windows, would give two keys one folder.
+const KEY_FORMAT =
+  'key must be 1 to 64 lowercase letters, digits, ".", "_" or "-", starting and ending with a letter or digit';
+const WINDOWS_DEVICE = "key can't be a device name Windows reserves (con, prn, aux, nul, com0-9 and lpt0-9)";
 
 const sharedServerOptionsSchema = z
   .object({
-    key: z.string({ message: 'key is required' }).regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/, KEY_FORMAT),
+    key: z
+      .string({ message: 'key is required' })
+      .regex(/^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$/, KEY_FORMAT)
+      .refine((key) => !/^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/.test(key), WINDOWS_DEVICE),
     transport: z.enum(['unix', 'http'], { message: "transport must be 'unix' or 'http'" }).optional(),
   })
   .strict();
