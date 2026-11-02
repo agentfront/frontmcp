@@ -9,18 +9,19 @@ import { resolve } from 'node:path';
 
 import { workspaceRoot } from './helpers/browser-bundle';
 
-function modulesLoadedBy(entry: string, pattern: string): string[] {
+function modulesLoadedBy(entry: string, pattern: RegExp): string[] {
   const runner = resolve(__dirname, 'helpers', 'loaded-modules.mjs');
-  return JSON.parse(
-    execFileSync(process.execPath, [runner, entry, pattern], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }),
+  const loaded: string[] = JSON.parse(
+    execFileSync(process.execPath, [runner, entry], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }),
   );
+  return loaded.filter((url) => pattern.test(url));
 }
 
 describe("the MCP server's JSON Schema validator under ESM", () => {
   it('loads from the same build as the MCP server', () => {
     const loaded = modulesLoadedBy(
       resolve(workspaceRoot, 'libs/sdk/dist/esm/index.mjs'),
-      '/@modelcontextprotocol/sdk/dist/(esm|cjs)/(server/index|validation/ajv-provider)\\.js$',
+      /\/@modelcontextprotocol\/sdk\/dist\/(esm|cjs)\/(server\/index|validation\/ajv-provider)\.js$/,
     );
 
     const buildsOf = (module: string) =>
