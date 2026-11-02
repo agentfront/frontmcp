@@ -79,17 +79,45 @@ describe('spawnOwned', () => {
     expect(running(pid)).toBe(false);
   });
 
+  it('stops a child that shares this process group, killing it when it ignores SIGTERM', async () => {
+    const script = 'process.on("SIGTERM", () => {}); process.stdout.write("ready"); setInterval(() => {}, 1000)';
+    const owned = spawnOwned(process.execPath, ['-e', script, '--'], {
+      marker: 'unit-stop-child',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    await new Promise((resolve) => owned.child.stdout?.once('data', resolve));
+
+    try {
+      await expect(owned.stop('SIGTERM', 200)).resolves.toBe(true);
+
+      expect(owned.child.signalCode).toBe('SIGKILL');
+      await expect(owned.stop()).resolves.toBe(true);
+    } finally {
+      owned.child.kill('SIGKILL');
+    }
+  });
+
+  it('has nothing to stop when the command could not start', async () => {
+    const owned = spawnOwned(join(directory, 'missing-command'), [], { marker: 'unit-missing', stdio: 'ignore' });
+    const failed = new Promise((resolve) => owned.child.once('error', resolve));
+
+    await expect(owned.stop()).resolves.toBe(true);
+    await failed;
+  });
+
   it.each(['', 'has space', 'a:b', '-leading', 'x'.repeat(65)])('refuses the marker %p', (marker) => {
     expect(() => spawnOwned(process.execPath, [], { marker })).toThrow(OwnedProcessError);
   });
 });
 
 describe('parseProcessList', () => {
-  it('reads pid, parent pid, group and command, skipping lines it cannot read', () => {
-    const output = '    1     0     1 /sbin/launchd\n  812   1  812 node worker.js --frontmcp-owner=a:9 x\nbogus\n\n';
+  it('reads pid, parent pid, group, zombie state and command, skipping lines it cannot read', () => {
+    const output =
+      '    1     0     1 Ss   /sbin/launchd\n  812   1  812 S node worker.js --frontmcp-owner=a:9 x\n  813   1  1 Z+ [node] <defunct>\nbogus\n\n';
     expect(parseProcessList(output)).toEqual<ProcessInfo[]>([
-      { pid: 1, ppid: 0, pgid: 1, command: '/sbin/launchd' },
-      { pid: 812, ppid: 1, pgid: 812, command: 'node worker.js --frontmcp-owner=a:9 x' },
+      { pid: 1, ppid: 0, pgid: 1, zombie: false, command: '/sbin/launchd' },
+      { pid: 812, ppid: 1, pgid: 812, zombie: false, command: 'node worker.js --frontmcp-owner=a:9 x' },
+      { pid: 813, ppid: 1, pgid: 1, zombie: true, command: '[node] <defunct>' },
     ]);
   });
 });
@@ -114,11 +142,11 @@ describe('reapOrphans', () => {
   it('stops a marked process whose owner is gone, with its descendants and its group', async () => {
     const { deps, signals } = scenario(
       [
-        { pid: 100, ppid: 1, pgid: 100, command: 'node worker.js --frontmcp-owner=tasks:50' },
-        { pid: 101, ppid: 100, pgid: 100, command: 'node child.js' },
-        { pid: 102, ppid: 101, pgid: 100, command: 'node grandchild.js' },
-        { pid: 103, ppid: 1, pgid: 100, command: 'node left-in-group.js' },
-        { pid: 200, ppid: 1, pgid: 200, command: 'node unmarked.js' },
+        { pid: 100, ppid: 1, pgid: 100, zombie: false, command: 'node worker.js --frontmcp-owner=tasks:50' },
+        { pid: 101, ppid: 100, pgid: 100, zombie: false, command: 'node child.js' },
+        { pid: 102, ppid: 101, pgid: 100, zombie: false, command: 'node grandchild.js' },
+        { pid: 103, ppid: 1, pgid: 100, zombie: false, command: 'node left-in-group.js' },
+        { pid: 200, ppid: 1, pgid: 200, zombie: false, command: 'node unmarked.js' },
       ],
       [],
     );
@@ -132,13 +160,67 @@ describe('reapOrphans', () => {
   it('leaves processes whose owner still runs, other markers and this process alone', async () => {
     const { deps, signals } = scenario(
       [
-        { pid: 300, ppid: 60, pgid: 300, command: 'node a.js --frontmcp-owner=tasks:60' },
-        { pid: 301, ppid: 1, pgid: 301, command: 'node b.js --frontmcp-owner=other:61' },
-        { pid: 302, ppid: 1, pgid: 302, command: 'node c.js --frontmcp-owner=tasks-2:62' },
-        { pid: 303, ppid: 1, pgid: 303, command: 'node d.js --frontmcp-owner=tasks:not-a-pid' },
-        { pid: process.pid, ppid: 1, pgid: process.pid, command: 'node self.js --frontmcp-owner=tasks:63' },
+        { pid: 300, ppid: 60, pgid: 300, zombie: false, command: 'node a.js --frontmcp-owner=tasks:60' },
+        { pid: 301, ppid: 1, pgid: 301, zombie: false, command: 'node b.js --frontmcp-owner=other:61' },
+        { pid: 302, ppid: 1, pgid: 302, zombie: false, command: 'node c.js --frontmcp-owner=tasks-2:62' },
+        { pid: 303, ppid: 1, pgid: 303, zombie: false, command: 'node d.js --frontmcp-owner=tasks:not-a-pid' },
+        {
+          pid: process.pid,
+          ppid: 1,
+          pgid: process.pid,
+          zombie: false,
+          command: 'node self.js --frontmcp-owner=tasks:63',
+        },
       ],
       [60],
+    );
+
+    await expect(reapOrphans('tasks', {}, deps)).resolves.toEqual([]);
+    expect(signals).toEqual([]);
+  });
+
+  it('never stops this process or its ancestors, even when they carry the marker of a gone owner', async () => {
+    const { deps, signals } = scenario(
+      [
+        {
+          pid: 650,
+          ppid: 1,
+          pgid: 650,
+          zombie: false,
+          command: 'npx tsx main.ts __run-task t1 --frontmcp-owner=tasks:50',
+        },
+        {
+          pid: 700,
+          ppid: 650,
+          pgid: 700,
+          zombie: false,
+          command: 'tsx main.ts __run-task t1 --frontmcp-owner=tasks:50',
+        },
+        { pid: 701, ppid: 700, pgid: 700, zombie: false, command: 'node sibling.js' },
+        {
+          pid: process.pid,
+          ppid: 700,
+          pgid: 700,
+          zombie: false,
+          command: 'node main.ts __run-task t1 --frontmcp-owner=tasks:50',
+        },
+        { pid: 900, ppid: 1, pgid: 900, zombie: false, command: 'node other.js --frontmcp-owner=tasks:50' },
+      ],
+      [],
+    );
+
+    await expect(reapOrphans('tasks', {}, deps)).resolves.toEqual([900]);
+    expect(signals).toEqual([[900, 'SIGTERM']]);
+  });
+
+  it("leaves the leader of this process's own group alone", async () => {
+    const { deps, signals } = scenario(
+      [
+        { pid: 800, ppid: 1, pgid: 800, zombie: false, command: 'node leader.js --frontmcp-owner=tasks:50' },
+        { pid: 801, ppid: 1, pgid: 800, zombie: false, command: 'node sibling.js' },
+        { pid: process.pid, ppid: 1, pgid: 800, zombie: false, command: 'node reaper.js' },
+      ],
+      [],
     );
 
     await expect(reapOrphans('tasks', {}, deps)).resolves.toEqual([]);
@@ -149,13 +231,15 @@ describe('reapOrphans', () => {
     const kill = jest.fn((pid: number) => {
       if (pid === 70) throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
     });
-    const listProcesses = () => [{ pid: 400, ppid: 1, pgid: 400, command: 'x --frontmcp-owner=tasks:70' }];
+    const listProcesses = () => [
+      { pid: 400, ppid: 1, pgid: 400, zombie: false, command: 'x --frontmcp-owner=tasks:70' },
+    ];
     await expect(reapOrphans('tasks', {}, { platform: 'darwin', kill, sleep, listProcesses })).resolves.toEqual([]);
     expect(kill).toHaveBeenCalledTimes(1);
   });
 
   it('kills what outlives the grace period', async () => {
-    const processes = [{ pid: 500, ppid: 1, pgid: 500, command: 'x --frontmcp-owner=tasks:80' }];
+    const processes = [{ pid: 500, ppid: 1, pgid: 500, zombie: false, command: 'x --frontmcp-owner=tasks:80' }];
     let alive = true;
     const kill = jest.fn((pid: number, signal: NodeJS.Signals | 0) => {
       if (pid === 80) throw esrch();
@@ -170,11 +254,29 @@ describe('reapOrphans', () => {
     expect(kill).toHaveBeenCalledWith(500, 'SIGKILL');
   });
 
+  it('counts an orphan that exited but was not collected by its new parent (a zombie) as stopped', async () => {
+    let exited = false;
+    const kill = jest.fn((pid: number, signal: NodeJS.Signals | 0) => {
+      if (pid === 95) throw esrch();
+      if (signal === 'SIGTERM') exited = true;
+    });
+    const listProcesses = () => [
+      exited
+        ? { pid: 650, ppid: 1, pgid: 650, zombie: true, command: '[node] <defunct>' }
+        : { pid: 650, ppid: 1, pgid: 650, zombie: false, command: 'x --frontmcp-owner=tasks:95' },
+    ];
+
+    await expect(reapOrphans('tasks', {}, { platform: 'linux', kill, sleep, listProcesses })).resolves.toEqual([650]);
+    expect(kill).not.toHaveBeenCalledWith(650, 'SIGKILL');
+  });
+
   it('does not report an orphan that survives even SIGKILL', async () => {
     const kill = jest.fn((pid: number) => {
       if (pid === 90) throw esrch();
     });
-    const listProcesses = () => [{ pid: 600, ppid: 1, pgid: 600, command: 'x --frontmcp-owner=tasks:90' }];
+    const listProcesses = () => [
+      { pid: 600, ppid: 1, pgid: 600, zombie: false, command: 'x --frontmcp-owner=tasks:90' },
+    ];
     await expect(
       reapOrphans('tasks', { graceMs: 0 }, { platform: 'linux', kill, sleep, listProcesses }),
     ).resolves.toEqual([]);
