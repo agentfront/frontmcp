@@ -58,11 +58,11 @@ export interface HookOptions<Ctx> {
   after?: readonly HookTarget[];
 }
 
+const HOOK_TARGET_MESSAGE =
+  'a hook target is a plugin name or a class name, optionally followed by .method, with no surrounding spaces';
+
 const hookTargetsSchema = z.array(
-  z
-    .string({ message: 'a hook target is a plugin name or a class name, optionally followed by .method' })
-    .trim()
-    .min(1, 'a hook target is a plugin name or a class name, optionally followed by .method'),
+  z.string({ message: HOOK_TARGET_MESSAGE }).regex(/^\S(?:.*\S)?$/, HOOK_TARGET_MESSAGE),
   { message: 'must be an array of plugin or class names, each optionally followed by .method' },
 );
 

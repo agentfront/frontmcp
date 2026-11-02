@@ -239,6 +239,7 @@ describe('hook option validation', () => {
     [{ appliesTo: 'everywhere' }, 'appliesTo'],
     [{ before: 'setup-gate' }, 'before'],
     [{ after: [''] }, 'after'],
+    [{ before: [' setup-gate '] }, 'before'],
     [{ before: [42] }, 'before'],
   ])('refuses %j where the hook is declared', (options, field) => {
     const invalid = options as Parameters<typeof ToolHook.Will>[1];

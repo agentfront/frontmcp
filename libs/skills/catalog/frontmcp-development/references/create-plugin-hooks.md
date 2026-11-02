@@ -176,7 +176,7 @@ export class FeatureGatePlugin {
 - **Scope.** A constraint relates hooks of the same flow, stage and type: a `@Will('execute')` hook's `before` orders it among the `@Will('execute')` hooks. The flow's own steps are not hooks and cannot be named.
 - **Precedence.** Constraints come first, then priority, then registration order: each place goes to the first hook, in priority order, whose `after` targets have run and that no remaining hook's `before` names. Hooks no constraint relates keep their priority order. For `@Around` hooks, `before` makes the hook wrap its target, `after` makes it run inside it.
 - **Errors.** Constraints that form a cycle (`a` before `b`, `b` before `a`) stop the server at startup with a `HookOrderCycleError` (code `HOOK_ORDER_CYCLE`) that names the hooks in the cycle, in its message and in `hooks`. A target that matches no hook on the stage logs one warning at startup (`Hook feature-gate.refuseDisabled (will 'execute' of 'tools:call-tool') names 'setup-gate' in before, but no hook on that stage matches it, so it changes nothing. ...`), and the hook keeps its place by priority. A constraint never relates a hook to itself, or to another instance of the same hook (the same plugin installed on two apps).
-- **Validation.** `before` and `after` must be arrays of non-empty strings, and `appliesTo` one of its values: anything else throws `InvalidDecoratorMetadataError` where the hook is declared.
+- **Validation.** `before` and `after` must be arrays of non-empty strings with no surrounding spaces, and `appliesTo` one of its values: anything else throws `InvalidDecoratorMetadataError` where the hook is declared.
 
 ### Seeing the Resolved Order
 
