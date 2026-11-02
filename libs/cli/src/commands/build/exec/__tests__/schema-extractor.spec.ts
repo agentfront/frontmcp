@@ -534,6 +534,22 @@ describe('extractSchemas manifest', () => {
     expect(lintServerManifest).toHaveBeenCalledWith(manifest);
   });
 
+  it("builds the manifest before listing, so a remote app's tools discovered by a list stay out of it", async () => {
+    const buildManifest = jest.fn().mockResolvedValue({ manifestVersion: 1, tools: [], skills: [] });
+
+    await extractWith({ buildManifest, lintServerManifest: jest.fn().mockReturnValue([]) });
+
+    expect(buildManifest.mock.invocationCallOrder[0]).toBeLessThan(mockListTools.mock.invocationCallOrder[0]);
+  });
+
+  it('boots the server only to read it when the SDK builds manifests, in CLI mode otherwise', async () => {
+    await extractWith({ buildManifest: jest.fn().mockResolvedValue({}), lintServerManifest: jest.fn() });
+    expect(mockConnect).toHaveBeenLastCalledWith(expect.any(Function), { mode: 'manifest' });
+
+    await extractWith({});
+    expect(mockConnect).toHaveBeenLastCalledWith(expect.any(Function), { mode: 'cli' });
+  });
+
   it('says why there is no manifest when the SDK builds none, or building it fails', async () => {
     expect((await extractWith({})).manifestError).toBe(
       'the installed @frontmcp/sdk does not build manifests; upgrade it',

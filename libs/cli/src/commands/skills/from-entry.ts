@@ -20,6 +20,29 @@ export interface FromEntryOptions {
   entry: string;
   /** Working directory used by esbuild for resolving relative imports. */
   cwd: string;
+  /** How long the server may take to boot before the extraction stops waiting for it. */
+  bootTimeoutMs?: number;
+}
+
+/** The default of {@link FromEntryOptions.bootTimeoutMs}. */
+export const EXTRACT_BOOT_TIMEOUT_MS = 60_000;
+
+/** The extraction, or a rejection once `timeoutMs` passes: a boot that waits forever must not hang the build. */
+function withinBootTimeout<T>(extraction: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `The server did not finish booting within ${timeoutMs / 1000} s: a provider, plugin, adapter or remote ` +
+              'app may be waiting for a service this machine cannot reach.',
+          ),
+        ),
+      timeoutMs,
+    );
+  });
+  return Promise.race([extraction, timedOut]).finally(() => clearTimeout(timer));
 }
 
 /**
@@ -40,6 +63,8 @@ export function resolvePackageEntry(pkg: string, cwd: string): string {
  * bundle's own directory, which from the OS temp dir finds no project deps.
  * The bundle carries a source map, so a skill's `instructions: { file }`
  * resolves against the source file that declared it.
+ *
+ * A server that has not booted after `bootTimeoutMs` fails the extraction.
  *
  * Temporary bundle dir is cleaned up before return regardless of outcome.
  */
@@ -66,7 +91,7 @@ export async function extractProjectSchema(opts: FromEntryOptions): Promise<Extr
     const sourceMapsEnabled = process.sourceMapsEnabled;
     process.setSourceMapsEnabled(true);
     try {
-      return await extractSchemas(bundlePath);
+      return await withinBootTimeout(extractSchemas(bundlePath), opts.bootTimeoutMs ?? EXTRACT_BOOT_TIMEOUT_MS);
     } finally {
       process.setSourceMapsEnabled(sourceMapsEnabled);
     }

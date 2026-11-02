@@ -20,6 +20,9 @@ let instanceCache = new WeakMap<object, Promise<FrontMcpInstance>>();
 /** How many connected clients share each cached server. */
 const instanceClients = new WeakMap<Promise<FrontMcpInstance>, number>();
 
+/** `'manifest'` boots a server only to read its entries: see `FrontMcpInstance.createForManifest()`. */
+type InstanceMode = 'full' | 'cli' | 'manifest';
+
 /**
  * Get or create the server for the given config.
  * Uses WeakMap caching to ensure singleton behavior per config object.
@@ -27,9 +30,6 @@ const instanceClients = new WeakMap<Promise<FrontMcpInstance>, number>();
  *
  * @internal
  */
-/** `'manifest'` is the CLI mode without its log file, for reading a server's entries in process. */
-type InstanceMode = 'full' | 'cli' | 'manifest';
-
 function getInstance(
   config: FrontMcpConfigInput,
   mode?: InstanceMode,
@@ -54,8 +54,9 @@ function getInstance(
         const { FrontMcpInstance } = await import('../front-mcp/front-mcp.js');
         // Create instance without starting HTTP server
         // CLI mode skips non-essential registries for faster startup
-        if (mode === 'full' || mode === undefined) return await FrontMcpInstance.createForConnect(resolvedConfig);
-        return await FrontMcpInstance.createForCli(resolvedConfig, { fileLog: mode === 'cli' });
+        if (mode === 'cli') return await FrontMcpInstance.createForCli(resolvedConfig);
+        if (mode === 'manifest') return await FrontMcpInstance.createForManifest(resolvedConfig);
+        return await FrontMcpInstance.createForConnect(resolvedConfig);
       } catch (error) {
         // Remove from cache on failure to allow retry
         instanceCache.delete(cacheKey);
@@ -114,7 +115,9 @@ async function endpointScope(instance: FrontMcpInstance, app?: string): Promise<
  *
  * @param config - FrontMCP configuration (same as @FrontMcp decorator)
  * @param options - Connection options including clientInfo, session, and authToken; `app` connects to the endpoint
- *   that app has of its own (each app's with `splitByApp`, a `standalone` app's otherwise) instead of the main one
+ *   that app has of its own (each app's with `splitByApp`, a `standalone` app's otherwise) instead of the main one;
+ *   `mode: 'manifest'` boots the server only to read it, as `frontmcp build` does: no store, no log file, and no
+ *   provider's `onReady()`
  * @returns Connected DirectClient instance
  *
  * @example Basic connection
@@ -151,14 +154,14 @@ async function endpointScope(instance: FrontMcpInstance, app?: string): Promise<
  */
 export async function connect(
   config: FrontMcpConfigInput,
-  options?: ConnectOptions & { mode?: 'full' | 'cli'; app?: string },
+  options?: ConnectOptions & { mode?: 'full' | 'cli' | 'manifest'; app?: string },
 ): Promise<DirectClient> {
   const { DirectClientImpl } = await import('./direct-client.js');
   const { instancePromise, release } = joinInstance(config, options?.mode);
   try {
     const instance = await instancePromise;
     const scope = await endpointScope(instance, options?.app);
-    await instance.emitProvidersReady();
+    if (options?.mode !== 'manifest') await instance.emitProvidersReady();
     return await DirectClientImpl.create(scope, options, release);
   } catch (error) {
     // Best-effort like a client's close(), which runs the same release: the caller needs this error

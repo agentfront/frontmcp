@@ -19,6 +19,7 @@ import {
   ToolContext,
   type EnabledSource,
   type FrontMcpConfigInput,
+  type FrontMcpMetadata,
 } from '../../common';
 import { FrontMcp } from '../../common/decorators/front-mcp.decorator';
 import { connect } from '../../direct/connect';
@@ -234,7 +235,7 @@ describe('buildManifest()', () => {
   });
 
   it('takes a @FrontMcp-decorated class', async () => {
-    @FrontMcp({ ...config(), serve: false })
+    @FrontMcp({ ...config(), serve: false } as FrontMcpMetadata)
     class CalcServer {}
 
     expect((await buildManifest(CalcServer)).tools.map((tool) => tool.name)).toContain('add');

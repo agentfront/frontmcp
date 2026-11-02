@@ -1,5 +1,5 @@
 import { McpServer, StdioServerTransport } from '@frontmcp/protocol';
-import { getEnv, isEdgeRuntime, randomUUID } from '@frontmcp/utils';
+import { getEnv, getEnvFlag, isEdgeRuntime, randomUUID } from '@frontmcp/utils';
 
 import {
   FrontMcpLogger,
@@ -71,6 +71,32 @@ function resolveConfigInput(optionsOrClass: ConfigOrServerClass): FrontMcpConfig
     );
   }
   return optionsOrClass;
+}
+
+/** Set while a build loads the entry only to read its metadata (`frontmcp build`, `skills install --from-entry`). */
+function isSchemaExtraction(): boolean {
+  return getEnvFlag('FRONTMCP_SCHEMA_EXTRACT');
+}
+
+/** A CLI-mode config: console only with `FRONTMCP_CLI_VERBOSE=1`, and the `~/.frontmcp/logs/` file with `fileLog`. */
+function parseCliConfig(options: FrontMcpConfigInput, { fileLog }: { fileLog: boolean }): FrontMcpConfigType {
+  const parsedConfig = parseFrontMcpConfigLite(options);
+  (parsedConfig as Record<string, unknown>)['__cliMode'] = true;
+  const verbose = process.env['FRONTMCP_CLI_VERBOSE'] === '1';
+  if (parsedConfig.logging) {
+    parsedConfig.logging.enableConsole = verbose;
+    const transports = parsedConfig.logging.transports ?? [];
+    if (fileLog && !transports.includes(FileLogTransportInstance)) {
+      transports.push(FileLogTransportInstance);
+    }
+    parsedConfig.logging.transports = transports;
+  } else {
+    (parsedConfig as Record<string, unknown>)['logging'] = {
+      enableConsole: verbose,
+      transports: fileLog ? [FileLogTransportInstance] : [],
+    };
+  }
+  return parsedConfig;
 }
 
 export class FrontMcpInstance implements FrontMcpInterface {
@@ -346,6 +372,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
   public static async bootstrap(
     options: FrontMcpConfigInput | FrontMcpConfigType,
   ): Promise<FrontMcpInstance | undefined> {
+    if (isSchemaExtraction()) return undefined;
     // `frontmcp start --db`, `frontmcp socket --db` and the generated installer
     // hand the database location over as FRONTMCP_SQLITE_PATH.
     const sqlitePath = process.env['FRONTMCP_SQLITE_PATH'];
@@ -534,39 +561,25 @@ export class FrontMcpInstance implements FrontMcpInterface {
   /**
    * Creates a FrontMCP instance optimized for CLI execution.
    * Skips non-essential registries (UI widget compilation, event stores,
-   * elicitation stores) for faster startup (~100-150ms savings). `fileLog: false` leaves out the log file
-   * under `~/.frontmcp/logs` that a CLI run writes.
+   * elicitation stores) for faster startup (~100-150ms savings).
    *
    * @example
    * const instance = await FrontMcpInstance.createForCli(config);
    * const scopes = instance.getScopes();
    */
-  public static async createForCli(
-    options: FrontMcpConfigInput,
-    { fileLog = true }: { fileLog?: boolean } = {},
-  ): Promise<FrontMcpInstance> {
-    const parsedConfig = parseFrontMcpConfigLite(options);
-    // Mark config for CLI mode so Scope can skip non-essential work
-    (parsedConfig as Record<string, unknown>)['__cliMode'] = true;
+  public static async createForCli(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
+    const frontMcp = new FrontMcpInstance(parseCliConfig(options, { fileLog: true }));
+    await frontMcp.ready;
+    return frontMcp;
+  }
 
-    // CLI logging: file transport always on, console only with --verbose.
-    // Follows npm/pip pattern: full verbosity goes to ~/.frontmcp/logs/,
-    // console stays clean unless explicitly requested.
-    const verbose = process.env['FRONTMCP_CLI_VERBOSE'] === '1';
-    if (parsedConfig.logging) {
-      parsedConfig.logging.enableConsole = verbose;
-      const transports = parsedConfig.logging.transports ?? [];
-      if (fileLog && !transports.includes(FileLogTransportInstance)) {
-        transports.push(FileLogTransportInstance);
-      }
-      parsedConfig.logging.transports = transports;
-    } else {
-      (parsedConfig as Record<string, unknown>)['logging'] = {
-        enableConsole: verbose,
-        transports: fileLog ? [FileLogTransportInstance] : [],
-      };
-    }
-
+  /** @internal What a build boots to read a server: CLI mode, in process only, no log file and no store to connect. */
+  public static async createForManifest(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
+    const parsedConfig = parseCliConfig(options, { fileLog: false });
+    const config = parsedConfig as Record<string, unknown> & { jobs?: Record<string, unknown> };
+    for (const backend of ['redis', 'pubsub', 'sqlite']) delete config[backend];
+    if (config.jobs) config.jobs = { ...config.jobs, store: undefined };
+    markDirectOnly(parsedConfig);
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
     return frontMcp;
@@ -679,6 +692,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       sqlite?: SqliteOptionsInput;
     },
   ): Promise<{ close: () => Promise<void> }> {
+    if (isSchemaExtraction()) return { close: async () => undefined };
     const { socketPath, sqlite, ...configInput } = options;
 
     // Parse config with HTTP enabled, overriding socketPath
@@ -761,6 +775,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * ```
    */
   public static async runStdio(optionsOrClass: ConfigOrServerClass): Promise<void> {
+    if (isSchemaExtraction()) return;
     // Resolve a decorated class to its stored config, or accept a raw config
     // object (#450). Done FIRST — before any global side effects (console
     // redirection, env flags) — so invalid input fails fast and a failed

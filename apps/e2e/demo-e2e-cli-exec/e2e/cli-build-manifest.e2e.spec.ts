@@ -6,9 +6,9 @@ import { spawn } from 'child_process';
 import * as net from 'node:net';
 import * as path from 'path';
 
-import { ensureDir, mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
+import { ensureDir, fileExists, mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
 
-import { ensureBuild, getDistDir, runFrontmcpCli } from './helpers/exec-cli';
+import { ensureBuild, getDistDir, runFrontmcpCli, runFrontmcpCliAsync } from './helpers/exec-cli';
 
 interface Manifest {
   manifestVersion: number;
@@ -36,6 +36,22 @@ async function freePort(): Promise<number> {
       );
     });
   });
+}
+
+/** A TCP server standing in for Redis: it counts the connections the build opens to it. */
+async function countingServer(): Promise<{ port: number; connections: () => number; close: () => Promise<void> }> {
+  let connections = 0;
+  const server = net.createServer((socket) => {
+    connections++;
+    socket.destroy();
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address() as net.AddressInfo;
+  return {
+    port: address.port,
+    connections: () => connections,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
 }
 
 describe('frontmcp build writes frontmcp.manifest.json', () => {
@@ -80,6 +96,96 @@ describe('frontmcp build writes frontmcp.manifest.json', () => {
     expect(manifest.skills.find((skill) => skill.name === 'greeting-helper')?.hash).toMatch(/^[0-9a-f]{64}$/);
     const names = manifest.tools.map((tool) => tool.name);
     expect(names).toEqual([...names].sort());
+  });
+
+  describe('booting the server to read it', () => {
+    let projectDir: string;
+    let redis: Awaited<ReturnType<typeof countingServer>>;
+    let heldPort: net.Server;
+
+    beforeAll(async () => {
+      redis = await countingServer();
+      heldPort = net.createServer();
+      await new Promise<void>((resolve) => heldPort.listen(0, '127.0.0.1', resolve));
+      const { port } = heldPort.address() as net.AddressInfo;
+      projectDir = await mkdtemp(path.join(SCRATCH_ROOT, '.scratch-build-boot-'));
+      await ensureDir(path.join(projectDir, 'src'));
+      await writeFile(
+        path.join(projectDir, 'src', 'main.ts'),
+        `import 'reflect-metadata';
+import { writeFileSync } from 'fs';
+import * as path from 'path';
+import { App, FrontMcpInstance, LogLevel, Provider, ProviderScope, Tool, ToolContext } from '@frontmcp/sdk';
+
+const mark = (name: string) => writeFileSync(path.join(${JSON.stringify(projectDir)}, name), name);
+
+@Provider({ name: 'warehouse', scope: ProviderScope.GLOBAL })
+class Warehouse {
+  onReady() {
+    mark('ready.txt');
+  }
+  onShutdown() {
+    mark('shutdown.txt');
+  }
+}
+
+@Tool({ name: 'stock', description: 'Count the stock', inputSchema: {} })
+class StockTool extends ToolContext {
+  async execute() {
+    return 'plenty';
+  }
+}
+
+@App({ name: 'store', tools: [StockTool] })
+class StoreApp {}
+
+const redis = { provider: 'redis' as const, host: '127.0.0.1', port: ${redis.port} };
+const config = {
+  info: { name: 'Boot Demo', version: '1.0.0' },
+  apps: [StoreApp],
+  providers: [Warehouse],
+  redis,
+  jobs: { enabled: true, store: { redis } },
+  sqlite: { path: ${JSON.stringify(path.join(projectDir, 'sessions.sqlite'))} },
+  http: { port: ${port} },
+  auth: { mode: 'public' as const },
+  logging: { level: LogLevel.Warn },
+};
+
+export default config;
+
+void FrontMcpInstance.bootstrap(config);
+`,
+      );
+      await writeFile(
+        path.join(projectDir, 'frontmcp.config.js'),
+        `module.exports = { name: 'boot-demo', version: '1.0.0', entry: './src/main.ts', deployments: [{ target: 'node' }] };\n`,
+      );
+    });
+
+    afterAll(async () => {
+      await redis.close();
+      await new Promise<void>((resolve) => heldPort.close(() => resolve()));
+      await rm(projectDir, { recursive: true, force: true });
+    });
+
+    it('serves nothing, connects to no store, never runs onReady, and exits', async () => {
+      const build = await runFrontmcpCliAsync(['build', '--target', 'node'], projectDir, BUILD_TIMEOUT_MS);
+
+      expect({ exitCode: build.exitCode, stderr: build.exitCode === 0 ? '' : build.stderr }).toEqual({
+        exitCode: 0,
+        stderr: '',
+      });
+      expect(build.stdout).toContain(path.join('dist', 'node', 'frontmcp.manifest.json'));
+      const manifest = JSON.parse(
+        await readFile(path.join(projectDir, 'dist', 'node', 'frontmcp.manifest.json')),
+      ) as Manifest;
+      expect(manifest.tools.map((tool) => tool.name)).toContain('stock');
+      expect(redis.connections()).toBe(0);
+      expect(await fileExists(path.join(projectDir, 'sessions.sqlite'))).toBe(false);
+      expect(await fileExists(path.join(projectDir, 'ready.txt'))).toBe(false);
+      expect(await fileExists(path.join(projectDir, 'shutdown.txt'))).toBe(true);
+    }, 200_000);
   });
 
   describe('the instructionsBudget lint', () => {
