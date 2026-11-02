@@ -38,6 +38,7 @@ const fixtureFiles = [
   'providers-must-compile.ts',
   'tool-aliases-must-compile.ts',
   'answer-shaping-must-compile.ts',
+  'call-recorder-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -165,6 +166,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types output.budget, clients profiles, http.forwardHeaders, the budget note and isClientCall() on the call-tool hook ctx', () => {
     expect(describeEach(inFixtureFile('answer-shaping-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types CallRecorderPlugin.init() options, on an app and on the server, and the CallRecord lines', () => {
+    expect(describeEach(inFixtureFile('call-recorder-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

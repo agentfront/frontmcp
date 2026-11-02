@@ -126,6 +126,19 @@ export async function writeFile(p: string, content: string, options?: { mode?: n
 }
 
 /**
+ * Append content to a file, creating the file when it is missing.
+ *
+ * **Node.js only** - throws an error if called in browser.
+ *
+ * @param p - Path to append to
+ * @param content - Content to append
+ */
+export async function appendFile(p: string, content: string): Promise<void> {
+  const fsp = getFsp();
+  await fsp.appendFile(p, content, 'utf8');
+}
+
+/**
  * Create a directory with optional mode (permissions).
  *
  * **Node.js only** - throws an error if called in browser.

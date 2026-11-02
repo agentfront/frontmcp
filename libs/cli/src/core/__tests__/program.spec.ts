@@ -90,6 +90,30 @@ describe('createProgram', () => {
     expect(opts.timeout).toBe(5000);
   });
 
+  it('should parse test --replay and the comma-separated --replay-ignore paths', async () => {
+    const program = await createProgram();
+    program.exitOverride();
+    const testCmd = program.commands.find((c) => c.name() === 'test');
+    if (!testCmd) throw new Error('Expected test command to exist');
+    testCmd.action(() => {
+      /* no-op */
+    });
+
+    await program.parseAsync([
+      'node',
+      'frontmcp',
+      'test',
+      '--replay',
+      'calls.jsonl',
+      '--replay-ignore',
+      '**.at, **.id,',
+    ]);
+
+    const opts = testCmd.opts();
+    expect(opts.replay).toBe('calls.jsonl');
+    expect(opts.replayIgnore).toEqual(['**.at', '**.id']);
+  });
+
   it('should parse logs with name and --follow --lines', async () => {
     const program = await createProgram();
     program.exitOverride();

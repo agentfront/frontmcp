@@ -24,6 +24,7 @@ import type { Prompt, Resource, ResourceTemplate, Tool } from '@frontmcp/protoco
 import { findDroppedKeys } from '@frontmcp/utils';
 
 import type { PromptResultWrapper, ResourceContentWrapper, ToolResultWrapper } from '../client/mcp-test-client.types';
+import { formatReplayReport, type ReplayReport } from '../replay/replay-session';
 import { uiMatchers } from '../ui/ui-matchers';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -487,6 +488,26 @@ const toHaveErrorCode: MatcherFunction<[code: number]> = function (received, cod
 };
 
 // ═══════════════════════════════════════════════════════════════════
+// REPLAY MATCHERS
+// ═══════════════════════════════════════════════════════════════════
+
+function isReplayReport(value: unknown): value is ReplayReport {
+  const report = value as Partial<ReplayReport> | null;
+  return typeof report?.file === 'string' && Array.isArray(report.calls) && Array.isArray(report.differences);
+}
+
+/**
+ * Check that every call of a replay answered as recorded
+ */
+const toMatchRecording: MatcherFunction<[]> = function (received) {
+  if (!isReplayReport(received)) {
+    return { pass: false, message: () => 'Expected the report replaySession() returns' };
+  }
+  const pass = received.differences.length === 0;
+  return { pass, message: () => formatReplayReport(received) };
+};
+
+// ═══════════════════════════════════════════════════════════════════
 // EXPORTS
 // ═══════════════════════════════════════════════════════════════════
 
@@ -517,6 +538,9 @@ export const mcpMatchers = {
   toHaveResult,
   toHaveError,
   toHaveErrorCode,
+
+  // Replay matchers
+  toMatchRecording,
 
   // UI matchers (for testing tool UI responses)
   ...uiMatchers,

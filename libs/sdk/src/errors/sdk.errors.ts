@@ -70,6 +70,15 @@ export class HaConfigurationError extends InternalMcpError {
 }
 
 /**
+ * Thrown when `CallRecorderPlugin.init()` is given options it cannot honour.
+ */
+export class CallRecorderConfigurationError extends InternalMcpError {
+  constructor(message: string) {
+    super(message, 'CALL_RECORDER_CONFIGURATION_ERROR');
+  }
+}
+
+/**
  * Thrown when an invoke state key is missing.
  */
 export class InvokeStateMissingKeyError extends InternalMcpError {

@@ -50,6 +50,8 @@ export function toParsedArgs(
   if (options['coverage'] !== undefined) out.coverage = options['coverage'] as boolean;
   // #540 — commander turns `--no-env` into `env: false`; default stays true.
   if (options['env'] === false) out.env = false;
+  if (options['replay'] !== undefined) out.replay = options['replay'] as string;
+  if (options['replayIgnore'] !== undefined) out.replayIgnore = options['replayIgnore'] as string[];
 
   // PM - start / socket
   if (options['port'] !== undefined) out.port = options['port'] as number;

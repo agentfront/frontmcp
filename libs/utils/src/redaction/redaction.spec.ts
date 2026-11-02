@@ -1,4 +1,4 @@
-import { redactFields } from '../logging/redaction';
+import { redactFields, redactJson } from './redaction';
 
 describe('redactFields', () => {
   it('should return the same object when no fields to redact', () => {
@@ -117,5 +117,42 @@ describe('redactFields', () => {
     expect(result.regex).toBe(regex);
     expect(result.error).toBe(error);
     expect(result.token).toBe('[REDACTED]');
+  });
+
+  it('should redact the keys a predicate names', () => {
+    const result = redactFields({ apiKey: 'k', name: 'n' }, (key) => key.endsWith('Key'));
+    expect(result).toEqual({ apiKey: '[REDACTED]', name: 'n' });
+  });
+
+  it('should redact objects inside nested arrays', () => {
+    const result = redactFields({ rows: [[{ token: 'abc' }]] }, ['token']);
+    expect(result).toEqual({ rows: [[{ token: '[REDACTED]' }]] });
+  });
+});
+
+describe('redactJson', () => {
+  it('should redact at any depth, also at the top of a list', () => {
+    const deep = { a: { b: { c: { d: { e: { f: { token: 'abc' } } } } } } };
+    expect(redactJson([deep], ['token'])).toEqual([{ a: { b: { c: { d: { e: { f: { token: '[REDACTED]' } } } } } } }]);
+  });
+
+  it('should redact inside a string that holds a JSON object or list', () => {
+    const answer = { content: [{ type: 'text', text: JSON.stringify({ user: 'ada', password: 'hunter2' }, null, 2) }] };
+    const redacted = redactJson(answer, ['password']) as { content: Array<{ text: string }> };
+    expect(JSON.parse(redacted.content[0].text)).toEqual({ user: 'ada', password: '[REDACTED]' });
+  });
+
+  it('should keep a JSON text that has nothing to redact as it was written', () => {
+    const text = JSON.stringify({ user: 'ada' }, null, 2);
+    expect(redactJson({ text }, ['password'])).toEqual({ text });
+  });
+
+  it('should keep text that only looks like JSON', () => {
+    expect(redactJson({ text: '{not json' }, ['password'])).toEqual({ text: '{not json' });
+  });
+
+  it('should keep values other than objects, lists and strings', () => {
+    expect(redactJson({ count: 3, ok: true, none: null }, ['token'])).toEqual({ count: 3, ok: true, none: null });
+    expect(redactJson('plain', ['token'])).toBe('plain');
   });
 });

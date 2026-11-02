@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import {
   access,
+  appendFile,
   chmod,
   copyFile,
   cp,
@@ -253,6 +254,17 @@ describe('FS Utils', () => {
     it('should throw for non-existing file', async () => {
       const filePath = path.join(tempDir, 'nonexistent.bin');
       await expect(readFileBuffer(filePath)).rejects.toThrow(/ENOENT/);
+    });
+  });
+
+  describe('appendFile', () => {
+    it('should create the file and append to it', async () => {
+      const filePath = path.join(tempDir, 'append-test.txt');
+
+      await appendFile(filePath, 'one\n');
+      await appendFile(filePath, 'two\n');
+
+      expect(await fs.promises.readFile(filePath, 'utf8')).toBe('one\ntwo\n');
     });
   });
 

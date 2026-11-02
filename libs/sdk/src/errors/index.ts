@@ -297,6 +297,7 @@ export {
   EnclaveExecutionError,
   FlowInputMissingError,
   DynamicJobDirectExecutionError,
+  CallRecorderConfigurationError,
 } from './sdk.errors';
 export * from './job.errors';
 export * from './plugin.errors';

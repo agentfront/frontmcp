@@ -23,6 +23,7 @@
     "output-schemas-must-compile.ts",
     "providers-must-compile.ts",
     "tool-aliases-must-compile.ts",
-    "answer-shaping-must-compile.ts"
+    "answer-shaping-must-compile.ts",
+    "call-recorder-must-compile.ts"
   ]
 }

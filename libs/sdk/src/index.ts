@@ -451,6 +451,16 @@ export type {
   ConfigResolver,
 } from './builtin/config';
 
+// CallRecorderPlugin - records client calls as redacted JSONL for replaySession() (built-in)
+export { CallRecorderPlugin } from './builtin/call-recorder';
+export type {
+  CallRecorderPluginOptions,
+  CallRecorderPluginOptionsInput,
+  CallRecord,
+  CallRecordError,
+  RecordedMethod,
+} from './builtin/call-recorder';
+
 // Config resolver functions
 export {
   normalizeNameForEnv,

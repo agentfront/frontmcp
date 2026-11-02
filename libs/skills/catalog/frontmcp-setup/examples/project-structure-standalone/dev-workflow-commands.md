@@ -34,6 +34,9 @@ frontmcp build --target cloudflare
 # Run unit and E2E tests (auto-discovers *.spec.ts and e2e/*.e2e.spec.ts)
 # Do NOT create a standalone jest.e2e.config.ts -- frontmcp test generates one automatically
 frontmcp test
+
+# Replay a CallRecorderPlugin recording against the project server; exits 1 when an answer changed
+frontmcp test --replay fixtures/calls.jsonl --replay-ignore '**.generatedAt'
 ```
 
 ```typescript

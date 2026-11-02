@@ -38,10 +38,20 @@ function withoutQuery(url: string): string {
   return end === -1 ? url : `${url.slice(0, end)}?${REDACTED}`;
 }
 
+/** Whether a header or field name names a credential: `X-Auth-Token`, `apiKey` and `client_secret` all do. */
+export function isCredentialName(name: string): boolean {
+  const key = name
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .replace(/[_\s]+/g, '-')
+    .toLowerCase();
+  return CREDENTIAL_HEADERS.has(key) || CREDENTIAL_HEADER_WORDS.test(key);
+}
+
 /** The value the debug log may show for a request header. */
 export function headerValueForLog(name: string, value: unknown): unknown {
   const key = name.toLowerCase();
-  if (CREDENTIAL_HEADERS.has(key) || CREDENTIAL_HEADER_WORDS.test(key)) return REDACTED;
+  if (isCredentialName(name)) return REDACTED;
   if (SESSION_ID_HEADER.test(key)) return `${String(value).slice(0, 8)}...`;
   if (REFERER_HEADERS.has(key)) {
     return Array.isArray(value) ? value.map((entry) => withoutQuery(String(entry))) : withoutQuery(String(value));
