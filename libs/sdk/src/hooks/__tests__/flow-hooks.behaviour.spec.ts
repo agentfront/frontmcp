@@ -244,3 +244,133 @@ describe('tools:call-tool hooks from nested plugins', () => {
     expect(trace.filter((entry) => entry === 'hook on nested plugin provider')).toHaveLength(1);
   });
 });
+
+const orderTrace: string[] = [];
+
+@Plugin({ name: 'setup-gate' })
+class SetupGatePlugin {
+  @ToolHook.Will('execute', { priority: 10 })
+  requireSetup() {
+    orderTrace.push('will setup-gate (10)');
+  }
+
+  @ToolHook.Around('execute', { priority: 10 })
+  async wrapInner(_ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<unknown>) {
+    orderTrace.push('around setup-gate (10): before');
+    await next();
+    orderTrace.push('around setup-gate (10): after');
+  }
+}
+
+@Plugin({ name: 'feature-gate' })
+class FeatureGatePlugin {
+  @ToolHook.Will('execute', { priority: -10 })
+  refuseDisabled() {
+    orderTrace.push('will feature-gate (-10)');
+  }
+
+  @ToolHook.Around('execute', { priority: -10 })
+  async wrapOuter(_ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<unknown>) {
+    orderTrace.push('around feature-gate (-10): before');
+    await next();
+    orderTrace.push('around feature-gate (-10): after');
+  }
+}
+
+@Plugin({ name: 'first-tie' })
+class FirstTiePlugin {
+  @ToolHook.Will('execute')
+  firstWill() {
+    orderTrace.push('will first-tie (0)');
+  }
+
+  @ToolHook.Stage('execute')
+  firstStep() {
+    orderTrace.push('stage first-tie (0)');
+  }
+}
+
+@Plugin({ name: 'second-tie' })
+class SecondTiePlugin {
+  @ToolHook.Will('execute')
+  secondWill() {
+    orderTrace.push('will second-tie (0)');
+  }
+}
+
+@Tool({ name: 'ordered', inputSchema: {} })
+class OrderedTool extends ToolContext {
+  async execute() {
+    orderTrace.push('EXECUTE ordered');
+    return { ok: true };
+  }
+
+  @ToolHook.Will('execute')
+  toolWill() {
+    orderTrace.push('will tool class (0)');
+  }
+
+  @ToolHook.Stage('execute')
+  toolStep() {
+    orderTrace.push('stage tool class (0)');
+  }
+}
+
+@App({
+  id: 'ordered',
+  name: 'Ordered',
+  tools: [OrderedTool],
+  plugins: [SetupGatePlugin, FeatureGatePlugin, FirstTiePlugin, SecondTiePlugin],
+})
+class OrderedApp {}
+
+describe('tools:call-tool hook order on one stage', () => {
+  let trace: string[];
+
+  beforeAll(async () => {
+    const server = await createTestFetchServer({
+      info: { name: 'flow-hooks-order', version: '1.0.0' },
+      apps: [OrderedApp],
+    });
+    orderTrace.length = 0;
+    await rpc20260728(server.handler, 'tools/call', { name: 'ordered', arguments: {} });
+    trace = [...orderTrace];
+  });
+
+  it('runs the hooks of two plugins lowest priority first, whatever order the plugins are listed in', () => {
+    expect(trace.filter((entry) => entry.includes('-gate') && entry.startsWith('will'))).toEqual([
+      'will feature-gate (-10)',
+      'will setup-gate (10)',
+    ]);
+  });
+
+  it('breaks a tie by registration order, with plugin hooks before the hooks of the tool class', () => {
+    expect(trace.filter((entry) => entry.startsWith('will'))).toEqual([
+      'will feature-gate (-10)',
+      'will first-tie (0)',
+      'will second-tie (0)',
+      'will tool class (0)',
+      'will setup-gate (10)',
+    ]);
+  });
+
+  it('runs a plugin step before the flow own step and a tool class step after it, on a tie', () => {
+    expect(trace.filter((entry) => entry.startsWith('stage') || entry.startsWith('EXECUTE'))).toEqual([
+      'stage first-tie (0)',
+      'EXECUTE ordered',
+      'stage tool class (0)',
+    ]);
+  });
+
+  it('nests Around hooks with the lowest priority outermost, around every step of the stage', () => {
+    expect(trace.filter((entry) => !entry.startsWith('will'))).toEqual([
+      'around feature-gate (-10): before',
+      'around setup-gate (10): before',
+      'stage first-tie (0)',
+      'EXECUTE ordered',
+      'stage tool class (0)',
+      'around setup-gate (10): after',
+      'around feature-gate (-10): after',
+    ]);
+  });
+});
