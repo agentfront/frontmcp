@@ -171,4 +171,11 @@ describe('toParsedArgs', () => {
     expect(result.buildTarget).toBeUndefined();
     expect('buildTarget' in result).toBe(false);
   });
+
+  it('should map test --replay and --replay-ignore', () => {
+    const result = toParsedArgs('test', [], { replay: 'calls.jsonl', replayIgnore: ['**.at'] });
+
+    expect(result.replay).toBe('calls.jsonl');
+    expect(result.replayIgnore).toEqual(['**.at']);
+  });
 });

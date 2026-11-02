@@ -5,11 +5,15 @@ describe('LaunchDarklyFeatureFlagAdapter', () => {
   const mockVariationDetail = jest.fn();
   const mockWaitForInitialization = jest.fn().mockResolvedValue(undefined);
   const mockClose = jest.fn().mockResolvedValue(undefined);
+  const mockOn = jest.fn();
+  const mockOff = jest.fn();
   const mockInit = jest.fn().mockReturnValue({
     variation: mockVariation,
     variationDetail: mockVariationDetail,
     waitForInitialization: mockWaitForInitialization,
     close: mockClose,
+    on: mockOn,
+    off: mockOff,
   });
 
   beforeEach(() => {
@@ -136,6 +140,26 @@ describe('LaunchDarklyFeatureFlagAdapter', () => {
       const results = await adapter.evaluateFlags(['flag-a', 'flag-b'], ctx);
       expect(results.get('flag-a')).toBe(true);
       expect(results.get('flag-b')).toBe(false);
+    });
+  });
+
+  describe('subscribe', () => {
+    it("follows the client's update events until it is stopped", async () => {
+      const adapter = await createAdapter();
+      await adapter.initialize();
+      const listener = jest.fn();
+
+      const stop = adapter.subscribe(listener);
+      expect(mockOn).toHaveBeenCalledWith('update', listener);
+
+      stop();
+      expect(mockOff).toHaveBeenCalledWith('update', listener);
+    });
+
+    it('follows nothing before it is initialized', async () => {
+      const adapter = await createAdapter();
+      expect(() => adapter.subscribe(jest.fn())()).not.toThrow();
+      expect(mockOn).not.toHaveBeenCalled();
     });
   });
 

@@ -35,6 +35,7 @@ import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
+import { assertEntryEnabled } from '../../surface';
 import { isUIResourceUri } from '../../tool/ui/ui-shared';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
@@ -73,7 +74,14 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'ensureRemoteCapabilities', 'findResource', 'checkEntryAuthorities', 'createResourceContext'],
+  pre: [
+    'parseInput',
+    'ensureRemoteCapabilities',
+    'findResource',
+    'checkEnabled',
+    'checkEntryAuthorities',
+    'createResourceContext',
+  ],
   execute: ['execute', 'validateOutput'],
   // After 'finalize' answers: hooks on 'fitAnswer' read and replace `state.output`
   finalize: ['finalize', 'fitAnswer'],
@@ -108,6 +116,8 @@ const resolvedResources = new ResolvedEntries<{ instance: ResourceEntry; params:
   access: 'authorized',
 })
 export default class ReadResourceFlow extends FlowBase<typeof name> {
+  static override readonly tracesHooksInAnswer = true;
+
   static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const uri = (rawInput as { request?: { params?: { uri?: unknown } } } | undefined)?.request?.params?.uri;
     if (typeof uri !== 'string') return undefined;
@@ -301,6 +311,16 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     this.logger.verbose('findResource:done');
   }
 
+  /** A resource or template whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */
+  @Stage('checkEnabled')
+  async checkEnabled() {
+    const { resource } = this.state;
+    if (!resource) return;
+    const entryType = resource.isTemplate ? 'ResourceTemplate' : 'Resource';
+    const { uri } = this.state.required.input;
+    await assertEntryEnabled(entryType, uri, resource.metadata.enabled, this.tryGetContext(), this.logger);
+  }
+
   /**
    * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in resource metadata.
    * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
@@ -394,7 +414,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     }
 
     const resourceContext = this.state.resourceContext;
-    const { input, params } = this.state.required;
+    const { input, params, resource } = this.state.required;
 
     if (!resourceContext) {
       this.logger.warn('execute: resourceContext not found, skipping execution');
@@ -404,8 +424,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
 
     try {
       // What the resource does for the caller (a skill:// listing, say) is judged for this call's surface.
+      const worker = resource.metadata.worker;
       resourceContext.output = await runOnSurface(callSurfaceOf(this.input.ctx), async () =>
-        resourceContext.execute(input.uri, params),
+        worker
+          ? import('../../offload/read-in-worker.js').then(({ readInWorker }) =>
+              readInWorker(resourceContext, resource.record.provide, worker, input.uri, params),
+            )
+          : resourceContext.execute(input.uri, params),
       );
       this.logger.verbose('execute:done');
     } catch (error) {

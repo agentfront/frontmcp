@@ -3,6 +3,8 @@
  * @description Main MCP Test Client implementation for E2E testing
  */
 
+import { trimSlashes } from '@frontmcp/utils';
+
 import {
   DefaultInterceptorChain,
   mockResponse,
@@ -1077,7 +1079,7 @@ export class McpTestClient {
 
   /** The MCP path this client is currently pointed at, for log and error text. */
   private mcpPathLabel(): string {
-    const entry = (this.config.entryPath ?? '').replace(/^\/+|\/+$/g, '');
+    const entry = trimSlashes(this.config.entryPath);
     return entry ? `/${entry}` : '/';
   }
 

@@ -257,6 +257,25 @@ describe('FS Utils', () => {
     });
   });
 
+  describe('appendFile', () => {
+    it('should create the file and append to it', async () => {
+      const filePath = path.join(tempDir, 'append-test.txt');
+
+      await appendFile(filePath, 'one\n');
+      await appendFile(filePath, 'two\n');
+
+      expect(await fs.promises.readFile(filePath, 'utf8')).toBe('one\ntwo\n');
+    });
+
+    it('should create the file with the given mode', async () => {
+      const filePath = path.join(tempDir, 'append-mode.txt');
+
+      await appendFile(filePath, 'one\n', { mode: 0o600 });
+
+      expect((await fs.promises.stat(filePath)).mode & 0o777).toBe(0o600);
+    });
+  });
+
   describe('writeFile', () => {
     it('should write content to file', async () => {
       const filePath = path.join(tempDir, 'write-test.txt');

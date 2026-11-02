@@ -14,6 +14,9 @@ export {
   ToolExecutionError,
   // Availability errors
   EntryUnavailableError,
+  FeatureOffError,
+  StaleToolListError,
+  InvalidFileSignalError,
   // Resource errors
   ResourceNotFoundError,
   ResourceReadError,
@@ -119,6 +122,16 @@ export {
   ElicitationSubscriptionError,
 } from './elicitation.error';
 
+// Export worker offload errors
+export {
+  OffloadBudgetExceededError,
+  OffloadAbortedError,
+  OffloadUnsupportedRuntimeError,
+  InvalidOffloadCallError,
+  OffloadNotCloneableError,
+  OffloadWorkerError,
+} from './offload.errors';
+
 // Export MRTR signals (protocol 2026-07-28)
 export {
   InputRequiredSignal,
@@ -181,6 +194,7 @@ export {
   DuplicateAppIdError,
   FlowNotRegisteredError,
   UnsupportedHookOwnerKindError,
+  HookOrderCycleError,
 } from './registry.errors';
 
 // Export provider errors
@@ -297,6 +311,7 @@ export {
   EnclaveExecutionError,
   FlowInputMissingError,
   DynamicJobDirectExecutionError,
+  CallRecorderConfigurationError,
 } from './sdk.errors';
 export * from './job.errors';
 export * from './plugin.errors';

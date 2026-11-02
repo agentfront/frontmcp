@@ -50,6 +50,7 @@ import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
 import { isDirectOnly } from '../front-mcp/direct-only.flag';
 import type { HaManager } from '../ha';
 import type { HealthService } from '../health';
+import { checkHookOrder, hookRunsOf } from '../hooks/hook-order';
 import HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils';
 import { type JobExecutionManager } from '../job/execution/job-execution.manager';
@@ -60,6 +61,7 @@ import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
 import { NotificationService } from '../notification';
+import { OffloadService } from '../offload/offload.service';
 import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
 import PromptRegistry from '../prompt/prompt.registry';
@@ -70,6 +72,7 @@ import { SkillValidationError } from '../skill/errors/skill-validation.error';
 import type { SkillSessionManager } from '../skill/session';
 import { pluginsRegisterDynamicSkills, registerSkillCapabilities } from '../skill/skill-scope.helper';
 import SkillRegistry from '../skill/skill.registry';
+import { LiveSurface } from '../surface/live-surface';
 import type { InProcessTaskRunner, TaskRegistry, TaskStore } from '../task';
 import { resolvesToVercelKvTaskBackend } from '../task/store/task-backend.utils';
 import { describeUnlistedOutputSchemas } from '../tool/tool-output-policy';
@@ -114,6 +117,7 @@ export class Scope extends ScopeEntry {
   /** Undefined in a direct-only scope, which serves no HTTP. */
   transportService: TransportService | undefined; // TODO: migrate transport service to transport.registry
   notificationService: NotificationService;
+  private liveSurface?: LiveSurface;
   declare haManager?: HaManager;
   /** ioredis client owned by the HA manager and transport bus; closed in shutdown(). */
   private haRedisClient?: { quit(): Promise<unknown>; disconnect(): void };
@@ -702,6 +706,9 @@ export class Scope extends ScopeEntry {
     // Fail-fast: entries with metadata only a plugin enforces (`approval`, `featureFlag`, ...) that no such plugin covers
     this.validateEnforcedMetadata();
 
+    // Fail-fast on hooks whose before/after order each other in a cycle; warn about a target no hook matches
+    checkHookOrder(hookRunsOf(this.scopeHooks), (message) => this.logger.warn(message));
+
     // One warning per tool whose declared outputSchema tools/list has to leave out
     for (const message of describeUnlistedOutputSchemas(this)) this.logger.warn(message);
 
@@ -914,6 +921,11 @@ export class Scope extends ScopeEntry {
     this.notificationService = new NotificationService(this);
     await this.notificationService.initialize();
     this.logger.verbose('NotificationService initialized');
+
+    const liveSurface = new LiveSurface(this);
+    liveSurface.start();
+    this.liveSurface = liveSurface;
+    this.onDispose(() => liveSurface.stop());
 
     // Install the task runner now that the notification service is available.
     // The runner needs it to deliver `notifications/tasks/status` events.
@@ -1360,6 +1372,12 @@ export class Scope extends ScopeEntry {
       },
       // FrontMcpContextProvider is a factory that retrieves from AsyncLocalStorage
       FrontMcpContextProvider,
+      {
+        scope: ProviderScope.GLOBAL,
+        name: 'OffloadService',
+        provide: OffloadService,
+        useValue: new OffloadService(this.metadata.offload, this.logger),
+      },
     ];
   }
 
@@ -1452,6 +1470,10 @@ export class Scope extends ScopeEntry {
 
   get notifications(): NotificationService {
     return this.notificationService;
+  }
+
+  get surface(): LiveSurface | undefined {
+    return this.liveSurface;
   }
 
   /**

@@ -63,6 +63,8 @@ All from `@frontmcp/sdk`. The two roots: `PublicMcpError` (message reaches the c
 | `InvalidMethodError`    | `'INVALID_METHOD'`                       | 400  | Wrong protocol method called                                      |
 | `UnauthorizedError`     | `'UNAUTHORIZED'` (-32001 JSON-RPC)       | 401  | Missing credentials                                               |
 | `EntryUnavailableError` | `'ENTRY_UNAVAILABLE'` (-32003 JSON-RPC)  | 403  | `availableWhen` mismatch at call time                             |
+| `FeatureOffError`       | `'FEATURE_OFF'` (-32003 JSON-RPC)        | 403  | The tool, resource or prompt's `enabled` is off                   |
+| `StaleToolListError`    | `'STALE_TOOL_LIST'`                      | 409  | A call from a session whose tool list changed since it listed     |
 | `RateLimitError`        | `'RATE_LIMIT_EXCEEDED'`                  | 429  | Rate-limit fired                                                  |
 | `QuotaExceededError`    | `'QUOTA_EXCEEDED'`                       | 429  | Quota-style limit fired                                           |
 | `PayloadTooLargeError`  | `'PAYLOAD_TOO_LARGE'`                    | 413  | Body limit exceeded                                               |
@@ -125,7 +127,7 @@ if (!settings.reviewsEnabled) {
 | `tools/call` (`isError: true` result)                 | A last line of the text, `To fix: Turn on Reviews in Settings (call settings_set with {"feature":"reviews"})`, and `_meta.remedy` |
 | JSON-RPC error (`resources/read`, `prompts/get`, ...) | `data.remedy`                                                                                                                     |
 
-A subclass passes its remedy as the fifth argument of `PublicMcpError`: `super(message, code, status, undefined, { say: '...' })`. Built-in refusals with a remedy: `EntryUnavailableError` names the environment the entry's `availableWhen` asks for (`Run the server where env is production to use this tool.`), and the feature-flag plugin's `FEATURE_FLAG_DISABLED` names the flag to turn on.
+A subclass passes its remedy as the fifth argument of `PublicMcpError`: `super(message, code, status, undefined, { say: '...' })`. Built-in refusals with a remedy: `EntryUnavailableError` names the environment the entry's `availableWhen` asks for (`Run the server where env is production to use this tool.`), the feature-flag plugin's `FEATURE_FLAG_DISABLED` names the flag to turn on, `FEATURE_OFF` carries the remedy of the entry's `EnabledSource`, and `STALE_TOOL_LIST` says to call `tools/list` again (see [`enabled`](./availability.md#enabled--turned-on-and-off-while-sessions-are-live)).
 
 ## `PublicMcpError` vs raw `Error`
 

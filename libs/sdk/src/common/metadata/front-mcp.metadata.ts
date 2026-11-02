@@ -15,6 +15,7 @@ import {
 import {
   authOptionsSchema,
   clientProfilesOptionsSchema,
+  devtoolsOptionsSchema,
   elicitationOptionsSchema,
   extAppsOptionsSchema,
   healthOptionsSchema,
@@ -24,6 +25,7 @@ import {
   mcpRegistryOptionsSchema,
   metricsOptionsSchema,
   observabilityOptionsSchema,
+  offloadOptionsSchema,
   outboundFetchOptionsSchema,
   paginationOptionsSchema,
   pubsubOptionsSchema,
@@ -35,6 +37,7 @@ import {
   type AuthOptions,
   type AuthOptionsInput,
   type ClientProfilesOptionsInput,
+  type DevtoolsOptionsInput,
   type ElicitationOptionsInput,
   type ExtAppsOptionsInput,
   type HealthOptionsInput,
@@ -44,6 +47,7 @@ import {
   type McpRegistryOptionsInput,
   type MetricsOptionsInput,
   type ObservabilityOptionsInterface,
+  type OffloadOptionsInput,
   type OutboundFetchOptionsInput,
   type PaginationOptions,
   type PubsubOptionsInput,
@@ -142,6 +146,18 @@ export interface FrontMcpBaseMetadata {
    * @default { shutdownHookTimeoutMs: 3000 }
    */
   lifecycle?: LifecycleOptionsInput;
+
+  /**
+   * The worker-thread pool that runs `this.offload()` calls and the reads of `worker: true` resources (Node only).
+   * @default { budgetMs: 30000, idleTimeoutMs: 30000, env: ['NODE_ENV'] }
+   */
+  offload?: OffloadOptionsInput;
+
+  /**
+   * Development aids: `hookTrace` adds the hooks a call ran to its answer's `_meta['frontmcp/trace']`.
+   * @default { hookTrace: true } when NODE_ENV is 'development', {} otherwise
+   */
+  devtools?: DevtoolsOptionsInput;
 
   /**
    * Shared tools that are available to all apps, in every scope (each `splitByApp` or standalone app's too).
@@ -627,6 +643,8 @@ export const frontMcpBaseSchema = z.object({
   instructions: z.string().optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   lifecycle: lifecycleOptionsSchema.optional(),
+  offload: offloadOptionsSchema.optional(),
+  devtools: devtoolsOptionsSchema.optional(),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
   skills: z.array(annotatedFrontMcpSkillsSchema).optional().default([]),
@@ -857,6 +875,8 @@ const frontMcpLiteSchema = z.object({
   instructions: z.string().optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   lifecycle: lifecycleOptionsSchema.optional(),
+  offload: offloadOptionsSchema.optional(),
+  devtools: devtoolsOptionsSchema.optional(),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
   skills: z.array(annotatedFrontMcpSkillsSchema).optional().default([]),

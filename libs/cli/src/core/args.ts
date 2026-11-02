@@ -70,6 +70,9 @@ export interface ParsedArgs {
   coverage?: boolean;
   // Test --no-env flag (skip .env / .env.local loading)
   env?: boolean;
+  // Test --replay <file> and --replay-ignore <paths>
+  replay?: string;
+  replayIgnore?: string[];
   // Build --target flag (unified build target)
   buildTarget?: BuildTarget;
   // Build --js flag (cli target: produce JS bundle instead of SEA binary)

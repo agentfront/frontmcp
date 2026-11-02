@@ -106,6 +106,10 @@ export type {
   WatchPathOptions,
 } from './process';
 
+// Redaction of sensitive fields in log entries and recorded calls
+export { redactFields, redactJson } from './redaction';
+export type { RedactedFields } from './redaction';
+
 // Escape utilities (HTML, JS, XSS prevention)
 export { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJsonForScript } from './escape';
 

@@ -5,10 +5,15 @@ describe('SplitioFeatureFlagAdapter', () => {
   const mockGetTreatment = jest.fn();
   const mockReady = jest.fn().mockResolvedValue(undefined);
   const mockDestroy = jest.fn().mockResolvedValue(undefined);
+  const mockOn = jest.fn();
+  const mockOff = jest.fn();
   const mockClient = jest.fn().mockReturnValue({
     getTreatment: mockGetTreatment,
     ready: mockReady,
     destroy: mockDestroy,
+    on: mockOn,
+    off: mockOff,
+    Event: { SDK_UPDATE: 'state::update' },
   });
   const mockSplitFactory = jest.fn().mockReturnValue({ client: mockClient });
 
@@ -146,6 +151,26 @@ describe('SplitioFeatureFlagAdapter', () => {
       const results = await adapter.evaluateFlags(['flag-a', 'flag-b'], ctx);
       expect(results.get('flag-a')).toBe(true);
       expect(results.get('flag-b')).toBe(false);
+    });
+  });
+
+  describe('subscribe', () => {
+    it("follows the client's SDK_UPDATE events until it is stopped", async () => {
+      const adapter = await createAdapter();
+      await adapter.initialize();
+      const listener = jest.fn();
+
+      const stop = adapter.subscribe(listener);
+      expect(mockOn).toHaveBeenCalledWith('state::update', listener);
+
+      stop();
+      expect(mockOff).toHaveBeenCalledWith('state::update', listener);
+    });
+
+    it('follows nothing before it is initialized', async () => {
+      const adapter = await createAdapter();
+      expect(() => adapter.subscribe(jest.fn())()).not.toThrow();
+      expect(mockOn).not.toHaveBeenCalled();
     });
   });
 

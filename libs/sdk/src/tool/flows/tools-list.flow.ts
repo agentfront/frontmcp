@@ -29,6 +29,7 @@ import { DEFAULT_TOOL_PAGINATION, type ToolPaginationOptions } from '../../commo
 import { InternalMcpError, InvalidInputError, InvalidMethodError } from '../../errors';
 import { type Scope } from '../../scope/scope.instance';
 import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
+import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
 import { toolOutputPolicies } from '../tool-output-policy';
 import { buildStaticWidgetUri, hasUIConfig } from '../ui/ui-shared';
 
@@ -87,7 +88,7 @@ type ResponseToolItem = BaseResponseToolItem & {
 // TODO: add support for session based tools
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findTools', 'filterByAuthorities', 'filterByPublicAccess', 'resolveConflicts'],
+  execute: ['findTools', 'filterByEnabled', 'filterByAuthorities', 'filterByPublicAccess', 'resolveConflicts'],
   post: ['parseTools'],
 } as const satisfies FlowPlan<string>;
 
@@ -180,6 +181,13 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
   private async loadToolUIRenderer() {
     await this.scope.toolUI?.load();
     return import('../ui/ui-render.js');
+  }
+
+  /** The hash of every tool name this listing shows, remembered as the session's surface when a client listed. */
+  private recordSurface(names: readonly string[]): string {
+    const internal = (this.rawInput as { ctx?: { internalCall?: boolean } } | undefined)?.ctx?.internalCall === true;
+    const sessionId = internal ? undefined : this.state.authInfo?.sessionId;
+    return this.scope.surface?.recordToolList(sessionId, names) ?? surfaceHash(names);
   }
 
   private encodeCursor(offset: number): string {
@@ -338,6 +346,16 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       this.logger.error('findTools: failed to collect tools', error);
       throw error;
     }
+  }
+
+  /** Leave out the tools whose `enabled` is off for this request. */
+  @Stage('filterByEnabled')
+  async filterByEnabled() {
+    const { tools } = this.state.required;
+    this.state.set(
+      'tools',
+      await enabledItems(tools, ({ tool }) => tool.metadata.enabled, this.tryGetContext(), this.logger),
+    );
   }
 
   /**
@@ -700,12 +718,8 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       const extra = tools.length > 5 ? `, +${tools.length - 5} more` : '';
       this.logger.verbose(`parseTools: prepared ${tools.length} tool descriptor(s): ${preview}${extra}`);
 
-      // Respond with tools and optional nextCursor for pagination
-      if (nextCursor) {
-        this.respond({ tools, nextCursor });
-      } else {
-        this.respond({ tools });
-      }
+      const surface = this.recordSurface(sortedResolved.map(({ finalName }) => finalName));
+      this.respond({ tools, ...(nextCursor && { nextCursor }), _meta: { [SURFACE_META_KEY]: surface } });
       this.logger.verbose('parseTools: response sent');
       this.logger.verbose('parseTools:done');
     } catch (error) {

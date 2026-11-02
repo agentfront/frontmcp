@@ -39,6 +39,11 @@ const fixtureFiles = [
   'tool-aliases-must-compile.ts',
   'answer-shaping-must-compile.ts',
   'stalls-dev-events-must-compile.ts',
+  'call-recorder-must-compile.ts',
+  'hook-ordering-must-compile.ts',
+  'hook-ordering-must-fail.ts',
+  'live-surface-must-compile.ts',
+  'offload-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -170,6 +175,37 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types observability.stalls and observability.devEvents, and a provider injecting FRONTMCP_LOGGER', () => {
     expect(describeEach(inFixtureFile('stalls-dev-events-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types CallRecorderPlugin.init() options, on an app and on the server, and the CallRecord lines', () => {
+    expect(describeEach(inFixtureFile('call-recorder-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types HookPhase, before / after, appliesTo: all-apps, the hook observers, the hook trace and devtools', () => {
+    expect(describeEach(inFixtureFile('hook-ordering-must-compile.ts'))).toEqual([]);
+  });
+
+  it('rejects an appliesTo, before or after the SDK cannot apply, and a write to HookPhase', () => {
+    expect(describeEach(inFixtureFile('hook-ordering-must-fail.ts'))).toEqual([]);
+  });
+
+  it('fails each hook-ordering-must-fail.ts case once its @ts-expect-error is removed', () => {
+    const mustFail = path.join(fixtureDir, 'hook-ordering-must-fail.ts');
+    const expectedLines = (ts.sys.readFile(mustFail) ?? '')
+      .split('\n')
+      .flatMap((line, index) => (line.includes('// @ts-expect-error') ? [index + 2] : []));
+    const failures = compileFixture(mustFail).diagnostics.filter((diagnostic) => diagnostic.fileName === mustFail);
+
+    expect(expectedLines).toHaveLength(4);
+    expect([...new Set(failures.map(({ location }) => Number(location.split(':').pop())))]).toEqual(expectedLines);
+  });
+
+  it('types enabled as a boolean or an EnabledSource such as fileSignal(), and the surface key', () => {
+    expect(describeEach(inFixtureFile('live-surface-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types this.offload() from the offloaded function, @Resource({ worker }) and the offload option', () => {
+    expect(describeEach(inFixtureFile('offload-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

@@ -40,7 +40,7 @@ export function collectToolMetadata(cls: ToolType): ToolMetadata {
   const seed = (extended ? { ...extended } : {}) as ToolMetadata;
   return Object.entries(FrontMcpToolTokens).reduce((metadata, [key, token]) => {
     const value = getMetadata(token, cls);
-    if (value) {
+    if (value !== undefined) {
       return Object.assign(metadata, {
         [key]: value,
       });

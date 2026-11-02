@@ -104,6 +104,14 @@ export { TestServer } from './server/test-server';
 export type { TestServerOptions, TestServerInfo } from './server/test-server';
 
 // ═══════════════════════════════════════════════════════════════════
+// CALL REPLAY
+// ═══════════════════════════════════════════════════════════════════
+
+export { replaySession, formatReplayReport } from './replay/replay-session';
+export type { ReplayReport, ReplayedCall, ReplaySessionOptions, ReplayTarget } from './replay/replay-session';
+export type { ReplayChange, ReplayError, ReplayOutcome, RecordedCall } from './replay/replay-diff';
+
+// ═══════════════════════════════════════════════════════════════════
 // ASSERTIONS
 // ═══════════════════════════════════════════════════════════════════
 
@@ -130,6 +138,7 @@ export {
   McpProtocolError,
   ServerStartError,
   AssertionError,
+  ReplayRecordingError,
 } from './errors/index';
 
 // ═══════════════════════════════════════════════════════════════════

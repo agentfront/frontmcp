@@ -1,6 +1,6 @@
 ---
 name: availability
-description: availableWhen axes (os / runtime / deployment / provider / target / surface / env), missingAxes, isPlatform.
+description: availableWhen axes (os / runtime / deployment / provider / target / surface / env), missingAxes, isPlatform, and enabled (fileSignal, FEATURE_OFF, list_changed, the surface hash, STALE_TOOL_LIST).
 ---
 
 # `availableWhen` — registry-level availability constraints
@@ -107,6 +107,48 @@ These are fine for ergonomic branching. For tools that **shouldn't exist at all*
 This is the safest way to expose internal-only tools that you want an agent / job to call but don't want a user to invoke from a chat UI.
 
 An MCP client (and the in-process client of a CLI build, surface `'cli'`) never sees such a tool: it is absent from `tools/list`, and `tools/call` answers `Tool "rotate_secrets" not found`, exactly as for a tool that doesn't exist. Resources, resource templates, prompts, agents and skills (including the skills HTTP endpoints, which count as `'mcp'`) follow the same rule, and CodeCall applies its caller's surface to the tools it reaches. An agent's model calls its tools on `'agent'` (and is only offered those its `surface` allows), a job's or workflow step's `this.callTool()` on `'job'`, a `@Channel` handling a webhook on `'http-trigger'`, and an in-browser agent calling through WebMCP (`@frontmcp/plugin-webmcp`) on `'webmcp'`. A tool, resource or prompt calling `this.callTool()` is in-process dispatch: that call carries no surface and is not restricted. Code reads its call's surface with `getCallSurface()`. The process-wide axes (`os`, `runtime`, ...) answer `EntryUnavailableError` instead.
+
+## `enabled` — turned on and off while sessions are live
+
+`availableWhen` is decided at boot. `enabled` is the switch that changes while the server runs, such as a feature a person turns on in a settings page or a flag in a flag service. It is a boolean, or an `EnabledSource`: `get(ctx?)` answers for a request, `subscribe(listener)` calls the listener whenever the answer may have changed (and returns the function that stops it), and an optional `remedy` says how to turn the entry back on. `fileSignal(path, key)` is the built-in source: the boolean under `key` in a JSON file, followed as the file changes.
+
+```typescript
+import { fileSignal, Tool, ToolContext } from '@frontmcp/sdk';
+
+const reviews = fileSignal('./features.json', 'reviews', {
+  remedy: { say: 'Turn on Reviews in Settings', tool: 'settings_set', args: { feature: 'reviews', on: true } },
+});
+
+@Tool({ name: 'review_list', inputSchema: {}, enabled: reviews })
+class ReviewListTool extends ToolContext {
+  /* … */
+}
+```
+
+- `@Resource`, `@ResourceTemplate` and `@Prompt` take the same `enabled`. Any other value fails at the decorator: `` `enabled` must be a boolean or an EnabledSource ``.
+- An entry that is off is left out of its list (`tools/list`, `resources/list`, `resources/templates/list`, `prompts/list`), and its completers complete nothing. `tools/call` (including `this.callTool()` and a call by an alias), `resources/read`, `resources/subscribe` and `prompts/get` refuse it with `FeatureOffError`: `FEATURE_OFF`, JSON-RPC -32003, `data.status` 403, and the source's remedy (without one, `Ask the server's operator to turn on tool "review_list".`). A source whose `get` throws counts as off.
+- The lists are filtered in each list flow's `filterByEnabled` stage and the refusal is the `checkEnabled` stage, so hooks can wrap both.
+- When a source's listener fires, every connected session gets `notifications/tools/list_changed` (or the resources or prompts one): one per list per 100 ms, however many entries or changes.
+- `fileSignal(path, key, { defaultValue?, pollIntervalMs?, remedy?, logger? })` watches the file's directory and reads the file again every `pollIntervalMs` (default 2000), which is the only check where watching fails. A missing file, or no boolean under `key`, means `defaultValue` (default `false`); content that is not JSON, as a write in progress leaves it, keeps the last value read (`defaultValue` before one was read). Each problem is logged once. A relative `path` is read against the process's working directory. Its default remedy is `Turn on the "reviews" feature, then try again.` Node only.
+- A source of your own answers per caller from the request context:
+
+```typescript
+import { type EnabledSource } from '@frontmcp/sdk';
+
+const proOnly: EnabledSource = {
+  get: (ctx) => plans.isPro(ctx?.authInfo?.extra?.['sub']),
+  subscribe: (listener) => plans.onChange(listener),
+  remedy: { say: 'Upgrade to Pro to use the billing tools.' },
+};
+```
+
+With `@frontmcp/plugin-feature-flags`, `featureFlagSource(adapter, 'beta')` is the `EnabledSource` of a flag. Code that changes what a list shows some other way announces it the same coalesced way with `scope.surface?.listChanged('tools')`.
+
+### The surface hash and stale tool lists
+
+`tools/list`, `resources/list`, `resources/templates/list` and `prompts/list` carry `_meta['frontmcp/surface']` (`SURFACE_META_KEY`): a 16-character hash of the names (URIs for resources, URI templates for templates) the list shows, the same on every page of a paginated list.
+
+FrontMCP also remembers, for each connected session that listed tools (the last 10 000), whether the tool list changed since. A 2026-07-28 or stateless request has no session to remember. A `tools/call` from such a session to a tool that is not in the current list, unknown or off, is answered with `StaleToolListError` (`STALE_TOOL_LIST`, 409, `To fix: Call tools/list again, then call a tool from the new list.`), and the session is sent `notifications/tools/list_changed`. Its next call gets the usual answer (`FEATURE_OFF`, `TOOL_NOT_FOUND`), so a client that never lists again is not stuck. A session that never listed, the task runner's run of a task-augmented call, and in-process `this.callTool()` are never answered `STALE_TOOL_LIST`.
 
 ## See also
 

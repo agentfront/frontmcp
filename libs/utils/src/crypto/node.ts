@@ -19,16 +19,6 @@ function toUint8Array(buf: Buffer): Uint8Array {
 }
 
 /**
- * Normalize input to Buffer for Node.js crypto operations.
- */
-function toBuffer(data: string | Uint8Array): Buffer {
-  if (typeof data === 'string') {
-    return Buffer.from(data, 'utf8');
-  }
-  return Buffer.from(data);
-}
-
-/**
  * Node.js crypto provider implementation.
  */
 export const nodeCrypto: CryptoProvider = {
@@ -41,12 +31,12 @@ export const nodeCrypto: CryptoProvider = {
   },
 
   sha256(data: string | Uint8Array): Uint8Array {
-    const hash = crypto.createHash('sha256').update(toBuffer(data)).digest();
+    const hash = crypto.createHash('sha256').update(data).digest();
     return toUint8Array(hash);
   },
 
   sha256Hex(data: string | Uint8Array): string {
-    return crypto.createHash('sha256').update(toBuffer(data)).digest('hex');
+    return crypto.createHash('sha256').update(data).digest('hex');
   },
 
   hmacSha256(key: Uint8Array, data: Uint8Array): Uint8Array {

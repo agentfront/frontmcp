@@ -82,3 +82,18 @@ export class AssertionError extends TestClientError {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
+
+/**
+ * Error thrown when a call recording has a line that is not a call record
+ */
+export class ReplayRecordingError extends TestClientError {
+  constructor(
+    public readonly file: string,
+    public readonly line: number,
+    reason: string,
+  ) {
+    super(`${file} line ${line} is not a call record: ${reason}`);
+    this.name = 'ReplayRecordingError';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}

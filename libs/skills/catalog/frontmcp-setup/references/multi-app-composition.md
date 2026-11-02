@@ -245,7 +245,7 @@ export default class Server {}
 
 - A shared tool keeps its own name. If an app in the same scope has a tool of that name, both are prefixed: `billing:health_check` for the app's and `server:health_check` for the shared one. No app may have the id `server` while `@FrontMcp` declares tools or resources (startup fails with `ReservedAppIdError`).
 - With `splitByApp: true`, and for a `standalone` app, each app's scope serves its own instance of every shared tool and resource.
-- An app's plugin hooks run for a shared tool only when declared with `appliesTo: 'uncovered-apps'`; server-level plugin hooks always run.
+- An app's plugin hooks run for a shared tool only when declared with `appliesTo: 'uncovered-apps'` or `'all-apps'`; server-level plugin hooks always run.
 - A shared tool belongs to no app, so `incrementalAuth` asks for no app grant before it runs.
 - `@FrontMcp` does not accept `prompts`; declare them on an `@App`.
 

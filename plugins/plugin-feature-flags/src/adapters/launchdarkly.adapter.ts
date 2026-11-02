@@ -63,6 +63,14 @@ export class LaunchDarklyFeatureFlagAdapter implements FeatureFlagAdapter {
     return results;
   }
 
+  /** Follows the client's `update` events, which fire when a flag's configuration changes. */
+  subscribe(listener: () => void): () => void {
+    const client = this.client as { on(event: string, fn: () => void): void; off(event: string, fn: () => void): void };
+    if (!client) return () => undefined;
+    client.on('update', listener);
+    return () => client.off('update', listener);
+  }
+
   async destroy(): Promise<void> {
     if (this.client) {
       await (this.client as any).close();
