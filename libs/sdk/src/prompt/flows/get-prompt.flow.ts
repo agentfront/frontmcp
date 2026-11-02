@@ -30,7 +30,7 @@ import {
   PromptNotFoundError,
 } from '../../errors';
 import { ResolvedEntries } from '../../flows/resolved-entries';
-import { type EntryClassHooksJoin } from '../../hooks/entry-class-hooks';
+import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
@@ -93,7 +93,7 @@ declare global {
 const name = 'prompts:get-prompt' as const;
 
 /** Where the hooks a prompt class declares join a run: they run on the instance 'createPromptContext' builds. */
-export const promptClassHooksJoin: EntryClassHooksJoin = { flow: name, plan, contextStage: 'createPromptContext' };
+export const promptClassHooksJoin = entryClassHooksJoin({ flow: name, plan, contextStage: 'createPromptContext' });
 const { Stage } = FlowHooksOf<'prompts:get-prompt'>(name);
 
 /** Prompts `resolveHookOwnerId` found, reused by the same run's `findPrompt`. */
@@ -137,6 +137,11 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
   }
 
   logger = this.scopeLogger.child('GetPromptFlow');
+
+  /** The prompt's name: the one `findPrompt` resolved, else the name the request asks for. */
+  get promptName(): string {
+    return this.state.prompt?.metadata.name ?? (this.state.input ?? this.input.request.params).name;
+  }
 
   @Stage('parseInput')
   async parseInput() {

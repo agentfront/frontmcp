@@ -87,6 +87,16 @@ class JobAuditPlugin {
     await next();
   }
 
+  @JobHook.Finally('validateOutput')
+  overrideAnswer(flowCtx: JobFlowCtx) {
+    // A Finally hook's answer is ignored, so it cannot replace the job's result
+    if (flowCtx.state.job?.name === 'overridden_job') flowCtx.respond({ result: { count: 999 }, logs: [] });
+    if (flowCtx.state.job?.name === 'replaced_job') {
+      flowCtx.state.set('answer', { result: { count: 999 }, logs: [] });
+      throw new Error('the recorder is down');
+    }
+  }
+
   @JobHook.Will('finalize')
   finalizing(flowCtx: JobFlowCtx) {
     trace.push(at('will', 'finalize', flowCtx));
@@ -198,6 +208,20 @@ class FailingCompletionStore extends MemoryJobStateStore {
   }
 }
 
+@Job({ name: 'overridden_job', inputSchema: {}, outputSchema: { count: z.number() } })
+class OverriddenJob extends JobContext {
+  async execute() {
+    return { count: 1 };
+  }
+}
+
+@Job({ name: 'replaced_job', inputSchema: {}, outputSchema: { count: z.number() } })
+class ReplacedJob extends JobContext {
+  async execute() {
+    return { count: 1 };
+  }
+}
+
 @Job({ name: 'aborted_job', inputSchema: {}, outputSchema: {} })
 class AbortedJob extends JobContext {
   async execute() {
@@ -285,6 +309,8 @@ class WhoAmIFlow {}
     ThrowerJob,
     SendJob,
     AbortedJob,
+    OverriddenJob,
+    ReplacedJob,
     WhoAmIJob,
     HookedJob,
   ],
@@ -510,16 +536,32 @@ describe('jobs:execute-job flow (#700)', () => {
     );
   });
 
-  it('records an attempt a hook ended without an answer as failed', async () => {
+  it('records an attempt a hook aborted as failed, with the reason it gave', async () => {
     await expect(manager.executeJob(jobNamed('aborted_job'), {})).rejects.toBeInstanceOf(FlowControl);
 
     const [run] = await manager.listRuns({ jobId: 'aborted_job' });
     expect(run).toEqual(
       expect.objectContaining({
         state: 'failed',
-        error: expect.objectContaining({ message: 'The job attempt ended before it produced a result' }),
+        error: expect.objectContaining({ message: 'Flow aborted: stopped by a hook' }),
       }),
     );
+  });
+
+  it("keeps the job's result when a Finally hook answers in its place", async () => {
+    const result = await manager.executeJob(jobNamed('overridden_job'), {});
+
+    expect(result).toEqual(expect.objectContaining({ state: 'completed', result: { count: 1 } }));
+    const [run] = await manager.listRuns({ jobId: 'overridden_job' });
+    expect(run).toEqual(expect.objectContaining({ state: 'completed', result: { count: 1 } }));
+  });
+
+  it("keeps the job's result when a Finally hook replaces it in state and then throws", async () => {
+    const result = await manager.executeJob(jobNamed('replaced_job'), {});
+
+    expect(result).toEqual(expect.objectContaining({ state: 'completed', result: { count: 1 } }));
+    const [run] = await manager.listRuns({ jobId: 'replaced_job' });
+    expect(run).toEqual(expect.objectContaining({ state: 'completed', result: { count: 1 } }));
   });
 
   it('builds the job with the providers a caller without a context passes', async () => {

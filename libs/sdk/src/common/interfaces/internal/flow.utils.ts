@@ -82,6 +82,9 @@ export class FlowState {
         (data as any)[prop] = value;
         return true;
       },
+      deleteProperty(_t, prop: PropertyKey) {
+        return Reflect.deleteProperty(data as object, prop);
+      },
       has(_t, prop) {
         return prop === 'required' || methodKeys.has(prop) || prop in (data as object);
       },

@@ -4,7 +4,8 @@ import { type EntryOwnerRef } from '../entries/base.entry';
 import { type ProviderRegistryInterface } from '../interfaces/internal';
 import { type FlowName } from './flow.metadata';
 
-export type HookStageType = 'stage' | 'will' | 'did' | 'around';
+/** A `did` hook runs only when its stage succeeds; a `finally` hook runs on every outcome and cannot change it. */
+export type HookStageType = 'stage' | 'will' | 'did' | 'around' | 'finally';
 export type HookPriority = number;
 
 /**
@@ -21,6 +22,7 @@ export type HookPriority = number;
 export type HookAppliesTo = 'own-app' | 'uncovered-apps';
 
 export interface HookOptions<Ctx> {
+  /** Lowest runs first (default 0), and the lowest Around is outermost; ties run plugin and provider hooks in registration order, then the flow's own step, then the entry class's hooks. */
   priority?: HookPriority;
   filter?: (ctx: Ctx) => boolean | Promise<boolean>;
   appliesTo?: HookAppliesTo;

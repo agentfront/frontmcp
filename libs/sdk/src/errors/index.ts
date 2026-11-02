@@ -208,6 +208,10 @@ export {
   TransportServiceNotAvailableError,
   SessionClaimConflictError,
   SessionOwnerUnreachableError,
+  UnsafeSocketDirectoryError,
+  SocketInUseError,
+  SocketPathConflictError,
+  SocketPermissionError,
 } from './transport.errors';
 
 // Export auth internal errors

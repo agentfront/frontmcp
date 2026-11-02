@@ -6,13 +6,12 @@
  * Import this file or ensure it's included in your tsconfig to get type checking.
  */
 
-// Note: These imports are used for documentation/JSDoc purposes in the interface comments
-// The actual runtime types are in mcp-matchers.ts
+import type { ZodRawShape, ZodType } from '@frontmcp/lazy-zod';
 
 /**
- * Custom MCP matchers for Jest
+ * Custom MCP matchers for Jest: tool, resource, prompt and protocol results
  */
-export interface McpMatchers<R = unknown> {
+export interface McpResultMatchers<R = unknown> {
   // ═══════════════════════════════════════════════════════════════════
   // TOOL MATCHERS
   // ═══════════════════════════════════════════════════════════════════
@@ -88,6 +87,21 @@ export interface McpMatchers<R = unknown> {
    * ```
    */
   toHaveResourceContent(): R;
+
+  /**
+   * Check that a tool's answer passes its output schema whole: it matches the schema, and parsing
+   * drops no key the schema does not declare. The failure message names the undeclared keys, which
+   * the server would strip, warn about or refuse, per its `output.undeclaredKeys` policy. A schema with
+   * a transform (`.transform()`, `z.preprocess()`, `.pipe()`) cannot be compared key by key and fails.
+   * @param outputSchema - The tool's `outputSchema`: a Zod schema or a raw shape
+   *
+   * @example
+   * ```typescript
+   * const answer = await tool.execute({ id: 'INV-1' });
+   * expect(answer).toPassOutputSchemaWhole(invoiceOutputSchema);
+   * ```
+   */
+  toPassOutputSchemaWhole(outputSchema: ZodType | ZodRawShape): R;
 
   // ═══════════════════════════════════════════════════════════════════
   // RESOURCE MATCHERS
@@ -205,7 +219,12 @@ export interface McpMatchers<R = unknown> {
    * ```
    */
   toHaveErrorCode(code: number): R;
+}
 
+/**
+ * Custom MCP matchers for Jest: rendered tool UI
+ */
+export interface McpUiMatchers<R = unknown> {
   // ═══════════════════════════════════════════════════════════════════
   // UI MATCHERS
   // ═══════════════════════════════════════════════════════════════════
@@ -301,25 +320,30 @@ export interface McpMatchers<R = unknown> {
   toHaveProperHtmlStructure(): R;
 }
 
+/**
+ * Custom MCP matchers for Jest
+ */
+export interface McpMatchers<R = unknown> extends McpResultMatchers<R>, McpUiMatchers<R> {}
+
 // ═══════════════════════════════════════════════════════════════════
 // JEST TYPE AUGMENTATION
 // ═══════════════════════════════════════════════════════════════════
 
-/* eslint-disable @typescript-eslint/no-namespace, @typescript-eslint/no-empty-object-type */
+/* eslint-disable @typescript-eslint/no-namespace */
 
 declare global {
   namespace jest {
     // Extend expect matchers
-    interface Matchers<R> extends McpMatchers<R> {}
+    interface Matchers<R> extends McpResultMatchers<R>, McpUiMatchers<R> {}
 
     // Extend asymmetric matchers (for expect.toContainTool etc.)
-    interface Expect extends McpMatchers<void> {}
+    interface Expect extends McpResultMatchers<void>, McpUiMatchers<void> {}
 
     // Extend inverse matchers (for expect.not.toContainTool etc.)
-    interface InverseAsymmetricMatchers extends McpMatchers<void> {}
+    interface InverseAsymmetricMatchers extends McpResultMatchers<void>, McpUiMatchers<void> {}
   }
 }
-/* eslint-enable @typescript-eslint/no-namespace, @typescript-eslint/no-empty-object-type */
+/* eslint-enable @typescript-eslint/no-namespace */
 
 // This export is needed to make this a module
 export {};

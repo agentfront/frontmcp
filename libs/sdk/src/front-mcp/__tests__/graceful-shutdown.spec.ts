@@ -212,6 +212,28 @@ describe('FrontMcpInstance.runUnixSocket() shutdown', () => {
     }
   });
 
+  it('shuts down what it built when the start is refused, then rethrows', async () => {
+    const socketPath = path.join(os.tmpdir(), `fmcp-${randomUUID().slice(0, 8)}.sock`);
+    const occupant = net.createServer();
+    await new Promise<void>((resolve) => occupant.listen(socketPath, resolve));
+    const shutdown = jest.spyOn(FrontMcpInstance.prototype, 'shutdown');
+    try {
+      await expect(
+        FrontMcpInstance.runUnixSocket({
+          info: { name: 'refused-socket', version: '1.0.0' },
+          apps: [DemoApp],
+          logging: { level: LogLevel.Off },
+          socketPath,
+        }),
+      ).rejects.toThrow('already in use');
+
+      expect(shutdown).toHaveBeenCalledTimes(1);
+    } finally {
+      shutdown.mockRestore();
+      await new Promise<void>((resolve) => occupant.close(() => resolve()));
+    }
+  });
+
   it('leaves the socket of a replacement that binds the same path while it shuts down', async () => {
     const socketPath = path.join(os.tmpdir(), `fmcp-${randomUUID().slice(0, 8)}.sock`);
     const replacement = net.createServer();

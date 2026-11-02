@@ -121,3 +121,46 @@ export class SessionOwnerUnreachableError extends PublicMcpError {
     this.reason = reason;
   }
 }
+
+function octalMode(mode: number): string {
+  return `0${(mode & 0o7777).toString(8)}`;
+}
+
+/**
+ * Thrown at startup when another user could replace a Unix socket: its directory, or one above it,
+ * belongs to another user (not root), or the group or others can write to it and it has no sticky bit.
+ */
+export class UnsafeSocketDirectoryError extends InternalMcpError {
+  constructor(directory: string, mode: number, ownerUid?: number) {
+    const reason =
+      ownerUid === undefined
+        ? 'the group or others can write to it and it has no sticky bit'
+        : `it belongs to another user (uid ${ownerUid})`;
+    super(
+      `Refusing to create a Unix socket under ${directory} (mode ${octalMode(mode)}): ${reason}. ` +
+        'Use a directory only you can write to, such as ~/.frontmcp/sockets.',
+      'UNSAFE_SOCKET_DIRECTORY',
+    );
+  }
+}
+
+/** Thrown at startup when a server is already listening on the Unix socket path. */
+export class SocketInUseError extends InternalMcpError {
+  constructor(socketPath: string) {
+    super(`Unix socket ${socketPath} is already in use by a running server.`, 'SOCKET_IN_USE');
+  }
+}
+
+/** Thrown at startup when the Unix socket path holds something the server must not remove. */
+export class SocketPathConflictError extends InternalMcpError {
+  constructor(socketPath: string, reason: string) {
+    super(`Refusing to replace ${socketPath}: ${reason}.`, 'SOCKET_PATH_CONFLICT');
+  }
+}
+
+/** Thrown at startup when a Unix socket cannot be made owner-only (0600). */
+export class SocketPermissionError extends InternalMcpError {
+  constructor(socketPath: string, detail: string) {
+    super(`Could not make Unix socket ${socketPath} owner-only (0600): ${detail}.`, 'SOCKET_PERMISSION');
+  }
+}

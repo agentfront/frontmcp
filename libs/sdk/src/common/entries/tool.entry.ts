@@ -15,7 +15,7 @@ import type ProviderRegistry from '../../provider/provider.registry';
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
 import { type ToolContext } from '../interfaces';
 import { type ProviderRegistryInterface } from '../interfaces/internal';
-import { type ToolInputType, type ToolMetadata, type ToolOutputType } from '../metadata';
+import { type ToolInputType, type ToolMetadata, type ToolOutputType, type UndeclaredKeysPolicy } from '../metadata';
 import { type ToolRecord } from '../records';
 import { BaseEntry, type EntryOwnerRef } from './base.entry';
 
@@ -41,6 +41,51 @@ export type ToolCallExtra = RequestHandlerExtra<Request, Notification> & {
 
 export type ParsedToolResult = CallToolResult;
 export type SafeTransformResult<T> = { success: true; data: T } | { success: false; error: Error };
+
+/** How a tool's answer is parsed against its `outputSchema`. */
+export interface OutputParseOptions {
+  /** What happens to keys the answer carries that the schema does not declare. @default 'strip' */
+  undeclaredKeys?: UndeclaredKeysPolicy;
+  /** Called with the undeclared key paths an answer carried, under the `'warn'` policy. */
+  onUndeclaredKeys?: (keyPaths: string[]) => void;
+}
+
+type OutputJsonSchemaResolution = { schema: Record<string, unknown> | null; unlistedReason?: string };
+
+/** Zod output types that are primitive outputs: they flow through `content` and are never listed. */
+const PRIMITIVE_ZOD_OUTPUT_TYPES = new Set<unknown>(['string', 'number', 'boolean', 'bigint', 'date']);
+
+/** How zod refers to a schema registered with an id, or to a reused one: `#/$defs/<name>`. */
+const DEFINITION_REF_PREFIX = '#/$defs/';
+
+/**
+ * The JSON Schema MCP accepts as a tool's `outputSchema`: an object schema as is, or a union
+ * (`anyOf` / `oneOf`) or `$ref` that resolves to object schemas only, typed `object` at the top level.
+ */
+function asObjectOutputSchema(json: Record<string, unknown>): Record<string, unknown> | null {
+  if (json['type'] === 'object') return json;
+  return isObjectSchema(json, json['$defs'], new Set()) ? { type: 'object', ...json } : null;
+}
+
+/** True for an object schema, a `#/$defs/` reference to one, or a union of those. */
+function isObjectSchema(schema: unknown, definitions: unknown, followedRefs: ReadonlySet<string>): boolean {
+  if (typeof schema !== 'object' || schema === null) return false;
+  const node = schema as Record<string, unknown>;
+  if (node['type'] === 'object') return true;
+  const ref = node['$ref'];
+  if (typeof ref === 'string') {
+    // Each `#/$defs/` reference is followed once: a recursive union can loop a validator forever
+    if (!ref.startsWith(DEFINITION_REF_PREFIX) || followedRefs.has(ref)) return false;
+    const definition = (definitions as Record<string, unknown> | undefined)?.[ref.slice(DEFINITION_REF_PREFIX.length)];
+    return isObjectSchema(definition, definitions, new Set([...followedRefs, ref]));
+  }
+  const members = node['anyOf'] ?? node['oneOf'];
+  return (
+    Array.isArray(members) &&
+    members.length > 0 &&
+    members.every((member) => isObjectSchema(member, definitions, followedRefs))
+  );
+}
 
 export abstract class ToolEntry<
   InSchema extends ToolInputType = ToolInputType,
@@ -145,38 +190,47 @@ export abstract class ToolEntry<
     return null;
   }
 
-  /** Cached output JSON Schema result (undefined = not yet computed, null = none) */
-  private _cachedOutputJsonSchema?: Record<string, unknown> | null;
+  /** The output JSON Schema and, when a declared schema is left out of tools/list, why (undefined = not yet computed) */
+  private outputJsonSchemaResolution?: OutputJsonSchemaResolution;
 
   /**
    * Get the tool's output schema as JSON Schema (cached after first call).
    *
    * Prefers an explicit `rawOutputSchema` (the JSON Schema set by the OpenAPI adapter /
-   * remote tools); otherwise converts a Zod-shape or `z.object()` `outputSchema` to JSON
-   * Schema — symmetric with {@link getInputJsonSchema}. Returns `null` for output forms
-   * that have no object-typed schema to advertise: primitive / media string literals
-   * (`'string'`, `'image'`, …), multi-content arrays (`['string', 'image']`), and any
-   * schema that does not serialize to a top-level `type: 'object'` (e.g. a union) — those
-   * flow through `content`, not `structuredContent`, per the MCP spec.
+   * remote tools); otherwise converts a Zod-shape or Zod `outputSchema` to JSON Schema —
+   * symmetric with {@link getInputJsonSchema}. MCP requires a top-level `type: 'object'`, so
+   * an object schema is returned as is and a union whose members are all object schemas is
+   * returned typed `object` (`{ type: 'object', anyOf | oneOf }`). Returns `null` for
+   * primitive / media outputs and multi-content arrays, which flow through `content`, and for
+   * any other schema (see {@link getUnlistedOutputSchemaReason}).
    *
    * @returns JSON Schema object, or null if there is no advertisable output schema.
    */
   getOutputJsonSchema(): Record<string, unknown> | null {
-    if (this._cachedOutputJsonSchema !== undefined) return this._cachedOutputJsonSchema;
-
-    const result = this.computeOutputJsonSchema();
-    this._cachedOutputJsonSchema = result;
-    return result;
+    return this.resolveOutputJsonSchema().schema;
   }
 
-  private computeOutputJsonSchema(): Record<string, unknown> | null {
+  /**
+   * Why the declared `outputSchema` is left out of tools/list, or undefined when it is listed
+   * or is a primitive / media / multi-content output, which is never listed by design.
+   */
+  getUnlistedOutputSchemaReason(): string | undefined {
+    return this.resolveOutputJsonSchema().unlistedReason;
+  }
+
+  private resolveOutputJsonSchema(): OutputJsonSchemaResolution {
+    this.outputJsonSchemaResolution ??= this.computeOutputJsonSchema();
+    return this.outputJsonSchemaResolution;
+  }
+
+  private computeOutputJsonSchema(): OutputJsonSchemaResolution {
     // Prefer rawOutputSchema when it is already a JSON Schema object (OpenAPI / remote passthrough).
     if (
       typeof this.rawOutputSchema === 'object' &&
       this.rawOutputSchema !== null &&
       !Array.isArray(this.rawOutputSchema)
     ) {
-      return this.rawOutputSchema as Record<string, unknown>;
+      return { schema: this.rawOutputSchema as Record<string, unknown> };
     }
 
     const schema = this.outputSchema as unknown;
@@ -184,36 +238,37 @@ export abstract class ToolEntry<
     // Primitive / media literals ('string' | 'number' | 'image' | …) and multi-content
     // arrays (['string', 'image']) have no object outputSchema — they flow via `content`.
     if (!schema || typeof schema === 'string' || Array.isArray(schema)) {
-      return null;
+      return { schema: null };
+    }
+
+    // Duck-type a Zod schema (z.object(), z.discriminatedUnion(), …) vs a raw shape
+    // ({ field: z.string() }); identity-based instanceof is avoided so a duplicated zod
+    // module copy cannot break detection.
+    const isZodSchema =
+      typeof (schema as { safeParse?: unknown }).safeParse === 'function' &&
+      typeof (schema as { parse?: unknown }).parse === 'function';
+
+    if (!isZodSchema && Object.keys(schema as Record<string, unknown>).length === 0) {
+      // Empty raw shape — nothing meaningful to advertise.
+      return { schema: null };
+    }
+
+    if (isZodSchema && PRIMITIVE_ZOD_OUTPUT_TYPES.has((schema as { type?: unknown }).type)) {
+      return { schema: null };
     }
 
     try {
-      // Duck-type a Zod schema (z.object(), z.discriminatedUnion(), …) vs a raw shape
-      // ({ field: z.string() }); identity-based instanceof is avoided so a duplicated zod
-      // module copy cannot break detection.
-      const isZodSchema =
-        typeof (schema as { safeParse?: unknown }).safeParse === 'function' &&
-        typeof (schema as { parse?: unknown }).parse === 'function';
-
-      if (!isZodSchema && Object.keys(schema as Record<string, unknown>).length === 0) {
-        // Empty raw shape — nothing meaningful to advertise.
-        return null;
-      }
-
       // `schema` is a Zod type (z.object()/discriminatedUnion/…) or a raw shape at
       // runtime, but `unknown` to TS. Narrow to the Zod-object type both z.object() and
       // toJSONSchema() accept (the raw-shape cast mirrors the inputSchema path above).
       const zodSchema = isZodSchema ? (schema as ReturnType<typeof z.object>) : z.object(schema as ToolInputType);
-      const json = toJSONSchema(zodSchema) as Record<string, unknown>;
-
-      // MCP requires outputSchema to be a top-level object schema; skip anything else
-      // (e.g. a discriminated union serializes to `anyOf`, not `type: 'object'`).
-      return json && json['type'] === 'object' ? json : null;
+      const objectSchema = asObjectOutputSchema(toJSONSchema(zodSchema) as Record<string, unknown>);
+      return objectSchema
+        ? { schema: objectSchema }
+        : { schema: null, unlistedReason: 'it is not an object schema or a union of object schemas' };
     } catch (error) {
-      if (isDebug() || isDevelopment()) {
-        console.warn('[ToolEntry] Failed to convert output Zod schema to JSON Schema:', error);
-      }
-      return null;
+      const message = error instanceof Error ? error.message : String(error);
+      return { schema: null, unlistedReason: `it cannot be converted to JSON Schema (${message})` };
     }
   }
 
@@ -231,10 +286,13 @@ export abstract class ToolEntry<
    * Convert the raw tool return value (Out) into an MCP CallToolResult-shaped object.
    * Concrete logic is implemented in ToolInstance.
    */
-  abstract parseOutput(result: Out | Partial<Out> | any): ParsedToolResult;
+  abstract parseOutput(result: Out | Partial<Out> | any, options?: OutputParseOptions): ParsedToolResult;
   /**
    * Convert the raw tool return value (Out) into an MCP CallToolResult-shaped object.
    * Concrete logic is implemented in ToolInstance.
    */
-  abstract safeParseOutput(raw: Out | Partial<Out> | any): SafeTransformResult<ParsedToolResult>;
+  abstract safeParseOutput(
+    raw: Out | Partial<Out> | any,
+    options?: OutputParseOptions,
+  ): SafeTransformResult<ParsedToolResult>;
 }

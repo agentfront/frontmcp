@@ -20,6 +20,19 @@ export interface EntryClassHooksJoin {
   contextStage: string;
 }
 
+const contextStageByFlow = new Map<string, string>();
+
+/** Declare where an entry class's hooks join its flow, and remember the flow's context stage for the hook order log. */
+export function entryClassHooksJoin(join: EntryClassHooksJoin): EntryClassHooksJoin {
+  contextStageByFlow.set(join.flow, join.contextStage);
+  return join;
+}
+
+/** The stage of `flow` that builds an entry's instance, when an entry class joins that flow. */
+export function entryContextStageOf(flow: string): string | undefined {
+  return contextStageByFlow.get(flow);
+}
+
 /** The stages of a plan, in the order a run reaches them. */
 function stagesInOrder(plan: EntryFlowPlan): string[] {
   return [

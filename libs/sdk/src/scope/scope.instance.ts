@@ -71,6 +71,7 @@ import { pluginsRegisterDynamicSkills, registerSkillCapabilities } from '../skil
 import SkillRegistry from '../skill/skill.registry';
 import type { InProcessTaskRunner, TaskRegistry, TaskStore } from '../task';
 import { resolvesToVercelKvTaskBackend } from '../task/store/task-backend.utils';
+import { describeUnlistedOutputSchemas } from '../tool/tool-output-policy';
 import { ToolInstance } from '../tool/tool.instance';
 import ToolRegistry from '../tool/tool.registry';
 import { normalizeTool } from '../tool/tool.utils';
@@ -691,6 +692,9 @@ export class Scope extends ScopeEntry {
 
     // Fail-fast: entries with metadata only a plugin enforces (`approval`, `featureFlag`, ...) that no such plugin covers
     this.validateEnforcedMetadata();
+
+    // One warning per tool whose declared outputSchema tools/list has to leave out
+    for (const message of describeUnlistedOutputSchemas(this)) this.logger.warn(message);
 
     await this.initGuardForDeclaredLimits();
 

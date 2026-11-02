@@ -31,7 +31,7 @@ import {
   InvalidOutputError,
   RateLimitError,
 } from '../../errors';
-import { type EntryClassHooksJoin } from '../../hooks/entry-class-hooks';
+import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type SdkAuthInfo } from '../../server/server.types';
@@ -142,7 +142,7 @@ function invalidOutputFrom(outputError: unknown): InvalidOutputError {
 const name = 'agents:call-agent' as const;
 
 /** Where the hooks an agent class declares join a run: they run on the instance 'createAgentContext' builds. */
-export const agentClassHooksJoin: EntryClassHooksJoin = { flow: name, plan, contextStage: 'createAgentContext' };
+export const agentClassHooksJoin = entryClassHooksJoin({ flow: name, plan, contextStage: 'createAgentContext' });
 const { Stage } = FlowHooksOf<'agents:call-agent'>(name);
 
 /**
