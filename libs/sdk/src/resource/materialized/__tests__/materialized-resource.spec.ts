@@ -194,6 +194,32 @@ describe('MaterializedResources', () => {
     expect(fake.scope.logger.warn.mock.calls[0][0]).toContain('n://broken');
   });
 
+  it('closes the stores it opened when another one fails to open', async () => {
+    const working = resourceStore({ coalesceMs: 0 });
+    const close = jest.spyOn(working, 'close');
+    const broken = resourceStore({ storage: { type: 'sqlite', sqlite: { path: '' } } });
+    const fake = scopeOf([
+      { uri: 'n://working', metadata: { name: 'working', from: working.key('working') }, record: {} },
+      { uri: 'n://broken', metadata: { name: 'broken', from: broken.key('broken') }, record: {} },
+    ]);
+
+    await expect(new MaterializedResources(fake.scope as never).start()).rejects.toThrow('sqlite.path');
+    expect(close).toHaveBeenCalled();
+  });
+
+  it('keeps the start error when a store also fails to close', async () => {
+    const working = resourceStore({ coalesceMs: 0 });
+    jest.spyOn(working, 'close').mockRejectedValueOnce(new Error('still busy'));
+    const broken = resourceStore({ storage: { type: 'sqlite', sqlite: { path: '' } } });
+    const fake = scopeOf([
+      { uri: 'n://working', metadata: { name: 'working', from: working.key('working') }, record: {} },
+      { uri: 'n://broken', metadata: { name: 'broken', from: broken.key('broken') }, record: {} },
+    ]);
+
+    await expect(new MaterializedResources(fake.scope as never).start()).rejects.toThrow('sqlite.path');
+    expect(fake.scope.logger.warn).toHaveBeenCalledWith(expect.stringContaining('still busy'));
+  });
+
   it('fails the start when a store cannot open', async () => {
     const broken = resourceStore({ storage: { type: 'sqlite', sqlite: { path: '' } } });
     const fake = scopeOf([{ uri: 'n://broken', metadata: { name: 'broken', from: broken.key('broken') }, record: {} }]);

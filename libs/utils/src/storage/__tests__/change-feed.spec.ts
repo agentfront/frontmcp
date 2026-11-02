@@ -168,6 +168,29 @@ describe('createChangeFeed()', () => {
       await storage.disconnect();
     });
 
+    it("still hears another process's write after a feed on another file with the same names published", async () => {
+      const mine = pollingStorage();
+      const theirs = pollingStorage();
+      await mine.storage.connect();
+      await theirs.storage.connect();
+      const here = open(mine.storage);
+      const onTheirFile = open(theirs.storage);
+      const listener = jest.fn();
+      here.subscribe('board', listener);
+      await jest.advanceTimersByTimeAsync(POLL_MS);
+
+      await onTheirFile.publish('board');
+      await jest.advanceTimersByTimeAsync(POLL_MS + COALESCE_MS);
+      const afterUnrelatedPublish = listener.mock.calls.length;
+      await mine.storage.incr('feed:board');
+      mine.otherProcessWrote();
+      await jest.advanceTimersByTimeAsync(POLL_MS + COALESCE_MS);
+
+      expect(listener).toHaveBeenCalledTimes(afterUnrelatedPublish + 1);
+      await mine.storage.disconnect();
+      await theirs.storage.disconnect();
+    });
+
     it('reads the topic counters only when the file moved', async () => {
       const { storage, otherProcessWrote } = pollingStorage();
       await storage.connect();

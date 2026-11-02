@@ -53,7 +53,14 @@ export class MaterializedResources {
     const misdeclared = entries.find(servesWithoutKey);
     if (misdeclared) throw new InvalidResourceStoreError(missingKeyMessage(misdeclared.metadata.name));
     const stores = new Set(entries.flatMap((entry) => materializedEntry(entry)?.from.store ?? []));
-    await Promise.all([...stores].map((store) => this.connect(store)));
+    const opened = await Promise.allSettled([...stores].map((store) => this.connect(store)));
+    const failure = opened.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failure) {
+      await this.stop().catch((error: unknown) =>
+        this.scope.logger.warn(`A materialized resource store did not close after a failed start: ${messageOf(error)}`),
+      );
+      throw failure.reason;
+    }
     this.follow();
     this.stopRegistry = this.scope.resources.subscribe({ immediate: false }, (event) => {
       if (event.kind !== 'updated') this.follow();

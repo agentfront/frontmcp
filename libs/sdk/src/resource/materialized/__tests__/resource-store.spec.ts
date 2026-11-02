@@ -36,6 +36,9 @@ describe('resourceStore()', () => {
       [{ coalesceMs: -1 }, 'coalesceMs'],
       [{ storage: 'sqlite' }, 'storage'],
       [{ storage: { type: 'postgres' } }, 'storage.type'],
+      [{ storage: { type: 'upstash' } }, 'storage.type'],
+      [{ storage: { type: 'auto' } }, 'storage.type'],
+      [{ storage: {} }, 'storage.type'],
       [{ unknown: true }, 'unknown'],
     ])('refuses %j where it is declared', (options, path) => {
       expect(() => resourceStore(options as never)).toThrow(InvalidResourceStoreError);

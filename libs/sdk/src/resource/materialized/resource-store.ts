@@ -11,13 +11,20 @@ import {
 import type { ResourceKey, ResourceSnapshot, ResourceStoreHandle } from '../../common/metadata/materialized.metadata';
 import { InvalidResourceStoreError } from '../../errors/mcp.error';
 
+/** The backends with an atomic `setIfEquals`, which every write uses. */
+const STORAGE_TYPES = ['memory', 'redis', 'sqlite'] as const;
+
+/** A `createStorage()` config on a backend a resource store can write atomically. */
+export type ResourceStoreStorage = StorageConfig & { type: (typeof STORAGE_TYPES)[number] };
+
 export interface ResourceStoreOptions {
   /**
    * Where the values live, through the storage factory: `memory` (the default) serves this process only; `sqlite`
    * and `redis` are shared by every process that opens the same file or server, and each of them hears the others'
-   * writes. Unless you set `fallback`, a backend that fails to open is an error, not a silent switch to memory.
+   * writes. Only these three have the atomic compare-and-set a write needs. Unless you set `fallback`, a backend
+   * that fails to open is an error, not a silent switch to memory.
    */
-  storage?: StorageConfig;
+  storage?: ResourceStoreStorage;
   /** How often a SQLite store checks `PRAGMA data_version` for another process's write, in milliseconds. @default 250 */
   pollIntervalMs?: number;
   /** Writes to one key within this window are announced once, in milliseconds. @default 50 */
@@ -31,12 +38,10 @@ export interface ResourceKeyOptions<T> {
   initial?: T;
 }
 
-const STORAGE_TYPES = ['memory', 'redis', 'vercel-kv', 'upstash', 'cloudflare-kv', 'sqlite', 'auto'] as const;
-
 const resourceStoreOptionsSchema = z
   .object({
     storage: z
-      .object({ type: z.enum(STORAGE_TYPES).optional() })
+      .object({ type: z.enum(STORAGE_TYPES) })
       .passthrough()
       .optional(),
     pollIntervalMs: z.number().int().positive().optional(),

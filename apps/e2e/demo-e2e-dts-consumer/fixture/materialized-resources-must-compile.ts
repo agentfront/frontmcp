@@ -69,3 +69,6 @@ export class WrongResource extends MaterializedResourceContext {}
 
 // @ts-expect-error pollIntervalMs is a number
 resourceStore({ pollIntervalMs: '250' });
+
+// @ts-expect-error a store writes with compare-and-set, which only memory, Redis and SQLite have
+resourceStore({ storage: { type: 'upstash' } });

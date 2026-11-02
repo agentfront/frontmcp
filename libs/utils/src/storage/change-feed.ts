@@ -142,7 +142,11 @@ class PubSubChangeFeed extends TopicFeed {
   }
 }
 
-/** The poll feeds of this process: stores on one file share its connection, whose data version their own writes leave. */
+/**
+ * The poll feeds of this process: stores on one file share its connection, whose data version their own writes leave,
+ * so each publish is also told to the others here. A feed on another file with the same names hears it too, which
+ * costs its listeners one read of the current state; only a feed's own publishes and polls move what it has seen.
+ */
 const pollingFeeds = new Set<PollingChangeFeed>();
 
 class PollingChangeFeed extends TopicFeed {
@@ -163,9 +167,10 @@ class PollingChangeFeed extends TopicFeed {
   }
 
   async publish(topic: string): Promise<void> {
-    const counterKey = this.storage.prefix + TOPIC_PREFIX + topic;
     const count = String(await this.storage.incr(TOPIC_PREFIX + topic));
-    for (const feed of pollingFeeds) feed.published(counterKey, count);
+    if (this.seen.has(topic)) this.seen.set(topic, count);
+    const counterKey = this.storage.prefix + TOPIC_PREFIX + topic;
+    for (const feed of pollingFeeds) feed.published(counterKey);
   }
 
   override async close(): Promise<void> {
@@ -175,14 +180,12 @@ class PollingChangeFeed extends TopicFeed {
     this.timer = undefined;
   }
 
-  /** A feed of this process incremented `counterKey` to `count`. */
-  private published(counterKey: string, count: string): void {
+  /** A feed of this process incremented `counterKey`. */
+  private published(counterKey: string): void {
     const ownPrefix = this.storage.prefix + TOPIC_PREFIX;
     if (!counterKey.startsWith(ownPrefix)) return;
     const topic = counterKey.slice(ownPrefix.length);
-    if (!this.seen.has(topic)) return;
-    this.seen.set(topic, count);
-    this.changed(topic);
+    if (this.seen.has(topic)) this.changed(topic);
   }
 
   protected watch(topic: string): void {

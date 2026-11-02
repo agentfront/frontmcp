@@ -47,6 +47,7 @@ export {
   ResourceStore,
   type ResourceKeyOptions,
   type ResourceStoreOptions,
+  type ResourceStoreStorage,
 } from './resource/materialized';
 export * from './errors';
 export {
