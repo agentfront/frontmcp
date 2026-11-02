@@ -34,7 +34,7 @@ export interface ResourceStoreOptions {
 }
 
 export interface ResourceKeyOptions<T> {
-  /** The value read before the first write. */
+  /** The value read before the first write; stored as JSON like every value, so it must be one JSON can hold. */
   initial?: T;
 }
 
@@ -91,7 +91,14 @@ export class ResourceStore implements ResourceStoreHandle {
     if (typeof name !== 'string' || name.length === 0) {
       throw new InvalidResourceStoreError('a key needs a name, such as key("board")');
     }
-    return new StoredResourceKey<T | undefined>(this, this.backend, name, options.initial);
+    let initialRecord: string;
+    try {
+      initialRecord = JSON.stringify({ value: options.initial, revision: 0 } satisfies StoredRecord<T | undefined>);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new InvalidResourceStoreError(`the initial value of key "${name}" cannot be stored as JSON: ${reason}`);
+    }
+    return new StoredResourceKey<T | undefined>(this, this.backend, name, initialRecord);
   }
 
   /** Call `listener` when `topic` is published, in this process or in another one that shares the storage. */
@@ -173,7 +180,8 @@ class StoredResourceKey<T> implements ResourceKey<T> {
     readonly store: ResourceStore,
     private readonly backend: KeyBackend,
     readonly name: string,
-    private readonly initial: T,
+    /** The revision-0 record, as JSON: what a read serves until the first write, and what that write starts from. */
+    private readonly initialRecord: string,
   ) {
     this.recordKey = `value:${name}`;
   }
@@ -193,23 +201,24 @@ class StoredResourceKey<T> implements ResourceKey<T> {
       const raw = await storage.get(this.recordKey);
       if (raw === null) {
         // Every first writer stores the same revision-0 record, so the race to create it is harmless.
-        await storage.set(this.recordKey, JSON.stringify({ value: this.initial, revision: 0 }), { ifNotExists: true });
+        await storage.set(this.recordKey, this.initialRecord, { ifNotExists: true });
         continue;
       }
       const current = this.parse(raw);
-      const next: StoredRecord<T> = {
+      const next = JSON.stringify({
         value: await change(current.value),
         revision: current.revision + 1,
         updatedAt: new Date().toISOString(),
-      };
-      if (await storage.setIfEquals(this.recordKey, raw, JSON.stringify(next))) {
+      } satisfies StoredRecord<T>);
+      if (await storage.setIfEquals(this.recordKey, raw, next)) {
         await this.store.publish(this.name).catch((error) => this.backend.reportError(error));
-        return next;
+        return this.parse(next);
       }
     }
   }
 
   subscribe(listener: (snapshot: ResourceSnapshot<T>) => void): () => void {
+    let active = true;
     let seen: Promise<number> = this.get().then(
       (snapshot) => snapshot.revision,
       () => -1,
@@ -222,7 +231,7 @@ class StoredResourceKey<T> implements ResourceKey<T> {
         this.backend.reportError(error);
         return revision;
       }
-      if (snapshot.revision === revision) return revision;
+      if (!active || snapshot.revision === revision) return snapshot.revision;
       try {
         listener(snapshot);
       } catch (error) {
@@ -230,14 +239,17 @@ class StoredResourceKey<T> implements ResourceKey<T> {
       }
       return snapshot.revision;
     };
-    return this.store.subscribe(this.name, () => {
+    const stop = this.store.subscribe(this.name, () => {
       seen = seen.then(check);
     });
+    return () => {
+      active = false;
+      stop();
+    };
   }
 
   private parse(raw: string | null): ResourceSnapshot<T> {
-    if (raw === null) return { value: this.initial, revision: 0 };
-    const record = JSON.parse(raw) as StoredRecord<T>;
+    const record = JSON.parse(raw ?? this.initialRecord) as StoredRecord<T>;
     return record.updatedAt === undefined
       ? { value: record.value, revision: record.revision }
       : { value: record.value, revision: record.revision, updatedAt: record.updatedAt };

@@ -112,8 +112,38 @@ describe('resourceStore()', () => {
       await expect(board.get()).resolves.toMatchObject({ value: { open: 1 }, revision: 1 });
     });
 
+    it('reads the initial value as a write would store it: a JSON copy, which a caller cannot change', async () => {
+      const initial = { open: 0, tags: [] as string[], since: new Date(0) };
+      const board = open().key('board', { initial });
+
+      (await board.get()).value.tags.push('changed');
+
+      await expect(board.get()).resolves.toEqual({
+        value: { open: 0, tags: [], since: '1970-01-01T00:00:00.000Z' },
+        revision: 0,
+      });
+    });
+
+    it('refuses an initial value JSON cannot hold where the key is declared', () => {
+      expect(() => open().key('count', { initial: BigInt(1) })).toThrow(InvalidResourceStoreError);
+    });
+
+    it('returns from a write the snapshot a read then serves', async () => {
+      const board = open().key<{ since: Date }>('board');
+
+      const written = await board.set({ since: new Date(0) });
+
+      expect(written.value).toEqual({ since: '1970-01-01T00:00:00.000Z' });
+      await expect(board.get()).resolves.toEqual(written);
+    });
+
     it('is a key a resource can serve', () => {
-      expect(isResourceKey(open().key('board'))).toBe(true);
+      const key = open().key('board');
+      const methods = { name: 'board', get: key.get, set: key.set, update: key.update, subscribe: key.subscribe };
+      expect(isResourceKey(key)).toBe(true);
+      expect(isResourceKey({ ...methods, store: key.store })).toBe(true);
+      expect(isResourceKey(methods)).toBe(false);
+      expect(isResourceKey({ ...methods, store: {} })).toBe(false);
       expect(isResourceKey({ name: 'board' })).toBe(false);
       expect(isResourceKey(undefined)).toBe(false);
     });
@@ -132,6 +162,29 @@ describe('resourceStore()', () => {
       await until(() => seen.length === 2);
 
       expect(seen).toEqual([1, 2]);
+    });
+
+    it('calls no key listener once it unsubscribed, even when a read had started', async () => {
+      const board = open().key<Board>('board', { initial: { open: 0 } });
+      const listener = jest.fn();
+      const unsubscribe = board.subscribe(listener);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      let readStarted = false;
+      let finishRead: () => void = () => undefined;
+      const get = jest.spyOn(board, 'get').mockImplementationOnce(async () => {
+        readStarted = true;
+        await new Promise<void>((resolve) => (finishRead = resolve));
+        return { value: { open: 1 }, revision: 1, updatedAt: new Date().toISOString() };
+      });
+
+      await board.set({ open: 1 });
+      await until(() => readStarted);
+      unsubscribe();
+      finishRead();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(get).toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
     });
 
     it('does not tell a key listener of a topic change that left the revision as it was', async () => {

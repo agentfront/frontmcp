@@ -20,6 +20,7 @@ export interface ResourceStoreHandle {
 /**
  * One value in a resource store (`resourceStore().key(name)`), which `@Resource({ from })` serves.
  * Writes are atomic in every process that shares the storage, and each one adds 1 to the revision.
+ * Values are stored as JSON: every read and write returns a JSON copy.
  */
 export interface ResourceKey<T = unknown> {
   readonly name: string;
@@ -41,7 +42,9 @@ export function isResourceKey(value: unknown): value is ResourceKey {
     typeof candidate.get === 'function' &&
     typeof candidate.set === 'function' &&
     typeof candidate.update === 'function' &&
-    typeof candidate.subscribe === 'function'
+    typeof candidate.subscribe === 'function' &&
+    typeof candidate.store?.connect === 'function' &&
+    typeof candidate.store.close === 'function'
   );
 }
 
