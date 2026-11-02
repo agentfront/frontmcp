@@ -5,6 +5,7 @@
  * - tools/list returns an empty array
  * - tools/call is answered as for an unknown tool (`Tool "<name>" not found`)
  * - skills/search and skills/load work normally
+ * - the initialize instructions still point at the skill index
  *
  * This mode is useful for planner agents that:
  * - Fetch skills to create execution plans
@@ -124,6 +125,21 @@ test.describe('MCP Skills-Only Mode E2E', () => {
         expect(content.skills.length).toBe(1);
         expect(content.skills[0].id).toBe('review-pr');
         expect(content.skills[0].formattedContent).toBeDefined();
+      } finally {
+        await client.disconnect();
+      }
+    });
+
+    test('should point the client at the skill index in its instructions', async ({ server }) => {
+      const client = await server
+        .createClientBuilder()
+        .withTransport('streamable-http')
+        .withQueryParams({ mode: 'skills_only' })
+        .buildAndConnect();
+
+      try {
+        expect(client.instructions).toMatch(/^This server has \d+ skills: the `skill:\/\/index\.json` resource/);
+        expect(client.instructions).not.toContain('**review-pr**');
       } finally {
         await client.disconnect();
       }

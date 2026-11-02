@@ -6,8 +6,9 @@
  * - skill://{skillPath}/SKILL.md      — raw SKILL.md (frontmatter + body)
  * - skill://{skillPath}/{filePath}    — any file inside the skill directory
  * - Auto-complete for skill paths
+ * - The annotations of each SKILL.md resource in resources/list (`skillsConfig.resourceAnnotations`)
  */
-import { expect, test } from '@frontmcp/testing';
+import { expect, test, type Resource } from '@frontmcp/testing';
 
 import type { JsonRpcRequest, JsonRpcResponse } from './helpers/skills-protocol';
 
@@ -66,6 +67,12 @@ interface SkillIndexDocument {
   skills: SkillIndexEntry[];
 }
 
+async function listSkillMdResources(mcp: { resources: { list(): Promise<Resource[]> } }): Promise<Resource[]> {
+  const skillMds = (await mcp.resources.list()).filter((resource) => resource.uri.endsWith('/SKILL.md'));
+  expect(skillMds.length).toBeGreaterThan(0);
+  return skillMds;
+}
+
 test.describe('SEP-2640 Skills Resources E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-skills/src/main.ts',
@@ -96,6 +103,24 @@ test.describe('SEP-2640 Skills Resources E2E', () => {
 
       const result = await mcp.resources.read(pointedAt ?? '');
       expect(result).toBeSuccessful();
+    });
+
+    test('default to one line that counts the skills instead of listing them', async ({ mcp }) => {
+      const index = extractResourceJson<SkillIndexDocument>(await mcp.resources.read('skill://index.json'));
+      const skillMdCount = index.skills.filter((entry) => entry.type === 'skill-md').length;
+
+      expect(mcp.instructions).toBe(
+        `This server has ${skillMdCount} skills: the \`skill://index.json\` resource lists each skill's \`SKILL.md\` URI.`,
+      );
+    });
+  });
+
+  test.describe('SKILL.md annotations in resources/list', () => {
+    test('carry the assistant audience and no numeric annotation by default', async ({ mcp }) => {
+      for (const resource of await listSkillMdResources(mcp)) {
+        expect(resource.annotations?.audience).toEqual(['assistant']);
+        expect(Object.values(resource.annotations ?? {}).filter((value) => typeof value === 'number')).toEqual([]);
+      }
     });
   });
 
@@ -261,5 +286,20 @@ test.describe('SEP-2640 Skills Resources E2E', () => {
       expect(reviewPr).toBeSuccessful();
       expect(deployApp).toBeSuccessful();
     });
+  });
+});
+
+test.describe("SEP-2640 Skills Resources E2E with resourceAnnotations: 'full'", () => {
+  test.use({
+    server: 'apps/e2e/demo-e2e-skills/src/main.ts',
+    project: 'demo-e2e-skills',
+    publicMode: true,
+    env: { SKILLS_RESOURCE_ANNOTATIONS: 'full' },
+  });
+
+  test('bring back priority 0.8 on every SKILL.md resource', async ({ mcp }) => {
+    for (const resource of await listSkillMdResources(mcp)) {
+      expect(resource.annotations).toMatchObject({ audience: ['assistant'], priority: 0.8 });
+    }
   });
 });
