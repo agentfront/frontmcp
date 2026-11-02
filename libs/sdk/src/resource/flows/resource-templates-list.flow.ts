@@ -12,7 +12,7 @@ import {
 
 import 'reflect-metadata';
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import {
   ListResourceTemplatesRequestSchema,
   ListResourceTemplatesResultSchema,
@@ -21,6 +21,7 @@ import {
 
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
+import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
 
 const inputSchema = z.object({
   request: ListResourceTemplatesRequestSchema,
@@ -50,7 +51,7 @@ type ResponseTemplateItem = ResourceTemplate;
 
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findTemplates', 'filterByAuthorities', 'resolveConflicts'],
+  execute: ['findTemplates', 'filterByEnabled', 'filterByAuthorities', 'resolveConflicts'],
   post: ['parseTemplates'],
 } as const satisfies FlowPlan<string>;
 
@@ -190,6 +191,16 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
     }
   }
 
+  /** Leave out the resource templates whose `enabled` is off for this request. */
+  @Stage('filterByEnabled')
+  async filterByEnabled() {
+    const { templates } = this.state.required;
+    this.state.set(
+      'templates',
+      await enabledItems(templates, ({ template }) => template.metadata.enabled, this.tryGetContext(), this.logger),
+    );
+  }
+
   /**
    * Filter resource templates by entry-level authorities.
    * Hookable: developers can use Will/Did/Around on 'filterByAuthorities'.
@@ -304,7 +315,8 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
         `parseTemplates: prepared ${resourceTemplates.length} template descriptor(s): ${preview}${extra}`,
       );
 
-      this.respond({ resourceTemplates });
+      const surface = surfaceHash(resourceTemplates.map(({ uriTemplate }) => uriTemplate));
+      this.respond({ resourceTemplates, _meta: { [SURFACE_META_KEY]: surface } });
       this.logger.verbose('parseTemplates: response sent');
       this.logger.verbose('parseTemplates:done');
     } catch (error) {

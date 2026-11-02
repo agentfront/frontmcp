@@ -1,5 +1,5 @@
 // file: libs/sdk/src/common/metadata/ui-serving-mode.ts
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import type { WidgetServingMode } from '@frontmcp/uipack/types';
 
 /**

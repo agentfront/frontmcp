@@ -6,7 +6,7 @@ import {
   type RateLimitConfig,
   type TimeoutConfig,
 } from '@frontmcp/guard';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import {
   AudioContentSchema,
   EmbeddedResourceSchema,
@@ -19,6 +19,7 @@ import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils
 
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
 import { type RawZodShape } from '../types';
+import { enabledOptionSchema, type EnabledOption } from './enabled.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import { type ToolUIConfig } from './tool-ui.metadata';
 
@@ -290,6 +291,13 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
   name: string;
 
   /**
+   * Other names `tools/call` and `this.callTool()` accept, such as the name before a rename. Never listed, and
+   * matched before a dotted name is read as `owner.name`. An alias that is also a tool's name or another tool's
+   * alias fails startup with `ToolAliasConflictError`.
+   */
+  aliases?: string[];
+
+  /**
    * Human-readable title listed by `tools/list`. When omitted, `annotations.title` is the only title.
    */
   title?: string;
@@ -484,6 +492,13 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
   availableWhen?: EntryAvailability;
 
   /**
+   * Whether the tool is on: a boolean, or an `EnabledSource` such as `fileSignal(path, key)` that can change while
+   * sessions are live. A tool that is off is left out of `tools/list`, and `tools/call` refuses it with `FEATURE_OFF`
+   * and a remedy. When a source changes, connected clients get `notifications/tools/list_changed`.
+   */
+  enabled?: EnabledOption;
+
+  /**
    * Execution hints reported in `tools/list` items per MCP 2025-11-25.
    *
    * `taskSupport` controls whether clients may invoke this tool as a background task
@@ -544,6 +559,14 @@ export const frontMcpToolMetadataSchema = z
   .object({
     id: z.string().optional(),
     name: z.string().min(1),
+    aliases: z
+      .array(
+        z
+          .string()
+          .min(1, 'A tool alias must not be empty')
+          .max(64, 'A tool alias must be at most 64 characters, like a tool name'),
+      )
+      .optional(),
     title: z.string().optional(),
     description: z.string().optional(),
     inputSchema: z.instanceof(Object),
@@ -561,6 +584,7 @@ export const frontMcpToolMetadataSchema = z
     concurrency: concurrencyConfigSchema.optional(),
     timeout: timeoutConfigSchema.optional(),
     availableWhen: entryAvailabilitySchema.optional(),
+    enabled: enabledOptionSchema.optional(),
     execution: z
       .object({
         taskSupport: z.enum(['required', 'optional', 'forbidden']).optional(),

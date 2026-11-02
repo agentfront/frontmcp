@@ -155,9 +155,30 @@ FeatureFlagPlugin.init({ adapter: 'custom', adapterInstance: flagAdapter });
   about, so the caller's `defaultValue` applies; answer `false` for a flag that's off.
 - `getVariant()` serves `this.featureFlags.getVariant()`. `isEnabled()` is required, though the plugin doesn't call it.
 - The optional `initialize()` runs when the server starts, and `destroy()` when it's disposed.
+- The optional `subscribe(listener)` calls `listener` when flags may have changed and returns the function that stops
+  it. With it, a flag flip sends connected clients `list_changed` for the lists your flags gate. The Split.io,
+  LaunchDarkly and Unleash adapters implement it.
 
 The built-in adapters are exported too: `StaticFeatureFlagAdapter`, `LaunchDarklyFeatureFlagAdapter`,
 `SplitioFeatureFlagAdapter` and `UnleashFeatureFlagAdapter`.
+
+### A flag as `enabled`
+
+`featureFlagSource(adapter, ref)` is a flag as an SDK `EnabledSource`, for `enabled` on a tool, resource, template
+or prompt. Give the plugin the same adapter. The SDK then filters the lists, refuses the entry with `FEATURE_OFF`
+and the remedy `Turn on the feature flag "beta".`, and sends `list_changed` when the adapter reports a change. The
+sources of one adapter share one listener on its SDK client:
+
+```ts
+import { FeatureFlagPlugin, featureFlagSource, UnleashFeatureFlagAdapter } from '@frontmcp/plugin-feature-flags';
+
+const flags = new UnleashFeatureFlagAdapter({ url: 'https://unleash.example.com/api', appName: 'my-mcp-server' });
+
+@Tool({ name: 'beta_report', inputSchema: {}, enabled: featureFlagSource(flags, 'beta-reports') })
+class BetaReportTool extends ToolContext {}
+
+FeatureFlagPlugin.init({ adapter: 'custom', adapterInstance: flags });
+```
 
 ## `this.featureFlags`
 

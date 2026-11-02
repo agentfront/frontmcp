@@ -53,6 +53,23 @@ Configure how clients connect to your FrontMCP server — SSE, Streamable HTTP, 
 class Server {}
 ```
 
+## Client Platform Detection
+
+FrontMCP names the platform of each client from the `clientInfo` it sends at `initialize` (MCP 2026-07-28 clients send it with each request). The platform picks how tool UI is served, and is the `client` label of the answer-cost counters on `/metrics`.
+
+| Platform                               | Detected from `clientInfo.name`                                           |
+| -------------------------------------- | ------------------------------------------------------------------------- |
+| `codex`                                | contains `codex` (OpenAI Codex sends `codex-mcp-client`)                  |
+| `claude-code`                          | contains `claude-code` or `claude code` (Claude Code sends `claude-code`) |
+| `openai`                               | contains `chatgpt`, `openai` or `gpt`                                     |
+| `claude`                               | contains `claude` or `anthropic`                                          |
+| `gemini`, `cursor`, `continue`, `cody` | the product name                                                          |
+| `ext-apps`                             | any client that declares the MCP Apps extension                           |
+| `generic-mcp`                          | contains `mcp`                                                            |
+| `unknown`                              | anything else                                                             |
+
+`transport.platformDetection.mappings` maps other names first (`{ pattern: 'acme-agent', platform: 'generic-mcp' }`), and `customOnly: true` turns the name guessing off. To change what a client receives (text or `structuredContent`, resource annotations, skills instructions), match its name with a `clients` profile: see `configure-client-profiles`.
+
 ## Protocol Presets
 
 Choose a preset that matches your deployment:

@@ -1,6 +1,11 @@
 /**
  * Storage Factory Tests
  */
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+import { StorageConfigError } from '../errors';
 import { createMemoryStorage, createStorage, getDetectedStorageType } from '../factory';
 
 jest.mock('../adapters/redis', () => ({
@@ -115,6 +120,86 @@ describe('Storage Factory', () => {
 
         expect(await storage.ping()).toBe(true);
         await storage.disconnect();
+      });
+    });
+
+    describe('explicit sqlite type', () => {
+      let dir: string;
+      let dbPath: string;
+
+      beforeEach(() => {
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'storage-factory-sqlite-'));
+        dbPath = path.join(dir, 'app.sqlite');
+      });
+
+      afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+      function failToLoadSqlitePackage(error: Error): void {
+        jest.doMock('@frontmcp/storage-sqlite', () => {
+          throw error;
+        });
+      }
+
+      afterEach(() => jest.dontMock('@frontmcp/storage-sqlite'));
+
+      it('stores keys in the SQLite file, which later storages on the file read', async () => {
+        const storage = await createStorage({ type: 'sqlite', sqlite: { path: dbPath, ttlCleanupIntervalMs: 0 } });
+        expect(storage.supportsPubSub()).toBe(false);
+        await storage.set('key', 'value', { ttlSeconds: 60 });
+        expect(await storage.incr('visits')).toBe(1);
+        await storage.disconnect();
+
+        const reopened = await createStorage({ type: 'sqlite', sqlite: { path: dbPath }, prefix: 'app:' });
+        expect(await reopened.root.get('key')).toBe('value');
+        expect(await reopened.root.deleteIfEquals?.('key', 'value')).toBe(true);
+        await reopened.set('scoped', '1');
+        expect(await reopened.root.get('app:scoped')).toBe('1');
+        await reopened.disconnect();
+      });
+
+      it.each([
+        ['no sqlite block', undefined, /sqlite\.path/],
+        ['an empty path', { path: '' }, /sqlite\.path/],
+        ['a negative busy timeout', { path: 'a.sqlite', busyTimeoutMs: -1 }, /sqlite\.busyTimeoutMs/],
+        ['a non-boolean walMode', { path: 'a.sqlite', walMode: 'yes' }, /sqlite\.walMode/],
+        ['an empty encryption secret', { path: 'a.sqlite', encryption: { secret: '' } }, /sqlite\.encryption\.secret/],
+      ])('rejects %s with StorageConfigError, even with a memory fallback', async (_case, sqlite, message) => {
+        const attempt = createStorage({ type: 'sqlite', sqlite: sqlite as never, fallback: 'memory' });
+        await expect(attempt).rejects.toBeInstanceOf(StorageConfigError);
+        await expect(createStorage({ type: 'sqlite', sqlite: sqlite as never })).rejects.toThrow(message);
+      });
+
+      it('names the package to install when @frontmcp/storage-sqlite is missing', async () => {
+        failToLoadSqlitePackage(
+          Object.assign(new Error("Cannot find module '@frontmcp/storage-sqlite'"), { code: 'MODULE_NOT_FOUND' }),
+        );
+        const attempt = createStorage({ type: 'sqlite', sqlite: { path: dbPath }, fallback: 'error' });
+        await expect(attempt).rejects.toBeInstanceOf(StorageConfigError);
+        await expect(createStorage({ type: 'sqlite', sqlite: { path: dbPath }, fallback: 'error' })).rejects.toThrow(
+          'npm install @frontmcp/storage-sqlite',
+        );
+      });
+
+      it('falls back to memory in development when the package is missing, as other backends do', async () => {
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        failToLoadSqlitePackage(
+          Object.assign(new Error("Cannot find module '@frontmcp/storage-sqlite'"), { code: 'MODULE_NOT_FOUND' }),
+        );
+        try {
+          const storage = await createStorage({ type: 'sqlite', sqlite: { path: dbPath } });
+          expect(storage.supportsPubSub()).toBe(true);
+          expect(warn).toHaveBeenCalledWith(expect.stringContaining('@frontmcp/storage-sqlite'));
+          await storage.disconnect();
+        } finally {
+          warn.mockRestore();
+        }
+      });
+
+      it('rethrows a failure other than the package being missing', async () => {
+        failToLoadSqlitePackage(new Error('native module failed to load'));
+        await expect(createStorage({ type: 'sqlite', sqlite: { path: dbPath }, fallback: 'error' })).rejects.toThrow(
+          'native module failed to load',
+        );
       });
     });
   });

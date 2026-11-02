@@ -1,6 +1,6 @@
 // file: libs/sdk/src/skill/flows/search-skills.flow.ts
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
 import { extractToolNames } from '../../common/metadata/skill.metadata';

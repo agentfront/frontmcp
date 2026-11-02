@@ -1,5 +1,5 @@
 import { authOptionsSchema } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import type { AuthInfo } from '@frontmcp/protocol';
 import { isValidMcpUri } from '@frontmcp/utils';
 

@@ -37,7 +37,7 @@ import {
   type ProviderCard,
   type ProviderPkce,
 } from '@frontmcp/auth';
-import { z, type ZodError } from '@frontmcp/lazy-zod';
+import { internalZ as z, type ZodError } from '@frontmcp/lazy-zod';
 import { generateCodeVerifier, randomUUID, sha256Base64url } from '@frontmcp/utils';
 
 import {

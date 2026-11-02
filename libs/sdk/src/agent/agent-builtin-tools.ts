@@ -10,7 +10,7 @@
  * and errors that apply to a client's call apply to the model's too.
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import {
   type GetPromptResult,
   type ListPromptsResult,

@@ -98,11 +98,12 @@ export abstract class ResourceContext<
   private readonly _outputHistory: HistoryEntry<Out>[] = [];
 
   constructor(args: ResourceCtorArgs<Params>) {
-    const { metadata, uri, params, providers, logger } = args;
+    const { metadata, uri, params, providers, logger, signal } = args;
     super({
       providers,
       logger: logger.child(`resource:${metadata.name}`),
       authInfo: args.authInfo,
+      signal,
     });
     this.resourceName = metadata.name;
     // resourceId uses the metadata name as the stable identifier for the resource type

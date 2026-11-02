@@ -28,6 +28,16 @@ export const MCP_ERROR_CODES = {
 
 export type McpErrorCode = (typeof MCP_ERROR_CODES)[keyof typeof MCP_ERROR_CODES];
 
+/**
+ * How the caller can get past a refusal: what to do and, when a tool does it, that tool and its arguments.
+ * Sent as JSON-RPC `data.remedy`, and in a tool-call error result as a `To fix:` line and `_meta.remedy`.
+ */
+export interface ErrorRemedy {
+  say: string;
+  tool?: string;
+  args?: Record<string, unknown>;
+}
+
 /** Error ids issued where random values can't be generated (see `McpError.generateErrorId`). */
 let sequentialErrorIds = 0;
 
@@ -105,6 +115,7 @@ export abstract class McpError extends Error {
       code: string;
       timestamp: string;
       stack?: string;
+      remedy?: ErrorRemedy;
     };
   } {
     const message = isDevelopment ? this.getInternalMessage() : this.getPublicMessage();
@@ -146,19 +157,60 @@ export class PublicMcpError extends McpError {
    */
   readonly wwwAuthenticate?: string;
 
-  constructor(message: string, code = 'PUBLIC_ERROR', statusCode = 400, wwwAuthenticate?: string) {
+  readonly remedy?: ErrorRemedy;
+
+  constructor(
+    message: string,
+    code = 'PUBLIC_ERROR',
+    statusCode = 400,
+    wwwAuthenticate?: string,
+    remedy?: ErrorRemedy,
+  ) {
     super(message);
     this.code = code;
     this.statusCode = statusCode;
     this.wwwAuthenticate = wwwAuthenticate;
+    this.remedy = remedy;
   }
 
   getPublicMessage(): string {
     return this.message;
   }
+
+  override toMcpError(isDevelopment = false): ReturnType<McpError['toMcpError']> {
+    const response = super.toMcpError(isDevelopment);
+    if (!this.remedy || !response._meta) return response;
+    const remedyLine = describeRemedy(this.remedy);
+    return {
+      ...response,
+      content: response.content.map((item) => ({ ...item, text: `${item.text}\n${remedyLine}` })),
+      _meta: { ...response._meta, remedy: this.remedy },
+    };
+  }
 }
 
 brandClass(PublicMcpError, '@frontmcp/sdk:PublicMcpError');
+
+function describeRemedy({ say, tool, args }: ErrorRemedy): string {
+  if (!tool) return `To fix: ${say}`;
+  return `To fix: ${say} (call ${tool}${args ? ` with ${JSON.stringify(args)}` : ''})`;
+}
+
+export interface RefusalOptions {
+  /** Defaults to `'REFUSED'`. */
+  code?: string;
+  /** Defaults to 403. */
+  status?: number;
+  remedy?: ErrorRemedy;
+}
+
+/**
+ * A public refusal with the remedy that gets past it, for `this.fail(...)`:
+ * `this.fail(refused('Reviews are off', { remedy: { say: 'Turn on Reviews in Settings', tool: 'settings_set' } }))`.
+ */
+export function refused(message: string, options: RefusalOptions = {}): PublicMcpError {
+  return new PublicMcpError(message, options.code ?? 'REFUSED', options.status ?? 403, undefined, options.remedy);
+}
 
 /**
  * Internal errors - should not expose details to clients
@@ -275,6 +327,8 @@ export class EntryUnavailableError extends PublicMcpError {
       `${entryType} "${entryName}" is not available in the current environment${constraint}${current}${axesNote}`,
       'ENTRY_UNAVAILABLE',
       403,
+      undefined,
+      availabilityRemedy(entryType, availability, missingAxes),
     );
     this.entryType = entryType;
     this.entryName = entryName;
@@ -312,6 +366,77 @@ export class EntryUnavailableError extends PublicMcpError {
       },
     };
   }
+}
+
+/**
+ * A tool, resource, resource template or prompt whose `enabled` is off: answered to `tools/call`, `resources/read`
+ * and `prompts/get`, with the remedy of its `EnabledSource` (or one naming the entry).
+ */
+export class FeatureOffError extends PublicMcpError {
+  readonly mcpErrorCode = MCP_ERROR_CODES.FORBIDDEN;
+
+  constructor(
+    readonly entryType: string,
+    readonly entryName: string,
+    remedy?: ErrorRemedy,
+  ) {
+    super(
+      `${entryType} "${entryName}" is turned off`,
+      'FEATURE_OFF',
+      403,
+      undefined,
+      remedy ?? { say: `Ask the server's operator to turn on ${entryType.toLowerCase()} "${entryName}".` },
+    );
+  }
+
+  toJsonRpcError() {
+    return {
+      code: this.mcpErrorCode,
+      message: this.getPublicMessage(),
+      data: { code: this.code, status: this.statusCode, entryType: this.entryType, entry: this.entryName },
+    };
+  }
+}
+
+/**
+ * A call to a tool that is not in the session's current tool list, from a session that last listed an older one.
+ * The session is sent `notifications/tools/list_changed` along with it.
+ */
+export class StaleToolListError extends PublicMcpError {
+  constructor(readonly toolName: string) {
+    super(
+      `Tool "${toolName}" is not in the current tool list; this session's tool list is out of date`,
+      'STALE_TOOL_LIST',
+      409,
+      undefined,
+      { say: 'Call tools/list again, then call a tool from the new list.' },
+    );
+  }
+
+  toJsonRpcError() {
+    return {
+      code: MCP_ERROR_CODES.INVALID_PARAMS,
+      message: this.getPublicMessage(),
+      data: { code: this.code, status: this.statusCode, tool: this.toolName },
+    };
+  }
+}
+
+/** A `fileSignal()` called with a path, key or option it cannot use; thrown where the entry is declared. */
+export class InvalidFileSignalError extends InternalMcpError {
+  constructor(details: string) {
+    super(`fileSignal(): ${details}`, 'INVALID_FILE_SIGNAL');
+  }
+}
+
+/** The environment that offers an entry: each missing axis set to a value its `availableWhen` allows, if any does. */
+function availabilityRemedy(entryType: string, availability: unknown, missingAxes: string[]): ErrorRemedy | undefined {
+  const requirements = missingAxes.map((axis) => {
+    const allowed = (availability as Record<string, unknown> | undefined)?.[axis];
+    return Array.isArray(allowed) && allowed.length > 0 ? `${axis} is ${allowed.join(' or ')}` : undefined;
+  });
+  if (requirements.length === 0 || requirements.includes(undefined)) return undefined;
+  return { say: `Run the server where ${requirements.join(' and ')} to use this ${entryType.toLowerCase()}.` };
 }
 
 /**

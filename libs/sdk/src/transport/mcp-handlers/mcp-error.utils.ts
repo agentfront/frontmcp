@@ -6,7 +6,7 @@
  * Errors that already expose a `toJsonRpcError()` method (e.g. TaskNotFoundError)
  * keep its code, message and data, plus their `errorId`. Other public errors keep
  * their message and get a code from their HTTP status; internal errors are masked
- * in production.
+ * in production. A public error's remedy is sent as `data.remedy`.
  *
  * Imports go through `@frontmcp/protocol` so we can later drop the direct
  * dependency on the upstream MCP SDK package without touching call sites.
@@ -18,7 +18,14 @@ import { McpError } from '@frontmcp/protocol';
 import { isProduction } from '@frontmcp/utils';
 
 import { FlowControl } from '../../common';
-import { InternalMcpError, MCP_ERROR_CODES, toMcpError, type McpError as FrontMcpError } from '../../errors';
+import {
+  InternalMcpError,
+  isPublicError,
+  MCP_ERROR_CODES,
+  toMcpError,
+  type ErrorRemedy,
+  type McpError as FrontMcpError,
+} from '../../errors';
 
 type JsonRpcErrorSource = {
   toJsonRpcError: () => { code: number; message: string; data?: Record<string, unknown> };
@@ -55,15 +62,24 @@ export function toReportedError(err: unknown): McpError | FrontMcpError {
   return failure instanceof McpError ? failure : toMcpError(failure);
 }
 
+/** A public error's remedy, as the `data.remedy` its JSON-RPC error carries. */
+function remedyData(error: FrontMcpError): { remedy?: ErrorRemedy } {
+  return isPublicError(error) && error.remedy ? { remedy: error.remedy } : {};
+}
+
 export function toSdkMcpError(err: unknown): McpError {
   const error = toReportedError(err);
   if (error instanceof McpError) return error;
   if (hasJsonRpcError(error)) {
     const jsonRpc = error.toJsonRpcError();
-    return new McpError(jsonRpc.code, jsonRpc.message, { ...jsonRpc.data, errorId: error.errorId });
+    return new McpError(jsonRpc.code, jsonRpc.message, {
+      ...jsonRpc.data,
+      errorId: error.errorId,
+      ...remedyData(error),
+    });
   }
 
-  const data = { errorId: error.errorId, code: error.code };
+  const data = { errorId: error.errorId, code: error.code, ...remedyData(error) };
   if (error.isPublic) {
     return new McpError(jsonRpcCodeForStatus(error.statusCode), error.getPublicMessage(), data);
   }

@@ -15,7 +15,7 @@
  * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http
  */
 import { isAnonymousSubject } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { MCP_20260728_META, type LoggingLevel, type SubscriptionFilter } from '@frontmcp/protocol';
 import { runRequestExclusive } from '@frontmcp/utils';
 
@@ -498,8 +498,12 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       signal: stdio?.signal,
       clientDeclaredRevision: this.state.clientDeclaredRevision !== false,
       // The instructions `initialize` sends: the server's, the channel hint and the skill catalog, for this caller
-      composeInstructions: (caller?: { authInfo?: unknown }) =>
-        composeCallerInstructions(this.scope, { ctx: caller, skillUriHints: true }),
+      composeInstructions: (caller?: { authInfo?: unknown }, clientName?: string) =>
+        composeCallerInstructions(this.scope, {
+          ctx: caller,
+          clientName: clientName ?? this.tryGetContext()?.clientInfo?.name,
+          skillUriHints: true,
+        }),
       notificationSink: sink,
       traceContext: extractTraceContext(meta),
     } satisfies Parameters<typeof dispatch20260728>[0];

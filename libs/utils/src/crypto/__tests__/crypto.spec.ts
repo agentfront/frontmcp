@@ -151,6 +151,18 @@ describe('Crypto Module', () => {
       const browserHash = browserCrypto.sha256Hex(input);
       expect(nodeHash).toBe(browserHash);
     });
+
+    it('should hash in Node without a global Buffer', () => {
+      const globals = globalThis as { Buffer?: typeof Buffer };
+      const nodeBuffer = globals.Buffer;
+      delete globals.Buffer;
+      try {
+        expect(nodeCrypto.sha256Hex('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+        expect(nodeCrypto.sha256(new TextEncoder().encode('abc'))).toHaveLength(32);
+      } finally {
+        globals.Buffer = nodeBuffer;
+      }
+    });
   });
 
   describe('HMAC-SHA256', () => {

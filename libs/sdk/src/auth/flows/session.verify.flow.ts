@@ -40,7 +40,7 @@ import {
   type ProviderVerifyRef,
   type VerifyResult,
 } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { getMachineId, randomUUID, sha256, sha256Hex, timingSafeEqual } from '@frontmcp/utils';
 
 import { detectPlatformFromUserAgent } from '../../notification/notification.service';

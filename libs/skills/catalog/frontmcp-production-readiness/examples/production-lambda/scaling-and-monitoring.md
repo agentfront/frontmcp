@@ -90,7 +90,7 @@ Resources:
 // src/providers/secrets.provider.ts
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-// Providers do NOT have onInit/onDestroy — load lazily on first read.
+// Load lazily on first read: `onBootstrap()` would add the fetch to every cold start.
 // The class is its own DI token: list it in `providers` and resolve it with `this.get(SecretsProvider)`
 @Provider({ name: 'SecretsProvider', scope: ProviderScope.GLOBAL })
 export class SecretsProvider {

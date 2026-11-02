@@ -6,7 +6,7 @@
  * Supports both in-memory (dev/test) and Redis (production) backends.
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { randomUUID, sha256Base64url } from '@frontmcp/utils';
 
 /**

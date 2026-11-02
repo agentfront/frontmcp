@@ -82,7 +82,8 @@ function problemsOf(label: string, metadata: unknown, isEnforced: (key: string) 
  * each entry, the hooks of the flow that gates it (`tools/call` for tools and agents,
  * `resources/read` for resources and templates, `prompts/get` for prompts, `skills:filter` for
  * skills), for the entry's hook owner. So a server-level plugin covers every entry, an app's plugin
- * covers its app, and, with `appliesTo: 'uncovered-apps'`, the apps that have no instance of it.
+ * covers its app, with `appliesTo: 'uncovered-apps'` the apps that have no instance of it, and with
+ * `appliesTo: 'all-apps'` every app.
  * Tools declared inside an `@Agent` run through the agent's own flow, so the agent's plugins cover
  * them, and with `execution.inheritPlugins` also those that cover the agent's app; none do with
  * `execution.useToolFlow: false`. Hidden entries are included.

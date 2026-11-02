@@ -32,6 +32,15 @@ import { runAsFlow } from '../context/running-flow';
 import { InternalMcpError, PublicMcpError, RequestContextNotAvailableError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
 import { entryContextStageOf } from '../hooks/entry-class-hooks';
+import {
+  observersOf,
+  recordHookTrace,
+  runObservedHook,
+  withHookTrace,
+  type HookObserver,
+  type HookTraceEntry,
+} from '../hooks/hook-observers';
+import { hookOwnerName } from '../hooks/hook-order';
 import type HookRegistry from '../hooks/hook.registry';
 import { bindContextHookTargets, staticHooksFor } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
@@ -49,18 +58,6 @@ import {
   type StageMap,
 } from './flow.stages';
 import { collectFlowMetadata } from './flow.utils';
-
-/**
- * Where a request's hook observer lives on its `FrontMcpContext`: `@frontmcp/observability` installs one to
- * record the hooks a request ran (`requestLogs`' `hooks_triggered`) and give each a span (`tracing.hookSpans`).
- */
-const HOOK_OBSERVER_KEY = Symbol.for('frontmcp:hook-observer');
-
-/** Wraps each injected hook a request runs: `run` runs the hook. */
-type HookObserver = (
-  hook: { flowName: string; stage: string; target: unknown; flowContext: unknown },
-  run: () => Promise<void>,
-) => Promise<void>;
 
 type StageOutcome = 'ok' | 'respond' | 'next' | 'handled' | 'fail' | 'abort' | 'unknown_error';
 
@@ -180,6 +177,10 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   /** In dev mode or with DEBUG only: per hook owner, the entry classes (`undefined`: none) whose hook order is logged. */
   private readonly loggedHookOrders =
     isDevelopment() || isDebug() ? new Map<string | undefined, Set<Token | undefined>>() : undefined;
+  /** Whether the run's answer gets `_meta['frontmcp/trace']`: dev mode or `devtools.hookTrace`, on a traced flow. */
+  private readonly tracesHooks: boolean;
+  /** The observers whose throws have been logged, each once. */
+  private readonly failedObservers = new WeakSet<HookObserver>();
 
   constructor(scope: ScopeEntry, record: FlowRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
     super(scope, record);
@@ -190,6 +191,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     this.plan = this.record.metadata.plan;
     this.hooks = scope.hooks;
     this.logger = scope.logger.child('FlowInstance');
+    this.tracesHooks =
+      (this.FlowClass as typeof FlowBase).tracesHooksInAnswer === true &&
+      (scope.metadata.devtools?.hookTrace ?? isDevelopment());
   }
 
   protected async initialize() {
@@ -501,10 +505,24 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     let contextReady = false;
 
-    const runHook: HookRunner = (hook, run) => {
-      const observe = currentContext.get<HookObserver>(HOOK_OBSERVER_KEY);
-      return observe ? observe({ ...hook, flowName: name, flowContext: context }, run) : run();
+    const trace: HookTraceEntry[] | undefined = this.tracesHooks ? [] : undefined;
+    const traceObserver = trace && recordHookTrace(trace);
+    const runHook: HookRunner = ({ stage, target, metadata }, run) => {
+      const installed = observersOf(currentContext);
+      const observers = traceObserver ? [...installed, traceObserver] : installed;
+      if (observers.length === 0) return run();
+      const hook = {
+        flowName: name,
+        stage,
+        type: metadata.type,
+        owner: hookOwnerName(metadata),
+        method: metadata.method,
+        target,
+        flowContext: context,
+      };
+      return runObservedHook(observers, hook, run, (error, observer) => this.logObserverFailure(observer, error));
     };
+    const answer = (output: FlowOutputOf<Name> | undefined) => (trace ? withHookTrace(output, trace) : output);
 
     const materializeAndMerge = async (
       newHooks: Array<Pick<HookEntry, 'metadata'>>,
@@ -769,7 +787,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           throw post.control;
         }
         await runFinalizeStage();
-        return responded;
+        return answer(responded);
       }
       if (pre.outcome === 'unknown_error' || pre.outcome === 'fail') {
         try {
@@ -834,7 +852,17 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // ---------- FINALIZE ----------
     await runFinalizeStage();
 
-    return responded;
+    return answer(responded);
+  }
+
+  /** Logs, once per observer, that a hook observer threw: the hook ran and settled as it would unobserved. */
+  private logObserverFailure(observer: HookObserver, error: unknown): void {
+    if (this.failedObservers.has(observer)) return;
+    this.failedObservers.add(observer);
+    this.logger.warn('Ignored a throw from a hook observer: the hook ran as it would with no observer', {
+      flow: this.name,
+      error: error instanceof Error ? error.message : describeValue(error),
+    });
   }
 
   /** Logs the order the run's hooks resolve to, on the first run for its hook owner and its entry class's hooks. */

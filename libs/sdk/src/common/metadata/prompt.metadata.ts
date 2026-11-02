@@ -1,8 +1,9 @@
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { IconSchema, type Icon } from '@frontmcp/protocol';
 import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils';
 
 import { type RawZodShape } from '../types';
+import { enabledOptionSchema, type EnabledOption } from './enabled.metadata';
 
 declare global {
   /**
@@ -81,6 +82,13 @@ export interface FrontMcpPromptMetadata extends ExtendFrontMcpPromptMetadata {
    * When set, the prompt is only discoverable and usable in matching environments.
    */
   availableWhen?: EntryAvailability;
+
+  /**
+   * Whether the prompt is on: a boolean, or an `EnabledSource` such as `fileSignal(path, key)` that can change
+   * while sessions are live. A prompt that is off is left out of `prompts/list`, and `prompts/get` refuses it with
+   * `FEATURE_OFF` and a remedy. When a source changes, connected clients get `notifications/prompts/list_changed`.
+   */
+  enabled?: EnabledOption;
 }
 
 export const frontMcpPromptMetadataSchema = z
@@ -91,6 +99,7 @@ export const frontMcpPromptMetadataSchema = z
     arguments: z.array(promptArgumentSchema).optional(),
     icons: z.array(IconSchema).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
+    enabled: enabledOptionSchema.optional(),
   } satisfies RawZodShape<FrontMcpPromptMetadata, ExtendFrontMcpPromptMetadata>)
   .passthrough();
 

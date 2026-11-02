@@ -20,6 +20,7 @@ Enable AES-256-GCM at-rest encryption for sensitive session data stored in SQLit
 ```typescript
 // src/main.ts
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({

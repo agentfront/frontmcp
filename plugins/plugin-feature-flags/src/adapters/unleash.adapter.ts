@@ -73,6 +73,14 @@ export class UnleashFeatureFlagAdapter implements FeatureFlagAdapter {
     return results;
   }
 
+  /** Follows the client's `changed` events, which fire when the toggles it fetched change. */
+  subscribe(listener: () => void): () => void {
+    const client = this.client as { on(event: string, fn: () => void): void; off(event: string, fn: () => void): void };
+    if (!client) return () => undefined;
+    client.on('changed', listener);
+    return () => client.off('changed', listener);
+  }
+
   async destroy(): Promise<void> {
     if (this.client) {
       (this.client as any).destroy();

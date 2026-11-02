@@ -6,7 +6,7 @@ import {
   type SessionIdPayload,
   type UserClaim,
 } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 // Re-export non-conflicting session types from @frontmcp/auth
 export { aiPlatformTypeSchema, userClaimSchema, sessionIdPayloadSchema } from '@frontmcp/auth';

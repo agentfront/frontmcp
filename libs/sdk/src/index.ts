@@ -31,7 +31,26 @@ export {
   setServerlessHandlerError,
 } from './front-mcp/serverless-handler';
 export * from './common';
+export {
+  ANSWER_COUNTERS,
+  BUDGET_META_KEY,
+  fitResourceAnswer,
+  fitToolAnswer,
+  type BudgetNote,
+  type BudgetOmission,
+} from './answer';
+export { fileSignal, SURFACE_META_KEY, surfaceHash, type FileSignalOptions, type LiveSurface } from './surface';
 export * from './errors';
+export {
+  addHookObserver,
+  HOOK_OBSERVER_KEY,
+  HOOK_TRACE_META_KEY,
+  type HookObserver,
+  type HookObserverHost,
+  type HookTraceEntry,
+  type HookTraceOutcome,
+  type ObservedHook,
+} from './hooks/hook-observers';
 export * from './elicitation';
 export * from './task';
 export { default as LoggerRegistry } from './logger/logger.registry';
@@ -253,6 +272,11 @@ export type { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/to
 export { default as ToolRegistry } from './tool/tool.registry';
 export { ToolInstance } from './tool/tool.instance';
 export { default as ProviderRegistry } from './provider/provider.registry';
+export { createContainer } from './provider/create-container';
+export type { CreateContainerOptions, FrontMcpContainer } from './provider/create-container';
+export { sqliteStorageProvider, SqliteStorageToken } from './storage/sqlite-storage.provider';
+export type { SqliteStorageProviderOptions } from './storage/sqlite-storage.provider';
+export type { OffloadCallOptions, OffloadFunction, OffloadModuleRef } from './offload/offload.types';
 
 // Job exports - saved, discoverable, triggerable executions
 export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './subsystems';
@@ -549,6 +573,16 @@ export type {
   ConfigResolutionContext,
   ConfigResolver,
 } from './builtin/config';
+
+// CallRecorderPlugin - records client calls as redacted JSONL for replaySession() (built-in)
+export { CallRecorderPlugin } from './builtin/call-recorder';
+export type {
+  CallRecorderPluginOptions,
+  CallRecorderPluginOptionsInput,
+  CallRecord,
+  CallRecordError,
+  RecordedMethod,
+} from './builtin/call-recorder';
 
 // Config resolver functions
 export {

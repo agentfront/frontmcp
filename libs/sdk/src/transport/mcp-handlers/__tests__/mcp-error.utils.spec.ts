@@ -3,9 +3,11 @@ import { McpError } from '@frontmcp/protocol';
 
 import { FlowControl } from '../../../common';
 import {
+  EntryUnavailableError,
   GenericServerError,
   InternalMcpError,
   PublicMcpError,
+  refused,
   ResourceNotFoundError,
   UnauthorizedError,
 } from '../../../errors';
@@ -135,5 +137,32 @@ describe('toSdkMcpError', () => {
     process.env['NODE_ENV'] = 'development';
 
     expect(toSdkMcpError(new Error('connect ECONNREFUSED')).message).toContain('ECONNREFUSED');
+  });
+});
+
+describe('toSdkMcpError remedies', () => {
+  const remedy = { say: 'Turn on Reviews in Settings', tool: 'settings_set' };
+
+  it('sends a public error remedy as data.remedy', () => {
+    const error = toSdkMcpError(refused('Reviews are off', { code: 'FEATURE_OFF', remedy }));
+
+    expect(error.code).toBe(-32003);
+    expect(error.data).toEqual({ errorId: expect.any(String), code: 'FEATURE_OFF', remedy });
+  });
+
+  it('adds the remedy to the data an error declares', () => {
+    const unavailable = new EntryUnavailableError('Prompt', 'brief', { env: ['production'] }, undefined, ['env']);
+
+    const error = toSdkMcpError(unavailable);
+
+    expect(error.data).toMatchObject({
+      entry: 'brief',
+      missingAxes: ['env'],
+      remedy: { say: 'Run the server where env is production to use this prompt.' },
+    });
+  });
+
+  it('sends no remedy key for an error without one', () => {
+    expect(toSdkMcpError(new PublicMcpError('Text is too long')).data).not.toHaveProperty('remedy');
   });
 });

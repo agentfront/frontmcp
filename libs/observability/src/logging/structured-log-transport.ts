@@ -1,9 +1,12 @@
-import { LogTransportInterface, LogRecord, LogLevelName, LogTransport } from '@frontmcp/sdk';
+import { LogLevelName, LogTransport, LogTransportInterface, type LogRecord } from '@frontmcp/sdk';
+import { redactFields } from '@frontmcp/utils';
 
 import type { LogSink } from './log-sink.interface';
-import type { StructuredLogEntry, StructuredLogTransportOptions } from './structured-log.types';
-import { LOG_LEVEL_TO_OTEL_SEVERITY } from './structured-log.types';
-import { redactFields } from './redaction';
+import {
+  LOG_LEVEL_TO_OTEL_SEVERITY,
+  type StructuredLogEntry,
+  type StructuredLogTransportOptions,
+} from './structured-log.types';
 
 /**
  * Context accessor function type.

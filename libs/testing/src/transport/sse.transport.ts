@@ -8,6 +8,8 @@
  * stream, as do notifications and server→client requests (e.g. `elicitation/create`).
  */
 
+import { trimSlashes, trimTrailing } from '@frontmcp/utils';
+
 import type { ClientInfo, ElicitationCreateRequest, ElicitationHandler } from '../client/mcp-test-client.types';
 import type { InterceptorChain } from '../interceptor';
 import { errorMessage, isAbortError, markInterceptedError } from './error-utils';
@@ -471,7 +473,7 @@ export class SseTransport implements McpTransport {
 
   private async requestAnonymousToken(): Promise<void> {
     const url = new URL(this.baseUrl);
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/oauth/token`;
+    url.pathname = `${trimTrailing(url.pathname, '/')}/oauth/token`;
     url.search = '';
     const tokenUrl = url.toString();
     try {
@@ -495,8 +497,8 @@ export class SseTransport implements McpTransport {
   /** `<baseUrl><entryPath>/sse`, built from URL parts so query params on `baseUrl` survive. */
   private sseUrl(): string {
     const url = new URL(this.baseUrl);
-    const entry = (this.entryPath ?? '').replace(/^\/+|\/+$/g, '');
-    const basePath = url.pathname.replace(/\/+$/, '');
+    const entry = trimSlashes(this.entryPath);
+    const basePath = trimTrailing(url.pathname, '/');
     url.pathname = entry ? `${basePath}/${entry}/sse` : `${basePath}/sse`;
     return url.toString();
   }

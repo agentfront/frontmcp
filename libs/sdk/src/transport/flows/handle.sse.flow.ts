@@ -1,4 +1,4 @@
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
 import {
@@ -39,7 +39,19 @@ const stateSessionSchema = z.object({
       protocol: z.enum(['legacy-sse', 'sse', 'streamable-http', 'stateful-http', 'stateless-http']).optional(),
       isPublic: z.boolean().optional(),
       platformType: z
-        .enum(['openai', 'claude', 'gemini', 'cursor', 'continue', 'cody', 'generic-mcp', 'ext-apps', 'unknown'])
+        .enum([
+          'openai',
+          'claude',
+          'claude-code',
+          'codex',
+          'gemini',
+          'cursor',
+          'continue',
+          'cody',
+          'generic-mcp',
+          'ext-apps',
+          'unknown',
+        ])
         .optional(),
     })
     .optional(),

@@ -99,7 +99,7 @@ logging: {
 }
 ```
 
-Redaction is recursive (handles nested objects) and case-insensitive.
+Redaction is recursive (nested objects, and objects in lists, lists of lists included), five levels deep, and case-insensitive. `redactFields()` is exported from `@frontmcp/utils` (and still from `@frontmcp/observability`); `CallRecorderPlugin` uses the same redaction, at any depth.
 
 ## CodeCall Audit Events
 

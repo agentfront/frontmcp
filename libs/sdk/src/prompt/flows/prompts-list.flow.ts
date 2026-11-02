@@ -12,12 +12,13 @@ import {
 
 import 'reflect-metadata';
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { ListPromptsRequestSchema, ListPromptsResultSchema, type Prompt } from '@frontmcp/protocol';
 
 import { isPubliclyListed, publicAccessFor } from '../../auth/public-access.utils';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
+import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
 
 const inputSchema = z.object({
   request: ListPromptsRequestSchema,
@@ -59,7 +60,7 @@ type ResponsePromptItem = Prompt;
 
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findPrompts', 'filterByAuthorities', 'filterByPublicAccess', 'resolveConflicts'],
+  execute: ['findPrompts', 'filterByEnabled', 'filterByAuthorities', 'filterByPublicAccess', 'resolveConflicts'],
   post: ['parsePrompts'],
 } as const satisfies FlowPlan<string>;
 
@@ -208,6 +209,16 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
     }
   }
 
+  /** Leave out the prompts whose `enabled` is off for this request. */
+  @Stage('filterByEnabled')
+  async filterByEnabled() {
+    const { prompts } = this.state.required;
+    this.state.set(
+      'prompts',
+      await enabledItems(prompts, ({ prompt }) => prompt.metadata.enabled, this.tryGetContext(), this.logger),
+    );
+  }
+
   /**
    * Filter prompts by entry-level authorities.
    * Hookable: developers can use Will/Did/Around on 'filterByAuthorities'.
@@ -316,7 +327,7 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
       const extra = prompts.length > 5 ? `, +${prompts.length - 5} more` : '';
       this.logger.verbose(`parsePrompts: prepared ${prompts.length} prompt descriptor(s): ${preview}${extra}`);
 
-      this.respond({ prompts });
+      this.respond({ prompts, _meta: { [SURFACE_META_KEY]: surfaceHash(prompts.map(({ name }) => name)) } });
       this.logger.verbose('parsePrompts: response sent');
       this.logger.verbose('parsePrompts:done');
     } catch (error) {

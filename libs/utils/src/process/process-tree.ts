@@ -1,5 +1,5 @@
 /**
- * Process-tree lifecycle for the long-lived children `frontmcp dev` spawns.
+ * Process-tree lifecycle for long-lived children, such as the ones `frontmcp dev` spawns.
  *
  * The process that actually holds the dev server's port is not always our
  * direct child: `tsx --watch main.ts` forks the server, and the `npx` fallback
@@ -20,13 +20,17 @@
  *   - when the direct child has already exited, the processes it started are
  *     found by their parent PID (`Get-CimInstance Win32_Process`) and ended one
  *     tree at a time, and the tree only counts as gone once none is left.
- * Spawning tools directly with `process.execPath` (see `tool-command.ts`)
+ * Spawning tools directly with `process.execPath` (the CLI's `tool-command.ts`)
  * removes the `cmd.exe` shim from the tree, so a dying parent's kill-on-close
  * job object (libuv puts every non-detached child in one) takes its children
  * with it; the lookup above covers what is left.
+ *
+ * **Node.js only**: `child_process` is loaded on first use, as the file system helpers load `fs`.
  */
 
-import { spawnSync, type ChildProcess, type SpawnOptions } from 'child_process';
+import type { ChildProcess, SpawnOptions } from 'child_process';
+
+import { getChildProcess } from './child-process';
 
 export interface ProcessTreeDeps {
   platform: NodeJS.Platform;
@@ -44,7 +48,7 @@ export interface ProcessTreeDeps {
 
 /** Runs taskkill and reports whether it succeeded — `spawnSync` itself never throws. */
 export function runTaskkill(pid: number, force: boolean): boolean {
-  const result = spawnSync('taskkill', ['/pid', String(pid), '/T', ...(force ? ['/F'] : [])], {
+  const result = getChildProcess().spawnSync('taskkill', ['/pid', String(pid), '/T', ...(force ? ['/F'] : [])], {
     stdio: 'ignore',
     windowsHide: true,
   });
@@ -54,7 +58,7 @@ export function runTaskkill(pid: number, force: boolean): boolean {
 /** Child PIDs of `pid` from `Get-CimInstance Win32_Process`; `[]` when the lookup fails. */
 export function queryChildPids(pid: number): number[] {
   if (!Number.isInteger(pid) || pid <= 0) return [];
-  const result = spawnSync(
+  const result = getChildProcess().spawnSync(
     'powershell.exe',
     [
       '-NoProfile',
@@ -79,16 +83,19 @@ export function parsePidList(output: string): number[] {
     .filter((pid) => pid > 0);
 }
 
-const defaultDeps: ProcessTreeDeps = {
-  platform: process.platform,
-  kill: (pid, signal) => process.kill(pid, signal),
-  taskkill: runTaskkill,
-  childPids: queryChildPids,
-  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-};
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function withDefaults(deps?: Partial<ProcessTreeDeps>): ProcessTreeDeps {
-  return { ...defaultDeps, ...deps };
+  return {
+    platform: process.platform,
+    kill: (pid, signal) => process.kill(pid, signal),
+    taskkill: runTaskkill,
+    childPids: queryChildPids,
+    sleep,
+    ...deps,
+  };
 }
 
 /**
@@ -105,7 +112,8 @@ function hasExited(child: ChildProcess): boolean {
   return child.exitCode !== null || child.signalCode !== null;
 }
 
-function isPidRunning(pid: number, d: ProcessTreeDeps): boolean {
+/** True while `pid` runs; a process this user may not signal (`EPERM`) counts as running. */
+export function isPidRunning(pid: number, d: Pick<ProcessTreeDeps, 'kill'>): boolean {
   try {
     d.kill(pid, 0);
     return true;

@@ -12,11 +12,13 @@ import {
 
 import 'reflect-metadata';
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { ListResourcesRequestSchema, ListResourcesResultSchema, type Resource } from '@frontmcp/protocol';
 
+import { annotationsForClient, callerClientProfile, type ClientNameSources } from '../../answer';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
+import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
 
 const inputSchema = z.object({
   request: ListResourcesRequestSchema,
@@ -46,7 +48,7 @@ type ResponseResourceItem = Resource;
 
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findResources', 'filterByAuthorities', 'resolveConflicts'],
+  execute: ['findResources', 'filterByEnabled', 'filterByAuthorities', 'resolveConflicts'],
   post: ['parseResources'],
 } as const satisfies FlowPlan<string>;
 
@@ -196,6 +198,16 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
     }
   }
 
+  /** Leave out the resources whose `enabled` is off for this request. */
+  @Stage('filterByEnabled')
+  async filterByEnabled() {
+    const { resources } = this.state.required;
+    this.state.set(
+      'resources',
+      await enabledItems(resources, ({ resource }) => resource.metadata.enabled, this.tryGetContext(), this.logger),
+    );
+  }
+
   /**
    * Filter resources by entry-level authorities.
    * Hookable: developers can use Will/Did/Around on 'filterByAuthorities'.
@@ -280,6 +292,13 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
         this.logger.warn(`parseResources: ${withoutUri.length} resource(s) skipped due to missing URI`);
       }
 
+      // A `clients` profile can drop numeric annotations, or give each SKILL.md its priority
+      const annotationsMode = callerClientProfile(this.scope.metadata.clients, {
+        context: this.tryGetContext(),
+        authInfo: (this.input.ctx as { authInfo?: ClientNameSources['authInfo'] } | undefined)?.authInfo,
+        notifications: this.scope.notifications,
+      })?.annotations;
+
       const resources: ResponseResourceItem[] = resolved
         .filter(({ resource }) => resource.uri != null)
         .map(({ finalName, resource }) => {
@@ -298,7 +317,8 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
           // Forward MCP `annotations` (audience, priority, lastModified) when set
           // — used by SEP-2640 skill resources to declare assistant-targeted
           // priority for SKILL.md vs lower priority for sub-files.
-          const annotations = resource.metadata.annotations;
+          const isSkillMd = uri.startsWith('skill://') && uri.endsWith('/SKILL.md');
+          const annotations = annotationsForClient(resource.metadata.annotations, annotationsMode, isSkillMd);
           if (annotations) {
             (item as ResponseResourceItem & { annotations?: typeof annotations }).annotations = annotations;
           }
@@ -337,7 +357,7 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
       const extra = resources.length > 5 ? `, +${resources.length - 5} more` : '';
       this.logger.verbose(`parseResources: prepared ${resources.length} resource descriptor(s): ${preview}${extra}`);
 
-      this.respond({ resources });
+      this.respond({ resources, _meta: { [SURFACE_META_KEY]: surfaceHash(resources.map(({ uri }) => uri)) } });
       this.logger.verbose('parseResources: response sent');
       this.logger.verbose('parseResources:done');
     } catch (error) {

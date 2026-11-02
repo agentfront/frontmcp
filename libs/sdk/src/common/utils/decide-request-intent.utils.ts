@@ -1,4 +1,4 @@
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { type ServerRequest } from '../interfaces';
 import { type LegacyProtocolFlags } from '../types/options/transport/schema';

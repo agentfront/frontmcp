@@ -1,5 +1,5 @@
 import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { MAX_CONCURRENT_TASKS_PER_SESSION } from '../../task/task.types';
 import type { AdapterType, AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
@@ -14,14 +14,18 @@ import {
 } from '../schemas';
 import {
   authOptionsSchema,
+  clientProfilesOptionsSchema,
+  devtoolsOptionsSchema,
   elicitationOptionsSchema,
   extAppsOptionsSchema,
   healthOptionsSchema,
   httpOptionsSchema,
+  lifecycleOptionsSchema,
   loggingOptionsSchema,
   mcpRegistryOptionsSchema,
   metricsOptionsSchema,
   observabilityOptionsSchema,
+  offloadOptionsSchema,
   outboundFetchOptionsSchema,
   paginationOptionsSchema,
   pubsubOptionsSchema,
@@ -32,14 +36,18 @@ import {
   transportOptionsSchema,
   type AuthOptions,
   type AuthOptionsInput,
+  type ClientProfilesOptionsInput,
+  type DevtoolsOptionsInput,
   type ElicitationOptionsInput,
   type ExtAppsOptionsInput,
   type HealthOptionsInput,
   type HttpOptionsInput,
+  type LifecycleOptionsInput,
   type LoggingOptionsInput,
   type McpRegistryOptionsInput,
   type MetricsOptionsInput,
   type ObservabilityOptionsInterface,
+  type OffloadOptionsInput,
   type OutboundFetchOptionsInput,
   type PaginationOptions,
   type PubsubOptionsInput,
@@ -132,6 +140,24 @@ export interface FrontMcpBaseMetadata {
    * Additional providers that are available to all apps.
    */
   providers?: ProviderType[];
+
+  /**
+   * Provider lifecycle settings: how long each provider's `onShutdown()` may run.
+   * @default { shutdownHookTimeoutMs: 3000 }
+   */
+  lifecycle?: LifecycleOptionsInput;
+
+  /**
+   * The worker-thread pool that runs `this.offload()` calls and the reads of `worker: true` resources (Node only).
+   * @default { budgetMs: 30000, idleTimeoutMs: 30000, env: ['NODE_ENV'] }
+   */
+  offload?: OffloadOptionsInput;
+
+  /**
+   * Development aids: `hookTrace` adds the hooks a call ran to its answer's `_meta['frontmcp/trace']`.
+   * @default { hookTrace: true } when NODE_ENV is 'development', {} otherwise
+   */
+  devtools?: DevtoolsOptionsInput;
 
   /**
    * Shared tools that are available to all apps, in every scope (each `splitByApp` or standalone app's too).
@@ -327,9 +353,19 @@ export interface FrontMcpBaseMetadata {
    *   `outputSchema` does not declare — `'strip'` / `'warn'` / `'keep'` / `'fail'`. Default
    *   `'warn'` when `NODE_ENV` is `'development'`, otherwise `'strip'`.
    *
+   * - `budget`: the most bytes a tool answer or a resource read may take as JSON (`maxBytes`),
+   *   and which end of a list to keep (`lists`). Off unless set.
+   *
    * @default { allowNonFinite: false, schemaMode: 'definition' }
    */
   output?: OutputPolicy;
+
+  /**
+   * Per-client answer shaping, keyed by a glob of the `clientInfo.name` a client sends at
+   * `initialize`: whether answers carry text, `structuredContent` or both, the resource annotations
+   * and the skills instructions it receives. See {@link ClientProfilesOptionsInput}.
+   */
+  clients?: ClientProfilesOptionsInput;
 
   /**
    * Jobs and workflows configuration.
@@ -606,6 +642,9 @@ export const frontMcpBaseSchema = z.object({
   __sourceDir: z.string().optional(),
   instructions: z.string().optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
+  lifecycle: lifecycleOptionsSchema.optional(),
+  offload: offloadOptionsSchema.optional(),
+  devtools: devtoolsOptionsSchema.optional(),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
   skills: z.array(annotatedFrontMcpSkillsSchema).optional().default([]),
@@ -640,6 +679,7 @@ export const frontMcpBaseSchema = z.object({
    * numeric output throws `InvalidOutputError`.
    */
   output: outputPolicySchema.optional(),
+  clients: clientProfilesOptionsSchema.optional(),
   jobs: z
     .object({
       enabled: z.boolean(),
@@ -834,6 +874,9 @@ const frontMcpLiteSchema = z.object({
   // Must round-trip through the lite parser so CLI/MCPB builds preserve it.
   instructions: z.string().optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
+  lifecycle: lifecycleOptionsSchema.optional(),
+  offload: offloadOptionsSchema.optional(),
+  devtools: devtoolsOptionsSchema.optional(),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
   skills: z.array(annotatedFrontMcpSkillsSchema).optional().default([]),

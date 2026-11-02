@@ -576,6 +576,80 @@ describe('StdioRevisionRouter', () => {
     });
   });
 
+  describe('whenIdle', () => {
+    it('resolves at once when no request is waiting for its reply', async () => {
+      const { router } = await connect(scope);
+
+      await expect(router.whenIdle(60_000)).resolves.toBeUndefined();
+    });
+
+    it('waits until the session-era server sent its reply', async () => {
+      const { stdio, router } = await connect(scope);
+      const call = unversionedRequest('tools/call', { name: 'add', arguments: { a: 1, b: 1 } });
+      const idle = jest.fn();
+      stdio.receive(call);
+
+      const waiting = router.whenIdle(60_000).then(idle);
+      await settle();
+      expect(idle).not.toHaveBeenCalled();
+      await router.send({ jsonrpc: '2.0', id: call.id, result: {} });
+      await waiting;
+
+      expect(idle).toHaveBeenCalled();
+    });
+
+    it('waits until a 2026-07-28 request is answered', async () => {
+      const { stdio, router } = await connect(scope);
+      const request = modernRequest('tools/call', { name: 'add', arguments: { a: 2, b: 3 } });
+      stdio.receive(request);
+
+      await router.whenIdle(60_000);
+
+      expect(stdio.written.some((message) => isResponse(message) && message.id === request.id)).toBe(true);
+    });
+
+    it('stops waiting for a request the client cancelled', async () => {
+      const { stdio, router } = await connect(scope);
+      const call = unversionedRequest('tools/call', { name: 'add', arguments: { a: 1, b: 1 } });
+      stdio.receive(call);
+      stdio.receive({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: call.id } });
+
+      await expect(router.whenIdle(60_000)).resolves.toBeUndefined();
+    });
+
+    it('does not wait for a subscriptions/listen stream, which only a cancellation ends', async () => {
+      const { stdio, router } = await connect(scope);
+      const listen = modernRequest('subscriptions/listen', { notifications: { resourceSubscriptions: [NOTE_URI] } });
+      stdio.receive(listen);
+      await stdio.waitFor(
+        (message) => 'method' in message && message.method === 'notifications/subscriptions/acknowledged',
+      );
+
+      try {
+        await expect(router.whenIdle(60_000)).resolves.toBeUndefined();
+      } finally {
+        stdio.receive({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: listen.id } });
+      }
+    });
+
+    it('stops waiting when the connection closes', async () => {
+      const { stdio, router } = await connect(scope);
+      stdio.receive(unversionedRequest('tools/call', { name: 'add', arguments: { a: 1, b: 1 } }));
+      const idle = router.whenIdle(60_000);
+
+      await router.close();
+
+      await expect(idle).resolves.toBeUndefined();
+    });
+
+    it('gives up after the timeout', async () => {
+      const { stdio, router } = await connect(scope);
+      stdio.receive(unversionedRequest('tools/call', { name: 'add', arguments: { a: 1, b: 1 } }));
+
+      await expect(router.whenIdle(20)).resolves.toBeUndefined();
+    });
+  });
+
   describe('transport.defaultProtocolVersion', () => {
     let statelessScope: Scope;
 

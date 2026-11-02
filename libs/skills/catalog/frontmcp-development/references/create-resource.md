@@ -41,6 +41,8 @@ The `@Resource` decorator accepts:
 - `description` (optional) -- human-readable description
 - `mimeType` (optional) -- MIME type of the resource content
 - `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
+- `enabled` (optional) -- `true`/`false`, or an `EnabledSource` such as `fileSignal('./features.json', 'reports')` that turns the resource on and off while sessions are live. Off: left out of `resources/list`, and `resources/read` and `resources/subscribe` answer `FEATURE_OFF` (403, `data.status` and the source's `data.remedy`); a change sends `notifications/resources/list_changed`. See [`enabled`](../../create-tool/references/availability.md#enabled--turned-on-and-off-while-sessions-are-live).
+- `worker` (optional, Node only) -- `true` or `{ budgetMs }`: `execute()` runs in a worker thread of the server's offload pool, so a CPU-heavy read does not block other calls. The worker has no DI container, scope or request context (`this.get()`, `this.scope`, `this.auth` throw there), and the output crosses back by structured clone. Past `budgetMs` (default `offload.budgetMs`, 30000) the read is refused with `OffloadBudgetExceededError`. See [`offload-cpu-work`](./offload-cpu-work.md).
 
 ### Class-Based Pattern
 
@@ -107,12 +109,14 @@ Each content item has a `uri`, optional `mimeType`, and either `text` (string da
 - `this.respond(value)` -- end `execute()` with `value` as its result, normalized like a returned one (up to 1.9.2 it failed with "Resource output not found")
 - `this.mark(stage)` -- set active execution stage for debugging/tracking
 - `this.fetch(input, init?)` -- HTTP fetch with context propagation
+- `this.offload(moduleRef, args, options?)` -- run an exported function of another module in a worker thread and resolve with its result (Node only; see [`offload-cpu-work`](./offload-cpu-work.md))
 
 **Properties:**
 
 - `this.metadata` -- resource metadata from the decorator
 - `this.scope` -- the current scope instance
 - `this.context` -- the execution context
+- `this.signal` -- aborts when the client cancels the read (`notifications/cancelled`, a closed connection)
 
 ### Simplified Return Values
 
@@ -151,6 +155,7 @@ The `@ResourceTemplate` decorator accepts:
 - `description` (optional) -- human-readable description
 - `mimeType` (optional) -- MIME type of the resource content
 - `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
+- `enabled` (optional) -- as on `@Resource`: a template that is off is left out of `resources/templates/list`, a read of any URI it matches answers `FEATURE_OFF`, and its completers complete nothing
 
 When a template returns a plain value (an object, a string, or an array of items), each content item's `uri` is based on the URI that was read: `users://42/profile`, or `users://42/profile#0`, `#1` for array items without their own `uri`.
 

@@ -12,7 +12,7 @@
  * 5. Original tool's elicit() returns the pre-resolved result immediately
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import type { CallToolResult } from '@frontmcp/protocol';
 
 import { Tool, ToolContext } from '../common';

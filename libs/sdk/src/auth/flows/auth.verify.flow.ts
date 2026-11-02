@@ -42,7 +42,7 @@ import {
   type TransparentVerifiedPayload,
   type VerifyResult,
 } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 

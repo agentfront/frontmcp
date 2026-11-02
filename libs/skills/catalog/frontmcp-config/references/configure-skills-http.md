@@ -104,6 +104,8 @@ Each `skill://<skillPath>/SKILL.md` resource in `resources/list` carries the ann
 
 **Default change (1.10.16):** up to 1.10.15 every `SKILL.md` resource carried `priority: 0.8`, and nothing turned it off. Some clients (for example a Rust MCP client whose JSON parser keeps arbitrary-precision numbers) fail the whole `resources/list` when an annotation is a number, so the default sends no numeric annotation. Set `resourceAnnotations: 'full'` to send `priority` again; a hook that deleted `priority` from the list is no longer needed.
 
+Both settings are server-wide. To change them for one client, match its `clientInfo.name` with a `clients` profile: `annotations: 'full' | 'no-numbers'` and `instructions: 'full' | 'compact'` win over `resourceAnnotations` and `injectInstructions` for that client (`'no-numbers'` also drops `priority` from your own resources). See `configure-client-profiles`.
+
 An unknown `injectInstructions` or `resourceAnnotations` value stops the server at boot: `@FrontMcp` throws `InvalidDecoratorMetadataError` for `skillsConfig`, naming the field and the accepted values.
 
 ## Skills-Only Connections (`?mode=skills_only`)

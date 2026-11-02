@@ -107,4 +107,10 @@ describe('FeatureFlagDisabledError', () => {
     expect(error.code).toBe('FEATURE_FLAG_DISABLED');
     expect(error.statusCode).toBe(403);
   });
+
+  it('carries a remedy that names the flag', () => {
+    const error = new FeatureFlagDisabledError('Prompt', 'beta_brief', 'beta-prompts');
+
+    expect(error.remedy).toEqual({ say: 'Turn on the feature flag "beta-prompts" to use this prompt.' });
+  });
 });

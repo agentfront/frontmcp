@@ -203,7 +203,7 @@ export default function initializeRequestHandler({
       // without a restart and the skill catalog only names skills the caller may
       // see. Falls back to the static serverOptions.instructions when no composer
       // was provided (legacy callers, tests, or embedders that pre-compose it).
-      const composed = await composeInstructions?.(ctx);
+      const composed = await composeInstructions?.(ctx, request.params.clientInfo?.name);
       const instructions = composed !== undefined ? composed : serverOptions.instructions;
 
       const result: InitializeResult = {

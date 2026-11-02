@@ -43,9 +43,10 @@ function getSpawn(): typeof import('child_process').spawn {
  * detached worker (CLI task runners, dev-server supervisors, etc.). Throws
  * via `assertNode` on non-Node runtimes.
  *
- * **Node.js only.** Exposed because consumers (e.g. `CliTaskRunner` in the
- * SDK) need a single place to reach `spawn` without a top-level
- * `import 'node:child_process'` that V8 isolates would choke on.
+ * **Node.js only.** Exposed so consumers have a single place to reach `spawn`
+ * without a top-level `import 'node:child_process'` that V8 isolates would
+ * choke on. A worker that should be reapable once its owner dies is spawned
+ * with `spawnOwned` instead (as `CliTaskRunner` in the SDK does).
  */
 export function getSpawnFn(): typeof import('child_process').spawn {
   return getSpawn();
@@ -122,6 +123,20 @@ export async function readFileBuffer(p: string): Promise<Buffer> {
 export async function writeFile(p: string, content: string, options?: { mode?: number }): Promise<void> {
   const fsp = getFsp();
   await fsp.writeFile(p, content, { encoding: 'utf8', mode: options?.mode });
+}
+
+/**
+ * Append content to a file, creating the file when it is missing.
+ *
+ * **Node.js only** - throws an error if called in browser.
+ *
+ * @param p - Path to append to
+ * @param content - Content to append
+ * @param options - The mode (permissions) a file created here gets, e.g. 0o600
+ */
+export async function appendFile(p: string, content: string, options?: { mode?: number }): Promise<void> {
+  const fsp = getFsp();
+  await fsp.appendFile(p, content, { encoding: 'utf8', mode: options?.mode });
 }
 
 /**
