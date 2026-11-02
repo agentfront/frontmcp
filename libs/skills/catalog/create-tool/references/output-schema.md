@@ -172,12 +172,12 @@ The default (`'definition'`) preserves the current behavior described above — 
 
 `output.undeclaredKeys` decides what `tools/call` does with keys an answer carries that `outputSchema` does not declare, at any depth (`costCenter`, `lines[].margin`). It cascades **Tool > App > server > default**, like `schemaMode`.
 
-| `undeclaredKeys` | Effect                                                                                                                                                        |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `'strip'`        | Drop them. **Default** outside development.                                                                                                                   |
-| `'warn'`         | Drop them and log a warning naming each key once per tool (up to 100 keys per tool). **Default** when `NODE_ENV=development`.                                 |
-| `'keep'`         | Send them in `structuredContent` and the text content. `tools/list` lists the schema's objects without `additionalProperties: false`, so clients accept them. |
-| `'fail'`         | Refuse the answer with `_meta.code: 'INVALID_OUTPUT'`; the error message in the server log names the keys. Nothing from the answer is sent.                   |
+| `undeclaredKeys` | Effect                                                                                                                                                                                                                                                                                                               |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'strip'`        | Drop them. **Default** outside development.                                                                                                                                                                                                                                                                          |
+| `'warn'`         | Drop them and log a warning naming each key once per tool (up to 100 keys per tool). **Default** when `NODE_ENV=development`.                                                                                                                                                                                        |
+| `'keep'`         | Send them in `structuredContent` and the text content. `tools/list` lists the schema's objects without `additionalProperties: false`, so clients accept them. A key it cannot put back, because the schema turned the object holding it into a primitive (`z.coerce.string()`), refuses the answer as `'fail'` does. |
+| `'fail'`         | Refuse the answer with `_meta.code: 'INVALID_OUTPUT'`; the error message in the server log names the keys. Nothing from the answer is sent.                                                                                                                                                                          |
 
 ```typescript
 // Fail loudly when an upstream API starts returning fields the tool never declared

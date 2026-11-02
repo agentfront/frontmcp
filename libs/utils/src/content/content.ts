@@ -143,12 +143,14 @@ export function findNonFiniteNumber(value: unknown): { path: string; value: numb
  * The key paths `original` holds that `parsed` lacks: what parsing `original` against a schema
  * dropped. Nested keys are dotted (`customer.taxId`), array items share an `[]` segment
  * (`lines[].margin`), keys holding `undefined` are skipped, and the paths come back sorted and
- * unique. The walk follows `parsed`, so it stops wherever the two values differ in shape.
+ * unique. The walk follows `parsed`, so it stops wherever the two values differ in shape, and
+ * wherever `parsed` holds the very same object, which also keeps it out of cycles.
  */
 export function findDroppedKeys(original: unknown, parsed: unknown): string[] {
   const droppedPaths = new Set<string>();
 
   function walk(source: unknown, target: unknown, path: string): void {
+    if (source === target) return;
     if (Array.isArray(source)) {
       source.forEach((item, index) => walk(item, Array.isArray(target) ? target[index] : undefined, `${path}[]`));
       return;

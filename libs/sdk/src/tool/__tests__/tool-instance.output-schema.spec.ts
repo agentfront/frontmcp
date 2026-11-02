@@ -206,6 +206,44 @@ describe('ToolInstance.parseOutput and undeclared keys', () => {
     });
   });
 
+  it("refuses under 'keep' an undeclared key whose object the schema coerced to a primitive", () => {
+    const { tool } = toolWithOutput({ payload: z.coerce.string() });
+
+    const parsed = tool.safeParseOutput({ payload: { secret: 'x' } }, { undeclaredKeys: 'keep' });
+
+    expect(parsed.success).toBe(false);
+    const error = (parsed as { error: Error }).error;
+    expect(error).toBeInstanceOf(InvalidOutputError);
+    expect(error.message).toContain('payload.secret');
+  });
+
+  describe('with a cycle under a z.any() field, which the parse keeps by reference', () => {
+    function cyclicAnswer() {
+      const meta: Record<string, unknown> = { name: 'node' };
+      meta['self'] = meta;
+      return { id: '1', note: 'n/a', meta };
+    }
+
+    it("reports the undeclared key under 'warn' without following the cycle", () => {
+      const { tool } = toolWithOutput({ id: z.string(), meta: z.any() });
+      const onUndeclaredKeys = jest.fn();
+
+      tool.parseOutput(cyclicAnswer(), { undeclaredKeys: 'warn', onUndeclaredKeys });
+
+      expect(onUndeclaredKeys).toHaveBeenCalledWith(['note']);
+    });
+
+    it("keeps the undeclared key under 'keep' without following the cycle", () => {
+      const { tool } = toolWithOutput({ id: z.string(), meta: z.any() });
+
+      expect(tool.parseOutput(cyclicAnswer(), { undeclaredKeys: 'keep' }).structuredContent).toEqual({
+        id: '1',
+        note: 'n/a',
+        meta: { name: 'node' },
+      });
+    });
+  });
+
   describe('with a transform, whose output cannot be compared with the answer key by key', () => {
     const renamingSchema = z.object({ a: z.string() }).transform((value) => ({ renamed: value.a }));
     const droppingSchema = z

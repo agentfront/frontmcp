@@ -168,10 +168,10 @@ export function formatOutputSchemaForDescription(
 
   const target = resolveLocalRef(schema, schema) ?? schema;
   const lines = propertyLinesOf(target);
-  if (lines) return `\n\n**Returns:**\n${lines.join('\n')}`;
-
   const members = target['anyOf'] ?? target['oneOf'];
-  if (!Array.isArray(members)) return `\n\n**Returns:** \`${schemaTypeOf(target)}\``;
+  if (!Array.isArray(members)) {
+    return lines ? `\n\n**Returns:**\n${lines.join('\n')}` : `\n\n**Returns:** \`${schemaTypeOf(target)}\``;
+  }
 
   const memberLines = members.map((member: Record<string, unknown>) => {
     const resolvedMember = resolveLocalRef(member, schema);
@@ -182,7 +182,8 @@ export function formatOutputSchemaForDescription(
   const options = memberLines.map(
     (memberLine, index) => `- Option ${index + 1}:\n${(memberLine ?? []).map((line) => `  ${line}`).join('\n')}`,
   );
-  return `\n\n**Returns** one of:\n${options.join('\n')}`;
+  const heading = lines ? `**Returns:**\n${lines.join('\n')}\n\nand one of:` : '**Returns** one of:';
+  return `\n\n${heading}\n${options.join('\n')}`;
 }
 
 function propertyLinesOf(schema: Record<string, unknown>): string[] | undefined {
