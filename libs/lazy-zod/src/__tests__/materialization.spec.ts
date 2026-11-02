@@ -1,5 +1,6 @@
 import { z as realZ } from 'zod';
 
+import { toJSONSchema } from '../index';
 import { LAZY_TARGET, lazyZ, type LazyZodSchema } from '../lazy-schema';
 import { z } from '../lazy-z';
 import { forceMaterialize, isLazy } from '../utils';
@@ -62,6 +63,13 @@ describe('materialization', () => {
     const real = forceMaterialize(s);
     expect(isLazy(real)).toBe(false);
     expect(real).toBeInstanceOf(realZ.ZodObject);
+  });
+
+  it('forceMaterialize leaves alone the catchall getter that .merge() defines', () => {
+    const merged = z.object({ a: z.string() }).merge(z.object({ b: z.number() }));
+    const eager = realZ.object({ a: realZ.string() }).merge(realZ.object({ b: realZ.number() }));
+    expect(toJSONSchema(merged)).toEqual(realZ.toJSONSchema(eager));
+    expect(toJSONSchema(eager)).toEqual(realZ.toJSONSchema(eager));
   });
 
   it('forceMaterialize is a no-op for non-lazy schemas', () => {
