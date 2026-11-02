@@ -79,6 +79,30 @@ describe('stdio server without its client', () => {
     expect(fs.readFileSync(shutdownMarker, 'utf8')).toBe('shutdown');
   }, 60_000);
 
+  it('answers a request still in flight when stdin closes, then runs the shutdown phase and exits 0', async () => {
+    server = StdioJsonRpcProcess.start('src/stdio-orphan-entrypoint.ts', projectPath, {
+      SHUTDOWN_MARKER: shutdownMarker,
+    });
+    expect((await server.request(initialize)).result).toBeDefined();
+    server.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    server.send({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: { name: 'slow-echo', arguments: { text: 'still owed', ms: 500 } },
+    });
+
+    const exitCode = await Promise.race([
+      server.closeStdin(),
+      new Promise<string>((resolve) => setTimeout(() => resolve('still running'), EXIT_BOUND_MS)),
+    ]);
+    const reply = await server.waitFor((message) => message.id === 2);
+
+    expect(exitCode).toBe(0);
+    expect(reply.result?.['structuredContent']).toEqual({ echo: 'still owed' });
+    expect(fs.readFileSync(shutdownMarker, 'utf8')).toBe('shutdown');
+  }, 60_000);
+
   it('runs the shutdown phase and exits within a bounded time when its parent dies and stdin stays open', async () => {
     const pidFile = path.join(directory, 'pids.json');
     server = StdioJsonRpcProcess.start('src/stdio-orphan-parent.ts', projectPath, {

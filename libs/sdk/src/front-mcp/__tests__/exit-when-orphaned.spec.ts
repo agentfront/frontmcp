@@ -98,10 +98,23 @@ describe('exitOnShutdownSignals({ whenOrphaned })', () => {
       await flush();
 
       expect(shutdown).toHaveBeenCalledTimes(1);
+      expect(shutdown).toHaveBeenCalledWith(reason);
       expect(target.exit).toHaveBeenCalledWith(0);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('shutting down'));
     },
   );
+
+  it('stops watching once a signal starts the shutdown', async () => {
+    const target = new FakeProcess();
+    const shutdown = jest.fn().mockResolvedValue(undefined);
+    exitOnShutdownSignals(shutdown, { target, whenOrphaned: {} });
+
+    target.emit('SIGTERM');
+    await flush();
+
+    expect(shutdown).toHaveBeenCalledWith('signal');
+    expect(mockWatchers[0].close).toHaveBeenCalled();
+  });
 
   it('watches nothing unless asked, and stops watching when removed', () => {
     const target = new FakeProcess();

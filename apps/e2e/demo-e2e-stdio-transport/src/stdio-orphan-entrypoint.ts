@@ -1,8 +1,10 @@
 /**
  * Stdio entrypoint with a provider that keeps a timer running, as a connection pool would, until `onShutdown()`
- * clears it and writes `SHUTDOWN_MARKER`. Only the shutdown phase lets the process end.
+ * clears it and writes `SHUTDOWN_MARKER`. Only the shutdown phase lets the process end. `slow-echo` answers after
+ * `ms` milliseconds, to leave a request in flight.
  */
-import { App, FrontMcpInstance, Provider, type OnReady, type OnShutdown } from '@frontmcp/sdk';
+import { z } from '@frontmcp/lazy-zod';
+import { App, FrontMcpInstance, Provider, Tool, ToolContext, type OnReady, type OnShutdown } from '@frontmcp/sdk';
 import { writeFile } from '@frontmcp/utils';
 
 import { serverConfig } from './config.js';
@@ -22,7 +24,15 @@ class KeepAlive implements OnReady, OnShutdown {
   }
 }
 
-@App({ name: 'Orphan', providers: [KeepAlive] })
+@Tool({ name: 'slow-echo', inputSchema: { text: z.string(), ms: z.number() } })
+class SlowEchoTool extends ToolContext {
+  async execute(input: { text: string; ms: number }) {
+    await new Promise((resolve) => setTimeout(resolve, input.ms));
+    return { echo: input.text };
+  }
+}
+
+@App({ name: 'Orphan', providers: [KeepAlive], tools: [SlowEchoTool] })
 class OrphanApp {}
 
 FrontMcpInstance.runStdio({ ...serverConfig, apps: [...serverConfig.apps, OrphanApp] }).catch((err) => {

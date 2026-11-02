@@ -24,6 +24,8 @@ export interface StdioRevisionRouterOptions {
   principal: string;
 }
 
+/** A stream the client ends by cancelling it, so it never owes a reply. */
+const LISTEN_METHOD = 'subscriptions/listen';
 const EVENT_SEPARATOR = '\n\n';
 const EVENT_DATA_FIELD = 'data:';
 
@@ -54,6 +56,12 @@ function isAsyncIterable(stream: HttpReadableLike): stream is AsyncIterable<Uint
   return Symbol.asyncIterator in stream;
 }
 
+function cancelledRequestId(message: JSONRPCMessage): RequestId | undefined {
+  if (!isJSONRPCNotification(message) || message.method !== 'notifications/cancelled') return undefined;
+  const requestId = message.params?.['requestId'];
+  return typeof requestId === 'string' || typeof requestId === 'number' ? requestId : undefined;
+}
+
 function internalError(id: RequestId): JSONRPCMessage {
   return { jsonrpc: '2.0', id, error: { code: -32603, message: 'Internal error' } };
 }
@@ -65,6 +73,8 @@ export class StdioRevisionRouter implements Transport {
   onmessage?: Transport['onmessage'];
 
   private readonly inFlight = new Map<RequestId, AbortController>();
+  private readonly awaitingReply = new Set<RequestId>();
+  private readonly idleWaiters = new Set<() => void>();
 
   /** `initialize` makes the connection session-era for good; a 2026-07-28 message first makes it stateless. */
   private era: 'unknown' | 'legacy' | 'modern' = 'unknown';
@@ -87,7 +97,12 @@ export class StdioRevisionRouter implements Transport {
   async send(message: JSONRPCMessage, options?: SendOptions): Promise<void> {
     // A stateless client has no session, so it gets no session broadcasts (list changes, channel events).
     if (this.era === 'modern' && isJSONRPCNotification(message)) return;
-    await this.inner.send(message, options);
+    try {
+      await this.inner.send(message, options);
+    } finally {
+      const repliedTo = isJSONRPCResultResponse(message) || isJSONRPCErrorResponse(message) ? message.id : undefined;
+      if (repliedTo !== undefined) this.replied(repliedTo);
+    }
   }
 
   async close(): Promise<void> {
@@ -95,8 +110,33 @@ export class StdioRevisionRouter implements Transport {
     await this.inner.close();
   }
 
+  /** Resolves once every request received so far has had its reply written, or after `timeoutMs`. */
+  whenIdle(timeoutMs: number): Promise<void> {
+    if (this.awaitingReply.size === 0) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = (): void => {
+        clearTimeout(timer);
+        this.idleWaiters.delete(done);
+        resolve();
+      };
+      const timer = setTimeout(done, timeoutMs);
+      this.idleWaiters.add(done);
+    });
+  }
+
+  private replied(id: RequestId): void {
+    this.awaitingReply.delete(id);
+    if (this.awaitingReply.size === 0) for (const done of [...this.idleWaiters]) done();
+  }
+
   private route(message: JSONRPCMessage, extra?: MessageExtra): void {
-    if (this.cancelsModernRequest(message)) return;
+    if (isJSONRPCRequest(message) && message.method !== LISTEN_METHOD) this.awaitingReply.add(message.id);
+    const cancelled = cancelledRequestId(message);
+    if (cancelled !== undefined) {
+      // A cancelled request gets no reply.
+      this.replied(cancelled);
+      if (this.abortsModernRequest(cancelled)) return;
+    }
 
     if ((isJSONRPCRequest(message) || isJSONRPCNotification(message)) && this.servesModern(message)) {
       if (this.era === 'unknown') this.era = 'modern';
@@ -117,12 +157,7 @@ export class StdioRevisionRouter implements Transport {
     });
   }
 
-  private cancelsModernRequest(message: JSONRPCMessage): boolean {
-    if (!isJSONRPCNotification(message) || message.method !== 'notifications/cancelled') return false;
-
-    const requestId = message.params?.['requestId'];
-    if (typeof requestId !== 'string' && typeof requestId !== 'number') return false;
-
+  private abortsModernRequest(requestId: RequestId): boolean {
     const controller = this.inFlight.get(requestId);
     if (!controller) return false;
 
@@ -145,7 +180,10 @@ export class StdioRevisionRouter implements Transport {
         error: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      if (id !== undefined && this.inFlight.get(id) === controller) this.inFlight.delete(id);
+      if (id !== undefined) {
+        if (this.inFlight.get(id) === controller) this.inFlight.delete(id);
+        this.replied(id);
+      }
     }
   }
 
@@ -188,5 +226,6 @@ export class StdioRevisionRouter implements Transport {
   private cancelAll(): void {
     for (const controller of this.inFlight.values()) controller.abort();
     this.inFlight.clear();
+    for (const id of [...this.awaitingReply]) this.replied(id);
   }
 }

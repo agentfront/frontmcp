@@ -135,6 +135,8 @@ The most common transport. The MCP client spawns your server as a child process 
 - **No orphans** — when stdin ends (the client closed it or exited) or the parent
   process exits, the server runs its graceful shutdown (providers' `onShutdown()`
   included) and exits 0, as on `SIGTERM`. The parent is checked once a second.
+  When stdin ends, the requests still in flight are answered first (for up to
+  2 seconds), so `cat requests.jsonl | node dist/main.js` gets every reply.
   `lifecycle: { exitWhenOrphaned: false }` turns this off
 
 ### npx (published npm package)

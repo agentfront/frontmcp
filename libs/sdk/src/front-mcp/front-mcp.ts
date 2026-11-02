@@ -28,7 +28,12 @@ import { computeTaskCapabilities } from '../task/task-scope.helper';
 import type { FetchHandlerCtx, WebFetchHandler } from '../transport/web-fetch-handler';
 import { markDirectOnly } from './direct-only.flag';
 import { createMcpGlobalProviders } from './front-mcp.providers';
-import { DEFAULT_SHUTDOWN_DEADLINE_MS, exitOnShutdownSignals, STDIO_SHUTDOWN_DEADLINE_MS } from './shutdown-signals';
+import {
+  DEFAULT_SHUTDOWN_DEADLINE_MS,
+  exitOnShutdownSignals,
+  STDIO_DRAIN_MS,
+  STDIO_SHUTDOWN_DEADLINE_MS,
+} from './shutdown-signals';
 
 /**
  * A `@FrontMcp`-decorated server class, or the raw config object it wraps.
@@ -714,7 +719,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * One connection serves every revision: `initialize` opens a session, a 2026-07-28 request is served statelessly.
    *
    * When stdin ends or the parent process exits, the server shuts down as on SIGTERM and exits 0, so a client that
-   * dies leaves no orphan behind; `lifecycle: { exitWhenOrphaned: false }` turns that off.
+   * dies leaves no orphan behind; when stdin ends, the requests in flight are answered first (for up to 2 seconds).
+   * `lifecycle: { exitWhenOrphaned: false }` turns that off.
    *
    * Accepts either a `@FrontMcp`-decorated class or the same config object you
    * pass to `@FrontMcp()` (#450).
@@ -945,7 +951,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // The graceful shutdown of the HTTP and socket servers (#712): every scope is shut down, then
       // disposed, so `onDispose` callbacks run under stdio too. It also runs when the client goes away.
       exitOnShutdownSignals(
-        async () => {
+        async (trigger) => {
+          // A client that closed stdin may still read the replies to the requests it sent before.
+          if (trigger === 'stdin-ended') await transport.whenIdle(STDIO_DRAIN_MS);
           scope.notifications.unregisterServer(sessionId);
           try {
             await frontMcp.shutdown();
