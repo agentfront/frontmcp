@@ -7,7 +7,8 @@
 
 import type Database from 'better-sqlite3';
 
-import { openDatabase, withBusyRetry } from './open-database';
+import { withBusyRetry } from './open-database';
+import { acquireConnection, type SqliteConnection } from './sqlite-connection';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 /**
@@ -60,7 +61,8 @@ interface PreparedStatements {
  * ```
  */
 export class SqliteEventStore implements EventStoreInterface {
-  private db: Database.Database;
+  private readonly connection: SqliteConnection;
+  private readonly db: Database.Database;
   private maxEvents: number;
   private ttlMs: number;
   private counters = new Map<string, number>();
@@ -68,11 +70,11 @@ export class SqliteEventStore implements EventStoreInterface {
   private stmts: PreparedStatements | null = null;
 
   constructor(options: SqliteEventStoreOptions) {
-    // Resolve better-sqlite3 (ESM-safe) and ensure the parent dir exists.
-    this.db = openDatabase(options.path, 'SqliteEventStore', {
+    this.connection = acquireConnection(options.path, 'SqliteEventStore', {
       busyTimeoutMs: options.busyTimeoutMs,
       walMode: options.walMode !== false,
     });
+    this.db = this.connection.db;
 
     this.maxEvents = options.maxEvents ?? 10000;
     this.ttlMs = options.ttlMs ?? 300000;
@@ -211,14 +213,14 @@ export class SqliteEventStore implements EventStoreInterface {
   }
 
   /**
-   * Close the database connection and stop cleanup timer.
+   * Stop the cleanup timer and release the connection, which closes once no other store on the file uses it.
    */
   close(): void {
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
     }
-    this.db.close();
+    this.connection.release();
   }
 
   /**

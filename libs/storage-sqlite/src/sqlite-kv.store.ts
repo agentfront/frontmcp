@@ -8,7 +8,8 @@
 import type Database from 'better-sqlite3';
 
 import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
-import { openDatabase, withBusyRetry } from './open-database';
+import { withBusyRetry } from './open-database';
+import { acquireConnection, type SqliteConnection } from './sqlite-connection';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 /** Bundled prepared statements - all-or-nothing initialization. */
@@ -37,17 +38,18 @@ interface KvPreparedStatements {
  * ```
  */
 export class SqliteKvStore {
-  private db: Database.Database;
+  private readonly connection: SqliteConnection;
+  private readonly db: Database.Database;
   private encryptionKey: Uint8Array | null = null;
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private stmts: KvPreparedStatements | null = null;
 
   constructor(options: SqliteStorageOptions) {
-    // Resolve better-sqlite3 (ESM-safe) and ensure the parent dir exists.
-    this.db = openDatabase(options.path, 'SqliteKvStore', {
+    this.connection = acquireConnection(options.path, 'SqliteKvStore', {
       busyTimeoutMs: options.busyTimeoutMs,
       walMode: options.walMode !== false,
     });
+    this.db = this.connection.db;
 
     // Derive encryption key if secret provided
     if (options.encryption?.secret) {
@@ -93,7 +95,7 @@ export class SqliteKvStore {
       ),
       cleanup: this.db.prepare('DELETE FROM kv WHERE expires_at IS NOT NULL AND expires_at <= ?'),
       ttl: this.db.prepare('SELECT expires_at FROM kv WHERE key = ?'),
-      expire: this.db.prepare('UPDATE kv SET expires_at = ? WHERE key = ?'),
+      expire: this.db.prepare('UPDATE kv SET expires_at = ? WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)'),
     };
   }
 
@@ -208,11 +210,11 @@ export class SqliteKvStore {
    *
    * @param key - The key to set expiry on
    * @param ttlMs - Time to live in milliseconds
-   * @returns true if key exists and TTL was set, false if key doesn't exist
+   * @returns true if key exists and TTL was set, false if key doesn't exist or has expired
    */
   expire(key: string, ttlMs: number): boolean {
-    const expiresAt = Date.now() + ttlMs;
-    const result = this.prepared().expire.run(expiresAt, key);
+    const now = Date.now();
+    const result = this.prepared().expire.run(now + ttlMs, key, now);
     return result.changes > 0;
   }
 
@@ -246,20 +248,26 @@ export class SqliteKvStore {
   }
 
   /**
-   * Close the database connection and stop cleanup timer.
+   * Stop the cleanup timer and release the connection, which closes once no other store on the file uses it.
    */
   close(): void {
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
     }
-    this.db.close();
+    this.connection.release();
   }
 
   /**
    * Get the underlying database instance (for advanced use cases / testing).
+   * Other stores on the same file share it, so do not close it directly.
    */
   getDatabase(): Database.Database {
     return this.db;
+  }
+
+  /** The connection this store shares with the other stores on its file, with its queue of operations. */
+  getConnection(): SqliteConnection {
+    return this.connection;
   }
 }

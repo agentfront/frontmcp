@@ -26,6 +26,12 @@ module.exports = {
     ],
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
+  moduleNameMapper: {
+    ...require('../../jest.imports-mapper'),
+    // The sqlite storage type loads it at runtime; it resolves back to this source tree, not a build.
+    '^@frontmcp/storage-sqlite$': '<rootDir>/../storage-sqlite/src/index.ts',
+    '^@frontmcp/utils$': '<rootDir>/src/index.ts',
+  },
   coverageDirectory: '../../coverage/unit/utils',
   collectCoverageFrom: [
     'src/**/*.ts',

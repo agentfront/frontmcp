@@ -547,6 +547,23 @@ export interface CloudflareKvAdapterOptions {
   keyPrefix?: string;
 }
 
+/**
+ * SQLite adapter options (when type='sqlite'); the adapter comes from `@frontmcp/storage-sqlite`.
+ * Processes on one machine that open the same file share its keys, counters and locks.
+ */
+export interface SqliteAdapterOptions {
+  /** Path to the database file; its directory is created if missing. */
+  path: string;
+  /** Write-ahead log: readers don't wait for the writer. Needs a local filesystem. @default true */
+  walMode?: boolean;
+  /** How long an operation waits for another process's lock before failing with `SQLITE_BUSY`. @default 5000 */
+  busyTimeoutMs?: number;
+  /** How often expired keys are purged, in milliseconds; 0 turns the sweep off. @default 60000 */
+  ttlCleanupIntervalMs?: number;
+  /** Encrypt values at rest with AES-256-GCM, from a key derived with HKDF-SHA256. */
+  encryption?: { secret: string };
+}
+
 // ============================================
 // Factory Types
 // ============================================
@@ -554,7 +571,7 @@ export interface CloudflareKvAdapterOptions {
 /**
  * Storage backend type.
  */
-export type StorageType = 'memory' | 'redis' | 'vercel-kv' | 'upstash' | 'cloudflare-kv' | 'auto';
+export type StorageType = 'memory' | 'redis' | 'vercel-kv' | 'upstash' | 'cloudflare-kv' | 'sqlite' | 'auto';
 
 /**
  * Configuration for createStorage factory.
@@ -566,6 +583,7 @@ export interface StorageConfig {
    * - 'redis': Redis (production)
    * - 'vercel-kv': Vercel KV (edge deployment, no pub/sub)
    * - 'upstash': Upstash Redis (edge deployment, with pub/sub)
+   * - 'sqlite': A local SQLite file, shared by the processes on one machine (no pub/sub)
    * - 'auto': Auto-detect based on environment variables
    * @default 'auto'
    */
@@ -595,6 +613,11 @@ export interface StorageConfig {
    * Upstash adapter options (when type='upstash').
    */
   upstash?: UpstashAdapterOptions;
+
+  /**
+   * SQLite adapter options (when type='sqlite').
+   */
+  sqlite?: SqliteAdapterOptions;
 
   /**
    * Root namespace prefix for all keys.

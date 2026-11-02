@@ -31,7 +31,8 @@ import type Database from 'better-sqlite3';
 import { getHostname } from '@frontmcp/utils';
 
 import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
-import { openDatabase, withBusyRetry } from './open-database';
+import { withBusyRetry } from './open-database';
+import { acquireConnection, type SqliteConnection } from './sqlite-connection';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 // ───────────────────────────────────────────────────────────────
@@ -158,6 +159,7 @@ interface Prepared {
 }
 
 export class SqliteTaskStore implements TaskStoreInterface {
+  private readonly connection: SqliteConnection;
   private readonly db: Database.Database;
   private readonly emitter = new EventEmitter();
   private readonly logger?: SqliteTaskLogger;
@@ -173,11 +175,11 @@ export class SqliteTaskStore implements TaskStoreInterface {
   private stmts: Prepared | null = null;
 
   constructor(options: SqliteTaskStoreOptions) {
-    // Resolve better-sqlite3 (ESM-safe) and ensure the parent dir exists.
-    this.db = openDatabase(options.path, 'SqliteTaskStore', {
+    this.connection = acquireConnection(options.path, 'SqliteTaskStore', {
       busyTimeoutMs: options.busyTimeoutMs,
       walMode: options.walMode !== false,
     });
+    this.db = this.connection.db;
 
     this.logger = options.logger;
     this.liveness = options.livenessProbe ?? defaultLivenessProbe;
@@ -379,7 +381,7 @@ export class SqliteTaskStore implements TaskStoreInterface {
     if (this.cleanupTimer) clearInterval(this.cleanupTimer);
     this.emitter.removeAllListeners();
     try {
-      this.db.close();
+      this.connection.release();
     } catch {
       /* ignore */
     }

@@ -11,14 +11,16 @@
  * is implemented here.
  *
  * Notes:
- * - All operations are backed by a single local SQLite file; "async" here just
- *   wraps synchronous better-sqlite3 calls in resolved promises.
- * - Pub/sub is NOT supported (single-process local file). Callers needing
- *   pub/sub must use Redis/Upstash.
+ * - Every operation runs on the connection this process shares for the file, in call
+ *   order. One that reads and then writes (conditional set, incr, compare-and-act) runs
+ *   in a single `BEGIN IMMEDIATE` transaction, so it is atomic across processes too.
+ * - Waiting for another process's lock does not block the event loop (see `SqliteConnection`).
+ * - Pub/sub is NOT supported. Callers needing pub/sub must use Redis/Upstash.
  */
 
-import { BaseStorageAdapter, type SetOptions } from '@frontmcp/utils';
+import { BaseStorageAdapter, StorageOperationError, validateTTL, type SetOptions } from '@frontmcp/utils';
 
+import { type SqliteConnection } from './sqlite-connection';
 import { SqliteKvStore } from './sqlite-kv.store';
 import { type SqliteStorageOptions } from './sqlite.options';
 
@@ -26,6 +28,8 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
   protected readonly backendName = 'sqlite';
 
   private readonly kv: SqliteKvStore;
+
+  private readonly connection: SqliteConnection;
 
   /**
    * Whether this adapter created (and therefore owns the lifecycle of) `kv`.
@@ -39,6 +43,7 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
     // Accept either raw options (we own the store) or an existing store.
     this.ownsKvStore = !(options instanceof SqliteKvStore);
     this.kv = options instanceof SqliteKvStore ? options : new SqliteKvStore(options);
+    this.connection = this.kv.getConnection();
   }
 
   // ============================================
@@ -78,33 +83,46 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
 
   async get(key: string): Promise<string | null> {
     this.ensureConnected();
-    return this.kv.get(key);
+    return this.connection.read(() => this.kv.get(key));
   }
 
   protected async doSet(key: string, value: string, options?: SetOptions): Promise<void> {
-    // Honor conditional flags (NX/XX). BaseStorageAdapter.set() already
-    // validated mutual exclusivity.
-    if (options?.ifNotExists && this.kv.has(key)) {
-      return;
-    }
-    if (options?.ifExists && !this.kv.has(key)) {
-      return;
-    }
-
+    // BaseStorageAdapter.set() already validated the TTL and that NX and XX are exclusive.
     const ttlMs = options?.ttlSeconds !== undefined ? options.ttlSeconds * 1000 : undefined;
-    this.kv.set(key, value, ttlMs);
+    return this.connection.write(() => {
+      if (options?.ifNotExists && this.kv.has(key)) return;
+      if (options?.ifExists && !this.kv.has(key)) return;
+      this.kv.set(key, value, ttlMs);
+    });
   }
 
   async delete(key: string): Promise<boolean> {
     this.ensureConnected();
-    const existed = this.kv.has(key);
-    this.kv.del(key);
-    return existed;
+    return this.connection.write(() => {
+      const existed = this.kv.has(key);
+      this.kv.del(key);
+      return existed;
+    });
+  }
+
+  override async deleteIfEquals(key: string, expectedValue: string): Promise<boolean> {
+    this.ensureConnected();
+    return this.connection.write(() => {
+      if (this.kv.get(key) !== expectedValue) return false;
+      this.kv.del(key);
+      return true;
+    });
+  }
+
+  override async expireIfEquals(key: string, expectedValue: string, ttlSeconds: number): Promise<boolean> {
+    this.ensureConnected();
+    validateTTL(ttlSeconds);
+    return this.connection.write(() => this.kv.get(key) === expectedValue && this.kv.expire(key, ttlSeconds * 1000));
   }
 
   async exists(key: string): Promise<boolean> {
     this.ensureConnected();
-    return this.kv.has(key);
+    return this.connection.read(() => this.kv.has(key));
   }
 
   // ============================================
@@ -113,13 +131,14 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
 
   async expire(key: string, ttlSeconds: number): Promise<boolean> {
     this.ensureConnected();
-    return this.kv.expire(key, ttlSeconds * 1000);
+    validateTTL(ttlSeconds);
+    return this.connection.write(() => this.kv.expire(key, ttlSeconds * 1000));
   }
 
   async ttl(key: string): Promise<number | null> {
     this.ensureConnected();
     // SqliteKvStore.ttl returns ms (-1 = no expiry, -2 = missing).
-    const ms = this.kv.ttl(key);
+    const ms = await this.connection.read(() => this.kv.ttl(key));
     if (ms === -2) return null; // key does not exist
     if (ms === -1) return -1; // no expiry
     return Math.max(0, Math.ceil(ms / 1000));
@@ -135,17 +154,17 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
     // Existing LIKE metacharacters are escaped as `\%`/`\_`; SqliteKvStore's
     // LIKE query declares `ESCAPE '\'` so these are matched literally.
     if (pattern === '*' || pattern === undefined) {
-      return this.kv.keys();
+      return this.connection.read(() => this.kv.keys());
     }
     const like = pattern
       .replace(/[%_]/g, (c) => `\\${c}`)
       .replace(/\*/g, '%')
       .replace(/\?/g, '_');
-    return this.kv.keys(like);
+    return this.connection.read(() => this.kv.keys(like));
   }
 
   // ============================================
-  // Atomic Operations (read-modify-write; single-process local file)
+  // Atomic Operations
   // ============================================
 
   async incr(key: string): Promise<number> {
@@ -158,20 +177,16 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
 
   async incrBy(key: string, amount: number): Promise<number> {
     this.ensureConnected();
-    const current = this.kv.get(key);
-    let base = 0;
-    if (current !== null) {
-      const parsed = Number.parseInt(current, 10);
-      if (Number.isNaN(parsed)) {
-        throw new Error(`SqliteStorageAdapter: value at "${key}" is not an integer`);
-      }
-      base = parsed;
-    }
-    const next = base + amount;
-    // Preserve any existing TTL.
-    const remainingMs = this.kv.ttl(key);
-    this.kv.set(key, String(next), remainingMs > 0 ? remainingMs : undefined);
-    return next;
+    return this.connection.write(() => {
+      const current = this.kv.get(key);
+      const base = current === null ? 0 : Number.parseInt(current, 10);
+      if (Number.isNaN(base)) throw new StorageOperationError('incrBy', key, 'Value is not an integer');
+      const next = base + amount;
+      // Preserve any existing TTL.
+      const remainingMs = this.kv.ttl(key);
+      this.kv.set(key, String(next), remainingMs > 0 ? remainingMs : undefined);
+      return next;
+    });
   }
 
   /**

@@ -7,7 +7,8 @@
 
 export { SqliteKvStore } from './sqlite-kv.store';
 export { SqliteStorageAdapter } from './sqlite-storage.adapter';
-export { openDatabase, withBusyRetry } from './open-database';
+export { openDatabase, withBusyRetry, isBusyError } from './open-database';
+export { acquireConnection, SqliteConnection } from './sqlite-connection';
 export type { OpenDatabaseOptions, BusyRetryOptions } from './open-database';
 export { loadBetterSqlite3 } from './better-sqlite3-loader';
 export { SqliteSessionStore } from './sqlite-session.store';

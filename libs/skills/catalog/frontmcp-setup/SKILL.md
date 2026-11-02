@@ -58,7 +58,7 @@ Entry point for project setup and scaffolding. This skill helps you find the rig
 | Organize a standalone (non-Nx) project        | `references/project-structure-standalone.md` | File layout, naming conventions (`<name>.<type>.ts`), folder hierarchy                         |
 | Organize an Nx monorepo                       | `references/project-structure-nx.md`         | apps/, libs/, servers/ layout, generators, dependency rules                                    |
 | Set up Redis for production storage           | `references/setup-redis.md`                  | Docker Redis, Vercel KV, pub/sub for distributed subscriptions (single-server uses in-memory)  |
-| Set up SQLite for local development           | `references/setup-sqlite.md`                 | WAL mode, migration helpers, encryption                                                        |
+| Set up SQLite for local development           | `references/setup-sqlite.md`                 | WAL mode, several processes on one file, app storage, encryption                               |
 | Compose multiple apps into one server         | `references/multi-app-composition.md`        | `@FrontMcp` with multiple `@App` classes, cross-app providers                                  |
 | Use Nx build, test, and CI commands           | `references/nx-workflow.md`                  | `nx build`, `nx test`, `nx run-many`, caching, affected commands                               |
 | Browse, install, and manage skills            | `references/frontmcp-skills-usage.md`        | CLI commands (search, list, install, read, export, publish), bundles, categories, bulk install |
@@ -200,6 +200,7 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 | [`basic-sqlite-setup`](./examples/setup-sqlite/basic-sqlite-setup.md)             | Basic        | Configure a FrontMCP server with SQLite for local session storage with WAL mode enabled.          |
 | [`encrypted-sqlite-storage`](./examples/setup-sqlite/encrypted-sqlite-storage.md) | Intermediate | Enable AES-256-GCM at-rest encryption for sensitive session data stored in SQLite.                |
 | [`unix-socket-daemon`](./examples/setup-sqlite/unix-socket-daemon.md)             | Advanced     | Configure a FrontMCP daemon that listens on a unix socket and uses SQLite for persistent storage. |
+| [`multi-process-storage`](./examples/setup-sqlite/multi-process-storage.md)       | Intermediate | Share counters and a lock between several local processes through one SQLite file.                |
 
 ## Accessing This Skill
 

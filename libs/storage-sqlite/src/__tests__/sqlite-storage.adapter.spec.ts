@@ -2,6 +2,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import type Database from 'better-sqlite3';
+
+import { StorageOperationError, StorageTTLError } from '@frontmcp/utils';
+
+import { loadBetterSqlite3 } from '../better-sqlite3-loader';
 import { SqliteKvStore } from '../sqlite-kv.store';
 import { SqliteStorageAdapter } from '../sqlite-storage.adapter';
 
@@ -32,6 +37,15 @@ describe('SqliteStorageAdapter', () => {
     await adapter.disconnect();
     cleanup(dbPath);
   });
+
+  /** A TTL that ran out between two sweeps: the row is still there, past its expiry. */
+  function expireNow(key: string): void {
+    adapter
+      .getKvStore()
+      .getDatabase()
+      .prepare('UPDATE kv SET expires_at = ? WHERE key = ?')
+      .run(Date.now() - 1, key);
+  }
 
   describe('keys() LIKE escaping', () => {
     // The adapter escapes LIKE metacharacters as `\%` / `\_`; this only works
@@ -192,6 +206,123 @@ describe('SqliteStorageAdapter', () => {
       expect(await adapter.exists('k')).toBe(false);
       expect(await adapter.ttl('k')).toBeNull();
     });
+
+    it('expire() returns false for a key whose TTL ran out', async () => {
+      await adapter.set('k', 'v', { ttlSeconds: 1 });
+      expireNow('k');
+      expect(await adapter.expire('k', 50)).toBe(false);
+    });
+
+    it('expire() rejects a TTL that is not a positive integer', async () => {
+      await adapter.set('k', 'v');
+      await expect(adapter.expire('k', 0)).rejects.toBeInstanceOf(StorageTTLError);
+      await expect(adapter.expire('k', 1.5)).rejects.toBeInstanceOf(StorageTTLError);
+    });
+
+    it('ifNotExists sets a key whose TTL ran out', async () => {
+      await adapter.set('k', 'old', { ttlSeconds: 1 });
+      expireNow('k');
+      await adapter.set('k', 'new', { ifNotExists: true });
+      expect(await adapter.get('k')).toBe('new');
+    });
+  });
+
+  describe('compare-and-act', () => {
+    it('deleteIfEquals deletes the key only while it holds the value', async () => {
+      await adapter.set('lease', 'mine');
+      expect(await adapter.deleteIfEquals('lease', 'theirs')).toBe(false);
+      expect(await adapter.get('lease')).toBe('mine');
+      expect(await adapter.deleteIfEquals('lease', 'mine')).toBe(true);
+      expect(await adapter.exists('lease')).toBe(false);
+    });
+
+    it('deleteIfEquals returns false for a missing or expired key', async () => {
+      expect(await adapter.deleteIfEquals('missing', 'x')).toBe(false);
+      await adapter.set('lease', 'mine', { ttlSeconds: 1 });
+      expireNow('lease');
+      expect(await adapter.deleteIfEquals('lease', 'mine')).toBe(false);
+    });
+
+    it('expireIfEquals sets the TTL only while the key holds the value', async () => {
+      await adapter.set('lease', 'mine', { ttlSeconds: 10 });
+      expect(await adapter.expireIfEquals('lease', 'theirs', 100)).toBe(false);
+      expect(await adapter.ttl('lease')).toBeLessThanOrEqual(10);
+      expect(await adapter.expireIfEquals('lease', 'mine', 100)).toBe(true);
+      expect(await adapter.ttl('lease')).toBeGreaterThan(10);
+    });
+
+    it('expireIfEquals returns false for a missing or expired key', async () => {
+      expect(await adapter.expireIfEquals('missing', 'x', 10)).toBe(false);
+      await adapter.set('lease', 'mine', { ttlSeconds: 1 });
+      expireNow('lease');
+      expect(await adapter.expireIfEquals('lease', 'mine', 10)).toBe(false);
+    });
+
+    it('expireIfEquals rejects a TTL that is not a positive integer', async () => {
+      await adapter.set('lease', 'mine');
+      await expect(adapter.expireIfEquals('lease', 'mine', -1)).rejects.toBeInstanceOf(StorageTTLError);
+    });
+
+    it('compares against the decrypted value when values are encrypted', async () => {
+      const encryptedPath = tmpDbPath();
+      const encrypted = new SqliteStorageAdapter({
+        path: encryptedPath,
+        ttlCleanupIntervalMs: 0,
+        encryption: { secret: 'a-secret-that-is-long-enough-for-tests' },
+      });
+      await encrypted.connect();
+      try {
+        await encrypted.set('lease', 'mine', { ttlSeconds: 10 });
+        expect(await encrypted.expireIfEquals('lease', 'mine', 100)).toBe(true);
+        expect(await encrypted.deleteIfEquals('lease', 'mine')).toBe(true);
+        await encrypted.set('n', '41');
+        expect(await encrypted.incr('n')).toBe(42);
+      } finally {
+        await encrypted.disconnect();
+        cleanup(encryptedPath);
+      }
+    });
+  });
+
+  describe('atomic across connections', () => {
+    let foreign: Database.Database;
+
+    beforeEach(() => {
+      foreign = new (loadBetterSqlite3())(dbPath);
+      foreign.pragma('busy_timeout = 0');
+    });
+
+    afterEach(() => foreign.close());
+
+    /** What another process sees when it writes the file between this operation's read and its write. */
+    function foreignWriteDuringRead(read: 'get' | 'has'): { outcome?: string } {
+      const seen: { outcome?: string } = {};
+      const kv = adapter.getKvStore();
+      const original = kv[read].bind(kv);
+      jest.spyOn(kv, read).mockImplementationOnce((key: string) => {
+        try {
+          foreign.prepare("INSERT OR REPLACE INTO kv (key, value) VALUES ('foreign', 'x')").run();
+          seen.outcome = 'wrote';
+        } catch (error) {
+          seen.outcome = (error as { code?: string }).code;
+        }
+        return original(key) as never;
+      });
+      return seen;
+    }
+
+    it.each([
+      ['incr', 'get', () => adapter.incr('n')],
+      ['set with ifNotExists', 'has', () => adapter.set('k', 'v', { ifNotExists: true })],
+      ['set with ifExists', 'has', () => adapter.set('k', 'v', { ifExists: true })],
+      ['delete', 'has', () => adapter.delete('k')],
+      ['deleteIfEquals', 'get', () => adapter.deleteIfEquals('k', 'v')],
+      ['expireIfEquals', 'get', () => adapter.expireIfEquals('k', 'v', 10)],
+    ] as const)('%s holds the write lock from its read to its write', async (_name, read, operation) => {
+      const seen = foreignWriteDuringRead(read);
+      await operation();
+      expect(seen.outcome).toBe('SQLITE_BUSY');
+    });
   });
 
   describe('atomic operations', () => {
@@ -213,6 +344,14 @@ describe('SqliteStorageAdapter', () => {
     it('throws when the existing value is not an integer', async () => {
       await adapter.set('counter', 'not-a-number');
       await expect(adapter.incr('counter')).rejects.toThrow(/is not an integer/);
+      await expect(adapter.incr('counter')).rejects.toBeInstanceOf(StorageOperationError);
+    });
+
+    it('starts an expired counter over, without its old TTL', async () => {
+      await adapter.set('counter', '7', { ttlSeconds: 1 });
+      expireNow('counter');
+      expect(await adapter.incr('counter')).toBe(1);
+      expect(await adapter.ttl('counter')).toBe(-1);
     });
 
     it('preserves an existing TTL across incr', async () => {

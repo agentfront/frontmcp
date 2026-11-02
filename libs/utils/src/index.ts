@@ -336,6 +336,7 @@ export type {
   RedisUrlFillInConfig,
   VercelKvAdapterOptions,
   UpstashAdapterOptions,
+  SqliteAdapterOptions,
   StorageType,
   StorageConfig,
   RedisErrorListenerOptions,
