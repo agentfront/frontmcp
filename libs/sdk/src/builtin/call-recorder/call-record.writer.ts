@@ -1,26 +1,37 @@
 import { appendFile, dirname, ensureDir, fileExists, stat } from '@frontmcp/utils';
 
 import type { FrontMcpLogger, OnShutdown } from '../../common';
-import type { CallRecord } from './call-record';
 
 const encoder = new TextEncoder();
 
 /** Appends call records to the recording in order, off the call's path: a call never waits for the file. */
 export class CallRecordWriter implements OnShutdown {
   private pending: Promise<void> = Promise.resolve();
-  private bytes: number | undefined;
+  private pendingBytes = 0;
   private full = false;
   private failureLogged = false;
+  private backlogLogged = false;
 
   constructor(
     private readonly options: { path: string; maxBytes: number },
     private readonly logger: FrontMcpLogger,
   ) {}
 
-  write(record: CallRecord): void {
+  /** Queues one JSONL line; while more than `maxBytes` wait to be written, lines are dropped. */
+  write(line: string): void {
     if (this.full) return;
-    const line = `${JSON.stringify(record)}\n`;
-    this.pending = this.pending.then(() => this.append(line)).catch((error: unknown) => this.reportFailure(error));
+    const bytes = encoder.encode(line).byteLength;
+    if (this.pendingBytes > 0 && this.pendingBytes + bytes > this.options.maxBytes) {
+      this.reportBacklog();
+      return;
+    }
+    this.pendingBytes += bytes;
+    this.pending = this.pending
+      .then(() => this.append(line, bytes))
+      .catch((error: unknown) => this.reportFailure(error))
+      .finally(() => {
+        this.pendingBytes -= bytes;
+      });
   }
 
   /** Logs the first failure to record a call; the later ones are dropped silently. */
@@ -35,20 +46,30 @@ export class CallRecordWriter implements OnShutdown {
     await this.pending;
   }
 
-  private async append(line: string): Promise<void> {
+  private reportBacklog(): void {
+    if (this.backlogLogged) return;
+    this.backlogLogged = true;
+    this.logger.warn(
+      `Dropped a call: ${this.pendingBytes} bytes of calls are still waiting to be written to ${this.options.path}; ` +
+        'later drops are not logged',
+    );
+  }
+
+  private async append(line: string, bytes: number): Promise<void> {
     if (this.full) return;
     const { path, maxBytes } = this.options;
-    if (this.bytes === undefined) {
-      await ensureDir(dirname(path));
-      this.bytes = (await fileExists(path)) ? (await stat(path)).size : 0;
-    }
-    const lineBytes = encoder.encode(line).byteLength;
-    if (this.bytes + lineBytes > maxBytes) {
+    if ((await this.sizeOnDisk(path)) + bytes > maxBytes) {
       this.full = true;
       this.logger.warn(`Stopped recording calls: ${path} reached its maxBytes of ${maxBytes} bytes`);
       return;
     }
-    await appendFile(path, line);
-    this.bytes += lineBytes;
+    await appendFile(path, line, { mode: 0o600 });
+  }
+
+  /** The file's size now, so other writers' lines count too; a missing file's directory is created. */
+  private async sizeOnDisk(path: string): Promise<number> {
+    if (await fileExists(path)) return (await stat(path)).size;
+    await ensureDir(dirname(path));
+    return 0;
   }
 }

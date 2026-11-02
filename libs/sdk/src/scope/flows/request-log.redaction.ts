@@ -23,10 +23,11 @@ const CREDENTIAL_HEADERS = new Set([
 /**
  * Header names that carry a credential by convention (`x-auth-token`, `x-access-token`,
  * `x-client-secret`, `x-client-key`, `x-functions-key`, `x-amz-security-token`,
- * `x-hub-signature-256`, ...), matched by whole dash-separated words.
+ * `x-hub-signature-256`, `x-amzn-oidc-accesstoken`, `x-goog-iap-jwt-assertion`, ...), matched by
+ * whole dash-separated words, or words ending in `token`, `secret`, `password`, `passwd` or `apikey`.
  */
 const CREDENTIAL_HEADER_WORDS =
-  /(?:^|-)(?:auth|authorization|token|secret|password|passwd|credential|credentials|key|apikey|signature|cookie)(?:-|$)/;
+  /(?:^|-)(?:[a-z0-9]*(?:token|secret|password|passwd|apikey)|auth|authorization|credential|credentials|key|signature|cookie|jwt|passphrase)(?:-|$)/;
 
 /** `mcp-session-id`, and the edge runtime's `x-frontmcp-session-id`. */
 const SESSION_ID_HEADER = /(?:^|-)session-id$/;
@@ -38,14 +39,27 @@ function withoutQuery(url: string): string {
   return end === -1 ? url : `${url.slice(0, end)}?${REDACTED}`;
 }
 
-/** Whether a header or field name names a credential: `X-Auth-Token`, `apiKey` and `client_secret` all do. */
-export function isCredentialName(name: string): boolean {
-  const key = name
+/** `apiKey`, `api_key` and `API Key` as `api-key`. */
+function dashedWordsOf(name: string): string {
+  return name
     .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
     .replace(/[_\s]+/g, '-')
     .toLowerCase();
+}
+
+function namesCredential(key: string): boolean {
   return CREDENTIAL_HEADERS.has(key) || CREDENTIAL_HEADER_WORDS.test(key);
+}
+
+/** Whether a header or field name names a credential: `X-Auth-Token`, `apiKey`, `passWord` and `client_secret` all do. */
+export function isCredentialName(name: string): boolean {
+  return namesCredential(name.toLowerCase()) || namesCredential(dashedWordsOf(name));
+}
+
+/** Whether a header or field name names a session id: `mcp-session-id`, `sessionId` and `session_id` all do. */
+export function isSessionIdName(name: string): boolean {
+  return SESSION_ID_HEADER.test(dashedWordsOf(name));
 }
 
 /** The value the debug log may show for a request header. */

@@ -155,4 +155,48 @@ describe('redactJson', () => {
     expect(redactJson({ count: 3, ok: true, none: null }, ['token'])).toEqual({ count: 3, ok: true, none: null });
     expect(redactJson('plain', ['token'])).toBe('plain');
   });
+
+  it('should redact a bearer or basic credential and a JWT under any key', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZGEifQ.c2lnbmF0dXJl';
+    const input = { q: 'Bearer sk-live-4f9a8b7c', auth: 'basic dXNlcjpwYXNzd29yZA==', note: `token ${jwt} expired` };
+    expect(redactJson(input, [])).toEqual({
+      q: 'Bearer [REDACTED]',
+      auth: 'basic [REDACTED]',
+      note: 'token [REDACTED] expired',
+    });
+  });
+
+  it('should redact the credentials of a URL and its query or fragment values under a redacted name', () => {
+    const urls = [
+      'https://ada:hunter2@db.example.com/x',
+      'https://ghp_abc123@github.com/org/repo.git',
+      'https://api.example.com/cb?code=1&access_token=tok-1#id_token=tok-2',
+    ];
+    expect(redactJson({ urls }, (key) => key.endsWith('token'))).toEqual({
+      urls: [
+        'https://[REDACTED]@db.example.com/x',
+        'https://[REDACTED]@github.com/org/repo.git',
+        'https://api.example.com/cb?code=1&access_token=[REDACTED]#id_token=[REDACTED]',
+      ],
+    });
+  });
+
+  it('should redact a value assigned to a redacted name in text that is not JSON', () => {
+    const script = `await callTool('fetch', { apiKey: "sk-123", "password": 'hunter2', city: 'Paris' });\nTOKEN=abc def`;
+    expect(redactJson(script, ['apikey', 'password', 'token'])).toBe(
+      `await callTool('fetch', { apiKey: "[REDACTED]", "password": '[REDACTED]', city: 'Paris' });\nTOKEN=[REDACTED] def`,
+    );
+  });
+
+  it('should redact a redacted name inside the value of another name', () => {
+    const text = 'redirect=https://app.example.com/cb?token=abc&next=1 and query: "token=def"';
+    expect(redactJson(text, ['token'])).toBe(
+      'redirect=https://app.example.com/cb?token=[REDACTED]&next=1 and query: "token=[REDACTED]"',
+    );
+  });
+
+  it('should keep prose that only mentions a scheme or a redacted name', () => {
+    const text = 'Bearer authentication needs a token:\nask the admin';
+    expect(redactJson(text, ['token'])).toBe(text);
+  });
 });

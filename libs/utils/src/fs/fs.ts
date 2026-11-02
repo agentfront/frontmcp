@@ -132,10 +132,11 @@ export async function writeFile(p: string, content: string, options?: { mode?: n
  *
  * @param p - Path to append to
  * @param content - Content to append
+ * @param options - The mode (permissions) a file created here gets, e.g. 0o600
  */
-export async function appendFile(p: string, content: string): Promise<void> {
+export async function appendFile(p: string, content: string, options?: { mode?: number }): Promise<void> {
   const fsp = getFsp();
-  await fsp.appendFile(p, content, 'utf8');
+  await fsp.appendFile(p, content, { encoding: 'utf8', mode: options?.mode });
 }
 
 /**

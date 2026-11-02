@@ -266,6 +266,14 @@ describe('FS Utils', () => {
 
       expect(await fs.promises.readFile(filePath, 'utf8')).toBe('one\ntwo\n');
     });
+
+    it('should create the file with the given mode', async () => {
+      const filePath = path.join(tempDir, 'append-mode.txt');
+
+      await appendFile(filePath, 'one\n', { mode: 0o600 });
+
+      expect((await fs.promises.stat(filePath)).mode & 0o777).toBe(0o600);
+    });
   });
 
   describe('writeFile', () => {

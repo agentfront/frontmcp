@@ -26,7 +26,7 @@ import {
   type LogRecord,
 } from '../../../common';
 import { connect } from '../../../direct';
-import { CallRecorderConfigurationError, PublicMcpError } from '../../../errors';
+import { CallRecorderConfigurationError, PublicMcpError, refused } from '../../../errors';
 import { CallRecorderPlugin, type CallRecord, type CallRecorderPluginOptionsInput } from '../index';
 
 const ToolHook = FlowHooksOf('tools:call-tool');
@@ -96,6 +96,58 @@ class RelayTool extends ToolContext {
   }
 }
 
+const JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZGEifQ.c2lnbmF0dXJlLXNlY3JldA';
+const HANDLE = '0f0e0d0c-0b0a-4908-8706-050403020100';
+
+@Tool({
+  name: 'fetch_page',
+  inputSchema: { q: z.string(), url: z.string(), headers: z.record(z.string(), z.string()) },
+})
+class FetchPageTool extends ToolContext {
+  async execute(input: { q: string; url: string; headers: Record<string, string> }) {
+    return {
+      url: input.url,
+      sessionId: 'session-0123456789abcdef',
+      note: `called with Bearer sk-answer-${JWT.length}`,
+    };
+  }
+}
+
+@Tool({ name: 'expired', inputSchema: {} })
+class ExpiredTool extends ToolContext {
+  async execute(): Promise<{ ok: boolean }> {
+    throw new PublicMcpError(`token ${JWT} has expired`, 'TOKEN_EXPIRED');
+  }
+}
+
+@Tool({ name: 'broken', inputSchema: {} })
+class BrokenTool extends ToolContext {
+  async execute(): Promise<{ ok: boolean }> {
+    throw new Error('cannot reach postgres://app:db-pass-1@db.internal/shop');
+  }
+}
+
+@Tool({ name: 'reviews', inputSchema: {} })
+class ReviewsTool extends ToolContext {
+  async execute(): Promise<{ ok: boolean }> {
+    throw refused('Reviews are off', { remedy: { say: 'Turn on Reviews in Settings' } });
+  }
+}
+
+@Tool({ name: 'big_report', inputSchema: {} })
+class BigReportTool extends ToolContext {
+  async execute() {
+    return { rows: [1, 2, 3] };
+  }
+}
+
+@Tool({ name: 'read_folded', inputSchema: { handle: z.string() } })
+class ReadFoldedTool extends ToolContext {
+  async execute(input: { handle: string }) {
+    return { read: input.handle.length };
+  }
+}
+
 @Resource({ name: 'motd', uri: 'notes://motd', mimeType: 'text/plain' })
 class MotdResource extends ResourceContext {
   async execute(uri: string) {
@@ -117,6 +169,18 @@ class FoldingPlugin {
     flow.respond({ content: [{ type: 'text', text: 'folded' }], structuredContent: { handle: 'h-1' } });
   }
 
+  @ToolHook.Will('fitAnswer', { filter: (flow) => flow.toolName === 'big_report' })
+  foldWithHandle(flow: FlowCtxOf<'tools:call-tool'>) {
+    flow.respond({
+      content: [
+        { type: 'text', text: JSON.stringify({ preview: [1], handle: HANDLE }) },
+        { type: 'text', text: `Read the rest with handle "${HANDLE}"` },
+      ],
+      structuredContent: { preview: [1], handle: HANDLE },
+      _meta: { 'frontmcp/result-handle': { handle: HANDLE, bytes: 20, ttlSeconds: 60 } },
+    });
+  }
+
   @ToolHook.Will('execute', { filter: (flow) => flow.toolName === 'skipped' })
   skip() {
     FlowControl.handled();
@@ -127,11 +191,33 @@ class FoldingPlugin {
   id: 'shop',
   name: 'Shop',
   plugins: [FoldingPlugin],
-  tools: [QuoteTool, LookupTool, ReportTool, SkippedTool, CrashTool, RefusedTool, LongReportTool, RelayTool],
+  tools: [
+    QuoteTool,
+    LookupTool,
+    ReportTool,
+    SkippedTool,
+    CrashTool,
+    RefusedTool,
+    LongReportTool,
+    RelayTool,
+    FetchPageTool,
+    ExpiredTool,
+    BrokenTool,
+    ReviewsTool,
+    BigReportTool,
+    ReadFoldedTool,
+  ],
   resources: [MotdResource],
   prompts: [GreetPrompt],
 })
 class ShopApp {}
+
+@Tool({ name: 'other_ping', inputSchema: {} })
+class OtherPingTool extends ToolContext {
+  async execute() {
+    return { pong: true };
+  }
+}
 
 let dir: string;
 
@@ -207,9 +293,25 @@ describe('CallRecorderPlugin', () => {
     const records = recordsIn(file);
     expect(records.map(({ name, error, answer }) => ({ name, error, answer }))).toEqual([
       { name: 'crash', error: { code: 'LEDGER_OFFLINE', message: 'ledger offline' }, answer: undefined },
-      { name: 'refused', error: { code: 'INVALID_OUTPUT', message: expect.any(String) }, answer: undefined },
+      { name: 'refused', error: { code: 'INVALID_OUTPUT' }, answer: undefined },
       { name: 'missing', error: { code: 'TOOL_NOT_FOUND', message: expect.any(String) }, answer: undefined },
     ]);
+  });
+
+  it("records a public error's text as its client reads it, and no message for an internal error", async () => {
+    const file = path.join(dir, 'calls.jsonl');
+    await session({ path: file }, async (client) => {
+      await client.callTool('reviews', {});
+      await client.callTool('broken', {});
+      await client.callTool('expired', {});
+    });
+
+    expect(recordsIn(file).map(({ error }) => error)).toEqual([
+      { code: 'REFUSED', message: 'Reviews are off\nTo fix: Turn on Reviews in Settings' },
+      { code: 'TOOL_EXECUTION_ERROR' },
+      { code: 'TOKEN_EXPIRED', message: 'token [REDACTED] has expired' },
+    ]);
+    expect(fs.readFileSync(file, 'utf8')).not.toContain('db-pass-1');
   });
 
   it('records the JSON-RPC code of a tool error the client gets as a JSON-RPC error', async () => {
@@ -269,7 +371,16 @@ describe('CallRecorderPlugin', () => {
     expect(records[1].answer).toMatchObject({
       messages: [{ role: 'user', content: { type: 'text', text: 'Hello Ada' } }],
     });
-    expect(records[2].error).toEqual({ code: -32002, message: expect.any(String) });
+    expect(records[2].error).toEqual({ code: -32002, message: 'Resource not found: notes://missing' });
+  });
+
+  it('records a resource URI without the credentials in it', async () => {
+    const file = path.join(dir, 'calls.jsonl');
+    await session({ path: file }, async (client) => {
+      await client.readResource('notes://motd?access_token=tok-uri-1').catch(() => undefined);
+    });
+
+    expect(recordsIn(file)[0].name).toBe('notes://motd?access_token=[REDACTED]');
   });
 
   it('never writes a configured field or a credential, in the input, the answer or its JSON text', async () => {
@@ -283,6 +394,77 @@ describe('CallRecorderPlugin', () => {
     expect(text).not.toContain('hunter2');
     expect(text).not.toContain('tok-secret-1');
     expect(recordsIn(file)[0].input).toEqual({ city: '[REDACTED]', password: '[REDACTED]' });
+  });
+
+  it('never writes a credential under an innocuous key, in a URL, a JWT or a session id', async () => {
+    const file = path.join(dir, 'calls.jsonl');
+    await session({ path: file }, async (client) => {
+      await client.callTool('fetch_page', {
+        q: 'Bearer sk-input-12345678',
+        url: `https://ada:url-pass-1@example.com/feed?api_key=key-in-url-1&jwt=${JWT}`,
+        headers: { Authorization: 'Basic dXNlcjpoZWFkZXItcGFzcy0x', Accept: 'text/html' },
+      });
+    });
+
+    const text = fs.readFileSync(file, 'utf8');
+    for (const secret of ['sk-input-12345678', 'url-pass-1', 'key-in-url-1', JWT, 'dXNlcjpoZWFkZXItcGFzcy0x']) {
+      expect(text).not.toContain(secret);
+    }
+    expect(text).not.toContain('sk-answer-');
+    expect(text).not.toContain('session-0123456789abcdef');
+    expect(recordsIn(file)[0].input).toMatchObject({
+      q: 'Bearer [REDACTED]',
+      headers: { Authorization: '[REDACTED]', Accept: 'text/html' },
+    });
+  });
+
+  it('never writes a result handle, in the folded answer or in a later call that reads it', async () => {
+    const file = path.join(dir, 'calls.jsonl');
+    await session({ path: file }, async (client) => {
+      await client.callTool('big_report', {});
+      await client.callTool('read_folded', { handle: HANDLE });
+    });
+
+    const text = fs.readFileSync(file, 'utf8');
+    expect(text).not.toContain(HANDLE);
+    const [folded, read] = recordsIn(file);
+    expect(folded.answer).toMatchObject({ structuredContent: { handle: '[REDACTED]' } });
+    expect(read.input).toEqual({ handle: '[REDACTED]' });
+  });
+
+  it('creates the recording readable by its owner only', async () => {
+    const file = path.join(dir, 'calls.jsonl');
+    await session({ path: file }, async (client) => {
+      await client.callTool('lookup', { key: 'a' });
+    });
+
+    expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+  });
+
+  it('records the calls to the app it is installed on, and not those to another app', async () => {
+    const file = path.join(dir, 'calls.jsonl');
+    @App({
+      id: 'shop-recorded',
+      name: 'Recorded',
+      plugins: [CallRecorderPlugin.init({ path: file })],
+      tools: [LookupTool],
+    })
+    class RecordedApp {}
+    @App({ id: 'other', name: 'Other', tools: [OtherPingTool] })
+    class OtherApp {}
+    const client = await connect({
+      info: { name: 'call-recorder-apps', version: '1.0.0' },
+      apps: [RecordedApp, OtherApp],
+      logging: { level: LogLevel.Warn, enableConsole: false, transports: [WarningCapture] },
+    } as FrontMcpConfigInput);
+    try {
+      await client.callTool('other_ping', {});
+      await client.callTool('lookup', { key: 'a' });
+    } finally {
+      await client.close();
+    }
+
+    expect(recordsIn(file).map(({ name }) => name)).toEqual(['lookup']);
   });
 
   it('records the answer the client received, after a hook replaced it', async () => {
@@ -346,6 +528,19 @@ describe('CallRecorderPlugin', () => {
     });
 
     expect(recordsIn(file)).toEqual([]);
+    expect(warnings.filter((message) => message.includes('maxBytes'))).toHaveLength(1);
+  });
+
+  it('counts what is in the file, also what another writer appended, against maxBytes', async () => {
+    const file = path.join(dir, 'calls.jsonl');
+    await session({ path: file, maxBytes: 4096 }, async (client) => {
+      await client.callTool('lookup', { key: 'a' });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      fs.appendFileSync(file, `${'x'.repeat(4096 - fs.statSync(file).size - 20)}\n`);
+      await client.callTool('lookup', { key: 'b' });
+    });
+
+    expect(fs.statSync(file).size).toBe(4096 - 19);
     expect(warnings.filter((message) => message.includes('maxBytes'))).toHaveLength(1);
   });
 

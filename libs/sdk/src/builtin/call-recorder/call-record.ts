@@ -10,8 +10,8 @@ export const CALL_RECORD_VERSION = 1;
 export interface CallRecordError {
   /** A tool error's `_meta.code` (`TOOL_NOT_FOUND`), or the JSON-RPC error code of a resource or prompt (`-32002`). */
   code: string | number;
-  /** The error's public message. */
-  message: string;
+  /** A public error's text as its client reads it; an internal error's generic text is not recorded. */
+  message?: string;
 }
 
 /** One line of a call recording: a client's call and the answer it received, redacted. */
