@@ -32,7 +32,7 @@ const plan = {
   execute: ['handle'],
 } as const satisfies FlowPlan<string>;
 
-const stateSchema = z.object({
+export const httpRouteStateSchema = z.object({
   route: z.custom<HttpRouteEntry>(),
   person: z.custom<PeopleSession>().optional(),
 });
@@ -44,7 +44,7 @@ declare global {
       typeof plan,
       typeof httpInputSchema,
       typeof httpOutputSchema,
-      typeof stateSchema
+      typeof httpRouteStateSchema
     >;
   }
 }

@@ -15,13 +15,16 @@ const TOKEN = 'operator-token';
 
 type Handler = (request: Request, ctx?: { remoteAddr?: { hostname: string } }) => Promise<Response>;
 
-async function serve(options: DashboardPluginOptionsInput, extra: Partial<FrontMcpConfigInput> = {}): Promise<Handler> {
+async function serve(
+  options: DashboardPluginOptionsInput,
+  throttle?: FrontMcpConfigInput['throttle'],
+): Promise<Handler> {
   return (await FrontMcpInstance.createFetchHandler({
     info: { name: 'dashboard-page', version: '1.0.0' },
     apps: [DashboardApp],
     plugins: [DashboardPlugin.init(options)],
     logging: { level: LogLevel.Off, enableConsole: false },
-    ...extra,
+    throttle,
   })) as Handler;
 }
 
@@ -88,10 +91,7 @@ describe('the dashboard page route', () => {
   });
 
   it('is behind throttle.ipFilter', async () => {
-    const handler = await serve(
-      { enabled: true },
-      { throttle: { enabled: true, ipFilter: { denyList: ['203.0.113.0/24'] } } },
-    );
+    const handler = await serve({ enabled: true }, { enabled: true, ipFilter: { denyList: ['203.0.113.0/24'] } });
 
     const response = await handler(new Request('http://localhost/dashboard'), {
       remoteAddr: { hostname: '203.0.113.9' },
