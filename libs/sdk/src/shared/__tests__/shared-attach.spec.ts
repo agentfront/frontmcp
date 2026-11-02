@@ -69,6 +69,9 @@ describe('towardsServer', () => {
 
 const posixOnly = process.platform === 'win32' ? describe.skip : describe;
 
+// Each test starts real servers, with their SQLite start lock, and attaches sessions to them.
+jest.setTimeout(20_000);
+
 posixOnly('attachSharedSession against a server that keeps refusing its token', () => {
   let home: string;
   let previousHome: string | undefined;

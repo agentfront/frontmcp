@@ -97,6 +97,9 @@ function createRunning(beforeStart: () => Promise<void>) {
 
 const posixOnly = process.platform === 'win32' ? describe.skip : describe;
 
+// Each test starts real servers, with their SQLite start lock, and attaches sessions to them.
+jest.setTimeout(20_000);
+
 posixOnly('a shared local server', () => {
   let home: string;
   let previousHome: string | undefined;
@@ -264,6 +267,25 @@ posixOnly('a shared local server', () => {
       expect(fs.existsSync(files.recordFile)).toBe(false);
       expect(fs.existsSync(files.socketPath)).toBe(false);
     });
+  });
+
+  it('shuts the server down when its scope cannot take the shared flows', async () => {
+    let shutdown: jest.SpyInstance | undefined;
+    const failing = (parsed: ConstructorParameters<typeof FrontMcpInstance>[0]) => {
+      const instance = create(parsed);
+      shutdown = jest.spyOn(instance, 'shutdown');
+      const getPrimaryScope = instance.getPrimaryScope.bind(instance);
+      jest.spyOn(instance, 'getPrimaryScope').mockImplementation(() => {
+        const scope = getPrimaryScope();
+        if (scope) jest.spyOn(scope, 'registryFlows').mockRejectedValue(new Error('flows refused'));
+        return scope;
+      });
+      return instance;
+    };
+
+    await expect(serveShared(serving('http', { create: failing }))).rejects.toThrow('flows refused');
+    expect(shutdown).toHaveBeenCalled();
+    expect(fs.existsSync(sharedServerFiles('spec').recordFile)).toBe(false);
   });
 
   describe('its start lock', () => {

@@ -67,6 +67,9 @@ async function waitUntil(condition: () => boolean, what: string, timeoutMs = 10_
 
 const posixOnly = process.platform === 'win32' ? describe.skip : describe;
 
+// Each test starts real servers, with their SQLite start lock, and attaches sessions to them.
+jest.setTimeout(20_000);
+
 posixOnly('a shared session across servers', () => {
   let home: string;
   let previousHome: string | undefined;
