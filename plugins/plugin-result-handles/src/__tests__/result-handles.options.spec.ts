@@ -58,6 +58,14 @@ describe('parseResultHandlesOptions', () => {
     expect(() => parseResultHandlesOptions(input as never)).toThrow(message);
   });
 
+  it('takes extra providers beside its options, as every plugin init() does', () => {
+    const extra = { name: 'extra', provide: Symbol('EXTRA'), useValue: 1 };
+
+    const record = ResultHandlesPlugin.init({ thresholdBytes: 4096, providers: [extra] });
+
+    expect(record.providers).toContain(extra);
+  });
+
   it('refuses invalid options when the plugin is created', () => {
     expect(() => ResultHandlesPlugin.init({ thresholdBytes: 10 })).toThrow(ResultHandlesConfigurationError);
     expect(() => new ResultHandlesPlugin({ ttlSeconds: -5 })).toThrow(ResultHandlesConfigurationError);

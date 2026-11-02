@@ -103,7 +103,8 @@ ResultHandlesPlugin.init({
 });
 ```
 
-The policy is asked only for answers over the threshold. `answer` is the answer's `structuredContent`, or its text.
+The policy is asked only for answers over the threshold. `answer` is the answer's `structuredContent`, or its text: a
+text that is a JSON object or array is parsed, so the policy (and `result_query`) gets the value, not the string.
 
 ## What the Model Sees
 
