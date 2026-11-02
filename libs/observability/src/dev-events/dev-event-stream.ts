@@ -102,7 +102,7 @@ export class DevEventStream {
   }
 
   async onShutdown(): Promise<void> {
-    await this.flush();
+    while (this.draining) await this.draining;
     this.closed = true;
     await Promise.all(this.sinks.map((sink) => this.attempt(sink, () => sink.close?.())));
   }

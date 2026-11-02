@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import { mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
 
-import { createDevEventsWriter, startEventsFile } from '../dev-events-file';
+import { createDevEventsWriter, startEventsFile, turnDevEventsOff } from '../dev-events-file';
 
 describe('the frontmcp dev events file', () => {
   let dir: string;
@@ -18,12 +18,28 @@ describe('the frontmcp dev events file', () => {
 
   it('starts each run with an empty file, creating its folder', async () => {
     const file = path.join(dir, '.frontmcp', 'dev-events.jsonl');
-    await startEventsFile(file);
+    const warn = jest.fn();
+    expect(await startEventsFile(file, warn)).toBe(true);
     expect(await readFile(file)).toBe('');
 
     await writeFile(file, '{"type":"call"}\n');
-    await startEventsFile(file);
+    expect(await startEventsFile(file, warn)).toBe(true);
     expect(await readFile(file)).toBe('');
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('turns the events off with a warning, instead of failing, when it cannot create the file', async () => {
+    await writeFile(path.join(dir, '.frontmcp'), 'a file where the folder should be');
+    const warn = jest.fn();
+
+    expect(await startEventsFile(path.join(dir, '.frontmcp', 'dev-events.jsonl'), warn)).toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('dev events are off: could not create'));
+  });
+
+  it('clears the variables that turn the server events on', () => {
+    const env: NodeJS.ProcessEnv = { FRONTMCP_DEV_EVENTS_FILE: '/tmp/events.jsonl', FRONTMCP_DEV_EVENTS_IPC: '1' };
+    turnDevEventsOff(env);
+    expect(env).toEqual({ FRONTMCP_DEV_EVENTS_FILE: '', FRONTMCP_DEV_EVENTS_IPC: '' });
   });
 
   it('appends the batches the server sends, in order, one JSON line per event', async () => {

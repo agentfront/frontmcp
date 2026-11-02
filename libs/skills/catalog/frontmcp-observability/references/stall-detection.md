@@ -88,8 +88,9 @@ each call, with the same fields as the report (`type: "stall"`, `stallMs`, `gcMs
 
 - A sampler checks the event loop every 10 ms on an unref'd timer, from the moment the server serves until shutdown. A
   gap of `thresholdMs` or more between two checks is a stall, measured to within 10 ms.
-- The process has one detector: the servers of a `splitByApp` server, or of standalone apps, share it, so each stall is
-  one warning naming the calls of every server.
+- The process has one detector for each `thresholdMs`: the servers of a `splitByApp` server, or of standalone apps,
+  share it when they use the same threshold, so each stall is one warning naming the calls of every server. Servers
+  with different thresholds each report the stall.
 - The calls in flight are kept by `Around` hooks on the `execute` stage of `tools:call-tool`,
   `resources:read-resource` and `prompts:get-prompt`, and each call is reported by `Finally` hooks on `finalize`. The
   hooks exist only when `stalls` or dev events are on.
