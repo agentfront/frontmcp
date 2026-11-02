@@ -1,4 +1,4 @@
-import { appendFile, dirname, ensureDir, fileExists, stat } from '@frontmcp/utils';
+import { appendFile, chmod, dirname, ensureDir, fileExists, stat } from '@frontmcp/utils';
 
 import type { FrontMcpLogger, OnShutdown } from '../../common';
 
@@ -11,6 +11,7 @@ export class CallRecordWriter implements OnShutdown {
   private full = false;
   private failureLogged = false;
   private backlogLogged = false;
+  private ownerOnly = false;
 
   constructor(
     private readonly options: { path: string; maxBytes: number },
@@ -66,9 +67,13 @@ export class CallRecordWriter implements OnShutdown {
     await appendFile(path, line, { mode: 0o600 });
   }
 
-  /** The file's size now, so other writers' lines count too; a missing file's directory is created. */
+  /** The file's size, other writers' lines included; an existing file is made owner-only, a missing one's dir made. */
   private async sizeOnDisk(path: string): Promise<number> {
-    if (await fileExists(path)) return (await stat(path)).size;
+    if (await fileExists(path)) {
+      if (!this.ownerOnly) await chmod(path, 0o600);
+      this.ownerOnly = true;
+      return (await stat(path)).size;
+    }
     await ensureDir(dirname(path));
     return 0;
   }
