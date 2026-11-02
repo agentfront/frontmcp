@@ -7,6 +7,8 @@ export type StageEntry<C> = {
   method: (ctx: C, next?: () => Promise<void>) => Promise<void>;
   /** The flow step or hook this entry runs. */
   hook: HookMetadata;
+  /** Set on the flow's own steps, which a hook's `before` or `after` cannot name. */
+  flowStep?: boolean;
   _priority: number;
   _order: number;
 };
@@ -31,7 +33,11 @@ export function sortStageMap<C>(table: StageMap<C>) {
   for (const key of Object.keys(table)) {
     const list = table[key];
     list.sort((a, b) => a._priority - b._priority || a._order - b._order);
-    const ordered = orderByConstraints(list, (entry) => entry.hook);
+    const ordered = orderByConstraints(
+      list,
+      (entry) => entry.hook,
+      (entry) => !entry.flowStep,
+    );
     if (ordered !== list) list.splice(0, list.length, ...ordered);
   }
 }
@@ -74,6 +80,7 @@ export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
 
     const entry: StageEntry<C> = {
       hook: m,
+      flowStep: true,
       _priority: m.priority ?? 0,
       _order: order++,
       method: async (ctx: any, next = NO_NEXT) => {

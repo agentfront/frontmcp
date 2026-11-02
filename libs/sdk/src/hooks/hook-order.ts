@@ -63,17 +63,22 @@ function cycleError(hooks: HookMetadata[], waitsFor: Set<number>[], placed: Set<
 
 /**
  * `items`, already in priority order, reordered so each hook runs after the hooks its `after` names and before those
- * its `before` names: each place goes to the first item, in priority order, that no constraint holds back.
- * Throws a {@link HookOrderCycleError} when the constraints contradict each other.
+ * its `before` names: each place goes to the first item, in priority order, that no constraint holds back. An item
+ * `canBeNamed` rejects (a flow's own step) is never a target. Throws a {@link HookOrderCycleError} when the
+ * constraints contradict each other.
  */
-export function orderByConstraints<T>(items: T[], hookOf: (item: T) => HookMetadata): T[] {
+export function orderByConstraints<T>(
+  items: T[],
+  hookOf: (item: T) => HookMetadata,
+  canBeNamed: (item: T) => boolean = () => true,
+): T[] {
   const hooks = items.map(hookOf);
   if (!hooks.some(hasConstraints)) return items;
 
   const waitsFor = hooks.map(() => new Set<number>());
   hooks.forEach((hook, index) => {
     hooks.forEach((other, otherIndex) => {
-      if (isSameHook(hook, other)) return;
+      if (isSameHook(hook, other) || !canBeNamed(items[otherIndex])) return;
       if (hook.before?.some((target) => namesHook(target, other))) waitsFor[otherIndex].add(index);
       if (hook.after?.some((target) => namesHook(target, other))) waitsFor[index].add(otherIndex);
     });

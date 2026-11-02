@@ -23,6 +23,7 @@ interface HookSpec {
   after?: string[];
   type?: HookMetadata['type'];
   stage?: string;
+  flowStep?: boolean;
 }
 
 function hookOf(spec: HookSpec): HookMetadata {
@@ -43,6 +44,7 @@ function hookOf(spec: HookSpec): HookMetadata {
 function runOrder(...specs: HookSpec[]): string[] {
   const entries: StageEntry<unknown>[] = specs.map((spec, index) => ({
     hook: hookOf(spec),
+    flowStep: spec.flowStep,
     _priority: spec.priority ?? 0,
     _order: index,
     method: async () => undefined,
@@ -135,6 +137,17 @@ describe('before / after within a stage', () => {
         { target: new FeatureGatePlugin(), pluginName: 'feature-gate', priority: 10, before: ['cache'] },
       ),
     ).toEqual(['setup-gate.run', 'feature-gate.run']);
+  });
+
+  it("never moves the flow's own step: a target naming its class matches nothing", () => {
+    class CallToolFlow {}
+
+    expect(
+      runOrder(
+        { target: new CallToolFlow(), method: 'execute', flowStep: true },
+        { target: new AuditPlugin(), pluginName: 'audit', priority: 10, before: ['CallToolFlow'] },
+      ),
+    ).toEqual(['CallToolFlow.execute', 'audit.run']);
   });
 
   it('throws a HookOrderCycleError that names the hooks in a cycle', () => {
