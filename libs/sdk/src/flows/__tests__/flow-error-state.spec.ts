@@ -65,6 +65,17 @@ class ZeroThrower {
 @App({ id: 'zero', name: 'Zero', tools: [OkTool], plugins: [ZeroThrower, FlowErrorProbe] })
 class ZeroApp {}
 
+@Plugin({ name: 'unprintable-thrower' })
+class UnprintableThrower {
+  @ToolHook.Will('execute')
+  throwUnprintable() {
+    throw Object.create(null);
+  }
+}
+
+@App({ id: 'unprintable', name: 'Unprintable', tools: [OkTool], plugins: [UnprintableThrower, FlowErrorProbe] })
+class UnprintableApp {}
+
 @Plugin({ name: 'finalize-breaker' })
 class FinalizeBreaker {
   @ToolHook.Will('finalize')
@@ -104,6 +115,18 @@ describe('state.flowError', () => {
 
     expect(seen).toHaveLength(1);
     expect(seen[0]).toBeInstanceOf(Error);
+  });
+
+  it('is an Error, and the Finally hooks still run, when a stage threw a value String() cannot convert', async () => {
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'unprintable', version: '1.0.0' },
+      apps: [UnprintableApp],
+    });
+    await server.callTool('ok', {}).catch(() => undefined);
+    await server.dispose();
+
+    expect(seenFinally).toHaveLength(1);
+    expect(String(seenFinally[0])).toContain('[object Object]');
   });
 
   it("is the output schema's refusal of the answer for the Finally hooks of finalize, whose Did hooks skip it", async () => {

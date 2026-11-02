@@ -99,6 +99,15 @@ export function parseTypedKey(k: string): { base: string; type?: 'will' | 'did' 
   return { base: k };
 }
 
+/** `String(value)`, or its `Object.prototype.toString` tag for a value that cannot be converted (a null-prototype object). */
+function describeValue(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    return Object.prototype.toString.call(value);
+  }
+}
+
 /** The error a fail() carried, or an Error naming why the flow was aborted. */
 function failureOf(control: FlowControl): unknown {
   const originalError = (control as { originalError?: unknown }).originalError;
@@ -517,11 +526,19 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     // A Finally hook cannot respond or fail its stage: what it throws is logged and dropped.
     const ignoreFinallyThrow = (key: string, thrown: unknown) => {
-      const description = thrown instanceof FlowControl ? `FlowControl '${thrown.type}'` : String(thrown);
+      const description = thrown instanceof FlowControl ? `FlowControl '${thrown.type}'` : describeValue(thrown);
       this.logger.warn(`Ignored a throw from a Finally hook of '${key}': it cannot change the stage's outcome`, {
         flow: name,
         thrown: description,
       });
+    };
+
+    // What a Finally hook wrote on its way to a signal the runner drops, such as a job's answer, is dropped with it
+    const restoreState = (before: Readonly<Record<string, unknown>>) => {
+      for (const key of Object.keys(context.state.snapshot())) {
+        if (!(key in before)) context.state.set(key as never, undefined as never);
+      }
+      context.state.set(before as never);
     };
 
     // Robust list runner (doesn't skip mid-run insertions)
@@ -543,10 +560,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         if (!item) break;
         seen.add(item);
 
+        const stateBefore = opts?.ignoreThrows ? (context.state.snapshot() as Record<string, unknown>) : undefined;
         try {
           await item.method(context);
         } catch (e: any) {
           if (opts?.ignoreThrows) {
+            if (e instanceof FlowControl && stateBefore) restoreState(stateBefore);
             ignoreFinallyThrow(key, e);
             continue;
           }
@@ -586,7 +605,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       const flowError =
         failure instanceof Error
           ? failure
-          : new InternalMcpError(`Flow failed with a non-Error value: ${String(failure)}`);
+          : new InternalMcpError(`Flow failed with a non-Error value: ${describeValue(failure)}`);
       context.state.set('flowError' as never, flowError as never);
     };
 

@@ -154,6 +154,11 @@ class UnrulyFinallyPlugin {
     throw new Error('finally hook broke');
   }
 
+  @ToolHook.Finally('finalize', { priority: -3 })
+  throwUnprintable() {
+    throw Object.create(null);
+  }
+
   @ToolHook.Finally('finalize')
   recordAfterUnruly(ctx: CallToolFlow) {
     trace.push(`Finally after unruly hooks: ${outcomeOf(ctx)}`);
@@ -348,6 +353,7 @@ describe('a Finally hook that responds or throws', () => {
     expect(logged).toEqual([
       expect.stringMatching(/finallyFinalize.*respond/),
       expect.stringMatching(/finallyFinalize.*finally hook broke/),
+      expect.stringMatching(/finallyFinalize.*\[object Object\]/),
     ]);
   });
 });
