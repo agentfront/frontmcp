@@ -2,7 +2,7 @@
 name: multi-instance-cleanup
 reference: production-node-sdk
 level: advanced
-description: 'Shows how multiple SDK instances can coexist without conflicts, and how to clean up timers and listeners — given that `@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. The pattern is: initialize in the constructor, expose a `stop()` method, and register it with `scope.onDispose()` from a factory provider so `server.dispose()` runs it.'
+description: 'Shows how multiple SDK instances can coexist without conflicts, and how a provider cleans up its timers and listeners: it starts them in `onReady()` and stops them in `onShutdown()`, which `server.dispose()` runs for the providers of that instance only.'
 tags:
   - production
   - sdk
@@ -11,7 +11,7 @@ tags:
   - instance
   - cleanup
 features:
-  - '`stop()` registered with `scope.onDispose()` from a factory provider that injects `ScopeEntry` (since `@Provider` classes have no `onDestroy` lifecycle hook)'
+  - 'A provider that starts its timer in `onReady()` and stops it in `onShutdown()`, so each `server.dispose()` cleans up its own'
   - Ensuring multiple instances coexist without sharing global state
   - Testing that dispose removes all event listeners (no leaks)
   - Verifying one instance still works after another is disposed
@@ -19,20 +19,22 @@ features:
 
 # Multi-Instance Coexistence and Cleanup
 
-Shows how multiple SDK instances can coexist without conflicts, and how to clean up timers and listeners — given that `@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. The pattern is: initialize in the constructor, expose a `stop()` method, and register it with `scope.onDispose()` from a factory provider so `server.dispose()` runs it.
+Shows how multiple SDK instances can coexist without conflicts, and how a provider cleans up its timers and listeners: it starts them in `onReady()` and stops them in `onShutdown()`, which `server.dispose()` runs for the providers of that instance only.
 
 ## Code
 
 ```typescript
 // src/providers/polling.provider.ts
-import { ScopeEntry } from '@frontmcp/sdk';
+import { Provider, type OnReady, type OnShutdown } from '@frontmcp/sdk';
 
-export class Poller {
+// Register it with `providers: [Poller]`; tools resolve the instance with `this.get(Poller)`.
+@Provider({ name: 'Poller' })
+export class Poller implements OnReady, OnShutdown {
   private intervalId: ReturnType<typeof setInterval> | undefined;
   private readonly listeners: Array<() => void> = [];
 
-  constructor() {
-    // Init at construction time — there is no async onInit hook on providers.
+  // Runs once the instance serves (here: once `create()` returned)
+  onReady(): void {
     this.intervalId = setInterval(() => {
       this.listeners.forEach((listener) => listener());
     }, 10_000);
@@ -44,27 +46,13 @@ export class Poller {
     this.listeners.push(listener);
   }
 
-  stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = undefined;
-    }
+  // Each instance's server.dispose() runs it for that instance's Poller only
+  onShutdown(): void {
+    clearInterval(this.intervalId);
+    this.intervalId = undefined;
     this.listeners.length = 0;
   }
 }
-
-// Register it with `providers: [pollerProvider]`; tools resolve the instance with `this.get(Poller)`.
-export const pollerProvider = {
-  name: 'Poller',
-  provide: Poller,
-  inject: () => [ScopeEntry],
-  useFactory: (scope: ScopeEntry) => {
-    const poller = new Poller();
-    // Each instance's server.dispose() runs its own scope's dispose callbacks.
-    scope.onDispose(() => poller.stop());
-    return poller;
-  },
-};
 ```
 
 ```typescript
@@ -84,7 +72,7 @@ describe('Multi-instance coexistence', () => {
     expect(tools1.length).toBeGreaterThan(0);
     expect(tools2.length).toBeGreaterThan(0);
 
-    // dispose() runs instance 1's onDispose callbacks, which stop its poller.
+    // dispose() runs instance 1's onShutdown() hooks, which stop its poller.
     await server1.dispose();
 
     // Instance 2 still works after instance 1 is disposed
@@ -111,7 +99,7 @@ describe('Multi-instance coexistence', () => {
 
 ## What This Demonstrates
 
-- `stop()` registered with `scope.onDispose()` from a factory provider that injects `ScopeEntry` (since `@Provider` classes have no `onDestroy` lifecycle hook)
+- A provider that starts its timer in `onReady()` and stops it in `onShutdown()`, so each `server.dispose()` cleans up its own
 - Ensuring multiple instances coexist without sharing global state
 - Testing that dispose removes all event listeners (no leaks)
 - Verifying one instance still works after another is disposed
@@ -119,4 +107,4 @@ describe('Multi-instance coexistence', () => {
 ## Related
 
 - See `production-node-sdk` for the full memory and cleanup checklist
-- See `create-plugin-hooks` in `frontmcp-development` (Server Lifecycle Hooks) for `scope.onDispose()`
+- See `create-provider` in `frontmcp-development` (Provider Lifecycle) for `onBootstrap()`, `onReady()` and `onShutdown()`

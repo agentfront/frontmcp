@@ -108,13 +108,13 @@ The provider class is the DI token (`this.get(TaskStoreProvider)`). For async se
 // src/providers/task-store.provider.ts
 import Redis, { Redis as RedisClient } from 'ioredis';
 
-import { AsyncProvider, Provider, ProviderScope } from '@frontmcp/sdk';
+import { AsyncProvider, Provider, ProviderScope, type OnShutdown } from '@frontmcp/sdk';
 import { randomUUID } from '@frontmcp/utils';
 
 import type { Task } from '../types/task';
 
 @Provider({ name: 'task-store', scope: ProviderScope.GLOBAL })
-export class TaskStoreProvider {
+export class TaskStoreProvider implements OnShutdown {
   constructor(private readonly redis: RedisClient) {}
 
   async create(input: Omit<Task, 'id' | 'createdAt'>): Promise<Task> {
@@ -149,9 +149,8 @@ export class TaskStoreProvider {
     }
   }
 
-  // `@Provider` has no `onDestroy` hook — expose explicit cleanup that the
-  // host calls before `server.dispose()`.
-  async disconnect(): Promise<void> {
+  // FrontMCP calls it on SIGTERM, `shutdown()` or `dispose()`
+  async onShutdown(): Promise<void> {
     await this.redis.quit();
   }
 }

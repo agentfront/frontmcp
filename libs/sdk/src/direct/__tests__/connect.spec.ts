@@ -49,6 +49,7 @@ const mockFrontMcpInstance = {
   ready: Promise.resolve(),
   getScopes: () => mockScopes,
   getPrimaryScope: () => mockScopes[0],
+  emitProvidersReady: jest.fn().mockResolvedValue(undefined),
 };
 
 jest.mock('../../front-mcp/front-mcp', () => ({

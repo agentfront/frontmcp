@@ -25,6 +25,7 @@ function toFixtureDiagnostic(diagnostic: ts.Diagnostic): FixtureDiagnostic {
 }
 
 const fixtureFiles = [
+  'provider-lifecycle-must-compile.ts',
   'tool-must-fail.ts',
   'prompts-must-compile.ts',
   'hooks-must-compile.ts',
@@ -84,6 +85,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types @Tool and @Agent so every invalid @Tool declaration is rejected', () => {
     expect(describeEach(inFixtureFile('tool-must-fail.ts'))).toEqual([]);
+  });
+
+  it('types the provider lifecycle hooks, the lifecycle option and createContainer()', () => {
+    expect(describeEach(inFixtureFile('provider-lifecycle-must-compile.ts'))).toEqual([]);
   });
 
   it('accepts the documented @Prompt forms', () => {

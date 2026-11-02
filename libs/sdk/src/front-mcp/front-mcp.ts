@@ -106,7 +106,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   async initialize(): Promise<void> {
-    this.providers = new ProviderRegistry([...createMcpGlobalProviders(this.config)]);
+    this.providers = new ProviderRegistry([...createMcpGlobalProviders(this.config)], undefined, {
+      shutdownHookTimeoutMs: this.config.lifecycle?.shutdownHookTimeoutMs,
+    });
     await this.providers.ready;
 
     this.logger = new LoggerRegistry(this.providers);
@@ -141,6 +143,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     for (const scope of this.getScopes()) {
       await scope.emitServerStarted();
     }
+    await this.emitProvidersReady();
 
     // Issue #399 — dev bridge bootstrap sentinel. When `frontmcp dev
     // --stdio` spawns this process, it sets FRONTMCP_DEV_BOOTSTRAP_SENTINEL=1
@@ -175,6 +178,16 @@ export class FrontMcpInstance implements FrontMcpInterface {
    */
   getScopes(): ScopeEntry[] {
     return this.scopes.getScopes();
+  }
+
+  /**
+   * Run every provider's `onReady()` once the server serves on its transport; later calls do nothing.
+   * @internal
+   */
+  async emitProvidersReady(): Promise<void> {
+    for (const scope of this.getScopes() as Scope[]) {
+      await scope.providers.runReadyHooks(scope.logger);
+    }
   }
 
   /**
@@ -375,6 +388,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     await frontMcp.wireMetricsService(server);
 
     server.prepare();
+    await frontMcp.emitProvidersReady();
     frontMcp.log?.info('FrontMCP handler created (serverless mode)');
     return server.getHandler();
   }
@@ -428,6 +442,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // the Express host registers as a route.
       const metricsService = await frontMcp.createMetricsService();
       const metricsConfig = frontMcp.config.metrics;
+      await frontMcp.emitProvidersReady();
       frontMcp.log?.info('FrontMCP fetch handler created (web-standard transport)');
       return createServerFetchHandler(
         scope,
@@ -598,7 +613,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
       frontMcp.log?.info('FrontMCP direct server created');
       // Disposing the server tears down every scope of the instance, not only the one it serves
-      return new DirectMcpServerImpl(scope as Scope, () => frontMcp.shutdown(), { workerEnv });
+      const server = new DirectMcpServerImpl(scope as Scope, () => frontMcp.shutdown(), { workerEnv });
+      await frontMcp.emitProvidersReady();
+      return server;
     } catch (error) {
       // shutdown() logs any step that fails; the caller needs the reason no server was created
       await frontMcp.shutdown().catch(() => undefined);
@@ -907,6 +924,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
         const channelNames = scope.channels.getChannelInstances().map((ch: { name: string }) => ch.name);
         scope.notifications.subscribeAllChannels(sessionId, channelNames);
       }
+      await frontMcp.emitProvidersReady();
 
       // Graceful shutdown: cleanup resources then exit with code 0.
       // A ref'd timer keeps the event loop alive while async cleanup runs —
@@ -921,6 +939,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
         try {
           scope.notifications.unregisterServer(sessionId);
           await scope.shutdown();
+          await scope.providers.runShutdownHooks(scope.logger);
           await mcpServer.close();
         } catch (err) {
           console.error('Error closing MCP server:', err);

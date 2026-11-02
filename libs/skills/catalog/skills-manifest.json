@@ -1991,12 +1991,13 @@
           "examples": [
             {
               "name": "basic-database-provider",
-              "description": "A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs.",
+              "description": "A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs, and closed in `onShutdown()`.",
               "level": "basic",
               "tags": ["development", "database", "provider"],
               "features": [
                 "Defining a typed token with `Token<T>` using a `Symbol` for DI identification",
                 "Using `AsyncProvider({ provide, name, scope, useFactory })` so async setup completes before tool execution",
+                "Closing the pool in `onShutdown()`, which runs after the requests in flight finish",
                 "Consuming the provider in a tool via `this.get(DB_TOKEN)` with full type safety",
                 "Registering the factory in the `providers` array so tools can resolve it"
               ]
@@ -2008,7 +2009,7 @@
               "tags": ["development", "provider", "config", "api", "providers"],
               "features": [
                 "A configuration provider using `readonly` properties from environment variables (sync construction)",
-                "An API client provider that reads credentials in the constructor (no `onInit` — `@Provider` has no lifecycle hooks)",
+                "An API client provider that reads credentials in the constructor, so a missing one fails startup",
                 "Folder-per-provider layout (`src/apps/main/providers/<slug>/`) with a barrel `index.ts` and a co-located `.provider.spec.ts`",
                 "Top-level `src/apps/main/providers/index.ts` barrel re-exporting each provider folder",
                 "Registering providers at `@FrontMcp` level for server-wide sharing across all apps",
@@ -2549,7 +2550,7 @@
               "features": [
                 "Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`",
                 "Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup",
-                "Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) — `@Provider` has no `onDestroy` hook",
+                "Cleanup: `onShutdown()` quits the Redis client at shutdown, after the requests in flight finish",
                 "Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`",
                 "Per-user data isolation using Redis hash keys (`tasks:${userId}`)"
               ]
@@ -2826,7 +2827,7 @@
                 "Setting per-tool TTL via `@Tool({ cache: { ttl } })` metadata in seconds",
                 "Using Redis-backed cache for multi-instance consistency",
                 "Configuring connection pool limits and timeouts to prevent resource exhaustion",
-                "Providers do not implement `onInit` / `onDestroy` — initialize in the constructor and let framework shutdown handle cleanup"
+                "The pool is created in the constructor and drained in `onShutdown()`, which framework shutdown runs"
               ]
             },
             {
@@ -3010,7 +3011,7 @@
                 "Removing the Unix socket file to prevent stale `.sock` files on restart",
                 "Cleaning up the PID file on shutdown",
                 "Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations",
-                "Providers initialize in the constructor — there is no `onInit` / `onDestroy`"
+                "Closing the database in the provider's `onShutdown()`, which the framework's SIGTERM handler runs"
               ]
             },
             {
@@ -3083,7 +3084,7 @@
               "features": [
                 "Connection reuse pattern: caching the connection promise in module scope so it survives Lambda freeze/thaw",
                 "Lazy-loading heavy dependencies (`pg`) via dynamic `import()` on first use, not at module load",
-                "Not closing connections on shutdown for Lambda (they survive freeze/thaw — and providers have no `onDestroy` hook anyway)",
+                "Not closing connections on shutdown for Lambda (they survive freeze/thaw, and a serverless handler never runs `onShutdown()`)",
                 "Keeping module scope lightweight with no heavy initialization"
               ]
             },
@@ -3133,11 +3134,11 @@
             },
             {
               "name": "multi-instance-cleanup",
-              "description": "Shows how multiple SDK instances can coexist without conflicts, and how to clean up timers and listeners — given that `@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. The pattern is: initialize in the constructor, expose a `stop()` method, and register it with `scope.onDispose()` from a factory provider so `server.dispose()` runs it.",
+              "description": "Shows how multiple SDK instances can coexist without conflicts, and how a provider cleans up its timers and listeners: it starts them in `onReady()` and stops them in `onShutdown()`, which `server.dispose()` runs for the providers of that instance only.",
               "level": "advanced",
               "tags": ["production", "sdk", "node", "multi", "instance", "cleanup"],
               "features": [
-                "`stop()` registered with `scope.onDispose()` from a factory provider that injects `ScopeEntry` (since `@Provider` classes have no `onDestroy` lifecycle hook)",
+                "A provider that starts its timer in `onReady()` and stops it in `onShutdown()`, so each `server.dispose()` cleans up its own",
                 "Ensuring multiple instances coexist without sharing global state",
                 "Testing that dispose removes all event listeners (no leaks)",
                 "Verifying one instance still works after another is disposed"
@@ -3212,7 +3213,7 @@
               "level": "intermediate",
               "tags": ["production", "vercel", "openapi", "performance", "cold", "start"],
               "features": [
-                "Lazy-loading heavy SDKs via dynamic `import()` on **first use**, not at module scope (and not in a fictional `Provider.onInit`)",
+                "Lazy-loading heavy SDKs via dynamic `import()` on **first use**, not at module scope or in `onBootstrap()`, which both run during the cold start",
                 "Caching expensive fetches (e.g., OpenAPI specs) across warm invocations",
                 "Keeping the module scope lightweight with no side effects",
                 "No `top-level await` and no heavy global initialization or network calls at import time (lightweight module-scope caching of cheap synchronous values like `cachedSpec` is fine)"

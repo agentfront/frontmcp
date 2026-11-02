@@ -2,18 +2,19 @@
 name: basic-database-provider
 reference: create-provider
 level: basic
-description: A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs.
+description: A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs, and closed in `onShutdown()`.
 tags: [development, database, provider]
 features:
   - 'Defining a typed token with `Token<T>` using a `Symbol` for DI identification'
   - 'Using `AsyncProvider({ provide, name, scope, useFactory })` so async setup completes before tool execution'
+  - 'Closing the pool in `onShutdown()`, which runs after the requests in flight finish'
   - 'Consuming the provider in a tool via `this.get(DB_TOKEN)` with full type safety'
   - 'Registering the factory in the `providers` array so tools can resolve it'
 ---
 
 # Basic Database Provider with Async Setup
 
-A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs.
+A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs, and closed in `onShutdown()`.
 
 ## Code
 
@@ -23,7 +24,6 @@ import type { Token } from '@frontmcp/di';
 
 export interface DatabaseService {
   query(sql: string, params?: unknown[]): Promise<unknown[]>;
-  close(): Promise<void>;
 }
 
 export const DB_TOKEN: Token<DatabaseService> = Symbol('DatabaseService');
@@ -33,25 +33,24 @@ export const DB_TOKEN: Token<DatabaseService> = Symbol('DatabaseService');
 // src/apps/main/providers/database.provider.ts
 import { createPool, type Pool } from 'your-db-driver';
 
-import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
+import { AsyncProvider, ProviderScope, type OnShutdown } from '@frontmcp/sdk';
 
 import { DB_TOKEN, type DatabaseService } from '../tokens';
 
-class DatabasePool implements DatabaseService {
+class DatabasePool implements DatabaseService, OnShutdown {
   constructor(private readonly pool: Pool) {}
 
   async query(sql: string, params?: unknown[]) {
     return this.pool.query(sql, params);
   }
 
-  async close() {
+  // FrontMCP calls it at shutdown, on the value the factory returned
+  async onShutdown() {
     await this.pool.end();
   }
 }
 
-// `@Provider` does NOT support `onInit`/`onDestroy` lifecycle hooks. For async
-// setup, register the dependency via `AsyncProvider({ useFactory })` — the
-// framework awaits `useFactory` before any tool can resolve the token.
+// The framework awaits `useFactory` before any tool can resolve the token.
 export const databaseProvider = AsyncProvider({
   provide: DB_TOKEN,
   name: 'DatabaseProvider',
@@ -115,6 +114,7 @@ class MainApp {}
 
 - Defining a typed token with `Token<T>` using a `Symbol` for DI identification
 - Using `AsyncProvider({ provide, name, scope, useFactory })` so async setup completes before tool execution
+- Closing the pool in `onShutdown()`, which runs after the requests in flight finish
 - Consuming the provider in a tool via `this.get(DB_TOKEN)` with full type safety
 - Registering the factory in the `providers` array so tools can resolve it
 

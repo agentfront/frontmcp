@@ -16,7 +16,7 @@ features:
   - Removing the Unix socket file to prevent stale `.sock` files on restart
   - Cleaning up the PID file on shutdown
   - Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations
-  - Providers initialize in the constructor — there is no `onInit` / `onDestroy`
+  - Closing the database in the provider's `onShutdown()`, which the framework's SIGTERM handler runs
 ---
 
 # Daemon Graceful Shutdown with Socket Cleanup
@@ -65,16 +65,20 @@ export function setupDaemonSideEffectCleanup(): void {
 // src/providers/sqlite-store.provider.ts
 import { dirname } from 'path';
 
-import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
+import { AsyncProvider, ProviderScope, type OnShutdown } from '@frontmcp/sdk';
 import { ensureDir } from '@frontmcp/utils';
 
 export const LOCAL_STORE = Symbol('LocalStore');
 
-// Providers do NOT have onInit/onDestroy lifecycle hooks. Anything async
-// at construction time goes through `AsyncProvider({ useFactory })` so the
-// dir is guaranteed to exist before the database is opened.
-export class SqliteStoreProvider {
+// Anything async at construction time goes through `AsyncProvider({ useFactory })`
+// so the dir is guaranteed to exist before the database is opened.
+export class SqliteStoreProvider implements OnShutdown {
   constructor(private readonly db: { close: () => void; exec: (sql: string) => void }) {}
+
+  // The framework's SIGTERM handler runs it once the requests in flight finish
+  onShutdown(): void {
+    this.db.close();
+  }
 }
 
 function openDatabase(path: string): { close: () => void; exec: (sql: string) => void } {
@@ -107,7 +111,7 @@ export const sqliteStoreProvider = AsyncProvider({
 - Removing the Unix socket file to prevent stale `.sock` files on restart
 - Cleaning up the PID file on shutdown
 - Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations
-- Providers initialize in the constructor — there is no `onInit` / `onDestroy`
+- Closing the database in the provider's `onShutdown()`, which the framework's SIGTERM handler runs
 
 ## Related
 

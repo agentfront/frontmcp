@@ -148,6 +148,8 @@ export type { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/to
 export { default as ToolRegistry } from './tool/tool.registry';
 export { ToolInstance } from './tool/tool.instance';
 export { default as ProviderRegistry } from './provider/provider.registry';
+export { createContainer } from './provider/create-container';
+export type { CreateContainerOptions, FrontMcpContainer } from './provider/create-container';
 
 // Job exports - saved, discoverable, triggerable executions
 export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './job';

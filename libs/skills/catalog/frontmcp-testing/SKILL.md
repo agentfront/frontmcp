@@ -81,17 +81,17 @@ This is a router skill. Follow this order to pick a testing approach, then move 
 
 ## Testing Strategy by Component Type
 
-| Component | Unit Test Focus                                          | E2E Test Focus                     | Key Assertions                                                          |
-| --------- | -------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
-| Tool      | Input validation, execute logic, error paths, DI mocking | `tools/call` via MCP client        | Output matches schema, errors return MCP codes                          |
-| Resource  | URI resolution, read content, template param handling    | `resources/read` via MCP client    | Content type correct, URI patterns resolve                              |
-| Prompt    | Argument validation, message generation, multi-turn      | `prompts/get` via MCP client       | Messages match expected structure                                       |
-| Agent     | LLM config, tool selection, handoff logic                | Agent loop via MCP client          | Tools called in order, result synthesized                               |
-| Provider  | Lifecycle hooks, factory output, singleton behavior      | Indirectly via tool/resource tests | Instance reuse, cleanup on scope disposal                               |
-| Job       | Progress tracking, retry logic, attempt counting         | Job execution via test harness     | Progress events emitted, retries respected                              |
-| Workflow  | Step dependencies, conditions, input mapping functions   | Workflow run via test harness      | Steps execute in order, conditions evaluated, continueOnError respected |
-| Skill     | Instruction loading (inline/file/url), tool validation   | Skill discovery via MCP/HTTP       | Instructions resolve, tool refs validated per `toolValidation` mode     |
-| Plugin    | Context extensions, provider registration, hook firing   | Indirectly via tool tests          | Extensions available on `this`, hooks fire at correct stages            |
+| Component | Unit Test Focus                                          | E2E Test Focus                                  | Key Assertions                                                          |
+| --------- | -------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------- |
+| Tool      | Input validation, execute logic, error paths, DI mocking | `tools/call` via MCP client                     | Output matches schema, errors return MCP codes                          |
+| Resource  | URI resolution, read content, template param handling    | `resources/read` via MCP client                 | Content type correct, URI patterns resolve                              |
+| Prompt    | Argument validation, message generation, multi-turn      | `prompts/get` via MCP client                    | Messages match expected structure                                       |
+| Agent     | LLM config, tool selection, handoff logic                | Agent loop via MCP client                       | Tools called in order, result synthesized                               |
+| Provider  | Lifecycle hooks, factory output, singleton behavior      | `createContainer()`, or via tool/resource tests | Instance reuse, `onShutdown()` on `dispose()`                           |
+| Job       | Progress tracking, retry logic, attempt counting         | Job execution via test harness                  | Progress events emitted, retries respected                              |
+| Workflow  | Step dependencies, conditions, input mapping functions   | Workflow run via test harness                   | Steps execute in order, conditions evaluated, continueOnError respected |
+| Skill     | Instruction loading (inline/file/url), tool validation   | Skill discovery via MCP/HTTP                    | Instructions resolve, tool refs validated per `toolValidation` mode     |
+| Plugin    | Context extensions, provider registration, hook firing   | Indirectly via tool tests                       | Extensions available on `this`, hooks fire at correct stages            |
 
 ## Cross-Cutting Testing Patterns
 
@@ -130,7 +130,7 @@ This is a router skill. Follow this order to pick a testing approach, then move 
 
 - [ ] Each tool has unit tests covering happy path, validation errors, and DI failures
 - [ ] Each resource has unit tests covering URI resolution and read content
-- [ ] Provider lifecycle (init, dispose) tested where applicable
+- [ ] Provider lifecycle (`onBootstrap()`, `onShutdown()`) tested where applicable, e.g. with `createContainer()` and `dispose()`
 
 ### E2E Tests
 

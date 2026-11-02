@@ -122,6 +122,8 @@ Besides flow hooks, the scope (`ScopeEntry`) takes two lifecycle callbacks:
 
 Use them for warming caches, starting background indexing, or releasing timers and connections. A plugin reaches the scope from a factory provider: `ScopeEntry` is a DI token, so `inject: () => [ScopeEntry]` hands the factory the scope it is built in. The plugin's providers are built while the server starts up, before it listens, so the callback is registered in time.
 
+A provider can also implement `onBootstrap()`, `onReady()` and `onShutdown()` itself, a plugin's providers included; see `create-provider` (Provider Lifecycle). `onReady()` runs on every transport, stdio and direct mode included, where `onServerStarted()` does not.
+
 ```typescript
 import { Plugin, ScopeEntry } from '@frontmcp/sdk';
 

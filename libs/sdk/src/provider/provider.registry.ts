@@ -41,6 +41,15 @@ import {
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { Scope } from '../scope';
 import { STATELESS_SESSION_ID } from '../transport/transport.types';
+import {
+  bootstrapProvider,
+  DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS,
+  lifecycleHooksOf,
+  readyProviders,
+  shutdownProviders,
+  type LifecycleEntry,
+  type LifecycleLogger,
+} from './provider.lifecycle';
 import { type ProviderViews } from './provider.types';
 import { normalizeProvider, providerDiscoveryDeps, providerInvocationTokens } from './provider.utils';
 
@@ -59,6 +68,8 @@ export interface ProviderRegistryOptions {
    * option follows its parent's setting.
    */
   providerCaching?: boolean;
+  /** How long each provider's `onShutdown()` may run; a registry with a parent and no value follows its parent. */
+  shutdownHookTimeoutMs?: number;
 }
 
 interface HierarchyDef {
@@ -118,6 +129,14 @@ export default class ProviderRegistry
   /** The registries built below this one (an app's, a plugin's, an agent's), disposed with it. */
   private readonly childRegistries = new Set<ProviderRegistry>();
 
+  /** The GLOBAL instances built here that declare a lifecycle hook, in build order. */
+  private readonly lifecycleEntries: LifecycleEntry[] = [];
+  /** Instances a registry of this tree runs the hooks of, so a value registered twice runs them once. */
+  private readonly lifecycleClaims: WeakSet<object>;
+  private readonly shutdownHookTimeoutMs: number;
+  private readyHooksRun = false;
+  private shutdownHooksRun = false;
+
   constructor(
     list: ProviderType[],
     private readonly parentProviders?: ProviderRegistry,
@@ -133,6 +152,9 @@ export default class ProviderRegistry
       !configured && parentProviders
         ? parentProviders.sessionCacheEnabled
         : shouldCacheProviders(options?.distributedMode, options?.providerCaching);
+    this.lifecycleClaims = parentProviders?.lifecycleClaims ?? new WeakSet();
+    this.shutdownHookTimeoutMs =
+      options?.shutdownHookTimeoutMs ?? parentProviders?.shutdownHookTimeoutMs ?? DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS;
 
     this.buildGraph();
     this.topoSort();
@@ -300,6 +322,7 @@ export default class ProviderRegistry
         console.error(`Failed instantiating:`, msg);
         throw new ProviderConstructionError(tokenName(token), e instanceof Error ? e : msg);
       }
+      await this.bootstrapBuilt(token);
     }
 
     // Start background session cleanup after initialization
@@ -309,6 +332,32 @@ export default class ProviderRegistry
     if (this.parentProviders) {
       this.startSessionCleanup();
     }
+  }
+
+  /** Run `onBootstrap()` on the instance just built for `token`, and keep it for the ready and shutdown phases. */
+  private async bootstrapBuilt(token: Token): Promise<void> {
+    const instance = lifecycleHooksOf(this.instances.get(token));
+    if (!instance || this.lifecycleClaims.has(instance)) return;
+    this.lifecycleClaims.add(instance);
+    const entry = { token, instance };
+    await bootstrapProvider(entry);
+    this.lifecycleEntries.push(entry);
+  }
+
+  /** Run `onReady()` on the providers built here, then on those of the registries below, in build order; once. */
+  async runReadyHooks(logger: LifecycleLogger): Promise<void> {
+    if (this.readyHooksRun) return;
+    this.readyHooksRun = true;
+    await readyProviders(this.lifecycleEntries, logger);
+    for (const child of [...this.childRegistries]) await child.runReadyHooks(logger);
+  }
+
+  /** Run `onShutdown()` on the providers of the registries below, then on those built here, in reverse order; once. */
+  async runShutdownHooks(logger: LifecycleLogger): Promise<void> {
+    if (this.shutdownHooksRun) return;
+    this.shutdownHooksRun = true;
+    for (const child of [...this.childRegistries].reverse()) await child.runShutdownHooks(logger);
+    await shutdownProviders(this.lifecycleEntries, this.shutdownHookTimeoutMs, logger);
   }
 
   /* -------------------- Views & session stores -------------------- */
@@ -814,7 +863,12 @@ export default class ProviderRegistry
     // Only instantiate GLOBAL-scoped providers (skip CONTEXT-scoped)
     // CONTEXT-scoped providers are built per-request via buildViews()
     const globalProviders = normalized.filter((rec) => this.getProviderScope(rec) === ProviderScope.GLOBAL);
-    return Promise.all(globalProviders.map((rec) => this.initiateOne(rec.provide, rec)));
+    return Promise.all(
+      globalProviders.map(async (rec) => {
+        await this.initiateOne(rec.provide, rec);
+        await this.bootstrapBuilt(rec.provide);
+      }),
+    );
   }
 
   private getWithParents<T>(token: Token<T>): T {

@@ -185,6 +185,7 @@ export {
   ProviderNotInstantiatedError,
   DependencyCycleError,
   ProviderConstructionError,
+  ProviderBootstrapError,
   ProviderDependencyError,
   ProviderScopedAccessError,
   ProviderNotAvailableError,
