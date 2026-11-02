@@ -224,6 +224,30 @@ describe('shared SQLite connections', () => {
     });
   });
 
+  it('keeps the value another process writes between reading an expired key and purging it', () => {
+    const kv = new SqliteKvStore({ path: dbPath, ttlCleanupIntervalMs: 0 });
+    const foreign = openForeignConnection(dbPath);
+    try {
+      kv.set('lock', 'stale', -1);
+      const statements = (kv as unknown as { stmts: { get: Database.Statement } }).stmts;
+      const readRow = statements.get;
+      statements.get = {
+        get: (key: string) => {
+          const row = readRow.get(key);
+          foreign.prepare("INSERT OR REPLACE INTO kv (key, value, expires_at) VALUES (?, 'fresh', NULL)").run(key);
+          return row;
+        },
+      } as unknown as Database.Statement;
+
+      expect(kv.get('lock')).toBeNull();
+
+      expect(foreign.prepare('SELECT value FROM kv WHERE key = ?').get('lock')).toEqual({ value: 'fresh' });
+    } finally {
+      foreign.close();
+      kv.close();
+    }
+  });
+
   describe('a lock held by another process', () => {
     it('waits for it without blocking the event loop', async () => {
       const adapter = new SqliteStorageAdapter({ path: dbPath, ttlCleanupIntervalMs: 0 });

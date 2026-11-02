@@ -17,6 +17,7 @@ interface KvPreparedStatements {
   get: Database.Statement;
   set: Database.Statement;
   del: Database.Statement;
+  delExpired: Database.Statement;
   has: Database.Statement;
   keys: Database.Statement;
   keysPattern: Database.Statement;
@@ -95,6 +96,7 @@ export class SqliteKvStore {
       get: this.db.prepare('SELECT value, expires_at FROM kv WHERE key = ?'),
       set: this.db.prepare('INSERT OR REPLACE INTO kv (key, value, expires_at) VALUES (?, ?, ?)'),
       del: this.db.prepare('DELETE FROM kv WHERE key = ?'),
+      delExpired: this.db.prepare('DELETE FROM kv WHERE key = ? AND expires_at IS NOT NULL AND expires_at <= ?'),
       has: this.db.prepare('SELECT 1 FROM kv WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)'),
       keys: this.db.prepare('SELECT key FROM kv WHERE (expires_at IS NULL OR expires_at > ?)'),
       keysPattern: this.db.prepare(
@@ -128,8 +130,9 @@ export class SqliteKvStore {
     if (!row) return null;
 
     // Check TTL
-    if (row.expires_at !== null && row.expires_at <= Date.now()) {
-      stmts.del.run(key);
+    const now = Date.now();
+    if (row.expires_at !== null && row.expires_at <= now) {
+      stmts.delExpired.run(key, now);
       return null;
     }
 
