@@ -91,6 +91,10 @@ class JobAuditPlugin {
   overrideAnswer(flowCtx: JobFlowCtx) {
     // A Finally hook's answer is ignored, so it cannot replace the job's result
     if (flowCtx.state.job?.name === 'overridden_job') flowCtx.respond({ result: { count: 999 }, logs: [] });
+    if (flowCtx.state.job?.name === 'replaced_job') {
+      flowCtx.state.set('answer', { result: { count: 999 }, logs: [] });
+      throw new Error('the recorder is down');
+    }
   }
 
   @JobHook.Will('finalize')
@@ -211,6 +215,13 @@ class OverriddenJob extends JobContext {
   }
 }
 
+@Job({ name: 'replaced_job', inputSchema: {}, outputSchema: { count: z.number() } })
+class ReplacedJob extends JobContext {
+  async execute() {
+    return { count: 1 };
+  }
+}
+
 @Job({ name: 'aborted_job', inputSchema: {}, outputSchema: {} })
 class AbortedJob extends JobContext {
   async execute() {
@@ -299,6 +310,7 @@ class WhoAmIFlow {}
     SendJob,
     AbortedJob,
     OverriddenJob,
+    ReplacedJob,
     WhoAmIJob,
     HookedJob,
   ],
@@ -541,6 +553,14 @@ describe('jobs:execute-job flow (#700)', () => {
 
     expect(result).toEqual(expect.objectContaining({ state: 'completed', result: { count: 1 } }));
     const [run] = await manager.listRuns({ jobId: 'overridden_job' });
+    expect(run).toEqual(expect.objectContaining({ state: 'completed', result: { count: 1 } }));
+  });
+
+  it("keeps the job's result when a Finally hook replaces it in state and then throws", async () => {
+    const result = await manager.executeJob(jobNamed('replaced_job'), {});
+
+    expect(result).toEqual(expect.objectContaining({ state: 'completed', result: { count: 1 } }));
+    const [run] = await manager.listRuns({ jobId: 'replaced_job' });
     expect(run).toEqual(expect.objectContaining({ state: 'completed', result: { count: 1 } }));
   });
 
