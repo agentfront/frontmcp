@@ -2,7 +2,7 @@ import { type ZodType } from '@frontmcp/lazy-zod';
 import {
   ElicitResultSchema,
   EmptyResultSchema,
-  McpServer,
+  type McpServer,
   type RequestId,
   type StreamableHTTPServerTransport,
 } from '@frontmcp/protocol';
@@ -23,6 +23,7 @@ import { type AuthenticatedServerRequest, type SdkAuthInfo } from '../../server/
 import { composeCallerInstructions } from '../../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../../task/task-scope.helper';
 import { createMcpHandlers } from '../mcp-handlers';
+import { createMcpServer } from '../mcp-server.factory';
 import { type TransportKey, type TransportType } from '../transport.types';
 import { type RecreateableSSEServerTransport } from './sse-transport';
 import { type RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
@@ -249,7 +250,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       serverInfo: JSON.stringify(serverOptions.serverInfo),
     });
 
-    this.server = new McpServer(info, serverOptions);
+    this.server = createMcpServer(info, serverOptions);
     const handlers = createMcpHandlers({
       scope: this.scope,
       serverOptions,

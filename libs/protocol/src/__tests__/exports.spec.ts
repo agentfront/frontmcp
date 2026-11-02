@@ -6,6 +6,7 @@ import { StdioServerTransport as SdkStdioServerTransport } from '@modelcontextpr
 import { StreamableHTTPServerTransport as SdkStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { WebStandardStreamableHTTPServerTransport as SdkWebStandardTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
+import { AjvJsonSchemaValidator as SdkAjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv-provider.js';
 
 import { Server as BrowserServer } from '../browser-mcp-server';
 import * as browserStreamableHttp from '../browser-mcp-streamable-http';
@@ -37,6 +38,7 @@ describe('@frontmcp/protocol exports', () => {
 
   it('exports the protocol surface from the package root', () => {
     expect(protocol.LATEST_PROTOCOL_VERSION).toBe(LATEST_PROTOCOL_VERSION);
+    expect(protocol.AjvJsonSchemaValidator).toBe(SdkAjvJsonSchemaValidator);
     expect(protocol.PROTOCOL_2026_07_28).toBe('2026-07-28');
     expect(protocol.StdioServerTransport).toBe(SdkStdioServerTransport);
   });

@@ -27,6 +27,7 @@ export * from './in-memory';
 
 // Server (browser/node conditional via #imports)
 export { Server as McpServer, type ServerOptions as McpServerOptions } from '#mcp-server';
+export { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv-provider.js';
 export {
   StreamableHTTPServerTransport,
   WebStandardStreamableHTTPServerTransport,

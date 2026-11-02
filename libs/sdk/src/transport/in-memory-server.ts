@@ -11,7 +11,6 @@ import {
   ErrorCode,
   InMemoryTransport,
   McpError,
-  McpServer,
   type AuthInfo,
   type Transport,
 } from '@frontmcp/protocol';
@@ -23,6 +22,7 @@ import { ElicitationTimeoutError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { buildScopedServerOptions } from './build-scoped-server-options';
+import { createMcpServer } from './mcp-server.factory';
 
 /**
  * Options for creating an in-memory MCP server.
@@ -166,7 +166,7 @@ export async function createInMemoryServer(
   const serverOptions = buildScopedServerOptions(scope);
 
   // Create MCP server
-  const mcpServer = new McpServer(scope.metadata.info, serverOptions);
+  const mcpServer = createMcpServer(scope.metadata.info, serverOptions);
 
   // Register handlers with auth context injection
   const composeInstructions = (caller?: { authInfo?: unknown }) =>
