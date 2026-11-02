@@ -176,7 +176,7 @@ class MyApp {}
 class MyServer {}
 ```
 
-Providers that `dynamicProviders()` returns reach the apps the plugin is installed for without an `exports` entry, which is why `this.myService` resolves in `DeleteUserTool`. Each provider needs a `name`; `inject` is optional and only needed when the factory takes dependencies. Inside the plugin, `this.get(token)` resolves from the plugin's own providers.
+Providers that `dynamicProviders()` returns reach the apps the plugin is installed for without an `exports` entry, which is why `this.myService` resolves in `DeleteUserTool`. `name` is optional and defaults to the token's name; `inject` is optional too, and only needed when the factory takes dependencies. Inside the plugin, `this.get(token)` resolves from the plugin's own providers.
 
 ## What This Demonstrates
 

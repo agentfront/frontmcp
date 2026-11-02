@@ -3,16 +3,17 @@
  */
 
 import 'reflect-metadata';
+
+import { DESIGN_PARAMTYPES, META_ASYNC_WITH, META_ASYNC_WITH_TOKENS } from '../tokens/di.constants.js';
 import {
-  tokenName,
-  isClass,
-  isPromise,
-  getAsyncWithTokens,
-  readWithParamTypes,
   depsOfClass,
   depsOfFunc,
+  getAsyncWithTokens,
+  isClass,
+  isPromise,
+  readWithParamTypes,
+  tokenName,
 } from '../utils/token.utils.js';
-import { DESIGN_PARAMTYPES, META_ASYNC_WITH, META_ASYNC_WITH_TOKENS } from '../tokens/di.constants.js';
 
 describe('token utils', () => {
   describe('tokenName', () => {
@@ -33,6 +34,24 @@ describe('token utils', () => {
 
     it('should return [ref] for null', () => {
       expect(tokenName(null as any)).toBe('[ref]');
+    });
+
+    it('should return the description of a symbol token', () => {
+      expect(tokenName(Symbol('api-url'))).toBe('api-url');
+    });
+
+    it('should return [ref] for a symbol without a description', () => {
+      expect(tokenName(Symbol())).toBe('[ref]');
+      expect(tokenName(Symbol(''))).toBe('[ref]');
+    });
+
+    it('should return the function name for an arrow function token', () => {
+      const makeStore = () => ({});
+      expect(tokenName(makeStore)).toBe('makeStore');
+    });
+
+    it('should return a string token itself', () => {
+      expect(tokenName('greeting')).toBe('greeting');
     });
 
     it('should return function name for named functions', () => {
