@@ -7,7 +7,7 @@ tags: [production, json-rpc, cli, transport, binary, stdio]
 features:
   - 'Exit code conventions: 0 (success), 1 (user error), 2 (internal error)'
   - 'Using stderr for all logging since stdout is the MCP JSON-RPC channel'
-  - 'Handling EOF on stdin and broken pipe on stdout gracefully'
+  - 'Relying on the built-in shutdown when stdin ends or the parent exits, and handling a broken pipe on stdout'
   - 'Showing helpful error messages for unknown flags instead of stack traces'
   - 'Validating file paths to prevent writes to unexpected locations'
 ---
@@ -47,11 +47,8 @@ async function main() {
     // stderr for all logging — stdout is the MCP JSON-RPC channel
     console.error('[my-mcp-cli] Starting MCP server via stdio...');
 
-    // Handle EOF on stdin gracefully
-    process.stdin.on('end', () => {
-      console.error('[my-mcp-cli] stdin closed. Exiting.');
-      process.exit(0);
-    });
+    // No stdin 'end' handler: when stdin ends or the parent process exits, the stdio server runs its
+    // graceful shutdown (providers' onShutdown() included) and exits 0. `process.exit()` here would skip it.
 
     // Handle broken pipe on stdout gracefully
     process.stdout.on('error', (err: NodeJS.ErrnoException) => {
@@ -122,7 +119,7 @@ export class SafeFileTool extends ToolContext {
 
 - Exit code conventions: 0 (success), 1 (user error), 2 (internal error)
 - Using stderr for all logging since stdout is the MCP JSON-RPC channel
-- Handling EOF on stdin and broken pipe on stdout gracefully
+- Relying on the built-in shutdown when stdin ends or the parent exits, and handling a broken pipe on stdout
 - Showing helpful error messages for unknown flags instead of stack traces
 - Validating file paths to prevent writes to unexpected locations
 

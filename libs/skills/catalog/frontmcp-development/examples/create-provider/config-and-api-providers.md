@@ -6,7 +6,7 @@ description: 'A configuration provider and an HTTP API client provider, organize
 tags: [development, provider, config, api, providers]
 features:
   - 'A configuration provider using `readonly` properties from environment variables (sync construction)'
-  - 'An API client provider that reads credentials in the constructor (no `onInit` — `@Provider` has no lifecycle hooks)'
+  - 'An API client provider that reads credentials in the constructor, so a missing one fails startup'
   - 'Folder-per-provider layout (`src/apps/main/providers/<slug>/`) with a barrel `index.ts` and a co-located `.provider.spec.ts`'
   - 'Top-level `src/apps/main/providers/index.ts` barrel re-exporting each provider folder'
   - 'Registering providers at `@FrontMcp` level for server-wide sharing across all apps'
@@ -99,8 +99,7 @@ import type { ApiClient } from '../../tokens';
 
 @Provider({ name: 'ApiClientProvider' })
 export class ApiClientProvider implements ApiClient {
-  // `@Provider` has no `onInit` lifecycle hook — read env in the constructor.
-  // First instantiation throws synchronously on missing config (fail fast).
+  // Read env in the constructor: a missing value throws at startup (fail fast).
   private readonly baseUrl: string;
   private readonly apiKey: string;
 
@@ -181,7 +180,7 @@ class MyServer {}
 ## What This Demonstrates
 
 - A configuration provider using `readonly` properties from environment variables (sync construction)
-- An API client provider that reads credentials in the constructor (no `onInit` — `@Provider` has no lifecycle hooks)
+- An API client provider that reads credentials in the constructor, so a missing one fails startup
 - Folder-per-provider layout (`src/apps/main/providers/<slug>/`) with a barrel `index.ts` and a co-located `.provider.spec.ts`
 - Top-level `src/apps/main/providers/index.ts` barrel re-exporting each provider folder
 - Registering providers at `@FrontMcp` level for server-wide sharing across all apps

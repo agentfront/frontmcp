@@ -13,7 +13,7 @@ tags:
 features:
   - 'Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`'
   - Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup
-  - 'Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) — `@Provider` has no `onDestroy` hook'
+  - 'Cleanup: `onShutdown()` quits the Redis client at shutdown, after the requests in flight finish'
   - Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`
   - Per-user data isolation using Redis hash keys (`tasks:${userId}`)
 ---
@@ -40,13 +40,13 @@ export interface Task {
 // src/providers/task-store.provider.ts
 import Redis, { Redis as RedisClient } from 'ioredis';
 
-import { AsyncProvider, Provider, ProviderScope } from '@frontmcp/sdk';
+import { AsyncProvider, Provider, ProviderScope, type OnShutdown } from '@frontmcp/sdk';
 import { randomUUID } from '@frontmcp/utils';
 
 import type { Task } from '../types/task';
 
 @Provider({ name: 'task-store', scope: ProviderScope.GLOBAL })
-export class TaskStoreProvider {
+export class TaskStoreProvider implements OnShutdown {
   constructor(private readonly redis: RedisClient) {}
 
   async create(input: Omit<Task, 'id' | 'createdAt'>): Promise<Task> {
@@ -81,10 +81,8 @@ export class TaskStoreProvider {
     }
   }
 
-  // `@Provider` has no `onDestroy` hook — expose explicit cleanup that the
-  // host calls before `server.dispose()` (e.g., from the SIGTERM/process
-  // shutdown side-effect handler).
-  async disconnect(): Promise<void> {
+  // FrontMCP calls it on SIGTERM, `shutdown()` or `dispose()`
+  async onShutdown(): Promise<void> {
     await this.redis.quit();
   }
 }
@@ -128,7 +126,7 @@ export class TasksApp {}
 
 - Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`
 - Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup
-- Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) — `@Provider` has no `onDestroy` hook
+- Cleanup: `onShutdown()` quits the Redis client at shutdown, after the requests in flight finish
 - Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`
 - Per-user data isolation using Redis hash keys (`tasks:${userId}`)
 

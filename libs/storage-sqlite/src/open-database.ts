@@ -36,7 +36,7 @@ export interface BusyRetryOptions {
   delayMs?: number;
 }
 
-function isBusyError(err: unknown): boolean {
+export function isBusyError(err: unknown): boolean {
   const code = (err as { code?: unknown } | null)?.code;
   return code === 'SQLITE_BUSY' || code === 'SQLITE_BUSY_RECOVERY' || code === 'SQLITE_BUSY_SNAPSHOT';
 }
@@ -49,6 +49,7 @@ function sleepSync(ms: number): void {
  * Run a synchronous SQLite operation, retrying while it reports `SQLITE_BUSY`.
  * `busy_timeout` covers ordinary lock waits; a few statements (the WAL switch,
  * schema changes racing another process's first open) can still fail fast.
+ * Blocks the event loop between attempts (750 ms at most by default): only for opening a store.
  */
 export function withBusyRetry<T>(operation: () => T, options: BusyRetryOptions = {}): T {
   const attempts = options.attempts ?? 5;

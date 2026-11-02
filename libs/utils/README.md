@@ -51,6 +51,7 @@ await storage.get('ticket:T-1'); // 'open'
 | Encryption, keys | `encryptValue`, `decryptValue`, `signData`, `verifyData`, `KeyPersistence`, `createKeyPersistence`                                                                        |
 | Storage          | `createStorage`, `createMemoryStorage`, `TypedStorage`, `EncryptedTypedStorage`, and adapters for memory, Redis, Vercel KV, Upstash and the file system                   |
 | File system      | `readFile`, `writeFile`, `mkdir`, `stat`, `fileExists`, `readJSON`, `writeJSON`, `ensureDir`, `isDirEmpty`, `runCmd` and more. Node.js only; `fs` loads on first use.     |
+| Processes        | `spawnOwned`, `reapOrphans`, `watchParent`, `watchPath`, `stopProcessTree`, `signalProcessTree`. Node.js only; `child_process` loads on first use.                        |
 | Environment      | `getEnv`, `isProduction`, `isDevelopment`, `isEdgeRuntime`, `isServerless`, `getRuntimeContext`, `isNode`, `isBrowser`                                                    |
 | Context, events  | `AsyncLocalStorage`, `EventEmitter`, both with browser builds                                                                                                             |
 | Safe regex       | `isPatternSafe`, `createSafeRegExp`, `safeTest`, `safeMatch`, `safeReplace`, against ReDoS (regular expression denial of service)                                         |

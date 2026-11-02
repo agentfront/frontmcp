@@ -26,7 +26,8 @@ description: |
   this.notify, this.progress, this.elicit, ElicitationDisabledError, ToolContext.execute,
   this.get(TOKEN), this.tryGet, register tool in @App, tool examples metadata,
   availableWhen, missingAxes, `tool()` function builder, Tool.esm, Tool.remote,
-  PublicMcpError, ResourceNotFoundError, MCP_ERROR_CODES, ui://widget.
+  PublicMcpError, ResourceNotFoundError, MCP_ERROR_CODES, ui://widget, tool aliases,
+  rename a tool, refused, error remedy.
 
 when_to_use: |
   Trigger when creating or editing a `*.tool.ts` / `*.tool.tsx` file, adding a `@Tool`
@@ -196,6 +197,9 @@ If a request seems to conflict with an inherited default (e.g., "wrap `inputSche
 10. Should it only run on certain OSes / runtimes / build targets?
     YES → availableWhen: { os, runtime, deployment, provider, target, surface, env }
           See: examples/21-tool-with-availability-constraints.md
+    Should it turn on and off while the server runs (a settings file, a flag service)?
+    YES → enabled: fileSignal('./features.json', 'reviews')
+          See: references/availability.md
 
 11. Should the result render as a widget in the host UI?
     YES → ui: { template, … }
@@ -269,26 +273,26 @@ Before considering a tool "done":
 
 ## References (deep dives)
 
-| Reference                                                             | Covers                                                                                                             |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| [`quick-start.md`](./references/quick-start.md)                       | 60-second tour: minimal tool, registration, calling it from a test                                                 |
-| [`decorator-options.md`](./references/decorator-options.md)           | Every field on `@Tool({...})` — what it does, default, when to set it                                              |
-| [`input-schema.md`](./references/input-schema.md)                     | Raw shape vs `z.object`, refinements, defaults, optional, describe                                                 |
-| [`output-schema.md`](./references/output-schema.md)                   | All supported output types: Zod shape, Zod schema, primitives, media, arrays                                       |
-| [`derived-types.md`](./references/derived-types.md)                   | `ToolInputOf` / `ToolOutputOf` patterns, file layout, schema hoisting                                              |
-| [`execution-context.md`](./references/execution-context.md)           | `ToolContext` methods + properties — `this.get`, `this.fetch`, `this.notify`, `this.context`, etc.                 |
-| [`error-handling.md`](./references/error-handling.md)                 | `this.fail`, MCP error classes (`PublicMcpError`, `ResourceNotFoundError`), error flow, when to throw vs `fail`    |
-| [`throttling.md`](./references/throttling.md)                         | `rateLimit`, `concurrency`, `timeout` — semantics, interaction, defaults                                           |
-| [`auth-providers.md`](./references/auth-providers.md)                 | `authProviders` string shorthand vs full mapping, scopes, alias, credential vault basics                           |
-| [`availability.md`](./references/availability.md)                     | `availableWhen` axes (os / runtime / deployment / provider / target / surface / env), `missingAxes`, `isPlatform`  |
-| [`elicitation.md`](./references/elicitation.md)                       | `this.elicit`, server-level enable, `ElicitationDisabledError`, accept / decline / cancel                          |
-| [`ui-widgets.md`](./references/ui-widgets.md)                         | `@Tool({ ui })` — template formats, `servingMode`, `resourceMode` host-detect, CSP, ignored options, MCP Apps spec |
-| [`annotations.md`](./references/annotations.md)                       | `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`                                      |
-| [`function-style-builder.md`](./references/function-style-builder.md) | `tool({...})(handler)` — when to pick over a class, register, ctx parameter                                        |
-| [`remote-and-esm.md`](./references/remote-and-esm.md)                 | `Tool.esm(...)` / `Tool.remote(...)` — load tools from npm packages or remote MCP servers                          |
-| [`registration.md`](./references/registration.md)                     | `@App({ tools })` vs `@FrontMcp({ tools })`, multi-app composition                                                 |
-| [`file-layout.md`](./references/file-layout.md)                       | Flat-sibling vs folder-per-tool, `<name>.schema.ts` / `<name>.tool.ts` / `<name>.tool.spec.ts`                     |
-| [`testing.md`](./references/testing.md)                               | Per-tool unit tests — `@frontmcp/testing`, mocking DI, asserting output validation                                 |
+| Reference                                                             | Covers                                                                                                                                                                            |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`quick-start.md`](./references/quick-start.md)                       | 60-second tour: minimal tool, registration, calling it from a test                                                                                                                |
+| [`decorator-options.md`](./references/decorator-options.md)           | Every field on `@Tool({...})` — what it does, default, when to set it, `aliases` for a renamed tool                                                                               |
+| [`input-schema.md`](./references/input-schema.md)                     | Raw shape vs `z.object`, refinements, defaults, optional, describe                                                                                                                |
+| [`output-schema.md`](./references/output-schema.md)                   | All supported output types: Zod shape, Zod schema, primitives, media, arrays                                                                                                      |
+| [`derived-types.md`](./references/derived-types.md)                   | `ToolInputOf` / `ToolOutputOf` patterns, file layout, schema hoisting                                                                                                             |
+| [`execution-context.md`](./references/execution-context.md)           | `ToolContext` methods + properties — `this.get`, `this.fetch`, `this.notify`, `this.context`, etc.                                                                                |
+| [`error-handling.md`](./references/error-handling.md)                 | `this.fail`, MCP error classes (`PublicMcpError`, `ResourceNotFoundError`), `refused()` remedies, throw vs `fail`                                                                 |
+| [`throttling.md`](./references/throttling.md)                         | `rateLimit`, `concurrency`, `timeout` — semantics, interaction, defaults                                                                                                          |
+| [`auth-providers.md`](./references/auth-providers.md)                 | `authProviders` string shorthand vs full mapping, scopes, alias, credential vault basics                                                                                          |
+| [`availability.md`](./references/availability.md)                     | `availableWhen` axes (os / runtime / deployment / provider / target / surface / env), `missingAxes`, `isPlatform`; `enabled` and `fileSignal()`, `FEATURE_OFF`, `STALE_TOOL_LIST` |
+| [`elicitation.md`](./references/elicitation.md)                       | `this.elicit`, server-level enable, `ElicitationDisabledError`, accept / decline / cancel                                                                                         |
+| [`ui-widgets.md`](./references/ui-widgets.md)                         | `@Tool({ ui })` — template formats, `servingMode`, `resourceMode` host-detect, CSP, ignored options, MCP Apps spec                                                                |
+| [`annotations.md`](./references/annotations.md)                       | `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`                                                                                                     |
+| [`function-style-builder.md`](./references/function-style-builder.md) | `tool({...})(handler)` — when to pick over a class, register, ctx parameter                                                                                                       |
+| [`remote-and-esm.md`](./references/remote-and-esm.md)                 | `Tool.esm(...)` / `Tool.remote(...)` — load tools from npm packages or remote MCP servers                                                                                         |
+| [`registration.md`](./references/registration.md)                     | `@App({ tools })` vs `@FrontMcp({ tools })`, multi-app composition                                                                                                                |
+| [`file-layout.md`](./references/file-layout.md)                       | Flat-sibling vs folder-per-tool, `<name>.schema.ts` / `<name>.tool.ts` / `<name>.tool.spec.ts`                                                                                    |
+| [`testing.md`](./references/testing.md)                               | Per-tool unit tests — `@frontmcp/testing`, mocking DI, asserting output validation                                                                                                |
 
 ## Rules (constraints — read these once, then they're enforced)
 

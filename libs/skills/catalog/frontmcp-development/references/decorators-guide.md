@@ -77,7 +77,9 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
 | `skillsConfig?` | Skills HTTP endpoints (`/llm.txt`, `/skills`), MCP tool config, `injectInstructions` policy, `SKILL.md` resource annotations, and tamper-evident `audit` log — see `configure-skills-http`                                                                                                                               |
 | `transport?`    | Transport preset (`'modern'`, `'legacy'`, `'stateless-api'`, `'full'`) or object                                                                                                                                                                                                                                         |
 | `auth?`         | Authentication mode: `'public'`, `'transparent'`, `'local'`, `'remote'`                                                                                                                                                                                                                                                  |
-| `http?`         | HTTP server options (port, host, cors, socketPath)                                                                                                                                                                                                                                                                       |
+| `http?`         | HTTP server options (port, host, cors, socketPath, `forwardHeaders` — request headers besides `x-frontmcp-*` kept in `customHeaders`; `authorization`, `cookie`, `proxy-*`, hop-by-hop and client-address headers such as `x-forwarded-*` are refused at startup)                                                        |
+| `output?`       | Output policy for every tool, overridable per `@App` / `@Tool`: `schemaMode`, `undeclaredKeys`, `allowNonFinite`, and `budget: { maxBytes, lists? }` (answer budget for tool answers and resource reads) — see `create-tool` → `output-schema`                                                                           |
+| `clients?`      | Per-client answer shaping keyed by a `clientInfo.name` glob: `structured` (`'both'` \| `'only'` \| `'text'`), `annotations` (`'full'` \| `'no-numbers'`), `instructions` (`'full'` \| `'compact'`) — see `frontmcp-config` → `configure-client-profiles`                                                                 |
 | `logging?`      | Logging configuration (transports and levels); without `level`, the level `FRONTMCP_LOG_LEVEL` names, else `info` (`warn` in a browser); per-request lines are at `verbose`                                                                                                                                              |
 | `elicitation?`  | Enable interactive user input during tool execution                                                                                                                                                                                                                                                                      |
 | `sqlite?`       | SQLite storage for local deployments (sessions, events)                                                                                                                                                                                                                                                                  |
@@ -85,6 +87,7 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
 | `jobs?`         | Background jobs/workflows system (`{ enabled, store? }`)                                                                                                                                                                                                                                                                 |
 | `throttle?`     | Server-level guard config (see note below)                                                                                                                                                                                                                                                                               |
 | `pagination?`   | List operation pagination (`tools/list` endpoint)                                                                                                                                                                                                                                                                        |
+| `offload?`      | Worker-thread pool behind `this.offload()` and `worker: true` resources (Node only): `maxWorkers`, `idleTimeoutMs`, `budgetMs` (30000), `env` (`['NODE_ENV']`) — see `offload-cpu-work`                                                                                                                                  |
 | `fetch?`        | What `this.fetch()` adds upstream: `forwardCallerTokenTo` / `forwardCustomHeadersTo` origin allow-lists (default: none), `autoInjectTracingHeaders`, `requestTimeout`                                                                                                                                                    |
 | `ui?`           | UI rendering config (CDN overrides for widget imports)                                                                                                                                                                                                                                                                   |
 | `extApps?`      | MCP Apps widget requests on a session: `ui/open-link`, `ui/request-display-mode`, `ui/update-model-context`, `notifications/message` (or the earlier `ui/openLink`, `ui/setDisplayMode`, `ui/updateModelContext`, `ui/log`). `ui/callServerTool` returns the tool's data, no page; a no-result method, `result: {}`      |
@@ -161,6 +164,7 @@ class AnalyticsApp {}
 | Field                | Description                                                                                                                                                                                                                         |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`               | Tool name (used in MCP protocol, snake_case)                                                                                                                                                                                        |
+| `aliases?`           | Other names `tools/call` and `this.callTool()` accept (an old name after a rename); never listed, and matched before a dotted name is read as `owner.name`                                                                          |
 | `description`        | Human-readable description for the LLM                                                                                                                                                                                              |
 | `inputSchema`        | Zod raw shape defining input parameters                                                                                                                                                                                             |
 | `outputSchema?`      | Output type: Zod schema, `'string'`, `'image'`, `'audio'`, etc.                                                                                                                                                                     |
@@ -255,14 +259,15 @@ class CodeReviewPrompt extends PromptContext {
 
 **Key fields:**
 
-| Field          | Description                                  |
-| -------------- | -------------------------------------------- |
-| `name`         | Resource name (used in MCP protocol)         |
-| `title?`       | Human-readable display title for UIs         |
-| `uri`          | Fixed URI (e.g., `config://app/settings`)    |
-| `description?` | What this resource provides                  |
-| `mimeType?`    | Content MIME type (e.g., `application/json`) |
-| `icons?`       | Array of Icon objects for UI representation  |
+| Field          | Description                                                                            |
+| -------------- | -------------------------------------------------------------------------------------- |
+| `name`         | Resource name (used in MCP protocol)                                                   |
+| `title?`       | Human-readable display title for UIs                                                   |
+| `uri`          | Fixed URI (e.g., `config://app/settings`)                                              |
+| `description?` | What this resource provides                                                            |
+| `mimeType?`    | Content MIME type (e.g., `application/json`)                                           |
+| `icons?`       | Array of Icon objects for UI representation                                            |
+| `worker?`      | `true` or `{ budgetMs }`: read in a worker thread (Node only) — see `offload-cpu-work` |
 
 ```typescript
 import { Resource, ResourceContext } from '@frontmcp/sdk';
@@ -702,7 +707,7 @@ Register the plugin in `@App({ plugins: [AuditPlugin] })`, or in `@FrontMcp({ pl
 A hook method receives the running flow, typed `FlowCtxOf<'<flow-name>'>`. The decorator checks the parameter: the flow's ctx, a structural subset of it, `unknown` or none compiles, and a property the flow does not have (or keeps protected, or of the wrong type) fails to compile (up to 1.10.15 any parameter compiled).
 
 - `ctx.toolName` and `ctx.toolInput` (`tools:call-tool`), `ctx.uri` (`resources:read-resource`) and `ctx.promptName` (`prompts:get-prompt`) name the entry and its input.
-- `ctx.request` holds the request's `sessionId`, `clientInfo`, `metadata` (user agent, client IP, `x-frontmcp-*` headers) and `protocol`; each is `undefined` when the run has none.
+- `ctx.request` holds the request's `sessionId`, `clientInfo`, `metadata` (user agent, client IP, `x-frontmcp-*` headers and those `http.forwardHeaders` keeps) and `protocol`; each is `undefined` when the run has none.
 - `ctx.notify.listChanged('tools' | 'resources' | 'prompts')` tells every connected client the list changed.
 - `ctx.state` holds the flow's data (for `tools:call-tool`: `input`, `tool`, `toolContext`, ...); `ctx.state.required.<key>` throws when the key is unset.
 - `ctx.logger` logs, and `ctx.fail(error)` or `ctx.respond(output)` ends the flow.

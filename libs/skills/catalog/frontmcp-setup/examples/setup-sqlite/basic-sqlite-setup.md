@@ -29,6 +29,7 @@ node -e "require('better-sqlite3')"
 ```typescript
 // src/main.ts
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
@@ -60,7 +61,7 @@ ls -la ~/.frontmcp/data/sessions.sqlite-shm
 
 # Inspect the database after at least one session
 sqlite3 ~/.frontmcp/data/sessions.sqlite ".tables"
-sqlite3 ~/.frontmcp/data/sessions.sqlite "SELECT key FROM kv_store LIMIT 5;"
+sqlite3 ~/.frontmcp/data/sessions.sqlite "SELECT key FROM kv LIMIT 5;"
 ```
 
 ## What This Demonstrates

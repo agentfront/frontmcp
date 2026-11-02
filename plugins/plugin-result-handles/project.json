@@ -1,0 +1,95 @@
+{
+  "name": "plugin-result-handles",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "plugins/plugin-result-handles/src",
+  "projectType": "library",
+  "tags": ["scope:plugins", "scope:publishable", "versioning:synchronized"],
+  "targets": {
+    "build-cjs": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["^build"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "plugins/plugin-result-handles/dist",
+        "main": "plugins/plugin-result-handles/src/index.ts",
+        "tsConfig": "plugins/plugin-result-handles/tsconfig.lib.json",
+        "format": ["cjs"],
+        "declaration": true,
+        "declarationRootDir": "plugins/plugin-result-handles/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "assets": [
+          "plugins/plugin-result-handles/README.md",
+          "plugins/plugin-result-handles/CHANGELOG.md",
+          "LICENSE",
+          "plugins/plugin-result-handles/package.json"
+        ],
+        "esbuildOptions": {
+          "minifyWhitespace": true,
+          "outExtension": {
+            ".js": ".js"
+          },
+          "external": ["@frontmcp/lazy-zod", "@frontmcp/sdk", "@frontmcp/utils", "zod", "reflect-metadata"]
+        }
+      }
+    },
+    "build-esm": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["build-cjs"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "plugins/plugin-result-handles/dist/esm",
+        "main": "plugins/plugin-result-handles/src/index.ts",
+        "tsConfig": "plugins/plugin-result-handles/tsconfig.lib.json",
+        "format": ["esm"],
+        "declaration": false,
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "esbuildOptions": {
+          "minifyWhitespace": true,
+          "outExtension": {
+            ".js": ".mjs"
+          },
+          "external": ["@frontmcp/lazy-zod", "@frontmcp/sdk", "@frontmcp/utils", "zod", "reflect-metadata"]
+        }
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-cjs", "build-esm"],
+      "options": {
+        "commands": [
+          "node scripts/strip-dist-from-pkg.js plugins/plugin-result-handles/dist/package.json",
+          "node scripts/inject-esm-require-banner.js plugins/plugin-result-handles/dist/esm",
+          "node scripts/escape-non-ascii.mjs plugins/plugin-result-handles/dist"
+        ],
+        "parallel": false
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/unit/plugin-result-handles"],
+      "options": {
+        "jestConfig": "plugins/plugin-result-handles/jest.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "npm publish plugins/plugin-result-handles/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    },
+    "publish-alpha": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "bash scripts/publish-alpha.sh {projectRoot}/dist",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

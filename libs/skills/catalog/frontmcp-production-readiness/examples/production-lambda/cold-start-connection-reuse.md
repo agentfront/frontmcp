@@ -13,7 +13,7 @@ tags:
 features:
   - 'Connection reuse pattern: caching the connection promise in module scope so it survives Lambda freeze/thaw'
   - Lazy-loading heavy dependencies (`pg`) via dynamic `import()` on first use, not at module load
-  - Not closing connections on shutdown for Lambda (they survive freeze/thaw — and providers have no `onDestroy` hook anyway)
+  - Not closing connections on shutdown for Lambda (they survive freeze/thaw, and a serverless handler never runs `onShutdown()`)
   - Keeping module scope lightweight with no heavy initialization
 ---
 
@@ -21,7 +21,7 @@ features:
 
 Shows how to minimize Lambda cold starts with lazy initialization on first call and the module-scope connection-reuse pattern for external services.
 
-> `@Provider`-decorated classes do NOT have `onInit` / `onDestroy` lifecycle hooks. Initialize lazily on first method call. For Lambda specifically, do **not** wire any shutdown hook for DB connections — Lambda freezes the execution context between invocations and your connection survives, so explicit close is wrong.
+> Initialize lazily on the first method call: a provider's constructor and `onBootstrap()` run during the cold start. For Lambda specifically, do **not** close DB connections on shutdown — Lambda freezes the execution context between invocations and your connection survives, so explicit close is wrong. A serverless handler is never shut down, so `onShutdown()` does not run there anyway.
 
 ## Code
 
@@ -121,7 +121,7 @@ export default class FastLambdaServer {}
 
 - Connection reuse pattern: caching the connection promise in module scope so it survives Lambda freeze/thaw
 - Lazy-loading heavy dependencies (`pg`) via dynamic `import()` on first use, not at module load
-- Not closing connections on shutdown for Lambda (they survive freeze/thaw — and providers have no `onDestroy` hook anyway)
+- Not closing connections on shutdown for Lambda (they survive freeze/thaw, and a serverless handler never runs `onShutdown()`)
 - Keeping module scope lightweight with no heavy initialization
 
 ## Related

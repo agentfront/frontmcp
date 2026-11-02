@@ -5,7 +5,8 @@
  * Supports both legacy TypeScript decorators and TC39 Stage 3 decorators.
  */
 
-import { type FlowName, type HookMetadata, type HookOptions, type HookStageType } from '../metadata';
+import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
+import { hookOptionsSchema, type FlowName, type HookMetadata, type HookOptions, type HookStageType } from '../metadata';
 import { FrontMcpFlowHookTokens } from '../tokens';
 import { isTC39MethodContext, PendingMetadataRegistry, type TC39MethodContext } from './decorator-utils';
 
@@ -66,12 +67,22 @@ export type FlowHookDecorator<Method> = <T extends Method>(
   descriptor: TypedPropertyDescriptor<T>,
 ) => void;
 
+/** Throws where the hook is declared when its `appliesTo`, `before` or `after` is not one the SDK can apply. */
+function assertHookOptions(type: HookStageType, stage: string, opts: unknown): void {
+  const parsed = hookOptionsSchema.safeParse(opts);
+  if (parsed.success) return;
+  const [issue] = parsed.error.issues;
+  const decoratorName = `${type[0].toUpperCase()}${type.slice(1)}('${stage}')`;
+  throw new InvalidDecoratorMetadataError(decoratorName, String(issue?.path[0] ?? 'options'), issue?.message ?? '');
+}
+
 /**
  * Base factory for creating hook decorators
  * Works with both legacy TypeScript and TC39 Stage 3 decorators
  */
 function make(flow: FlowName, type: HookStageType) {
   return function <Ctx, T extends string, Method>(stage: T, opts: HookOptions<Ctx> = {}): FlowHookDecorator<Method> {
+    assertHookOptions(type, stage, opts);
     return (target: any, keyOrContext: any, _desc?: PropertyDescriptor): any => {
       const { priority = 0, filter, ...rest } = opts;
 

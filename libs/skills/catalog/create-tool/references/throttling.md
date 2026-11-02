@@ -41,7 +41,7 @@ Cap simultaneous in-flight executions.
 - **Scope**: server-wide by default. Concurrency caps the resource — there's no point in per-session concurrency for shared resources like CPU / GPU / DB connection pools.
 - **Behavior on overflow**: with the default `queueTimeoutMs: 0`, the call is refused at once with `ConcurrencyLimitError` (code `CONCURRENCY_LIMIT`, HTTP 429). Set `queueTimeoutMs` to let it wait that long for a slot; it then fails with `QueueTimeoutError`.
 - **Slot lifetime**: a call holds its slot until `execute()` returns, however long that takes. The slot is stored with a time to live (300 seconds) that the server renews while the call runs, so the TTL only frees the slot of a server that died without releasing it.
-- **Storage**: shared limits (`throttle.storage`) need a backend with an atomic compare-and-delete: memory, Redis, Upstash or Vercel KV. With another backend, global or default concurrency refuses to start, and a tool's own `concurrency` fails its first call, with `GUARD_STORAGE_UNSUPPORTED`.
+- **Storage**: shared limits (`throttle.storage`) need a backend with an atomic compare-and-delete: memory, Redis, Upstash, Vercel KV or SQLite (`{ type: 'sqlite', sqlite: { path } }`, shared by the processes on one machine). With another backend, global or default concurrency refuses to start, and a tool's own `concurrency` fails its first call, with `GUARD_STORAGE_UNSUPPORTED`.
 - **Use for**: tools that hold a real bottleneck — image / PDF rendering, ML inference, DB write transactions.
 
 ## `timeout`

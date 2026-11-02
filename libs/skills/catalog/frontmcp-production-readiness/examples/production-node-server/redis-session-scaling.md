@@ -64,9 +64,9 @@ export default class ScalableServer {}
 // src/providers/env-validation.provider.ts
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-// Validate env in the constructor rather than a lifecycle hook — first
-// instantiation throws synchronously on missing config and prevents the
-// server from starting (fail fast). Providers don't expose onInit/onDestroy.
+// Validate env in the constructor — first instantiation throws synchronously
+// on missing config and prevents the server from starting (fail fast).
+// A check that needs I/O goes in `onBootstrap()`, which fails startup the same way.
 // The class is its own DI token: list it in `providers` and resolve it with `this.get(EnvValidationProvider)`
 @Provider({ name: 'EnvValidationProvider', scope: ProviderScope.GLOBAL })
 export class EnvValidationProvider {

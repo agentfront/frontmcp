@@ -57,7 +57,10 @@ export type McpHandlerOptions = {
    * skills that caller may see. When omitted, or when it yields `undefined`, the
    * handler falls back to the static `serverOptions.instructions`.
    */
-  composeInstructions?: (caller?: { authInfo?: unknown }) => string | undefined | Promise<string | undefined>;
+  composeInstructions?: (
+    caller?: { authInfo?: unknown },
+    clientName?: string,
+  ) => string | undefined | Promise<string | undefined>;
 };
 
 export type McpRequestHandler<

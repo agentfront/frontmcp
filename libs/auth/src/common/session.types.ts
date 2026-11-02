@@ -14,6 +14,8 @@ export type TransportProtocolType = 'legacy-sse' | 'sse' | 'streamable-http' | '
 export type AIPlatformType =
   | 'openai' // ChatGPT, OpenAI API clients
   | 'claude' // Claude Desktop, Claude API clients
+  | 'claude-code' // Claude Code (clientInfo.name 'claude-code')
+  | 'codex' // OpenAI Codex (clientInfo.name 'codex-mcp-client')
   | 'gemini' // Google Gemini clients
   | 'cursor' // Cursor IDE
   | 'continue' // Continue.dev
@@ -28,6 +30,8 @@ export type AIPlatformType =
 export const aiPlatformTypeSchema = z.enum([
   'openai',
   'claude',
+  'claude-code',
+  'codex',
   'gemini',
   'cursor',
   'continue',

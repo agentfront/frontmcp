@@ -41,6 +41,16 @@ import {
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { Scope } from '../scope';
 import { STATELESS_SESSION_ID } from '../transport/transport.types';
+import {
+  bootstrapProvider,
+  DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS,
+  lifecycleHooksOf,
+  readyProviders,
+  shutdownProviders,
+  type LifecycleEntry,
+  type LifecycleLogger,
+  type SharedLifecycle,
+} from './provider.lifecycle';
 import { type ProviderViews } from './provider.types';
 import { normalizeProvider, providerDiscoveryDeps, providerInvocationTokens } from './provider.utils';
 
@@ -59,6 +69,8 @@ export interface ProviderRegistryOptions {
    * option follows its parent's setting.
    */
   providerCaching?: boolean;
+  /** How long each provider's `onShutdown()` may run; a registry with a parent and no value follows its parent. */
+  shutdownHookTimeoutMs?: number;
 }
 
 interface HierarchyDef {
@@ -118,6 +130,16 @@ export default class ProviderRegistry
   /** The registries built below this one (an app's, a plugin's, an agent's), disposed with it. */
   private readonly childRegistries = new Set<ProviderRegistry>();
 
+  /** The GLOBAL instances built here that declare a lifecycle hook and whose bootstrap and ready hooks run here. */
+  private readonly lifecycleEntries: LifecycleEntry[] = [];
+  /** Every GLOBAL instance with a lifecycle hook this registry holds, one another registry also holds included. */
+  private readonly heldEntries: LifecycleEntry[] = [];
+  /** Each instance's shared lifecycle in this tree: the first holder bootstraps and readies it, the last shuts it down. */
+  private readonly sharedLifecycles: WeakMap<object, SharedLifecycle>;
+  private readonly shutdownHookTimeoutMs: number;
+  private readyHooksRun?: Promise<void>;
+  private shutdownHooksRun?: Promise<void>;
+
   constructor(
     list: ProviderType[],
     private readonly parentProviders?: ProviderRegistry,
@@ -133,6 +155,9 @@ export default class ProviderRegistry
       !configured && parentProviders
         ? parentProviders.sessionCacheEnabled
         : shouldCacheProviders(options?.distributedMode, options?.providerCaching);
+    this.sharedLifecycles = parentProviders?.sharedLifecycles ?? new WeakMap();
+    this.shutdownHookTimeoutMs =
+      options?.shutdownHookTimeoutMs ?? parentProviders?.shutdownHookTimeoutMs ?? DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS;
 
     this.buildGraph();
     this.topoSort();
@@ -300,6 +325,7 @@ export default class ProviderRegistry
         console.error(`Failed instantiating:`, msg);
         throw new ProviderConstructionError(tokenName(token), e instanceof Error ? e : msg);
       }
+      await this.bootstrapBuilt(token);
     }
 
     // Start background session cleanup after initialization
@@ -309,6 +335,51 @@ export default class ProviderRegistry
     if (this.parentProviders) {
       this.startSessionCleanup();
     }
+  }
+
+  /** Run `onBootstrap()` on the instance just built for `token`, and keep it for the ready and shutdown phases. */
+  private async bootstrapBuilt(token: Token): Promise<void> {
+    const instance = lifecycleHooksOf(this.instances.get(token));
+    if (!instance || this.heldEntries.some((held) => held.instance === instance)) return;
+    const entry = { token, instance };
+    const shared = this.sharedLifecycles.get(instance);
+    const lifecycle = shared ?? { holders: 0, bootstrapped: bootstrapProvider(entry) };
+    if (!shared) this.sharedLifecycles.set(instance, lifecycle);
+    lifecycle.holders++;
+    await lifecycle.bootstrapped;
+    if (!shared) this.lifecycleEntries.push(entry);
+    this.heldEntries.push(entry);
+  }
+
+  /** Run `onReady()` on the providers built here, then on those of the registries below, in build order; once. */
+  runReadyHooks(logger: LifecycleLogger): Promise<void> {
+    this.readyHooksRun ??= this.readyHereAndBelow(logger);
+    return this.readyHooksRun;
+  }
+
+  /** Run `onShutdown()` on the providers of the registries below, then on those built here, in reverse order; once. */
+  runShutdownHooks(logger: LifecycleLogger): Promise<void> {
+    this.shutdownHooksRun ??= this.shutdownBelowAndHere(logger);
+    return this.shutdownHooksRun;
+  }
+
+  private async readyHereAndBelow(logger: LifecycleLogger): Promise<void> {
+    await readyProviders(this.lifecycleEntries, logger);
+    for (const child of [...this.childRegistries]) await child.runReadyHooks(logger);
+  }
+
+  private async shutdownBelowAndHere(logger: LifecycleLogger): Promise<void> {
+    for (const child of [...this.childRegistries].reverse()) await child.runShutdownHooks(logger);
+    const lastHeld = this.heldEntries.filter((entry) => this.releaseLifecycleHold(entry.instance));
+    await shutdownProviders(lastHeld, this.shutdownHookTimeoutMs, logger);
+  }
+
+  /** Release this registry's hold on `instance`; true when no other registry of the tree still holds it. */
+  private releaseLifecycleHold(instance: object): boolean {
+    const lifecycle = this.sharedLifecycles.get(instance);
+    if (!lifecycle) return true;
+    lifecycle.holders--;
+    return lifecycle.holders === 0;
   }
 
   /* -------------------- Views & session stores -------------------- */
@@ -814,7 +885,12 @@ export default class ProviderRegistry
     // Only instantiate GLOBAL-scoped providers (skip CONTEXT-scoped)
     // CONTEXT-scoped providers are built per-request via buildViews()
     const globalProviders = normalized.filter((rec) => this.getProviderScope(rec) === ProviderScope.GLOBAL);
-    return Promise.all(globalProviders.map((rec) => this.initiateOne(rec.provide, rec)));
+    return Promise.all(
+      globalProviders.map(async (rec) => {
+        await this.initiateOne(rec.provide, rec);
+        await this.bootstrapBuilt(rec.provide);
+      }),
+    );
   }
 
   private getWithParents<T>(token: Token<T>): T {

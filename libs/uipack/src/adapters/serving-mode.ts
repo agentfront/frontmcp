@@ -9,7 +9,16 @@
 /**
  * Platform types recognized by the serving mode resolver.
  */
-export type AdapterPlatformType = 'openai' | 'ext-apps' | 'claude' | 'gemini' | 'generic-mcp' | 'unknown' | string;
+export type AdapterPlatformType =
+  | 'openai'
+  | 'ext-apps'
+  | 'claude'
+  | 'claude-code'
+  | 'codex'
+  | 'gemini'
+  | 'generic-mcp'
+  | 'unknown'
+  | string;
 
 /**
  * Input for serving mode resolution.
@@ -42,7 +51,7 @@ export interface ServingModeResult {
  *
  * - Gemini: No UI support
  * - OpenAI, ext-apps, claude, generic-mcp, unknown: UI supported, inline mode
- * - OpenAI/ext-apps/generic-mcp/unknown: include structuredContent
+ * - OpenAI/ext-apps/generic-mcp/codex/unknown: include structuredContent
  */
 export function resolveServingMode(options: ResolveServingModeOptions): ServingModeResult {
   const { configuredMode, platformType } = options;
@@ -80,6 +89,7 @@ export function resolveServingMode(options: ResolveServingModeOptions): ServingM
     platformType === 'openai' ||
     platformType === 'ext-apps' ||
     platformType === 'generic-mcp' ||
+    platformType === 'codex' ||
     platformType === 'unknown';
 
   return {

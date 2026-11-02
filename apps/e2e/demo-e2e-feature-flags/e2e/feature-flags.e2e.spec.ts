@@ -111,6 +111,15 @@ test.describe('Feature Flags E2E', () => {
       expect(result).toBeError();
       expect(result).toHaveTextContent('disabled by feature flag');
     });
+
+    test('should name the flag to turn on in the refusal', async ({ mcp }) => {
+      const result = await mcp.tools.call('experimental-agent', { task: 'test' });
+
+      expect(result).toHaveTextContent('To fix: Turn on the feature flag "experimental-agent" to use this tool.');
+      expect(result.raw._meta?.['remedy']).toEqual({
+        say: 'Turn on the feature flag "experimental-agent" to use this tool.',
+      });
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────

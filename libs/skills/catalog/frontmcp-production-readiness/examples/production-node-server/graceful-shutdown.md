@@ -23,10 +23,11 @@ Shows how to expose load-balancer drain state without overriding the FrontMCP fr
 
 > The framework already installs SIGTERM/SIGINT handlers that:
 >
-> 1. Unregister the server from the notification bus
-> 2. Call `scope.shutdown()` to dispose all providers
-> 3. Call `mcpServer.close()` on the underlying transport
-> 4. Exit with code 0 (or 1 after a 5s deadline)
+> 1. Stop accepting connections
+> 2. Shut every scope down (HA heartbeat, session relay, Redis, channels)
+> 3. Let the requests in flight finish
+> 4. Dispose every scope: its `onDispose` callbacks, then every provider's `onShutdown()`, an app's before the server's, each within `lifecycle.shutdownHookTimeoutMs` (default 3000 ms)
+> 5. Exit with code 0 (or 1 after a 10 s deadline)
 >
 > See `libs/sdk/src/front-mcp/front-mcp.ts`. **Do not register a second handler that also calls `process.exit()`** — both will fire and race.
 

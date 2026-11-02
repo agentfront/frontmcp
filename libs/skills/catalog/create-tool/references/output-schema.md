@@ -144,6 +144,7 @@ output?: {
   schemaMode?: 'definition' | 'description' | 'both' | 'none'; // default 'definition'
   schemaDescriptionFormat?: 'summary' | 'jsonSchema';          // default 'summary'
   undeclaredKeys?: 'strip' | 'warn' | 'keep' | 'fail';         // see Undeclared keys
+  budget?: { maxBytes: number; lists?: 'keep-newest' | 'keep-oldest' } | false; // see Answer budget
 };
 ```
 
@@ -202,6 +203,35 @@ expect(await tool.execute({ id: 'INV-1' })).toPassOutputSchemaWhole(outputSchema
 
 The matcher fails for a schema with a transform, for the same reason; assert on the parsed answer there.
 
+## Answer budget
+
+`output.budget` caps how many bytes an answer may take, so one call that returns a 300 KB list does not fill the model's context. It cascades **Tool > App > server**, like `undeclaredKeys`; it is off unless set, and `budget: false` on a tool or an app turns off the budget a wider level set. Resource reads follow the app's and the server's budget.
+
+```typescript
+@FrontMcp({
+  info: { name: 'reports', version: '1.0.0' },
+  apps: [ReportsApp],
+  output: { budget: { maxBytes: 64 * 1024 } }, // lists: 'keep-newest' by default
+})
+class Server {}
+
+// This tool's answers are small and must stay whole
+@Tool({ name: 'get_invoice', inputSchema, outputSchema, output: { budget: false } })
+class GetInvoiceTool extends ToolContext {
+  /* … */
+}
+```
+
+- `maxBytes` (at least 1024) is measured as UTF-8 JSON, on each copy of the data: an answer with both the JSON text and `structuredContent` sends each one within `maxBytes`.
+- The budget never cuts inside JSON, so the answer stays valid JSON. It leaves out whole list items: with `lists: 'keep-newest'` (default) it keeps a list's last items, as in a log kept in time order; with `'keep-oldest'` its first items. It then cuts the end of long strings. Larger values shrink first. An answer made only of numbers, booleans and keys stays as it is.
+- Plain text is cut at its end. Images, audio and embedded resources are left alone; so are HTML resource contents (`ui://` widgets) and blobs.
+- What was left out is noted twice: in `_meta['frontmcp/budget']` (`{ maxBytes, lists, omitted: [{ path: '$.rows', items: 880, of: 1000 }, { path: '$.body', chars: 4000 }] }`, plus `uri` for a resource) and in a last text content the model reads: `This answer was shortened to fit its 65536-byte budget: left out the first 880 of 1000 items of $.rows.`
+- A cut never breaks the `outputSchema` a client validates `structuredContent` against: when it would (fewer items than `.min(10)`, a shortened tuple or a pattern), the answer is sent whole and the server logs a warning once per tool. Loosen the schema, or raise or turn off that tool's budget.
+- An answer a tool, agent or job gets from `this.callTool()` is never cut; only answers sent to a client are.
+- The budget runs in the `fitAnswer` stage of `tools:call-tool` and `resources:read-resource`, after `finalize`. A plugin can wrap or replace it (`Around('fitAnswer')`) and read or set `state.output`. `BUDGET_META_KEY`, `fitToolAnswer()` and `fitResourceAnswer()` are exported for that.
+
+How a client receives the answer (text, `structuredContent` or both) is set per client with `clients` profiles: see [client profiles](../../frontmcp-config/references/configure-client-profiles.md).
+
 ## Why this matters
 
 - **Data leak prevention** — without `outputSchema`, accidentally returning `{ result, internalApiKey }` leaks the key. With it, only `result` flows (unless `output.undeclaredKeys` is `'keep'`).
@@ -212,5 +242,6 @@ The matcher fails for a schema with a transform, for the same reason; assert on 
 ## See also
 
 - [`input-schema.md`](./input-schema.md)
+- [`configure-client-profiles.md`](../../frontmcp-config/references/configure-client-profiles.md)
 - [`derived-types.md`](./derived-types.md)
 - [`rules/always-define-output-schema.md`](../rules/always-define-output-schema.md)

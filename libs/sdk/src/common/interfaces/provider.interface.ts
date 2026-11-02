@@ -17,6 +17,21 @@ export type ProviderType<
   Tokens extends readonly (ClassToken | Token)[] = readonly (ClassToken | Token)[],
 > = Type<Provide> | ProviderClassType<Provide> | ProviderValueType<Provide> | ProviderFactoryType<Provide, Tokens>;
 
+/** A GLOBAL provider whose `onBootstrap()` runs once it is built, after its dependencies and before the server lists anything. */
+export interface OnBootstrap {
+  onBootstrap(): void | Promise<void>;
+}
+
+/** A GLOBAL provider whose `onReady()` runs once the server serves on its transport. */
+export interface OnReady {
+  onReady(): void | Promise<void>;
+}
+
+/** A GLOBAL provider whose `onShutdown()` runs at shutdown, after its dependents', within `lifecycle.shutdownHookTimeoutMs`. */
+export interface OnShutdown {
+  onShutdown(): void | Promise<void>;
+}
+
 /**
  * Helper to define factory providers without tuple widening.
  * Enforces that `useFactory` params follow the `inject()` tokens (order + arity).

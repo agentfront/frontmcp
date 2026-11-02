@@ -150,7 +150,9 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
           sessionId,
           scopeId: scope.id,
           authInfo,
-          ...(inProcessMetadata ? inProcessRequestContext(inProcessMetadata) : {}),
+          ...(inProcessMetadata
+            ? inProcessRequestContext(inProcessMetadata, { forwardsHeader: contextStorage.forwardsHeader })
+            : {}),
           // Per request, in the context only: `this.workerEnv` reads it; process.env is never written
           ...(inProcessPlatformEnv !== undefined ? { platformEnv: inProcessPlatformEnv } : {}),
         },

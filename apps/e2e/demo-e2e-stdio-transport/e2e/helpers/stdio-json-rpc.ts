@@ -79,8 +79,27 @@ export class StdioJsonRpcProcess {
     return exited;
   }
 
-  async stop(): Promise<void> {
+  /** End stdin, leaving the process unsignalled, and resolve with the exit code. */
+  async closeStdin(): Promise<number | null> {
+    if (this.hasExited()) return this.child.exitCode;
+    const exited = new Promise<number | null>((resolve) => this.child.once('exit', (code) => resolve(code)));
+    this.child.stdin.end();
+    return exited;
+  }
+
+  /** Kill the process outright, leaving stdin open. */
+  async kill(): Promise<void> {
     if (this.hasExited()) return;
+    const exited = new Promise((resolve) => this.child.once('exit', resolve));
+    this.child.kill('SIGKILL');
+    await exited;
+  }
+
+  async stop(): Promise<void> {
+    if (this.hasExited()) {
+      this.child.stdin.destroy();
+      return;
+    }
     const exited = new Promise((resolve) => this.child.once('close', resolve));
     this.child.stdin.end();
     this.child.kill('SIGTERM');

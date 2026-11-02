@@ -1,11 +1,11 @@
 import {
-  getPlatformClientInfo,
   buildUserAgent,
-  getPlatformUserAgent,
   getPlatformCapabilities,
-  requiresCapabilityDetection,
-  PLATFORM_DETECTION_PATTERNS,
+  getPlatformClientInfo,
+  getPlatformUserAgent,
   MCP_APPS_EXTENSION_KEY,
+  PLATFORM_DETECTION_PATTERNS,
+  requiresCapabilityDetection,
 } from '../platform-client-info';
 import type { TestPlatformType } from '../platform-types';
 
@@ -14,6 +14,8 @@ describe('getPlatformClientInfo', () => {
     ['openai', 'ChatGPT', '1.0'],
     ['ext-apps', 'mcp-ext-apps', '1.0'],
     ['claude', 'claude-desktop', '1.0'],
+    ['claude-code', 'claude-code', '1.0'],
+    ['codex', 'codex-mcp-client', '1.0'],
     ['cursor', 'cursor', '1.0'],
     ['continue', 'continue', '1.0'],
     ['cody', 'cody', '1.0'],
@@ -61,6 +63,8 @@ describe('PLATFORM_DETECTION_PATTERNS', () => {
       'openai',
       'ext-apps',
       'claude',
+      'claude-code',
+      'codex',
       'cursor',
       'continue',
       'cody',

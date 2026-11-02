@@ -11,6 +11,9 @@
     "types": []
   },
   "files": [
+    "provider-lifecycle-must-compile.ts",
+    "sqlite-storage-must-compile.ts",
+    "process-kit-must-compile.ts",
     "tool-must-fail.ts",
     "prompts-must-compile.ts",
     "hooks-must-compile.ts",
@@ -18,6 +21,14 @@
     "host-must-compile.ts",
     "skills-must-compile.ts",
     "output-schemas-must-compile.ts",
-    "providers-must-compile.ts"
+    "providers-must-compile.ts",
+    "tool-aliases-must-compile.ts",
+    "answer-shaping-must-compile.ts",
+    "live-surface-must-compile.ts",
+    "offload-must-compile.ts",
+    "call-recorder-must-compile.ts",
+    "hook-ordering-must-compile.ts",
+    "hook-ordering-must-fail.ts",
+    "live-surface-must-compile.ts"
   ]
 }

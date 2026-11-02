@@ -138,7 +138,7 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
     throw new StorageNotSupportedError(
       'deleteIfEquals',
       this.backendName,
-      'Use the memory, Redis, Upstash or Vercel KV adapter for an atomic compare-and-delete.',
+      'Use the memory, Redis, Upstash, Vercel KV or SQLite adapter for an atomic compare-and-delete.',
     );
   }
 
@@ -147,7 +147,7 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
     throw new StorageNotSupportedError(
       'expireIfEquals',
       this.backendName,
-      'Use the memory, Redis, Upstash or Vercel KV adapter for an atomic compare-and-expire.',
+      'Use the memory, Redis, Upstash, Vercel KV or SQLite adapter for an atomic compare-and-expire.',
     );
   }
 

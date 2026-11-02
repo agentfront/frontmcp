@@ -22,6 +22,11 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
 
   // global scoped providers
   providers: tokenFactory.meta('providers'),
+  // provider lifecycle hooks (onShutdown timeout)
+  lifecycle: tokenFactory.meta('lifecycle'),
+  offload: tokenFactory.meta('offload'),
+  // development aids (hook trace)
+  devtools: tokenFactory.meta('devtools'),
   // global scoped tools (shared across apps)
   tools: tokenFactory.meta('tools'),
   // global scoped resources (shared across apps)
@@ -68,4 +73,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   tasks: tokenFactory.meta('tasks'),
   // output validation policy (e.g., reject non-finite numeric output)
   output: tokenFactory.meta('output'),
+  // per-client answer shaping, keyed by a clientInfo.name glob
+  clients: tokenFactory.meta('clients'),
 };
