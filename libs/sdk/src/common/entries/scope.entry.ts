@@ -107,7 +107,7 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   haManager?: HaManager;
 
   /** The scope's `@HttpRoute`s, which the `http:route` flow serves; `undefined` when it has none. */
-  httpRouteTable?: HttpRouteTable;
+  declare httpRouteTable?: HttpRouteTable;
 
   abstract get rateLimitManager(): GuardManager | undefined;
 

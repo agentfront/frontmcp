@@ -985,22 +985,7 @@ export class Scope extends ScopeEntry {
     // reserved-path guard uses the resolved entryPath + routeBase, so it is
     // aware of split-by-app scope bases (e.g. /mcp/billing).
     if (httpServing) {
-      const routeTable = httpServing.buildHttpRouteTable({
-        apps: this.scopeApps.getApps().map((app) => ({
-          routes: (app.metadata as { routes?: readonly unknown[] }).routes,
-          providers: app.providers,
-        })),
-        scopeProviders: this.scopeProviders,
-        server: this.globalProviders,
-        people: this.metadata.http?.auth?.people,
-        entryPath: this.entryPath,
-        routeBase: this.routeBase,
-        healthPaths: httpServing.servedHealthPaths(this.metadata.health),
-      });
-      if (routeTable) {
-        this.httpRouteTable = routeTable;
-        this.onDispose(() => routeTable.closeStreams());
-      }
+      httpServing.attachHttpRoutes(this, this.globalProviders);
       httpServing.registerCustomHttpRoutes({
         routes: this.metadata.http?.routes,
         server: this.httpRouteRegistrar,

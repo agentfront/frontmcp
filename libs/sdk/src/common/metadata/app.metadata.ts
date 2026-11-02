@@ -34,7 +34,6 @@ import {
 } from '../schemas';
 import { type AuthOptionsInput, type RawZodShape } from '../types';
 import { appFilterConfigSchema, type AppFilterConfig } from './app-filter.metadata';
-import { httpRouteMetadataOf } from './http-route.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import { type EsmOptions, type RemoteOptions } from './remote-primitive.metadata';
 import type { WidgetServingMode } from './tool-ui.metadata';
@@ -228,9 +227,7 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
   channels: z.array(z.lazy(() => annotatedFrontMcpChannelsSchema)).optional(),
   routes: z
     .array(
-      z.custom<HttpRouteType>((value) => httpRouteMetadataOf(value) !== undefined, {
-        message: 'routes takes @HttpRoute classes',
-      }),
+      z.custom<HttpRouteType>((value) => typeof value === 'function', { message: 'routes takes @HttpRoute classes' }),
     )
     .optional(),
   auth: authOptionsSchema.optional(),

@@ -61,9 +61,9 @@ describe('@HttpRoute', () => {
     );
   });
 
-  it('refuses an app route that is not an @HttpRoute class', () => {
+  it('refuses an app route that is not a class', () => {
     expect(() => {
-      @App({ name: 'bad', routes: [class Plain {}] as never })
+      @App({ name: 'bad', routes: [{ path: '/x' }] as never })
       class BadApp {}
       return BadApp;
     }).toThrow();
@@ -71,6 +71,10 @@ describe('@HttpRoute', () => {
 });
 
 describe('the routes of a server', () => {
+  it('refuse a class that is not an @HttpRoute', async () => {
+    await expect(boot([class Plain {}])).rejects.toThrow(InvalidHttpRouteError);
+  });
+
   it('refuse a people route when http.auth.people is not set', async () => {
     await expect(boot([routeClass({ method: 'GET', path: '/x', auth: 'people' })])).rejects.toThrow(
       InvalidHttpRouteError,

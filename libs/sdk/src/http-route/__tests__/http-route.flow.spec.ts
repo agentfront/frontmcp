@@ -7,13 +7,17 @@ import 'reflect-metadata';
 import * as http from 'node:http';
 import type * as net from 'node:net';
 
+import { LoopbackTokenAuth } from '@frontmcp/auth';
+
 import { createTestFetchServer, rpc20260728 } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import {
   App,
+  FlowHooksOf,
   frontMcpMetadataSchema,
   httpRespond,
   HttpRoute,
   LogLevel,
+  Plugin,
   Provider,
   ProviderScope,
   Tool,
@@ -21,6 +25,7 @@ import {
   type FrontMcpConfigInput,
 } from '../../common';
 import { HttpRouteContext } from '../../common/interfaces/http-route.interface';
+import { PublicMcpError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { resourceStore } from '../../resource/materialized';
 import { type Scope } from '../../scope/scope.instance';
@@ -38,6 +43,13 @@ class Counter {
 class CountTool extends ToolContext {
   async execute() {
     return { count: this.get(Counter).next() };
+  }
+}
+
+@Tool({ name: 'sign-in-code', inputSchema: {} })
+class SignInCodeTool extends ToolContext {
+  async execute() {
+    return { code: this.get(LoopbackTokenAuth).createCode().code };
   }
 }
 
@@ -119,7 +131,7 @@ class FailingRoute extends HttpRouteContext {
   id: 'web',
   name: 'web',
   providers: [Counter],
-  tools: [CountTool],
+  tools: [CountTool, SignInCodeTool],
   routes: [CountPage, HelloRoute, PageRoute, AddNoteRoute, ListNotesRoute, NoteEvents, HomeRoute, FailingRoute],
 })
 class WebApp {}
@@ -426,6 +438,63 @@ describe('@HttpRoute providers', () => {
 
     expect(fromTool.message.result?.['structuredContent']).toEqual({ count: 1 });
     expect(fromPage.count).toBe(2);
+    await harness.instance.shutdown();
+  });
+
+  it('lets a tool hand a person a one-time sign-in code', async () => {
+    const harness = await startWebFetch(CONFIG);
+    const handler = (request: Request) => harness.send(new URL(request.url).pathname, request);
+
+    const issued = await rpc20260728(handler, 'tools/call', { name: 'sign-in-code', arguments: {} });
+    const { code } = issued.message.result?.['structuredContent'] as { code: string };
+    const login = await harness.send('/_frontmcp/people/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: harness.origin },
+      body: `code=${code}`,
+    });
+
+    expect(login.status).toBe(200);
+    expect(login.headers.get('set-cookie')).toContain('frontmcp_people=');
+    await harness.instance.shutdown();
+  });
+});
+
+const RouteHook = FlowHooksOf('http:route');
+
+@Plugin({ name: 'route-gate' })
+class RouteGatePlugin {
+  @RouteHook.Will('handle')
+  refuseBlocked(ctx: { rawInput: { request: { path: string } } }) {
+    if (ctx.rawInput.request.path === '/hello/blocked') throw new PublicMcpError('blocked by a hook', 'BLOCKED', 451);
+  }
+}
+
+describe('the http:route flow', () => {
+  it('runs the hooks a plugin puts on its stages', async () => {
+    const harness = await startWebFetch({ ...CONFIG, plugins: [RouteGatePlugin] });
+
+    expect((await harness.send('/hello/blocked')).status).toBe(451);
+    expect(await (await harness.send('/hello/ada')).text()).toBe('hello ada');
+    await harness.instance.shutdown();
+  });
+});
+
+describe('bad sign-in codes', () => {
+  it('lock the client out, with 429, even from a good code', async () => {
+    const harness = await startWebFetch(CONFIG);
+    const post = (code: string) =>
+      harness.send('/_frontmcp/people/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: harness.origin },
+        body: JSON.stringify({ code }),
+      });
+
+    const statuses: number[] = [];
+    for (let attempt = 0; attempt < 5; attempt++) statuses.push((await post(`wrong-${attempt}`)).status);
+    const { code } = (harness.instance.getScopes()[0] as Scope).providers.get(LoopbackTokenAuth).createCode();
+
+    expect(statuses).toEqual([401, 401, 401, 401, 429]);
+    expect((await post(code)).status).toBe(429);
     await harness.instance.shutdown();
   });
 });
