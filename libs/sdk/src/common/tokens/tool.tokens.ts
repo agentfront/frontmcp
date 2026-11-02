@@ -6,6 +6,7 @@ export const FrontMcpToolTokens = {
   type: tokenFactory.type('tool'),
   id: tokenFactory.meta('id'),
   name: tokenFactory.meta('name'),
+  aliases: tokenFactory.meta('aliases'),
   title: tokenFactory.meta('title'),
   description: tokenFactory.meta('description'),
   inputSchema: tokenFactory.meta('inputSchema'),

@@ -14,14 +14,16 @@ import {
   type AdapterRegistryInterface,
   type AppRecord,
   type EntryOwnerRef,
+  type FrontMcpLogger,
   type PluginInstance,
   type PluginRegistryInterface,
   type ProviderRegistryInterface,
   type RemoteAppMetadata,
   type SkillEntry,
+  type ToolEntry,
 } from '../../common';
 import { isPrimitiveIncluded } from '../../common/utils/primitive-filter';
-import { InternalMcpError } from '../../errors';
+import { InternalMcpError, ToolAliasConflictError } from '../../errors';
 import PromptRegistry from '../../prompt/prompt.registry';
 import type ProviderRegistry from '../../provider/provider.registry';
 import { type McpClientService } from '../../remote-mcp';
@@ -411,6 +413,16 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     }
   }
 
+  /** A remote tool named like a local tool's alias is left out, so the alias keeps reaching the local tool. */
+  private registerRemoteTool(instance: ToolEntry, logger: FrontMcpLogger): void {
+    try {
+      this._tools.registerToolInstance(instance);
+    } catch (error) {
+      if (!(error instanceof ToolAliasConflictError)) throw error;
+      logger.warn(`Remote app ${this.id}: tool "${instance.name}" is not loaded. ${error.message}`);
+    }
+  }
+
   /**
    * Discover remote capabilities and register them in standard registries.
    */
@@ -506,7 +518,7 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     for (const token of previous.resources) this._resources.unregisterResourceInstance(token);
     for (const token of previous.prompts) this._prompts.unregisterPromptInstance(token);
 
-    for (const instance of tools) this._tools.registerToolInstance(instance);
+    for (const instance of tools) this.registerRemoteTool(instance, logger);
     for (const instance of resources) this._resources.registerResourceInstance(instance);
     for (const instance of prompts) this._prompts.registerPromptInstance(instance);
 

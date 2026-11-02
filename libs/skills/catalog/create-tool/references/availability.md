@@ -52,19 +52,25 @@ On Linux / Windows servers, this tool simply doesn't exist — it's not in `tool
 
 ## Error shape on mismatch
 
-When the constraint fails at call time, FrontMCP throws `EntryUnavailableError` (string code `'ENTRY_UNAVAILABLE'`, JSON-RPC `-32003` FORBIDDEN, HTTP 403). Its `data` carries `missingAxes: string[]` (since #417) so clients can surface a specific reason without parsing prose:
+When the constraint fails at call time, FrontMCP throws `EntryUnavailableError` (string code `'ENTRY_UNAVAILABLE'`, JSON-RPC `-32003` FORBIDDEN, HTTP 403). Its `data` carries `missingAxes: string[]` (since #417) so clients can surface a specific reason without parsing prose, and a `remedy` naming the environment the entry needs (none when an axis allows no value, such as `env: []`):
 
 ```json
 {
   "code": -32003,
-  "message": "Tool 'deploy_service' is not available in this environment.",
+  "message": "Prompt \"deploy_notes\" is not available in the current environment (requires: {\"env\":[\"production\"]}) ...",
   "data": {
+    "entryType": "Prompt",
+    "entry": "deploy_notes",
     "missingAxes": ["env"],
-    "expected": { "env": ["production"] },
-    "actual": { "env": "development" }
+    "constraint": { "env": ["production"] },
+    "context": { "env": "development", "...": "..." },
+    "remedy": { "say": "Run the server where env is production to use this prompt." },
+    "errorId": "err_..."
   }
 }
 ```
+
+`resources/read` and `prompts/get` answer with that JSON-RPC error. `tools/call` answers an `isError: true` result instead: the same message with the remedy as a last `To fix:` line, and `_meta.code: 'ENTRY_UNAVAILABLE'` and `_meta.remedy`.
 
 ## Imperative checks
 

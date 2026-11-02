@@ -10,7 +10,7 @@
 import { PublicMcpError } from '@frontmcp/sdk';
 
 /**
- * Raised when a tool, resource, prompt or agent is called while its feature flag is off.
+ * Raised when a tool, resource, prompt or agent is called while its feature flag is off. Its remedy names the flag.
  */
 export class FeatureFlagDisabledError extends PublicMcpError {
   override readonly name = 'FeatureFlagDisabledError';
@@ -20,7 +20,9 @@ export class FeatureFlagDisabledError extends PublicMcpError {
     public readonly entryName: string | undefined,
     public readonly flagKey: string,
   ) {
-    super(`${kind} "${entryName}" is disabled by feature flag "${flagKey}"`, 'FEATURE_FLAG_DISABLED', 403);
+    super(`${kind} "${entryName}" is disabled by feature flag "${flagKey}"`, 'FEATURE_FLAG_DISABLED', 403, undefined, {
+      say: `Turn on the feature flag "${flagKey}" to use this ${kind.toLowerCase()}.`,
+    });
   }
 }
 

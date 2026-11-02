@@ -67,6 +67,22 @@ export class ToolNameConflictError extends InternalMcpError {
 }
 
 /**
+ * Thrown at startup, or when a tool is registered at runtime, when a tool alias (`@Tool({ aliases })`) is also a
+ * tool's name or another tool's alias in the server.
+ */
+export class ToolAliasConflictError extends InternalMcpError {
+  readonly conflicts: string[];
+
+  constructor(conflicts: string[]) {
+    super(
+      `Tool alias conflict: ${conflicts.join('; ')}. Give each alias to one tool, and never use a tool's name as one.`,
+      'TOOL_ALIAS_CONFLICT',
+    );
+    this.conflicts = conflicts;
+  }
+}
+
+/**
  * Thrown when an app's id is the owner id server-level entries (`@FrontMcp({ tools, resources })`) are
  * listed under, which would make an app tool and a server tool of the same name indistinguishable.
  */

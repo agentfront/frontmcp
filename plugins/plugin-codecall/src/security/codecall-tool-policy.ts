@@ -40,6 +40,7 @@ export interface CodeCallPolicyEntry {
   fullName: string;
   owner?: CodeCallPolicyOwner;
   metadata?: {
+    aliases?: readonly string[];
     description?: string;
     tags?: string[];
     hideFromDiscovery?: boolean;
@@ -286,6 +287,7 @@ export function denyUnknownTool(name: string): { allowed: false; reason: string 
 interface ResolvableEntry {
   name: string;
   fullName: string;
+  metadata?: { aliases?: readonly string[] };
 }
 
 interface ToolResolutionScope {
@@ -302,23 +304,29 @@ interface ToolResolutionScope {
  *
  * MUST mirror that stage. The policy has to evaluate the same entry the flow will execute:
  * resolve more narrowly and legitimate remote-app tools get denied; resolve more loosely and
- * a tool reachable only through the flow's fallback escapes the policy entirely. The flow
- * applies three steps, and so does this —
- *   1. the scope registry,
- *   2. a hyphen <-> underscore alias (issue #408),
- *   3. remote app registries, for tools whose subscription has not yet propagated.
+ * a tool reachable only through the flow's fallback escapes the policy entirely. Like the flow,
+ * this matches a tool's declared aliases (`@Tool({ aliases })`) first, then its name or a
+ * hyphen <-> underscore spelling of it (issue #408), each in the scope registry and then in
+ * remote app registries, for tools whose subscription has not yet propagated.
  */
 export function resolveCodeCallTool<T extends ResolvableEntry>(scope: unknown, name: string): T | undefined {
-  const typedScope = scope as ToolResolutionScope;
-
-  const alias = /[-_]/.test(name)
+  const otherSpelling = /[-_]/.test(name)
     ? name.includes('_')
       ? name.replace(/_/g, '-')
       : name.replace(/-/g, '_')
     : undefined;
-  const candidates = alias ? [name, alias] : [name];
+  const candidates = otherSpelling ? [name, otherSpelling] : [name];
+  const declaresAlias = (entry: ResolvableEntry) => entry.metadata?.aliases?.includes(name) === true;
   const matches = (entry: ResolvableEntry) => candidates.includes(entry.fullName) || candidates.includes(entry.name);
 
+  return findResolvableTool<T>(scope, declaresAlias) ?? findResolvableTool<T>(scope, matches);
+}
+
+function findResolvableTool<T extends ResolvableEntry>(
+  scope: unknown,
+  matches: (entry: ResolvableEntry) => boolean,
+): T | undefined {
+  const typedScope = scope as ToolResolutionScope;
   const local = typedScope.tools?.getTools(true)?.find(matches);
   if (local) return local as T;
 

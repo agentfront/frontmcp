@@ -290,6 +290,13 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
   name: string;
 
   /**
+   * Other names `tools/call` and `this.callTool()` accept, such as the name before a rename. Never listed, and
+   * matched before a dotted name is read as `owner.name`. An alias that is also a tool's name or another tool's
+   * alias fails startup with `ToolAliasConflictError`.
+   */
+  aliases?: string[];
+
+  /**
    * Human-readable title listed by `tools/list`. When omitted, `annotations.title` is the only title.
    */
   title?: string;
@@ -544,6 +551,14 @@ export const frontMcpToolMetadataSchema = z
   .object({
     id: z.string().optional(),
     name: z.string().min(1),
+    aliases: z
+      .array(
+        z
+          .string()
+          .min(1, 'A tool alias must not be empty')
+          .max(64, 'A tool alias must be at most 64 characters, like a tool name'),
+      )
+      .optional(),
     title: z.string().optional(),
     description: z.string().optional(),
     inputSchema: z.instanceof(Object),

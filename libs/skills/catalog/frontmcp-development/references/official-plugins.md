@@ -807,7 +807,8 @@ A disabled flag filters the entry out of `tools/list`, `resources/list`, `prompt
 That matters because a listing is not an access control. Clients cache listings and hold
 resource URIs and prompt names from earlier sessions, so anything gated only at list time
 stays reachable by name. The refusal is a public `FeatureFlagDisabledError` (`FEATURE_FLAG_DISABLED`, 403)
-that names the capability and the flag. `FeatureFlagPlugin.init()` with no (or an unknown) `adapter` throws a
+that names the capability and the flag, with a remedy that names the flag to turn on (`data.remedy` on
+`resources/read` and `prompts/get`; a `To fix:` line and `_meta.remedy` on `tools/call`). `FeatureFlagPlugin.init()` with no (or an unknown) `adapter` throws a
 `FeatureFlagConfigurationError` at startup, and so does `adapter: 'custom'` without an `adapterInstance` that has
 `isEnabled()`, `getVariant()` and `evaluateFlags()` (it used to start and answer every request with a 500). If the adapter is unavailable, or does not know the flag, the gate uses the ref's
 `defaultValue`, then the plugin's `gateDefaultValue`, then `false`, so a bare string ref fails closed unless you opt in.

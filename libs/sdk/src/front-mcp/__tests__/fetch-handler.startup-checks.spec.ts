@@ -176,6 +176,19 @@ describe('createFetchHandler() startup checks', () => {
       ]);
     });
 
+    it("answers server_misconfigured when a tool alias is another tool's name", async () => {
+      const handler = await createOnEdge(serverWith({ tools: [tool('lookup', { aliases: ['find'] }), tool('find')] }));
+
+      const response = await handler(initialize());
+
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({
+        error: 'server_misconfigured',
+        code: 'TOOL_ALIAS_CONFLICT',
+        message: expect.not.stringContaining('find'),
+      });
+    });
+
     it('builds a server that passes them on its first request', async () => {
       const handler = await createOnEdge(serverWith({ tools: [tool('lookup')] }));
 

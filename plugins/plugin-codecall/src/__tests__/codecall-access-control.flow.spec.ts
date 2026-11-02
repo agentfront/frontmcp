@@ -100,7 +100,7 @@ class AdminApp {}
 
 async function startCodeCallServer(
   codecallOptions: CodeCallPluginOptionsInput,
-  otherApps: Array<typeof AdminApp> = [],
+  otherApps: Array<typeof AdminApp | typeof ReportsApp> = [],
 ): Promise<CodeCallServer> {
   @App({
     id: 'crm',
@@ -154,7 +154,7 @@ const EXCLUDE_ADMIN_TOOLS: CodeCallPluginOptionsInput['includeTools'] = (tool) =
 
 function useCodeCallServer(
   codecallOptions: CodeCallPluginOptionsInput,
-  otherApps: Array<typeof AdminApp> = [],
+  otherApps: Array<typeof AdminApp | typeof ReportsApp> = [],
 ): () => CodeCallServer {
   let server: CodeCallServer | undefined;
 
@@ -355,6 +355,52 @@ describe('CodeCall with directCalls disabled (GHSA-6w3j-82v5-6qrr)', () => {
 
     expect(outcome.status).toBe('ok');
     expect(executedTools).toEqual(['users:list']);
+  });
+});
+
+function aliasedTool(name: string, aliases: string[], codecall?: CodeCallToolMetadata) {
+  @Tool({ name, aliases, description: `Runs ${name} for the access-control spec`, inputSchema: {}, codecall })
+  class AliasedTool extends ToolContext {
+    async execute() {
+      executedTools.push(name);
+      return { ran: name };
+    }
+  }
+  return AliasedTool;
+}
+
+@App({
+  id: 'reports',
+  name: 'Reports',
+  tools: [
+    aliasedTool('wipe_reports', ['get-report'], { enabledInCodeCall: false }),
+    aliasedTool('list_reports', ['reports.list']),
+  ],
+})
+class ReportsApp {}
+
+describe('CodeCall and tool aliases', () => {
+  const server = useCodeCallServer({ mode: 'codecall_only', directCalls: { enabled: true } }, [ReportsApp]);
+
+  it('judges the tool an alias reaches, not the tool its hyphen/underscore spelling names', async () => {
+    const outcome = await runScript(server(), `return await callTool('get-report', {});`);
+
+    expect(outcome.status).not.toBe('ok');
+    expect(executedTools).toEqual([]);
+  });
+
+  it('refuses codecall:invoke of an alias of a tool the policy denies', async () => {
+    const result = await invoke(server(), 'get-report');
+
+    expect(result.isError).toBe(true);
+    expect(executedTools).toEqual([]);
+  });
+
+  it('runs an allowed tool called by its alias', async () => {
+    const outcome = await runScript(server(), `return await callTool('reports.list', {});`);
+
+    expect(outcome.status).toBe('ok');
+    expect(executedTools).toEqual(['list_reports']);
   });
 });
 

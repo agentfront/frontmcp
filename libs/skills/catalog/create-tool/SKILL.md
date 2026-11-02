@@ -26,7 +26,8 @@ description: |
   this.notify, this.progress, this.elicit, ElicitationDisabledError, ToolContext.execute,
   this.get(TOKEN), this.tryGet, register tool in @App, tool examples metadata,
   availableWhen, missingAxes, `tool()` function builder, Tool.esm, Tool.remote,
-  PublicMcpError, ResourceNotFoundError, MCP_ERROR_CODES, ui://widget.
+  PublicMcpError, ResourceNotFoundError, MCP_ERROR_CODES, ui://widget, tool aliases,
+  rename a tool, refused, error remedy.
 
 when_to_use: |
   Trigger when creating or editing a `*.tool.ts` / `*.tool.tsx` file, adding a `@Tool`
@@ -272,12 +273,12 @@ Before considering a tool "done":
 | Reference                                                             | Covers                                                                                                             |
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | [`quick-start.md`](./references/quick-start.md)                       | 60-second tour: minimal tool, registration, calling it from a test                                                 |
-| [`decorator-options.md`](./references/decorator-options.md)           | Every field on `@Tool({...})` — what it does, default, when to set it                                              |
+| [`decorator-options.md`](./references/decorator-options.md)           | Every field on `@Tool({...})` — what it does, default, when to set it, `aliases` for a renamed tool                |
 | [`input-schema.md`](./references/input-schema.md)                     | Raw shape vs `z.object`, refinements, defaults, optional, describe                                                 |
 | [`output-schema.md`](./references/output-schema.md)                   | All supported output types: Zod shape, Zod schema, primitives, media, arrays                                       |
 | [`derived-types.md`](./references/derived-types.md)                   | `ToolInputOf` / `ToolOutputOf` patterns, file layout, schema hoisting                                              |
 | [`execution-context.md`](./references/execution-context.md)           | `ToolContext` methods + properties — `this.get`, `this.fetch`, `this.notify`, `this.context`, etc.                 |
-| [`error-handling.md`](./references/error-handling.md)                 | `this.fail`, MCP error classes (`PublicMcpError`, `ResourceNotFoundError`), error flow, when to throw vs `fail`    |
+| [`error-handling.md`](./references/error-handling.md)                 | `this.fail`, MCP error classes (`PublicMcpError`, `ResourceNotFoundError`), `refused()` remedies, throw vs `fail`  |
 | [`throttling.md`](./references/throttling.md)                         | `rateLimit`, `concurrency`, `timeout` — semantics, interaction, defaults                                           |
 | [`auth-providers.md`](./references/auth-providers.md)                 | `authProviders` string shorthand vs full mapping, scopes, alias, credential vault basics                           |
 | [`availability.md`](./references/availability.md)                     | `availableWhen` axes (os / runtime / deployment / provider / target / surface / env), `missingAxes`, `isPlatform`  |

@@ -4,6 +4,10 @@ export {
   McpError,
   PublicMcpError,
   InternalMcpError,
+  // Refusals
+  refused,
+  type ErrorRemedy,
+  type RefusalOptions,
   // Tool errors
   ToolNotFoundError,
   ToolNotConsentedError,
@@ -172,6 +176,7 @@ export {
   NameDisambiguationError,
   EntryValidationError,
   ToolNameConflictError,
+  ToolAliasConflictError,
   ReservedAppIdError,
   DuplicateAppIdError,
   FlowNotRegisteredError,

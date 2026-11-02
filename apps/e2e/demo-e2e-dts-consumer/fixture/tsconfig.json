@@ -21,6 +21,7 @@
     "host-must-compile.ts",
     "skills-must-compile.ts",
     "output-schemas-must-compile.ts",
-    "providers-must-compile.ts"
+    "providers-must-compile.ts",
+    "tool-aliases-must-compile.ts"
   ]
 }

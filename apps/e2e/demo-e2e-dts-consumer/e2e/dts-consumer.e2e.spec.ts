@@ -36,6 +36,7 @@ const fixtureFiles = [
   'skills-must-compile.ts',
   'output-schemas-must-compile.ts',
   'providers-must-compile.ts',
+  'tool-aliases-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -155,6 +156,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types providers without a name, AsyncProvider with and without inject, useValue and symbol or string tokens in every entry point', () => {
     expect(describeEach(inFixtureFile('providers-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types @Tool({ aliases }), refused() and a PublicMcpError remedy', () => {
+    expect(describeEach(inFixtureFile('tool-aliases-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

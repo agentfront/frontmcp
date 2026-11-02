@@ -1,4 +1,4 @@
-import { JwtSecretRequiredError, SessionSecretRequiredError } from '../index';
+import { JwtSecretRequiredError, SessionSecretRequiredError, ToolAliasConflictError } from '../index';
 import {
   describeConfigIssues,
   findMisconfiguration,
@@ -24,6 +24,14 @@ describe('misconfiguration classification (#646)', () => {
   it('finds a fault wrapped in a cause chain', () => {
     const wrapped = new Error('boom', { cause: new SessionSecretRequiredError('x') });
     expect(findMisconfiguration(wrapped)?.code).toBe('SESSION_SECRET_REQUIRED');
+  });
+
+  it('recognizes a tool alias conflict without echoing the aliases', () => {
+    const found = findMisconfiguration(
+      new ToolAliasConflictError(['alias "secret_tool" of tool "a" is the name of tool "b"']),
+    );
+    expect(found?.code).toBe('TOOL_ALIAS_CONFLICT');
+    expect(found?.remedy).not.toContain('secret_tool');
   });
 
   it('maps a ZodError to CONFIG_INVALID', () => {
