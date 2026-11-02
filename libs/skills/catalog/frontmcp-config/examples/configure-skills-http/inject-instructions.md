@@ -2,11 +2,12 @@
 name: inject-instructions
 reference: configure-skills-http
 level: basic
-description: Set a server-level instructions string and append the skill catalog summary on every initialize response.
+description: Set a server-level instructions string and append the full skill catalog summary on every initialize response.
 tags: [config, skills, instructions, injection, initialize]
 features:
   - 'Top-level `instructions` on `@FrontMcp` exposes a global system prompt to MCP clients'
   - "`skillsConfig.injectInstructions: 'append'` adds the skill catalog summary after the user prompt"
+  - "The default, `'compact'`, adds one line with the skill count and the `skill://index.json` pointer instead"
   - 'Dynamic skills are picked up because the composer runs on every initialize request'
   - 'The catalog only names skills the initializing caller may see (skill authorities and the `skills:filter` flow, e.g. feature flags)'
   - 'Catalog summary is bounded at 16 KB with a truncation footer pointing at skill://index.json'
@@ -14,7 +15,7 @@ features:
 
 # Inject Instructions on Initialize
 
-Set a server-level instructions string and append the skill catalog summary on every initialize response.
+Set a server-level instructions string and append the full skill catalog summary on every initialize response.
 
 ## Code
 
@@ -37,7 +38,8 @@ import { MainApp } from './main.app';
   skillsConfig: {
     enabled: true,
     mcpResources: true,
-    // 'append' (default) — the skill catalog summary is appended after instructions
+    // 'compact' (default) — one line: the skill count and where to read the skills
+    // 'append' — the skill catalog summary is appended after instructions
     // 'prepend' — summary first, then instructions
     // 'replace' — instructions only; summary and channel hints dropped (falls back to 'append' if instructions is empty)
     // 'off'    — no summary; instructions and channel hints still sent
@@ -51,6 +53,7 @@ export default class FlightBotServer {}
 
 - Top-level `instructions` on `@FrontMcp` exposes a global system prompt to MCP clients
 - `skillsConfig.injectInstructions: 'append'` adds the skill catalog summary after the user prompt
+- The default, `'compact'`, adds one line with the skill count and the `skill://index.json` pointer instead
 - Dynamic skills are picked up because the composer runs on every initialize request
 - The catalog only names skills the initializing caller may see (skill authorities and the `skills:filter` flow, e.g. feature flags)
 - Catalog summary is bounded at 16 KB with a truncation footer pointing at skill://index.json

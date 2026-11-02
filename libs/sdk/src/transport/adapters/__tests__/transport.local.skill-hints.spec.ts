@@ -80,7 +80,9 @@ describe('initialize instructions: SEP-2640 skill URI hints', () => {
   });
 
   it('sends no hints unless the transport asks for them', async () => {
-    const instructions = await composeCallerInstructions(makeScope({ sep2640InInstructions: true }));
+    const instructions = await composeCallerInstructions(
+      makeScope({ sep2640InInstructions: true, injectInstructions: 'append' }),
+    );
 
     expect(instructions).toContain('**deploy**: Deploy to production');
     expect(instructions).not.toContain(DEPLOY_HINT);

@@ -1,7 +1,7 @@
 ---
 name: configure-skills-http
-description: Full reference for skillsConfig — HTTP catalog endpoints, auth, caching, instructions injection, and tamper-evident audit log.
-tags: [config, skills, skills-http, llm-txt, instructions, audit, injection]
+description: Full reference for skillsConfig — HTTP catalog endpoints, auth, caching, instructions injection, SKILL.md resource annotations, and tamper-evident audit log.
+tags: [config, skills, skills-http, llm-txt, instructions, audit, injection, annotations]
 ---
 
 # Configure `skillsConfig`
@@ -16,12 +16,13 @@ tags: [config, skills, skills-http, llm-txt, instructions, audit, injection]
   apps: [MainApp],
 
   // Server-level instructions, exposed as `instructions` on initialize.
-  // Combined with the skill catalog summary per skillsConfig.injectInstructions.
+  // Combined with the skills line or catalog summary per skillsConfig.injectInstructions.
   instructions: 'You are a helpful assistant for booking flights.',
 
   skillsConfig: {
     enabled: true, // turn on /skills, /llm.txt, skill:// resources
     mcpResources: true, // expose skills as MCP resources (skill://index.json, skill://<skillPath>/SKILL.md)
+    resourceAnnotations: 'no-priority', // 'no-priority' (default) | 'full' | 'off'
     llmTxt: true, // serve /llm.txt
     llmFullTxt: false, // serve /llm_full.txt (full SKILL.md bodies)
     auth: 'api-key', // 'inherit' (default) | 'public' | 'api-key' | 'bearer'
@@ -32,7 +33,7 @@ tags: [config, skills, skills-http, llm-txt, instructions, audit, injection]
       redis: { provider: 'redis', host: 'localhost', port: 6379 },
       ttlMs: 60_000,
     },
-    injectInstructions: 'append', // 'off' | 'append' | 'prepend' | 'replace'
+    injectInstructions: 'compact', // 'compact' (default) | 'off' | 'append' | 'prepend' | 'replace'
     failOnInvalidSkills: true, // false: a 'strict' skill with a missing tool is logged, not fatal
     externalProvider: new RestSkillProvider({ mode: 'read-only' }), // external skill storage, see below
     audit: {
@@ -57,22 +58,51 @@ The new top-level `instructions?: string` field on `@FrontMcp` is forwarded verb
 | -------------- | -------- | ------- | ----------------------------------------------------------------------- |
 | `instructions` | `string` | `''`    | High-level prompt the server gives to the LLM client at connection time |
 
-`skillsConfig.injectInstructions` controls whether (and how) FrontMCP appends a generated **skill catalog summary** to those instructions on every `initialize` request.
+`skillsConfig.injectInstructions` controls what FrontMCP adds about the server's skills to those instructions on every `initialize` request: one short line by default, or a generated **skill catalog summary**.
 
 ## Skill Catalog Injection Policy
 
 | Mode      | Behavior                                                                                                                                                                                        |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `off`     | The catalog summary is suppressed. Server `instructions` and channel hints are still surfaced.                                                                                                  |
-| `append`  | Server `instructions`, then channel hints, then the catalog summary, joined by `\n\n---\n\n`. **(Default.)**                                                                                    |
+| `compact` | Server `instructions`, then channel hints, then one line with the number of skills and where to read them, joined by `\n\n---\n\n`. No line when the caller sees no skill. **(Default.)**       |
+| `off`     | Nothing about skills is added. Server `instructions` and channel hints are still surfaced.                                                                                                      |
+| `append`  | Server `instructions`, then channel hints, then the catalog summary (every skill's name and description). The default up to 1.10.15.                                                            |
 | `prepend` | Catalog summary first, then channel hints, then server `instructions`.                                                                                                                          |
 | `replace` | Surface ONLY the server `instructions`; the catalog AND channel hints are dropped. When `instructions` is empty/undefined this falls back to `'append'` so a misconfig doesn't drop everything. |
+
+The `compact` line reads:
+
+```text
+This server has 3 skills: the `skill://index.json` resource lists each skill's `SKILL.md` URI.
+```
+
+With `mcpResources: false` it points at the `skills/*` methods instead:
+
+```text
+This server has 3 skills: find one with the `skills/search` request and load it with `skills/load`.
+```
+
+**Default change (1.10.16):** up to 1.10.15 the default was `'append'`, which lists every skill's name and description (up to 16 KB). Some clients copy the server's instructions into every tool's description, so a large catalog was repeated once per tool. Set `injectInstructions: 'append'` to get the full catalog back.
 
 The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer. Its header and footer point clients at `skill://index.json` (SEP-2640 — singular scheme), which lists each skill's `skill://<skillPath>/SKILL.md` URI. With `mcpResources: false` no `skill://` resource is served, so they point at the `skills/load` and `skills/search` methods instead, and `sep2640InInstructions` is ignored.
 
 > **Dynamic skills:** because the composer recomputes the summary on every `initialize` request, skills registered after server boot **are** picked up automatically. Their `skill://<skillPath>/SKILL.md` resources follow too: a skill registered or removed after boot (`this.scope.skills.registerSkillContent()` / `unregisterSkill()`, a skill-bundle plugin) is added to or dropped from `resources/list`, and clients get `notifications/resources/list_changed`. Up to 1.9.4 `resources/list` named only the skills present at startup.
 
-> **Per caller:** the summary (and the SEP-2640 `skill://` hints under `sep2640InInstructions`) is composed for the client that initializes, like `skills/list`: it only names skills whose `authorities` that caller satisfies and that the hookable `skills:filter` flow keeps, so a flag-disabled skill's name and description are left out. With nothing gating a skill the instructions are unchanged. Transports use `composeCallerInstructions(scope, { ctx })`, exported from `@frontmcp/sdk` for custom transports.
+> **Per caller:** the compact line or the summary (and the SEP-2640 `skill://` hints under `sep2640InInstructions`) is composed for the client that initializes, like `skills/list`: it only counts or names skills whose `authorities` that caller satisfies and that the hookable `skills:filter` flow keeps, so a flag-disabled skill's name and description are left out. With nothing gating a skill the instructions are unchanged. Transports use `composeCallerInstructions(scope, { ctx })`, exported from `@frontmcp/sdk` for custom transports.
+
+## SKILL.md Resource Annotations
+
+Each `skill://<skillPath>/SKILL.md` resource in `resources/list` carries the annotations `skillsConfig.resourceAnnotations` selects:
+
+| Mode          | Annotations                                                                                  |
+| ------------- | -------------------------------------------------------------------------------------------- |
+| `no-priority` | `audience: ['assistant']`, plus `lastModified` for a file-backed skill. **(Default.)**       |
+| `full`        | `audience: ['assistant']`, `priority: 0.8` (the SEP-2640 recommendation) and `lastModified`. |
+| `off`         | No `annotations` field.                                                                      |
+
+**Default change (1.10.16):** up to 1.10.15 every `SKILL.md` resource carried `priority: 0.8`, and nothing turned it off. Some clients (for example a Rust MCP client whose JSON parser keeps arbitrary-precision numbers) fail the whole `resources/list` when an annotation is a number, so the default sends no numeric annotation. Set `resourceAnnotations: 'full'` to send `priority` again; a hook that deleted `priority` from the list is no longer needed.
+
+An unknown `injectInstructions` or `resourceAnnotations` value stops the server at boot: `@FrontMcp` throws `InvalidDecoratorMetadataError` for `skillsConfig`, naming the field and the accepted values.
 
 ## Skills-Only Connections (`?mode=skills_only`)
 
@@ -185,17 +215,19 @@ See [`skill-audit-log`](../../frontmcp-extensibility/references/skill-audit-log.
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Local dev, no skills                      | `skillsConfig` unset                                                                                  |
 | Public server, hand-curated server prompt | `instructions: '...'`, `injectInstructions: 'off'`                                                    |
-| Server with many dynamic skills           | `injectInstructions: 'append'` (default) or `'prepend'` if skill guidance must lead the prompt        |
+| Server with many dynamic skills           | `injectInstructions: 'compact'` (default): clients read `skill://index.json` when they need a skill   |
+| Clients must see every skill up front     | `injectInstructions: 'append'`, or `'prepend'` if skill guidance must lead the prompt                 |
+| Client that relies on resource `priority` | `resourceAnnotations: 'full'`                                                                         |
 | Multi-pod production                      | `cache: { enabled: true, redis: {...} }`, `audit: { signer: Rs256, store: StorageAdapterAuditStore }` |
 | Compliance / forensic requirements        | RS256 signer + persistent store + scheduled `verifyChain(...)` in CI                                  |
 
 ## Examples
 
-| Example                                                                           | Level    | Description                                                                                                 |
-| --------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| [`inject-instructions`](../examples/configure-skills-http/inject-instructions.md) | Basic    | Set a server-level instructions string and append the skill catalog summary on every initialize response.   |
-| [`audit-log-basic`](../examples/configure-skills-http/audit-log-basic.md)         | Basic    | Enable the skill audit log with the in-memory store and HS256 signer for development and tests.             |
-| [`audit-log-redis`](../examples/configure-skills-http/audit-log-redis.md)         | Advanced | Production-grade audit log with the Redis-backed StorageAdapterAuditStore and the RS256 bundle-signing key. |
+| Example                                                                           | Level    | Description                                                                                                    |
+| --------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| [`inject-instructions`](../examples/configure-skills-http/inject-instructions.md) | Basic    | Set a server-level instructions string and append the full skill catalog summary on every initialize response. |
+| [`audit-log-basic`](../examples/configure-skills-http/audit-log-basic.md)         | Basic    | Enable the skill audit log with the in-memory store and HS256 signer for development and tests.                |
+| [`audit-log-redis`](../examples/configure-skills-http/audit-log-redis.md)         | Advanced | Production-grade audit log with the Redis-backed StorageAdapterAuditStore and the RS256 bundle-signing key.    |
 
 > See all examples in [`examples/configure-skills-http/`](../examples/configure-skills-http/)
 

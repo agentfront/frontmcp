@@ -1,5 +1,9 @@
 // common/types/options/__tests__/skills-http.options.spec.ts
 
+import 'reflect-metadata';
+
+import { InvalidDecoratorMetadataError } from '../../../../errors';
+import { FrontMcp } from '../../../decorators/front-mcp.decorator';
 import {
   normalizeEndpointConfig,
   normalizeSkillsConfigOptions,
@@ -97,6 +101,41 @@ describe('skillsConfigOptionsSchema', () => {
     it('should apply default api=true', () => {
       const result = skillsConfigOptionsSchema.parse({});
       expect(result.api).toBe(true);
+    });
+
+    it("should apply default injectInstructions='compact'", () => {
+      const result = skillsConfigOptionsSchema.parse({});
+      expect(result.injectInstructions).toBe('compact');
+    });
+
+    it("should apply default resourceAnnotations='no-priority'", () => {
+      const result = skillsConfigOptionsSchema.parse({});
+      expect(result.resourceAnnotations).toBe('no-priority');
+    });
+  });
+
+  describe('instructions and annotation policies', () => {
+    it.each(['off', 'compact', 'append', 'prepend', 'replace'])('should accept injectInstructions=%s', (policy) => {
+      expect(skillsConfigOptionsSchema.safeParse({ injectInstructions: policy }).success).toBe(true);
+    });
+
+    it.each(['full', 'no-priority', 'off'])('should accept resourceAnnotations=%s', (policy) => {
+      expect(skillsConfigOptionsSchema.safeParse({ resourceAnnotations: policy }).success).toBe(true);
+    });
+
+    it.each([
+      ['injectInstructions', 'everything'],
+      ['resourceAnnotations', 'audience'],
+    ])('should refuse an unknown %s at boot', (option, value) => {
+      const boot = () =>
+        FrontMcp({
+          info: { name: 'invalid-skills-config', version: '1.0.0' },
+          apps: [],
+          skillsConfig: { [option]: value },
+        } as never)(class InvalidSkillsConfigServer {});
+
+      expect(boot).toThrow(InvalidDecoratorMetadataError);
+      expect(boot).toThrow(new RegExp(`skillsConfig[\\s\\S]*${option}`));
     });
   });
 

@@ -146,6 +146,7 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
       resourceRegistry,
       logger,
       resolveLastModified: resolveLastModifiedForSkill,
+      resourceAnnotations: skillsConfig?.resourceAnnotations,
     });
   } else {
     logger.verbose('SEP-2640 skill:// resources disabled via skillsConfig.mcpResources=false');

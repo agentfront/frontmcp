@@ -63,7 +63,7 @@ const serverConfig = {
   info: { name: 'skills-filter-flow', version: '1.0.0' },
   apps: [GuidesApp],
   logging: { level: LogLevel.Off },
-  skillsConfig: { enabled: true },
+  skillsConfig: { enabled: true, injectInstructions: 'append' as const },
 };
 
 function textOf(result: ReadResourceResult): string {
@@ -326,6 +326,7 @@ describe('skills:filter flow', () => {
         apps: [RecordedGuidesApp],
         logging: { level: LogLevel.Off },
         instructions: 'Guides server.',
+        skillsConfig: { injectInstructions: 'append' },
       });
 
       expect(await initializeInstructions(scope)).toBe(

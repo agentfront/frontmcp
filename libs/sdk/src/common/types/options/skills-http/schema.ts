@@ -116,10 +116,11 @@ export const skillsConfigOptionsSchema = z.object({
   llmFullTxt: skillsConfigEndpointInputSchema.optional().default(true),
   api: skillsConfigEndpointInputSchema.optional().default(true),
   mcpResources: z.boolean().optional().default(true),
+  resourceAnnotations: z.enum(['full', 'no-priority', 'off']).optional().default('no-priority'),
   sep2640InInstructions: z.boolean().optional().default(false),
   cache: skillsConfigCacheOptionsSchema.optional(),
   audit: skillsConfigAuditOptionsSchema.optional(),
-  injectInstructions: z.enum(['off', 'append', 'prepend', 'replace']).optional().default('append'),
+  injectInstructions: z.enum(['off', 'compact', 'append', 'prepend', 'replace']).optional().default('compact'),
   scoring: z.enum(['cosine', 'bm25']).optional(),
   failOnInvalidSkills: z.boolean().optional(),
   externalProvider: z

@@ -6,11 +6,13 @@
  * - The `initialize` response's `instructions` field is server-side prompt
  *   text that clients usually inject verbatim into the model context. Pushing
  *   every skill's full SKILL.md body would balloon every initialize response
- *   and burn token budget on tool calls. Instead, we ship a bounded catalog
- *   summary (`**name**: description`) plus a pointer to where the full content
- *   is served: the SEP-2640 `skill://index.json` resource, or the
- *   `skills/search` and `skills/load` MCP extension methods when
- *   `skillsConfig.mcpResources` is false and no `skill://` resource exists.
+ *   and burn token budget on tool calls. Instead, the default `'compact'`
+ *   policy ships one line with the skill count, and `'append'`, `'prepend'`
+ *   and `'replace'` a bounded catalog summary (`**name**: description`). Both
+ *   point to where the full content is served: the SEP-2640
+ *   `skill://index.json` resource, or the `skills/search` and `skills/load`
+ *   MCP extension methods when `skillsConfig.mcpResources` is false and no
+ *   `skill://` resource exists.
  * - Resolution is sync — the registry already holds metadata at boot. The
  *   per-skill `instructions` markdown body stays lazy.
  * - Off / replace policies short-circuit before we touch the registry, so a
@@ -21,8 +23,9 @@
  *   after the server boots are reflected in subsequent reconnects without a
  *   restart.
  * - Transports compose it per caller with {@link composeCallerInstructions}:
- *   the catalog and the SEP-2640 hints only name skills the skill authorities
- *   and the `skills:filter` flow let that caller see, like `skills/list`.
+ *   the compact line, the catalog and the SEP-2640 hints only count or name
+ *   skills the skill authorities and the `skills:filter` flow let that caller
+ *   see, like `skills/list`.
  */
 
 import type { ScopeEntry, SkillEntry } from '../common';
@@ -33,9 +36,9 @@ import { filterSkillsByAuthorities } from './skill-authorities.helper';
 import { filterServableSkills } from './skill-filter.helper';
 import type { SkillRegistryInterface } from './skill.registry';
 
-export type InjectInstructionsPolicy = 'off' | 'append' | 'prepend' | 'replace';
+export type InjectInstructionsPolicy = 'off' | 'compact' | 'append' | 'prepend' | 'replace';
 
-const DEFAULT_POLICY: InjectInstructionsPolicy = 'append';
+const DEFAULT_POLICY: InjectInstructionsPolicy = 'compact';
 /**
  * Hard ceiling on the catalog block. Keeps the initialize payload bounded
  * regardless of how many skills are registered. ~16 KB fits comfortably in a
@@ -77,17 +80,28 @@ export interface SkillsCatalogSummaryOptions {
 interface CatalogPointers {
   header: string;
   truncationHint: string;
+  compact: string;
 }
 
 const RESOURCE_POINTERS: CatalogPointers = {
   header: `Available skills (read the \`${SKILL_INDEX_URI}\` resource for each skill's \`SKILL.md\` URI):`,
   truncationHint: `read \`${SKILL_INDEX_URI}\` to browse`,
+  compact: `the \`${SKILL_INDEX_URI}\` resource lists each skill's \`SKILL.md\` URI.`,
 };
 
 const METHOD_POINTERS: CatalogPointers = {
   header: 'Available skills (load full content with the `skills/load` request, or find others with `skills/search`):',
   truncationHint: 'use `skills/search` to find the rest',
+  compact: 'find one with the `skills/search` request and load it with `skills/load`.',
 };
+
+/** The skills the instructions count or list; `visibility: 'mcp'` matches both `'mcp'` and `'both'` (see `getSkills`). */
+function listedSkills(
+  skillRegistry: SkillRegistryInterface | undefined,
+  options: SkillsCatalogSummaryOptions,
+): readonly SkillEntry[] {
+  return options.skills ?? skillRegistry?.getSkills({ visibility: 'mcp' }) ?? [];
+}
 
 /**
  * Sanitize a skill description so it can be embedded as a single bullet in a
@@ -169,8 +183,7 @@ export function buildSkillsCatalogSummary(
   skillRegistry: SkillRegistryInterface | undefined,
   options: SkillsCatalogSummaryOptions = {},
 ): string {
-  // `visibility: 'mcp'` matches both `'mcp'` and `'both'` (see `getSkills`).
-  const skills = options.skills ?? skillRegistry?.getSkills({ visibility: 'mcp' }) ?? [];
+  const skills = listedSkills(skillRegistry, options);
   if (skills.length === 0) return '';
 
   const pointers = options.mcpResources === false ? METHOD_POINTERS : RESOURCE_POINTERS;
@@ -206,6 +219,19 @@ export function buildSkillsCatalogSummary(
 }
 
 /**
+ * The `'compact'` line: how many skills there are and where to read them. Empty when there are none.
+ */
+function buildCompactSkillsLine(
+  skillRegistry: SkillRegistryInterface | undefined,
+  options: SkillsCatalogSummaryOptions,
+): string {
+  const count = listedSkills(skillRegistry, options).length;
+  if (count === 0) return '';
+  const pointers = options.mcpResources === false ? METHOD_POINTERS : RESOURCE_POINTERS;
+  return `This server has ${count === 1 ? '1 skill' : `${count} skills`}: ${pointers.compact}`;
+}
+
+/**
  * Compose the final `instructions` string for the MCP `initialize` response
  * by merging server instructions, channel hints, and the skill catalog
  * summary per the configured policy.
@@ -215,7 +241,8 @@ export function buildSkillsCatalogSummary(
  *
  * Policy semantics:
  * - `'off'`: skips the skill catalog; user + channel hints are still emitted.
- * - `'append'` (default): user + channel + catalog, in that order.
+ * - `'compact'` (default): user + channel + one line counting the skills, no line without skills.
+ * - `'append'`: user + channel + catalog, in that order.
  * - `'prepend'`: catalog + channel + user.
  * - `'replace'`: only the user-supplied instructions are emitted. **Falls
  *   back to `'append'` semantics when `userInstructions` is empty/undefined**
@@ -242,14 +269,16 @@ export function composeInitializeInstructions(options: ComposeOptions): string {
     return joinSections([user, channel]);
   }
 
-  const catalog = buildSkillsCatalogSummary(options.skillRegistry, {
-    mcpResources: options.mcpResources,
-    skills: options.skills,
-  });
+  const summaryOptions: SkillsCatalogSummaryOptions = { mcpResources: options.mcpResources, skills: options.skills };
+  if (policy === 'compact') {
+    return joinSections([user, channel, buildCompactSkillsLine(options.skillRegistry, summaryOptions)]);
+  }
+
+  const catalog = buildSkillsCatalogSummary(options.skillRegistry, summaryOptions);
   if (policy === 'prepend') {
     return joinSections([catalog, channel, user]);
   }
-  // 'append' (default and 'replace'-with-empty-user fallback)
+  // 'append' (and the 'replace'-with-empty-user fallback)
   return joinSections([user, channel, catalog]);
 }
 
@@ -299,9 +328,9 @@ export interface CallerInstructionsOptions {
 
 /**
  * Compose the `initialize` instructions for one caller: server instructions, channel hints and the
- * skill catalog (plus the SEP-2640 hints when asked), per `skillsConfig.injectInstructions`.
+ * compact skills line or skill catalog (plus the SEP-2640 hints when asked), per `skillsConfig.injectInstructions`.
  *
- * The catalog and hints only name the MCP-visible skills the skill authorities and the hookable
+ * The line, catalog and hints only count or name the MCP-visible skills the skill authorities and the hookable
  * `skills:filter` flow let this caller see, the same skills `skills/list` returns. The filter only
  * runs when the instructions would list a skill. If it fails, the skills are left out rather than
  * failing the handshake. With nothing filtering, the result equals {@link composeInitializeInstructions}.
@@ -366,7 +395,7 @@ function skillUriHintsEnabled(scope: InstructionsScope): boolean {
   return !(skillsConfig.injectInstructions === 'replace' && serverInstructions.length > 0);
 }
 
-/** Whether {@link composeInitializeInstructions} emits the skill catalog under these options. */
+/** Whether {@link composeInitializeInstructions} counts or lists skills under these options. */
 function includesSkillCatalog(options: ComposeOptions): boolean {
   const policy = options.policy ?? DEFAULT_POLICY;
   if (policy === 'off') return false;

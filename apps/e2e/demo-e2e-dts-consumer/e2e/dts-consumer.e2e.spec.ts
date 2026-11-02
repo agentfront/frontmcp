@@ -129,7 +129,7 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('host-must-compile.ts'))).toEqual([]);
   });
 
-  it('types this.scope.skills.setExternalProvider() and skillsConfig.externalProvider', () => {
+  it('types this.scope.skills.setExternalProvider(), skillsConfig.externalProvider and its instructions and annotation policies', () => {
     expect(describeEach(inFixtureFile('skills-must-compile.ts'))).toEqual([]);
   });
 

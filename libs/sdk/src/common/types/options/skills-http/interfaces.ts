@@ -79,6 +79,14 @@ import type { ExternalSkillProviderBase } from '../../../../skill/providers/exte
 export type SkillsConfigAuthMode = 'inherit' | 'public' | 'api-key' | 'bearer';
 
 /**
+ * Which annotations each `skill://<skillPath>/SKILL.md` resource carries in `resources/list`.
+ * - 'no-priority': `audience: ['assistant']` and `lastModified` (when known), no numeric annotation
+ * - 'full': also `priority: 0.8`, the SEP-2640 recommendation
+ * - 'off': no annotations
+ */
+export type SkillResourceAnnotations = 'full' | 'no-priority' | 'off';
+
+/**
  * JWT validation configuration for bearer auth mode.
  */
 export interface SkillsConfigJwtOptions {
@@ -288,6 +296,19 @@ export interface SkillsConfigOptions {
   mcpResources?: boolean;
 
   /**
+   * Which annotations each `skill://<skillPath>/SKILL.md` resource carries in `resources/list`.
+   *
+   * - `'no-priority'` (default): `audience: ['assistant']`, plus `lastModified` for file-backed
+   *   skills. No numeric annotation is sent: some clients fail the whole `resources/list` when an
+   *   annotation is a number.
+   * - `'full'`: also `priority: 0.8`, the SEP-2640 recommendation (the default up to 1.10.15).
+   * - `'off'`: no annotations.
+   *
+   * @default 'no-priority'
+   */
+  resourceAnnotations?: SkillResourceAnnotations;
+
+  /**
    * SEP-2640 §Discovery — opt-in inclusion of skill URIs in the server's
    * `instructions` field. When `true`, the transport adapter adds a
    * short "Available skills:" block listing each MCP-visible skill's
@@ -363,16 +384,23 @@ export interface SkillsConfigOptions {
    * `instructions` (from `@FrontMcp({ instructions })`) and any framework
    * hints (e.g. channel reply-tool guidance).
    *
-   * - `'append'` (default): `instructions` is sent as-is, followed by a
+   * - `'compact'` (default): `instructions` and channel hints, then one line
+   *   with the number of skills the caller may see and where to read them
+   *   (`skill://index.json`, or the `skills/search` and `skills/load`
+   *   methods when `mcpResources` is false). No line when the caller sees no
+   *   skill. Some clients copy the instructions into every tool description,
+   *   so the full catalog can cost many tokens per tool.
+   * - `'append'`: `instructions` is sent as-is, followed by a
    *   `\n\n---\n\n` separator and the per-skill summary (`**Name**: …`
-   *   blocks separated by `---`). Channel hints sit between them.
+   *   blocks separated by `---`). Channel hints sit between them. The
+   *   default up to 1.10.15.
    * - `'prepend'`: the skill catalog summary is sent first, then channel
    *   hints, then the server `instructions`. Useful when bundle guidance
    *   must appear in the model's prefix.
    * - `'replace'`: surface ONLY the server `instructions` field — the
    *   skill catalog summary AND channel hints are dropped. Use when the
    *   server config is the canonical prompt and skills should be
-   *   discovered via `searchSkills` instead. **When `instructions` is
+   *   discovered via `skills/search` instead. **When `instructions` is
    *   empty/undefined this falls back to `'append'` semantics** so a
    *   misconfigured server doesn't silently drop everything.
    * - `'off'`: never inject the bundle skill catalog into `initialize`.
@@ -380,9 +408,9 @@ export interface SkillsConfigOptions {
    *   the per-skill summary is suppressed. Lowest-cost option for very
    *   large catalogs (catalog summaries can otherwise blow context).
    *
-   * @default 'append'
+   * @default 'compact'
    */
-  injectInstructions?: 'off' | 'append' | 'prepend' | 'replace';
+  injectInstructions?: 'off' | 'compact' | 'append' | 'prepend' | 'replace';
 
   /**
    * Ranking function for skill semantic search (the in-memory vector index).
