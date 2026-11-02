@@ -1720,7 +1720,7 @@
         },
         {
           "name": "shared-local-server",
-          "description": "Serve every stdio session of a server on one machine from one shared local process with FrontMCP's FrontMcpInstance.runShared - one start per key, an owner-only Unix socket or loopback HTTP with a token, and a server identity proof before the token is sent",
+          "description": "Serve every stdio session of a server on one machine from one shared local process with FrontMCP's FrontMcpInstance.runShared - one start per key, an owner-only Unix socket or loopback HTTP with a token, a server identity and version proof before the token is sent, a newer session replacing an older server under live sessions, a fallback to running in the session's own process, and exit when idle or when the checkout is removed",
           "examples": []
         }
       ]

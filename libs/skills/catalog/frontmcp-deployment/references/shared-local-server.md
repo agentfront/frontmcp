@@ -1,6 +1,6 @@
 ---
 name: shared-local-server
-description: Serve every stdio session of a server on one machine from one shared local process with FrontMCP's FrontMcpInstance.runShared - one start per key, an owner-only Unix socket or loopback HTTP with a token, and a server identity proof before the token is sent
+description: Serve every stdio session of a server on one machine from one shared local process with FrontMCP's FrontMcpInstance.runShared - one start per key, an owner-only Unix socket or loopback HTTP with a token, a server identity and version proof before the token is sent, a newer session replacing an older server under live sessions, a fallback to running in the session's own process, and exit when idle or when the checkout is removed
 ---
 
 # Shared Local Server
@@ -63,10 +63,14 @@ Starting the server takes the start lock in a SQLite file, so install `@frontmcp
 
 ## Options
 
-| Option      | Type                | Default                        | Meaning                                                                        |
-| ----------- | ------------------- | ------------------------------ | ------------------------------------------------------------------------------ |
-| `key`       | `string`            | required                       | Names the server: sessions with the same key on this machine share one process |
-| `transport` | `'unix'` / `'http'` | `'unix'` (`'http'` on Windows) | An owner-only Unix socket, or loopback HTTP on `127.0.0.1` with a token        |
+| Option           | Type                | Default                        | Meaning                                                                                                           |
+| ---------------- | ------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `key`            | `string`            | required                       | Names the server: sessions with the same key on this machine share one process                                    |
+| `transport`      | `'unix'` / `'http'` | `'unix'` (`'http'` on Windows) | An owner-only Unix socket, or loopback HTTP on `127.0.0.1` with a token                                           |
+| `attachBudgetMs` | `number`            | `15000`                        | How long a session tries to reach, start or replace the server before it runs the server in its own process       |
+| `replaceOlder`   | `boolean`           | `true`                         | A session that finds a server older than its `info.version` replaces it; `false` runs the server in its process   |
+| `idleTimeoutMs`  | `number` / `false`  | `600000`                       | The server exits after this long without a request; `false` keeps it running                                      |
+| `checkout`       | `string` / `false`  | the entry file's folder        | The server exits once this folder is removed (a deleted checkout or worktree); `false` never; relative to the cwd |
 
 `key` is 1 to 64 lowercase letters, digits, `.`, `_` or `-`, starting and ending with a letter or digit, and not a
 device name Windows reserves (`con`, `prn`, `aux`, `nul`, `com0`-`com9`, `lpt0`-`lpt9`, with or without an extension):
@@ -76,7 +80,13 @@ Invalid options reject with `InvalidSharedServerOptionsError` (`INVALID_SHARED_S
 starts, for example
 `runShared() options are invalid: key: key must be 1 to 64 lowercase letters, digits, ".", "_" or "-", starting and ending with a letter or digit`,
 `runShared() options are invalid: key: key can't be a device name Windows reserves (con, prn, aux, nul, com0-9 and lpt0-9)`,
-`runShared() options are invalid: transport: transport must be 'unix' or 'http'`, or, on Windows,
+`runShared() options are invalid: transport: transport must be 'unix' or 'http'`,
+`runShared() options are invalid: attachBudgetMs: attachBudgetMs must be a whole number of milliseconds from 1 to 600000`,
+`runShared() options are invalid: replaceOlder: replaceOlder must be true or false`,
+`runShared() options are invalid: idleTimeoutMs: idleTimeoutMs must be a whole number of milliseconds from 1 to 604800000, or false`,
+`runShared() options are invalid: checkout: checkout must be the path of a folder, or false`,
+`runShared() options are invalid: info.version: a shared server states its version, which must be 1 to 256 characters`
+(the config's `info.version` is the version sessions compare), or, on Windows,
 `runShared() options are invalid: transport: a Unix socket can't be kept owner-only on Windows; use transport 'http'`.
 With the Unix socket, a socket path longer than a socket address holds (103 bytes) is refused the same way:
 `runShared() options are invalid: transport: the socket path <path> is longer than 103 bytes; use a shorter key or FRONTMCP_HOME, or transport 'http'`.
@@ -84,13 +94,28 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
 ## How it works
 
 1. **Attach.** A session reads the server's record, `~/.frontmcp/shared/<key>/server.json` (under `FRONTMCP_HOME`
-   when set), and challenges the endpoint it names with a fresh random nonce. The server answers with an HMAC of the
-   nonce bound to its endpoint (the socket path, or `http://127.0.0.1:<port>`), keyed by a key derived from the secret
-   in the record. Only when the proof verifies (compared in constant time) does the session send the token, also
-   derived from that secret, as `Authorization: Bearer` on every MCP request. Over loopback HTTP it challenges the
-   server again before each request, so a process that takes the port of a server that stopped gets none. An answer
-   to a challenge that doesn't state its length, or is longer than 1 KiB, is refused unread.
-2. **Start.** When no server proves its identity, the session takes the key's start lock (a lease in
+   when set), and challenges the endpoint it names with a fresh random nonce. The server answers with its version
+   (the config's `info.version`) and an HMAC of the nonce, its endpoint (the socket path, or `http://127.0.0.1:<port>`)
+   and that version, keyed by a key derived from the secret in the record. Only when the proof verifies (compared in
+   constant time) does the session trust the version and send the token, also derived from that secret, as
+   `Authorization: Bearer` on every MCP request. Over loopback HTTP it challenges the server again before each request,
+   so a process that takes the port of a server that stopped gets none. An answer to a challenge that doesn't state
+   its length, or is longer than 1 KiB, is refused unread.
+2. **Versions.** A session never attaches to a server older than its own `info.version`. Versions are compared as
+   semver; equal strings are the same version; two versions that aren't both semver can't be ordered, and the session
+   then runs the server in its own process rather than replacing one it can't compare. A session of an older version
+   attaches to a newer server.
+3. **Upgrade.** With `replaceOlder` (the default), a session that finds an older server takes the start lock and asks
+   it to drain: `POST /.well-known/frontmcp-shared-server/drain` with the token and its own version, which the server
+   accepts (`202`) only from a newer version (`409` otherwise, so an older session never downgrades a newer server).
+   The draining server removes its record, answers every new request `503` with `x-frontmcp-shared-server: exiting`,
+   lets the requests in flight finish (up to 5 s), and exits; the session waits until it has let go of its endpoint,
+   starts its own server and attaches. The sessions of the older server send their next request to the new one: they
+   replay the client's `initialize` (its original capabilities), then send the client
+   `notifications/tools/list_changed` (and the resources and prompts ones the server advertises). A request no server
+   took (refused as `exiting`, the endpoint gone, a `401` from the new server on the socket) is sent again to the next
+   server; one that may have reached the old server before it went away is answered `dev_server_unreachable`.
+4. **Start.** When no server proves its identity, the session takes the key's start lock (a lease in
    `~/.frontmcp/shared/<key>/start-lock.sqlite`, set only when absent, with a 10 s TTL it renews while it waits), checks
    once more, and runs its own entry again, detached, as the server (the process gets `FRONTMCP_SHARED_SERVE=<key>` and
    `FRONTMCP_SHARED_START_LOCK=<holder>`). The server keeps renewing that lock until it has written its record, so a
@@ -98,17 +123,27 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
    together wait for that one server; when both a launcher and its server die, the lock lapses and another session takes
    it over. A server that finds the lock taken by another session stops without writing its record
    (`did not start: another session is starting it`), and the session that started it waits for the other one's server.
-   A session gives up after 60 s, or as soon as the server it started exits while it still holds the lock.
-3. **Serve.** The server generates a fresh secret, listens, and only then writes the record. It serves the config
+5. **Fallback.** When a session hasn't attached within `attachBudgetMs` (the server is wedged or unreachable), when the
+   server it started exits, or when it may not replace an older one, it runs the server in its own process: the same
+   config with the same flows and hooks, static-token auth for a fresh token, served in-process with no listener. It
+   says so once on stderr: `[frontmcp shared] warn running the shared server "<key>" in this process: <reason>`, and
+   stays that way for the rest of the session.
+6. **Serve.** The server generates a fresh secret, listens, and only then writes the record. It serves the config
    through the normal HTTP flows (`http:request`, `session:verify`, the MCP handlers, every hook), with `auth`
    replaced by static-token auth for that token and `http` replaced by the shared endpoint, so a configured `auth`,
    `http.routes` or CORS does not apply to it. An app with `auth` of its own (an `@App({ auth })` that gets an
    endpoint of its own, with `splitByApp` or `standalone`) would keep that auth and answer without the token, so the
-   server refuses to start:
+   server refuses to start (and so does a session running it in its own process):
    `The shared server "<key>" did not start: app "<id>" has auth of its own (mode <mode>), which the shared server's token would not guard; remove auth from its @App, or serve it without runShared()`.
-   The identity challenge is its own flow, `shared:identify`
-   (`POST /.well-known/frontmcp-shared-server`), hookable like any other.
-4. **Bridge.** The session is the same stdio bridge `frontmcp dev --stdio` uses: newline-delimited JSON-RPC on
+   The identity challenge and the drain are flows of their own, `shared:identify`
+   (`POST /.well-known/frontmcp-shared-server`) and `shared:drain`, hookable like any other.
+7. **Exit.** The server exits once it had no request carrying the token (or identity challenge) for `idleTimeoutMs`,
+   once its `checkout` folder is removed, when a newer session drains it, or on `SIGTERM` / `SIGINT`. Each way, it
+   refuses new requests as `exiting`, removes its record and its socket, lets the requests in flight finish, and logs
+   `The shared server "<key>" exits: <reason>` to its log file. A session that is just attaching sends its request to
+   the next server (starting one when none runs), so it never fails for it. The start lock file stays: it is the key's
+   coordination point, and no lease is left held in it.
+8. **Bridge.** The session is the same stdio bridge `frontmcp dev --stdio` uses: newline-delimited JSON-RPC on
    stdin/stdout, frames buffered while the session attaches, the server's `mcp-session-id` reused on every request.
    When stdin ends or the client goes away, the session ends its MCP session on the server and exits; the server keeps
    running for the other sessions.
@@ -130,7 +165,9 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
 - **Other users** can't reach the Unix socket at all. On loopback HTTP they can connect, but every MCP request needs
   the token; a process that takes the port of a server that stopped, before a session attaches or while sessions are
   attached, gets challenges it can't answer, and never a request or the token. A proof replayed from an earlier
-  challenge, made with an earlier server's key, or bound to another endpoint is refused.
+  challenge, made with an earlier server's key, bound to another endpoint, or claiming another version is refused, so
+  a squatter can't pass for a newer server either. Only a holder of the token can make a server drain, and only for a
+  newer version.
 - **Web pages** can't reach the socket. On loopback HTTP the server accepts only the loopback names as `Host` (DNS
   rebinding) and refuses every request that carries an `Origin`.
 - The record is what a session trusts: a server proves it holds the record's secret, not that it is yours. That is
@@ -151,20 +188,24 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
 
 | Error                              | Code                             | When                                                                                   |
 | ---------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------- |
-| `InvalidSharedServerOptionsError`  | `INVALID_SHARED_SERVER_OPTIONS`  | `key` or `transport` is invalid                                                        |
+| `InvalidSharedServerOptionsError`  | `INVALID_SHARED_SERVER_OPTIONS`  | an option, or `info.version`, is invalid                                               |
 | `UnsafeSharedServerDirectoryError` | `UNSAFE_SHARED_SERVER_DIRECTORY` | another user could replace or read the server's files                                  |
 | `SharedServerStartError`           | `SHARED_SERVER_START_FAILED`     | `The shared server "<key>" did not start: <reason>` (it exited, or none proved itself) |
 | `SharedServerIdentityError`        | `SHARED_SERVER_IDENTITY_REFUSED` | `The process at <endpoint> did not prove it is the shared server` (loopback HTTP)      |
 
-A session that can't attach answers the requests it holds with `dev_reload_deadline` (`-32097`), carrying the reason
-in `error.data.error`, writes `[frontmcp shared] error attach-failed …` to stderr, and `runShared()` rejects. A request
-the session can't send (its server stopped, or `SharedServerIdentityError`) is answered with `dev_server_unreachable`
-(`-32099`).
+A session that can't attach runs the server in its own process instead (see Fallback); only when that fails too does
+it answer the requests it holds with `dev_reload_deadline` (`-32097`), carrying the reason in `error.data.error`, write
+`[frontmcp shared] error attach-failed …` to stderr, and `runShared()` rejects. A request that may have reached a
+server that then went away is answered with `dev_server_unreachable` (`-32099`); the session's next requests go to the
+next server.
 
 ## Limits
 
-- The server runs until it gets `SIGTERM` or `SIGINT`; stop it with the pid in `server.json`. A session whose server
-  stopped answers `dev_server_unreachable` (`-32099`) until its client restarts it.
+- Idle means no request: a session that stays quiet past `idleTimeoutMs` finds the server gone, and its next request
+  starts a new one (with the `initialize` replayed). Server-side state of that session (subscriptions, session memory)
+  isn't carried over, nor is work the server runs in the background after a call returned.
+- The version compared is `info.version`: a code change that doesn't bump it is not an upgrade. A session that runs the
+  server in its own process stays that way until its client restarts it.
 - The server runs with the environment, working folder and Node flags of the session that started it (an inspector
   flag such as `--inspect` too, so the process that runs your tools can be debugged). A later session's own
   environment isn't applied: two client configs that pass different credentials in `env` need different keys.
@@ -178,6 +219,8 @@ the session can't send (its server stopped, or `SharedServerIdentityError`) is a
 | Problem                                                  | Fix                                                                                                                                    |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `did not start: it exited with code 1`                   | Run the entry with `FRONTMCP_SHARED_SERVE=<key>` in a terminal to see why the server can't start; its log is under `~/.frontmcp/logs/` |
+| `running the shared server "<key>" in this process: …`   | The reason follows: a wedged server (stop the pid in `server.json`), an older server with `replaceOlder: false`, or a start failure    |
+| `which can't be ordered against this session's …`        | Use semver `info.version`s, or the same version, in every checkout that shares the key                                                 |
 | `app "<id>" has auth of its own`                         | Remove `auth` from that `@App`: on a shared server the token guards every app                                                          |
 | `did not start: another session is starting it`          | Seen when running the server by hand while another session starts one; a session whose server stops this way waits for the other's     |
 | `the sqlite type needs @frontmcp/storage-sqlite`         | Install `@frontmcp/storage-sqlite`: the start lock lives in SQLite                                                                     |

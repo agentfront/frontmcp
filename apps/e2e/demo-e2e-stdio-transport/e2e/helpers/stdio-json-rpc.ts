@@ -15,6 +15,7 @@ const RESPONSE_TIMEOUT_MS = 30_000;
 /** A stdio MCP server process spoken to in raw newline-delimited JSON-RPC. */
 export class StdioJsonRpcProcess {
   readonly stdoutLines: string[] = [];
+  readonly stderrLines: string[] = [];
   private readonly received: JsonRpcMessage[] = [];
   private readonly waiters = new Set<() => void>();
 
@@ -28,6 +29,7 @@ export class StdioJsonRpcProcess {
       }
       for (const wake of this.waiters) wake();
     });
+    createInterface({ input: child.stderr }).on('line', (line) => this.stderrLines.push(line));
   }
 
   /** Run the entrypoint in this process's node, so a signal reaches the server itself and not a launcher shell. */
@@ -37,7 +39,6 @@ export class StdioJsonRpcProcess {
       env: { ...process.env, ...env } as Record<string, string>,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    child.stderr.resume();
     return new StdioJsonRpcProcess(child);
   }
 

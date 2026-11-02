@@ -266,4 +266,156 @@ describe('bridge state machine (issue #399)', () => {
     expect(failResp).toBeDefined();
     expect(failResp?.error?.data).toMatchObject({ reason: 'forward_failed' });
   });
+
+  describe('when its upstream is lost', () => {
+    it('buffers new requests and leaves the ones in flight to settle on their own', async () => {
+      const { fsm, rec } = makeFsm();
+      fsm.onBootStart();
+      fsm.onChildReady();
+      await fsm.enqueue({ jsonrpc: '2.0', id: 1, method: 'long-call' });
+
+      fsm.onUpstreamLost('drained');
+      await fsm.enqueue({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+      await new Promise((r) => setImmediate(r));
+
+      expect(fsm.state).toBe('Reloading');
+      expect(rec.responses).toEqual([]);
+      expect(fsm.bufferDepth()).toBe(1);
+      await fsm.relayUpstream({ jsonrpc: '2.0', id: 1, result: {} });
+      fsm.onChildReady();
+      await new Promise((r) => setImmediate(r));
+      expect(rec.responses.map((r) => r.id)).toEqual([1]);
+      expect(rec.forwarded.map((f) => f.id)).toEqual([1, 2]);
+    });
+
+    it('puts a request its upstream never took back in front of the buffer, and sends it once ready', async () => {
+      const { fsm, rec } = makeFsm();
+      fsm.onBootStart();
+      fsm.onChildReady();
+      const refused: JsonRpcFrame = { jsonrpc: '2.0', id: 1, method: 'tools/call' };
+      await fsm.enqueue(refused);
+      fsm.onUpstreamLost('drained');
+      await fsm.enqueue({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+
+      await fsm.requeue(refused);
+      expect(fsm.bufferDepth()).toBe(2);
+      fsm.onChildReady();
+      await new Promise((r) => setImmediate(r));
+
+      expect(rec.forwarded.map((f) => f.id)).toEqual([1, 1, 2]);
+      expect(rec.responses).toEqual([]);
+    });
+
+    it('sends a requeued request at once when it is ready again', async () => {
+      const { fsm, rec } = makeFsm();
+      fsm.onBootStart();
+      fsm.onChildReady();
+      const frame: JsonRpcFrame = { jsonrpc: '2.0', id: 3, method: 'tools/call' };
+      await fsm.requeue(frame);
+      expect(rec.forwarded.map((f) => f.id)).toEqual([3]);
+    });
+
+    it('keeps the buffered requests a drain had not sent yet, instead of dropping them', async () => {
+      const rec: Recorder = { forwarded: [], responses: [] };
+      let release: () => void = () => undefined;
+      const fsm = createBridgeStateMachine({
+        log: makeLog(),
+        bufferSize: 8,
+        reloadDeadlineMs: 30_000,
+        respond: (f) => void rec.responses.push(f),
+        forward: async (f) => {
+          rec.forwarded.push(f);
+          if (f.id === 1) await new Promise<void>((resolve) => (release = resolve));
+        },
+      });
+      fsm.onBootStart();
+      for (const id of [1, 2, 3]) await fsm.enqueue({ jsonrpc: '2.0', id, method: 'm' });
+      fsm.onChildReady();
+      await new Promise((r) => setImmediate(r));
+
+      fsm.onUpstreamLost('drained');
+      release();
+      await new Promise((r) => setImmediate(r));
+      expect(fsm.bufferDepth()).toBe(2);
+      fsm.onChildReady();
+      await new Promise((r) => setImmediate(r));
+
+      expect(rec.forwarded.map((f) => f.id)).toEqual([1, 2, 3]);
+      expect(rec.responses).toEqual([]);
+    });
+
+    it('answers the requests a drain had not sent yet when it stops', async () => {
+      const rec: Recorder = { forwarded: [], responses: [] };
+      let release: () => void = () => undefined;
+      const fsm = createBridgeStateMachine({
+        log: makeLog(),
+        bufferSize: 8,
+        reloadDeadlineMs: 30_000,
+        respond: (f) => void rec.responses.push(f),
+        forward: async (f) => {
+          rec.forwarded.push(f);
+          if (f.id === 1) await new Promise<void>((resolve) => (release = resolve));
+        },
+      });
+      fsm.onBootStart();
+      for (const id of [1, 2]) await fsm.enqueue({ jsonrpc: '2.0', id, method: 'm' });
+      fsm.onChildReady();
+      await new Promise((r) => setImmediate(r));
+
+      await fsm.stop();
+      release();
+      await new Promise((r) => setImmediate(r));
+
+      expect(rec.responses.map((r) => [r.id, r.error?.code])).toEqual([
+        [1, -32099],
+        [2, -32099],
+      ]);
+    });
+
+    it('answers a request whose forward fails once its upstream was lost, which no one else answers', async () => {
+      const rec: Recorder = { forwarded: [], responses: [] };
+      const fsm: BridgeStateMachine = createBridgeStateMachine({
+        log: makeLog(),
+        bufferSize: 8,
+        reloadDeadlineMs: 30_000,
+        respond: (f) => void rec.responses.push(f),
+        forward: async (f) => {
+          rec.forwarded.push(f);
+          fsm.onUpstreamLost('gone');
+          throw new Error('gone');
+        },
+      });
+      fsm.onBootStart();
+      await fsm.enqueue({ jsonrpc: '2.0', id: 1, method: 'buffered' });
+      fsm.onChildReady();
+      await new Promise((r) => setImmediate(r));
+      fsm.onChildReady();
+      await fsm.enqueue({ jsonrpc: '2.0', id: 2, method: 'live' });
+
+      expect(rec.responses.map((r) => [r.id, r.error?.code])).toEqual([
+        [1, -32099],
+        [2, -32099],
+      ]);
+    });
+
+    it('answers a request whose forward fails after a child exit only once', async () => {
+      const rec: Recorder = { forwarded: [], responses: [] };
+      const fsm: BridgeStateMachine = createBridgeStateMachine({
+        log: makeLog(),
+        bufferSize: 8,
+        reloadDeadlineMs: 30_000,
+        respond: (f) => void rec.responses.push(f),
+        forward: async () => {
+          fsm.onChildExit('crashed');
+          await new Promise((r) => setImmediate(r));
+          throw new Error('crashed');
+        },
+      });
+      fsm.onBootStart();
+      fsm.onChildReady();
+      await fsm.enqueue({ jsonrpc: '2.0', id: 1, method: 'live' });
+
+      expect(rec.responses.filter((r) => r.id === 1)).toHaveLength(1);
+    });
+  });
 });

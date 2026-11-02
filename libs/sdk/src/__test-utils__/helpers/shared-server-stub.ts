@@ -4,10 +4,16 @@ import type { AddressInfo } from 'node:net';
 import { createSharedServerNonce, deriveSharedServerKeys, proveSharedServerIdentity } from '@frontmcp/auth';
 import { base64urlEncode, randomBytes } from '@frontmcp/utils';
 
-import { httpEndpoint, SHARED_IDENTIFY_PATH, unixEndpoint, type SharedEndpoint } from '../../shared/shared-endpoint';
+import {
+  httpEndpoint,
+  SHARED_DRAIN_PATH,
+  SHARED_IDENTIFY_PATH,
+  unixEndpoint,
+  type SharedEndpoint,
+} from '../../shared/shared-endpoint';
 
 /** How the stub answers an identity challenge: as the real server would, or as one of the ways a squatter might. */
-export type StubBehavior = 'prove' | 'garbage' | 'replay' | 'stale' | 'other-endpoint' | 'error';
+export type StubBehavior = 'prove' | 'garbage' | 'replay' | 'stale' | 'other-endpoint' | 'other-version' | 'error';
 
 export interface StubRequest {
   method: string;
@@ -29,7 +35,15 @@ export async function startIdentityStub(options: {
   behavior: StubBehavior;
   socketPath?: string;
   port?: number;
+  /** The version it claims to run. @default '1.0.0' */
+  version?: string;
+  /** How it answers a drain request: the status, and whether it then stops listening. @default 202, closing */
+  drain?: { status: number; close: boolean };
+  /** The status it answers any other request with. @default 204 */
+  status?: number;
 }): Promise<IdentityStub> {
+  const version = options.version ?? '1.0.0';
+  const drain = options.drain ?? { status: 202, close: true };
   const { proofKey } = deriveSharedServerKeys(options.secret);
   const requests: StubRequest[] = [];
   const recordedNonce = createSharedServerNonce();
@@ -39,8 +53,14 @@ export async function startIdentityStub(options: {
     req.on('data', (chunk: Buffer) => (body += chunk.toString()));
     req.on('end', () => {
       requests.push({ method: req.method ?? '', path: req.url ?? '', headers: req.headers, body });
+      if (req.url === SHARED_DRAIN_PATH) {
+        res.statusCode = drain.status;
+        res.end();
+        if (drain.status === 202 && drain.close) setImmediate(() => void close());
+        return;
+      }
       if (req.url !== SHARED_IDENTIFY_PATH) {
-        res.statusCode = 204;
+        res.statusCode = options.status ?? 204;
         res.end();
         return;
       }
@@ -52,26 +72,25 @@ export async function startIdentityStub(options: {
         return;
       }
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ proof }));
+      res.end(JSON.stringify({ proof, version }));
     });
   });
 
   function proofFor(behavior: StubBehavior, endpointId: string, nonce: string): string | undefined {
+    const statement = { endpoint: endpointId, nonce, version };
     switch (behavior) {
       case 'prove':
-        return proveSharedServerIdentity(proofKey, endpointId, nonce);
+        return proveSharedServerIdentity(proofKey, statement);
       case 'garbage':
         return base64urlEncode(randomBytes(32));
       case 'replay':
-        return proveSharedServerIdentity(proofKey, endpointId, recordedNonce);
+        return proveSharedServerIdentity(proofKey, { ...statement, nonce: recordedNonce });
       case 'stale':
-        return proveSharedServerIdentity(
-          deriveSharedServerKeys(base64urlEncode(randomBytes(32))).proofKey,
-          endpointId,
-          nonce,
-        );
+        return proveSharedServerIdentity(deriveSharedServerKeys(base64urlEncode(randomBytes(32))).proofKey, statement);
       case 'other-endpoint':
-        return proveSharedServerIdentity(proofKey, `${endpointId}0`, nonce);
+        return proveSharedServerIdentity(proofKey, { ...statement, endpoint: `${endpointId}0` });
+      case 'other-version':
+        return proveSharedServerIdentity(proofKey, { ...statement, version: `${version}-other` });
       case 'error':
         return undefined;
     }
@@ -83,14 +102,13 @@ export async function startIdentityStub(options: {
   });
   const port = options.socketPath ? undefined : (server.address() as AddressInfo).port;
   const endpoint = port === undefined ? unixEndpoint(options.socketPath as string) : httpEndpoint(port);
-  return {
-    endpoint,
-    port,
-    requests,
-    close: () =>
-      new Promise<void>((resolve) => {
-        server.closeAllConnections();
-        server.close(() => resolve());
-      }),
-  };
+  let closing: Promise<void> | undefined;
+  function close(): Promise<void> {
+    closing ??= new Promise<void>((resolve) => {
+      server.closeAllConnections();
+      server.close(() => resolve());
+    });
+    return closing;
+  }
+  return { endpoint, port, requests, close };
 }

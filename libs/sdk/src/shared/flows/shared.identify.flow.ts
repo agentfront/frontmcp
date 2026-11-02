@@ -16,6 +16,7 @@ import {
 } from '../../common';
 import { SHARED_IDENTIFY_PATH } from '../shared-endpoint';
 import { SharedServerIdentity } from '../shared-server.identity';
+import { exitingResponse, SharedServerLifecycle } from '../shared-server.lifecycle';
 
 const inputSchema = httpInputSchema;
 const outputSchema = HttpJsonSchema;
@@ -40,7 +41,7 @@ declare global {
 const name = 'shared:identify' as const;
 const Stage = StageHookOf(name);
 
-/** POST /.well-known/frontmcp-shared-server: the HMAC of the client's nonce, bound to the server's endpoint. */
+/** POST /.well-known/frontmcp-shared-server: the HMAC of the client's nonce, bound to the server's endpoint and version. */
 @Flow({
   name,
   plan,
@@ -71,6 +72,9 @@ export default class SharedIdentifyFlow extends FlowBase<typeof name> {
       this.respond(httpRespond.json({ error: 'nonce must be 32 random bytes in base64url' }, { status: 400 }));
       return;
     }
-    this.respond(httpRespond.json({ proof: this.get(SharedServerIdentity).prove(nonce) }));
+    const lifecycle = this.get(SharedServerLifecycle);
+    if (lifecycle.isExiting) this.respond(exitingResponse());
+    lifecycle.touch();
+    this.respond(httpRespond.json(this.get(SharedServerIdentity).prove(nonce)));
   }
 }
