@@ -659,13 +659,13 @@ class DeployPipeline {}
 
 **Variants:**
 
-| Decorator  | Timing        | Description                                                                                       |
-| ---------- | ------------- | ------------------------------------------------------------------------------------------------- |
-| `@Will`    | Before        | Runs before the stage                                                                             |
-| `@Did`     | After success | Runs after the stage succeeds; skipped when it fails                                              |
-| `@Stage`   | During        | Runs as part of the stage itself                                                                  |
-| `@Around`  | Wrapping      | Wraps the stage; `await next()` runs it                                                           |
-| `@Finally` | After, always | Runs after the stage whatever its outcome; reads `ctx.state.flowError`; cannot change the outcome |
+| Decorator  | Timing        | Description                                                                             |
+| ---------- | ------------- | --------------------------------------------------------------------------------------- |
+| `@Will`    | Before        | Runs before the stage                                                                   |
+| `@Did`     | After success | Runs after the stage succeeds; skipped when it fails                                    |
+| `@Stage`   | During        | Runs as part of the stage itself                                                        |
+| `@Around`  | Wrapping      | Wraps the stage; `await next()` runs it                                                 |
+| `@Finally` | After, always | Runs after the stage whatever its outcome; reads `ctx.error`; cannot change the outcome |
 
 Declare hooks on a `@Plugin` (or a provider) to run them for every tool, resource or prompt of the app it is registered on:
 
@@ -692,19 +692,22 @@ export class AuditPlugin {
   async timeResourceRead(ctx: FlowCtxOf<'resources:read-resource'>, next: () => Promise<void>) {
     const startedAt = Date.now();
     await next();
-    ctx.logger.info(`Read ${ctx.state.required.input.uri} in ${Date.now() - startedAt}ms`);
+    ctx.logger.info(`Read ${ctx.uri} in ${Date.now() - startedAt}ms`);
   }
 }
 ```
 
 Register the plugin in `@App({ plugins: [AuditPlugin] })`, or in `@FrontMcp({ plugins: [AuditPlugin] })` to run its hooks for every app.
 
-A hook method receives the running flow, typed `FlowCtxOf<'<flow-name>'>`:
+A hook method receives the running flow, typed `FlowCtxOf<'<flow-name>'>`. The decorator checks the parameter: the flow's ctx, a structural subset of it, `unknown` or none compiles, and a property the flow does not have (or keeps protected, or of the wrong type) fails to compile (up to 1.10.15 any parameter compiled).
 
+- `ctx.toolName` and `ctx.toolInput` (`tools:call-tool`), `ctx.uri` (`resources:read-resource`) and `ctx.promptName` (`prompts:get-prompt`) name the entry and its input.
+- `ctx.request` holds the request's `sessionId`, `clientInfo`, `metadata` (user agent, client IP, `x-frontmcp-*` headers) and `protocol`; each is `undefined` when the run has none.
+- `ctx.notify.listChanged('tools' | 'resources' | 'prompts')` tells every connected client the list changed.
 - `ctx.state` holds the flow's data (for `tools:call-tool`: `input`, `tool`, `toolContext`, ...); `ctx.state.required.<key>` throws when the key is unset.
 - `ctx.logger` logs, and `ctx.fail(error)` or `ctx.respond(output)` ends the flow.
 - An `@Around` hook also receives `next`, which runs the stage.
-- A `@Finally` hook runs when the stage failed too, so close spans, timers and locks there rather than in `@Did`; its `ctx.respond()`, `ctx.fail()` and throws are logged and ignored.
+- A `@Finally` hook runs when the stage failed too, so close spans, timers and locks there rather than in `@Did`; it reads the failure from `ctx.error`, and its `ctx.respond()`, `ctx.fail()` and throws are logged and ignored.
 - `this` is the plugin or provider instance.
 
 A hook declared on a `@Tool`, `@Resource` or `@Prompt` class runs only for that entry, on its context (`this.input`, `this.get()`). See `create-plugin-hooks` for the stages of each flow, `priority`, `filter` and entry-class hooks.

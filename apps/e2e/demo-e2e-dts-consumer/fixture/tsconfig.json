@@ -14,6 +14,7 @@
     "tool-must-fail.ts",
     "prompts-must-compile.ts",
     "hooks-must-compile.ts",
+    "hooks-must-fail.ts",
     "host-must-compile.ts",
     "skills-must-compile.ts",
     "output-schemas-must-compile.ts"
