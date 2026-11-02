@@ -43,10 +43,11 @@ Each line holds `v`, `at`, `method`, `name` (the tool or prompt name the client 
 - **`error`** is `{ code, message }` with the code the client saw — a tool error answer's `_meta.code` (`TOOL_NOT_FOUND`), or the JSON-RPC code of a resource or prompt (`-32002`) — and the public message.
 - **`session`** is the first 8 characters of the session id, as the request log shows it.
 - Calls a tool makes in process (`this.callTool()`) are not recorded: replaying the outer call makes them again.
+- A task-augmented call is recorded once, with the answer its task produced, and replays as a plain call.
 
 ## Redaction
 
-Nothing sensitive reaches the file:
+Fields are redacted by name, never by value, so review a recording before you commit it (a token inside a URL, or a field such as `ssn` not listed in `redactFields`, is written as it is):
 
 - every field named like a credential the request log hides (`authorization`, `cookie`, `apiKey`, `access_token`, `password`, `client_secret`, ...) is `[REDACTED]`, at any depth of the input and the answer, and inside text that holds JSON;
 - so is every field in `redactFields`;

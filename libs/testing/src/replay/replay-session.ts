@@ -117,7 +117,7 @@ export async function replaySession(
       });
     }
   } finally {
-    await Promise.all([...clients.values()].map((client) => client.disconnect()));
+    await Promise.allSettled([...clients.values()].map((client) => client.disconnect()));
   }
   return { file, calls, differences: calls.filter(({ outcome }) => outcome !== 'same') };
 }

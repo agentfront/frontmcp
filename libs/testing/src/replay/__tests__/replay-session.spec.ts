@@ -15,9 +15,11 @@ interface FakeClient {
 
 const clients: FakeClient[] = [];
 let answer: (method: string, params?: Record<string, unknown>) => JSONRPCResponse;
+let failDisconnect = false;
 
 beforeEach(() => {
   clients.length = 0;
+  failDisconnect = false;
   answer = () => ({ jsonrpc: '2.0', id: 1, result: { content: [] } });
   jest.spyOn(McpTestClient, 'create').mockImplementation((config: McpTestClientConfig) => {
     const client: FakeClient = { config, requests: [], disconnected: false };
@@ -31,6 +33,7 @@ beforeEach(() => {
       },
       disconnect: async () => {
         client.disconnected = true;
+        if (failDisconnect) throw new Error('socket already closed');
       },
     };
     return { buildAndConnect: async () => connected } as unknown as ReturnType<typeof McpTestClient.create>;
@@ -107,6 +110,16 @@ describe('replaySession', () => {
     ]);
     expect(report.differences.map(({ line }) => line)).toEqual([2, 3]);
     expect(clients[0].config).toEqual({ baseUrl: 'http://localhost:3999' });
+  });
+
+  it('returns the report when a client fails to disconnect', async () => {
+    const file = recording([{ ...base, method: 'tools/call', name: 'ping', answer: { content: [] } }]);
+    failDisconnect = true;
+
+    const report = await replaySession(file, 'http://localhost:3999');
+
+    expect(report.differences).toEqual([]);
+    expect(clients[0].disconnected).toBe(true);
   });
 
   it('refuses a line that is not a call record, naming the line', async () => {

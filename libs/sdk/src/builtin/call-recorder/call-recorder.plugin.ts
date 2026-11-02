@@ -100,9 +100,11 @@ export default class CallRecorderPlugin extends DynamicPlugin<
     ];
   };
 
+  /** A task-augmented call is recorded by the task's own run, which answers; the run creating it answers a handle. */
   @ToolHook.Will('parseInput', { priority: -1000 })
   openToolCall(flow: FlowCtxOf<'tools:call-tool'>): void {
-    if (flow.isClientCall()) this.open(flow, 'tools/call');
+    const createsTask = requestParamsOf(flow.rawInput)['task'] !== undefined;
+    if (flow.isClientCall() && !createsTask) this.open(flow, 'tools/call');
   }
 
   @ResourceHook.Will('parseInput', { priority: -1000 })

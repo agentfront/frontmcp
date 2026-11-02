@@ -6,6 +6,7 @@ import * as path from 'node:path';
 
 import { z } from '@frontmcp/lazy-zod';
 
+import { createTestFetchServer } from '../../../__test-utils__/helpers/mcp-20260728.helpers';
 import {
   App,
   FlowControl,
@@ -218,6 +219,36 @@ describe('CallRecorderPlugin', () => {
     });
 
     expect(recordsIn(file)[0].error).toEqual({ code: -32601, message: expect.any(String) });
+  });
+
+  it('records a task-augmented call once, with the answer of the task', async () => {
+    const file = path.join(dir, 'calls.jsonl');
+    const server = await createTestFetchServer({
+      ...config({ path: file }),
+      tasks: { enabled: true, defaultTtlMs: 60_000, defaultPollIntervalMs: 10 },
+    } as FrontMcpConfigInput);
+    const scope = server.instance.getScopes()[0];
+    const ctx = { authInfo: { sessionId: 'recorder-task-session' } };
+    const created = (await scope.runFlowForOutput('tools:call-tool', {
+      request: { method: 'tools/call', params: { name: 'long_report', arguments: {}, task: { ttl: 60_000 } } },
+      ctx,
+    })) as unknown as { task: { taskId: string } };
+    const statusOf = async () =>
+      (
+        (await scope.runFlowForOutput('tasks:get', {
+          request: { method: 'tasks/get', params: { taskId: created.task.taskId } },
+          ctx,
+        })) as unknown as { status: string }
+      ).status;
+    for (let attempt = 0; attempt < 100 && (await statusOf()) === 'working'; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    await server.instance.shutdown();
+
+    const records = recordsIn(file);
+    expect(records.map(({ name, answer }) => ({ name, answer }))).toEqual([
+      { name: 'long_report', answer: expect.objectContaining({ structuredContent: { done: true } }) },
+    ]);
   });
 
   it('records resource reads and prompts, and their JSON-RPC error codes', async () => {
