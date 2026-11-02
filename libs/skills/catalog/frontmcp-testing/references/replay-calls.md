@@ -40,20 +40,23 @@ Invalid options throw `CallRecorderConfigurationError` from `CallRecorderPlugin.
 Each line holds `v`, `at`, `method`, `name` (the tool or prompt name the client asked for, or the resource URI), `input`, `answer` or `error`, `durationMs`, `session` and `client`:
 
 - **`answer`** is what the client received: the answer after every hook and the answer stages (`fitAnswer`, `shapeAnswer`), so a folded result-handles answer is recorded folded.
-- **`error`** is `{ code, message }` with the code the client saw — a tool error answer's `_meta.code` (`TOOL_NOT_FOUND`), or the JSON-RPC code of a resource or prompt (`-32002`) — and the public message.
+- **`error`** is `{ code, message }` with the code the client saw — a tool error answer's `_meta.code` (`TOOL_NOT_FOUND`), or the JSON-RPC code of a resource or prompt (`-32002`) — and, for a public error, the text the client reads (a tool error's text includes its `To fix:` remedy line; a JSON-RPC message has no `MCP error <code>:` prefix). An internal error is recorded as `{ code }` only: its text is generic and carries a new error id each time.
+- The file is created owner-only (`0600`). Lines are written in order off the call's path; while `maxBytes` of lines wait for a slow disk, later calls are dropped (logged once). `maxBytes` counts the file's size on disk, so lines another process appends to the same path count too.
 - **`session`** is the first 8 characters of the session id, as the request log shows it.
 - Calls a tool makes in process (`this.callTool()`) are not recorded: replaying the outer call makes them again.
 - A task-augmented call is recorded once, with the answer its task produced, and replays as a plain call.
 
 ## Redaction
 
-Fields are redacted by name, never by value, so review a recording before you commit it (a token inside a URL, or a field such as `ssn` not listed in `redactFields`, is written as it is):
+Review a recording before you commit it: a field such as `ssn` not listed in `redactFields`, or a secret in a shape the rules below do not know, is written as it is.
 
-- every field named like a credential the request log hides (`authorization`, `cookie`, `apiKey`, `access_token`, `password`, `client_secret`, ...) is `[REDACTED]`, at any depth of the input and the answer, and inside text that holds JSON;
-- so is every field in `redactFields`;
-- no request headers are recorded, and the session id is cut to 8 characters.
+- Every field named like a credential the request log hides is `[REDACTED]`, at any depth of the input and the answer, and inside text that holds JSON. Names are matched by words, camelCase and snake_case split: `authorization`, `cookie`, `apiKey`, `access_token`, `accesstoken`, `password`, `passWord`, `client_secret`, `jwt`, `passphrase`, and any word `key`, `auth`, `token`, `secret` or `signature` — so `key`, `cacheKey` and `pageToken` / `nextPageToken` are redacted too. So is a session id field (`sessionId`, `session_id`).
+- So is every field in `redactFields`.
+- Inside any other text, also a tool's text block, an error message and a resource URI: a `Bearer` or `Basic` credential, a JWT, the `user:password@` of a URL, and the value given to a redacted name (`?access_token=…`, `#id_token=…`, `apiKey: "…"`, `TOKEN=…`).
+- The handle of a folded result-handles answer (its encryption keys derive from it) is `[REDACTED]` wherever it appears, also in a later call that passes it to `result_query`.
+- No request headers or `_meta` of a request are recorded, and the session id is cut to 8 characters.
 
-A redacted input replays as the string `[REDACTED]`. Name a safe field in `keepFields` to record and replay it as it was.
+A redacted input replays as the string `[REDACTED]`, so a call whose answer depends on it (a key-value `get({ key })`, a page token) answers differently. Name a safe field in `keepFields` to record and replay it as it was.
 
 ## Replay
 
@@ -73,16 +76,16 @@ test('the new build answers the recorded calls as before', async ({ server }) =>
 
 `replaySession()` replays the calls in order, one client per recorded session (with the recorded client info), and returns `{ file, calls, differences }`. Each call has an `outcome`:
 
-| Outcome      | Meaning                                                            |
-| ------------ | ------------------------------------------------------------------ |
-| `same`       | The answer matches, or both failed with the same code              |
-| `changed`    | An answer path differs, or the call failed with another error code |
-| `new-error`  | The recording answered and the replay failed                       |
-| `gone-error` | The recording failed and the replay answered                       |
+| Outcome      | Meaning                                                           |
+| ------------ | ----------------------------------------------------------------- |
+| `same`       | The answer matches, or both failed with the same code and message |
+| `changed`    | An answer path differs, or the call failed with another error     |
+| `new-error`  | The recording answered and the replay failed                      |
+| `gone-error` | The recording failed and the replay answered                      |
 
-`changes` lists each differing path (`structuredContent.price`); text that holds JSON is compared as JSON (`content.0.text.price`). A value the recording redacted is not compared, and neither are the ids of folded result handles (`compareResultHandles: true` compares them).
+`changes` lists each differing path (`structuredContent.price`); text that holds JSON is compared as JSON (`content.0.text.price`). A value the recording redacted is not compared, and a `[REDACTED]` inside a text matches any text there (so a folded answer's new handle is not a change). Two errors differ by code (`error.code`), then, for a public error, by message (`error.message`); an internal error is compared by code only.
 
-`ignore` takes dot paths where `*` matches one key and `**` any number of keys. Ignore timestamps, generated ids and anything else that changes on every call.
+`ignore` takes dot paths where `*` matches one key and `**` any number of keys. Ignore timestamps, generated ids and anything else that changes on every call; `error.message` ignores the messages of errors (a server recorded in production and replayed in development words a few errors differently).
 
 ## From the CLI
 

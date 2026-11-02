@@ -7,9 +7,13 @@ const answer = (structuredContent: Record<string, unknown>) => ({
 });
 
 describe('replayedAnswerOf', () => {
-  it('reads a JSON-RPC error as an error', () => {
+  it('reads a JSON-RPC error as an error, without the MCP error prefix of its message', () => {
     expect(replayedAnswerOf({ jsonrpc: '2.0', id: 1, error: { code: -32002, message: 'gone' } })).toEqual({
       error: { code: -32002, message: 'gone' },
+    });
+    const prefixed = { code: -32002, message: 'MCP error -32002: Resource not found: notes://gone' };
+    expect(replayedAnswerOf({ jsonrpc: '2.0', id: 1, error: prefixed })).toEqual({
+      error: { code: -32002, message: 'Resource not found: notes://gone' },
     });
   });
 
@@ -76,18 +80,23 @@ describe('compareCall', () => {
     expect(compareCall(recorded, answer({ token: 'tok-live', price: 12 })).outcome).toBe('same');
   });
 
-  it('ignores the id of a folded answer handle unless told to compare it', () => {
+  it('does not compare what the recording redacted inside a text, such as a folded answer handle', () => {
     const folded = (handle: string) => ({
       answer: {
-        content: [{ type: 'text', text: `Read the rest with result_query and handle "${handle}"` }],
+        content: [{ type: 'text', text: `Read the rest with result_query and handle "${handle}" in 600 seconds` }],
         structuredContent: { preview: [1], handle },
         _meta: { 'frontmcp/result-handle': { handle, bytes: 20000, ttlSeconds: 600 } },
       },
     });
-    const recorded = toolCall(folded('2b4f-old'));
+    const recorded = toolCall(folded('[REDACTED]'));
     expect(compareCall(recorded, folded('9c1e-new'))).toEqual({ outcome: 'same', changes: [] });
-    expect(compareCall(recorded, folded('9c1e-new'), { compareResultHandles: true }).changes).toHaveLength(3);
-    expect(compareCall(toolCall(folded('')), folded('')).outcome).toBe('same');
+    const reworded = folded('9c1e-new');
+    reworded.answer.content[0].text = 'Read the rest with handle "9c1e-new" in 600 seconds';
+    expect(compareCall(recorded, reworded).changes.map(({ path }) => path)).toEqual(['content.0.text']);
+    const twice = toolCall({ answer: 'Bearer [REDACTED] then [REDACTED].' });
+    expect(compareCall(twice, { answer: 'Bearer tok-1 then tok-2.' }).outcome).toBe('same');
+    expect(compareCall(twice, { answer: 'Bearer tok-1 then tok-2!' }).outcome).toBe('changed');
+    expect(compareCall(twice, { answer: 'Bearer' }).outcome).toBe('changed');
   });
 
   it('tells a new error, a gone error and an error with another code apart', () => {
@@ -102,13 +111,36 @@ describe('compareCall', () => {
       changes: [],
       error: failed.error,
     });
-    expect(compareCall(toolCall(failed), { error: { code: 'LEDGER_OFFLINE', message: 'reworded' } }).outcome).toBe(
-      'same',
-    );
+    expect(compareCall(toolCall(failed), { error: { code: 'LEDGER_OFFLINE', message: 'ledger offline' } })).toEqual({
+      outcome: 'same',
+      changes: [],
+      error: failed.error,
+    });
     expect(compareCall(toolCall(failed), { error: { code: 'INTERNAL_ERROR', message: 'boom' } })).toEqual({
       outcome: 'changed',
       changes: [{ path: 'error.code', recorded: 'LEDGER_OFFLINE', replayed: 'INTERNAL_ERROR' }],
       error: { code: 'INTERNAL_ERROR', message: 'boom' },
     });
+  });
+
+  it("reports a public error's reworded message, unless told to ignore it", () => {
+    const failed = toolCall({ error: { code: 'LEDGER_OFFLINE', message: 'ledger offline' } });
+    const reworded = { error: { code: 'LEDGER_OFFLINE', message: 'ledger closed for the night' } };
+    expect(compareCall(failed, reworded)).toEqual({
+      outcome: 'changed',
+      changes: [{ path: 'error.message', recorded: 'ledger offline', replayed: 'ledger closed for the night' }],
+      error: reworded.error,
+    });
+    expect(compareCall(failed, reworded, { ignore: ['error.message'] }).outcome).toBe('same');
+    const redacted = toolCall({ error: { code: 'TOKEN_EXPIRED', message: 'token [REDACTED] has expired' } });
+    expect(compareCall(redacted, { error: { code: 'TOKEN_EXPIRED', message: 'token eyJx has expired' } }).outcome).toBe(
+      'same',
+    );
+  });
+
+  it('compares only the code of an internal error, whose message the recording does not keep', () => {
+    const internal = toolCall({ error: { code: 'TOOL_EXECUTION_ERROR' } });
+    const replayed = { error: { code: 'TOOL_EXECUTION_ERROR', message: 'Internal FrontMCP error: err_1' } };
+    expect(compareCall(internal, replayed).outcome).toBe('same');
   });
 });

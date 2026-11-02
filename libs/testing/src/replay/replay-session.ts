@@ -43,7 +43,7 @@ const recordedCallSchema = z.object({
   name: z.string(),
   input: z.record(z.string(), z.unknown()).optional(),
   answer: z.unknown().optional(),
-  error: z.object({ code: z.union([z.string(), z.number()]), message: z.string() }).optional(),
+  error: z.object({ code: z.union([z.string(), z.number()]), message: z.string().optional() }).optional(),
   session: z.string().optional(),
   client: z.object({ name: z.string(), version: z.string() }).optional(),
 });
@@ -134,7 +134,10 @@ export function formatReplayReport({ file, calls, differences }: ReplayReport): 
   const lines = [`Replayed ${calls.length} calls from ${file}: ${differences.length} differ`];
   for (const call of differences) {
     lines.push(`  line ${call.line} ${call.method} ${call.name}: ${OUTCOME_LABELS[call.outcome]}`);
-    if (call.error) lines.push(`    ${call.error.code}: ${call.error.message}`);
+    if (call.error) {
+      const { code, message } = call.error;
+      lines.push(message === undefined ? `    ${code}` : `    ${code}: ${message}`);
+    }
     for (const change of call.changes) {
       lines.push(`    ${change.path}: ${preview(change.recorded)} -> ${preview(change.replayed)}`);
     }

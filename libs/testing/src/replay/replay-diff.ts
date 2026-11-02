@@ -8,7 +8,8 @@ export type ReplayedMethod = (typeof REPLAYED_METHODS)[number];
 /** Why a call failed: a tool error answer's `_meta.code`, or a JSON-RPC error code, and the message. */
 export interface ReplayError {
   code: string | number;
-  message: string;
+  /** A replayed error's message; a recording keeps only a public error's. */
+  message?: string;
 }
 
 /** A call of a `CallRecorderPlugin` recording: what was asked, and the answer or error the client received. */
@@ -42,15 +43,15 @@ export interface CallComparison {
 }
 
 export interface CompareOptions {
-  /** Answer paths not compared: dot paths where `*` is one key and `**` any number, e.g. `**.generatedAt`. */
+  /**
+   * Paths not compared: dot paths into the answer where `*` is one key and `**` any number, e.g. `**.generatedAt`,
+   * or `error.message` for the message of an error.
+   */
   ignore?: readonly string[];
-  /** Compare the ids of folded answer handles, which are new on every call (false by default). */
-  compareResultHandles?: boolean;
 }
 
 const REDACTED = '[REDACTED]';
-const RESULT_HANDLE_META_KEY = 'frontmcp/result-handle';
-const RESULT_HANDLE = '<result-handle>';
+const MCP_ERROR_PREFIX = /^MCP error -?\d+: /;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -70,7 +71,9 @@ function textOf(result: unknown): string {
 
 /** The answer of a replayed call, or its error: a JSON-RPC error, or a tool error answer the server formatted. */
 export function replayedAnswerOf(response: JSONRPCResponse): ReplayedAnswer {
-  if (response.error) return { error: { code: response.error.code, message: response.error.message } };
+  if (response.error) {
+    return { error: { code: response.error.code, message: response.error.message.replace(MCP_ERROR_PREFIX, '') } };
+  }
   const code = serverErrorCodeOf(response.result);
   return code === undefined ? { answer: response.result } : { error: { code, message: textOf(response.result) } };
 }
@@ -81,34 +84,42 @@ export function compareCall(
   replayed: ReplayedAnswer,
   options: CompareOptions = {},
 ): CallComparison {
+  const ignore = (options.ignore ?? []).map((pattern) => pattern.split('.'));
   if (recorded.error && 'error' in replayed) {
-    const sameCode = recorded.error.code === replayed.error.code;
-    const changes = sameCode
-      ? []
-      : [{ path: 'error.code', recorded: recorded.error.code, replayed: replayed.error.code }];
-    return { outcome: sameCode ? 'same' : 'changed', changes, error: replayed.error };
+    const changes = errorChanges(recorded.error, replayed.error).filter(
+      ({ path }) => !ignore.some((pattern) => matchesPath(pattern, path.split('.'))),
+    );
+    return { outcome: changes.length > 0 ? 'changed' : 'same', changes, error: replayed.error };
   }
   if (recorded.error) return { outcome: 'gone-error', changes: [], error: recorded.error };
   if ('error' in replayed) return { outcome: 'new-error', changes: [], error: replayed.error };
-  const [before, after] = options.compareResultHandles
-    ? [recorded.answer, replayed.answer]
-    : [withoutResultHandle(recorded.answer), withoutResultHandle(replayed.answer)];
   const changes: ReplayChange[] = [];
-  collectChanges(
-    before,
-    after,
-    [],
-    (options.ignore ?? []).map((pattern) => pattern.split('.')),
-    changes,
-  );
+  collectChanges(recorded.answer, replayed.answer, [], ignore, changes);
   return { outcome: changes.length > 0 ? 'changed' : 'same', changes };
 }
 
-function withoutResultHandle(answer: unknown): unknown {
-  const meta = isRecord(answer) && isRecord(answer['_meta']) ? answer['_meta'][RESULT_HANDLE_META_KEY] : undefined;
-  const handle = isRecord(meta) ? meta['handle'] : undefined;
-  if (typeof handle !== 'string' || handle.length === 0) return answer;
-  return JSON.parse(JSON.stringify(answer).split(handle).join(RESULT_HANDLE));
+/** Another code; or, for the same code, another message where the recording kept one (a public error's). */
+function errorChanges(recorded: ReplayError, replayed: ReplayError): ReplayChange[] {
+  if (recorded.code !== replayed.code)
+    return [{ path: 'error.code', recorded: recorded.code, replayed: replayed.code }];
+  if (recorded.message === undefined || matchesRedacted(recorded.message, replayed.message ?? '')) return [];
+  return [{ path: 'error.message', recorded: recorded.message, replayed: replayed.message }];
+}
+
+/** Whether `replayed` reads as `recorded`, where each `[REDACTED]` in `recorded` stands for any text. */
+function matchesRedacted(recorded: string, replayed: string): boolean {
+  const [first, ...rest] = recorded.split(REDACTED);
+  const last = rest.pop();
+  if (last === undefined) return recorded === replayed;
+  const end = replayed.length - last.length;
+  if (end < first.length || !replayed.startsWith(first) || !replayed.endsWith(last)) return false;
+  let at = first.length;
+  for (const part of rest) {
+    const found = replayed.indexOf(part, at);
+    if (found === -1 || found + part.length > end) return false;
+    at = found + part.length;
+  }
+  return true;
 }
 
 function parsedJsonText(text: string): unknown {
@@ -156,6 +167,7 @@ function collectChanges(
       collectChanges(recordedJson, replayedJson, path, ignore, changes);
       return;
     }
+    if (matchesRedacted(recorded, replayed)) return;
   }
   changes.push({ path: path.join('.'), recorded, replayed });
 }

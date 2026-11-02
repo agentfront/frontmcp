@@ -130,6 +130,21 @@ describe('replaySession', () => {
     expect(clients).toEqual([]);
   });
 
+  it('reads a recorded error without a message', async () => {
+    const file = recording([{ ...base, method: 'tools/call', name: 'crash', error: { code: 'TOOL_EXECUTION_ERROR' } }]);
+    answer = () => ({
+      jsonrpc: '2.0',
+      id: 1,
+      result: {
+        isError: true,
+        content: [{ type: 'text', text: 'boom' }],
+        _meta: { errorId: 'e', code: 'TOOL_EXECUTION_ERROR' },
+      },
+    });
+
+    expect((await replaySession(file, 'http://localhost:3999')).differences).toEqual([]);
+  });
+
   it('refuses a line that is not JSON', async () => {
     const file = recording(['{not json']);
 
@@ -158,7 +173,14 @@ describe('formatReplayReport', () => {
           changes: [],
           error: { code: 'LEDGER_OFFLINE', message: 'ledger offline' },
         },
-        { line: 5, method: 'resources/read', name: 'notes://gone', outcome: 'gone-error', changes: [] },
+        {
+          line: 5,
+          method: 'resources/read',
+          name: 'notes://gone',
+          outcome: 'gone-error',
+          changes: [],
+          error: { code: -32603 },
+        },
         {
           line: 6,
           method: 'tools/call',
@@ -177,6 +199,7 @@ describe('formatReplayReport', () => {
         '  line 4 tools/call pay: new error',
         '    LEDGER_OFFLINE: ledger offline',
         '  line 5 resources/read notes://gone: gone error',
+        '    -32603',
         '  line 6 tools/call note: changed',
         `    structuredContent.text: "${'x'.repeat(76)}... -> (none)`,
       ].join('\n'),
