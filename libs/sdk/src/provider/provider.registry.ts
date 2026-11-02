@@ -129,10 +129,12 @@ export default class ProviderRegistry
   /** The registries built below this one (an app's, a plugin's, an agent's), disposed with it. */
   private readonly childRegistries = new Set<ProviderRegistry>();
 
-  /** The GLOBAL instances built here that declare a lifecycle hook, in build order. */
+  /** The GLOBAL instances built here that declare a lifecycle hook and whose bootstrap and ready hooks run here. */
   private readonly lifecycleEntries: LifecycleEntry[] = [];
-  /** Instances a registry of this tree runs the hooks of, so a value registered twice runs them once. */
-  private readonly lifecycleClaims: WeakSet<object>;
+  /** Every GLOBAL instance with a lifecycle hook this registry holds, one another registry also holds included. */
+  private readonly heldEntries: LifecycleEntry[] = [];
+  /** How many registries of this tree hold each instance: the first runs its bootstrap and ready hooks, the last its shutdown. */
+  private readonly lifecycleHolders: WeakMap<object, number>;
   private readonly shutdownHookTimeoutMs: number;
   private readyHooksRun?: Promise<void>;
   private shutdownHooksRun?: Promise<void>;
@@ -152,7 +154,7 @@ export default class ProviderRegistry
       !configured && parentProviders
         ? parentProviders.sessionCacheEnabled
         : shouldCacheProviders(options?.distributedMode, options?.providerCaching);
-    this.lifecycleClaims = parentProviders?.lifecycleClaims ?? new WeakSet();
+    this.lifecycleHolders = parentProviders?.lifecycleHolders ?? new WeakMap();
     this.shutdownHookTimeoutMs =
       options?.shutdownHookTimeoutMs ?? parentProviders?.shutdownHookTimeoutMs ?? DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS;
 
@@ -337,11 +339,15 @@ export default class ProviderRegistry
   /** Run `onBootstrap()` on the instance just built for `token`, and keep it for the ready and shutdown phases. */
   private async bootstrapBuilt(token: Token): Promise<void> {
     const instance = lifecycleHooksOf(this.instances.get(token));
-    if (!instance || this.lifecycleClaims.has(instance)) return;
-    this.lifecycleClaims.add(instance);
+    if (!instance) return;
+    const holders = this.lifecycleHolders.get(instance) ?? 0;
+    this.lifecycleHolders.set(instance, holders + 1);
     const entry = { token, instance };
-    await bootstrapProvider(entry);
-    this.lifecycleEntries.push(entry);
+    if (holders === 0) {
+      await bootstrapProvider(entry);
+      this.lifecycleEntries.push(entry);
+    }
+    this.heldEntries.push(entry);
   }
 
   /** Run `onReady()` on the providers built here, then on those of the registries below, in build order; once. */
@@ -363,7 +369,15 @@ export default class ProviderRegistry
 
   private async shutdownBelowAndHere(logger: LifecycleLogger): Promise<void> {
     for (const child of [...this.childRegistries].reverse()) await child.runShutdownHooks(logger);
-    await shutdownProviders(this.lifecycleEntries, this.shutdownHookTimeoutMs, logger);
+    const lastHeld = this.heldEntries.filter((entry) => this.releaseLifecycleHold(entry.instance));
+    await shutdownProviders(lastHeld, this.shutdownHookTimeoutMs, logger);
+  }
+
+  /** Release this registry's hold on `instance`; true when no other registry of the tree still holds it. */
+  private releaseLifecycleHold(instance: object): boolean {
+    const holders = (this.lifecycleHolders.get(instance) ?? 1) - 1;
+    this.lifecycleHolders.set(instance, holders);
+    return holders === 0;
   }
 
   /* -------------------- Views & session stores -------------------- */

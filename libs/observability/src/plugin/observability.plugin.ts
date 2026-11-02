@@ -296,8 +296,8 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onHttpDidRoute(ctx);
   }
 
-  @HttpHook.Did('finalize', { priority: 1000 })
-  _httpDidFinalize(ctx: unknown): void {
+  @HttpHook.Finally('finalize', { priority: 1000 })
+  _httpFinallyFinalize(ctx: unknown): void {
     if (this.tracingEnabled) onHttpDidFinalize(ctx);
     // Delivered off the response path: a slow onRequestComplete must not hold the response
     if (this.requestLogsEnabled) void completeRequestLog(ctx as never);
@@ -367,8 +367,8 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onToolWillApplyUI(ctx);
   }
 
-  @ToolHook.Did('finalize', { priority: 1000 })
-  _toolDidFinalize(ctx: unknown): void {
+  @ToolHook.Finally('finalize', { priority: 1000 })
+  _toolFinallyFinalize(ctx: unknown): void {
     if (this.tracingEnabled) onToolDidFinalize(ctx);
     if (this.requestLogsEnabled) recordRequestLogFailure(ctx as never);
   }
@@ -409,8 +409,8 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onResourceDidExecute(ctx);
   }
 
-  @ResourceHook.Did('finalize', { priority: 1000 })
-  _resourceDidFinalize(ctx: unknown): void {
+  @ResourceHook.Finally('finalize', { priority: 1000 })
+  _resourceFinallyFinalize(ctx: unknown): void {
     if (this.tracingEnabled) onResourceDidFinalize(ctx);
     if (this.requestLogsEnabled) recordRequestLogFailure(ctx as never);
   }
@@ -451,8 +451,8 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onPromptDidExecute(ctx);
   }
 
-  @PromptHook.Did('finalize', { priority: 1000 })
-  _promptDidFinalize(ctx: unknown): void {
+  @PromptHook.Finally('finalize', { priority: 1000 })
+  _promptFinallyFinalize(ctx: unknown): void {
     if (this.tracingEnabled) onPromptDidFinalize(ctx);
     if (this.requestLogsEnabled) recordRequestLogFailure(ctx as never);
   }
@@ -492,8 +492,8 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onAgentDidExecute(ctx);
   }
 
-  @AgentCallHook.Did('finalize', { priority: 1000 })
-  _agentDidFinalize(ctx: unknown): void {
+  @AgentCallHook.Finally('finalize', { priority: 1000 })
+  _agentFinallyFinalize(ctx: unknown): void {
     if (this.tracingEnabled) onAgentDidFinalize(ctx);
   }
 
@@ -575,7 +575,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowWillStart('skills/search', this.tracingOpts, ctx);
   }
 
-  @SkillSearchHook.Did('finalize', { priority: 1000 })
+  @SkillSearchHook.Finally('finalize', { priority: 1000 })
   _skillSearchDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
@@ -590,7 +590,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowStage('loadSkills', ctx);
   }
 
-  @SkillLoadHook.Did('finalize', { priority: 1000 })
+  @SkillLoadHook.Finally('finalize', { priority: 1000 })
   _skillLoadDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
@@ -604,7 +604,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowWillStart('completion/complete', this.tracingOpts, ctx);
   }
 
-  @CompletionHook.Did('finalize', { priority: 1000 })
+  @CompletionHook.Finally('finalize', { priority: 1000 })
   _completionDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
@@ -638,8 +638,8 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onTransportStage('onElicitResult', ctx);
   }
 
-  @LegacySseHook.Did('cleanup', { priority: 1000 })
-  _sseDidCleanup(ctx: unknown): void {
+  @LegacySseHook.Finally('cleanup', { priority: 1000 })
+  _sseFinallyCleanup(ctx: unknown): void {
     if (this.tracingEnabled) onTransportDidFinalize(ctx);
   }
 
@@ -682,8 +682,8 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onTransportStage('onExtApps', ctx);
   }
 
-  @StreamableHttpHook.Did('cleanup', { priority: 1000 })
-  _shttpDidCleanup(ctx: unknown): void {
+  @StreamableHttpHook.Finally('cleanup', { priority: 1000 })
+  _shttpFinallyCleanup(ctx: unknown): void {
     if (this.tracingEnabled) onTransportDidFinalize(ctx);
   }
 
@@ -701,8 +701,8 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onTransportStage('handleRequest', ctx);
   }
 
-  @StatelessHttpHook.Did('cleanup', { priority: 1000 })
-  _slhttpDidCleanup(ctx: unknown): void {
+  @StatelessHttpHook.Finally('cleanup', { priority: 1000 })
+  _slhttpFinallyCleanup(ctx: unknown): void {
     if (this.tracingEnabled) onTransportDidFinalize(ctx);
   }
 
@@ -812,7 +812,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.traces('elicitationSpans')) onGenericFlowWillStart('elicitation/request', this.tracingOpts, ctx);
   }
 
-  @ElicitRequestHook.Did('finalize', { priority: 1000 })
+  @ElicitRequestHook.Finally('finalize', { priority: 1000 })
   _elicitReqDone(ctx: unknown): void {
     if (this.traces('elicitationSpans')) onGenericFlowDidFinalize(ctx);
   }
@@ -822,7 +822,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.traces('elicitationSpans')) onGenericFlowWillStart('elicitation/result', this.tracingOpts, ctx);
   }
 
-  @ElicitResultHook.Did('finalize', { priority: 1000 })
+  @ElicitResultHook.Finally('finalize', { priority: 1000 })
   _elicitResDone(ctx: unknown): void {
     if (this.traces('elicitationSpans')) onGenericFlowDidFinalize(ctx);
   }
@@ -836,7 +836,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowWillStart('resources/subscribe', this.tracingOpts, ctx);
   }
 
-  @SubscribeResourceHook.Did('finalize', { priority: 1000 })
+  @SubscribeResourceHook.Finally('finalize', { priority: 1000 })
   _subscribeDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
@@ -846,7 +846,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowWillStart('resources/unsubscribe', this.tracingOpts, ctx);
   }
 
-  @UnsubscribeResourceHook.Did('finalize', { priority: 1000 })
+  @UnsubscribeResourceHook.Finally('finalize', { priority: 1000 })
   _unsubscribeDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
@@ -928,7 +928,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowWillStart('logging/set-level', this.tracingOpts, ctx);
   }
 
-  @LoggingSetLevelHook.Did('finalize', { priority: 1000 })
+  @LoggingSetLevelHook.Finally('finalize', { priority: 1000 })
   _setLevelDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }

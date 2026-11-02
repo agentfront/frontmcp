@@ -4,6 +4,8 @@ import { resolvePendingTC39HooksForClass } from '../common/decorators/hook.decor
 export type StageEntry<C> = {
   /** `next` is passed only to an Around hook: it runs the rest of the stage. */
   method: (ctx: C, next?: () => Promise<void>) => Promise<void>;
+  /** The flow step or hook this entry runs. */
+  hook: HookMetadata;
   _priority: number;
   _order: number;
 };
@@ -33,13 +35,7 @@ export function cloneStageMap<C>(table: StageMap<C>): StageMap<C> {
 }
 
 export function resolveStageKey(type: HookMetadata['type'], stage: string) {
-  return type === 'will'
-    ? `will${cap(stage)}`
-    : type === 'did'
-      ? `did${cap(stage)}`
-      : type === 'around'
-        ? `around${cap(stage)}`
-        : stage;
+  return type === 'stage' ? stage : `${type}${cap(stage)}`;
 }
 
 export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
@@ -69,6 +65,7 @@ export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
     const resolved = resolveStageKey(m.type, m.stage);
 
     const entry: StageEntry<C> = {
+      hook: m,
       _priority: m.priority ?? 0,
       _order: order++,
       method: async (ctx: any, next = NO_NEXT) => {
@@ -114,6 +111,7 @@ export function mergeHookMetasIntoStageMap<C>(
     const resolved = resolveStageKey(m.type, m.stage);
 
     const entry: StageEntry<C> = {
+      hook: m,
       _priority: m.priority ?? 0,
       _order: order++,
       method: async (ctx: any, next = NO_NEXT) => {
@@ -141,4 +139,36 @@ export function mergeHookMetasIntoStageMap<C>(
   }
 
   sortStageMap(table);
+}
+
+const HOOK_TYPES_IN_RUN_ORDER = ['will', 'around', 'stage', 'did', 'finally'] as const;
+
+/** `will SomePlugin.method (0)`: a step's type, the class that declares it, its method and its priority. */
+function describeStep(hook: HookMetadata, flowClassName: string): string {
+  // A plugin or provider hook's `target` is the instance its method runs on.
+  const target: unknown = hook.target;
+  const owner =
+    typeof target === 'function' ? target.name : target && typeof target === 'object' ? target.constructor.name : '';
+  return `${hook.type} ${owner || flowClassName}.${hook.method} (${hook.priority ?? 0})`;
+}
+
+/** One line per stage of `stages` that `resolved` adds a hook to over `base`, listing its steps in the order they run. */
+export function describeHookOrder<C>(
+  stages: readonly string[],
+  base: StageMap<C>,
+  resolved: StageMap<C>,
+  flowClassName: string,
+): string[] {
+  const lines: string[] = [];
+  for (const stage of stages) {
+    const keys = HOOK_TYPES_IN_RUN_ORDER.map((type) => resolveStageKey(type, stage));
+    if (!keys.some((key) => (resolved[key]?.length ?? 0) > (base[key]?.length ?? 0))) continue;
+
+    const [will, around, body, did, after] = keys.map((key) =>
+      (resolved[key] ?? []).map((entry) => describeStep(entry.hook, flowClassName)),
+    );
+    const wrapped = around.reduceRight((inner, outer) => `${outer} [ ${inner} ]`, body.join(' → '));
+    lines.push(`  ${stage}: ${[...will, wrapped, ...did, ...after].filter(Boolean).join(' → ')}`);
+  }
+  return lines;
 }

@@ -555,7 +555,10 @@ describe('FeatureFlagPlugin and the skill catalog in the initialize instructions
   }
 
   it('lists an enabled skill and leaves a disabled one out of the catalog', async () => {
-    const instructions = await instructionsFor(serverConfig);
+    const instructions = await instructionsFor({
+      ...serverConfig,
+      skillsConfig: { enabled: true, injectInstructions: 'append' },
+    });
 
     expect(instructions).toContain('**enabled-skill**: Enabled flagged workflow');
     expect(instructions).not.toContain('disabled-skill');

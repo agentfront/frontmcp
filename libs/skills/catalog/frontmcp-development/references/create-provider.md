@@ -127,7 +127,9 @@ class MyApp {}
 class Server {}
 ```
 
-Besides a `@Provider` class and a factory, `providers` takes a value or class binding, `{ name, provide, useValue }` or `{ name, provide, useClass }`. Every provider object needs a `name`. Up to 1.9.0, `@FrontMcp`, `@App`, `@Plugin` and `@Agent` refused `useClass` objects, and `useValue` objects unless the value was an instance of a `@Provider` class.
+A config object takes the same `providers`, `AsyncProvider` factories included, wherever it goes: `FrontMcpInstance.runStdio(config)`, `bootstrap(config)`, `createDirect(config)` and `runUnixSocket({ ...config, socketPath })`.
+
+Besides a `@Provider` class and a factory, `providers` takes a value or class binding, `{ provide, useValue }` or `{ provide, useClass }`. `name` is optional everywhere and shows in logs and errors. It defaults to the class name for a `@Provider()` class, and to the token's name for a provider object: the class name, a symbol's description or a string token. Up to 1.10.15, every provider needed a `name`. Up to 1.9.0, `@FrontMcp`, `@App`, `@Plugin` and `@Agent` refused `useClass` objects, and `useValue` objects unless the value was an instance of a `@Provider` class.
 
 ## Step 4: Use in Tools
 
@@ -368,7 +370,7 @@ class Server {}
 | Background work that should run only while serving | `onReady()`                                                           | `onShutdown()` |
 
 - Hooks are found by method name. A provider that already had a method called `onBootstrap`, `onReady` or `onShutdown` has it called since 1.11, with no arguments. That includes a third-party client registered with `useValue` or returned by a factory (an SDK's `onReady(callback)`, for example): wrap such a client in a provider class.
-- A `useValue` object registered in more than one place of a server runs its hooks once for that server.
+- A `useValue` object registered in more than one place of a server runs its hooks once for that server. Its `onShutdown()` runs once every scope that holds it (each app of a `splitByApp` server) has shut down its own providers, so the providers that depend on it shut down first.
 - `onReady()` is awaited: `createDirect()`, `connect()` and the handlers return, and `bootstrap()` and `runStdio()` install their SIGTERM / SIGINT handlers, once every `onReady()` has settled. Start long work there without awaiting it, as `SearchIndex` does.
 - A host you assemble from `FrontMcpInstance.createForGraph()` runs the `onReady()` hooks itself, with `instance.emitProvidersReady()`.
 - Serverless and edge handlers are never shut down, so `onShutdown()` does not run there.
@@ -433,7 +435,7 @@ frontmcp dev
 
 ### Configuration
 
-- [ ] Provider class has `@Provider` decorator with `name` (or factory uses `AsyncProvider`)
+- [ ] Provider class has the `@Provider()` decorator (or factory uses `AsyncProvider`)
 - [ ] Token is defined with `Token<T>` using a `Symbol` and typed interface
 - [ ] Provider (class or `AsyncProvider` factory) is registered in `providers` array of `@App` or `@FrontMcp`
 - [ ] Sync setup happens in the constructor (throws fast on missing config)

@@ -160,6 +160,13 @@ describe('auditSecurityDefaults()', () => {
         const finding = dnsFinding({ resolvedBindAddress: '127.0.0.1' });
         expect(finding?.code).toBe('DNS_REBINDING_PROTECTED');
         expect(finding?.message).toContain('loopback');
+        expect(finding?.message).toContain('Host and Origin headers are checked');
+      });
+
+      it('says Origin is not checked on a loopback bind when CORS admits every origin', () => {
+        delete process.env['FRONTMCP_ALLOWED_HOSTS'];
+        const finding = dnsFinding({ resolvedBindAddress: '127.0.0.1', cors: { origin: true } });
+        expect(finding?.message).toContain('Origin is not checked');
       });
 
       it('says a Unix socket has no Host to check', () => {

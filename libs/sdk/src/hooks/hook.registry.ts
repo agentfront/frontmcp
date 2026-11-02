@@ -64,7 +64,7 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
   /** Historical records by class (kept if you still want access to raw records) */
   recordsByCls: Map<Token, HookRecord[]> = new Map();
 
-  /** Fast O(1) indexes of *instances*, sorted by priority (desc) */
+  /** Fast O(1) indexes of *instances*, in the order a stage runs them: lowest priority first, then registration order */
   private entriesByCls: Map<Token, HookEntry[]> = new Map();
   private hooksByFlow: Map<FlowName, HookEntry[]> = new Map();
   private hooksByFlowStage: Map<FlowName, Map<string, HookEntry[]>> = new Map();
@@ -109,16 +109,15 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
     return entry.metadata?.priority ?? 0;
   }
 
-  /** Binary insert by priority (desc). Stable for equal priorities. */
+  /** Binary insert, lowest priority first, after the items of an equal priority. */
   private insertSorted(arr: HookEntry[], item: HookEntry) {
     const p = this.getPriority(item);
     let lo = 0;
     let hi = arr.length;
-    // Insert AFTER existing equal-priority items to keep stable order.
     while (lo < hi) {
       const mid = (lo + hi) >>> 1;
       const mp = this.getPriority(arr[mid]);
-      if (mp < p) {
+      if (mp > p) {
         hi = mid;
       } else {
         lo = mid + 1;
@@ -166,7 +165,7 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
       this.recordsByCls.set(cls, recs);
     }
 
-    // Build fast indexes of *instances*, sorted by priority
+    // Build fast indexes of *instances*, in run order
     const entry = this.instances.get(token)!;
     const { flow, stage, target } = rec.metadata;
 
@@ -201,7 +200,7 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
     this.inherited = { registry: parent, ownerId };
   }
 
-  /** Hooks for a given *flow*, filtered by owner if provided, sorted by priority (desc). */
+  /** Hooks for a given *flow*, filtered by owner if provided, in run order. */
   getFlowHooksForOwner<Name extends FlowName>(
     flow: Name,
     ownerId?: string,
@@ -219,7 +218,7 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
     return merged;
   }
 
-  /** This registry's own hooks for a given *flow*, filtered by owner if provided, sorted by priority (desc). */
+  /** This registry's own hooks for a given *flow*, filtered by owner if provided, in run order. */
   private getOwnFlowHooksForOwner<Name extends FlowName>(
     flow: Name,
     ownerId?: string,
@@ -245,7 +244,7 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
     );
   }
 
-  /** Hooks defined on a given *class* (metadata.target), sorted by priority (desc). */
+  /** Hooks defined on a given *class* (metadata.target), in run order. */
   getClsHooks(token: Token): HookEntry[] {
     return this.entriesByCls.get(token) ?? [];
   }
@@ -255,7 +254,7 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
     return [...this.instances.values()];
   }
 
-  /** Hooks for a given *flow*, sorted by priority (desc). */
+  /** Hooks for a given *flow*, in run order. */
   getFlowHooks<Name extends FlowName>(
     flow: Name,
   ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[] {
@@ -267,7 +266,7 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
     >[];
   }
 
-  /** Hooks for a specific *flow + stage*, sorted by priority (desc). */
+  /** Hooks for a specific *flow + stage*, in run order. */
   getFlowStageHooks<Name extends FlowName>(
     flow: Name,
     stage: FlowStagesOf<Name> | string,

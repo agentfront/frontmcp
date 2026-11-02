@@ -5,6 +5,7 @@ import {
   FrontMcp,
   type ScopeEntry,
   type SkillContent,
+  type SkillsConfigOptions,
   type SkillSearchResult,
 } from '@frontmcp/sdk';
 
@@ -41,6 +42,13 @@ export function useCatalog(scope: ScopeEntry): void {
   info: { name: 'dts-skills', version: '1.0.0' },
   apps: [],
   serve: false,
-  skillsConfig: { externalProvider: new CatalogSkillProvider({ mode: 'read-only' }) },
+  skillsConfig: {
+    externalProvider: new CatalogSkillProvider({ mode: 'read-only' }),
+    injectInstructions: 'compact',
+    resourceAnnotations: 'full',
+  },
 })
 export class SkillsServer {}
+
+// @ts-expect-error resourceAnnotations accepts 'full' | 'no-priority' | 'off' only
+export const unknownAnnotations: SkillsConfigOptions = { resourceAnnotations: 'audience' };

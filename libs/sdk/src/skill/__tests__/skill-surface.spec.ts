@@ -35,7 +35,7 @@ const serverConfig = {
   info: { name: 'skills-surface', version: '1.0.0' },
   apps: [GuidesApp],
   logging: { level: LogLevel.Off },
-  skillsConfig: { enabled: true },
+  skillsConfig: { enabled: true, injectInstructions: 'append' as const },
 };
 
 function textOf(result: ReadResourceResult): string {

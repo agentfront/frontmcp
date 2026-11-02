@@ -31,6 +31,11 @@ describe('ProviderScope', () => {
 
 describe('providerMetadataSchema', () => {
   describe('valid inputs', () => {
+    it('should accept metadata without a name, which the token then provides', () => {
+      const result = providerMetadataSchema.safeParse({});
+      expect(result.success).toBe(true);
+    });
+
     it('should accept minimal metadata with just name', () => {
       const result = providerMetadataSchema.safeParse({ name: 'TestProvider' });
       expect(result.success).toBe(true);
@@ -82,11 +87,6 @@ describe('providerMetadataSchema', () => {
   });
 
   describe('invalid inputs', () => {
-    it('should reject missing name', () => {
-      const result = providerMetadataSchema.safeParse({});
-      expect(result.success).toBe(false);
-    });
-
     it('should reject empty name', () => {
       const result = providerMetadataSchema.safeParse({ name: '' });
       expect(result.success).toBe(false);

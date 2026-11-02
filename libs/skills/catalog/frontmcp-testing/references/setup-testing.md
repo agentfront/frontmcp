@@ -454,15 +454,16 @@ A nested `test.describe` inherits an outer skip. The `(name, fn)` form still ski
 import { expect } from '@frontmcp/testing';
 ```
 
-| Matcher                   | Asserts                                                                                                            |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `toContainTool(name)`     | Tools list includes a tool with the given name                                                                     |
-| `toContainResource(uri)`  | Resources list includes a resource with the given URI                                                              |
-| `toContainPrompt(name)`   | Prompts list includes a prompt with the given name                                                                 |
-| `toBeSuccessful()`        | Tool call result is not an error                                                                                   |
-| `toBeError(code?)`        | Result is an error; a string code matches `_meta.code` (`'INVALID_INPUT'`), a number matches a JSON-RPC error code |
-| `toHaveTextContent(text)` | Result contains text content matching the string                                                                   |
-| `toHaveMimeType(mime)`    | Resource content has the expected MIME type                                                                        |
+| Matcher                                 | Asserts                                                                                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toContainTool(name)`                   | Tools list includes a tool with the given name                                                                                                    |
+| `toContainResource(uri)`                | Resources list includes a resource with the given URI                                                                                             |
+| `toContainPrompt(name)`                 | Prompts list includes a prompt with the given name                                                                                                |
+| `toBeSuccessful()`                      | Tool call result is not an error                                                                                                                  |
+| `toBeError(code?)`                      | Result is an error; a string code matches `_meta.code` (`'INVALID_INPUT'`), a number matches a JSON-RPC error code                                |
+| `toHaveTextContent(text)`               | Result contains text content matching the string                                                                                                  |
+| `toHaveMimeType(mime)`                  | Resource content has the expected MIME type                                                                                                       |
+| `toPassOutputSchemaWhole(outputSchema)` | A tool's answer matches its `outputSchema` (Zod schema or raw shape) and has no undeclared key the server would strip; the failure names the keys |
 
 ## Running Tests with Nx
 
@@ -551,8 +552,23 @@ defaults: the same `@swc/jest` transform (no `ts-jest` needed), the same discove
 `__tests__/**/*.spec.ts(x)`, `e2e/**/*.e2e.spec.ts(x)`), the same 60-second timeout, and the same
 `transformIgnorePatterns` for `jose`, `@noble/hashes` and `@noble/ciphers`. Setting `testMatch` or
 `transformIgnorePatterns` replaces the preset's list rather than extending it, so copy its entries into yours.
-Name the package, not `'@frontmcp/testing/jest-preset'`: Jest looks for `jest-preset.js` at the root of the
-package it is given.
+Name the package, `'@frontmcp/testing'`, not `'@frontmcp/testing/jest-preset'`: Jest looks for `jest-preset.js`
+under the name it is given.
+
+For unit tests, start from `preset: '@frontmcp/testing/jest-preset-unit'`. It shares the transform and the
+`jose` / `@noble/*` patterns above, keeps Jest's default 5-second timeout, registers no setup file (add
+`@frontmcp/testing/setup` to `setupFilesAfterEnv` to use the MCP matchers), and runs every `*.spec.ts(x)` except
+`.e2e.spec`, `.perf.spec` and `.pw.spec` files. It also fits a CommonJS project that compiles its TypeScript with
+`ts-jest`: without it, the first auth path that loads `jose` fails with `SyntaxError: Unexpected token 'export'`.
+Set the ts-jest transform for `.ts` only, so the preset's transform still compiles those packages:
+
+```javascript
+// jest.config.js
+module.exports = {
+  preset: '@frontmcp/testing/jest-preset-unit',
+  transform: { '^.+\\.tsx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.json' }] },
+};
+```
 
 ## Manual Testing with frontmcp dev
 

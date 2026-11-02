@@ -1,5 +1,8 @@
 import 'reflect-metadata';
 
+import { tokenName } from '@frontmcp/di';
+import { isDebug, isDevelopment } from '@frontmcp/utils';
+
 import {
   FlowControl,
   FlowEntry,
@@ -9,6 +12,7 @@ import {
   type FlowInputOf,
   type FlowName,
   type FlowOutputOf,
+  type FlowPhase,
   type FlowPlan,
   type FlowRecord,
   type FlowStagesOf,
@@ -27,6 +31,7 @@ import { FRONTMCP_CONTEXT, FrontMcpContextStorage, type FrontMcpContext } from '
 import { runAsFlow } from '../context/running-flow';
 import { InternalMcpError, PublicMcpError, RequestContextNotAvailableError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
+import { entryContextStageOf } from '../hooks/entry-class-hooks';
 import type HookRegistry from '../hooks/hook.registry';
 import { bindContextHookTargets, staticHooksFor } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
@@ -36,8 +41,10 @@ import { matchMountedPath } from './flow.http-path';
 import {
   cloneStageMap,
   collectFlowHookMap,
+  describeHookOrder,
   mergeHookMetasIntoStageMap,
   type HookRunner,
+  type StageEntry,
   type StageMap,
 } from './flow.stages';
 
@@ -68,6 +75,7 @@ interface StageKeys {
   will: string;
   did: string;
   around: string;
+  finally: string;
 }
 
 // Stage names come from flow plans, so this stays as small as the set of stages.
@@ -76,38 +84,80 @@ const stageKeysByName = new Map<string, StageKeys>();
 function stageKeysOf(stage: string): StageKeys {
   let keys = stageKeysByName.get(stage);
   if (!keys) {
-    keys = { will: `will${CAP(stage)}`, did: `did${CAP(stage)}`, around: `around${CAP(stage)}` };
+    keys = {
+      will: `will${CAP(stage)}`,
+      did: `did${CAP(stage)}`,
+      around: `around${CAP(stage)}`,
+      finally: `finally${CAP(stage)}`,
+    };
     stageKeysByName.set(stage, keys);
   }
   return keys;
 }
 
-function parseTypedKey(k: string): { base: string; type?: 'will' | 'did' | 'around' } {
+export function parseTypedKey(k: string): { base: string; type?: 'will' | 'did' | 'around' | 'finally' } {
   const lc = k.toLowerCase();
   if (lc.startsWith('will') && k.length > 4) return { base: k.slice(4, 5).toLowerCase() + k.slice(5), type: 'will' };
   if (lc.startsWith('did') && k.length > 3) return { base: k.slice(3, 4).toLowerCase() + k.slice(4), type: 'did' };
   if (lc.startsWith('around') && k.length > 6)
     return { base: k.slice(6, 7).toLowerCase() + k.slice(7), type: 'around' };
+  if (lc.startsWith('finally') && k.length > 7)
+    return { base: k.slice(7, 8).toLowerCase() + k.slice(8), type: 'finally' };
   return { base: k };
+}
+
+/** `String(value)`, or its `Object.prototype.toString` tag for a value that cannot be converted (a null-prototype object). */
+function describeValue(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    return Object.prototype.toString.call(value);
+  }
+}
+
+/** The error a fail() carried, or an Error naming why the flow was aborted. */
+function failureOf(control: FlowControl): unknown {
+  const originalError = (control as { originalError?: unknown }).originalError;
+  if (originalError !== undefined) return originalError;
+  return control.type === 'abort' ? new InternalMcpError(`Flow aborted: ${String(control.output)}`) : control;
 }
 
 const stageBasesByGroup = new WeakMap<readonly string[], string[]>();
 
 /** The base stages a plan group runs, in order: a typed key runs with its base, and a repeated base runs once. */
-function stageBasesOf(group: readonly string[]): string[] {
+export function stageBasesOf(group: readonly string[]): string[] {
   let bases = stageBasesByGroup.get(group);
   if (!bases) {
     const seen = new Set<string>();
     bases = [];
     for (const rawKey of group) {
       const { base, type } = parseTypedKey(rawKey);
-      if (type || seen.has(base)) continue;
-      seen.add(base);
-      bases.push(base);
+      // A stage named `finallyCheck` predates Finally hooks: it is `check`'s hook key only when the group lists `check`
+      const stage = type === 'finally' && !group.includes(base) ? rawKey : base;
+      if ((type && stage === base) || seen.has(stage)) continue;
+      seen.add(stage);
+      bases.push(stage);
     }
     stageBasesByGroup.set(group, bases);
   }
   return bases;
+}
+
+// The order a failed run reaches them in: its error stages run before its finalize stages.
+const FLOW_PHASES: readonly FlowPhase[] = ['pre', 'execute', 'post', 'error', 'finalize'];
+
+/** A stage's list with the hooks that joined it while `step` ran moved right after `step`, where they start. */
+function listJoinedAfterStep<C>(
+  list: StageEntry<C>[],
+  present: readonly StageEntry<C>[],
+  step: StageEntry<C>,
+): StageEntry<C>[] {
+  const stepIndex = list.indexOf(step);
+  if (stepIndex === -1) return list;
+  const joinedBefore = list.slice(0, stepIndex).filter((entry) => !present.includes(entry));
+  const rest = list.filter((entry) => !joinedBefore.includes(entry));
+  rest.splice(rest.indexOf(step) + 1, 0, ...joinedBefore);
+  return rest;
 }
 
 /** The order after the last entry of a stage map, where hooks merged into it start. */
@@ -124,6 +174,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   private hooks: HookRegistry;
   private readonly logger: FrontMcpLogger;
   private baseStageOrderEnd?: number;
+  /** In dev mode or with DEBUG only: per hook owner, the entry classes (`undefined`: none) whose hook order is logged. */
+  private readonly loggedHookOrders =
+    isDevelopment() || isDebug() ? new Map<string | undefined, Set<Token | undefined>>() : undefined;
 
   constructor(scope: ScopeEntry, record: FlowRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
     super(scope, record);
@@ -482,6 +535,8 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // instance hooks do when the stage that builds the instance appends them.
     await materializeAndMerge(entryStaticHooks);
 
+    if (this.loggedHookOrders) this.logHookOrderOnce(this.loggedHookOrders, stages, hookOwnerId, entryClass);
+
     let responded: FlowOutputOf<Name> | undefined;
 
     const toStageResult = (e: unknown): StageResult => {
@@ -500,8 +555,29 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // Whether any stage body or hook is registered under `key` right now.
     const hasEntries = (key: string): boolean => (stages[key]?.length ?? 0) > 0;
 
+    // A Finally hook cannot respond or fail its stage: what it throws is logged and dropped.
+    const ignoreFinallyThrow = (key: string, thrown: unknown) => {
+      const description = thrown instanceof FlowControl ? `FlowControl '${thrown.type}'` : describeValue(thrown);
+      this.logger.warn(`Ignored a throw from a Finally hook of '${key}': it cannot change the stage's outcome`, {
+        flow: name,
+        thrown: description,
+      });
+    };
+
+    // The values a Finally hook set on the state before the throw the runner drops, such as a job's answer, are put back
+    const restoreState = (before: Readonly<Record<string, unknown>>) => {
+      const state = context.state as unknown as Record<string, unknown>;
+      for (const key of Object.keys(context.state.snapshot())) {
+        if (!(key in before)) delete state[key];
+      }
+      context.state.set(before as never);
+    };
+
     // Robust list runner (doesn't skip mid-run insertions)
-    const runList = async (key: string, opts?: { ignoreRespond?: boolean }): Promise<StageResult> => {
+    const runList = async (
+      key: string,
+      opts?: { ignoreRespond?: boolean; ignoreThrows?: boolean },
+    ): Promise<StageResult> => {
       const seen = new Set<any>();
 
       while (true) {
@@ -516,9 +592,15 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         if (!item) break;
         seen.add(item);
 
+        const stateBefore = opts?.ignoreThrows ? (context.state.snapshot() as Record<string, unknown>) : undefined;
         try {
           await item.method(context);
         } catch (e: any) {
+          if (opts?.ignoreThrows) {
+            if (stateBefore) restoreState(stateBefore);
+            ignoreFinallyThrow(key, e);
+            continue;
+          }
           if (e instanceof FlowControl && e.type === 'respond' && opts?.ignoreRespond) continue;
           return toStageResult(e);
         }
@@ -548,9 +630,20 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       return FAILED_OUTCOMES.has(innerResult.outcome) ? { outcome: 'ok' } : innerResult;
     };
 
+    // `state.flowError` keeps the run's first failure (a thrown Error, a `fail()` or an abort) for what runs after it
+    const recordFailure = (control: unknown) => {
+      if (context.state.get('flowError' as never)) return;
+      const failure = control instanceof FlowControl ? failureOf(control) : control;
+      const flowError =
+        failure instanceof Error
+          ? failure
+          : new InternalMcpError(`Flow failed with a non-Error value: ${describeValue(failure)}`);
+      context.state.set('flowError' as never, flowError as never);
+    };
+
     // Run exactly one stage in order: will → around(stage) → did (did runs once)
     // An empty hook list is skipped without a call: running it would only return 'ok'.
-    const runOneStage = async (stageName: string, stopOnRespond: boolean): Promise<StageResult> => {
+    const runStageSteps = async (stageName: string, stopOnRespond: boolean): Promise<StageResult> => {
       const keys = stageKeysOf(stageName);
       // 1) willStage
       if (hasEntries(keys.will)) {
@@ -578,6 +671,15 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       return { outcome: 'ok' };
     };
 
+    // Then the stage's Finally hooks run, whatever its outcome, with its failure recorded for them.
+    const runOneStage = async (stageName: string, stopOnRespond: boolean): Promise<StageResult> => {
+      const result = await runStageSteps(stageName, stopOnRespond);
+      if (FAILED_OUTCOMES.has(result.outcome)) recordFailure(result.control);
+      const finallyKey = stageKeysOf(stageName).finally;
+      if (hasEntries(finallyKey)) await runList(finallyKey, { ignoreThrows: true });
+      return result;
+    };
+
     // IMPORTANT: ignore typed stage names in plan arrays.
     // Only base stage names in the plan drive execution; typed hooks run *with* their base.
     const runStageGroup = async (
@@ -597,15 +699,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         }
       }
       return { outcome: 'ok' };
-    };
-
-    // The error and finalize stages read why the flow failed from `state.flowError`, always an Error
-    const recordFailure = (control: unknown) => {
-      const flowError =
-        control instanceof Error
-          ? control
-          : new InternalMcpError(`Flow failed with a non-Error value: ${String(control)}`);
-      context.state.set('flowError' as never, flowError as never);
     };
 
     const runErrorStage = async () => {
@@ -638,7 +731,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       if (pre.outcome === 'respond') {
         const post = await runStageGroup((plan as any).post, false);
         if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
-          recordFailure(post.control);
           try {
             await runErrorStage();
           } finally {
@@ -657,7 +749,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         return responded;
       }
       if (pre.outcome === 'unknown_error' || pre.outcome === 'fail') {
-        recordFailure(pre.control);
         try {
           await runErrorStage();
         } finally {
@@ -681,7 +772,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       if (exec.outcome === 'respond') {
         // continue to post + finalize
       } else if (exec.outcome === 'unknown_error' || exec.outcome === 'fail') {
-        recordFailure(exec.control);
         try {
           await runErrorStage();
         } finally {
@@ -702,7 +792,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       const post = await runStageGroup((plan as any).post, false);
       this.logger.verbose(`run: POST completed, outcome=${post.outcome}`);
       if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
-        recordFailure(post.control);
         try {
           await runErrorStage();
         } finally {
@@ -723,5 +812,42 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     await runFinalizeStage();
 
     return responded;
+  }
+
+  /** Logs the order the run's hooks resolve to, on the first run for its hook owner and its entry class's hooks. */
+  private logHookOrderOnce(
+    logged: Map<string | undefined, Set<Token | undefined>>,
+    stages: StageMap<FlowType>,
+    ownerId: string | undefined,
+    entryClass: Token | undefined,
+  ): void {
+    const entryHooks = entryClass
+      ? this.hooks.getClsHooks(entryClass).filter((hook) => hook.metadata.flow === this.name)
+      : [];
+    const entryKey = entryHooks.length > 0 ? entryClass : undefined;
+    const loggedEntries = logged.get(ownerId) ?? new Set<Token | undefined>();
+    if (loggedEntries.has(entryKey)) return;
+    logged.set(ownerId, loggedEntries.add(entryKey));
+
+    // The entry's instance hooks join when its context is built: merge them where they will land.
+    const resolved = cloneStageMap(stages);
+    const instanceHooks = entryHooks.filter((hook) => !hook.metadata.static).map((hook) => hook.metadata);
+    mergeHookMetasIntoStageMap(this.FlowClass, resolved, instanceHooks, nextStageOrder(stages));
+    const contextStage = entryContextStageOf(this.name);
+    const contextStep = contextStage ? this.stages[contextStage]?.[0] : undefined;
+    if (contextStage && contextStep && resolved[contextStage]) {
+      resolved[contextStage] = listJoinedAfterStep(resolved[contextStage], stages[contextStage] ?? [], contextStep);
+    }
+    const stageNames = FLOW_PHASES.flatMap((phase) => {
+      const group = this.plan[phase];
+      return group ? stageBasesOf(group) : [];
+    });
+    const lines = describeHookOrder(stageNames, this.stages, resolved, this.FlowClass.name);
+    if (lines.length === 0) return;
+
+    const owner = ownerId === undefined ? '' : ` for '${ownerId}'`;
+    const entry = entryKey === undefined ? '' : ` and ${tokenName(entryKey)}`;
+    const header = `Hook order of '${this.name}'${owner}${entry}, lowest priority first (an around hook wraps what its brackets hold):`;
+    this.logger.info([header, ...lines].join('\n'));
   }
 }

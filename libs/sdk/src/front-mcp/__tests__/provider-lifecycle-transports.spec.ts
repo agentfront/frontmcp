@@ -179,3 +179,53 @@ describe('Provider lifecycle on every transport', () => {
     );
   });
 });
+
+describe('A server-level value shared by the scopes of a splitByApp server', () => {
+  const order: string[] = [];
+
+  class SharedConnection implements OnShutdown {
+    onShutdown() {
+      order.push('shutdown:connection');
+    }
+  }
+
+  @Provider({ name: 'first-store' })
+  class FirstStore implements OnShutdown {
+    constructor(readonly connection: SharedConnection) {}
+    onShutdown() {
+      order.push('shutdown:first-store');
+    }
+  }
+
+  @Provider({ name: 'second-store' })
+  class SecondStore implements OnShutdown {
+    constructor(readonly connection: SharedConnection) {}
+    onShutdown() {
+      order.push('shutdown:second-store');
+    }
+  }
+
+  @App({ id: 'first', name: 'First', providers: [FirstStore], tools: [PingTool] })
+  class FirstApp {}
+
+  @App({ id: 'second', name: 'Second', providers: [SecondStore], tools: [PingTool] })
+  class SecondApp {}
+
+  it('shuts the value down after the providers of every scope that depend on it', async () => {
+    const instance = new FrontMcpInstance(
+      frontMcpMetadataSchema.parse({
+        info: { name: 'split-lifecycle', version: '1.0.0' },
+        apps: [FirstApp, SecondApp],
+        splitByApp: true,
+        providers: [{ provide: SharedConnection, name: 'connection', useValue: new SharedConnection() }],
+        logging: { level: LogLevel.Off, enableConsole: false },
+      }),
+    );
+    await instance.ready;
+
+    await instance.shutdown();
+
+    expect(order).toHaveLength(3);
+    expect(order[2]).toBe('shutdown:connection');
+  });
+});

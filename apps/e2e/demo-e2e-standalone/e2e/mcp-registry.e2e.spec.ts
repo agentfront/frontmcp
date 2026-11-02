@@ -44,6 +44,14 @@ describe('MCP Registry documents', () => {
     expect((await fetch(`${server.info.baseUrl}/mcp/isolated/server-card`)).status).toBe(404);
   });
 
+  it('refuses the card to a page on another origin, since the server binds loopback', async () => {
+    const card = await fetch(`${server.info.baseUrl}/mcp/server-card`, {
+      headers: { Origin: 'https://registry.example' },
+    });
+
+    expect(card.status).toBe(403);
+  });
+
   it('lists the card in the AI Catalog', async () => {
     const catalog = await (await fetch(`${server.info.baseUrl}/.well-known/ai-catalog.json`)).json();
     expect(catalog).toEqual({

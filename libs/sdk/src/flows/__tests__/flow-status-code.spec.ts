@@ -20,8 +20,8 @@ class StatusProbe {
   }
 
   @ToolHook.Did('finalize')
-  record(flowCtx: { state: { statusCode?: unknown } }) {
-    statusesSeenAtFinalize.push(flowCtx.state.statusCode);
+  record(flowCtx: { state: object }) {
+    statusesSeenAtFinalize.push(Reflect.get(flowCtx.state, 'statusCode'));
   }
 }
 

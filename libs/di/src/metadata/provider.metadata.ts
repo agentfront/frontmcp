@@ -34,10 +34,8 @@ export interface ProviderMetadata {
    */
   id?: string;
 
-  /**
-   * Human-readable name for the provider.
-   */
-  name: string;
+  /** Name shown in logs and errors; `@frontmcp/sdk` names a provider without one after its token. */
+  name?: string;
 
   /**
    * Optional description of what the provider does.

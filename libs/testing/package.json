@@ -56,6 +56,12 @@
     "./jest-preset": {
       "default": "./jest-preset.js"
     },
+    "./jest-preset-unit": {
+      "default": "./jest-preset-unit.js"
+    },
+    "./jest-preset-unit/jest-preset": {
+      "default": "./jest-preset-unit.js"
+    },
     "./fixtures": {
       "development": "./src/fixtures/index.ts",
       "require": {

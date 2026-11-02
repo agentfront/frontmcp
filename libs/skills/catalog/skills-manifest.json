@@ -1066,7 +1066,7 @@
         },
         {
           "name": "configure-skills-http",
-          "description": "Full reference for skillsConfig — HTTP catalog endpoints, auth, caching, instructions injection, and tamper-evident audit log.",
+          "description": "Full reference for skillsConfig — HTTP catalog endpoints, auth, caching, instructions injection, SKILL.md resource annotations, and tamper-evident audit log.",
           "examples": [
             {
               "name": "audit-log-basic",
@@ -1095,12 +1095,13 @@
             },
             {
               "name": "inject-instructions",
-              "description": "Set a server-level instructions string and append the skill catalog summary on every initialize response.",
+              "description": "Set a server-level instructions string and append the full skill catalog summary on every initialize response.",
               "level": "basic",
               "tags": ["config", "skills", "instructions", "injection", "initialize"],
               "features": [
                 "Top-level `instructions` on `@FrontMcp` exposes a global system prompt to MCP clients",
                 "`skillsConfig.injectInstructions: 'append'` adds the skill catalog summary after the user prompt",
+                "The default, `'compact'`, adds one line with the skill count and the `skill://index.json` pointer instead",
                 "Dynamic skills are picked up because the composer runs on every initialize request",
                 "The catalog only names skills the initializing caller may see (skill authorities and the `skills:filter` flow, e.g. feature flags)",
                 "Catalog summary is bounded at 16 KB with a truncation footer pointing at skill://index.json"
@@ -1854,7 +1855,7 @@
         },
         {
           "name": "create-plugin-hooks",
-          "description": "Intercept and extend FrontMCP flows using before, after, around, and stage hook decorators",
+          "description": "Intercept and extend FrontMCP flows using before, after, around, finally, and stage hook decorators",
           "examples": [
             {
               "name": "basic-logging-plugin",
@@ -1865,7 +1866,7 @@
                 "Using `ToolHook` pre-built export instead of calling `FlowHooksOf('tools:call-tool')` directly",
                 "Destructuring `Will` and `Did` decorators from the hook object",
                 "Setting `priority: -100` on `@Will` so the logging hook runs before the stage's other `@Will` hooks (lower runs first)",
-                "Reading the tool name and arguments from `ctx.state.required.input` and logging with `ctx.logger`",
+                "Reading the tool name and arguments from `ctx.toolName` and `ctx.toolInput` and logging with `ctx.logger`",
                 "Registering a plugin in the `plugins` array of `@App`"
               ]
             },
@@ -2693,7 +2694,7 @@
               "features": [
                 "Plugin hooks can access toolCtx.telemetry to add events to the active span",
                 "Events from plugins appear in the same trace as the tool execution",
-                "One `@ToolHook.Around('execute')` hook records success and failure: the flow state has no `error` key, and a `Did` hook runs only after a successful execute",
+                "One `@ToolHook.Around('execute')` hook records success and failure while the execute span is open: a `Did` hook runs only after a successful execute",
                 "Graceful degradation when observability is not enabled"
               ]
             },
@@ -3002,13 +3003,13 @@
             },
             {
               "name": "graceful-shutdown-cleanup",
-              "description": "Shows how to layer daemon-specific cleanup (socket file, PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler.",
+              "description": "Shows how to layer daemon-specific cleanup (PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler, leaving the socket file to the framework.",
               "level": "intermediate",
               "tags": ["production", "unix-socket", "cli", "database", "daemon", "graceful"],
               "features": [
                 "The framework already wires SIGTERM/SIGINT — daemon cleanup attaches _additional_ listeners and does not call `process.exit()`",
                 "Using `server.dispose()` (the only real method) instead of fictional `server.close()`",
-                "Removing the Unix socket file to prevent stale `.sock` files on restart",
+                "Leaving the Unix socket file to the framework, which removes it on close and replaces a stale one at startup",
                 "Cleaning up the PID file on shutdown",
                 "Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations",
                 "Closing the database in the provider's `onShutdown()`, which the framework's SIGTERM handler runs"

@@ -13,10 +13,13 @@ import { getMetadata, hasAsyncWith } from './metadata.utils.js';
  * Get a human-readable name for a token.
  *
  * @param t - The token to get the name for
- * @returns A string representation of the token
+ * @returns The class name, the symbol's description, the string token itself, or `[ref]`
  */
-export const tokenName = (t: Token): string =>
-  typeof t === 'function' && !!(t as any).prototype ? (t as any).name : ((t as any)?.name ?? '[ref]');
+export const tokenName = (t: Token): string => {
+  if (typeof t === 'string') return t;
+  if (typeof t === 'symbol') return t.description || '[ref]';
+  return t?.name ?? '[ref]';
+};
 
 /**
  * Check if a value is a class constructor.

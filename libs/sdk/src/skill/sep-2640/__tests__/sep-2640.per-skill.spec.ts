@@ -3,8 +3,8 @@
  *
  * SEP-2640 §Resource Metadata says each `skill://<skill-path>/SKILL.md`
  * resource SHOULD carry frontmatter-derived `name`/`description` plus
- * `audience`/`priority` annotations. The per-skill registration emits
- * those — verified here.
+ * annotations. The per-skill registration emits those, per
+ * `skillsConfig.resourceAnnotations` — verified here.
  */
 
 import 'reflect-metadata';
@@ -46,19 +46,34 @@ describe('buildPerSkillResourceRecord', () => {
     expect(rec.metadata.mimeType).toBe(SKILL_MD_MIME_TYPE);
   });
 
-  it('attaches audience: ["assistant"] and priority 0.8 annotations', () => {
+  it('attaches audience: ["assistant"] and no numeric priority by default', () => {
     const skill = makeSkill({ name: 'a', description: 'A' });
     const rec = buildPerSkillResourceRecord(fakeScope, skill);
 
-    expect(rec.metadata.annotations).toEqual({
-      audience: ['assistant'],
-      priority: SKILL_MD_PRIORITY,
-    });
+    expect(rec.metadata.annotations).toEqual({ audience: ['assistant'] });
   });
 
-  it('includes lastModified when supplied', () => {
+  it("attaches priority 0.8 under resourceAnnotations: 'full'", () => {
+    const skill = makeSkill({ name: 'a', description: 'A' });
+    const rec = buildPerSkillResourceRecord(fakeScope, skill, { resourceAnnotations: 'full' });
+
+    expect(rec.metadata.annotations).toEqual({ audience: ['assistant'], priority: SKILL_MD_PRIORITY });
+  });
+
+  it("attaches no annotations under resourceAnnotations: 'off'", () => {
     const skill = makeSkill({ name: 'a', description: 'A' });
     const rec = buildPerSkillResourceRecord(fakeScope, skill, {
+      resourceAnnotations: 'off',
+      lastModified: '2026-05-05T12:00:00Z',
+    });
+
+    expect('annotations' in rec.metadata).toBe(false);
+  });
+
+  it.each(['no-priority', 'full'] as const)('includes lastModified when supplied under %s', (resourceAnnotations) => {
+    const skill = makeSkill({ name: 'a', description: 'A' });
+    const rec = buildPerSkillResourceRecord(fakeScope, skill, {
+      resourceAnnotations,
       lastModified: '2026-05-05T12:00:00Z',
     });
     expect(rec.metadata.annotations?.lastModified).toBe('2026-05-05T12:00:00Z');
@@ -130,43 +145,81 @@ describe('buildPerSkillResourceRecord', () => {
   });
 });
 
+type RegisterOptions = Pick<
+  Parameters<typeof registerPerSkillResources>[0],
+  'resourceAnnotations' | 'resolveLastModified'
+>;
+
+function setup(initial: SkillEntry, options: RegisterOptions = {}) {
+  let served: SkillEntry[] = [initial];
+  const listeners: Array<() => void> = [];
+  const records: ResourceFunctionRecord[] = [];
+  const disposers: Array<() => void> = [];
+  const scope = {
+    onDispose: (callback: () => void) => disposers.push(callback),
+    skills: {
+      hasAny: () => true,
+      getSkills: () => served,
+      subscribe: (_options: unknown, listener: () => void) => {
+        listeners.push(listener);
+        return () => listeners.splice(listeners.indexOf(listener), 1);
+      },
+    },
+  } as unknown as ScopeEntry;
+  const unregistered: unknown[] = [];
+  const resourceRegistry = {
+    registerDynamicResource: (record: ResourceFunctionRecord) => records.push(record),
+    unregisterResourceInstance: (token: unknown) => unregistered.push(token),
+  } as unknown as ResourceRegistry;
+  const logger = { verbose: jest.fn(), warn: jest.fn() } as unknown as FrontMcpLogger;
+
+  return {
+    register: () =>
+      registerPerSkillResources({ scope, skillRegistry: scope.skills, resourceRegistry, logger, ...options }),
+    metadata: () => (records[0]?.metadata ?? {}) as unknown as Record<string, unknown>,
+    records,
+    unregistered,
+    dispose: () => disposers.forEach((callback) => callback()),
+    replaceWith: (skill?: SkillEntry) => {
+      served = skill ? [skill] : [];
+      for (const listener of [...listeners]) listener();
+    },
+  };
+}
+
+describe('registerPerSkillResources annotations', () => {
+  const skill = makeSkill({ name: 'report', description: 'Open report' });
+  const lastModified = '2026-05-05T12:00:00Z';
+
+  it('adds lastModified next to the audience by default', async () => {
+    const harness = setup(skill, { resolveLastModified: async () => lastModified });
+    await harness.register();
+
+    expect(harness.metadata()['annotations']).toEqual({ audience: ['assistant'], lastModified });
+  });
+
+  it("brings back priority 0.8 under resourceAnnotations: 'full'", async () => {
+    const harness = setup(skill, { resourceAnnotations: 'full', resolveLastModified: async () => lastModified });
+    await harness.register();
+
+    expect(harness.metadata()['annotations']).toEqual({
+      audience: ['assistant'],
+      priority: SKILL_MD_PRIORITY,
+      lastModified,
+    });
+  });
+
+  it("neither annotates nor resolves lastModified under resourceAnnotations: 'off'", async () => {
+    const resolveLastModified = jest.fn(async () => lastModified);
+    const harness = setup(skill, { resourceAnnotations: 'off', resolveLastModified });
+    await harness.register();
+
+    expect('annotations' in harness.metadata()).toBe(false);
+    expect(resolveLastModified).not.toHaveBeenCalled();
+  });
+});
+
 describe('registerPerSkillResources when a skill is replaced at the same path (#606)', () => {
-  function setup(initial: SkillEntry) {
-    let served: SkillEntry[] = [initial];
-    const listeners: Array<() => void> = [];
-    const records: ResourceFunctionRecord[] = [];
-    const disposers: Array<() => void> = [];
-    const scope = {
-      onDispose: (callback: () => void) => disposers.push(callback),
-      skills: {
-        hasAny: () => true,
-        getSkills: () => served,
-        subscribe: (_options: unknown, listener: () => void) => {
-          listeners.push(listener);
-          return () => listeners.splice(listeners.indexOf(listener), 1);
-        },
-      },
-    } as unknown as ScopeEntry;
-    const unregistered: unknown[] = [];
-    const resourceRegistry = {
-      registerDynamicResource: (record: ResourceFunctionRecord) => records.push(record),
-      unregisterResourceInstance: (token: unknown) => unregistered.push(token),
-    } as unknown as ResourceRegistry;
-    const logger = { verbose: jest.fn(), warn: jest.fn() } as unknown as FrontMcpLogger;
-
-    return {
-      register: () => registerPerSkillResources({ scope, skillRegistry: scope.skills, resourceRegistry, logger }),
-      metadata: () => (records[0]?.metadata ?? {}) as unknown as Record<string, unknown>,
-      records,
-      unregistered,
-      dispose: () => disposers.forEach((callback) => callback()),
-      replaceWith: (skill?: SkillEntry) => {
-        served = skill ? [skill] : [];
-        for (const listener of [...listeners]) listener();
-      },
-    };
-  }
-
   const plain = makeSkill({ name: 'report', description: 'Open report' });
   const gated = makeSkill({
     name: 'report',

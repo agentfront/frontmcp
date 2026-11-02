@@ -21,7 +21,7 @@ export { z } from './lazy-z';
 export { z as default } from './lazy-z';
 export { eagerZ } from './eager-z';
 export { lazyZ, LazyZodSchema, LAZY_BRAND, LAZY_TARGET, type InferLazy } from './lazy-schema';
-export { isLazy, forceMaterialize } from './utils';
+export { isLazy, forceMaterialize, hasTransform } from './utils';
 
 // JSON-Schema conversion. Kept here so consumer code never reaches past the
 // `@frontmcp/lazy-zod` boundary into `zod/v4` directly — one place to swap the

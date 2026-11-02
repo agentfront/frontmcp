@@ -4,8 +4,6 @@ import * as http from 'node:http';
 import cors from 'cors';
 import express from 'express';
 
-import { fileExists, unlink } from '@frontmcp/utils';
-
 import {
   type CorsOptions,
   type HttpMethod,
@@ -18,7 +16,21 @@ import { PayloadTooLargeError } from '../../errors/mcp.error';
 import { applyMachineIdHeader } from '../../ha/ha-headers';
 import { resolveSecurityHeaders } from '../middleware/csp.middleware';
 import { createHostValidationMiddleware } from '../middleware/host-validation.middleware';
-import { allowedHostsFromEnv, deriveAllowedHosts, shouldEnforceDerivedHosts } from '../security/resolve-allowed-hosts';
+import {
+  allowedHostsFromEnv,
+  corsAllowedOrigins,
+  deriveAllowedHosts,
+  deriveAllowedOrigins,
+  isLoopbackAddress,
+  shouldEnforceDerivedHosts,
+} from '../security/resolve-allowed-hosts';
+import {
+  assertSafeSocketDirectory,
+  clearStaleSocket,
+  enforceOwnerOnly,
+  hasSocketFileMode,
+  listenOwnerOnly,
+} from '../security/unix-socket-guard';
 import { HostServerAdapter } from './base.host.adapter';
 
 const SERVER_DRAIN_MS = 5_000;
@@ -195,7 +207,8 @@ export class ExpressHostAdapter extends HostServerAdapter {
    *
    * ON by default since v1.7.2 (BC-035). `allowedHosts` falls back to the names
    * this process actually answers to — the loopback aliases with and without
-   * the bound port, the bound NIC address, and the configured issuer host.
+   * the bound port, the bound NIC address, and the configured issuer host. On a
+   * loopback bind `allowedOrigins` falls back to its own origins and the CORS list.
    *
    * Escape hatches, in precedence order: explicit
    * `security.dnsRebindingProtection.allowedHosts`, the
@@ -236,8 +249,8 @@ export class ExpressHostAdapter extends HostServerAdapter {
         // derive from, and therefore no protection on exactly the loopback
         // listener DNS rebinding targets.
         const derivation = {
-          // `start()` binds `bindAddress ?? '0.0.0.0'`; mirror that exactly.
-          bindAddress: bindAddress ?? '0.0.0.0',
+          // `start()` binds `bindAddress ?? '127.0.0.1'`; mirror that exactly.
+          bindAddress: bindAddress ?? '127.0.0.1',
           port: portOrSocketPath,
           issuer: options?.listen?.issuer,
         };
@@ -260,7 +273,14 @@ export class ExpressHostAdapter extends HostServerAdapter {
         // skip it rather than fail closed on a valid config.
         if (!allowedHosts.length) return undefined;
 
-        return createHostValidationMiddleware({ enabled: true, allowedHosts });
+        // A page on another site reaches a loopback server under a loopback Host; only its Origin differs.
+        const corsOrigins = corsAllowedOrigins(options?.cors);
+        const allowedOrigins =
+          isLoopbackAddress(derivation.bindAddress) && corsOrigins
+            ? deriveAllowedOrigins({ port: derivation.port, issuer: derivation.issuer, extraOrigins: corsOrigins })
+            : undefined;
+
+        return createHostValidationMiddleware({ enabled: true, allowedHosts, allowedOrigins });
       };
     }
 
@@ -329,26 +349,28 @@ export class ExpressHostAdapter extends HostServerAdapter {
     server.keepAliveTimeout = 75_000;
 
     if (typeof portOrSocketPath === 'string') {
-      // Unix socket mode - clean up stale socket file before listening
-      await this.cleanupStaleSocket(portOrSocketPath);
+      const ownerOnly = hasSocketFileMode();
+      if (ownerOnly) {
+        await assertSafeSocketDirectory(portOrSocketPath);
+        await clearStaleSocket(portOrSocketPath);
+      }
       this.enableDerivedHostValidation(portOrSocketPath);
       await new Promise<void>((resolve, reject) => {
         server.on('error', reject);
-        server.listen(portOrSocketPath, () => {
-          // Set socket file permissions (owner + group read/write)
-          // Using node:fs chmodSync directly - no chmod equivalent in @frontmcp/utils
-          try {
-            const fs = require('node:fs');
-            fs.chmodSync(portOrSocketPath, 0o660);
-          } catch {
-            // chmod may fail on some platforms, non-critical
-          }
-          console.log(`MCP HTTP (Express) on unix://${portOrSocketPath}`);
-          resolve();
-        });
+        if (ownerOnly) listenOwnerOnly(server, portOrSocketPath, resolve);
+        else server.listen(portOrSocketPath, resolve);
       });
+      if (ownerOnly) {
+        try {
+          await enforceOwnerOnly(portOrSocketPath);
+        } catch (error) {
+          await this.stop(0);
+          throw error;
+        }
+      }
+      console.log(`MCP HTTP (Express) on unix://${portOrSocketPath}`);
     } else {
-      const host = bindAddress ?? '0.0.0.0';
+      const host = bindAddress ?? '127.0.0.1';
       await new Promise<void>((resolve, reject) => {
         server.on('error', reject);
         server.listen(portOrSocketPath, host, () => {
@@ -383,16 +405,6 @@ export class ExpressHostAdapter extends HostServerAdapter {
       await closed;
     } finally {
       clearTimeout(forceClose);
-    }
-  }
-
-  private async cleanupStaleSocket(socketPath: string): Promise<void> {
-    try {
-      if (await fileExists(socketPath)) {
-        await unlink(socketPath);
-      }
-    } catch {
-      // Ignore cleanup errors - listen will fail if socket is still in use
     }
   }
 }
