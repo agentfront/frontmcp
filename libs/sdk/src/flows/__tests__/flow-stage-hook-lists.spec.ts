@@ -275,6 +275,28 @@ describe('describeHookOrder', () => {
     ]);
   });
 
+  it('shows the before and after a step declares next to its priority', () => {
+    class GatePlugin {}
+    const base = { execute: [step({ method: 'execute' })] };
+    const resolved = {
+      ...base,
+      willExecute: [
+        step({
+          type: 'will',
+          method: 'refuse',
+          target: GatePlugin,
+          priority: 10,
+          before: ['setup-gate'],
+          after: ['Tenant'],
+        }),
+      ],
+    };
+
+    expect(describeHookOrder(['execute'], base, resolved, 'MyFlow')).toEqual([
+      '  execute: will GatePlugin.refuse (10, before setup-gate, after Tenant) → stage MyFlow.execute (0)',
+    ]);
+  });
+
   it('nests the Around hooks lowest priority outermost, around the steps only', () => {
     class InnerPlugin {}
     const base = { execute: [step({ method: 'execute' })] };

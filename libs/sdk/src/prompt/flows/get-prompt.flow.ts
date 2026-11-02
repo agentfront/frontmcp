@@ -116,6 +116,8 @@ function findPromptForGet(prompts: ScopeEntry['prompts'], name: string): PromptE
   access: 'authorized',
 })
 export default class GetPromptFlow extends FlowBase<typeof name> {
+  static override readonly tracesHooksInAnswer = true;
+
   static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const promptName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
     if (typeof promptName !== 'string') return undefined;

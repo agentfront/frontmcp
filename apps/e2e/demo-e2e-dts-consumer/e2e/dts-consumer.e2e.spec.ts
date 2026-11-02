@@ -38,6 +38,8 @@ const fixtureFiles = [
   'providers-must-compile.ts',
   'tool-aliases-must-compile.ts',
   'answer-shaping-must-compile.ts',
+  'hook-ordering-must-compile.ts',
+  'hook-ordering-must-fail.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -165,6 +167,25 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types output.budget, clients profiles, http.forwardHeaders and the budget note', () => {
     expect(describeEach(inFixtureFile('answer-shaping-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types HookPhase, before / after, appliesTo: all-apps, the hook observers, the hook trace and devtools', () => {
+    expect(describeEach(inFixtureFile('hook-ordering-must-compile.ts'))).toEqual([]);
+  });
+
+  it('rejects an appliesTo, before or after the SDK cannot apply, and a write to HookPhase', () => {
+    expect(describeEach(inFixtureFile('hook-ordering-must-fail.ts'))).toEqual([]);
+  });
+
+  it('fails each hook-ordering-must-fail.ts case once its @ts-expect-error is removed', () => {
+    const mustFail = path.join(fixtureDir, 'hook-ordering-must-fail.ts');
+    const expectedLines = (ts.sys.readFile(mustFail) ?? '')
+      .split('\n')
+      .flatMap((line, index) => (line.includes('// @ts-expect-error') ? [index + 2] : []));
+    const failures = compileFixture(mustFail).diagnostics.filter((diagnostic) => diagnostic.fileName === mustFail);
+
+    expect(expectedLines).toHaveLength(4);
+    expect([...new Set(failures.map(({ location }) => Number(location.split(':').pop())))]).toEqual(expectedLines);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

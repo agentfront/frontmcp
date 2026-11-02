@@ -40,6 +40,16 @@ export {
   type BudgetOmission,
 } from './answer';
 export * from './errors';
+export {
+  addHookObserver,
+  HOOK_OBSERVER_KEY,
+  HOOK_TRACE_META_KEY,
+  type HookObserver,
+  type HookObserverHost,
+  type HookTraceEntry,
+  type HookTraceOutcome,
+  type ObservedHook,
+} from './hooks/hook-observers';
 export * from './elicitation';
 export * from './task';
 export { default as LoggerRegistry } from './logger/logger.registry';

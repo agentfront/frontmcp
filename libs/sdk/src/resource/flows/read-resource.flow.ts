@@ -108,6 +108,8 @@ const resolvedResources = new ResolvedEntries<{ instance: ResourceEntry; params:
   access: 'authorized',
 })
 export default class ReadResourceFlow extends FlowBase<typeof name> {
+  static override readonly tracesHooksInAnswer = true;
+
   static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const uri = (rawInput as { request?: { params?: { uri?: unknown } } } | undefined)?.request?.params?.uri;
     if (typeof uri !== 'string') return undefined;
