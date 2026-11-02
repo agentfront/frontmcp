@@ -36,7 +36,26 @@ test('tool execution works', async ({ mcp }) => {
 npx frontmcp test
 ```
 
-`frontmcp test` (from the [`frontmcp`](https://www.npmjs.com/package/frontmcp) CLI) runs `src/**/*.spec.ts`, `__tests__/**/*.spec.ts` and `e2e/**/*.e2e.spec.ts` with a Jest configuration it generates. With a `jest.config.*` of your own, use `preset: '@frontmcp/testing'` for the same settings. The server starts when the first test that needs it runs, and tests with the same `test.use()` options share it.
+`frontmcp test` (from the [`frontmcp`](https://www.npmjs.com/package/frontmcp) CLI) runs `src/**/*.spec.ts`, `__tests__/**/*.spec.ts` and `e2e/**/*.e2e.spec.ts` with a Jest configuration it generates. With a `jest.config.*` of your own, start from one of the [Jest presets](#jest-presets). The server starts when the first test that needs it runs, and tests with the same `test.use()` options share it.
+
+## Jest presets
+
+| Preset                                         | Use it for                                                                                                                                                                                                                                          |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `preset: '@frontmcp/testing'`                  | The configuration `frontmcp test` generates: unit and e2e specs, a 60-second timeout, and the matchers registered through `@frontmcp/testing/setup`                                                                                                 |
+| `preset: '@frontmcp/testing/jest-preset-unit'` | Unit tests, in a CommonJS project too: Jest's default 5-second timeout, no setup file, and every `*.spec.ts(x)` except `*.e2e.spec`, `*.perf.spec` and `*.pw.spec` files. Add `@frontmcp/testing/setup` to `setupFilesAfterEnv` to use the matchers |
+
+Both compile TypeScript and TSX with `@swc/jest`, and both compile `jose`, `@noble/hashes` and `@noble/ciphers`, ESM-only packages the SDK loads, which Jest's CommonJS runtime otherwise fails on with `SyntaxError: Unexpected token 'export'`. To compile your TypeScript with `ts-jest`, set a transform for `.ts` only, so the preset still compiles those packages:
+
+```js
+// jest.config.js
+module.exports = {
+  preset: '@frontmcp/testing/jest-preset-unit',
+  transform: { '^.+\\.tsx?$': 'ts-jest' },
+};
+```
+
+`testMatch` and `transformIgnorePatterns` of your own replace the preset's lists, so copy its entries into yours.
 
 ## Fixtures
 
@@ -60,7 +79,7 @@ npx frontmcp test
 
 **Tool UI**: `toHaveRenderedHtml`, `toContainHtmlElement`, `toContainBoundValue`, `toBeXssSafe`, `toHaveWidgetMetadata`, `toHaveCssClass`, `toNotContainRawContent`, `toHaveProperHtmlStructure`
 
-Use them through the `expect` this package exports, which is Jest's `expect` with these matchers typed. `frontmcp test` and the preset also register them on Jest's global `expect`, through `@frontmcp/testing/setup`, which you can add to `setupFilesAfterEnv` yourself.
+Use them through the `expect` this package exports, which is Jest's `expect` with these matchers typed. `frontmcp test` and the `@frontmcp/testing` preset register them, through `@frontmcp/testing/setup`, which you can add to `setupFilesAfterEnv` yourself.
 
 ## Configuration
 

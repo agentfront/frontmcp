@@ -127,7 +127,7 @@ class RecordsApp {}
 export default class Server {}
 ```
 
-`providers` and `exports` take provider definitions, not bare tokens: `exports: [AuditLoggerToken]` throws when `@Plugin` runs (`providers items must be annotated with @Provider()`). Every provider object needs a `name`, whether it binds the token with `useFactory` (as here), `useClass` or `useValue`. The tool reaches `AuditLoggerToken` (and so `this.auditLog`) only because the plugin exports that definition to the app. The caller's identity comes from `this.auth.user.sub`; `this.scope` is the server scope, not the user.
+`providers` and `exports` take provider definitions, not bare tokens: `exports: [AuditLoggerToken]` throws when `@Plugin` runs (`providers items must be annotated with @Provider()`). A provider object binds the token with `useFactory` (as here), `useClass` or `useValue`, and its `name` is optional: it defaults to the token's name. The tool reaches `AuditLoggerToken` (and so `this.auditLog`) only because the plugin exports that definition to the app. The caller's identity comes from `this.auth.user.sub`; `this.scope` is the server scope, not the user.
 
 ## What This Demonstrates
 

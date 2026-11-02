@@ -1267,7 +1267,9 @@ libs/testing/
 │   └── errors/
 │       └── index.ts                # Custom error classes
 │
-├── jest-preset.js                  # Jest preset configuration
+├── jest-preset.js                  # Jest preset configuration (`frontmcp test`'s settings)
+├── jest-preset-unit.js             # Jest preset for unit tests, CommonJS projects included
+├── jest-preset.base.js             # What both presets share: transform, ESM-only packages
 ├── package.json                    # Package manifest
 └── ARCHITECTURE.md                 # This file
 ```

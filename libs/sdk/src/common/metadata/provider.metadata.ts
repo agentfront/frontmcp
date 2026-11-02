@@ -10,7 +10,7 @@ import { type RawZodShape } from '../types';
 export const frontMcpProviderMetadataSchema = z
   .object({
     id: z.string().optional(),
-    name: z.string().min(1),
+    name: z.string().min(1).optional(),
     description: z.string().optional(),
     scope: z.nativeEnum(ProviderScope).optional().default(ProviderScope.GLOBAL),
   } satisfies RawZodShape<ProviderMetadata>)

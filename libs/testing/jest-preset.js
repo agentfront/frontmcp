@@ -3,6 +3,7 @@
  * @description Jest preset for @frontmcp/testing
  *
  * Mirrors the config `frontmcp test` injects (libs/cli/src/commands/dev/test.ts); a CLI test fails when they differ.
+ * For unit tests in a CommonJS project, use `@frontmcp/testing/jest-preset-unit`.
  *
  * Usage in jest.config.ts:
  * ```typescript
@@ -13,33 +14,10 @@
  * ```
  */
 
+const base = require('./jest-preset.base.js');
+
 module.exports = {
-  // Use Node.js environment for E2E tests
-  testEnvironment: 'node',
-
-  // Covers `.js` too: ESM-only deps ship `.js`, and un-ignoring them in `transformIgnorePatterns` needs a matching transform.
-  transform: {
-    '^.+\\.[tj]sx?$': [
-      // The transform `frontmcp test` injects, resolved from here because @frontmcp/testing installs it
-      require.resolve('@swc/jest'),
-      {
-        jsc: {
-          target: 'es2022',
-          parser: { syntax: 'typescript', tsx: true, decorators: true, dynamicImport: true },
-          transform: { decoratorMetadata: true, legacyDecorator: true, react: { runtime: 'automatic' } },
-          keepClassNames: true,
-          externalHelpers: false,
-          loose: true,
-        },
-        module: { type: 'es6' },
-        sourceMaps: true,
-        swcrc: false,
-      },
-    ],
-  },
-
-  // File extensions to consider
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  ...base,
 
   testTimeout: 60000,
 
@@ -55,14 +33,6 @@ module.exports = {
     '<rootDir>/e2e/**/*.e2e.spec.ts',
     '<rootDir>/e2e/**/*.e2e.spec.tsx',
   ],
-
-  // Transpile ESM-only deps (`@noble/*` for CodeCall); the `.pnpm` skip keeps this correct under pnpm (issue #519).
-  transformIgnorePatterns: [
-    'node_modules[/\\\\](?!\\.pnpm[/\\\\])(?!(jose|@noble[/\\\\]hashes|@noble[/\\\\]ciphers)[/\\\\])',
-  ],
-
-  // Ignore patterns
-  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
 
   // Coverage settings (optional, disabled by default for E2E)
   collectCoverage: false,
