@@ -1,6 +1,6 @@
 ---
 name: create-job
-description: Create long-running background jobs with retry policies, timeouts, cancellation, cleanup, progress tracking, and permissions
+description: Create long-running background jobs with retry policies, timeouts, cancellation, cleanup, progress tracking, permissions, and runners (inline, worker thread, or a detached process that outlives the server)
 ---
 
 # Creating Jobs
@@ -35,18 +35,19 @@ Create a class extending `JobContext<In, Out>` and implement the `execute(input:
 
 ### JobMetadata Fields
 
-| Field          | Type                                | Required | Default                            | Description                                                                                                                       |
-| -------------- | ----------------------------------- | -------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `name`         | `string`                            | Yes      | --                                 | Unique job name                                                                                                                   |
-| `inputSchema`  | `ZodRawShape`                       | Yes      | --                                 | Zod raw shape for input validation                                                                                                |
-| `outputSchema` | `ZodRawShape \| ZodType`            | Yes      | --                                 | Zod schema for output validation                                                                                                  |
-| `description`  | `string`                            | No       | --                                 | Human-readable description                                                                                                        |
-| `timeout`      | `number`                            | No       | `jobs.defaultTimeoutMs` (`300000`) | How long one attempt may run, in ms; the run ends as `timed_out` when its last attempt did. `0` = no limit                        |
-| `cleanup`      | `JobCleanup \| { run, timeoutMs? }` | No       | --                                 | Runs when an attempt is interrupted, times out or is cancelled (see [Timeouts, Cancel and Cleanup](#timeouts-cancel-and-cleanup)) |
-| `retry`        | `RetryPolicy`                       | No       | --                                 | Retry configuration (see below)                                                                                                   |
-| `tags`         | `string[]`                          | No       | --                                 | Categorization tags                                                                                                               |
-| `labels`       | `Record<string, string>`            | No       | --                                 | Key-value labels for filtering                                                                                                    |
-| `permissions`  | `JobPermission[]`                   | No       | --                                 | Array of permission rules. Multiple rules may target the same action; all matching rules must pass                                |
+| Field          | Type                                 | Required | Default                            | Description                                                                                                                       |
+| -------------- | ------------------------------------ | -------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `name`         | `string`                             | Yes      | --                                 | Unique job name                                                                                                                   |
+| `inputSchema`  | `ZodRawShape`                        | Yes      | --                                 | Zod raw shape for input validation                                                                                                |
+| `outputSchema` | `ZodRawShape \| ZodType`             | Yes      | --                                 | Zod schema for output validation                                                                                                  |
+| `description`  | `string`                             | No       | --                                 | Human-readable description                                                                                                        |
+| `timeout`      | `number`                             | No       | `jobs.defaultTimeoutMs` (`300000`) | How long one attempt may run, in ms; the run ends as `timed_out` when its last attempt did. `0` = no limit                        |
+| `cleanup`      | `JobCleanup \| { run, timeoutMs? }`  | No       | --                                 | Runs when an attempt is interrupted, times out or is cancelled (see [Timeouts, Cancel and Cleanup](#timeouts-cancel-and-cleanup)) |
+| `runner`       | `'inline' \| 'worker' \| 'detached'` | No       | `jobs.runner` (`'inline'`)         | Where the attempts run (see [Runners](#runners))                                                                                  |
+| `retry`        | `RetryPolicy`                        | No       | --                                 | Retry configuration (see below)                                                                                                   |
+| `tags`         | `string[]`                           | No       | --                                 | Categorization tags                                                                                                               |
+| `labels`       | `Record<string, string>`             | No       | --                                 | Key-value labels for filtering                                                                                                    |
+| `permissions`  | `JobPermission[]`                    | No       | --                                 | Array of permission rules. Multiple rules may target the same action; all matching rules must pass                                |
 
 ### Basic Example
 
@@ -323,6 +324,62 @@ class CiServer {}
 ## Run Handle and `job://runs/{runId}`
 
 `execute_job` answers with `{ runId, state, uri }`; a background run answers at once with `state: 'pending'` and `uri: 'job://runs/<runId>'`. Reading that resource returns the run as JSON (`runId`, `jobName`, `state`, `attempt`, `maxAttempts`, `startedAt`, `completedAt`, `updatedAt`, `revision`, `progress`, `result`, `error`, `logs`); `resources/subscribe` to it, and every write this process makes to the run (state changes and `this.progress()` reports) sends `notifications/resources/updated`. The same owner and `read` rule as `get_job_status` decide who may read it; a run the caller may not read reads as not found. Run states: `pending`, `running`, `retrying`, then `completed`, `failed`, `cancelled`, `timed_out` or `interrupted`. Each write bumps the record's `revision` and stamps `updatedAt`.
+
+## Runners
+
+`@Job({ runner })`, or `@FrontMcp({ jobs: { runner } })` for the jobs that set none, picks where a job's attempts run. Any other value fails the decorator (`runner must be 'inline', 'worker' or 'detached'`).
+
+| Runner     | Where `execute()` runs                                  | Use for                                                                  |
+| ---------- | ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `inline`   | The server's event loop (the default)                   | Jobs that wait on I/O and use providers                                  |
+| `worker`   | A worker thread of the server's offload pool            | CPU-heavy jobs that would block the server                               |
+| `detached` | A process of its own that outlives the server's process | Work that must finish after a restart, a deploy or a crash of the server |
+
+**`worker`.** The `jobs:execute-job` flow (permissions, admission, timeout, `cleanup`, the run record) stays on the main thread; only `execute()` moves to a worker of the offload pool (see `offload-cpu-work`), which imports the module that declares the job. The same rules as `this.offload()` apply: the worker has no DI container, scope or request context (`this.get()` and `this.scope` throw `ProviderNotAvailableError`), the worker's environment holds only `offload.env`, and the input and output cross by structured clone. `this.progress()` and `this.log()` reach the run as they do inline. A timeout, a cancel or a shutdown terminates the worker, so `execute()` really stops; `this.signal` is not available inside the worker, and `cleanup` runs on the main thread. A bundle that inlines `@frontmcp/sdk` (SEA, `mcpb`, `lambda`, `vercel`) has no module to import and refuses the call with `InvalidOffloadCallError`.
+
+**`detached`.** `execute_job` answers at once with `{ runId, state: 'pending', uri }`, whatever `background` says, and the server starts a process for the run with `spawnOwned`: the server's own command again (`process.execPath`, its `execArgv`, its entry and arguments) in a process group of its own, so stopping the server's group spares it. That process boots the server's config with no transport and no `onReady()`, runs the run through the same `jobs:execute-job` flow, then exits. The run lives in the job store:
+
+- The runner writes its pid and keeps a heartbeat key in the store (renewed every second, expiring after 5 s by the store's own TTL). The progress it reports is written every 500 ms at most; state changes are written at once.
+- The run survives the server: a server killed or restarted mid-run leaves it running, and its result lands in the store. Any server on that store reads it (`get_job_status`, `job://runs/{runId}`) and cancels it with `cancel_job`; the runner reads the cancel within 500 ms, aborts `this.signal` and runs `cleanup` itself. A server watches the detached runs it knows of every second, so its `job://runs/{runId}` subscribers and `job-completion` channels hear about them.
+- **Reconcile on boot.** A server that boots reads the store for runs left `pending`, `running` or `retrying`. A run whose runner is gone (its pid no longer runs on this host, or its heartbeat expired) ends `interrupted` (`JOB_INTERRUPTED`, `its runner is gone`) and its job's `cleanup` runs in that server with reason `'interrupt'`; one process settles each run, however many boot at once. A detached run whose runner never took it over ends `failed` with `JOB_RUNNER_BOOT_FAILED`, as does one whose runner could not boot (it writes the cause itself). A run whose runner is alive is watched until it ends. Inline runs of another live server are left alone.
+- **What the runner gets.** The server's environment (it boots the same providers), its argv, `FRONTMCP_RUN_JOB_ID` and the owner tag; the run's input from the store. Nothing of the caller: no access token, headers or session, so `this.auth` is empty in a detached attempt. A job with `execute` permissions cannot run detached, since its attempts would check credentials the runner never receives.
+- **Requirements.** A Node server started from its entry (`node dist/main.js`, `frontmcp dev`, a stdio server) whose entry declares the server with `@FrontMcp` or calls `FrontMcpInstance.bootstrap()` / `runStdio()`, and a store other processes share (`jobs.store.sqlite`, a top-level `sqlite`, or Redis). At boot, a detached job on an edge or browser runtime, on a serverless deployment, or with `execute` permissions fails startup with `JobRunnerUnavailableError` (`JOB_RUNNER_UNAVAILABLE`, with a remedy). An in-process server (`create()`, `createDirect()`, `connect()`) or a memory store refuses the run itself with the same code.
+- `jobs.admission` bounds the attempts of one process, and each detached run is a process of its own: admission does not bound how many detached runs run at once.
+- Runners carry the `spawnOwned` marker `JOB_WORKER_MARKER` (`'frontmcp-job'`). They are never reaped automatically, since outliving their server is the point; `reapOrphans(JOB_WORKER_MARKER)` from `@frontmcp/utils` stops the ones whose server is gone. SIGTERM interrupts a runner's run, which runs its `cleanup` and ends `interrupted`.
+
+```typescript
+import { FrontMcp, Job, JobContext, z } from '@frontmcp/sdk';
+
+declare function exportBucket(
+  bucket: string,
+  options: { signal?: AbortSignal; onFile: (count: number) => void },
+): Promise<number>;
+declare function removePartialUpload(bucket: string): Promise<void>;
+declare class ExportsApp {}
+
+@Job({
+  name: 'export-archive',
+  inputSchema: { bucket: z.string() },
+  outputSchema: { files: z.number() },
+  runner: 'detached',
+  timeout: 0,
+  permissions: [{ action: 'read' }, { action: 'delete' }],
+  cleanup: async (job) => removePartialUpload((job.input as { bucket: string }).bucket),
+})
+class ExportArchiveJob extends JobContext {
+  async execute({ bucket }: { bucket: string }) {
+    const files = await exportBucket(bucket, { signal: this.signal, onFile: (n) => this.progress(n) });
+    return { files };
+  }
+}
+
+@FrontMcp({
+  info: { name: 'exports', version: '1.0.0' },
+  apps: [ExportsApp],
+  sqlite: { path: '~/.exports/state.sqlite' }, // the runners read and write runs here
+})
+class ExportsServer {}
+```
 
 ## Permissions
 
@@ -739,6 +796,8 @@ class DataServer {}
 | Watching a run    | `resources/subscribe` to the `uri` `execute_job` returned                            | Polling `get_job_status` in a tight loop                             | Every write to the run sends `notifications/resources/updated` to subscribers                                                          |
 | Permissions       | `permissions: [{ action: 'execute', roles: [...] }, ...]` (array, singular `action`) | `permissions: { actions: [...], roles, predicate }` (does not parse) | The schema requires an array of `{ action, roles, scopes, custom }` rules; `actions` plural and top-level `predicate` are not accepted |
 | Job hooks         | `@JobHook.Will('execute')` on a plugin, or on the `@Job` class itself                | Hooking `tools:call-tool` for `execute_job`                          | `jobs:execute-job` runs for every attempt, background run and workflow step; the `execute_job` tool's flow sees only the call          |
+| CPU-heavy job     | `runner: 'worker'`                                                                   | A tight loop in an inline `execute()`                                | An inline job blocks every other call of the server, `ping` included                                                                   |
+| Outliving restart | `runner: 'detached'` with a shared store                                             | A background inline run for work that must survive a deploy          | An inline run ends `interrupted` when its server stops; a detached run keeps going in its own process                                  |
 
 ## Verification Checklist
 
@@ -749,6 +808,7 @@ class DataServer {}
 - [ ] `retry` policy is configured if the job may fail transiently
 - [ ] `timeout` is set appropriately for the expected execution duration (`0` only for work that must never be cut off)
 - [ ] A job that starts processes or writes temp files has a `cleanup`, and passes `this.signal` on
+- [ ] A `runner: 'worker'` job uses no providers; a `runner: 'detached'` job has no `execute` permissions and a shared store
 - [ ] Job is registered in `jobs` array of `@App`
 
 ### Runtime
@@ -773,6 +833,10 @@ class DataServer {}
 | `JOB_RUN_FINISHED`                                      | `cancel_job` on a run that already ended                                                    | Read its outcome with `get_job_status`                                                                                      |
 | Run stays `running` after a cancel from another process | That process has no shared store, so it never sees the cancel                               | Use a shared `jobs.store` (`sqlite` on one machine, `redis` across machines)                                                |
 | Permission denied error                                 | User lacks required roles or scopes                                                         | Verify user has one of the `roles` and all `scopes` defined in `permissions`                                                |
+| `JOB_RUNNER_UNAVAILABLE` at startup                     | A detached job on an edge, browser or serverless runtime, or with `execute` permissions     | Set `runner: 'inline'` (or `'worker'`) on the job, or drop its `execute` permissions                                        |
+| `JOB_RUNNER_UNAVAILABLE` from `execute_job`             | A detached job on an in-process server or a memory store                                    | Start the server from its entry, and give jobs a shared store (`sqlite` or `redis`)                                         |
+| `JOB_RUNNER_BOOT_FAILED`                                | The detached runner could not boot the server, or exited before it took the run over        | Check that the entry starts the server; the error's message names the cause                                                 |
+| Detached run `interrupted`: `its runner is gone`        | Its process died (killed, out of memory, machine restart) and a server reconciled the store | Its `cleanup` ran in that server; run the job again                                                                         |
 
 ## Examples
 
@@ -782,6 +846,7 @@ class DataServer {}
 | [`job-with-permissions`](../examples/create-job/job-with-permissions.md) | Advanced     | A data export job with declarative permission controls, plus a function-style job for simple tasks.                |
 | [`job-with-retry`](../examples/create-job/job-with-retry.md)             | Intermediate | A job that syncs data from an external API with automatic retry, exponential backoff, and batch progress tracking. |
 | [`durable-build-job`](../examples/create-job/durable-build-job.md)       | Advanced     | A build job on a SQLite store with a timeout, a cleanup, admission limits, cancel and a subscribed run handle.     |
+| [`detached-export-job`](../examples/create-job/detached-export-job.md)   | Advanced     | An export job that runs in a process of its own, survives a server restart and is cancelled from any server.       |
 
 > See all examples in [`examples/create-job/`](../examples/create-job/)
 

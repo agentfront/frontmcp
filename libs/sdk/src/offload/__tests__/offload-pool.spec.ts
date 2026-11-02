@@ -71,6 +71,19 @@ globalThis[key].set(__filename + '#report#report://{id}', {
 });
 `;
 
+const JOB_MODULE = `
+const { isMainThread } = require('node:worker_threads');
+const key = Symbol.for('@frontmcp/sdk:worker-jobs');
+globalThis[key] = globalThis[key] || new Map();
+globalThis[key].set(__filename + '#crunch', {
+  run: async (input, attempt, log, progress) => {
+    log('info', 'crunching');
+    progress({ progress: 1, total: 2, message: 'half way' });
+    return { output: { input, attempt, isMainThread }, logs: ['crunched'] };
+  },
+});
+`;
+
 function testLogger(): FrontMcpLogger & Record<'verbose' | 'debug' | 'info' | 'warn' | 'error', jest.Mock> {
   const logger = {
     child: () => logger,
@@ -96,6 +109,7 @@ describe('OffloadPool', () => {
     await writeFile(pathJoin(dir, 'default-function.mjs'), DEFAULT_FUNCTION_MODULE);
     await writeFile(pathJoin(dir, 'slow-to-load.mjs'), SLOW_TO_LOAD_MODULE);
     await writeFile(pathJoin(dir, 'report.cjs'), RESOURCE_MODULE);
+    await writeFile(pathJoin(dir, 'crunch.cjs'), JOB_MODULE);
   });
 
   afterAll(async () => {
@@ -417,6 +431,31 @@ describe('OffloadPool', () => {
     expect(value).toEqual({ uri: 'report://1', params: { id: '1' }, isMainThread: false });
     expect(logger.info).toHaveBeenCalledWith('reading report://1');
     expect(logger.info).toHaveBeenCalledWith('unknown level');
+  });
+
+  it('runs a worker job through the runner its module registered, with its progress and log lines', async () => {
+    const offload = pool();
+    const logger = testLogger();
+    const onProgress = jest.fn();
+    const file = pathJoin(dir, 'crunch.cjs');
+
+    const value = await offload.run(
+      { kind: 'job', file, key: `${file}#crunch`, name: 'crunch', input: { n: 2 }, attempt: 3 },
+      { ...call({ label: 'crunch', logger }), onProgress },
+    );
+
+    expect(value).toEqual({ output: { input: { n: 2 }, attempt: 3, isMainThread: false }, logs: ['crunched'] });
+    expect(onProgress).toHaveBeenCalledWith({ progress: 1, total: 2, message: 'half way' });
+    expect(logger.info).toHaveBeenCalledWith('crunching');
+  });
+
+  it('rejects a worker job its module did not register', async () => {
+    const offload = pool();
+    const file = pathJoin(dir, 'crunch.cjs');
+
+    await expect(
+      offload.run({ kind: 'job', file, key: `${file}#other`, name: 'other', input: {}, attempt: 1 }, call()),
+    ).rejects.toThrow(/registered no worker job "other"/);
   });
 
   it('rejects a worker resource its module did not register', async () => {

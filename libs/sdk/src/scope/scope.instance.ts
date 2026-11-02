@@ -57,6 +57,7 @@ import { type JobExecutionManager } from '../job/execution/job-execution.manager
 import type { JobsConfig } from '../job/job-scope.helper';
 import type JobRegistry from '../job/job.registry';
 import { normalizeJob } from '../job/job.utils';
+import { isJobWorker } from '../job/runner/detached-job.flag';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
@@ -894,6 +895,8 @@ export class Scope extends ScopeEntry {
         jobsConfig: effectiveConfig,
         logger: this.logger,
         notifyFn,
+        directOnly: this.directOnly,
+        jobWorker: isJobWorker(this.metadata),
       });
 
       this._scopeJobs = result.jobRegistry as JobRegistry;

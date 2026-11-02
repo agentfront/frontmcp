@@ -78,3 +78,15 @@ describe('frontMcpMetadataSchema — durable jobs config', () => {
     expect(() => parseJobs({ enabled: true, defaultTimeoutMs: -1 })).toThrow();
   });
 });
+
+describe('frontMcpMetadataSchema — job runners', () => {
+  it.each(['inline', 'worker', 'detached'])('keeps runner %s', (runner) => {
+    expect(parseJobs({ enabled: true, runner })?.['runner']).toBe(runner);
+  });
+
+  it('refuses an unknown runner with the runners it takes', () => {
+    expect(() => parseJobs({ enabled: true, runner: 'thread' })).toThrow(
+      /jobs\.runner must be 'inline', 'worker' or 'detached'/,
+    );
+  });
+});

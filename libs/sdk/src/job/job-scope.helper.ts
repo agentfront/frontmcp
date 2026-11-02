@@ -11,6 +11,7 @@ import { type EntryOwnerRef, type RedisOptionsInput } from '../common';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
+import { type JobRunner } from '../common/metadata/job.metadata';
 import type FlowRegistry from '../flows/flow.registry';
 import type ProviderRegistry from '../provider/provider.registry';
 import ExecuteWorkflowTool from '../workflow/tools/execute-workflow.tool';
@@ -19,11 +20,12 @@ import ListWorkflowsTool from '../workflow/tools/list-workflows.tool';
 import RegisterWorkflowTool from '../workflow/tools/register-workflow.tool';
 import RemoveWorkflowTool from '../workflow/tools/remove-workflow.tool';
 import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/workflow.registry';
-import { JobExecutionManager } from './execution/job-execution.manager';
+import { DETACHED_FLUSH_MS, JobExecutionManager } from './execution/job-execution.manager';
 import ExecuteJobFlow from './flows/execute-job.flow';
 import { JobAdmission, type JobAdmissionOptions } from './job-admission';
 import JobRegistry, { type JobRegistryInterface } from './job.registry';
 import { JobRunResource } from './resources/job-run.resource';
+import { assertRunnersAvailable } from './runner/job-runner';
 import { createJobDefinitionStore } from './store/job-definition-store.factory';
 import { type JobDefinitionStore } from './store/job-definition.interface';
 import { createJobStateStore } from './store/job-state-store.factory';
@@ -56,6 +58,8 @@ export interface JobsConfig {
   defaultTimeoutMs?: number;
   /** When job attempts may start: at most `concurrency` at once, each claiming `memoryMb`, waiting up to `maxWaitMs`. */
   admission?: JobAdmissionOptions;
+  /** Where the attempts of a job that sets no `runner` run. @default 'inline' */
+  runner?: JobRunner;
 }
 
 /** `jobs.store`: Redis, or a SQLite file the processes on one machine share; memory when neither is set. */
@@ -100,6 +104,10 @@ export interface RegisterJobCapabilitiesArgs {
   jobsConfig: JobsConfig;
   logger: FrontMcpLogger;
   notifyFn?: (data: Record<string, unknown>) => Promise<void>;
+  /** The scope is served in process only (`create()`, `createDirect()`, `connect()`): it has no entry to run again. */
+  directOnly?: boolean;
+  /** The scope was booted by a detached runner, which runs one run and reconciles nothing. */
+  jobWorker?: boolean;
 }
 
 export interface JobCapabilitiesResult {
@@ -117,6 +125,7 @@ export interface JobCapabilitiesResult {
  */
 export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs): Promise<JobCapabilitiesResult> {
   const { providers, flowRegistry, owner, jobsList, jobProviders, workflowsList, jobsConfig, logger, notifyFn } = args;
+  const { directOnly = false, jobWorker = false } = args;
 
   // Every attempt of every job runs through this hookable flow (#700)
   await flowRegistry.registryFlows([ExecuteJobFlow]);
@@ -155,6 +164,9 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     workflowRegistry.registerDynamic(dynWf);
   }
 
+  // A detached job is refused here, at boot, where its process could not outlive the server
+  assertRunnersAvailable(jobRegistry.getJobs(), jobsConfig.runner);
+
   // 4. Create execution manager. Its status notifications also publish finished job and workflow
   // runs to the scope's completions, which `job-completion` channel sources subscribe to.
   const scope = providers.getActiveScope();
@@ -171,7 +183,10 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
       defaultTimeoutMs: jobsConfig.defaultTimeoutMs,
       admission: jobsConfig.admission ? new JobAdmission(jobsConfig.admission) : undefined,
       // A store other processes share can carry a cancel this process must notice
-      cancelPollMs: stateStoreType === 'memory' ? undefined : CANCEL_POLL_MS,
+      cancelPollMs: stateStoreType === 'memory' ? undefined : jobWorker ? DETACHED_FLUSH_MS : CANCEL_POLL_MS,
+      runner: jobsConfig.runner,
+      findJob: (name) => jobRegistry.findByName(name),
+      detachedUnavailable: detachedUnavailable(stateStoreType, directOnly && !jobWorker),
     },
   );
   // At shutdown the runs left are interrupted (their cleanup runs) before the stores close
@@ -181,6 +196,12 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     await definitionStore.dispose();
   });
   scope.resources.registerDynamicResource(JobRunResource);
+  // Runs a dead runner left in a shared store are settled in the background, once the registries exist
+  if (stateStoreType !== 'memory' && !jobWorker) {
+    void executionManager
+      .reconcile()
+      .catch((error: unknown) => logger.warn(`Could not reconcile the job runs in the store: ${String(error)}`));
+  }
 
   // 5. Collect management tools. The dynamic-registration pair is omitted
   // unless the operator opted in — an unregistered tool cannot be called at
@@ -217,6 +238,26 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     definitionStore,
     managementTools,
   };
+}
+
+/** Why a server cannot start detached runs, and what to do instead; undefined when it can. */
+function detachedUnavailable(
+  storeType: 'redis' | 'memory' | 'sqlite',
+  inProcess: boolean,
+): { why: string; remedy: string } | undefined {
+  if (inProcess) {
+    return {
+      why: 'an in-process server (create(), createDirect(), connect()) has no entry a detached process can run again',
+      remedy: "Start the server from its entry (node dist/main.js, frontmcp dev), or set runner: 'inline' on the job",
+    };
+  }
+  if (storeType === 'memory') {
+    return {
+      why: 'job runs are kept in this process memory, which a detached process cannot read',
+      remedy: 'Give jobs a store other processes share: jobs.store.sqlite, a top-level sqlite or redis',
+    };
+  }
+  return undefined;
 }
 
 /**

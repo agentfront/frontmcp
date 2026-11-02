@@ -165,6 +165,18 @@ export class RedisJobStateStore implements JobStateStore {
     return (await this.client.get(this.cancelKey(runId))) !== null;
   }
 
+  async touchRunner(runnerId: string, ttlSeconds: number): Promise<void> {
+    await this.client.set(`${this.keyPrefix}runner:${runnerId}`, '1', 'EX', ttlSeconds);
+  }
+
+  async isRunnerAlive(runnerId: string): Promise<boolean> {
+    return (await this.client.get(`${this.keyPrefix}runner:${runnerId}`)) !== null;
+  }
+
+  async claimRun(runId: string): Promise<boolean> {
+    return (await this.client.set(`${this.keyPrefix}claim:${runId}`, '1', 'NX', 'EX', this.ttlSeconds)) === 'OK';
+  }
+
   async dispose(): Promise<void> {
     // A client passed in is shared and outlives the store
     if (!this.ownsClient) return;

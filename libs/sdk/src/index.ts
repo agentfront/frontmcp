@@ -202,11 +202,13 @@ export type {
 export type {
   JobStateStore,
   JobRunRecord,
+  JobRunnerInfo,
   WorkflowRunRecord,
   JobExecutionState,
   JobRunProgress,
   JobDefinitionStore,
 } from './job';
+export { JOB_WORKER_MARKER } from './job/runner/job-runner';
 
 // Job-management tool classes (issue #408 — opt-in manual registration via
 // @App({ tools: [...] }) when finer-grained control than auto-registration

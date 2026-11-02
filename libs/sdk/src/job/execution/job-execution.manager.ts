@@ -1,10 +1,10 @@
-import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
+import { getHostname, randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
 import { type ScopeEntry } from '../../common';
 import { type JobEntry } from '../../common/entries/job.entry';
 import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
-import { type JobPermission } from '../../common/metadata/job.metadata';
+import { type JobInterruptReason, type JobPermission, type JobRunner } from '../../common/metadata/job.metadata';
 import { resolvePrincipal } from '../../common/utils/principal.utils';
 import { FrontMcpContext } from '../../context';
 import {
@@ -12,30 +12,37 @@ import {
   JobInterruptedError,
   JobNotAuthorizedError,
   JobRunFinishedError,
+  JobRunnerBootError,
+  JobRunnerUnavailableError,
   JobRunNotCancellableError,
   JobRunNotFoundError,
   JobTimeoutError,
 } from '../../errors';
 import { outlasts } from '../../provider/provider.lifecycle';
+import { isAlive } from '../../task/helpers/process-liveness';
 import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
 import { type JobAdmission } from '../job-admission';
 import {
   abortableDelay,
   retryDelayMs,
   runJobAttemptFlow,
+  runJobCleanup,
   toJobError,
   willRetryJobAttempt,
   type JobAttemptOutcome,
   type JobAttemptResult,
   type JobRunRecorder,
 } from '../job-attempt';
-import { detachedRunContext } from '../job-context-providers';
+import { detachedRunContext, jobContextProviders } from '../job-context-providers';
 import { JobPermissionGuard } from '../job-permission.guard';
 import { jobRunUri } from '../job-run-access';
 import { type JobRegistryInterface } from '../job.registry';
+import { runnerOf, spawnDetachedRunner, type DetachedRunnerProcess } from '../runner/job-runner';
+import { LatestValueFlusher, RunnerHeartbeat } from '../runner/run-flusher';
 import {
   FINISHED_JOB_STATES,
   type JobExecutionState,
+  type JobRunnerInfo,
   type JobRunProgress,
   type JobRunRecord,
   type JobStateStore,
@@ -45,6 +52,15 @@ import {
 /** How long an attempt of a job that sets no `timeout` may run. */
 export const DEFAULT_JOB_TIMEOUT_MS = 300_000;
 
+/** How often a detached run writes the progress it reported, and reads the store for a cancel. */
+export const DETACHED_FLUSH_MS = 500;
+
+/** How long a detached runner may take to boot before a missing heartbeat means it is gone. */
+const DETACHED_BOOT_TTL_SECONDS = 60;
+
+/** How often a server reads a detached run it watches. */
+const DETACHED_WATCH_MS = 1_000;
+
 export interface JobExecutionManagerOptions {
   /** How long an attempt of a job that sets no `timeout` may run, in ms; 0 for no limit. @default 300000 */
   defaultTimeoutMs?: number;
@@ -52,6 +68,14 @@ export interface JobExecutionManagerOptions {
   admission?: JobAdmission;
   /** How often an active run reads the store for a cancel another process wrote, in ms; unset never reads it. */
   cancelPollMs?: number;
+  /** Where the attempts of a job that sets no `runner` run (`jobs.runner`). @default 'inline' */
+  runner?: JobRunner;
+  /** The job of a run by its name, for a detached run's runner and the cleanup of a run whose runner is gone. */
+  findJob?: (name: string) => JobEntry | undefined;
+  /** Why this server cannot start a detached run, and what to do instead; unset when it can. */
+  detachedUnavailable?: { why: string; remedy: string };
+  /** Starts the process of a detached run. @default a process running the server's own command again */
+  spawnDetached?: (runId: string) => DetachedRunnerProcess;
 }
 
 /** A run this manager is executing: aborting its controller stops the run, and `settled` resolves once it ended. */
@@ -109,6 +133,12 @@ export class JobExecutionManager {
   private readonly activeRuns = new Map<string, ActiveRun>();
   /** The last write this process queued for each run, so the next one waits for it. */
   private readonly runWrites = new Map<string, Promise<unknown>>();
+  /** This process as the runner of its inline and worker runs, alive in the store while it has any. */
+  private readonly heartbeat: RunnerHeartbeat;
+  /** The detached runs this server watches, by run. */
+  private readonly watchers = new Map<string, ReturnType<typeof setInterval>>();
+  /** The progress writes of the detached runs this process runs, at most one per {@link DETACHED_FLUSH_MS}. */
+  private readonly progressFlushers = new Map<string, LatestValueFlusher<JobRunProgress>>();
 
   /**
    * @param scope - The scope the manager serves. A background run without a caller context gets a
@@ -127,6 +157,9 @@ export class JobExecutionManager {
     this.notifyFn = notifyFn;
     this.scope = scope;
     this.options = options;
+    this.heartbeat = new RunnerHeartbeat(stateStore, randomUUID(), (error) =>
+      this.logger.warn(`Could not renew this server's job heartbeat: ${toJobError(error).message}`),
+    );
   }
 
   /**
@@ -149,6 +182,7 @@ export class JobExecutionManager {
     const runId = randomUUID();
     const retryConfig = job.metadata.retry ?? {};
     const maxAttempts = retryConfig.maxAttempts ?? 1;
+    const runner = runnerOf(job, this.options.runner);
 
     const runRecord: JobRunRecord = {
       runId,
@@ -162,31 +196,47 @@ export class JobExecutionManager {
       attempt: 1,
       maxAttempts,
       logs: [],
-      background: opts.background ?? false,
+      background: runner === 'detached' || (opts.background ?? false),
+      scopeId: this.scope?.id,
     };
 
-    await this.stateStore.createRun(runRecord);
+    if (runner === 'detached') return this.startDetached(job, runRecord);
+
+    // Alive in the store before the run is, so a server reconciling the store never takes it for an orphan
+    const release = await this.heartbeat.hold();
+    try {
+      await this.stateStore.createRun({ ...runRecord, runner: this.ownRunner(runner) });
+    } catch (error) {
+      release();
+      throw error;
+    }
 
     if (opts.background) {
       const runOpts = withBackgroundContext(opts, (this.scope ?? job.providers.getActiveScope()).id);
       // Spawn background execution, as its own request (it outlives this one; a no-op on Node)
-      runRequestExclusive(() => this.executeJobBackground(job, input, runId, runOpts)).catch(async (err) => {
-        this.logger.error(`Background job execution failed: ${err}`);
-        try {
-          await this.updateState(runId, {
-            state: 'failed',
-            error: { message: err?.message ?? String(err), name: err?.name ?? 'Error' },
-            completedAt: Date.now(),
-          });
-        } catch (updateErr) {
-          this.logger.error(`Failed to update run state after error: ${updateErr}`);
-        }
-      });
+      void runRequestExclusive(() => this.executeJobBackground(job, input, runId, runOpts))
+        .catch(async (err) => {
+          this.logger.error(`Background job execution failed: ${err}`);
+          try {
+            await this.updateState(runId, {
+              state: 'failed',
+              error: { message: err?.message ?? String(err), name: err?.name ?? 'Error' },
+              completedAt: Date.now(),
+            });
+          } catch (updateErr) {
+            this.logger.error(`Failed to update run state after error: ${updateErr}`);
+          }
+        })
+        .finally(release);
       return { runId, state: 'pending' };
     }
 
     // Inline execution
-    return this.executeJobInline(job, input, runId, opts);
+    try {
+      return await this.executeJobInline(job, input, runId, opts);
+    } finally {
+      release();
+    }
   }
 
   /**
@@ -301,6 +351,9 @@ export class JobExecutionManager {
    * for them at most that long.
    */
   async dispose(timeoutMs?: number): Promise<void> {
+    // The detached runs keep running in their own processes
+    for (const watch of this.watchers.values()) clearInterval(watch);
+    this.watchers.clear();
     const runs = [...this.activeRuns.entries()];
     for (const [runId, run] of runs) run.controller.abort(new JobInterruptedError(runId));
     const ended = () => Promise.all(runs.map(([, run]) => run.settled));
@@ -308,6 +361,54 @@ export class JobExecutionManager {
       await ended();
     } else if (await outlasts(ended, timeoutMs)) {
       this.logger.warn(`The interrupted job runs did not end within ${timeoutMs} ms`);
+    }
+  }
+
+  /**
+   * Settle the job runs a dead runner left unfinished in the store, and watch the detached runs whose runner is
+   * alive. A run whose runner is gone (its pid no longer runs on this host, or its heartbeat expired in the store)
+   * ends `interrupted` and its job's cleanup runs here, or `failed` with `JobRunnerBootError` when its detached
+   * runner never took it over. One process settles each run, however many reconcile at once.
+   */
+  async reconcile(): Promise<void> {
+    for (const record of await this.stateStore.listRuns()) {
+      if (FINISHED_JOB_STATES.has(record.state) || !record.runner) continue;
+      if (this.scope && record.scopeId !== undefined && record.scopeId !== this.scope.id) continue;
+      if (await this.runnerGone(record.runner)) await this.endOrphan(record);
+      else if (record.runner.kind === 'detached') this.watch(record.runId);
+    }
+  }
+
+  /**
+   * Run a detached run in this process, which becomes its runner: its pid goes on the record, its heartbeat in
+   * the store, its attempts run as an inline run's do, and its progress is written every 500 ms at most. A cancel
+   * written to the store is read every 500 ms. An unknown or finished run is left alone.
+   */
+  async runDetached(runId: string): Promise<void> {
+    const record = await this.stateStore.getRun(runId);
+    if (!record?.runner || FINISHED_JOB_STATES.has(record.state)) return;
+    const job = this.options.findJob?.(record.jobName);
+    if (!job) {
+      await this.failToBoot(record, `the server has no job named "${record.jobName}"`);
+      return;
+    }
+    const warn = (error: unknown) => this.logger.warn(`Detached run ${runId}: ${toJobError(error).message}`);
+    const release = await new RunnerHeartbeat(this.stateStore, record.runner.id, warn).hold();
+    const flusher = new LatestValueFlusher<JobRunProgress>(
+      (progress) => this.updateState(runId, { progress }),
+      DETACHED_FLUSH_MS,
+      warn,
+    );
+    this.progressFlushers.set(runId, flusher);
+    try {
+      await this.updateState(runId, { runner: { ...record.runner, pid: currentPid(), hostname: getHostname() } });
+      const scopeId = this.scope?.id ?? job.providers.getActiveScope().id;
+      const opts = withBackgroundContext<ExecuteJobOptions>({ sessionId: record.sessionId, authInfo: {} }, scopeId);
+      await this.executeJobInline(job, record.input, runId, opts).catch(() => undefined);
+    } finally {
+      flusher.stop();
+      this.progressFlushers.delete(runId);
+      release();
     }
   }
 
@@ -321,6 +422,144 @@ export class JobExecutionManager {
     limit?: number;
   }): Promise<(JobRunRecord | WorkflowRunRecord)[]> {
     return this.stateStore.listRuns(opts);
+  }
+
+  // ---- Private: detached runs ----
+
+  /**
+   * Start a detached run: a heartbeat that lasts while its process boots, the process, then the run record with
+   * that process as its runner. Answers at once; this server watches the run until it ends.
+   */
+  private async startDetached(job: JobEntry, record: JobRunRecord): Promise<BackgroundJobResult> {
+    const unavailable = this.options.detachedUnavailable;
+    if (unavailable) throw new JobRunnerUnavailableError(job.name, unavailable.why, unavailable.remedy);
+    const runner: JobRunnerInfo = { kind: 'detached', id: randomUUID(), pid: 0, hostname: getHostname() };
+    await this.stateStore.touchRunner?.(runner.id, DETACHED_BOOT_TTL_SECONDS);
+    const child = (this.options.spawnDetached ?? spawnDetachedRunner)(record.runId);
+    const created = this.stateStore.createRun({ ...record, runner: { ...runner, pid: child.pid ?? 0 } });
+    child.once('error', (error) => {
+      void created.then(
+        () => this.failToBoot(record, error.message),
+        () => undefined,
+      );
+    });
+    await created;
+    this.watch(record.runId);
+    return { runId: record.runId, state: 'pending' };
+  }
+
+  /** Read a detached run every second: tell its subscribers when it changed, and settle it if its runner is gone. */
+  private watch(runId: string): void {
+    if (this.watchers.has(runId)) return;
+    let revision: number | undefined;
+    let reading = false;
+    const timer = setInterval(async () => {
+      if (reading) return;
+      reading = true;
+      try {
+        const record = await this.stateStore.getRun(runId);
+        if (record && record.revision !== revision) {
+          revision = record.revision;
+          this.scope?.resources.notifyContentChanged(jobRunUri(runId));
+        }
+        if (!record || FINISHED_JOB_STATES.has(record.state)) {
+          this.unwatch(runId);
+          if (record) await this.notify({ type: 'job:status', runId, state: record.state, jobName: record.jobName });
+        } else if (record.runner && (await this.runnerGone(record.runner))) {
+          this.unwatch(runId);
+          await this.endOrphan(record);
+        }
+      } catch (error) {
+        this.logger.warn(`Could not read detached run ${runId}: ${toJobError(error).message}`);
+      } finally {
+        reading = false;
+      }
+    }, DETACHED_WATCH_MS);
+    timer.unref?.();
+    this.watchers.set(runId, timer);
+  }
+
+  private unwatch(runId: string): void {
+    clearInterval(this.watchers.get(runId));
+    this.watchers.delete(runId);
+  }
+
+  /**
+   * Whether a runner is gone: its pid no longer runs on this host, or the store's TTL dropped its heartbeat. A
+   * runner on another host, on a store that keeps no heartbeats, counts as alive.
+   */
+  private async runnerGone(runner: JobRunnerInfo): Promise<boolean> {
+    const local = runner.hostname !== undefined && runner.hostname === getHostname();
+    if (local && !isAlive(runner.pid)) return true;
+    if (!this.stateStore.isRunnerAlive) return false;
+    return !(await this.stateStore.isRunnerAlive(runner.id));
+  }
+
+  /** End a run whose runner is gone, once across the processes sharing the store, and run its job's cleanup. */
+  private async endOrphan(record: JobRunRecord): Promise<void> {
+    const { runId } = record;
+    if (this.stateStore.claimRun && !(await this.stateStore.claimRun(runId))) return;
+    const neverStarted = record.state === 'pending' && record.runner?.kind === 'detached';
+    const error = neverStarted
+      ? new JobRunnerBootError(runId, 'its process exited before it took the run over')
+      : new JobInterruptedError(runId, 'its runner is gone');
+    const state = await this.endRun(record, error);
+    if (state && record.state === 'running') {
+      await this.cleanupOrphan(record, state === 'cancelled' ? 'cancel' : 'interrupt');
+    }
+  }
+
+  /**
+   * End a run that is still unfinished with `error`, stop watching it, and notify; a cancel written first wins.
+   * Answers the state written, or undefined when the run had already ended.
+   */
+  private async endRun(record: JobRunRecord, error: Error): Promise<JobExecutionState | undefined> {
+    const { runId } = record;
+    const state = await this.withRunLock(runId, async () => {
+      const current = await this.stateStore.getRun(runId);
+      if (!current || FINISHED_JOB_STATES.has(current.state)) return undefined;
+      return this.writeOutcome(runId, { state: 'failed', attempt: current.attempt, error });
+    });
+    if (!state) return undefined;
+    this.unwatch(runId);
+    await this.notify({ type: 'job:status', runId, state, jobName: record.jobName });
+    return state;
+  }
+
+  /** Run the job's cleanup for a run whose runner is gone, on an instance built here for the run's input. */
+  private async cleanupOrphan(record: JobRunRecord, reason: JobInterruptReason): Promise<void> {
+    const job = this.options.findJob?.(record.jobName);
+    if (!job?.metadata.cleanup) return;
+    try {
+      const scopeId = this.scope?.id ?? job.providers.getActiveScope().id;
+      const { context } = withBackgroundContext<ExecuteJobOptions>(
+        { sessionId: record.sessionId, authInfo: {} },
+        scopeId,
+      );
+      const contextProviders = context ? await jobContextProviders(job, context) : undefined;
+      const instance = job.create(job.parseInput(record.input), {
+        authInfo: {},
+        contextProviders,
+        attempt: record.attempt,
+      });
+      await runJobCleanup(job, instance, reason, this.logger);
+    } catch (error) {
+      this.logger.warn(`The ${reason} cleanup of run ${record.runId} could not run: ${toJobError(error).message}`);
+    }
+  }
+
+  /** End a detached run whose runner did not start, with `JobRunnerBootError`. */
+  private async failToBoot(record: JobRunRecord, cause: string): Promise<void> {
+    try {
+      await this.endRun(record, new JobRunnerBootError(record.runId, cause));
+    } catch (error) {
+      this.logger.error(`Could not record that run ${record.runId} did not start: ${toJobError(error).message}`);
+    }
+  }
+
+  /** This process as the runner of an inline or worker run. */
+  private ownRunner(kind: JobRunner): JobRunnerInfo {
+    return { kind, id: this.heartbeat.runnerId, pid: currentPid(), hostname: getHostname() };
   }
 
   // ---- Private: inline execution ----
@@ -392,7 +631,7 @@ export class JobExecutionManager {
       runId,
       maxAttempts,
       (outcome) => this.recordAttempt(job, runId, outcome),
-      (progress) => this.updateState(runId, { progress }),
+      (progress) => this.recordProgress(runId, progress),
     );
 
     // Each attempt is one run of the `jobs:execute-job` flow, which records how it ended (#700).
@@ -437,8 +676,16 @@ export class JobExecutionManager {
     }
   }
 
+  /** Keep the progress a run reported: at once, or with the next flush of a detached run. */
+  private async recordProgress(runId: string, progress: JobRunProgress): Promise<void> {
+    const flusher = this.progressFlushers.get(runId);
+    if (flusher) flusher.push(progress);
+    else await this.updateState(runId, { progress });
+  }
+
   /** Write how an attempt ended to the run record, and send the run's status notification. */
   private async recordAttempt(job: JobEntry, runId: string, outcome: JobAttemptOutcome): Promise<void> {
+    await this.progressFlushers.get(runId)?.flush();
     const state = await this.withRunLock(runId, () => this.writeOutcome(runId, outcome));
     if (!state) return;
     const attempt = state === 'retrying' ? { attempt: outcome.attempt } : {};
@@ -647,6 +894,11 @@ class RunRecorder implements JobRunRecorder {
   async ensureRecorded(outcome: JobAttemptOutcome): Promise<void> {
     if (!this.recorded.has(outcome.attempt)) await this.recordAttempt(outcome);
   }
+}
+
+/** This process's pid; 0 where there is no process. */
+function currentPid(): number {
+  return typeof process === 'undefined' ? 0 : process.pid;
 }
 
 /** What a cancel writes to the run record. */

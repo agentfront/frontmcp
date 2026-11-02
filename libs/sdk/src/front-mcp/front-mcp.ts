@@ -16,6 +16,7 @@ import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 import { DirectMcpServerImpl, type DirectMcpServer, type DirectServerOptions } from '../direct';
 import { describeConfigIssues, InternalMcpError, ScopeConfigurationError, ServerNotFoundError } from '../errors';
 import type { HealthService } from '../health';
+import { detachedJobRunId } from '../job/runner/detached-job.flag';
 import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import LoggerRegistry from '../logger/logger.registry';
 import type { MetricsService } from '../metrics';
@@ -98,6 +99,12 @@ function parseCliConfig(options: FrontMcpConfigInput, { fileLog }: { fileLog: bo
     };
   }
   return parsedConfig;
+}
+
+/** A detached job runner runs the server's entry again: it runs its one run instead of serving, then exits. */
+async function exitAfterDetachedRun(config: FrontMcpConfigInput | FrontMcpConfigType, runId: string): Promise<void> {
+  const { runDetachedJob } = await import('../job/runner/detached-job.worker.js');
+  process.exit(await runDetachedJob(config, runId));
 }
 
 export class FrontMcpInstance implements FrontMcpInterface {
@@ -385,6 +392,12 @@ export class FrontMcpInstance implements FrontMcpInterface {
           }
         : options,
     );
+
+    const detachedRunId = detachedJobRunId();
+    if (detachedRunId) {
+      await exitAfterDetachedRun(parsedConfig, detachedRunId);
+      return undefined;
+    }
 
     // When FRONTMCP_DAEMON_SOCKET is set (e.g., SEA binary started as daemon),
     // run in Unix socket mode instead of normal HTTP server
@@ -782,6 +795,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // redirection, env flags) — so invalid input fails fast and a failed
     // resolve never trips the single-connection guard below.
     const options = resolveConfigInput(optionsOrClass);
+    const detachedRunId = detachedJobRunId();
+    if (detachedRunId) return exitAfterDetachedRun(options, detachedRunId);
 
     // ── Stdio stdout protection ──────────────────────────────────────────
     // In stdio mode, stdout is the MCP JSON-RPC channel. ANY non-protocol

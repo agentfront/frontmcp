@@ -79,6 +79,21 @@ const jobCleanupSchema = z.union([
 ]);
 
 // ============================================
+// Job Runner
+// ============================================
+
+/**
+ * Where an attempt's `execute()` runs: `'inline'` on the server's event loop, `'worker'` in a worker thread of the
+ * server's offload pool (no DI container there, as for `this.offload()`), `'detached'` in a process of its own that
+ * outlives the server and keeps the run in the job store.
+ */
+export type JobRunner = 'inline' | 'worker' | 'detached';
+
+export const jobRunnerSchema = z.enum(['inline', 'worker', 'detached'], {
+  message: "runner must be 'inline', 'worker' or 'detached'",
+});
+
+// ============================================
 // Job Metadata
 // ============================================
 
@@ -130,6 +145,9 @@ export interface JobMetadata<
    */
   cleanup?: JobCleanup | JobCleanupOptions;
 
+  /** Where the job's attempts run. Default: `jobs.runner`, else `'inline'`. */
+  runner?: JobRunner;
+
   /**
    * Retry configuration for failed executions.
    */
@@ -166,6 +184,7 @@ export const frontMcpJobMetadataSchema = z
     outputSchema: z.instanceof(Object),
     timeout: z.number().int().min(0).optional(),
     cleanup: jobCleanupSchema.optional(),
+    runner: jobRunnerSchema.optional(),
     retry: jobRetryConfigSchema.optional(),
     tags: z.array(z.string().min(1)).optional(),
     labels: z.record(z.string(), z.string()).optional(),

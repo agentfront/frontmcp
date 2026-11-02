@@ -47,6 +47,7 @@ const fixtureFiles = [
   'duties-must-compile.ts',
   'offload-must-compile.ts',
   'durable-jobs-must-compile.ts',
+  'job-runners-must-compile.ts',
   'build-manifest-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
@@ -222,6 +223,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types @Job({ cleanup }), jobs.store.sqlite, jobs.defaultTimeoutMs, jobs.admission, CancelJobTool, the run states and a store without cancel requests', () => {
     expect(describeEach(inFixtureFile('durable-jobs-must-compile.ts'))).toEqual([]);
+  });
+
+  it("types @Job({ runner }), jobs.runner, the run's runner, JOB_WORKER_MARKER and the runner errors", () => {
+    expect(describeEach(inFixtureFile('job-runners-must-compile.ts'))).toEqual([]);
   });
 
   it('types instructionsBudget, buildManifest(), lintServerManifest() and the manifest schema', () => {

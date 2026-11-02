@@ -50,10 +50,29 @@ export class JobCancelledError extends PublicMcpError {
   }
 }
 
-/** The server shut down while the run was active; the run is `interrupted`. */
+/** The run stopped before it finished because its process went away; the run is `interrupted`. */
 export class JobInterruptedError extends PublicMcpError {
-  constructor(runId: string) {
-    super(`Run "${runId}" was interrupted: the server shut down`, 'JOB_INTERRUPTED', 503);
+  constructor(runId: string, why = 'the server shut down') {
+    super(`Run "${runId}" was interrupted: ${why}`, 'JOB_INTERRUPTED', 503);
+  }
+}
+
+/** The job's runner cannot run here: a detached run needs a Node server started from its entry and a shared store. */
+export class JobRunnerUnavailableError extends PublicMcpError {
+  constructor(jobName: string, why: string, remedy: string) {
+    super(`Job "${jobName}" cannot use its runner: ${why}`, 'JOB_RUNNER_UNAVAILABLE', 501, undefined, {
+      say: remedy,
+    });
+  }
+}
+
+/** The process of a detached run could not start, or exited before it took the run over; the run is `failed`. */
+export class JobRunnerBootError extends PublicMcpError {
+  constructor(runId: string, cause: string) {
+    super(`The detached runner of run "${runId}" did not start: ${cause}`, 'JOB_RUNNER_BOOT_FAILED', 503, undefined, {
+      say: 'Run the job again; if it keeps failing, check that the server starts from its entry',
+      tool: 'execute_job',
+    });
   }
 }
 

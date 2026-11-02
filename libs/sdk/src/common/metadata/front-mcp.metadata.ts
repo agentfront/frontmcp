@@ -433,6 +433,14 @@ export interface FrontMcpBaseMetadata {
      */
     defaultTimeoutMs?: number;
     /**
+     * Where the attempts of a job that sets no `runner` run: `'inline'` on the server's event loop, `'worker'` in a
+     * worker thread of the offload pool, `'detached'` in a process of their own that survives a server restart
+     * (Node only, from the server's entry, with a store other processes share).
+     *
+     * @default 'inline'
+     */
+    runner?: 'inline' | 'worker' | 'detached';
+    /**
      * When job attempts (and workflow steps) may start in this process: at most `concurrency` at once,
      * each claiming `memoryMb` of free memory. An attempt waits up to `maxWaitMs` (default 600000) and
      * is then refused with `JOB_ADMISSION_TIMEOUT`.
@@ -740,6 +748,9 @@ export const frontMcpBaseSchema = z.object({
         .refine((store) => !(store.redis && store.sqlite), { message: 'jobs.store takes redis or sqlite, not both' })
         .optional(),
       defaultTimeoutMs: z.number().int().nonnegative().optional(),
+      runner: z
+        .enum(['inline', 'worker', 'detached'], { message: "jobs.runner must be 'inline', 'worker' or 'detached'" })
+        .optional(),
       admission: z
         .object({
           concurrency: z.number().int().positive().optional(),

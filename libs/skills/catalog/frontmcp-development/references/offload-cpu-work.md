@@ -13,8 +13,10 @@ such work in a pool of `worker_threads` instead:
   an exported function of another module in a worker and resolves with its result.
 - `@Resource({ worker: true })` (and `@ResourceTemplate`, `resource()`, `resourceTemplate()`) runs the resource's whole
   read in a worker.
+- `@Job({ runner: 'worker' })` (or `jobs.runner: 'worker'`) runs a job's whole `execute()` in a worker, under the same
+  rules as a worker resource (see `create-job`).
 
-Both are Node only. The pool starts its first worker on the first call that needs one, and shuts down with the server.
+All three are Node only. The pool starts its first worker on the first call that needs one, and shuts down with the server.
 
 ## When to Use This Skill
 
