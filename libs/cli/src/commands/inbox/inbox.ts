@@ -156,8 +156,9 @@ async function answerInteractively(
 }
 
 /**
- * `frontmcp inbox <link>`: spends the one-time code of an inbox sign-in link (the server's `questionInboxLink()`) for
- * a session, as a browser would, then lists the questions waiting for that link's caller, or answers one.
+ * `frontmcp inbox <link>`: spends the one-time code of an inbox sign-in link (printed on the server's console by
+ * `printQuestionInboxLink()`) for a session, as a browser would, then lists the questions waiting for that link's
+ * caller, or answers one.
  */
 export async function runInbox(link: string, options: InboxOptions, io: InboxIo = terminalIo()): Promise<void> {
   const { origin, code } = parseSignInLink(link, options.url);

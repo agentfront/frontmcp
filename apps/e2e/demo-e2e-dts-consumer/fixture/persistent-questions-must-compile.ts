@@ -4,7 +4,7 @@ import {
   App,
   FrontMcp,
   LoopbackTokenAuth,
-  questionInboxLink,
+  printQuestionInboxLink,
   QuestionPendingError,
   Tool,
   ToolContext,
@@ -33,9 +33,9 @@ export class ApproveDeployTool extends ToolContext {
 @Tool({ name: 'inbox-link', inputSchema: {} })
 export class InboxLinkTool extends ToolContext {
   async execute() {
-    const link: { code: string; expiresAt: number; loginPath: string } = questionInboxLink(this);
+    const printed: { expiresAt: number } = printQuestionInboxLink(this);
     const bound = this.get(LoopbackTokenAuth).createCode({ subject: 'principal:alice' });
-    return { link: link.loginPath, other: bound.code };
+    return { until: printed.expiresAt, other: bound.expiresAt };
   }
 }
 

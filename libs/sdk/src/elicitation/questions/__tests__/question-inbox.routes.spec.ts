@@ -11,7 +11,7 @@ import { App, LogLevel, type FrontMcpConfigInput } from '../../../common';
 import { ElicitationNotSupportedError } from '../../../errors';
 import { type FrontMcpInstance } from '../../../front-mcp/front-mcp';
 import { type Scope } from '../../../scope/scope.instance';
-import { questionInboxLink } from '../question-inbox.routes';
+import { printQuestionInboxLink } from '../question-inbox.routes';
 import { type QuestionStore } from '../question.store';
 
 @App({ id: 'inbox', name: 'inbox' })
@@ -202,7 +202,7 @@ describe('the question inbox', () => {
   });
 });
 
-describe('questionInboxLink', () => {
+describe('printQuestionInboxLink', () => {
   const people = new LoopbackTokenAuth({
     mode: 'loopback-token',
     codeTtlMs: 60_000,
@@ -214,17 +214,30 @@ describe('questionInboxLink', () => {
   const context = (authInfo: unknown, withPeople = true) =>
     ({ tryGet: () => (withPeople ? people : undefined), tryGetContext: () => ({ authInfo }) }) as never;
 
-  it('makes a sign-in link to the inbox for the subject of the call', () => {
-    const link = questionInboxLink(context({ user: { sub: 'alice' } }));
-    const session = people.exchangeCode(link.code, 'client');
+  it('prints a sign-in link for the subject of the call on the console, and gives the caller no code', () => {
+    const printed: string[] = [];
+    const write = jest.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      printed.push(String(chunk));
+      return true;
+    });
 
-    expect(link.loginPath).toBe(`/_frontmcp/people/login?code=${link.code}&next=%2F_frontmcp%2Finbox`);
+    const result = printQuestionInboxLink(context({ user: { sub: 'alice' } }));
+    write.mockRestore();
+    const link = /question inbox sign-in link: (\S+)/.exec(printed.join(''))?.[1] ?? '';
+    const code = new URL(link, 'http://localhost').searchParams.get('code') ?? '';
+    const session = people.exchangeCode(code, 'client');
+
+    expect(result).toEqual({ expiresAt: expect.any(Number) });
+    expect(JSON.stringify(result)).not.toContain(code);
+    expect(link).toBe(`/_frontmcp/people/login?code=${code}&next=%2F_frontmcp%2Finbox`);
     expect(session.ok && people.verifySession(session.cookieValue)?.subject).toBe('principal:alice');
   });
 
   it('is refused without people auth, and for an anonymous caller', () => {
-    expect(() => questionInboxLink(context({ user: { sub: 'alice' } }, false))).toThrow(ElicitationNotSupportedError);
-    expect(() => questionInboxLink(context({ user: { sub: 'anon:1' } }))).toThrow(ElicitationNotSupportedError);
+    expect(() => printQuestionInboxLink(context({ user: { sub: 'alice' } }, false))).toThrow(
+      ElicitationNotSupportedError,
+    );
+    expect(() => printQuestionInboxLink(context({ user: { sub: 'anon:1' } }))).toThrow(ElicitationNotSupportedError);
   });
 });
 

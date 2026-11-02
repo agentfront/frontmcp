@@ -1,5 +1,5 @@
 import { z } from '@frontmcp/lazy-zod';
-import { App, questionInboxLink, Tool, ToolContext } from '@frontmcp/sdk';
+import { App, printQuestionInboxLink, Tool, ToolContext } from '@frontmcp/sdk';
 
 @Tool({
   name: 'approve-deploy',
@@ -23,12 +23,12 @@ class ApproveDeployTool extends ToolContext {
 
 @Tool({
   name: 'inbox-link',
-  description: 'A one-time sign-in link to the inbox of the caller, for the person who answers its questions.',
+  description: 'Prints a one-time sign-in link to the inbox of the caller on the server console, for the person.',
   inputSchema: {},
 })
 class InboxLinkTool extends ToolContext {
   async execute() {
-    return questionInboxLink(this);
+    return printQuestionInboxLink(this);
   }
 }
 

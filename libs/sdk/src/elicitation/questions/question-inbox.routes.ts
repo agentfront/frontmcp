@@ -41,15 +41,18 @@ async function inboxOf(route: HttpRouteContext, store: QuestionStore): Promise<{
   return { questions: subject ? await store.list(subject) : [] };
 }
 
+function printToConsole(message: string): void {
+  if (typeof process !== 'undefined' && typeof process.stderr?.write === 'function') process.stderr.write(message);
+  else console.warn(message);
+}
+
 /**
- * A one-time sign-in link to the question inbox for the caller of `context` (a tool, an agent): the person who opens
- * it, in a browser or with `frontmcp inbox`, sees and answers that caller's questions, and no one else's.
+ * Print a one-time sign-in link to the question inbox of the caller of `context` (a tool, an agent) on the server's
+ * console (stderr), where the person at the machine reads it, as they read the startup token. The person who opens it,
+ * in a browser or with `frontmcp inbox`, sees and answers that caller's questions, and no one else's. The caller gets
+ * only the link's expiry, so an agent cannot sign in and answer its own question.
  */
-export function questionInboxLink(context: ExecutionContextBase): {
-  code: string;
-  expiresAt: number;
-  loginPath: string;
-} {
+export function printQuestionInboxLink(context: ExecutionContextBase): { expiresAt: number } {
   const people = context.tryGet(LoopbackTokenAuth);
   if (!people) throw new ElicitationNotSupportedError('The question inbox needs people auth: set http.auth.people');
   const subject = questionSubjectOf(context.tryGetContext()?.authInfo);
@@ -57,8 +60,13 @@ export function questionInboxLink(context: ExecutionContextBase): {
     throw new ElicitationNotSupportedError('The question inbox is for a signed-in user or a session, not this caller');
   }
   const { code, expiresAt } = people.createCode({ subject });
-  const next = encodeURIComponent(QUESTION_INBOX_PATH);
-  return { code, expiresAt, loginPath: `${PEOPLE_LOGIN_PATH}?code=${code}&next=${next}` };
+  const link = `${PEOPLE_LOGIN_PATH}?code=${code}&next=${encodeURIComponent(QUESTION_INBOX_PATH)}`;
+  printToConsole(
+    `[frontmcp] question inbox sign-in link: ${link}\n` +
+      `[frontmcp] It works once, until ${new Date(expiresAt).toISOString()}: open it on this server, ` +
+      "or run frontmcp inbox --url <server> '<link>'.\n",
+  );
+  return { expiresAt };
 }
 
 /** The inbox routes of a scope's persistent questions: people routes, which show a person their subject's questions. */

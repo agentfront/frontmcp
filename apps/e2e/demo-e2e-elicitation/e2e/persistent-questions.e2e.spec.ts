@@ -15,6 +15,7 @@ import { mkdtemp, rm } from '@frontmcp/utils';
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-elicitation/src/main.questions.ts';
 const CLI = resolve(__dirname, '../../../../libs/cli/dist/src/core/cli.js');
 const run = promisify(execFile);
+const INBOX_LINK = /question inbox sign-in link: (\S+)/;
 
 interface InboxQuestion {
   id: string;
@@ -67,10 +68,25 @@ describe('Persistent questions E2E', () => {
     return client;
   }
 
+  /** Have the caller print an inbox link on the server console, and read it there as the person at the machine does. */
   async function inboxLink(mcp: McpTestClient): Promise<string> {
+    const printedBefore = server.getLogs().length;
     const result = await mcp.tools.call('inbox-link', {});
     expect(result).toBeSuccessful();
-    return new URL((result.json() as { loginPath: string }).loginPath, server.info.baseUrl).toString();
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      const line = server
+        .getLogs()
+        .slice(printedBefore)
+        .find((entry) => INBOX_LINK.test(entry));
+      if (line) {
+        const link = (INBOX_LINK.exec(line) as RegExpExecArray)[1];
+        expect(JSON.stringify(result)).not.toContain(new URL(link, server.info.baseUrl).searchParams.get('code'));
+        return new URL(link, server.info.baseUrl).toString();
+      }
+      await new Promise((settle) => setTimeout(settle, 50));
+    }
+    throw new Error('the server printed no inbox link');
   }
 
   /** Sign a person in with the caller's inbox link, as the inbox page does, and return their session cookie. */

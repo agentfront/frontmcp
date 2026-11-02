@@ -227,7 +227,7 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('offload-must-compile.ts'))).toEqual([]);
   });
 
-  it('types persist, questionInboxLink, the question errors and elicitation.persistent', () => {
+  it('types persist, printQuestionInboxLink, the question errors and elicitation.persistent', () => {
     expect(describeEach(inFixtureFile('persistent-questions-must-compile.ts'))).toEqual([]);
   });
 

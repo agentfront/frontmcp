@@ -1,4 +1,9 @@
-export { questionInboxLink, questionInboxRoutes, QUESTION_INBOX_PATH, QUESTIONS_PATH } from './question-inbox.routes';
+export {
+  printQuestionInboxLink,
+  questionInboxRoutes,
+  QUESTION_INBOX_PATH,
+  QUESTIONS_PATH,
+} from './question-inbox.routes';
 export { questionSubjectOf } from './question-subject';
 export {
   createQuestionStore,

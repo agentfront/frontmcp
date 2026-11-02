@@ -137,7 +137,7 @@ class Server {}
 ```
 
 ```typescript
-import { questionInboxLink, Tool, ToolContext, z } from '@frontmcp/sdk';
+import { printQuestionInboxLink, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({ name: 'approve_deploy', inputSchema: { version: z.string() } })
 class ApproveDeployTool extends ToolContext {
@@ -150,11 +150,11 @@ class ApproveDeployTool extends ToolContext {
   }
 }
 
-// A one-time sign-in link to the inbox of the caller: give it to the person who answers
+// Print a one-time sign-in link to the caller's inbox on the server console, for the person at the machine
 @Tool({ name: 'inbox_link', inputSchema: {} })
 class InboxLinkTool extends ToolContext {
   async execute() {
-    return questionInboxLink(this); // { code, expiresAt, loginPath: '/_frontmcp/people/login?code=…&next=/_frontmcp/inbox' }
+    return printQuestionInboxLink(this); // { expiresAt }: the link itself goes to stderr, never to the MCP client
   }
 }
 ```
@@ -162,18 +162,20 @@ class InboxLinkTool extends ToolContext {
 - **Who a question belongs to (its subject):** `principal:<sub>` for a signed-in caller (a reconnect, or any session of
   that user, gets the answer), else `session:<id>` for the verified session. An anonymous caller with neither is refused
   (`ElicitationNotSupportedError`).
-- **Who may answer:** only a person signed in **for that subject**: `questionInboxLink(this)` (or
-  `LoopbackTokenAuth.createCode({ subject })`) makes a code bound to the caller's subject, and the session it buys sees
-  and answers that subject's questions only. Another subject, and a person signed in with the startup token, get an
-  empty inbox and `404` for any question id.
+- **Who may answer:** only a person signed in **for that subject**. `printQuestionInboxLink(this)` prints, on the
+  server's console (stderr, like the startup token), a one-time link whose code is bound to the caller's subject; the
+  session it buys sees and answers that subject's questions only. The caller gets only `{ expiresAt }`: a code in a tool
+  result would let the agent sign in and approve its own question. Another subject, and a person signed in with the
+  startup token, get an empty inbox and `404` for any question id. An app that reaches its people another way (email, a
+  chat) can make the code itself with `LoopbackTokenAuth.createCode({ subject })` and must send it to the person only.
 - **The inbox (people routes):** `GET /_frontmcp/inbox` (a page), `GET /_frontmcp/questions` (JSON),
   `GET /_frontmcp/questions/events` (SSE of the same view, updated on every change),
   `POST /_frontmcp/questions/:id/answer` with `{ "action": "accept" | "decline" | "cancel", "content"?: {...} }`. They run
   through the `http:route` flow, so the answer route gets the same-origin check (`403` from another site). An accept is
   validated against the question's schema (`400`); a second answer gets `409`.
-- **The CLI:** `frontmcp inbox <sign-in link>` spends the link's one-time code like a browser, lists the questions (and
-  asks on a terminal); `--answer <id> --content '{"approve":true}'` (or `--decline` / `--cancel`) answers one. Each run
-  needs a fresh link.
+- **The CLI:** `frontmcp inbox <sign-in link>` (or the printed path with `--url <server>`) spends the link's one-time
+  code like a browser, lists the questions (and asks on a terminal); `--answer <id> --content '{"approve":true}'` (or
+  `--decline` / `--cancel`) answers one. Each run needs a fresh link.
 - **Delivery, once:** the waiting call gets the answer; when it stopped waiting (its `ttl` passed, or the session ended),
   it fails with `QuestionPendingError` (`408`) and the answer waits for the next call that asks the same key. When a newer
   call of the subject asks while one waits, the newer one waits for it and the older fails with
@@ -242,7 +244,7 @@ frontmcp dev
 | User sees raw JSON instead of a form              | The MCP client renders the `requestedSchema` as raw data rather than a form | Use standard JSON Schema types (`boolean`, `string`, `enum`) that clients can render as UI controls |
 | Tool hangs indefinitely waiting for user response | No timeout configured and user never responds                               | Implement a timeout or cancellation mechanism in the tool logic to handle non-responsive users      |
 | `QuestionPendingError` from a persistent question | The call stopped waiting before anyone answered                             | Answer in the inbox, then call again with the same `persist.key`: that call gets the answer         |
-| The inbox is empty for the person                 | They signed in with the startup token, or for another caller                | Sign in with `questionInboxLink(this)` from a call of the caller that asked                         |
+| The inbox is empty for the person                 | They signed in with the startup token, or for another caller                | Open the link `printQuestionInboxLink(this)` printed for a call of the caller that asked            |
 
 ## Examples
 

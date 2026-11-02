@@ -963,7 +963,7 @@
               "features": [
                 "Turning on `elicitation.persistent` next to `http.auth.people` for the inbox routes",
                 "Asking with `this.elicit(..., { ttl, persist: { key } })` so the question outlives the call",
-                "Handing the person a sign-in link bound to the caller with `questionInboxLink(this)`",
+                "Printing a sign-in link bound to the caller on the server console with `printQuestionInboxLink(this)`",
                 "Answering with `frontmcp inbox <link>`, and the next call receiving the answer once"
               ]
             }

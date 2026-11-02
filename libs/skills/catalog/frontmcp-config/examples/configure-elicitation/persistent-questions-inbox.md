@@ -7,7 +7,7 @@ tags: [config, elicitation, persistent, inbox, people-auth]
 features:
   - 'Turning on `elicitation.persistent` next to `http.auth.people` for the inbox routes'
   - 'Asking with `this.elicit(..., { ttl, persist: { key } })` so the question outlives the call'
-  - 'Handing the person a sign-in link bound to the caller with `questionInboxLink(this)`'
+  - 'Printing a sign-in link bound to the caller on the server console with `printQuestionInboxLink(this)`'
   - 'Answering with `frontmcp inbox <link>`, and the next call receiving the answer once'
 ---
 
@@ -19,7 +19,7 @@ Keep a question for its caller past the session, answered in the inbox or the CL
 
 ```typescript
 // src/server.ts
-import { App, FrontMcp, questionInboxLink, Tool, ToolContext, z } from '@frontmcp/sdk';
+import { App, FrontMcp, printQuestionInboxLink, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'approve_deploy',
@@ -37,10 +37,14 @@ class ApproveDeployTool extends ToolContext {
   }
 }
 
-@Tool({ name: 'inbox_link', description: 'A sign-in link to my questions', inputSchema: {} })
+@Tool({
+  name: 'inbox_link',
+  description: 'Print a sign-in link to my questions on the server console',
+  inputSchema: {},
+})
 class InboxLinkTool extends ToolContext {
   async execute() {
-    return questionInboxLink(this);
+    return printQuestionInboxLink(this);
   }
 }
 
@@ -58,8 +62,8 @@ class Server {}
 ```
 
 ```bash
-# The agent called inbox_link and passed the person its link; the person answers from a terminal
-frontmcp inbox 'http://127.0.0.1:3000/_frontmcp/people/login?code=…&next=%2F_frontmcp%2Finbox'
+# The agent called inbox_link; the person copies the link from the server's console and answers from a terminal
+frontmcp inbox --url http://127.0.0.1:3000 '/_frontmcp/people/login?code=…&next=%2F_frontmcp%2Finbox'
 # or, with a fresh link and the id the listing showed:
 frontmcp inbox '<link>' --answer q-… --content '{"approve":true}'
 ```
@@ -68,7 +72,7 @@ frontmcp inbox '<link>' --answer q-… --content '{"approve":true}'
 
 - Turning on `elicitation.persistent` next to `http.auth.people` for the inbox routes
 - Asking with `this.elicit(..., { ttl, persist: { key } })` so the question outlives the call
-- Handing the person a sign-in link bound to the caller with `questionInboxLink(this)`
+- Printing a sign-in link bound to the caller on the server console with `printQuestionInboxLink(this)`
 - Answering with `frontmcp inbox <link>`, and the next call receiving the answer once
 
 `approve_deploy` waits 60 s; if nobody answers by then it fails with `QuestionPendingError`, and the question stays for a
