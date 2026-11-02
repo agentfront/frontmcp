@@ -78,6 +78,21 @@ export interface ElicitOptions {
    * Required for URL mode.
    */
   url?: string;
+
+  /**
+   * Keep the question for the caller after this call stops waiting (`elicitation.persistent`): a person answers it in
+   * the inbox, not the client, and the answer reaches this call, or the next call of the same caller that asks `key`.
+   * `ttl` is how long this call waits; `persist.ttlMs` how long the question and its answer are kept (longer).
+   */
+  persist?: PersistOptions;
+}
+
+/** `ElicitOptions.persist`. */
+export interface PersistOptions {
+  /** Names the question among the caller's: asking a key that is waiting asks the same question. */
+  key: string;
+  /** How long the question, and an answer no call took yet, are kept, in ms. @default elicitation.persistent.ttlMs */
+  ttlMs?: number;
 }
 
 /**

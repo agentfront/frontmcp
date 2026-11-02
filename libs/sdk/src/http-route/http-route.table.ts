@@ -12,6 +12,7 @@ import {
   type HttpRouteSseOptions,
   type ProviderRegistryInterface,
 } from '../common';
+import { questionInboxRoutes } from '../elicitation/questions/question-inbox.routes';
 import { InvalidHttpRouteError, InvalidPeopleAuthOptionsError } from '../errors';
 import { matchRoutePath } from '../flows/flow.http-path';
 import { servedHealthPaths } from '../health/health.routes';
@@ -119,7 +120,7 @@ function withoutTrailingSlash(path: string): string {
 
 /**
  * Give a scope the routes it serves: its apps' `@HttpRoute`s, plus the people sign-in routes when `http.auth.people`
- * is set; none when it has neither. The scopes of one `server` share one people auth. Fails fast on a bad or duplicate path, a path of the MCP endpoint, a class that is
+ * is set (and the question inbox when `elicitation.persistent` is on too); none when it has neither. The scopes of one `server` share one people auth. Fails fast on a bad or duplicate path, a path of the MCP endpoint, a class that is
  * not an `@HttpRoute`, and a people route without people auth.
  */
 export function attachHttpRoutes(scope: Scope, server: object): void {
@@ -128,10 +129,18 @@ export function attachHttpRoutes(scope: Scope, server: object): void {
     return routes.map((target) => ({ target, providers: app.providers }));
   });
   const peopleOption = scope.metadata.http?.auth?.people;
+  const questions = scope.persistentQuestions;
+  if (questions && peopleOption === undefined) {
+    scope.logger.warn(
+      'elicitation.persistent is on but http.auth.people is not set, so the question inbox is off: ' +
+        "set http: { auth: { people: 'loopback-token' } } to answer questions at /_frontmcp/inbox or with frontmcp inbox",
+    );
+  }
   if (declared.length === 0 && peopleOption === undefined) return;
 
   const people = peopleOption === undefined ? undefined : peopleAuthFor(server, peopleOption, scope.providers);
-  const builtIn = people ? PEOPLE_SIGN_IN_ROUTES.map((target) => ({ target, providers: scope.providers })) : [];
+  const builtInRoutes = [...PEOPLE_SIGN_IN_ROUTES, ...(questions ? questionInboxRoutes(questions.store) : [])];
+  const builtIn = people ? builtInRoutes.map((target) => ({ target, providers: scope.providers })) : [];
   const reserved = computeReservedPaths(scope.entryPath, scope.routeBase, servedHealthPaths(scope.metadata.health));
   const mcpPath = scope.fullPath || '/';
   const served = new Set<string>();

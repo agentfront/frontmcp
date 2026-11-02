@@ -8,7 +8,27 @@
 // IMPORTANT: Keep these interfaces in sync with the Zod schemas.
 // The typecheck.ts file will fail to compile if they get out of sync.
 
+import type { StorageConfig } from '@frontmcp/utils';
+
 import type { RedisOptionsInterface } from '../redis';
+
+/** A `createStorage()` config on a backend with the atomic compare-and-set a question's answer needs. */
+export type PersistentQuestionsStorage = StorageConfig & { type: 'memory' | 'redis' | 'sqlite' };
+
+/**
+ * `elicitation.persistent`: questions kept for the caller that asked (`this.elicit(..., { persist: { key } })`), which
+ * a person answers later in the inbox (`/_frontmcp/inbox` with `http.auth.people`, or `frontmcp inbox`).
+ */
+export interface PersistentQuestionsOptionsInterface {
+  /** How long a question waits for its answer, and an answer for the call that takes it, in ms. @default 86400000 */
+  ttlMs?: number;
+
+  /**
+   * Where questions are kept. Unset: the server's `redis`, else its `sqlite`, else a SQLite file in
+   * `$FRONTMCP_HOME` (`~/.frontmcp/questions.sqlite`), so a question outlives the process that asked it.
+   */
+  storage?: PersistentQuestionsStorage;
+}
 
 // ============================================
 // ELICITATION OPTIONS INTERFACE
@@ -92,4 +112,10 @@ export interface ElicitationOptionsInterface {
    * ```
    */
   redis?: RedisOptionsInterface;
+
+  /**
+   * Keep questions that outlive the session: `true`, or the questions' settings.
+   * Off by default; `this.elicit(..., { persist })` is refused while it is off.
+   */
+  persistent?: boolean | PersistentQuestionsOptionsInterface;
 }

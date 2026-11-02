@@ -467,6 +467,10 @@ class AgentScopeEntry {
     return undefined;
   }
 
+  get persistentQuestions(): undefined {
+    return undefined;
+  }
+
   get metadata() {
     return this.agentScope.scopeMetadata;
   }

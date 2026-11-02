@@ -25,6 +25,12 @@ export type { ElicitationOptionsInterface };
 export const elicitationOptionsSchema = z.object({
   enabled: z.boolean().optional().default(false),
   redis: redisOptionsSchema.optional(),
+  // Checked in full when the server opens the store, so a browser bundle that does not use it carries no schema
+  persistent: z
+    .union([z.boolean(), z.object({}).passthrough()], {
+      message: 'elicitation.persistent must be true, false or an object of settings',
+    })
+    .optional(),
 } satisfies RawZodShape<ElicitationOptionsInterface>);
 
 // ============================================

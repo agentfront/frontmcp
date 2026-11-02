@@ -731,6 +731,8 @@ export class AgentContext<
         entryName: this._agentNameInternal ?? this.agentName,
         entryInput: this._agentInputInternal ?? this.input,
         elicitationEnabled: this.scope.metadata.elicitation?.enabled === true,
+        questions: this.scope.persistentQuestions,
+        signal: this.signal,
       },
       message,
       requestedSchema,
