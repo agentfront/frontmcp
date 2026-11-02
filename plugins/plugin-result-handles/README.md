@@ -78,6 +78,8 @@ sees the folded answer. An answer folds when all of these hold:
 - `foldPolicy(toolName, answer, context)` returns `true`;
 - the tool's output schema admits the folded form (below).
 
+When the store can't keep the answer (Redis is down, say), the answer is sent whole and the plugin logs a warning.
+
 ## Tools with an output schema
 
 A client checks `structuredContent` against the `outputSchema` it was listed, so a tool with an output schema folds
@@ -147,6 +149,9 @@ ResultHandlesPlugin.init({ storage: { type: 'sqlite', sqlite: { path: '/var/lib/
 ```
 
 SQLite needs `@frontmcp/storage-sqlite`.
+
+Each folded answer is kept, as the tool returned it and unencrypted, until its TTL runs out. With memory storage,
+`storage: { type: 'memory', memory: { maxEntries: 1000 } }` caps how many are held at once, dropping the oldest.
 
 ## Docs
 

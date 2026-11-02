@@ -17,6 +17,7 @@ import {
 } from '@frontmcp/sdk';
 
 import { foldedAnswerSchema, type FoldedAnswer } from '../folded-answer';
+import { ResultHandleStore } from '../result-handle.store';
 import { RESULT_HANDLE_META_KEY, type FoldContext } from '../result-handles.options';
 import ResultHandlesPlugin from '../result-handles.plugin';
 
@@ -303,6 +304,17 @@ describe('ResultHandlesPlugin', () => {
       expect(warnings.map((warning) => warning.slice(0, 32))).toEqual([
         'Tool "exports:closed_api_rows" a',
         'Tool "exports:broken_api_rows" a',
+      ]);
+    });
+
+    it('sends the answer whole, with a warning, when the store cannot keep it', async () => {
+      jest.spyOn(ResultHandleStore.prototype, 'save').mockRejectedValueOnce(new Error('connection refused'));
+      const client = await open();
+      const result = await call(client, 'export_rows', { count: 200 });
+
+      expect(result.structuredContent).toEqual({ rows: rows(200), total: 200 });
+      expect(warnings).toEqual([
+        'Could not keep the answer of tool "exports:export_rows" for result_query, so it is sent whole: connection refused',
       ]);
     });
 

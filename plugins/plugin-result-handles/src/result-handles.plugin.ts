@@ -115,7 +115,15 @@ export default class ResultHandlesPlugin extends DynamicPlugin<
       this.warnUnfoldableOnce(tool, bytes);
       return;
     }
-    await store.save(handle, answer, owner);
+    try {
+      await store.save(handle, answer, owner);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logger().warn(
+        `Could not keep the answer of tool "${tool.fullName}" for result_query, so it is sent whole: ${reason}`,
+      );
+      return;
+    }
     const { ttlSeconds } = this.options;
     const note =
       `This answer is ${bytes} bytes, so it was folded: preview is its start and shape its structure. ` +
@@ -128,16 +136,18 @@ export default class ResultHandlesPlugin extends DynamicPlugin<
     });
   }
 
+  private logger(): FrontMcpLogger {
+    return this.get(FrontMcpLogger).child('ResultHandles');
+  }
+
   private warnUnfoldableOnce(tool: FoldedTool, bytes: number): void {
     if (this.unfoldableTools.has(tool)) return;
     this.unfoldableTools.add(tool);
-    this.get(FrontMcpLogger)
-      .child('ResultHandles')
-      .warn(
-        `Tool "${tool.fullName}" answered ${bytes} bytes, over the ${this.options.thresholdBytes}-byte fold threshold, ` +
-          'but its outputSchema does not admit the folded form { preview, shape, handle }, so its answers are sent ' +
-          'whole. Make foldedAnswerSchema a member of a z.union() outputSchema to fold them.',
-      );
+    this.logger().warn(
+      `Tool "${tool.fullName}" answered ${bytes} bytes, over the ${this.options.thresholdBytes}-byte fold threshold, ` +
+        'but its outputSchema does not admit the folded form { preview, shape, handle }, so its answers are sent ' +
+        'whole. Make foldedAnswerSchema a member of a z.union() outputSchema to fold them.',
+    );
   }
 }
 
