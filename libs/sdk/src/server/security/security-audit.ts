@@ -9,7 +9,7 @@
 
 import type { CorsOptions } from '../../common';
 import { resolveHttpCors } from '../middleware/cors-env';
-import { allowedHostsFromEnv, isRoutableBind } from './resolve-allowed-hosts';
+import { allowedHostsFromEnv, corsAllowedOrigins, isRoutableBind } from './resolve-allowed-hosts';
 
 /**
  * Security configuration for the audit.
@@ -81,8 +81,8 @@ export function auditSecurityDefaults(config: SecurityAuditConfig, isProduction:
       level: 'info',
       code: 'CORS_DISABLED',
       message:
-        'No CORS headers are sent. Cross-origin requests still reach the server — a browser just ' +
-        'will not let the calling page read the response. CORS is not server-side access control.',
+        'No CORS headers are sent, so a browser will not let a page on another origin read the response. ' +
+        'CORS is not server-side access control: on a routable bind, cross-origin requests still reach the server.',
     });
   } else if (corsOrigin === true) {
     findings.push({
@@ -195,7 +195,11 @@ function auditDnsRebinding(config: SecurityAuditConfig, bindAddress: string): Se
     return {
       level: 'info',
       code: 'DNS_REBINDING_PROTECTED',
-      message: `DNS rebinding protection is enabled: Host headers are checked against the loopback names for ${bindAddress}.`,
+      message: corsAllowedOrigins(resolveHttpCors(config.cors))
+        ? `DNS rebinding protection is enabled: Host and Origin headers are checked against the loopback names for ${bindAddress}. ` +
+          'A request with no Origin header is allowed.'
+        : `DNS rebinding protection is enabled: Host headers are checked against the loopback names for ${bindAddress}. ` +
+          'Origin is not checked: CORS admits every origin.',
     };
   }
 

@@ -979,6 +979,32 @@ describe('generateCliEntry', () => {
       expect(source).toContain('.pid');
     });
 
+    it('creates the sockets directory owner-only (0700)', () => {
+      const source = generateCliEntry(makeOptions());
+      expect(source).toContain('fs.mkdirSync(socketDir, { recursive: true, mode: 0o700 })');
+      expect(source).toContain('fs.chmodSync(socketDir, 0o700)');
+    });
+
+    it('takes group and other write away from FRONTMCP_HOME, which could otherwise replace the sockets directory', () => {
+      const source = generateCliEntry(makeOptions());
+      expect(source).toContain('if (homeMode & 0o022) fs.chmodSync(FRONTMCP_HOME, homeMode & ~0o022)');
+    });
+
+    it('refuses a symlinked sockets directory before setting its mode', () => {
+      const source = generateCliEntry(makeOptions());
+      const symlinkCheck = source.indexOf('fs.lstatSync(socketDir).isSymbolicLink()');
+      expect(symlinkCheck).toBeGreaterThan(-1);
+      expect(source.indexOf('fs.chmodSync(socketDir, 0o700)')).toBeGreaterThan(symlinkCheck);
+    });
+
+    it('removes a leftover socket only once no daemon is running', () => {
+      const source = generateCliEntry(makeOptions());
+      const runningCheck = source.indexOf("console.log('Daemon already running");
+      const unlink = source.indexOf('fs.unlinkSync(socketPath)');
+      expect(runningCheck).toBeGreaterThan(-1);
+      expect(unlink).toBeGreaterThan(runningCheck);
+    });
+
     it('should write the name and entry that frontmcp list and status read (#768)', () => {
       const source = generateCliEntry(makeOptions({ appName: 'my-server', selfContained: false }));
       expect(source).toContain('name: "my-server"');

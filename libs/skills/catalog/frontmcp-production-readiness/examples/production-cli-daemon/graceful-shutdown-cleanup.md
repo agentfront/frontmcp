@@ -2,7 +2,7 @@
 name: graceful-shutdown-cleanup
 reference: production-cli-daemon
 level: intermediate
-description: Shows how to layer daemon-specific cleanup (socket file, PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler.
+description: Shows how to layer daemon-specific cleanup (PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler, leaving the socket file to the framework.
 tags:
   - production
   - unix-socket
@@ -13,7 +13,7 @@ tags:
 features:
   - The framework already wires SIGTERM/SIGINT — daemon cleanup attaches _additional_ listeners and does not call `process.exit()`
   - Using `server.dispose()` (the only real method) instead of fictional `server.close()`
-  - Removing the Unix socket file to prevent stale `.sock` files on restart
+  - Leaving the Unix socket file to the framework, which removes it on close and replaces a stale one at startup
   - Cleaning up the PID file on shutdown
   - Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations
   - Providers initialize in the constructor — there is no `onInit` / `onDestroy`
@@ -21,9 +21,9 @@ features:
 
 # Daemon Graceful Shutdown with Socket Cleanup
 
-Shows how to layer daemon-specific cleanup (socket file, PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler.
+Shows how to layer daemon-specific cleanup (PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler, leaving the socket file to the framework.
 
-> The FrontMCP framework already installs `SIGTERM` / `SIGINT` handlers that call `scope.shutdown()` and `mcpServer.close()` (see `libs/sdk/src/front-mcp/front-mcp.ts`). **Do not install your own** competing shutdown handler — only register _additional_ cleanup hooks (e.g. for socket / PID files) that run before the framework exits.
+> The FrontMCP framework already installs `SIGTERM` / `SIGINT` handlers that shut down and dispose every scope (so `scope.onDispose()` callbacks run) and close the server (see `libs/sdk/src/front-mcp/front-mcp.ts`). Closing the server removes its socket file, and the next start replaces a stale one, so do not unlink the socket yourself: a signal listener runs while requests are still draining. **Do not install your own** competing shutdown handler — only register _additional_ cleanup hooks (e.g. for a PID file) that run before the framework exits.
 >
 > `FrontMcpServerInstance` exposes `dispose()` only — there is **no** `server.close()` method.
 
@@ -39,14 +39,9 @@ import { fileExists, unlink } from '@frontmcp/utils';
  * the framework owns that.
  */
 export function setupDaemonSideEffectCleanup(): void {
-  const socketPath = '/tmp/my-daemon.sock';
   const pidFile = `${process.env.HOME}/.config/my-daemon/daemon.pid`;
 
   const cleanup = async () => {
-    if (await fileExists(socketPath)) {
-      await unlink(socketPath);
-      console.log(`[daemon] Socket removed: ${socketPath}`);
-    }
     if (await fileExists(pidFile)) {
       await unlink(pidFile);
       console.log(`[daemon] PID file removed: ${pidFile}`);
@@ -104,7 +99,7 @@ export const sqliteStoreProvider = AsyncProvider({
 
 - The framework already wires SIGTERM/SIGINT — daemon cleanup attaches _additional_ listeners and does not call `process.exit()`
 - Using `server.dispose()` (the only real method) instead of fictional `server.close()`
-- Removing the Unix socket file to prevent stale `.sock` files on restart
+- Leaving the Unix socket file to the framework, which removes it on close and replaces a stale one at startup
 - Cleaning up the PID file on shutdown
 - Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations
 - Providers initialize in the constructor — there is no `onInit` / `onDestroy`
