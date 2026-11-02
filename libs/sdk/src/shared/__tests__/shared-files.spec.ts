@@ -2,8 +2,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { UnsafeSharedServerDirectoryError } from '../../errors';
+import { InvalidSharedServerOptionsError, UnsafeSharedServerDirectoryError } from '../../errors';
 import {
+  assertSocketPathFits,
   prepareSharedDirectory,
   readServerRecord,
   removeServerRecord,
@@ -42,6 +43,16 @@ posixOnly('shared server files', () => {
       socketPath: path.join(directory, 'server.sock'),
       lockFile: path.join(directory, 'start-lock.sqlite'),
     });
+  });
+
+  it('refuses a socket path longer than a socket address holds', () => {
+    expect(() => assertSocketPathFits(sharedServerFiles('notes'))).not.toThrow();
+    process.env['FRONTMCP_HOME'] = path.join(home, 'h'.repeat(40));
+    const long = sharedServerFiles('k'.repeat(64));
+    expect(() => assertSocketPathFits(long)).toThrow(InvalidSharedServerOptionsError);
+    expect(() => assertSocketPathFits(long)).toThrow(
+      `transport: the socket path ${long.socketPath} is longer than 103 bytes; use a shorter key or FRONTMCP_HOME, or transport 'http'`,
+    );
   });
 
   it('creates the folder owner-only', async () => {

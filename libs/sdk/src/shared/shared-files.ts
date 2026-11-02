@@ -5,12 +5,14 @@ import * as path from 'node:path';
 import { z } from '@frontmcp/lazy-zod';
 import { getEnv, lstat, mkdir, readFile, realpath, rename, unlink, writeFile } from '@frontmcp/utils';
 
-import { UnsafeSharedServerDirectoryError } from '../errors/shared-server.errors';
+import { InvalidSharedServerOptionsError, UnsafeSharedServerDirectoryError } from '../errors/shared-server.errors';
 import { findReplaceableDirectory } from '../server/security/unix-socket-guard';
 
 const OWNER_ONLY_DIRECTORY = 0o700;
 const OWNER_ONLY_FILE = 0o600;
 const GROUP_OR_OTHER_ACCESS = 0o077;
+// A socket address holds 104 bytes on macOS (108 on Linux), the terminating NUL included.
+const MAX_SOCKET_PATH_BYTES = 103;
 
 /** Where a shared server of one key keeps its files, in a folder of its own under `~/.frontmcp/shared`. */
 export interface SharedServerFiles {
@@ -57,6 +59,15 @@ export function sharedServerFiles(key: string): SharedServerFiles {
     socketPath: path.join(directory, 'server.sock'),
     lockFile: path.join(directory, 'start-lock.sqlite'),
   };
+}
+
+/** Refuse a socket path the platform can't listen on, which would otherwise fail with a bare `EINVAL`. */
+export function assertSocketPathFits(files: SharedServerFiles): void {
+  if (new TextEncoder().encode(files.socketPath).length <= MAX_SOCKET_PATH_BYTES) return;
+  throw new InvalidSharedServerOptionsError(
+    `transport: the socket path ${files.socketPath} is longer than ${MAX_SOCKET_PATH_BYTES} bytes; ` +
+      "use a shorter key or FRONTMCP_HOME, or transport 'http'",
+  );
 }
 
 /** Create the key's folder owner-only, and refuse one that another user could replace, or one above it. */

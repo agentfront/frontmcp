@@ -73,6 +73,8 @@ Starting the server takes the start lock in a SQLite file, so install `@frontmcp
 `runShared() options are invalid: key: key must be 1 to 64 letters, digits, ".", "_" or "-", starting with a letter or digit`,
 `runShared() options are invalid: transport: transport must be 'unix' or 'http'`, or, on Windows,
 `runShared() options are invalid: transport: a Unix socket can't be kept owner-only on Windows; use transport 'http'`.
+With the Unix socket, a socket path longer than a socket address holds (103 bytes) is refused the same way:
+`runShared() options are invalid: transport: the socket path <path> is longer than 103 bytes; use a shorter key or FRONTMCP_HOME, or transport 'http'`.
 
 ## How it works
 

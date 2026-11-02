@@ -17,6 +17,7 @@ import { deriveAllowedHosts } from '../server/security/resolve-allowed-hosts';
 import SharedIdentifyFlow from './flows/shared.identify.flow';
 import { httpEndpoint, unixEndpoint } from './shared-endpoint';
 import {
+  assertSocketPathFits,
   prepareSharedDirectory,
   removeServerRecord,
   sharedServerFiles,
@@ -85,6 +86,7 @@ export async function serveShared(
   create: (config: FrontMcpConfigType) => SharedServerInstance,
 ): Promise<SharedServerHandle> {
   const files = sharedServerFiles(options.key);
+  if (options.transport === 'unix') assertSocketPathFits(files);
   await prepareSharedDirectory(files);
   const secret = createSharedServerSecret();
   const { proofKey, token } = deriveSharedServerKeys(secret);
@@ -114,17 +116,17 @@ export async function serveShared(
   await scope.registryFlows(SharedIdentifyFlow);
   try {
     await instance.start();
+    await writeServerRecord(files, {
+      transport: options.transport,
+      ...(port === undefined ? {} : { port }),
+      path: scope.fullPath || '/',
+      pid: process.pid,
+      secret,
+    });
   } catch (error) {
     await instance.shutdown().catch(() => undefined);
     throw error;
   }
-  await writeServerRecord(files, {
-    transport: options.transport,
-    ...(port === undefined ? {} : { port }),
-    path: scope.fullPath || '/',
-    pid: process.pid,
-    secret,
-  });
   return {
     close: async () => {
       await removeServerRecord(files, process.pid);

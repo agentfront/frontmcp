@@ -14,7 +14,7 @@ import {
   type AttachedSharedServer,
   type SpawnedServer,
 } from './ensure-shared-server';
-import { prepareSharedDirectory, sharedServerFiles } from './shared-files';
+import { assertSocketPathFits, prepareSharedDirectory, sharedServerFiles } from './shared-files';
 import type { ResolvedSharedServerOptions } from './shared-server.options';
 import { openStartLockStorage, SharedStartLock } from './start-lock';
 
@@ -54,6 +54,7 @@ function stderrLogger(): BridgeLogger {
 
 async function connect(options: AttachSharedSessionOptions, logger: BridgeLogger): Promise<AttachedSharedServer> {
   const files = sharedServerFiles(options.key);
+  if (options.transport === 'unix') assertSocketPathFits(files);
   await prepareSharedDirectory(files);
   return ensureSharedServer({
     key: options.key,
