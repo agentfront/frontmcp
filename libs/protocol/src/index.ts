@@ -26,7 +26,7 @@ export * from './stdio';
 export * from './in-memory';
 
 // Server (browser/node conditional via #imports)
-export { Server as McpServer, type ServerOptions as McpServerOptions } from '#mcp-server';
+export { Server as McpServer, type ServerOptions as McpServerOptions, AjvJsonSchemaValidator } from '#mcp-server';
 export {
   StreamableHTTPServerTransport,
   WebStandardStreamableHTTPServerTransport,

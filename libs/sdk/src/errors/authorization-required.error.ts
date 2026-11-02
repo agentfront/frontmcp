@@ -11,7 +11,7 @@
  *
  * Supports MCP elicit flow for clients that support it.
  */
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { PublicMcpError } from './mcp.error';
 

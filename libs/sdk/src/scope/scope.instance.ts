@@ -60,12 +60,14 @@ import { normalizeJob } from '../job/job.utils';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
+import { describeBudgetOverruns } from '../manifest/instructions-budget.check';
 import { NotificationService } from '../notification';
 import { OffloadService } from '../offload/offload.service';
 import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
 import PromptRegistry from '../prompt/prompt.registry';
 import ProviderRegistry from '../provider/provider.registry';
+import { MaterializedResources } from '../resource/materialized/materialized-resources';
 import ResourceRegistry from '../resource/resource.registry';
 import type { HttpRouteRegistrar, RegisteredHttpRoute } from '../server/custom-routes.helper';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
@@ -324,6 +326,7 @@ export class Scope extends ScopeEntry {
     }
     if (httpServing) {
       this.transportService = new httpServing.TransportService(this, effectivePersistence, transportBus);
+      httpServing.loadStreamableHttpTransportOnStart(this);
     }
     warnIfRequestStateKeyNotShared({ logger: this.logger, metadata: this.metadata });
     warnIfSessionModeIgnored({ logger: this.logger, transport: transportConfig, session: this.metadata.session });
@@ -931,6 +934,10 @@ export class Scope extends ScopeEntry {
     this.liveSurface = liveSurface;
     this.onDispose(() => liveSurface.stop());
 
+    const materializedResources = new MaterializedResources(this);
+    await materializedResources.start();
+    this.onDispose(() => materializedResources.stop());
+
     // Install the task runner now that the notification service is available.
     // The runner needs it to deliver `notifications/tasks/status` events.
     installTaskRunner?.();
@@ -1053,6 +1060,8 @@ export class Scope extends ScopeEntry {
       this._healthService.autoDiscoverProbes(this);
       this.logger.verbose(`HealthService initialized (${this._healthService.getProbeCount()} probe(s))`);
     }
+
+    for (const message of await describeBudgetOverruns(this)) this.logger.warn(message);
 
     mark('batch3:finalization');
     this.logger.info(`Scope ready — ${this.formatScopeSummary()}`);

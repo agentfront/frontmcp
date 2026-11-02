@@ -43,8 +43,11 @@ const fixtureFiles = [
   'hook-ordering-must-compile.ts',
   'hook-ordering-must-fail.ts',
   'live-surface-must-compile.ts',
+  'materialized-resources-must-compile.ts',
+  'duties-must-compile.ts',
   'offload-must-compile.ts',
   'durable-jobs-must-compile.ts',
+  'build-manifest-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -205,12 +208,24 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('live-surface-must-compile.ts'))).toEqual([]);
   });
 
+  it('types resourceStore(), its keys and snapshots, @Resource({ from }) and MaterializedResourceContext', () => {
+    expect(describeEach(inFixtureFile('materialized-resources-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types @Duty, its metadata and run context, and createContainer({ runDuties, info })', () => {
+    expect(describeEach(inFixtureFile('duties-must-compile.ts'))).toEqual([]);
+  });
+
   it('types this.offload() from the offloaded function, @Resource({ worker }) and the offload option', () => {
     expect(describeEach(inFixtureFile('offload-must-compile.ts'))).toEqual([]);
   });
 
   it('types @Job({ cleanup }), jobs.store.sqlite, jobs.defaultTimeoutMs, jobs.admission, CancelJobTool, the run states and a store without cancel requests', () => {
     expect(describeEach(inFixtureFile('durable-jobs-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types instructionsBudget, buildManifest(), lintServerManifest() and the manifest schema', () => {
+    expect(describeEach(inFixtureFile('build-manifest-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

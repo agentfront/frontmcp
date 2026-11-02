@@ -22,3 +22,4 @@ export * from './lifecycle';
 export * from './clients';
 export * from './offload';
 export * from './devtools';
+export * from './instructions-budget';

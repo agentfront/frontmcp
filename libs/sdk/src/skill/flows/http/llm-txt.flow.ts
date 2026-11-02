@@ -5,7 +5,7 @@
  * Returns compact skill summaries in plain text format.
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import {
   enforceGlobalRateLimit,

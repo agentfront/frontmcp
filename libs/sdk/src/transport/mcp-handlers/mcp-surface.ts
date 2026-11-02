@@ -4,7 +4,8 @@ import { type CallSurface } from '../../common/availability';
  * The surface an MCP request arrives on, for `availableWhen.surface`.
  *
  * `'cli'` for the in-process client of a CLI build: its scope is created by
- * `FrontMcpInstance.createForCli`, which only the generated CLI (and its schema extractor) uses.
+ * `FrontMcpInstance.createForCli`, which only the generated CLI uses, or by `createForManifest`, which its schema
+ * extractor and `buildManifest()` use.
  * `'mcp'` for every other MCP client: a transport (HTTP, SSE, stdio, a CLI daemon's socket), the
  * 2026-07-28 dispatcher, or `connect()`.
  */

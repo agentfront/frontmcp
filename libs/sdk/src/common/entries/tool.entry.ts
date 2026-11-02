@@ -1,6 +1,6 @@
 // file: libs/sdk/src/common/entries/tool.entry.ts
 
-import { toJSONSchema, z } from '@frontmcp/lazy-zod';
+import { toJSONSchema, internalZ as z } from '@frontmcp/lazy-zod';
 import {
   type AuthInfo,
   type CallToolRequest,

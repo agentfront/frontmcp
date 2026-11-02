@@ -5,7 +5,7 @@
  * Provides JSON API for listing, searching, and loading skills.
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import {
   enforceGlobalRateLimit,

@@ -1726,7 +1726,8 @@ export default class SkillRegistry
     return [...this.localRows, ...this.dynamicRows, ...[...this.adopted.values()].flat()];
   }
 
-  private listAllInstances(): readonly SkillEntry[] {
+  /** List all instances (locals, dynamic and adopted), whether hidden or available or not. */
+  listAllInstances(): readonly SkillEntry[] {
     return this.listAllIndexed().map((r) => r.instance);
   }
 

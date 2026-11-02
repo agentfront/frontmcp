@@ -294,6 +294,10 @@ export {
   createStorage,
   createMemoryStorage,
   getDetectedStorageType,
+  // Change feed
+  createChangeFeed,
+  DEFAULT_CHANGE_FEED_COALESCE_MS,
+  DEFAULT_CHANGE_FEED_POLL_INTERVAL_MS,
   // Namespace
   NamespacedStorageImpl,
   createRootStorage,
@@ -375,6 +379,9 @@ export type {
   RedisUrlSiblingFields,
   CreateRedisClientOptions,
   ErrorEmitterClient,
+  ChangeFeed,
+  ChangeFeedKind,
+  ChangeFeedOptions,
 } from './storage';
 
 // LLM platform tool call processing (cross-platform: Node.js and browser)

@@ -1,5 +1,5 @@
 import { type Token } from '@frontmcp/di';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { type ScopeEntry } from '../entries';
 import { type HttpMethod, type ServerRequest } from '../interfaces';

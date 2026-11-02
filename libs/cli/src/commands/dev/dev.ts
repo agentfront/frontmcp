@@ -12,7 +12,7 @@ import { c } from '../../core/colors';
 import { loadDevEnv } from '../../shared/env';
 import { resolveEntry } from '../../shared/fs';
 import { projectToolCommand, spawnTool, type ToolCommand } from '../../shared/tool-command';
-import { startEventsFile } from './dev-events-file';
+import { startEventsFile, turnDevEventsOff } from './dev-events-file';
 import { findNextFreePort, isPortFree, lookupPortOwner } from './port';
 
 const DEFAULT_DEV_PORT = 3000;
@@ -264,8 +264,11 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
     console.log(`${c('gray', '[dev]')} MCP endpoint path: ${configHttpPath}`);
   }
   if (eventsFile) {
-    await startEventsFile(eventsFile);
-    console.log(`${c('gray', '[dev]')} events: ${path.relative(cwd, eventsFile)}`);
+    if (await startEventsFile(eventsFile, (message) => console.warn(`${c('yellow', '[dev]')} ${message}`))) {
+      console.log(`${c('gray', '[dev]')} events: ${path.relative(cwd, eventsFile)}`);
+    } else {
+      turnDevEventsOff(childEnv);
+    }
   }
   console.log(
     `${c('gray', '[dev]')} starting ${c('bold', 'tsx --watch')} and ${c(

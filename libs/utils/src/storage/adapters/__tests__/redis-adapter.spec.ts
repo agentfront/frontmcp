@@ -921,6 +921,36 @@ describe('RedisStorageAdapter', () => {
         await adapter.disconnect();
       });
 
+      it('tells reconnect listeners when the subscriber connection is ready again, not when it first connects', async () => {
+        const adapter = new RedisStorageAdapter({ url: 'redis://localhost:6379' });
+        await adapter.connect();
+        const subscriberEvents = new Map<string, Array<() => void>>();
+        const mockSubscriber = {
+          ...createMockRedisClient(),
+          on: jest.fn((event: string, listener: () => void) => {
+            subscriberEvents.set(event, [...(subscriberEvents.get(event) ?? []), listener]);
+          }),
+          subscribe: jest.fn().mockResolvedValue(1),
+          quit: jest.fn().mockResolvedValue('OK'),
+        };
+        MockRedisClass.mockImplementationOnce(() => mockSubscriber);
+        const emitReady = () => subscriberEvents.get('ready')?.forEach((listener) => listener());
+        const reconnected = jest.fn();
+        const stop = adapter.onPubSubReconnect(reconnected);
+
+        await adapter.subscribe('channel', jest.fn());
+        emitReady();
+        expect(reconnected).not.toHaveBeenCalled();
+
+        emitReady();
+        expect(reconnected).toHaveBeenCalledTimes(1);
+
+        stop();
+        emitReady();
+        expect(reconnected).toHaveBeenCalledTimes(1);
+        await adapter.disconnect();
+      });
+
       it('should clean up subscriber on disconnect', async () => {
         const adapter = new RedisStorageAdapter({ url: 'redis://localhost:6379' });
         await adapter.connect();

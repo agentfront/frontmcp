@@ -1,6 +1,7 @@
 import type { infer as zInfer, ZodTypeAny } from 'zod';
 
 import { CHAIN_METHODS } from './factories';
+import { withRecursionWalk } from './memoizer';
 
 /**
  * Branded symbol that identifies lazy schemas at runtime.
@@ -24,8 +25,10 @@ const HOT_PATH_METHODS = new Set(['parse', 'safeParse', 'parseAsync', 'safeParse
  */
 export class LazyZodSchema {
   private _resolved: ZodTypeAny | undefined;
+  private _materialize: (() => ZodTypeAny) | undefined;
 
-  constructor(private readonly _materialize: () => ZodTypeAny) {
+  constructor(materialize: () => ZodTypeAny) {
+    this._materialize = materialize;
     Object.defineProperty(this, LAZY_BRAND, {
       value: true,
       enumerable: false,
@@ -34,14 +37,33 @@ export class LazyZodSchema {
     });
   }
 
-  /** Materialize (and memoize) the underlying real zod schema. */
+  /** Materialize (and memoize) the underlying real zod schema, then drop the factory and what it captured. */
   materialize(): ZodTypeAny {
-    return this._resolved ?? (this._resolved = this._materialize());
+    const factory = this._materialize;
+    if (factory) {
+      this._resolved = this.build(factory);
+      this._materialize = undefined;
+    }
+    return this._resolved as ZodTypeAny;
+  }
+
+  protected build(factory: () => ZodTypeAny): ZodTypeAny {
+    return withRecursionWalk(factory);
   }
 
   /** True once the underlying schema has been constructed. */
   get isMaterialized(): boolean {
     return this._resolved !== undefined;
+  }
+
+  /** The stand-in for `materialize()[method](...args)`. */
+  chain(method: string, args: unknown[]): unknown {
+    return wrapLazy(
+      new LazyZodSchema(() => {
+        const real = this.materialize() as unknown as Record<string, (...a: unknown[]) => ZodTypeAny>;
+        return real[method](...args);
+      }),
+    );
   }
 }
 
@@ -58,85 +80,80 @@ export class LazyZodSchema {
  *  - `getPrototypeOf` forwards to the materialized schema so `instanceof`
  *    works (materializes on first check).
  */
+const lazyHandler: ProxyHandler<LazyZodSchema> = {
+  get(target, key, _receiver) {
+    // Brand check — zero cost, avoids materializing during `isLazy`
+    if (key === LAZY_BRAND) return true;
+    // Escape hatch — return the underlying LazyZodSchema instance
+    if (key === LAZY_TARGET) return target;
+
+    // Own-prop fast path — self-patched hot-path methods land here on
+    // every call after the first. No function-creation, no materialize.
+    if (typeof key !== 'symbol' && Object.prototype.hasOwnProperty.call(target, key)) {
+      return (target as unknown as Record<string, unknown>)[key as string];
+    }
+
+    // Hot path — materialize, bind, self-patch, call.
+    // Forward ALL arguments (zod's `parse` / `safeParse` accept optional
+    // params objects like error maps); taking only `data` would drop them
+    // on the cold path and make cold/warm calls behave differently.
+    if (typeof key === 'string' && HOT_PATH_METHODS.has(key)) {
+      return (...args: unknown[]) => {
+        const real = target.materialize();
+        const bound = (real as unknown as Record<string, (...a: unknown[]) => unknown>)[key].bind(real);
+        Object.defineProperty(target, key, {
+          value: bound,
+          writable: true,
+          configurable: true,
+          enumerable: false,
+        });
+        return bound(...args);
+      };
+    }
+
+    // Chainable — capture into a new lazy
+    if (typeof key === 'string' && CHAIN_METHODS.has(key)) {
+      return (...args: unknown[]) => target.chain(key, args);
+    }
+
+    // Anything else — materialize and forward. Bind methods so callers
+    // using `schema.method(...)` get the right `this`, but NOT constructors
+    // or classes (binding turns them into "bound X" which breaks
+    // `.constructor.name` identity checks downstream). `key === 'constructor'`
+    // is the common case we have to protect; a broader heuristic covers
+    // any function whose `prototype` has own properties (i.e. a class).
+    const real = target.materialize() as unknown as Record<PropertyKey, unknown>;
+    const val = real[key as PropertyKey];
+    if (typeof val === 'function') {
+      if (key === 'constructor') return val;
+      const maybeCtor = val as { prototype?: object };
+      if (
+        typeof maybeCtor.prototype === 'object' &&
+        maybeCtor.prototype !== null &&
+        Object.getOwnPropertyNames(maybeCtor.prototype).length > 1
+      ) {
+        return val;
+      }
+      return (val as (...a: unknown[]) => unknown).bind(real);
+    }
+    return val;
+  },
+
+  has(target, key) {
+    if (key === LAZY_BRAND) return true;
+    if (typeof key === 'string' && (HOT_PATH_METHODS.has(key) || CHAIN_METHODS.has(key))) {
+      return true;
+    }
+    return Reflect.has(target.materialize(), key);
+  },
+
+  getPrototypeOf(target) {
+    return Object.getPrototypeOf(target.materialize());
+  },
+};
+
 export function wrapLazy(schema: LazyZodSchema): unknown {
-  const proxy: unknown = new Proxy(schema, {
-    get(target, key, _receiver) {
-      // Brand check — zero cost, avoids materializing during `isLazy`
-      if (key === LAZY_BRAND) return true;
-      // Escape hatch — return the underlying LazyZodSchema instance
-      if (key === LAZY_TARGET) return target;
-
-      // Own-prop fast path — self-patched hot-path methods land here on
-      // every call after the first. No function-creation, no materialize.
-      if (typeof key !== 'symbol' && Object.prototype.hasOwnProperty.call(target, key)) {
-        return (target as unknown as Record<string, unknown>)[key as string];
-      }
-
-      // Hot path — materialize, bind, self-patch, call.
-      // Forward ALL arguments (zod's `parse` / `safeParse` accept optional
-      // params objects like error maps); taking only `data` would drop them
-      // on the cold path and make cold/warm calls behave differently.
-      if (typeof key === 'string' && HOT_PATH_METHODS.has(key)) {
-        return (...args: unknown[]) => {
-          const real = target.materialize();
-          const bound = (real as unknown as Record<string, (...a: unknown[]) => unknown>)[key].bind(real);
-          Object.defineProperty(target, key, {
-            value: bound,
-            writable: true,
-            configurable: true,
-            enumerable: false,
-          });
-          return bound(...args);
-        };
-      }
-
-      // Chainable — capture into a new lazy
-      if (typeof key === 'string' && CHAIN_METHODS.has(key)) {
-        return (...args: unknown[]) =>
-          wrapLazy(
-            new LazyZodSchema(() => {
-              const real = target.materialize() as unknown as Record<string, (...a: unknown[]) => ZodTypeAny>;
-              return real[key](...args);
-            }),
-          );
-      }
-
-      // Anything else — materialize and forward. Bind methods so callers
-      // using `schema.method(...)` get the right `this`, but NOT constructors
-      // or classes (binding turns them into "bound X" which breaks
-      // `.constructor.name` identity checks downstream). `key === 'constructor'`
-      // is the common case we have to protect; a broader heuristic covers
-      // any function whose `prototype` has own properties (i.e. a class).
-      const real = target.materialize() as unknown as Record<PropertyKey, unknown>;
-      const val = real[key as PropertyKey];
-      if (typeof val === 'function') {
-        if (key === 'constructor') return val;
-        const maybeCtor = val as { prototype?: object };
-        if (
-          typeof maybeCtor.prototype === 'object' &&
-          maybeCtor.prototype !== null &&
-          Object.getOwnPropertyNames(maybeCtor.prototype).length > 1
-        ) {
-          return val;
-        }
-        return (val as (...a: unknown[]) => unknown).bind(real);
-      }
-      return val;
-    },
-
-    has(target, key) {
-      if (key === LAZY_BRAND) return true;
-      if (typeof key === 'string' && (HOT_PATH_METHODS.has(key) || CHAIN_METHODS.has(key))) {
-        return true;
-      }
-      return Reflect.has(target.materialize(), key);
-    },
-
-    getPrototypeOf(target) {
-      return Object.getPrototypeOf(target.materialize());
-    },
-  });
-  return proxy;
+  return new Proxy(schema, lazyHandler);
 }
 
 /**

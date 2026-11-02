@@ -8,6 +8,7 @@
  *     server/
  *       index.js          (esbuild bundle, renamed from {name}.bundle.js)
  *       package.json      (minimal CJS manifest so Node resolves index.js)
+ *       frontmcp.manifest.json (the server manifest, written by buildMcpb unless --no-manifest)
  *       _skills/          (optional — when the server ships skills)
  *     bin/                (optional — when SEA is enabled; bin/{os}/launch picks the architecture)
  *       {platform}/{name}[.exe]

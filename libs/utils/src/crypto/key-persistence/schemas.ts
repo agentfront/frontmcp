@@ -4,7 +4,7 @@
  * @module @frontmcp/utils/key-persistence
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { AnyKeyData, AsymmetricKeyData, SecretKeyData } from './types';
 

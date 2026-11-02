@@ -68,7 +68,8 @@ function sanitizeForFs(name: string | undefined): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/^[-.]+/, '');
 }
 
-function findProjectRoot(start: string): string | undefined {
+/** The nearest directory above `start`, itself included, that holds a package.json. */
+export function findProjectRoot(start: string): string | undefined {
   let dir = start;
   // Cap the walk at 32 levels to bound worst-case (sandbox / symlink loops).
   // `@frontmcp/utils.readFileSync` is the sync FS escape hatch per the

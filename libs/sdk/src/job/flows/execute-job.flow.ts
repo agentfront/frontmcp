@@ -1,6 +1,6 @@
 // file: libs/sdk/src/job/flows/execute-job.flow.ts
 import type { AuthoritiesContextBuilder } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import {
   Flow,

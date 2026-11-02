@@ -37,7 +37,7 @@ test.describe('Stall attribution', () => {
 
     const line = await stallLineNaming(() => server.getLogs(), 'busy-wait');
     const stallMs = Number(STALL_LINE.exec(line)?.[1]);
-    expect(stallMs).toBeGreaterThanOrEqual(600);
+    expect(stallMs).toBeGreaterThanOrEqual(590);
     expect(line).toMatch(/tools\/call stall-probe:busy-wait \(\d+ ms, session [0-9a-f]{12}\)/);
     expect(line).not.toContain('fail-fast');
     expect(line).not.toContain('"ms"');

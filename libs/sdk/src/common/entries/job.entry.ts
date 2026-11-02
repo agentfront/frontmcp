@@ -1,4 +1,4 @@
-import { toJSONSchema, z } from '@frontmcp/lazy-zod';
+import { toJSONSchema, internalZ as z } from '@frontmcp/lazy-zod';
 
 import type ProviderRegistry from '../../provider/provider.registry';
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
