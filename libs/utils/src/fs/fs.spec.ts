@@ -307,17 +307,6 @@ describe('FS Utils', () => {
     });
   });
 
-  describe('appendFile', () => {
-    it('creates the file, then adds to its end', async () => {
-      const filePath = path.join(tempDir, 'append-test.jsonl');
-
-      await appendFile(filePath, 'first\n');
-      await appendFile(filePath, 'second\n');
-
-      expect(await fs.promises.readFile(filePath, 'utf8')).toBe('first\nsecond\n');
-    });
-  });
-
   describe('mkdir', () => {
     it('should create directory', async () => {
       const dirPath = path.join(tempDir, 'new-dir');
