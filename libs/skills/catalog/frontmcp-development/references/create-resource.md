@@ -41,6 +41,7 @@ The `@Resource` decorator accepts:
 - `description` (optional) -- human-readable description
 - `mimeType` (optional) -- MIME type of the resource content
 - `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
+- `enabled` (optional) -- `true`/`false`, or an `EnabledSource` such as `fileSignal('./features.json', 'reports')` that turns the resource on and off while sessions are live. Off: left out of `resources/list`, and `resources/read` and `resources/subscribe` answer `FEATURE_OFF` (403, `data.status` and the source's `data.remedy`); a change sends `notifications/resources/list_changed`. See [`enabled`](../../create-tool/references/availability.md#enabled--turned-on-and-off-while-sessions-are-live).
 
 ### Class-Based Pattern
 
@@ -151,6 +152,7 @@ The `@ResourceTemplate` decorator accepts:
 - `description` (optional) -- human-readable description
 - `mimeType` (optional) -- MIME type of the resource content
 - `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
+- `enabled` (optional) -- as on `@Resource`: a template that is off is left out of `resources/templates/list`, a read of any URI it matches answers `FEATURE_OFF`, and its completers complete nothing
 
 When a template returns a plain value (an object, a string, or an array of items), each content item's `uri` is based on the URI that was read: `users://42/profile`, or `users://42/profile#0`, `#1` for array items without their own `uri`.
 

@@ -368,6 +368,67 @@ export class EntryUnavailableError extends PublicMcpError {
   }
 }
 
+/**
+ * A tool, resource, resource template or prompt whose `enabled` is off: answered to `tools/call`, `resources/read`
+ * and `prompts/get`, with the remedy of its `EnabledSource` (or one naming the entry).
+ */
+export class FeatureOffError extends PublicMcpError {
+  readonly mcpErrorCode = MCP_ERROR_CODES.FORBIDDEN;
+
+  constructor(
+    readonly entryType: string,
+    readonly entryName: string,
+    remedy?: ErrorRemedy,
+  ) {
+    super(
+      `${entryType} "${entryName}" is turned off`,
+      'FEATURE_OFF',
+      403,
+      undefined,
+      remedy ?? { say: `Ask the server's operator to turn on ${entryType.toLowerCase()} "${entryName}".` },
+    );
+  }
+
+  toJsonRpcError() {
+    return {
+      code: this.mcpErrorCode,
+      message: this.getPublicMessage(),
+      data: { code: this.code, status: this.statusCode, entryType: this.entryType, entry: this.entryName },
+    };
+  }
+}
+
+/**
+ * A call to a tool that is not in the session's current tool list, from a session that last listed an older one.
+ * The session is sent `notifications/tools/list_changed` along with it.
+ */
+export class StaleToolListError extends PublicMcpError {
+  constructor(readonly toolName: string) {
+    super(
+      `Tool "${toolName}" is not in the current tool list; this session's tool list is out of date`,
+      'STALE_TOOL_LIST',
+      409,
+      undefined,
+      { say: 'Call tools/list again, then call a tool from the new list.' },
+    );
+  }
+
+  toJsonRpcError() {
+    return {
+      code: MCP_ERROR_CODES.INVALID_PARAMS,
+      message: this.getPublicMessage(),
+      data: { code: this.code, status: this.statusCode, tool: this.toolName },
+    };
+  }
+}
+
+/** A `fileSignal()` called with a path, key or option it cannot use; thrown where the entry is declared. */
+export class InvalidFileSignalError extends InternalMcpError {
+  constructor(details: string) {
+    super(`fileSignal(): ${details}`, 'INVALID_FILE_SIGNAL');
+  }
+}
+
 /** The environment that offers an entry: each missing axis set to a value its `availableWhen` allows, if any does. */
 function availabilityRemedy(entryType: string, availability: unknown, missingAxes: string[]): ErrorRemedy | undefined {
   const requirements = missingAxes.map((axis) => {

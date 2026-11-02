@@ -914,6 +914,39 @@ class CustomFlagServer {}
 - `unleash` -- Unleash integration. Requires `unleash-client` package.
 - `custom` -- Provide your own adapter instance (`adapterInstance`, required) implementing the `FeatureFlagAdapter` interface. Its optional `initialize()` runs before the server serves and `destroy()` when the server is disposed, as for the built-in adapters (up to 1.9.1 neither was called).
 
+### A flag flip updates connected clients
+
+An adapter that reports changes, through the optional `subscribe(listener): () => void` of `FeatureFlagAdapter`,
+makes a flag flip send `notifications/tools/list_changed` (and the resources and prompts ones, for the lists that
+hold an entry with a `featureFlag`) to every connected session, one per list per 100 ms. Split.io (`SDK_UPDATE`),
+LaunchDarkly (`update`) and Unleash (`changed`) report their SDK's change events; `static` flags never change; a
+`custom` adapter reports changes when it implements `subscribe`. The lists already follow the flag on every request.
+
+Each flag is an `EnabledSource` (`FeatureFlagSource`): the gates ask it, with the same fallback as above. Use one as
+an entry's `enabled` with `featureFlagSource(adapter, ref, options?)` and give the plugin the same adapter. However
+many entries use an adapter's flags, its SDK client gets one change listener for them. Such an
+entry is filtered and refused by the SDK itself: `FEATURE_OFF` with the remedy `Turn on the feature flag "beta".`
+(where `featureFlag` answers `FEATURE_FLAG_DISABLED`), and a call from a session whose tool list changed since it
+listed answers `STALE_TOOL_LIST` (see `create-tool` → `availability.md`).
+
+```typescript
+import FeatureFlagPlugin, { featureFlagSource, UnleashFeatureFlagAdapter } from '@frontmcp/plugin-feature-flags';
+
+const flags = new UnleashFeatureFlagAdapter({ url: 'https://unleash.example.com/api', appName: 'my-mcp-server' });
+
+@Tool({ name: 'beta_report', inputSchema: {}, enabled: featureFlagSource(flags, 'beta-reports') })
+class BetaReportTool extends ToolContext {
+  /* ... */
+}
+
+@App({
+  name: 'reports',
+  tools: [BetaReportTool],
+  plugins: [FeatureFlagPlugin.init({ adapter: 'custom', adapterInstance: flags })],
+})
+class ReportsApp {}
+```
+
 ### Using `this.featureFlags` in Tools
 
 ```typescript

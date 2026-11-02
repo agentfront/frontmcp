@@ -35,6 +35,7 @@ import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
+import { assertEntryEnabled } from '../../surface';
 import { isUIResourceUri } from '../../tool/ui/ui-shared';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
@@ -73,7 +74,14 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'ensureRemoteCapabilities', 'findResource', 'checkEntryAuthorities', 'createResourceContext'],
+  pre: [
+    'parseInput',
+    'ensureRemoteCapabilities',
+    'findResource',
+    'checkEnabled',
+    'checkEntryAuthorities',
+    'createResourceContext',
+  ],
   execute: ['execute', 'validateOutput'],
   // After 'finalize' answers: hooks on 'fitAnswer' read and replace `state.output`
   finalize: ['finalize', 'fitAnswer'],
@@ -299,6 +307,16 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       `findResource: resource "${match.instance.name}" found (template: ${match.instance.isTemplate})`,
     );
     this.logger.verbose('findResource:done');
+  }
+
+  /** A resource or template whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */
+  @Stage('checkEnabled')
+  async checkEnabled() {
+    const { resource } = this.state;
+    if (!resource) return;
+    const entryType = resource.isTemplate ? 'ResourceTemplate' : 'Resource';
+    const { uri } = this.state.required.input;
+    await assertEntryEnabled(entryType, uri, resource.metadata.enabled, this.tryGetContext(), this.logger);
   }
 
   /**

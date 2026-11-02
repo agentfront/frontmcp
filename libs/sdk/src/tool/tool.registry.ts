@@ -534,6 +534,11 @@ export default class ToolRegistry extends RegistryAbstract<
     return this.emitter.on((e) => cb({ ...e, snapshot: this.listAllInstances().filter(filter) }));
   }
 
+  /** Tell listeners the listed tools changed though none was added or removed, as when an `enabled` source flips. */
+  notifyListChanged(): void {
+    this.bump('reset');
+  }
+
   private bump(kind: ToolChangeEvent['kind']) {
     const version = ++this.version;
     this.emitter.emit({ kind, changeScope: 'global', version, snapshot: this.listAllInstances() });

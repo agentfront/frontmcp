@@ -73,6 +73,7 @@ The `@Prompt` decorator accepts:
 - `description` (optional) -- human-readable description
 - `arguments` (optional) -- array of `PromptArgument` objects
 - `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
+- `enabled` (optional) -- `true`/`false`, or an `EnabledSource` such as `fileSignal('./features.json', 'triage')` that turns the prompt on and off while sessions are live. Off: left out of `prompts/list`, its completers complete nothing, and `prompts/get` answers `FEATURE_OFF` (403, `data.status` and the source's `data.remedy`); a change sends `notifications/prompts/list_changed`. See [`enabled`](../../create-tool/references/availability.md#enabled--turned-on-and-off-while-sessions-are-live).
 
 ### PromptArgument Structure
 

@@ -25,6 +25,7 @@ export const FrontMcpToolTokens = {
   concurrency: tokenFactory.meta('concurrency'), // Concurrency control configuration
   timeout: tokenFactory.meta('timeout'), // Timeout configuration
   availableWhen: tokenFactory.meta('availableWhen'), // Environment availability constraint
+  enabled: tokenFactory.meta('enabled'),
   execution: tokenFactory.meta('execution'), // Execution hints (taskSupport, etc.)
   output: tokenFactory.meta('output'), // Output policy (allowNonFinite, schemaMode, ...)
 } as const satisfies RawMetadataShape<ToolMetadata, ExtendFrontMcpToolMetadata>;
