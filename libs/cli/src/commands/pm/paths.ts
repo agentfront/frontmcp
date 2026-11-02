@@ -51,7 +51,6 @@ export function ensurePmDirs(): void {
       fs.mkdirSync(dir, { recursive: true });
     }
   }
-  ensureSocketsDir();
 }
 
 /** The server refuses a socket others could replace, so ~/.frontmcp is not writable by others and its sockets are owner-only. */

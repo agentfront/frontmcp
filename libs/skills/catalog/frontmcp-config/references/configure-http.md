@@ -196,11 +196,13 @@ browser sends one on every cross-site `POST`. Rejecting the absent case breaks e
 
 ### No CORS Headers (Default)
 
-When `cors` is not specified, the server sends **no CORS headers**. On a loopback bind, the derived
+When `cors` is not specified, the server sends **no CORS headers** (except on the public server card,
+`<entryPath>/server-card`, which answers any origin). On a loopback bind, the derived
 `Origin` check ([DNS Rebinding Protection](#dns-rebinding-protection)) refuses a request from another
 site with `403`. Otherwise a cross-origin request reaches the server and is served normally — the
-browser simply refuses to let the calling page read the response. Non-browser clients are unaffected: CORS is a browser rule, **not server-side access
-control**. If you need to keep callers out, use authentication.
+browser simply refuses to let the calling page read the response. Non-browser clients are
+unaffected: CORS is a browser rule, **not server-side access control**. If you need to keep callers
+out, use authentication.
 
 `cors: {}` and `cors: { origin: false }` behave identically to omitting the option — the middleware
 is installed only when `origin` is set to something other than `false`.
