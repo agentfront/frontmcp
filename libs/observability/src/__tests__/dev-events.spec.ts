@@ -104,6 +104,28 @@ describe('DevEventStream', () => {
     expect(sink.batches).toEqual([[event('last')]]);
     expect(sink.close).toHaveBeenCalledTimes(1);
   });
+
+  it('writes an event accepted while shutdown waits for the last batch before it closes the sinks', async () => {
+    let closed = false;
+    const batches: DevEvent[][] = [];
+    const sink: DevEventSink = {
+      name: 'closing',
+      write: (written) => {
+        if (closed) throw new Error('write after close');
+        batches.push([...written]);
+      },
+      close: () => {
+        closed = true;
+      },
+    };
+    const { stream: events } = stream([sink]);
+
+    events.emit(event('first'));
+    void events.flush().then(() => events.emit(event('during-shutdown')));
+    await events.onShutdown();
+
+    expect(batches).toEqual([[event('first')], [event('during-shutdown')]]);
+  });
 });
 
 describe('JsonlFileSink', () => {

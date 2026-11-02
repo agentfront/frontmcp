@@ -23,7 +23,7 @@
  * ```
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { AsyncLocalStorage, randomUUID } from '@frontmcp/utils';
 
 import { EncryptionContextNotSetError, VaultLoadError, VaultNotFoundError } from '../errors/auth-internal.errors';

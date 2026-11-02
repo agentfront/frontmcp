@@ -4,7 +4,7 @@
  * loaded from remote or ESM-based apps.
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 /**
  * Glob-style name patterns per primitive type.

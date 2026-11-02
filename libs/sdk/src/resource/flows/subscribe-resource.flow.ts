@@ -1,6 +1,6 @@
 // file: libs/sdk/src/resource/flows/subscribe-resource.flow.ts
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { EmptyResultSchema, SubscribeRequestSchema } from '@frontmcp/protocol';
 
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';

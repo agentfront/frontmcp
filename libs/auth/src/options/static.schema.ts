@@ -1,7 +1,7 @@
 // options/static.schema.ts
 // Static mode — a fixed shared secret presented on every request.
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { RawZodShape } from '../common/zod-utils';
 import type { StaticAuthOptionsInterface } from './interfaces';

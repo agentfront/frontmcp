@@ -1,7 +1,7 @@
 // options/app-auth.schema.ts
 // App-level auth options with standalone option
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { type RawZodShape } from '../common/zod-utils';
 import { localAuthSchema, remoteAuthSchema } from './orchestrated.schema';
