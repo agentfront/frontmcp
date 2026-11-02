@@ -240,6 +240,33 @@ describe('output-policy', () => {
       );
     });
 
+    it('renders the shared properties and each union member when the root has both', () => {
+      const schema = {
+        type: 'object',
+        properties: { kind: { type: 'string' } },
+        required: ['kind'],
+        oneOf: [
+          { type: 'object', properties: { id: { type: 'string' } } },
+          { type: 'object', properties: { error: { type: 'string' } } },
+        ],
+      };
+
+      expect(formatOutputSchemaForDescription(schema, 'summary')).toBe(
+        '\n\n**Returns:**\n- `kind`: string (required)\n\nand one of:\n' +
+          '- Option 1:\n  - `id`: string (optional)\n- Option 2:\n  - `error`: string (optional)',
+      );
+    });
+
+    it('leaves the summary out when the root has properties and a union member cannot be summarized', () => {
+      const schema = {
+        type: 'object',
+        properties: { kind: { type: 'string' } },
+        anyOf: [{ type: 'object', properties: { id: { type: 'string' } } }, { type: 'string' }],
+      };
+
+      expect(formatOutputSchemaForDescription(schema, 'summary')).toBe('');
+    });
+
     it('leaves the summary out when a union member cannot be summarized', () => {
       const schema = {
         type: 'object',
