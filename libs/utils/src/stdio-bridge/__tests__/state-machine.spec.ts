@@ -344,6 +344,34 @@ describe('bridge state machine (issue #399)', () => {
       expect(rec.responses).toEqual([]);
     });
 
+    it('sends the requests a drain had not sent yet once it is ready again before that drain noticed', async () => {
+      const rec: Recorder = { forwarded: [], responses: [] };
+      let release: () => void = () => undefined;
+      const fsm = createBridgeStateMachine({
+        log: makeLog(),
+        bufferSize: 8,
+        reloadDeadlineMs: 30_000,
+        respond: (f) => void rec.responses.push(f),
+        forward: async (f) => {
+          rec.forwarded.push(f);
+          if (f.id === 1) await new Promise<void>((resolve) => (release = resolve));
+        },
+      });
+      fsm.onBootStart();
+      for (const id of [1, 2, 3]) await fsm.enqueue({ jsonrpc: '2.0', id, method: 'm' });
+      fsm.onChildReady();
+      await new Promise((r) => setImmediate(r));
+
+      fsm.onUpstreamLost('drained');
+      fsm.onChildReady();
+      release();
+      await new Promise((r) => setImmediate(r));
+
+      expect(rec.forwarded.map((f) => f.id)).toEqual([1, 2, 3]);
+      expect(fsm.bufferDepth()).toBe(0);
+      expect(rec.responses).toEqual([]);
+    });
+
     it('answers the requests a drain had not sent yet when it stops', async () => {
       const rec: Recorder = { forwarded: [], responses: [] };
       let release: () => void = () => undefined;

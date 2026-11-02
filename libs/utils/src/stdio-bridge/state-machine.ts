@@ -297,8 +297,12 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
   };
   return machine;
 
-  /** Frames that were taken from the buffer but not sent: buffered again, or answered once nothing will send them. */
+  /** Frames taken from the buffer but not sent: sent when ready again, buffered, or answered once nothing will send them. */
   async function keepUnsent(frames: JsonRpcFrame[]): Promise<void> {
+    if (state === 'Ready') {
+      for (const frame of frames) await machine.enqueue(frame);
+      return;
+    }
     buffer.unshift(...frames);
     if (state === 'Stopping') await flushBufferAsResponses(DEV_SERVER_UNREACHABLE, 'stopping');
     if (state === 'Degraded') await flushBufferAsResponses(DEV_RELOAD_DEADLINE, 'deadline', degradedDetail);
