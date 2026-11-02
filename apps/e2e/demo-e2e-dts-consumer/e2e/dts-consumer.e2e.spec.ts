@@ -91,7 +91,7 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('prompts-must-compile.ts'))).toEqual([]);
   });
 
-  it('types the prompt and completion hooks, the scope channel accessors and server-level adapters', () => {
+  it('types the prompt, completion and Finally hooks, the scope channel accessors and server-level adapters', () => {
     expect(describeEach(inFixtureFile('hooks-must-compile.ts'))).toEqual([]);
   });
 
