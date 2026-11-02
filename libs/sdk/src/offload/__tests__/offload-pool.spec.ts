@@ -258,6 +258,22 @@ describe('OffloadPool', () => {
     await expect(runExport(offload, 'add', [2, 2])).resolves.toBe(4);
   });
 
+  it('rejects the call when a worker cannot start', async () => {
+    const offload = pool();
+    const workerThreads: typeof import('node:worker_threads') = require('node:worker_threads');
+    const spawn = jest.spyOn(workerThreads, 'Worker').mockImplementation(() => {
+      throw new Error('out of threads');
+    });
+    try {
+      await expect(runExport(offload, 'add', [1, 1])).rejects.toThrow(
+        new OffloadWorkerError('work', 'it could not start: out of threads'),
+      );
+      expect(offload.size).toBe(0);
+    } finally {
+      spawn.mockRestore();
+    }
+  });
+
   it('refuses a module reference it cannot run', async () => {
     const offload = pool();
     const refused = (moduleRef: unknown, args: unknown = []) =>

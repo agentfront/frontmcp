@@ -127,7 +127,15 @@ export class OffloadPool {
 
   private dispatch(): void {
     while (this.queue.length > 0) {
-      const pooled = this.idle.pop() ?? (this.workers.size < this.maxWorkers ? this.spawn() : undefined);
+      let pooled: PooledWorker | undefined;
+      try {
+        pooled = this.idle.pop() ?? (this.workers.size < this.maxWorkers ? this.spawn() : undefined);
+      } catch (error) {
+        const failed = this.queue.shift();
+        if (failed)
+          this.settle(failed, new OffloadWorkerError(failed.call.label, `it could not start: ${messageOf(error)}`));
+        continue;
+      }
       if (!pooled) return;
       const pending = this.queue.shift();
       if (pending) this.start(pooled, pending);
