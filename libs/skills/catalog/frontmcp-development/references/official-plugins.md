@@ -1,11 +1,11 @@
 ---
 name: official-plugins
-description: Guide to the 7 official plugins for discovery, memory, auth, caching, flags, monitoring, and WebMCP
+description: Guide to the 8 official plugins for discovery, memory, auth, caching, flags, monitoring, WebMCP, and large answers
 ---
 
 # Official FrontMCP Plugins
 
-FrontMCP ships 7 official plugins that extend server behavior with cross-cutting concerns: semantic tool discovery, session memory, authorization workflows, result caching, feature gating, visual monitoring, and exposing in-browser tools to browser agents (WebMCP). Install individually or via `@frontmcp/plugins` (meta-package re-exporting cache, codecall, and remember).
+FrontMCP ships 8 official plugins that extend server behavior with cross-cutting concerns: semantic tool discovery, session memory, authorization workflows, result caching, feature gating, visual monitoring, exposing in-browser tools to browser agents (WebMCP), and folding large tool answers into a handle the model reads in slices. Install individually or via `@frontmcp/plugins` (meta-package re-exporting cache, codecall, and remember).
 
 > **Note:** The Dashboard plugin (`@frontmcp/plugin-dashboard`) is currently in **beta** and may not work correctly in all environments. It is not recommended for production use at this time.
 
@@ -17,6 +17,7 @@ FrontMCP ships 7 official plugins that extend server behavior with cross-cutting
 - Adding session memory, tool caching, or authorization workflows to an existing server
 - Integrating feature flag services (LaunchDarkly, Split.io, Unleash) to gate tools at runtime
 - Exposing the tools of a FrontMCP server running in the browser to in-browser agents through WebMCP (`document.modelContext`)
+- Keeping large tool answers out of the model's context, readable in slices through `result_query` (see `result-handles-plugin`)
 
 ### Recommended
 
@@ -1171,6 +1172,27 @@ void registerWebMcpTools(resolveDocumentModelContext(), tools, (modelContext) =>
 - `listWebMcpTools(factory)` returns exactly what the plugin passes to `registerTool()` (names, titles, descriptions, input schemas, hints), then disposes the server. The factory must hand the `modelContext` it gets to `WebMcpPlugin.init()`; otherwise it rejects.
 - `registerWebMcpTools(modelContext, tools, loadServer, { exposedTo? })` registers the list at once. The first call loads the server once (concurrent first calls share the load) and runs through the plugin; a failed load rejects that call (a server it built is disposed, the listed tools stay) and the next call retries. Then the plugin follows the server's tool changes; a listed tool the server lacks is unregistered. No `modelContext` → does nothing.
 - `@frontmcp/plugin-webmcp/register` never imports `@frontmcp/sdk` (a few KB, CJS and ESM).
+
+## 8. Result Handles Plugin (`@frontmcp/plugin-result-handles`)
+
+Folds a tool answer over `thresholdBytes` (16 KB by default) into `{ preview, shape, handle }` and adds the
+`result_query` tool, which reads slices of the rest by path, range or page, and fields. A handle is a random UUID bound
+to the call's session and authenticated caller; another session or caller gets `RESULT_HANDLE_NOT_FOUND`. It runs on
+the `fitAnswer` stage, before `output.budget`. A tool with an output schema folds only when the schema admits the
+folded form (`z.union([schema, foldedAnswerSchema])`).
+
+```typescript
+import ResultHandlesPlugin from '@frontmcp/plugin-result-handles';
+
+@App({
+  name: 'Orders',
+  tools: [ExportOrdersTool],
+  plugins: [ResultHandlesPlugin.init({ thresholdBytes: 32 * 1024, ttlSeconds: 600, storage: { type: 'auto' } })],
+})
+class OrdersApp {}
+```
+
+Every option, the folded form, `result_query` and its errors: see `result-handles-plugin`.
 
 ## Common Patterns
 

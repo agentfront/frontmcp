@@ -39,7 +39,13 @@
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-answer-shaping/jest.e2e.config.ts",
         "passWithNoTests": true
-      }
+      },
+      "dependsOn": [
+        {
+          "projects": ["plugin-result-handles", "observability"],
+          "target": "build"
+        }
+      ]
     },
     "test:e2e": {
       "executor": "@nx/jest:jest",
@@ -48,7 +54,13 @@
         "jestConfig": "apps/e2e/demo-e2e-answer-shaping/jest.e2e.config.ts",
         "runInBand": true,
         "passWithNoTests": true
-      }
+      },
+      "dependsOn": [
+        {
+          "projects": ["plugin-result-handles", "observability"],
+          "target": "build"
+        }
+      ]
     }
   }
 }
