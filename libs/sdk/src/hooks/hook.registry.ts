@@ -204,11 +204,12 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
       this.graph.delete(token);
     }
     const prune = <Key>(index: Map<Key, HookEntry[]>) => {
-      for (const [key, entries] of index)
+      for (const [key, entries] of index) {
         index.set(
           key,
           entries.filter((entry) => !removed.has(entry)),
         );
+      }
     };
     prune(this.entriesByCls);
     prune(this.hooksByFlow);

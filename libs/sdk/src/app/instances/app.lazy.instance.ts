@@ -197,7 +197,7 @@ export class AppLazyInstance extends AppEntry<LazyAppRecordMetadata> implements 
   }
 
   private assertCanBeLazy(app: AppLocalInstance, hooksBefore: ReadonlySet<HookEntry>): void {
-    const duties = [...app.providers.getAllSingletons().values()].flatMap((value) => dutyMetadataOf(value)?.name ?? []);
+    const duties = [...app.providers.getAllSingletons().values()].flatMap((value) => dutyMetadataOf(value) ?? []);
     const reasons = whyLoadedAppCannotBeLazy({
       tools: app.tools.listAllInstances(),
       resources: app.resources.listAllInstances(),
