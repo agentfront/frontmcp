@@ -143,6 +143,28 @@ describe('Provider lifecycle hooks', () => {
     child.dispose();
   });
 
+  it('shuts a value registered under two tokens of one registry down after the providers that depend on it', async () => {
+    const POOL = Symbol('POOL');
+    const REPO = Symbol('REPO');
+    const POOL_ALIAS = Symbol('POOL_ALIAS');
+    const pool = { onShutdown: () => void phases.push('shutdown:pool') };
+    const registry = new ProviderRegistry([
+      { name: 'pool', provide: POOL, useValue: pool },
+      {
+        name: 'repo',
+        provide: REPO,
+        inject: () => [POOL] as const,
+        useFactory: () => ({ onShutdown: () => void phases.push('shutdown:repo') }),
+      },
+      { name: 'pool-alias', provide: POOL_ALIAS, useValue: pool },
+    ]);
+    await registry.ready;
+
+    await registry.runShutdownHooks(silentLogger());
+
+    expect(phases).toEqual(['shutdown:repo', 'shutdown:pool']);
+  });
+
   it('ignores values without hooks and CONTEXT-scoped providers', async () => {
     @Provider({ name: 'per-request', scope: ProviderScope.CONTEXT })
     class PerRequest implements OnBootstrap {

@@ -339,7 +339,7 @@ export default class ProviderRegistry
   /** Run `onBootstrap()` on the instance just built for `token`, and keep it for the ready and shutdown phases. */
   private async bootstrapBuilt(token: Token): Promise<void> {
     const instance = lifecycleHooksOf(this.instances.get(token));
-    if (!instance) return;
+    if (!instance || this.heldEntries.some((held) => held.instance === instance)) return;
     const holders = this.lifecycleHolders.get(instance) ?? 0;
     this.lifecycleHolders.set(instance, holders + 1);
     const entry = { token, instance };
