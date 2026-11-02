@@ -119,6 +119,31 @@ describe('CallMonitor', () => {
     expect(seen).toEqual([0, 1, 0]);
   });
 
+  it('shares one stall detector between the servers of a process, so a stall is reported once with all their calls', async () => {
+    const logs = [logger(), logger()];
+    const [first, second] = logs.map((log) => new CallMonitor({ thresholdMs: 200 }, false, log));
+    first.onReady();
+    second.onReady();
+    started.push(first, second);
+    expect(first.stalls).toBe(second.stalls);
+
+    let seen: string[] = [];
+    await second.trackToolExecution(toolFlow(), async () => {
+      seen = first.stalls?.calls.running().map((call) => call.entry) ?? [];
+    });
+    first.stalls?.onStall({ stallMs: 300, gcMs: 0, cause: 'unknown', calls: [] });
+
+    expect(seen).toEqual(['probe:busy-wait']);
+    expect(logs.flatMap((log) => log.warn.mock.calls)).toEqual([
+      ['Event loop stalled for 300 ms with no call in flight'],
+    ]);
+
+    await first.onShutdown();
+    expect(second.stalls?.running).toBe(true);
+    await second.onShutdown();
+    expect(second.stalls?.running).toBe(false);
+  });
+
   it('runs execute untracked without a stall detector or a resolved entry', async () => {
     const next = jest.fn(async () => undefined);
     await new CallMonitor(false, false, logger()).trackToolExecution(toolFlow(), next);

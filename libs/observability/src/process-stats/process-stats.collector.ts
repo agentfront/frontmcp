@@ -22,7 +22,6 @@
 import { readdirSync } from '@frontmcp/utils';
 
 import type { GaugeSnapshotEntry } from '../prometheus/render';
-import { monitorLoopDelay } from '../stalls/stall-detector';
 
 interface MetricsProcessOptions {
   eventLoopLag?: boolean;
@@ -59,6 +58,17 @@ const MICROS_PER_SECOND = 1e6;
 function probeSafely<T>(probe: () => T): T | undefined {
   try {
     return probe();
+  } catch {
+    return undefined;
+  }
+}
+
+function defaultMonitorEventLoopDelay(): ELDHistogram | undefined {
+  try {
+    const { monitorEventLoopDelay } = require('node:perf_hooks') as typeof import('node:perf_hooks');
+    const histogram = monitorEventLoopDelay({ resolution: 10 });
+    histogram.enable();
+    return histogram as unknown as ELDHistogram;
   } catch {
     return undefined;
   }
@@ -114,7 +124,7 @@ export class ProcessStatsCollector {
     this.readFdCount = init.readFdCount ?? defaultReadFdCount;
     this.cpuStart = probeSafely(() => this.cpuUsage());
     if (this.options.eventLoopLag !== false) {
-      this.histogram = init.monitorEventLoopDelay ? init.monitorEventLoopDelay() : monitorLoopDelay();
+      this.histogram = init.monitorEventLoopDelay ? init.monitorEventLoopDelay() : defaultMonitorEventLoopDelay();
     }
   }
 

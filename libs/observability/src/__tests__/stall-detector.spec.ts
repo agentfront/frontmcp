@@ -1,16 +1,7 @@
-import { monitorLoopDelay, StallDetector, type GcPause, type StallReport } from '../stalls/stall-detector';
-
-const NS_PER_MS = 1e6;
+import { StallDetector, type GcPause, type StallReport } from '../stalls/stall-detector';
 
 function harness(thresholdMs = 200) {
   let now = 10_000;
-  const histogram = {
-    max: 0,
-    reset: jest.fn(() => {
-      histogram.max = 0;
-    }),
-    disable: jest.fn(),
-  };
   let recordGc: (pause: GcPause) => void = () => undefined;
   const stopGc = jest.fn();
   const reports: StallReport[] = [];
@@ -18,7 +9,6 @@ function harness(thresholdMs = 200) {
     thresholdMs,
     onStall: (report) => reports.push(report),
     now: () => now,
-    histogram: () => histogram,
     observeGc: (record) => {
       recordGc = record;
       return stopGc;
@@ -27,15 +17,16 @@ function harness(thresholdMs = 200) {
   detector.start();
   return {
     detector,
-    histogram,
     reports,
     stopGc,
     advance: (ms: number) => (now += ms),
-    /** The loop was blocked for `ms` and the sampler ran right after. */
-    block: (ms: number) => {
+    /** The loop was free and the sampler ran `ms` after the previous sample. */
+    tick: (ms = 10) => {
       now += ms;
-      histogram.max = ms * NS_PER_MS;
+      detector.sample();
     },
+    /** The loop was blocked for `ms`: the sampler runs that late. */
+    block: (ms: number) => (now += ms),
     gc: (pause: GcPause) => recordGc(pause),
     get now() {
       return now;
@@ -49,30 +40,26 @@ describe('StallDetector', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it('reports nothing while the loop delay stays under the threshold', () => {
+  it('reports nothing while the gap between samples stays under the threshold', () => {
     const h = harness();
-    h.advance(100);
-    h.histogram.max = 150 * NS_PER_MS;
-    h.detector.sample();
-    h.advance(100);
-    h.detector.sample();
+    h.tick();
+    h.tick(150);
+    h.tick();
 
     expect(h.reports).toEqual([]);
-    expect(h.histogram.reset).toHaveBeenCalledTimes(2);
   });
 
   it('names the call that was running through the stall, on the sample after it', async () => {
     const h = harness();
     let finish: () => void = () => undefined;
     const running = h.detector.calls.track(tool('reports:export'), () => new Promise<void>((r) => (finish = r)));
-    h.advance(10);
+    h.tick();
 
     h.block(600);
     h.detector.sample();
     expect(h.reports).toEqual([]);
 
-    h.advance(100);
-    h.detector.sample();
+    h.tick();
     finish();
     await running;
 
@@ -93,8 +80,7 @@ describe('StallDetector', () => {
     });
 
     h.detector.sample();
-    h.advance(100);
-    h.detector.sample();
+    h.tick();
 
     expect(h.reports).toHaveLength(1);
     expect(h.reports[0]).toMatchObject({
@@ -104,36 +90,23 @@ describe('StallDetector', () => {
     });
   });
 
-  it('does not name a call that finished before the stall began', async () => {
+  it('does not name a call that finished before the stall began, nor one that started after it', async () => {
     const h = harness();
     await h.detector.calls.track(tool('quick'), async () => {
       h.advance(5);
     });
-    h.advance(50);
+    h.tick();
+    h.tick();
 
     h.block(400);
     h.detector.sample();
-    h.advance(100);
-    h.detector.sample();
+    let finish: () => void = () => undefined;
+    const queued = h.detector.calls.track(tool('queued'), () => new Promise<void>((r) => (finish = r)));
+    h.tick();
+    finish();
+    await queued;
 
     expect(h.reports).toEqual([{ stallMs: 400, gcMs: 0, cause: 'unknown', calls: [] }]);
-  });
-
-  it('still names the blocking call when the delay is only measured on the next sample', async () => {
-    const h = harness();
-    await h.detector.calls.track(tool('busy-wait'), async () => {
-      h.advance(500);
-    });
-    h.detector.sample();
-
-    h.advance(100);
-    h.histogram.max = 500 * NS_PER_MS;
-    h.detector.sample();
-    h.advance(100);
-    h.detector.sample();
-
-    expect(h.reports).toHaveLength(1);
-    expect(h.reports[0]).toMatchObject({ cause: 'calls', calls: [{ entry: 'busy-wait' }] });
   });
 
   it('blames garbage collection, not the call in flight, when a GC pause takes up the stall', async () => {
@@ -145,8 +118,7 @@ describe('StallDetector', () => {
     h.block(300);
     h.detector.sample();
     h.gc({ startTime: stallStart + 20, duration: 250 });
-    h.advance(100);
-    h.detector.sample();
+    h.tick();
     finish();
     await running;
 
@@ -170,32 +142,34 @@ describe('StallDetector', () => {
     h.gc({ startTime: stallStart + 550, duration: 100 });
 
     h.detector.sample();
-    h.advance(100);
-    h.detector.sample();
+    h.tick();
 
     expect(h.reports[0]).toMatchObject({ stallMs: 600, gcMs: 50, cause: 'calls' });
   });
 
-  it('samples on an unref-ed interval no longer than the threshold, and stops cleanly', () => {
+  it('samples every 10 ms on an unref-ed interval, and stops cleanly', () => {
     const h = harness(50);
+    const sample = jest.spyOn(h.detector, 'sample');
     expect(h.detector.running).toBe(true);
+
     h.block(80);
-    jest.advanceTimersByTime(50);
-    expect(h.histogram.reset).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(9);
+    expect(sample).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
+    expect(sample).toHaveBeenCalledTimes(1);
 
     h.detector.stop();
     expect(h.detector.running).toBe(false);
-    expect(h.reports).toHaveLength(1);
-    expect(h.histogram.disable).toHaveBeenCalled();
+    expect(h.reports).toEqual([expect.objectContaining({ stallMs: 80 })]);
     expect(h.stopGc).toHaveBeenCalled();
 
     jest.advanceTimersByTime(500);
-    expect(h.histogram.reset).toHaveBeenCalledTimes(1);
+    expect(sample).toHaveBeenCalledTimes(1);
   });
 
-  it('does nothing where the runtime cannot measure the loop delay', () => {
+  it('does nothing where the runtime has no perf_hooks', () => {
     const onStall = jest.fn();
-    const detector = new StallDetector({ thresholdMs: 200, onStall, histogram: () => undefined });
+    const detector = new StallDetector({ thresholdMs: 200, onStall, observeGc: () => undefined });
     detector.start();
     expect(detector.running).toBe(false);
     jest.advanceTimersByTime(1_000);
@@ -206,22 +180,39 @@ describe('StallDetector', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
-  it('measures with perf_hooks by default, and releases the histogram and GC observer on stop', () => {
+  it('observes GC with perf_hooks by default, and releases the observer on stop', () => {
     jest.useRealTimers();
     const detector = new StallDetector({ thresholdMs: 60_000, onStall: jest.fn() });
 
     detector.start();
     detector.start();
+    expect(detector.running).toBe(true);
     detector.sample();
     detector.stop();
 
-    const histogram = monitorLoopDelay();
-    expect(histogram?.max).toBeGreaterThanOrEqual(0);
-    histogram?.disable();
+    expect(detector.running).toBe(false);
+  });
+
+  it('reports a stall that the sampler is the first to see after it ends', async () => {
+    jest.useRealTimers();
+    const reports: StallReport[] = [];
+    const detector = new StallDetector({ thresholdMs: 100, onStall: (report) => reports.push(report) });
+    detector.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const end = performance.now() + 300;
+    while (performance.now() < end) {
+      // Blocks the event loop on purpose.
+    }
+    detector.sample();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    detector.stop();
+
+    expect(reports.map((report) => report.stallMs)).toContainEqual(expect.any(Number));
+    expect(Math.max(...reports.map((report) => report.stallMs))).toBeGreaterThanOrEqual(300);
   });
 
   it('keeps sampling when a stall listener throws', () => {
-    const histogram = { max: 0, reset: () => (histogram.max = 0) };
     let now = 0;
     const detector = new StallDetector({
       thresholdMs: 100,
@@ -229,15 +220,14 @@ describe('StallDetector', () => {
         throw new Error('listener failed');
       },
       now: () => now,
-      histogram: () => histogram,
-      observeGc: () => undefined,
+      observeGc: () => () => undefined,
     });
     detector.start();
     now += 300;
-    histogram.max = 300 * NS_PER_MS;
     detector.sample();
 
     expect(() => detector.sample()).not.toThrow();
+    expect(detector.running).toBe(true);
     detector.stop();
   });
 });

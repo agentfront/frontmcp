@@ -3,15 +3,21 @@ import { FlowHooksOf, ResourceHook, ToolHook } from '@frontmcp/sdk';
 import { DevEventStream, IpcDevEventSink, JsonlFileSink, type DevEventSink } from '../dev-events/dev-event-stream';
 import { flowFailureOf, sessionTracingId } from '../plugin/observability.hooks';
 import type { ResolvedDevEventsOptions, ResolvedStallOptions } from '../plugin/observability.options';
-import { createCounter } from '../telemetry/telemetry.counters';
+import { createCounter, type TelemetryCounter } from '../telemetry/telemetry.counters';
 import type { CallMethod } from './in-flight-calls';
-import { StallDetector } from './stall-detector';
+import { StallDetector, type StallReport } from './stall-detector';
 import { countStall, describeStall, STALL_SECONDS_COUNTER, STALL_SECONDS_DESCRIPTION } from './stall-report';
 
 const PromptHook = FlowHooksOf('prompts:get-prompt');
 
 interface MonitorLogger {
   warn(message: string): void;
+}
+
+interface SharedStallDetector {
+  readonly detector: StallDetector;
+  /** The monitors of the servers it samples for; the first one reports each stall. */
+  readonly monitors: Set<CallMonitor>;
 }
 
 interface CallFlowContext {
@@ -53,41 +59,62 @@ function sinksOf(options: ResolvedDevEventsOptions): DevEventSink[] {
 }
 
 /**
- * The server's stall detector and dev event stream. Its hooks keep each entry's execute stage in the calls in flight
- * (an `Around` hook, so a failed call ends too) and report each call when its flow ends (a `Finally` hook).
+ * A server's dev event stream, and its share of the process's stall detector. Its hooks keep each entry's execute stage
+ * in the calls in flight (an `Around` hook, so a failed call ends too) and report each call when its flow ends (a
+ * `Finally` hook).
  */
 export class CallMonitor {
+  /** One stall detector per threshold in the process, shared by the monitor of every server, so a stall is reported once. */
+  private static readonly sharedDetectors = new Map<number, SharedStallDetector>();
+
   readonly stalls?: StallDetector;
   readonly devEvents?: DevEventStream;
+  private readonly sharedStalls?: SharedStallDetector;
+  private readonly stallCounter?: TelemetryCounter;
   private readonly callStarts = new WeakMap<object, number>();
 
   constructor(
     stallOptions: ResolvedStallOptions | false,
     devEventsOptions: ResolvedDevEventsOptions | false,
-    logger: MonitorLogger,
+    private readonly logger: MonitorLogger,
   ) {
-    const devEvents = devEventsOptions
+    this.devEvents = devEventsOptions
       ? new DevEventStream(sinksOf(devEventsOptions), { maxQueue: devEventsOptions.maxQueue, logger })
       : undefined;
-    this.devEvents = devEvents;
     if (!stallOptions) return;
-    const counter = createCounter(STALL_SECONDS_COUNTER, STALL_SECONDS_DESCRIPTION);
-    this.stalls = new StallDetector({
-      thresholdMs: stallOptions.thresholdMs,
+    this.stallCounter = createCounter(STALL_SECONDS_COUNTER, STALL_SECONDS_DESCRIPTION);
+    this.sharedStalls = CallMonitor.sharedDetectorFor(stallOptions.thresholdMs);
+    this.stalls = this.sharedStalls.detector;
+  }
+
+  private static sharedDetectorFor(thresholdMs: number): SharedStallDetector {
+    const existing = CallMonitor.sharedDetectors.get(thresholdMs);
+    if (existing) return existing;
+    const monitors = new Set<CallMonitor>();
+    const detector = new StallDetector({
+      thresholdMs,
       onStall: (report) => {
-        logger.warn(describeStall(report));
-        countStall(report, counter);
-        devEvents?.emit({ type: 'stall', at: new Date().toISOString(), ...report });
+        const [reporter] = monitors;
+        reporter?.reportStall(report);
       },
     });
+    const shared = { detector, monitors };
+    CallMonitor.sharedDetectors.set(thresholdMs, shared);
+    return shared;
   }
 
   onReady(): void {
-    this.stalls?.start();
+    if (!this.sharedStalls) return;
+    this.sharedStalls.monitors.add(this);
+    this.sharedStalls.detector.start();
   }
 
   async onShutdown(): Promise<void> {
-    this.stalls?.stop();
+    const shared = this.sharedStalls;
+    if (shared?.monitors.has(this)) {
+      if (shared.monitors.size === 1) shared.detector.stop();
+      shared.monitors.delete(this);
+    }
     await this.devEvents?.onShutdown();
   }
 
@@ -146,6 +173,12 @@ export class CallMonitor {
     // Calls are pruned only by the sampler, so none is kept while it does not run.
     if (!this.stalls?.running || !entry) return next();
     return this.stalls.calls.track({ method, entry, ...sessionOf(flow) }, next, () => flow.state?.abandonedExecution);
+  }
+
+  private reportStall(report: StallReport): void {
+    this.logger.warn(describeStall(report));
+    if (this.stallCounter) countStall(report, this.stallCounter);
+    this.devEvents?.emit({ type: 'stall', at: new Date().toISOString(), ...report });
   }
 
   private report(ctx: unknown, method: CallMethod): void {

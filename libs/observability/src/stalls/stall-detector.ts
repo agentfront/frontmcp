@@ -1,13 +1,5 @@
 import { InFlightCalls, type CallIdentity, type CallRecord } from './in-flight-calls';
 
-/** The part of `perf_hooks.monitorEventLoopDelay()`'s histogram the detector reads. */
-export interface LoopDelayHistogram {
-  /** The longest delay since the last reset, in nanoseconds. */
-  readonly max: number;
-  reset(): void;
-  disable?(): void;
-}
-
 /** A garbage-collection pause, on the `performance.now()` clock. */
 export interface GcPause {
   startTime: number;
@@ -33,8 +25,7 @@ export interface StallDetectorOptions {
   thresholdMs: number;
   onStall: (report: StallReport) => void;
   now?: () => number;
-  histogram?: () => LoopDelayHistogram | undefined;
-  /** Feeds GC pauses to `record`, and returns how to stop. */
+  /** Feeds GC pauses to `record`, and returns how to stop; none where the runtime has no `perf_hooks`, so no sampling. */
   observeGc?: (record: (pause: GcPause) => void) => (() => void) | undefined;
 }
 
@@ -45,31 +36,25 @@ interface DetectedStall {
   calls: CallRecord[];
 }
 
-const NS_PER_MS = 1e6;
-const MAX_SAMPLE_INTERVAL_MS = 100;
+/** How often the loop is sampled; a stall is the time between two samples, so it is measured to within this. */
+const SAMPLE_INTERVAL_MS = 10;
 
-/** A loop-delay histogram at 10 ms resolution, or none where `perf_hooks` is missing (edge runtimes). */
-export function monitorLoopDelay(): import('node:perf_hooks').IntervalHistogram | undefined {
+function observeGcPauses(record: (pause: GcPause) => void): (() => void) | undefined {
+  let perfHooks: typeof import('node:perf_hooks');
   try {
-    const { monitorEventLoopDelay } = require('node:perf_hooks') as typeof import('node:perf_hooks');
-    const histogram = monitorEventLoopDelay({ resolution: 10 });
-    histogram.enable();
-    return histogram;
+    perfHooks = require('node:perf_hooks') as typeof import('node:perf_hooks');
   } catch {
     return undefined;
   }
-}
-
-function observeGcPauses(record: (pause: GcPause) => void): (() => void) | undefined {
   try {
-    const { PerformanceObserver } = require('node:perf_hooks') as typeof import('node:perf_hooks');
-    const observer = new PerformanceObserver((list) => {
+    const observer = new perfHooks.PerformanceObserver((list) => {
       for (const entry of list.getEntries()) record({ startTime: entry.startTime, duration: entry.duration });
     });
     observer.observe({ entryTypes: ['gc'] });
     return () => observer.disconnect();
   } catch {
-    return undefined;
+    // A runtime that does not report GC entries: stalls are still measured, none of them as GC.
+    return () => undefined;
   }
 }
 
@@ -78,17 +63,16 @@ function overlapMs(pause: GcPause, stall: DetectedStall): number {
 }
 
 /**
- * Samples the event-loop delay and reports each stall of `thresholdMs` or more with the calls in flight during it.
- * A stall is reported on the sample after the one that measured it, once its GC pauses have been delivered.
+ * Samples the event loop every 10 ms and reports each gap of `thresholdMs` or more between two samples as a stall,
+ * with the calls in flight during it. A stall is reported on the sample after the one that measured it, once its
+ * GC pauses have been delivered.
  */
 export class StallDetector {
   readonly calls: InFlightCalls;
   readonly onStall: (report: StallReport) => void;
   private readonly thresholdMs: number;
   private readonly now: () => number;
-  private readonly createHistogram: () => LoopDelayHistogram | undefined;
   private readonly observeGc: (record: (pause: GcPause) => void) => (() => void) | undefined;
-  private histogram?: LoopDelayHistogram;
   private stopObservingGc?: () => void;
   private timer?: ReturnType<typeof setInterval>;
   private pending: DetectedStall[] = [];
@@ -99,23 +83,21 @@ export class StallDetector {
     this.thresholdMs = options.thresholdMs;
     this.onStall = options.onStall;
     this.now = options.now ?? (() => performance.now());
-    this.createHistogram = options.histogram ?? monitorLoopDelay;
     this.observeGc = options.observeGc ?? observeGcPauses;
     this.calls = new InFlightCalls(this.now);
   }
 
-  /** Whether it samples: started, on a runtime that measures the loop delay, and not stopped. */
+  /** Whether it samples: started, on a runtime with `perf_hooks`, and not stopped. */
   get running(): boolean {
     return this.timer !== undefined;
   }
 
   start(): void {
-    if (this.histogram) return;
-    this.histogram = this.createHistogram();
-    if (!this.histogram) return;
+    if (this.timer) return;
     this.stopObservingGc = this.observeGc((pause) => this.gcPauses.push(pause));
+    if (!this.stopObservingGc) return;
     this.previousSampleAt = this.now();
-    this.timer = setInterval(() => this.sample(), Math.min(this.thresholdMs, MAX_SAMPLE_INTERVAL_MS));
+    this.timer = setInterval(() => this.sample(), SAMPLE_INTERVAL_MS);
     this.timer.unref?.();
   }
 
@@ -124,26 +106,19 @@ export class StallDetector {
     clearInterval(this.timer);
     this.timer = undefined;
     this.reportPending();
-    this.histogram?.disable?.();
-    this.histogram = undefined;
     this.stopObservingGc?.();
     this.stopObservingGc = undefined;
   }
 
   sample(): void {
-    const histogram = this.histogram;
-    if (!histogram) return;
+    if (!this.timer) return;
     const now = this.now();
     this.reportPending();
-    const stallMs = histogram.max / NS_PER_MS;
-    histogram.reset();
-    if (stallMs >= this.thresholdMs) {
-      const from = now - stallMs;
-      this.pending.push({ from, to: now, stallMs, calls: this.calls.during(from, now) });
-    }
-    // A delay measured one sample late can belong to a call that ended before this sample.
-    this.calls.prune(this.previousSampleAt);
-    const keepFrom = Math.min(this.previousSampleAt, ...this.pending.map((stall) => stall.from));
+    const from = this.previousSampleAt;
+    const stallMs = now - from;
+    if (stallMs >= this.thresholdMs) this.pending.push({ from, to: now, stallMs, calls: this.calls.during(from, now) });
+    this.calls.prune(now);
+    const keepFrom = Math.min(now, ...this.pending.map((stall) => stall.from));
     this.gcPauses = this.gcPauses.filter((pause) => pause.startTime + pause.duration >= keepFrom);
     this.previousSampleAt = now;
   }

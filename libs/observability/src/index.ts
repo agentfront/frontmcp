@@ -129,7 +129,6 @@ export type {
   CallMethod,
   CallRecord,
   GcPause,
-  LoopDelayHistogram,
   StallDetectorOptions,
   StallReport,
   StalledCall,
