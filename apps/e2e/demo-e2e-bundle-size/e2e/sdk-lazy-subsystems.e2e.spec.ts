@@ -12,6 +12,14 @@ import { workspaceRoot } from './helpers/browser-bundle';
 type Step = { step: string; initialized: string[] };
 
 const SUBSYSTEM_MODULE = /^libs\/sdk\/src\/(job|workflow|channel|remote-mcp|esm-loader)\//;
+// Helpers the startup path itself uses: the decorators parse `Tool.esm()` specifiers, the scope normalizes app entries
+const STARTUP_HELPERS = [
+  'libs/sdk/src/esm-loader/package-specifier.ts',
+  'libs/sdk/src/esm-loader/module-specifiers.ts',
+  'libs/sdk/src/job/job.utils.ts',
+  'libs/sdk/src/channel/channel.utils.ts',
+  'libs/sdk/src/channel/sources/completion-events.ts',
+];
 const OAUTH_FLOW_MODULE = /^libs\/sdk\/src\/auth\/flows\/oauth\.[a-z-]+\.flow\.ts$/;
 
 function initializedModules(...steps: string[]): Step[] {
@@ -30,7 +38,8 @@ describe('the subsystems of the SDK under require()', () => {
     const [load] = initializedModules();
 
     expect(load.initialized.length).toBeGreaterThan(0);
-    expect(load.initialized.filter((source) => SUBSYSTEM_MODULE.test(source))).toEqual([]);
+    const subsystemModules = load.initialized.filter((source) => SUBSYSTEM_MODULE.test(source));
+    expect(subsystemModules.filter((source) => !STARTUP_HELPERS.includes(source))).toEqual([]);
   });
 
   it.each([

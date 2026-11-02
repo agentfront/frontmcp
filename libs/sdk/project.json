@@ -31,39 +31,7 @@
           "libs/sdk/src/third-party/import-protocol-client.ts"
         ],
         "assets": ["libs/sdk/README.md", "LICENSE", "libs/sdk/package.json"],
-        "esbuildOptions": {
-          "minifyWhitespace": true,
-          "outExtension": { ".js": ".js" },
-          "external": [
-            "#js-yaml",
-            "#semver",
-            "#uipack-render",
-            "#protocol-client",
-            "@frontmcp/sdk",
-            "@frontmcp/utils",
-            "@frontmcp/di",
-            "@frontmcp/lazy-zod",
-            "@frontmcp/uipack",
-            "@frontmcp/uipack/*",
-            "@frontmcp/auth",
-            "@frontmcp/guard",
-            "@frontmcp/protocol",
-            "@frontmcp/protocol/*",
-            "@frontmcp/observability",
-            "@opentelemetry/api",
-            "@opentelemetry/sdk-trace-base",
-            "ioredis",
-            "jose",
-            "reflect-metadata",
-            "zod",
-            "express",
-            "cors",
-            "raw-body",
-            "content-type",
-            "@vercel/kv",
-            "#import-computed"
-          ]
-        }
+        "esbuildConfig": "libs/sdk/esbuild.cjs.config.js"
       }
     },
     "build-esm": {
