@@ -41,7 +41,7 @@ Each line holds `v`, `at`, `method`, `name` (the tool or prompt name the client 
 
 - **`answer`** is what the client received: the answer after every hook and the answer stages (`fitAnswer`, `shapeAnswer`), so a folded result-handles answer is recorded folded.
 - **`error`** is `{ code, message }` with the code the client saw — a tool error answer's `_meta.code` (`TOOL_NOT_FOUND`), or the JSON-RPC code of a resource or prompt (`-32002`) — and, for a public error, the text the client reads (a tool error's text includes its `To fix:` remedy line; a JSON-RPC message has no `MCP error <code>:` prefix). An internal error is recorded as `{ code }` only: its text is generic and carries a new error id each time.
-- The file is created owner-only (`0600`). Lines are written in order off the call's path; while `maxBytes` of lines wait for a slow disk, later calls are dropped (logged once). `maxBytes` counts the file's size on disk, so lines another process appends to the same path count too.
+- The file is owner-only (`0600`): a new one is created so, and an existing one is set to `0600` before the first line is added (a file the server's user does not own is not written to; the failure is logged). Lines are written in order off the call's path; while `maxBytes` of lines wait for a slow disk, later calls are dropped (logged once). `maxBytes` counts the file's size on disk, so lines another process appends to the same path count too.
 - **`session`** is the first 8 characters of the session id, as the request log shows it.
 - Calls a tool makes in process (`this.callTool()`) are not recorded: replaying the outer call makes them again.
 - A task-augmented call is recorded once, with the answer its task produced, and replays as a plain call.

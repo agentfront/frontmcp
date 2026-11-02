@@ -441,6 +441,17 @@ describe('CallRecorderPlugin', () => {
     expect(fs.statSync(file).mode & 0o777).toBe(0o600);
   });
 
+  it('makes an existing recording readable by its owner only before it adds calls to it', async () => {
+    const file = path.join(dir, 'shared.jsonl');
+    fs.writeFileSync(file, '', { mode: 0o644 });
+    fs.chmodSync(file, 0o644);
+    await session({ path: file }, async (client) => {
+      await client.callTool('lookup', { key: 'a' });
+    });
+
+    expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+  });
+
   it('records the calls to the app it is installed on, and not those to another app', async () => {
     const file = path.join(dir, 'calls.jsonl');
     @App({
