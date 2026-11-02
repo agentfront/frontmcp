@@ -1,4 +1,4 @@
-import { McpServer, StdioServerTransport } from '@frontmcp/protocol';
+import { StdioServerTransport } from '@frontmcp/protocol';
 import { getEnv, isEdgeRuntime, randomUUID } from '@frontmcp/utils';
 
 import {
@@ -25,6 +25,7 @@ import { ScopeRegistry } from '../scope/scope.registry';
 import { type FrontMcpServerInstance } from '../server/server.instance';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task/task-scope.helper';
+import { createMcpServer } from '../transport/mcp-server.factory';
 import type { FetchHandlerCtx, WebFetchHandler } from '../transport/web-fetch-handler';
 import { markDirectOnly } from './direct-only.flag';
 import { createMcpGlobalProviders } from './front-mcp.providers';
@@ -894,7 +895,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       };
 
       // Create MCP server
-      const mcpServer = new McpServer(scope.metadata.info, serverOptions);
+      const mcpServer = createMcpServer(scope.metadata.info, serverOptions);
       startupCleanups.push(() => mcpServer.close());
 
       // Generate session ID for stdio connection

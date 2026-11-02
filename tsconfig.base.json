@@ -123,7 +123,8 @@
       "#import-computed": ["libs/sdk/src/esm-loader/import-computed.ts"],
       "#js-yaml": ["libs/sdk/src/third-party/js-yaml.ts"],
       "#semver": ["libs/sdk/src/third-party/semver.ts"],
-      "#uipack-render": ["libs/sdk/src/third-party/uipack-render.ts"]
+      "#uipack-render": ["libs/sdk/src/third-party/uipack-render.ts"],
+      "#protocol-client": ["libs/sdk/src/third-party/protocol-client.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
