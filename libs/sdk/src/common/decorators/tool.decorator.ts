@@ -200,8 +200,8 @@ type __StructuredOutputType =
   | z.ZodRawShape
   | z.ZodObject<any>
   | z.ZodArray<z.ZodType>
-  | z.ZodUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>
-  | z.ZodDiscriminatedUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>;
+  | z.ZodUnion<readonly [z.ZodObject<any>, ...z.ZodObject<any>[]]>
+  | z.ZodDiscriminatedUnion<readonly [z.ZodObject<any>, ...z.ZodObject<any>[]]>;
 
 type __ToolSingleOutputType =
   | __PrimitiveOutputType

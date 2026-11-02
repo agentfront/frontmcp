@@ -13,8 +13,24 @@
  *   - 'none': expose it nowhere.
  *
  * Driven through the real `tools/list` flow via `server.listTools()`.
+ *
+ * `output.undeclaredKeys` decides what `tools/call` does with keys an answer carries that its
+ * `outputSchema` does not declare: 'strip', 'warn' (strip and log once), 'keep' or 'fail'.
+ * A call that renders the tool's UI sends declared keys only, whatever the policy.
  */
-import { App, FrontMcpInstance, Tool, ToolContext, z, type DirectMcpServer } from '@frontmcp/sdk';
+import {
+  App,
+  connect,
+  FrontMcpInstance,
+  LogLevel,
+  LogTransport,
+  LogTransportInterface,
+  Tool,
+  ToolContext,
+  z,
+  type DirectMcpServer,
+  type LogRecord,
+} from '@frontmcp/sdk';
 
 // A structured (top-level object) output so the schema is eligible for both
 // outputSchema advertisement and the description rendering.
@@ -202,5 +218,149 @@ describe('tools/list output.schemaMode (E2E)', () => {
       expect(tool?.description).toBe('Pins definition, overriding the server default.');
       expect(tool?.description).not.toContain('**Returns:**');
     });
+  });
+});
+
+const UNDECLARED_VALUE = 'QCC-4410';
+const quoteAnswer = { price: 10, quoteCostCenter: UNDECLARED_VALUE } as { price: number };
+const quoteOutput = { price: z.number() };
+
+@Tool({ name: 'quote_default', inputSchema: {}, outputSchema: quoteOutput })
+class DefaultQuoteTool extends ToolContext {
+  async execute() {
+    return quoteAnswer;
+  }
+}
+
+@Tool({ name: 'quote_warned', inputSchema: {}, outputSchema: quoteOutput, output: { undeclaredKeys: 'warn' } })
+class WarnedQuoteTool extends ToolContext {
+  async execute() {
+    return quoteAnswer;
+  }
+}
+
+@Tool({ name: 'quote_kept', inputSchema: {}, outputSchema: quoteOutput, output: { undeclaredKeys: 'keep' } })
+class KeptQuoteTool extends ToolContext {
+  async execute() {
+    return quoteAnswer;
+  }
+}
+
+@Tool({ name: 'quote_strict', inputSchema: {}, outputSchema: quoteOutput, output: { undeclaredKeys: 'fail' } })
+class StrictQuoteTool extends ToolContext {
+  async execute() {
+    return quoteAnswer;
+  }
+}
+
+@Tool({
+  name: 'quote_view',
+  inputSchema: {},
+  outputSchema: quoteOutput,
+  output: { undeclaredKeys: 'keep' },
+  ui: { template: (ctx) => `<pre>${ctx.helpers.escapeHtml(JSON.stringify(ctx.output))}</pre>` },
+})
+class QuoteViewTool extends ToolContext {
+  async execute() {
+    return quoteAnswer;
+  }
+}
+
+@App({
+  name: 'UndeclaredKeys',
+  description: 'Tools exercising output.undeclaredKeys',
+  tools: [DefaultQuoteTool, WarnedQuoteTool, KeptQuoteTool, StrictQuoteTool, QuoteViewTool],
+})
+class UndeclaredKeysApp {}
+
+const policyWarnings: string[] = [];
+
+@LogTransport({ name: 'UndeclaredKeysE2eCapture', description: 'Keeps warnings for assertions' })
+class PolicyWarningCapture extends LogTransportInterface {
+  log(record: LogRecord): void {
+    if (record.level === LogLevel.Warn) policyWarnings.push(record.message);
+  }
+}
+
+const undeclaredKeysServerConfig = {
+  info: { name: 'undeclared-keys-e2e', version: '0.0.0' },
+  apps: [UndeclaredKeysApp],
+  auth: { mode: 'public' as const },
+  // A client named quote-viewer is treated as Claude, which renders the UI without structuredContent.
+  transport: { platformDetection: { mappings: [{ pattern: 'quote-viewer', platform: 'claude' as const }] } },
+  logging: { level: LogLevel.Warn, enableConsole: false, transports: [PolicyWarningCapture] },
+};
+
+describe('tools/call output.undeclaredKeys (E2E)', () => {
+  let server: DirectMcpServer;
+
+  beforeAll(async () => {
+    server = await FrontMcpInstance.createDirect(undeclaredKeysServerConfig);
+  });
+
+  afterAll(async () => {
+    await server.dispose();
+  });
+
+  it("strips undeclared keys silently by default outside development ('strip')", async () => {
+    const result = await server.callTool('quote_default', {});
+
+    expect(result.structuredContent).toEqual({ price: 10 });
+    expect(JSON.stringify(result)).not.toContain(UNDECLARED_VALUE);
+    expect(policyWarnings.filter((line) => line.includes('quote_default'))).toEqual([]);
+  });
+
+  it("'warn' strips undeclared keys and warns once for the tool and key set", async () => {
+    const first = await server.callTool('quote_warned', {});
+    await server.callTool('quote_warned', {});
+
+    expect(first.structuredContent).toEqual({ price: 10 });
+    const warnings = policyWarnings.filter((line) => line.includes('quote_warned'));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('quoteCostCenter');
+  });
+
+  it("'keep' passes undeclared keys through, and an MCP client accepts them against the listed schema", async () => {
+    const client = await connect(undeclaredKeysServerConfig, {
+      clientInfo: { name: 'policy-probe', version: '1.0.0' },
+    });
+    try {
+      await client.listTools();
+      const result = (await client.callTool('quote_kept', {})) as {
+        structuredContent?: unknown;
+        content?: Array<{ text?: string }>;
+      };
+
+      expect(result.structuredContent).toEqual({ price: 10, quoteCostCenter: UNDECLARED_VALUE });
+      expect(result.content?.[0]?.text).toContain(UNDECLARED_VALUE);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("'fail' refuses the answer with INVALID_OUTPUT", async () => {
+    await expect(server.callTool('quote_strict', {})).rejects.toMatchObject({ code: 'INVALID_OUTPUT' });
+  });
+
+  it('a call that renders the UI sends declared keys only, even under keep', async () => {
+    const result = await server.callTool('quote_view', {});
+
+    expect(result._meta?.['ui/html']).toBeDefined();
+    expect(result.structuredContent).toEqual({ price: 10 });
+    expect(JSON.stringify(result)).not.toContain(UNDECLARED_VALUE);
+  });
+
+  it('a UI render for a client that takes no structuredContent sends declared keys only, even under keep', async () => {
+    const client = await connect(undeclaredKeysServerConfig, {
+      clientInfo: { name: 'quote-viewer', version: '1.0.0' },
+    });
+    try {
+      const result = await client.callTool('quote_view', {});
+
+      expect(JSON.stringify(result)).toContain('ui/html');
+      expect(JSON.stringify(result)).not.toContain(UNDECLARED_VALUE);
+    } finally {
+      await client.close();
+    }
   });
 });
