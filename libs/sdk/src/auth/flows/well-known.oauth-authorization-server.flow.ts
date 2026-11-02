@@ -2,7 +2,7 @@
 import 'reflect-metadata';
 
 import { advertisedScopes, trimSlash } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { isProduction } from '@frontmcp/utils';
 
 import {

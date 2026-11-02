@@ -1,6 +1,6 @@
 // file: libs/sdk/src/resource/flows/unsubscribe-resource.flow.ts
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { EmptyResultSchema, UnsubscribeRequestSchema } from '@frontmcp/protocol';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';

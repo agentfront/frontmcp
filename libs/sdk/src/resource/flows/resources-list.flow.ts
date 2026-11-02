@@ -12,7 +12,7 @@ import {
 
 import 'reflect-metadata';
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { ListResourcesRequestSchema, ListResourcesResultSchema, type Resource } from '@frontmcp/protocol';
 
 import { annotationsForClient, callerClientProfile, type ClientNameSources } from '../../answer';

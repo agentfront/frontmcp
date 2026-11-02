@@ -5,7 +5,7 @@
  * These are portable types that can be used across different implementations.
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { AuthorizationVault, Credential } from '../session';
 

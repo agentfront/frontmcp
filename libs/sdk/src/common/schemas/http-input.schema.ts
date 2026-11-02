@@ -1,4 +1,4 @@
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 // Checked as `z.object({})` checks, but passed through as is: a passthrough object copies every key of a Node request.
 const httpObjectSchema = () =>
