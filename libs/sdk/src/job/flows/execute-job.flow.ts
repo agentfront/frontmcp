@@ -16,12 +16,16 @@ import {
 import { JobEntry } from '../../common/entries/job.entry';
 import { JobContext } from '../../common/interfaces/job.interface';
 import { runOnSurface } from '../../context/call-surface';
-import { InternalMcpError, JobNotAuthorizedError } from '../../errors';
+import { InternalMcpError, JobNotAuthorizedError, JobTimeoutError } from '../../errors';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
+import { outlasts } from '../../provider/provider.lifecycle';
+import { type JobAdmissionSlot } from '../job-admission';
 import {
   EXECUTE_JOB_FLOW,
+  interruptReasonOf,
   toJobError,
+  untilAborted,
   willRetryJobAttempt,
   type JobAttemptOutcome,
   type JobAttemptWorkflowStep,
@@ -29,6 +33,9 @@ import {
 } from '../job-attempt';
 import { jobContextProviders } from '../job-context-providers';
 import { JobPermissionGuard } from '../job-permission.guard';
+
+/** How long a job's `cleanup` may take when it sets no `timeoutMs`. */
+const DEFAULT_CLEANUP_TIMEOUT_MS = 3_000;
 
 /** A job's input once its `inputSchema` parsed it. */
 type JobInput = ReturnType<JobEntry['parseInput']>;
@@ -58,6 +65,10 @@ const inputSchema = z.object({
     run: z.custom<JobRunRecorder>().optional(),
     workflow: workflowStepSchema.optional(),
     signal: z.instanceof(AbortSignal).optional(),
+    /** How long the job's `execute()` may run, in ms; unset or 0 for no limit. */
+    timeoutMs: z.number().int().nonnegative().optional(),
+    /** The attempt's admission slot, freed by the caller once the flow ends. */
+    admission: z.custom<JobAdmissionSlot>().optional(),
   }),
 });
 
@@ -81,6 +92,8 @@ const stateSchema = z.object({
   /** The job's input as its `inputSchema` parsed it. */
   parsedInput: z.custom<JobInput>(),
   jobContext: z.instanceof(JobContext),
+  /** Aborts the attempt: at its timeout, or when the caller's `ctx.signal` aborts; the job reads it as `this.signal`. */
+  attemptAbort: z.instanceof(AbortController),
   /** What `execute()` returned, or passed to `this.respond()`. */
   output: z.custom<JobOutput>(),
   /** The attempt's answer: set by `validateOutput`, or by a hook that answered for the job with `respond()`. */
@@ -90,8 +103,9 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'checkJobAuthorization', 'validateInput', 'createJobContext'],
+  pre: ['parseInput', 'checkJobAuthorization', 'validateInput', 'admit', 'createJobContext'],
   execute: ['execute', 'validateOutput'],
+  error: ['cleanup'],
   finalize: ['updateRunState', 'finalize'],
 } as const satisfies FlowPlan<string>;
 
@@ -185,6 +199,16 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
   }
 
   /**
+   * Wait for a slot under `jobs.admission`; past its `maxWaitMs` the attempt is refused with
+   * `JobAdmissionTimeoutError`, which is not retried. A cancel or shutdown stops the wait.
+   */
+  @Stage('admit')
+  async admit() {
+    const { job } = this.state.required;
+    await this.input.ctx.admission?.acquire(job.name, this.input.ctx.signal);
+  }
+
+  /**
    * Build the job's instance for this attempt, with the CONTEXT-scoped providers of the context the
    * attempt runs in (#705), and load its `this.auth`. The hooks the job class declares as instance
    * methods join the run here.
@@ -198,11 +222,14 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
     // An attempt its caller gave up on while its providers were built never builds the job.
     this.throwIfAborted();
 
+    const attemptAbort = abortControllerFollowing(ctx.signal);
+    this.state.set('attemptAbort', attemptAbort);
     const jobContext = job.create(parsedInput, {
       authInfo: this.state.authInfo ?? {},
       contextProviders,
       attempt,
-      signal: ctx.signal,
+      signal: attemptAbort.signal,
+      onProgress: ctx.run?.recordProgress?.bind(ctx.run),
     });
     // `authorities.pipes` may be async: run them before any hook or execute() reads `this.auth`.
     await jobContext.loadAuthContext();
@@ -214,19 +241,29 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
 
   /**
    * Run the job's `execute()` on the `'job'` surface. A value passed to `this.respond()` is its result.
-   * An attempt its caller gave up on while the job ran fails with the caller's reason, however the job ended.
+   * Past `ctx.timeoutMs` the attempt is aborted with `JobTimeoutError`. An attempt that is aborted ends
+   * at once with the abort's reason, however the job ends; `execute()` itself is not stopped.
    */
   @Stage('execute')
   async execute() {
-    const { jobContext, parsedInput } = this.state.required;
+    const { job, jobContext, parsedInput, attemptAbort } = this.state.required;
     this.throwIfAborted();
+    const timeoutMs = this.input.ctx.timeoutMs;
+    const timer = timeoutMs
+      ? setTimeout(() => attemptAbort.abort(new JobTimeoutError(job.name, timeoutMs)), timeoutMs)
+      : undefined;
     let output: unknown;
     try {
-      output = await runOnSurface('job', async () => jobContext.execute(parsedInput));
+      output = await untilAborted(
+        runOnSurface('job', async () => jobContext.execute(parsedInput)),
+        attemptAbort.signal,
+      );
     } catch (error) {
       this.throwIfAborted();
       if (!(error instanceof FlowControl && error.type === 'respond')) throw toJobError(error);
       output = error.output;
+    } finally {
+      clearTimeout(timer);
     }
     this.throwIfAborted();
     this.state.set('output', output);
@@ -239,6 +276,26 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
     const { job, jobContext } = this.state.required;
     const result = job.parseOutput(this.state.output);
     this.state.set('answer', { result, logs: [...jobContext.getLogs()] });
+  }
+
+  /**
+   * Run the job's `cleanup` when the attempt was aborted after its job was built: it timed out, the run
+   * was cancelled, or the server shut down. It gets its own time limit, and its failure is logged.
+   */
+  @Stage('cleanup')
+  async cleanup() {
+    const { job, jobContext, attemptAbort } = this.state;
+    const cleanup = job?.metadata.cleanup;
+    if (!cleanup || !jobContext || !attemptAbort?.signal.aborted) return;
+    const { run, timeoutMs = DEFAULT_CLEANUP_TIMEOUT_MS } = typeof cleanup === 'function' ? { run: cleanup } : cleanup;
+    const reason = interruptReasonOf(attemptAbort.signal.reason);
+    try {
+      if (await outlasts(() => run(jobContext, reason), timeoutMs)) {
+        this.logger.warn(`cleanup: the ${reason} cleanup did not finish within ${timeoutMs} ms`);
+      }
+    } catch (error) {
+      this.logger.warn(`cleanup: the ${reason} cleanup failed: ${toJobError(error).message}`);
+    }
   }
 
   /**
@@ -294,8 +351,16 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
   }
 
   private throwIfAborted(): void {
-    const signal = this.input.ctx.signal;
+    const signal = this.state.attemptAbort?.signal ?? this.input.ctx.signal;
     if (!signal?.aborted) return;
     throw signal.reason instanceof Error ? signal.reason : new InternalMcpError('The job attempt was abandoned');
   }
+}
+
+/** A controller of its own for the attempt, aborted with the caller's reason when the caller's signal aborts. */
+function abortControllerFollowing(signal: AbortSignal | undefined): AbortController {
+  const controller = new AbortController();
+  if (signal?.aborted) controller.abort(signal.reason);
+  signal?.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  return controller;
 }

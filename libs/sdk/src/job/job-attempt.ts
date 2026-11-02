@@ -2,9 +2,17 @@ import type { AuthoritiesContextBuilder } from '@frontmcp/auth';
 
 import { FlowControl, type ScopeEntry } from '../common';
 import { type JobEntry } from '../common/entries/job.entry';
-import { type JobRetryConfig } from '../common/metadata/job.metadata';
+import { type JobInterruptReason, type JobRetryConfig } from '../common/metadata/job.metadata';
 import { FrontMcpContextStorage, type FrontMcpContext } from '../context';
-import { InvalidOutputError, JobNotAuthorizedError } from '../errors';
+import {
+  InvalidOutputError,
+  JobAdmissionTimeoutError,
+  JobCancelledError,
+  JobInterruptedError,
+  JobNotAuthorizedError,
+} from '../errors';
+import { type JobAdmission, type JobAdmissionSlot } from './job-admission';
+import { type JobRunProgress } from './store/job-state.interface';
 
 /** The flow that runs one attempt of a job. */
 export const EXECUTE_JOB_FLOW = 'jobs:execute-job' as const;
@@ -26,6 +34,8 @@ export interface JobRunRecorder {
   readonly maxAttempts: number;
   /** Write how an attempt ended to the run record, and notify about it. */
   recordAttempt(outcome: JobAttemptOutcome): Promise<void>;
+  /** Keep the progress the job reported on the run record, and notify about it. */
+  recordProgress?(progress: JobRunProgress): Promise<void>;
 }
 
 /** The workflow step an attempt runs for. */
@@ -62,10 +72,15 @@ export interface JobAttemptRequest {
   /** The workflow step the attempt runs for, if any. */
   workflow?: JobAttemptWorkflowStep;
   /**
-   * Aborted when the caller gave up on the attempt (a workflow step's timeout): a job not started yet is
-   * not started, and a started one reads it as `this.signal` while its flow ends as failed.
+   * Aborted when the caller gave up on the attempt (the run was cancelled or interrupted, a workflow
+   * step's timeout passed): a job not started yet is not started, and a started one reads it as
+   * `this.signal` while its flow ends as failed and runs the job's `cleanup`.
    */
   signal?: AbortSignal;
+  /** How long the job's `execute()` may run, in ms; unset or 0 for no limit. */
+  timeoutMs?: number;
+  /** The scope's admission; the attempt waits for a slot before its job is built. */
+  admission?: JobAdmission;
 }
 
 /** What a successful attempt returns. */
@@ -86,6 +101,8 @@ export interface JobAttemptResult {
 export async function runJobAttemptFlow(request: JobAttemptRequest): Promise<JobAttemptResult> {
   const { job, context } = request;
   const scope = job.providers.getActiveScope();
+  // The slot the attempt's `admit` stage takes is freed here, however the flow ends.
+  const admission: JobAdmissionSlot | undefined = request.admission?.slot();
   const run = () =>
     scope.runFlowForOutput(EXECUTE_JOB_FLOW, {
       job,
@@ -98,23 +115,72 @@ export async function runJobAttemptFlow(request: JobAttemptRequest): Promise<Job
         run: request.run,
         workflow: request.workflow,
         signal: request.signal,
+        timeoutMs: request.timeoutMs,
+        admission,
       },
     });
 
-  const storage = contextStorageOf(scope);
-  if (!context || !storage || storage.getStore() === context) return run();
-  return storage.runWithContext(context, run);
+  try {
+    const storage = contextStorageOf(scope);
+    if (!context || !storage || storage.getStore() === context) return await run();
+    return await storage.runWithContext(context, run);
+  } finally {
+    admission?.release();
+  }
 }
+
+/** Failures that end the run whatever attempts are left. */
+const FINAL_FAILURES = [
+  InvalidOutputError,
+  JobNotAuthorizedError,
+  JobCancelledError,
+  JobInterruptedError,
+  JobAdmissionTimeoutError,
+];
 
 /**
  * Whether a failed attempt is followed by another one. A result that failed the job's `outputSchema`
  * is not retried, because the job ran to completion and running it again would repeat its side
- * effects; nor is a denial, which is not transient.
+ * effects; nor is a denial, a cancel, a shutdown or an admission refusal, which are not transient. A
+ * timeout is.
  */
 export function willRetryJobAttempt(error: unknown, attempt: number, maxAttempts: number): boolean {
   if (attempt >= maxAttempts) return false;
   const cause = error instanceof FlowControl ? ((error as { originalError?: unknown }).originalError ?? error) : error;
-  return !(cause instanceof InvalidOutputError) && !(cause instanceof JobNotAuthorizedError);
+  return !FINAL_FAILURES.some((failure) => cause instanceof failure);
+}
+
+/** What the job's `cleanup` is told about why its attempt stopped, from the reason its signal was aborted with. */
+export function interruptReasonOf(reason: unknown): JobInterruptReason {
+  if (reason instanceof JobCancelledError) return 'cancel';
+  if (reason instanceof JobInterruptedError) return 'interrupt';
+  return 'timeout';
+}
+
+/** `work`'s outcome, or a rejection with `signal`'s reason as soon as it aborts; `work` itself keeps going. */
+export function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const aborted = () => reject(signal.reason);
+    if (signal.aborted) aborted();
+    else signal.addEventListener('abort', aborted, { once: true });
+    work.then(resolve, reject).finally(() => signal.removeEventListener('abort', aborted));
+  });
+}
+
+/** Wait `ms`, or reject with `signal`'s reason as soon as it aborts. */
+export function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const aborted = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', aborted);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', aborted, { once: true });
+  });
 }
 
 /** How long to wait before the attempt after `attempt`, from the job's (or step's) retry config. */

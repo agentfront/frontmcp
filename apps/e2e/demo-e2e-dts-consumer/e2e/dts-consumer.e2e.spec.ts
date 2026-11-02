@@ -44,6 +44,7 @@ const fixtureFiles = [
   'hook-ordering-must-fail.ts',
   'live-surface-must-compile.ts',
   'offload-must-compile.ts',
+  'durable-jobs-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -206,6 +207,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types this.offload() from the offloaded function, @Resource({ worker }) and the offload option', () => {
     expect(describeEach(inFixtureFile('offload-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types @Job({ cleanup }), jobs.store.sqlite, jobs.defaultTimeoutMs, jobs.admission, CancelJobTool and the run states', () => {
+    expect(describeEach(inFixtureFile('durable-jobs-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

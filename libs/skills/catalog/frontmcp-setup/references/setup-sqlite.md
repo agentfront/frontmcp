@@ -238,7 +238,7 @@ WAL needs a local filesystem: never put a WAL database on NFS, SMB or another ne
 
 Any number of processes on one machine can open the same file. SQLite lets one process write at a time; FrontMCP keeps that cheap:
 
-- **One connection per file per process.** The stores a process opens on one file (sessions, tasks, elicitation, events, and your own SQLite storage) share a single connection, so a process never waits on its own lock.
+- **One connection per file per process.** The stores a process opens on one file (sessions, tasks, elicitation, events, job runs, and your own SQLite storage) share a single connection, so a process never waits on its own lock.
 - **Short, atomic writes.** Each write is one short `BEGIN IMMEDIATE` transaction. A conditional set (`ifNotExists`/`ifExists`), `incr`, `deleteIfEquals` and `expireIfEquals` read and write in that one transaction, so counters stay exact and an NX lock has one holder across processes.
 - **Waiting without blocking.** Operations through `createStorage({ type: 'sqlite' })`, `sqliteStorageProvider()` or `SqliteStorageAdapter` run one at a time per process and wait for another process's lock on a timer, so the event loop keeps running; `disconnect()` lets the operations already called finish first. The periodic sweeps of expired keys and events wait the same way. The built-in session, task, elicitation and event stores' own reads and writes still wait synchronously, for at most `busyTimeoutMs`.
 
@@ -258,13 +258,14 @@ You do not call any factory yourself. The SDK constructs the SQLite session stor
 ### How the wiring works (issue #401)
 
 Top-level `sqlite` is treated by the SDK as the **default SQLite backend** for
-three subsystems:
+four subsystems:
 
-| Subsystem                     | Default source     | Override                       |
-| ----------------------------- | ------------------ | ------------------------------ |
-| Transport session persistence | top-level `sqlite` | `transport.persistence.sqlite` |
-| Background task store         | top-level `sqlite` | `tasks.sqlite`                 |
-| Elicitation store             | top-level `sqlite` | `elicitation.sqlite`           |
+| Subsystem                     | Default source     | Override                           |
+| ----------------------------- | ------------------ | ---------------------------------- |
+| Transport session persistence | top-level `sqlite` | `transport.persistence.sqlite`     |
+| Background task store         | top-level `sqlite` | `tasks.sqlite`                     |
+| Elicitation store             | top-level `sqlite` | `elicitation.sqlite`               |
+| Job runs and definitions      | top-level `sqlite` | `jobs.store` (`sqlite` or `redis`) |
 
 If you want different files per subsystem, set the subsystem's own `sqlite`
 block — it takes precedence over the top-level one. To disable a single

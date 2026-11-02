@@ -865,18 +865,22 @@ export class Scope extends ScopeEntry {
       if (autoEnabled) {
         this.logger.info(
           `Jobs auto-enabled: detected ${allJobs.length} job(s) and ${allWorkflows.length} workflow(s) in @App declarations. ` +
-            `Defaulting to in-memory stores — configure storage via @FrontMcp({ jobs: { store: ... } }) for multi-replica HA.`,
+            `Their runs are kept in jobs.store, else the top-level redis or sqlite, else in memory.`,
         );
       }
 
-      const effectiveConfig: JobsConfig = { ...(jobsConfig ?? {}), enabled: true };
       const notifyFn = async (data: Record<string, unknown>) => {
         if (this.notificationService) {
           this.logger.debug('Job notification', data);
         }
       };
 
-      const { registerJobCapabilities } = await import('../job/job-scope.helper.js');
+      const { registerJobCapabilities, resolveJobsStore } = await import('../job/job-scope.helper.js');
+      const effectiveConfig: JobsConfig = {
+        ...(jobsConfig ?? {}),
+        enabled: true,
+        store: resolveJobsStore(jobsConfig?.store, { redis: this.metadata.redis, sqlite: resolvedTopLevelSqlite }),
+      };
       const result = await registerJobCapabilities({
         providers: this.scopeProviders,
         flowRegistry: this.scopeFlows,

@@ -115,7 +115,7 @@ class StartedFailingJob extends JobContext {
 @Job({ name: 'signal-probe', inputSchema: {}, outputSchema: { signal: z.string() } })
 class SignalProbeJob extends JobContext {
   async execute() {
-    return { signal: this.signal ? 'present' : 'none' };
+    return { signal: this.signal?.aborted === false ? 'live' : 'none' };
   }
 }
 
@@ -305,10 +305,10 @@ describe('WorkflowStepExecutor', () => {
       expect(startedTrace).toEqual(['execute threw', 'did:finalize:WorkflowJobTimeoutError']);
     });
 
-    it('gives a job run outside a workflow step no signal', async () => {
+    it('gives a job run outside a workflow step a signal of its own, for its timeout and a cancel', async () => {
       const response = await server.callTool('execute_job', { name: 'signal-probe' });
 
-      expect((response.structuredContent as { result?: unknown }).result).toEqual({ signal: 'none' });
+      expect((response.structuredContent as { result?: unknown }).result).toEqual({ signal: 'live' });
     });
   });
 

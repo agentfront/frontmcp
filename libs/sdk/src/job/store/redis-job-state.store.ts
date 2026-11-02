@@ -47,9 +47,13 @@ export class RedisJobStateStore implements JobStateStore {
     return `${this.keyPrefix}idx:${field}:${value}`;
   }
 
+  private cancelKey(runId: string): string {
+    return `${this.keyPrefix}cancel:${runId}`;
+  }
+
   async createRun(record: JobRunRecord | WorkflowRunRecord): Promise<void> {
     const key = this.key(record.runId);
-    const data = JSON.stringify(record);
+    const data = JSON.stringify({ ...record, revision: 1, updatedAt: Date.now() });
     await this.client.set(key, data, 'EX', this.ttlSeconds);
 
     // Index by jobId and sessionId for queries
@@ -66,8 +70,9 @@ export class RedisJobStateStore implements JobStateStore {
     const raw = await this.client.get(key);
     if (!raw) return;
 
-    const existing = JSON.parse(raw);
-    const updated = { ...existing, ...updates };
+    const existing = JSON.parse(raw) as JobRunRecord;
+    const { runId: _ignoreRunId, ...safeUpdates } = updates;
+    const updated = { ...existing, ...safeUpdates, revision: (existing.revision ?? 0) + 1, updatedAt: Date.now() };
     await this.client.set(key, JSON.stringify(updated), 'EX', this.ttlSeconds);
   }
 
@@ -83,7 +88,7 @@ export class RedisJobStateStore implements JobStateStore {
     state?: JobExecutionState;
     limit?: number;
   }): Promise<(JobRunRecord | WorkflowRunRecord)[]> {
-    let runIds: string[] = [];
+    let runIds: string[];
 
     if (opts?.jobId) {
       runIds = await this.client.smembers(this.indexKey('jobId', opts.jobId));
@@ -139,6 +144,14 @@ export class RedisJobStateStore implements JobStateStore {
     }
 
     return removed;
+  }
+
+  async requestCancel(runId: string): Promise<void> {
+    await this.client.set(this.cancelKey(runId), '1', 'EX', this.ttlSeconds);
+  }
+
+  async isCancelRequested(runId: string): Promise<boolean> {
+    return (await this.client.get(this.cancelKey(runId))) !== null;
   }
 
   async dispose(): Promise<void> {

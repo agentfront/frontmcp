@@ -1,4 +1,28 @@
-export type JobExecutionState = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'retrying';
+export type JobExecutionState =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'retrying'
+  | 'timed_out'
+  | 'interrupted';
+
+/** The states a run ends in. */
+export const FINISHED_JOB_STATES: ReadonlySet<JobExecutionState> = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+  'timed_out',
+  'interrupted',
+]);
+
+/** The last progress a run's job reported with `this.progress()`. */
+export interface JobRunProgress {
+  progress: number;
+  total?: number;
+  message?: string;
+}
 
 export interface JobRunRecord {
   runId: string;
@@ -21,6 +45,11 @@ export interface JobRunRecord {
   maxAttempts: number;
   logs: string[];
   background: boolean;
+  progress?: JobRunProgress;
+  /** 1 when the run is created, and one more on each update. */
+  revision?: number;
+  /** When the store last wrote the run. */
+  updatedAt?: number;
 }
 
 export interface WorkflowRunRecord extends JobRunRecord {
@@ -39,7 +68,9 @@ export interface WorkflowRunRecord extends JobRunRecord {
 }
 
 export interface JobStateStore {
+  /** Store a new run at revision 1. */
   createRun(record: JobRunRecord | WorkflowRunRecord): Promise<void>;
+  /** Merge `updates` into the run (never its `runId`), bump its revision and stamp `updatedAt`; an unknown run is ignored. */
   updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void>;
   getRun(runId: string): Promise<JobRunRecord | WorkflowRunRecord | null>;
   listRuns(opts?: {
@@ -49,5 +80,8 @@ export interface JobStateStore {
     limit?: number;
   }): Promise<(JobRunRecord | WorkflowRunRecord)[]>;
   cleanup(olderThanMs: number): Promise<number>;
+  /** Record that the run was cancelled, where every process sharing the store reads it; a run never loses it. */
+  requestCancel(runId: string): Promise<void>;
+  isCancelRequested(runId: string): Promise<boolean>;
   dispose(): Promise<void>;
 }

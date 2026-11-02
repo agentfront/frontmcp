@@ -94,6 +94,7 @@ export const SYSTEM_TOOL_NAMES = new Set([
   'list_jobs',
   'execute_job',
   'get_job_status',
+  'cancel_job',
   'register_job',
   'remove_job',
   'list_workflows',

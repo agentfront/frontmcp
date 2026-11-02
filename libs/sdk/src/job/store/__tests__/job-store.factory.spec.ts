@@ -18,44 +18,46 @@ describe('job store factories with Redis', () => {
     createRedisClient.mockReturnValue({});
   });
 
-  it('connects the state store with every connection field of the redis option', () => {
-    const { type } = createJobStateStore({ redis: { provider: 'redis', ...connection } });
+  it('connects the state store with every connection field of the redis option', async () => {
+    const { type } = await createJobStateStore({ redis: { provider: 'redis', ...connection } });
 
     expect(type).toBe('redis');
     expect(createRedisClient).toHaveBeenCalledWith(expect.objectContaining(connection));
   });
 
-  it('connects the definition store with every connection field of the redis option', () => {
-    const { type } = createJobDefinitionStore({ redis: connection });
+  it('connects the definition store with every connection field of the redis option', async () => {
+    const { type } = await createJobDefinitionStore({ redis: connection });
 
     expect(type).toBe('redis');
     expect(createRedisClient).toHaveBeenCalledWith(expect.objectContaining(connection));
   });
 
-  it('passes a url on with the fields beside it, for them to fill in what it leaves out', () => {
-    createJobStateStore({ redis: { provider: 'redis', url: 'redis://cache.internal:6380', password: 'secret' } });
+  it('passes a url on with the fields beside it, for them to fill in what it leaves out', async () => {
+    await createJobStateStore({ redis: { provider: 'redis', url: 'redis://cache.internal:6380', password: 'secret' } });
 
     expect(createRedisClient).toHaveBeenCalledWith(
       expect.objectContaining({ url: 'redis://cache.internal:6380', password: 'secret' }),
     );
   });
 
-  it('stops on a url a field contradicts instead of falling back to memory', () => {
+  it('stops on a url a field contradicts instead of falling back to memory', async () => {
     createRedisClient.mockImplementation(() => {
       throw new StorageConfigError('redis', 'redis port contradicts redis.url.');
     });
     const contradicting = { url: 'redis://cache.internal:6380', port: 6379 };
 
-    expect(() => createJobStateStore({ redis: { provider: 'redis', ...contradicting } })).toThrow(StorageConfigError);
-    expect(() => createJobDefinitionStore({ redis: contradicting })).toThrow(StorageConfigError);
+    await expect(createJobStateStore({ redis: { provider: 'redis', ...contradicting } })).rejects.toThrow(
+      StorageConfigError,
+    );
+    await expect(createJobDefinitionStore({ redis: contradicting })).rejects.toThrow(StorageConfigError);
   });
 
-  it('still falls back to memory when the client cannot be created', () => {
+  it('still falls back to memory when the client cannot be created', async () => {
     createRedisClient.mockImplementation(() => {
       throw new Error('ioredis is required for Redis storage adapter');
     });
 
-    expect(createJobStateStore({ redis: { provider: 'redis', ...connection } }).type).toBe('memory');
-    expect(createJobDefinitionStore({ redis: connection }).type).toBe('memory');
+    expect((await createJobStateStore({ redis: { provider: 'redis', ...connection } })).type).toBe('memory');
+    expect((await createJobDefinitionStore({ redis: connection })).type).toBe('memory');
   });
 });

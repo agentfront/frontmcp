@@ -1,11 +1,12 @@
 import { type Token } from '@frontmcp/di';
+import { type SqliteAdapterOptions } from '@frontmcp/utils';
 
 import {
   completionEventsOf,
   completionOutputText,
   type ScopeCompletionEvents,
 } from '../channel/sources/completion-events';
-import { type EntryOwnerRef } from '../common';
+import { type EntryOwnerRef, type RedisOptionsInput } from '../common';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
@@ -19,11 +20,14 @@ import RemoveWorkflowTool from '../workflow/tools/remove-workflow.tool';
 import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/workflow.registry';
 import { JobExecutionManager } from './execution/job-execution.manager';
 import ExecuteJobFlow from './flows/execute-job.flow';
+import { JobAdmission, type JobAdmissionOptions } from './job-admission';
 import JobRegistry, { type JobRegistryInterface } from './job.registry';
-import { createJobDefinitionStore, type JobDefinitionStoreOptions } from './store/job-definition-store.factory';
+import { JobRunResource } from './resources/job-run.resource';
+import { createJobDefinitionStore } from './store/job-definition-store.factory';
 import { type JobDefinitionStore } from './store/job-definition.interface';
-import { createJobStateStore, type JobStateStoreOptions } from './store/job-state-store.factory';
+import { createJobStateStore } from './store/job-state-store.factory';
 import { type JobStateStore, type WorkflowRunRecord } from './store/job-state.interface';
+import CancelJobTool from './tools/cancel-job.tool';
 import ExecuteJobTool from './tools/execute-job.tool';
 import GetJobStatusTool from './tools/get-job-status.tool';
 // Import tools
@@ -45,16 +49,38 @@ export interface JobsConfig {
    * @default false
    */
   allowDynamicRegistration?: boolean;
-  store?: {
-    redis?: {
-      provider: string;
-      host?: string;
-      port?: number;
-      url?: string;
-      [key: string]: unknown;
-    };
-    keyPrefix?: string;
-  };
+  /** Where runs and dynamic definitions are kept; unset, the top-level `redis` or `sqlite` (see {@link resolveJobsStore}). */
+  store?: JobsStoreConfig;
+  /** How long an attempt of a job that sets no `timeout` may run, in ms; 0 for no limit. @default 300000 */
+  defaultTimeoutMs?: number;
+  /** When job attempts may start: at most `concurrency` at once, each claiming `memoryMb`, waiting up to `maxWaitMs`. */
+  admission?: JobAdmissionOptions;
+}
+
+/** `jobs.store`: Redis, or a SQLite file the processes on one machine share; memory when neither is set. */
+export interface JobsStoreConfig {
+  redis?: RedisOptionsInput;
+  sqlite?: SqliteAdapterOptions;
+  keyPrefix?: string;
+}
+
+/** How often an active run reads a shared store for a cancel another process wrote. */
+const CANCEL_POLL_MS = 1_000;
+
+/**
+ * The store jobs use: `jobs.store` when it names a backend, else the server's top-level `redis` (unless it
+ * is Vercel KV, which has no key listing), else its top-level `sqlite`, else memory (undefined).
+ */
+export function resolveJobsStore(
+  store: JobsStoreConfig | undefined,
+  topLevel: { redis?: RedisOptionsInput; sqlite?: SqliteAdapterOptions },
+): JobsStoreConfig | undefined {
+  if (store?.redis || store?.sqlite) return store;
+  const redis = topLevel.redis;
+  const vercelKv = redis !== undefined && 'provider' in redis && redis.provider === 'vercel-kv';
+  if (redis && !vercelKv) return { ...store, redis };
+  if (topLevel.sqlite) return { ...store, sqlite: topLevel.sqlite };
+  return store;
 }
 
 export interface RegisterJobCapabilitiesArgs {
@@ -91,20 +117,16 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
   await flowRegistry.registryFlows([ExecuteJobFlow]);
 
   // 1. Create stores
-  const storeOpts: JobStateStoreOptions = {
-    redis: jobsConfig.store?.redis,
-    keyPrefix: jobsConfig.store?.keyPrefix ?? 'mcp:jobs:',
-  };
+  const { redis, sqlite } = jobsConfig.store ?? {};
+  const keyPrefix = jobsConfig.store?.keyPrefix ?? 'mcp:jobs:';
 
-  const { store: stateStore, type: stateStoreType } = createJobStateStore(storeOpts, logger);
+  const { store: stateStore, type: stateStoreType } = await createJobStateStore({ redis, sqlite, keyPrefix }, logger);
   logger.info(`Job state store: ${stateStoreType}`);
 
-  const defOpts: JobDefinitionStoreOptions = {
-    redis: jobsConfig.store?.redis,
-    keyPrefix: (jobsConfig.store?.keyPrefix ?? 'mcp:jobs:') + 'def:',
-  };
-
-  const { store: definitionStore, type: defStoreType } = createJobDefinitionStore(defOpts, logger);
+  const { store: definitionStore, type: defStoreType } = await createJobDefinitionStore(
+    { redis, sqlite, keyPrefix: keyPrefix + 'def:' },
+    logger,
+  );
   logger.info(`Job definition store: ${defStoreType}`);
 
   // 2. Load dynamic definitions
@@ -140,7 +162,20 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
       await publishJobCompletion(data, stateStore, completions);
     },
     scope,
+    {
+      defaultTimeoutMs: jobsConfig.defaultTimeoutMs,
+      admission: jobsConfig.admission ? new JobAdmission(jobsConfig.admission) : undefined,
+      // A store other processes share can carry a cancel this process must notice
+      cancelPollMs: stateStoreType === 'memory' ? undefined : CANCEL_POLL_MS,
+    },
   );
+  // At shutdown the runs left are interrupted (their cleanup runs) before the stores close
+  scope.onDispose(async () => {
+    await executionManager.dispose();
+    await stateStore.dispose();
+    await definitionStore.dispose();
+  });
+  scope.resources.registerDynamicResource(JobRunResource);
 
   // 5. Collect management tools. The dynamic-registration pair is omitted
   // unless the operator opted in — an unregistered tool cannot be called at
@@ -150,6 +185,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     ListJobsTool,
     ExecuteJobTool,
     GetJobStatusTool,
+    CancelJobTool,
     RemoveJobTool,
     ListWorkflowsTool,
     ExecuteWorkflowTool,

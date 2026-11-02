@@ -3,10 +3,13 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '../../common';
 import { JobNotAuthorizedError } from '../../errors';
 import type { JobExecutionManager } from '../execution/job-execution.manager';
+import { jobRunUri } from '../job-run-access';
 
 @Tool({
   name: 'execute_job',
-  description: 'Execute a registered job by name. Supports inline (synchronous) and background execution.',
+  description:
+    'Execute a registered job by name. Supports inline (synchronous) and background execution; a background run ' +
+    'answers at once with its runId and the job://runs/{runId} resource to read or subscribe to.',
   inputSchema: {
     name: z.string().describe('Job name to execute'),
     input: z.record(z.string(), z.unknown()).optional().describe('Job input data'),
@@ -15,6 +18,7 @@ import type { JobExecutionManager } from '../execution/job-execution.manager';
   outputSchema: {
     runId: z.string(),
     state: z.string(),
+    uri: z.string().describe('The job://runs/{runId} resource of the run'),
     result: z.unknown().optional(),
     logs: z.array(z.string()).optional(),
   },
@@ -46,6 +50,6 @@ export default class ExecuteJobTool extends ToolContext {
       authoritiesContextBuilder: this.scope.authoritiesContextBuilder,
     });
 
-    return result;
+    return { ...result, uri: jobRunUri(result.runId) };
   }
 }
