@@ -248,6 +248,15 @@ posixOnly('a shared local server', () => {
     }
   });
 
+  it('shuts down the server it started when it can not write its record', async () => {
+    const files = sharedServerFiles('spec');
+    fs.mkdirSync(`${files.recordFile}.${process.pid}.tmp`, { recursive: true });
+
+    await expect(serveShared(config, { key: 'spec', transport: 'unix' }, create)).rejects.toThrow();
+    expect(fs.existsSync(files.socketPath)).toBe(false);
+    expect(fs.existsSync(files.recordFile)).toBe(false);
+  });
+
   describe('over loopback HTTP', () => {
     it('ends its MCP session on the server when the session stops', async () => {
       await serve('http');
