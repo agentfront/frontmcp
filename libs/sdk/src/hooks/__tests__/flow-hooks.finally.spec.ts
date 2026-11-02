@@ -92,6 +92,11 @@ class LedgerFinallyPlugin {
     trace.push('Did execute');
   }
 
+  @ToolHook.Did('execute', { filter: calling('post_did_broke') })
+  breakDidExecute() {
+    throw new PublicMcpError('did hook broke');
+  }
+
   @ToolHook.Finally('execute', { priority: 100 })
   lastFinallyExecute(ctx: CallToolFlow) {
     trace.push(`Finally p100 execute: ${outcomeOf(ctx)}`);
@@ -125,6 +130,7 @@ class LedgerFinallyPlugin {
     postingTool('post_gated'),
     postingTool('post_cached'),
     postingTool('post_wrapped'),
+    postingTool('post_did_broke'),
   ],
 })
 class LedgerApp {}
@@ -247,6 +253,19 @@ describe('Finally hooks', () => {
       'Finally p100 execute: around broke',
       'Did finalize',
       'Finally finalize: around broke',
+    ]);
+  });
+
+  it('run when a Did hook fails a stage whose body succeeded, and read that failure, which the client gets', async () => {
+    const call = await callTool(server, 'post_did_broke');
+
+    expect({ isError: call.isError, text: call.text }).toEqual({ isError: true, text: 'did hook broke' });
+    expect(call.trace).toEqual([
+      'Did execute',
+      'Finally p0 execute: did hook broke',
+      'Finally p100 execute: did hook broke',
+      'Did finalize',
+      'Finally finalize: did hook broke',
     ]);
   });
 
