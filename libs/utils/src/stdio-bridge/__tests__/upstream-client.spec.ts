@@ -183,6 +183,30 @@ describe('createHttpUpstream', () => {
     }
   });
 
+  it('refuses a redirect on every request it sends its headers with, the session end included', async () => {
+    const server = await startServer();
+    const redirects: Array<RequestRedirect | undefined> = [];
+    const sendThrough: typeof fetch = (input, init) => {
+      redirects.push(init?.redirect);
+      return fetch(input, init);
+    };
+    try {
+      const upstream = createHttpUpstream({
+        url: server.url,
+        log: silentLog(),
+        onFrame: () => undefined,
+        headers: { authorization: 'Bearer secret' },
+        fetch: sendThrough,
+      });
+      await upstream.send(initialize);
+      await upstream.endSession();
+
+      expect(redirects).toEqual(['error', 'error']);
+    } finally {
+      await server.close();
+    }
+  });
+
   it('ends the session the server issued, once', async () => {
     const server = await startServer();
     try {

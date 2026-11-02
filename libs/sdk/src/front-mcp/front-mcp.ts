@@ -1010,6 +1010,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * ```
    */
   public static async runShared(optionsOrClass: ConfigOrServerClass, shared: SharedServerOptions): Promise<void> {
+    if (isSchemaExtraction()) return;
     const options = resolveConfigInput(optionsOrClass);
     const { runShared } = await import('../shared/index.js');
     await runShared(options, shared, (config) => new FrontMcpInstance(config));

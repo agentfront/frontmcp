@@ -68,6 +68,10 @@ Starting the server takes the start lock in a SQLite file, so install `@frontmcp
 | `key`       | `string`            | required                       | Names the server: sessions with the same key on this machine share one process |
 | `transport` | `'unix'` / `'http'` | `'unix'` (`'http'` on Windows) | An owner-only Unix socket, or loopback HTTP on `127.0.0.1` with a token        |
 
+Give every session of a key the same `transport`. A session attaches only to a server of its own transport, so one
+that finds the key's server running over the other transport starts a second server, which takes the record over;
+the first keeps running, with its background work, until you stop it.
+
 `key` is 1 to 64 lowercase letters, digits, `.`, `_` or `-`, starting and ending with a letter or digit, and not a
 device name Windows reserves (`con`, `prn`, `aux`, `nul`, `com0`-`com9`, `lpt0`-`lpt9`, with or without an extension):
 on a case-insensitive file system (macOS, Windows) `My-Server` and `my-server` would share one folder, and Windows
@@ -129,7 +133,8 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
   way.
 - **Other users** can't reach the Unix socket at all. On loopback HTTP they can connect, but every MCP request needs
   the token; a process that takes the port of a server that stopped, before a session attaches or while sessions are
-  attached, gets challenges it can't answer, and never a request or the token. A proof replayed from an earlier
+  attached, gets challenges it can't answer, and is not sent a request or the token, except in the instant described
+  below. A proof replayed from an earlier
   challenge, made with an earlier server's key, or bound to another endpoint is refused.
 - **Web pages** can't reach the socket. On loopback HTTP the server accepts only the loopback names as `Host` (DNS
   rebinding) and refuses every request that carries an `Origin`.
@@ -138,7 +143,7 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
 - Endpoints that need no token on any FrontMCP server still answer other users on loopback HTTP: the health routes
   (`/health`, `/healthz`, `/readyz`: the server's name, version and counts) and routes a plugin adds.
 - A process that takes the port in the instant between a challenge and the request it guards could receive that one
-  request; the token it carries is useless, since it dies with the server.
+  request, its payload included; the token it carries is useless, since it dies with the server.
 - **Same-user processes** can read the record, as they can read everything else of yours: the shared server trusts
   them like any stdio server does.
 - **A stale socket** a crashed server left is removed by the next server that starts; a live one that doesn't prove

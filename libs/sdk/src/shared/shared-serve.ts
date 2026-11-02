@@ -148,10 +148,10 @@ async function startSharedServer(
     }),
   );
   await instance.ready;
-  const scope = instance.getPrimaryScope() as Scope | undefined;
-  if (!scope) throw new InternalMcpError('No scopes initialized. Ensure at least one app is configured.');
-  await scope.registryFlows(SharedIdentifyFlow);
   try {
+    const scope = instance.getPrimaryScope() as Scope | undefined;
+    if (!scope) throw new InternalMcpError('No scopes initialized. Ensure at least one app is configured.');
+    await scope.registryFlows(SharedIdentifyFlow);
     assertTokenGuardsEveryScope(instance, options.key, token);
     await instance.start();
     if (!(await startLock.held())) throw new SharedServerStartError(options.key, ANOTHER_START);
