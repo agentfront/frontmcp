@@ -56,6 +56,7 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   'mcp registry': sdkModule('mcp-registry/flows/'),
   metrics: sdkModule('metrics/'),
   observability: sdkModule('scope/(observability-scope\\.helper|tracer-provider\\.utils)'),
+  'worker offload': sdkModule('offload/(offload-pool|offload-worker\\.source|read-in-worker|worker-resource\\.reader)'),
   'remote and esm entries': sdkModule('remote-mcp/|esm-loader/(?!package-specifier)'),
   skills:
     /^libs\/sdk\/dist\/browser\/skill\/(providers\/|session\/|hooks\/|sep-2640\/(?!sep-2640\.constants)|flows\/(?!filter-skills\.flow)|skill-md-parser)|(^|\/)node_modules\/(js-yaml|vectoriadb)\//,

@@ -25,6 +25,7 @@ import {
   mcpRegistryOptionsSchema,
   metricsOptionsSchema,
   observabilityOptionsSchema,
+  offloadOptionsSchema,
   outboundFetchOptionsSchema,
   paginationOptionsSchema,
   pubsubOptionsSchema,
@@ -46,6 +47,7 @@ import {
   type McpRegistryOptionsInput,
   type MetricsOptionsInput,
   type ObservabilityOptionsInterface,
+  type OffloadOptionsInput,
   type OutboundFetchOptionsInput,
   type PaginationOptions,
   type PubsubOptionsInput,
@@ -144,6 +146,12 @@ export interface FrontMcpBaseMetadata {
    * @default { shutdownHookTimeoutMs: 3000 }
    */
   lifecycle?: LifecycleOptionsInput;
+
+  /**
+   * The worker-thread pool that runs `this.offload()` calls and the reads of `worker: true` resources (Node only).
+   * @default { budgetMs: 30000, idleTimeoutMs: 30000, env: ['NODE_ENV'] }
+   */
+  offload?: OffloadOptionsInput;
 
   /**
    * Development aids: `hookTrace` adds the hooks a call ran to its answer's `_meta['frontmcp/trace']`.
@@ -635,6 +643,7 @@ export const frontMcpBaseSchema = z.object({
   instructions: z.string().optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   lifecycle: lifecycleOptionsSchema.optional(),
+  offload: offloadOptionsSchema.optional(),
   devtools: devtoolsOptionsSchema.optional(),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
@@ -866,6 +875,7 @@ const frontMcpLiteSchema = z.object({
   instructions: z.string().optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   lifecycle: lifecycleOptionsSchema.optional(),
+  offload: offloadOptionsSchema.optional(),
   devtools: devtoolsOptionsSchema.optional(),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),

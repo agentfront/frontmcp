@@ -103,7 +103,32 @@ interface ResourceMetadata extends ExtendFrontMcpResourceMetadata {
    * `FEATURE_OFF` and a remedy. When a source changes, connected clients get `notifications/resources/list_changed`.
    */
   enabled?: EnabledOption;
+
+  /**
+   * Run `read` in a worker thread of the server's offload pool (Node only), so CPU-heavy work does not block the server.
+   * The worker imports the module that declares the resource and builds the resource there, without a DI container:
+   * `this.get()`, `this.scope`, `this.auth` and the request context throw there. It gets the URI and its parameters, and
+   * sends back the output by structured clone. `{ budgetMs }` bounds how long it may run (default `offload.budgetMs`);
+   * past it the read is refused with `OffloadBudgetExceededError`.
+   */
+  worker?: ResourceWorkerOption;
 }
+
+/** `true`, or the budget of each read in the worker. */
+export type ResourceWorkerOption = boolean | { budgetMs?: number };
+
+const resourceWorkerOptionSchema = z.union([
+  z.boolean(),
+  z
+    .object({
+      budgetMs: z
+        .number({ message: 'worker.budgetMs must be a number of milliseconds' })
+        .int('worker.budgetMs must be a whole number of milliseconds')
+        .positive('worker.budgetMs must be greater than 0')
+        .optional(),
+    })
+    .strict(),
+]);
 
 const resourceAnnotationsSchema = z
   .object({
@@ -127,6 +152,7 @@ export const frontMcpResourceMetadataSchema = z
     _meta: z.record(z.string(), z.unknown()).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
     enabled: enabledOptionSchema.optional(),
+    worker: resourceWorkerOptionSchema.optional(),
   } satisfies RawZodShape<ResourceMetadata, ExtendFrontMcpResourceMetadata>)
   .passthrough();
 
@@ -193,6 +219,9 @@ interface ResourceTemplateMetadata extends ExtendFrontMcpResourceTemplateMetadat
    * `FEATURE_OFF` and a remedy. When a source changes, connected clients get `notifications/resources/list_changed`.
    */
   enabled?: EnabledOption;
+
+  /** Read in a worker thread of the offload pool; see `ResourceMetadata.worker`. */
+  worker?: ResourceWorkerOption;
 }
 
 export const frontMcpResourceTemplateMetadataSchema = z
@@ -209,6 +238,7 @@ export const frontMcpResourceTemplateMetadataSchema = z
     _meta: z.record(z.string(), z.unknown()).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
     enabled: enabledOptionSchema.optional(),
+    worker: resourceWorkerOptionSchema.optional(),
   } satisfies RawZodShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>)
   .passthrough();
 

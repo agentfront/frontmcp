@@ -61,6 +61,7 @@ import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
 import { NotificationService } from '../notification';
+import { OffloadService } from '../offload/offload.service';
 import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
 import PromptRegistry from '../prompt/prompt.registry';
@@ -1365,6 +1366,12 @@ export class Scope extends ScopeEntry {
       },
       // FrontMcpContextProvider is a factory that retrieves from AsyncLocalStorage
       FrontMcpContextProvider,
+      {
+        scope: ProviderScope.GLOBAL,
+        name: 'OffloadService',
+        provide: OffloadService,
+        useValue: new OffloadService(this.metadata.offload, this.logger),
+      },
     ];
   }
 
