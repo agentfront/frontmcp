@@ -22,6 +22,41 @@ export const HEAVY_FACTORIES: ReadonlySet<string> = new Set([
   'tuple',
 ]);
 
+/** The other schema factories, which `internalZ` defers too. The public `z` leaves them as Zod's own. */
+export const LEAF_FACTORIES: ReadonlySet<string> = new Set([
+  'string',
+  'number',
+  'int',
+  'boolean',
+  'bigint',
+  'symbol',
+  'date',
+  'undefined',
+  'null',
+  'void',
+  'any',
+  'unknown',
+  'never',
+  'nan',
+  'literal',
+  'enum',
+  'nativeEnum',
+  'url',
+  'email',
+  'uuid',
+  'array',
+  'set',
+  'map',
+  'partialRecord',
+  'optional',
+  'nullable',
+  'lazy',
+  'function',
+  'custom',
+  'instanceof',
+  'preprocess',
+]);
+
 export const CHAIN_METHODS: ReadonlySet<string> = new Set([
   // ZodType generic
   'optional',
