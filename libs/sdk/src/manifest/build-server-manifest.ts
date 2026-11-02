@@ -89,9 +89,11 @@ function sortedBy<T>(items: T[], key: (item: T) => string): T[] {
   });
 }
 
+/** The hash of a skill's loaded content, read with LF line endings so a Windows checkout gets the same one. */
 async function skillHash(skill: SkillEntry): Promise<string | undefined> {
   try {
-    return computeSkillHash(await skill.load());
+    const content = await skill.load();
+    return computeSkillHash({ ...content, instructions: content.instructions.replace(/\r\n/g, '\n') });
   } catch {
     return undefined;
   }

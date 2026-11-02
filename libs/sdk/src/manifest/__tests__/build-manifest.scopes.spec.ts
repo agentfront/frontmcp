@@ -1,5 +1,10 @@
 import 'reflect-metadata';
 
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { randomUUID, rm, writeFile } from '@frontmcp/utils';
+
 import { App, LogLevel, Skill, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { buildManifest } from '../build-manifest';
 
@@ -73,6 +78,33 @@ describe('buildManifest() across scopes', () => {
 
     expect(lost).toEqual(expect.objectContaining({ app: 'orders', description: 'Its file is gone' }));
     expect(lost).not.toHaveProperty('hash');
+  });
+
+  it('gives a skill the same hash whether its file has LF or CRLF line endings', async () => {
+    const runbookFile = path.join(os.tmpdir(), `frontmcp-runbook-${randomUUID()}.md`);
+
+    @Skill({ name: 'runbook', description: 'Restart the service', instructions: { file: runbookFile } })
+    class RunbookSkill {}
+
+    @App({ id: 'runbooks', name: 'Runbooks', skills: [RunbookSkill] })
+    class RunbooksApp {}
+
+    const hashOf = async (lineEnding: string) => {
+      await writeFile(runbookFile, ['# Restart', '', 'Drain, then restart.', ''].join(lineEnding));
+      const manifest = await buildManifest({
+        info: { name: 'runbook-manifest', version: '1.0.0' },
+        apps: [RunbooksApp],
+        logging: { level: LogLevel.Off },
+      });
+      return manifest.skills[0].hash;
+    };
+    try {
+      const lf = await hashOf('\n');
+      expect(lf).toMatch(/^[0-9a-f]{64}$/);
+      expect(await hashOf('\r\n')).toBe(lf);
+    } finally {
+      await rm(runbookFile, { force: true });
+    }
   });
 
   it('sends no instructions field when the server has none to send', async () => {
