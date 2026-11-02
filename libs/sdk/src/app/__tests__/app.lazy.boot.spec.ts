@@ -4,10 +4,19 @@ import 'reflect-metadata';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { z } from '@frontmcp/lazy-zod';
 import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
-import { App, Job, JobContext, LogLevel, Skill, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
+import {
+  App,
+  Job,
+  JobContext,
+  LogLevel,
+  Skill,
+  Tool,
+  ToolContext,
+  type FrontMcpConfigInput,
+  type LocalAppMetadata,
+} from '../../common';
 import { connect } from '../../direct/connect';
 import { LazyAppConfigurationError } from '../../errors';
 import { buildManifest } from '../../manifest/build-manifest';
@@ -152,6 +161,19 @@ describe('the manifest of a lazy app', () => {
     }
   });
 
+  it("lists a lazy app in its own scope with splitByApp, and imports it on that scope's first call", async () => {
+    const split: Partial<FrontMcpConfigInput> = { splitByApp: true } as Partial<FrontMcpConfigInput>;
+    const manifest = await buildManifest(lazyServer(billingImport(), split));
+    const lazy = billingImport();
+    const client = await connect(lazyServer(lazy, { ...split, manifest }), { app: 'billing' });
+
+    expect(JSON.stringify(await client.listTools())).toContain('charge');
+    expect(lazy).not.toHaveBeenCalled();
+    expect(JSON.stringify(await client.callTool('charge', { customer: 'acme', cents: 1 }))).toContain('R-acme');
+    expect(lazy).toHaveBeenCalledTimes(1);
+    await client.close();
+  });
+
   it('refuses a manifest that is not a frontmcp.manifest.json', async () => {
     const config = lazyServer(billingImport(), { manifest: { manifestVersion: 99 } as unknown as ServerManifest });
 
@@ -191,7 +213,7 @@ class NightlyJob extends JobContext {
   }
 }
 
-@Tool({ name: 'gated', inputSchema: { reason: z.string() }, authorities: 'admin' })
+@Tool({ name: 'gated', inputSchema: {}, authorities: 'admin' })
 class GatedTool extends ToolContext {
   async execute() {
     return 'ok';
@@ -206,7 +228,7 @@ class LiveTool extends ToolContext {
 }
 
 describe('an app that cannot be lazy', () => {
-  it.each([
+  it.each<[string, Partial<LocalAppMetadata>, RegExp]>([
     ['skills', { skills: [RefundsSkill] }, /skills/],
     ['jobs', { jobs: [NightlyJob] }, /jobs/],
     ['its own auth', { auth: { mode: 'public' } }, /auth/],

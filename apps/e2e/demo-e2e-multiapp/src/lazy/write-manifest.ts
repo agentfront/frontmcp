@@ -5,7 +5,7 @@ process.env['FRONTMCP_SCHEMA_EXTRACT'] = '1';
 
 async function main(out: string): Promise<void> {
   const { buildManifest } = await import('@frontmcp/sdk');
-  const { default: LazyAppsServer } = await import('./lazy.main');
+  const { LazyAppsServer } = await import('./lazy.main.js');
   await writeFile(out, JSON.stringify(await buildManifest(LazyAppsServer), null, 2));
 }
 

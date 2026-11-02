@@ -14,11 +14,11 @@ const port = parseInt(process.env['PORT'] ?? '3104', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E Lazy Apps', version: '0.1.0' },
-  apps: [StatusApp, { id: 'billing', name: 'Billing', lazy: () => import('./billing.app') }],
+  apps: [StatusApp, { id: 'billing', name: 'Billing', lazy: () => import('./billing.app.js') }],
   manifest: process.env['LAZY_APPS_MANIFEST'] || undefined,
   logging: { level: LogLevel.Warn },
   http: { port },
   auth: { mode: 'public', sessionTtl: 3600, anonymousScopes: ['anonymous'] },
   transport: { protocol: { json: true, legacy: true, strictSession: false } },
 })
-export default class LazyAppsServer {}
+export class LazyAppsServer {}
