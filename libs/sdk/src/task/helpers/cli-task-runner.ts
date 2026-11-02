@@ -10,15 +10,18 @@
  * Cancellation uses `process.kill(pid, SIGTERM)`. The worker is expected to
  * observe the signal via the AbortSignal surfaced on `ToolContext.signal`.
  *
+ * Workers are spawned owned under {@link TASK_WORKER_MARKER}, so one whose
+ * server is gone can be stopped with `reapOrphans(TASK_WORKER_MARKER)`.
+ *
  * @module task/helpers/cli-task-runner
  */
 
-// `spawn` is resolved lazily through `@frontmcp/utils` so this module can be
+// `spawnOwned` loads `child_process` lazily inside `@frontmcp/utils` so this module can be
 // imported by the main SDK barrel in V8-isolate builds (Cloudflare Workers,
 // Deno Deploy) without their bundlers eagerly pulling in `node:child_process`.
-// The runner can only execute on Node runtimes — calling `spawn` outside Node
+// The runner can only execute on Node runtimes — spawning outside Node
 // throws via `assertNode` inside utils.
-import { getHostname, getSpawnFn } from '@frontmcp/utils';
+import { getHostname, spawnOwned } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../../common';
 import type { TaskStore } from '../store';
@@ -40,6 +43,8 @@ export interface CliTaskRunnerDeps {
 
 const RUN_TASK_SUBCOMMAND = '__run-task';
 const RUN_TASK_ENV_VAR = 'FRONTMCP_RUN_TASK_ID';
+/** The `spawnOwned` marker of task workers, for `reapOrphans(TASK_WORKER_MARKER)`. */
+const TASK_WORKER_MARKER = 'frontmcp-task';
 
 export class CliTaskRunner implements TaskRunner {
   readonly kind = 'cli' as const;
@@ -56,7 +61,8 @@ export class CliTaskRunner implements TaskRunner {
       args: fullArgs,
     });
 
-    const child = getSpawnFn()(exe, fullArgs, {
+    const { child } = spawnOwned(exe, fullArgs, {
+      marker: TASK_WORKER_MARKER,
       detached: true,
       stdio: 'ignore',
       env: { ...process.env, [RUN_TASK_ENV_VAR]: record.taskId },
@@ -177,4 +183,4 @@ export class CliTaskRunner implements TaskRunner {
   }
 }
 
-export { RUN_TASK_SUBCOMMAND, RUN_TASK_ENV_VAR };
+export { RUN_TASK_SUBCOMMAND, RUN_TASK_ENV_VAR, TASK_WORKER_MARKER };

@@ -2,7 +2,7 @@ import 'reflect-metadata';
 
 import { createGuardManager, type GuardConfig, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
-import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
+import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime, mkdir } from '@frontmcp/utils';
 
 import AdapterRegistry from '../adapter/adapter.registry';
 import AgentRegistry from '../agent/agent.registry';
@@ -82,7 +82,6 @@ import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/reques
 import type { SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import type { TransportService } from '../transport/transport.registry';
-import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import { registerServerEntries } from './server-entries.helper';
 import { reportStartup } from './startup-report.helper';
@@ -1077,10 +1076,6 @@ export class Scope extends ScopeEntry {
     }
     try {
       const { dirname } = require('path') as typeof import('path');
-      const { mkdir } = await importWithRequireFallback(
-        () => import('@frontmcp/utils'),
-        () => require('@frontmcp/utils') as typeof import('@frontmcp/utils'),
-      );
       await mkdir(dirname(finalPath), { recursive: true });
     } catch (err) {
       this.logger.warn('[FrontMcp] Could not ensure sqlite parent directory exists', {
