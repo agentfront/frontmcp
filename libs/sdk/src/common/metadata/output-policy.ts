@@ -166,15 +166,44 @@ export function formatOutputSchemaForDescription(
     return `\n\n**Output schema:**\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``;
   }
 
+  const target = resolveLocalRef(schema, schema) ?? schema;
+  const lines = propertyLinesOf(target);
+  if (lines) return `\n\n**Returns:**\n${lines.join('\n')}`;
+
+  const members = target['anyOf'] ?? target['oneOf'];
+  if (!Array.isArray(members)) return `\n\n**Returns:** \`${schemaTypeOf(target)}\``;
+
+  const memberLines = members.map((member: Record<string, unknown>) => {
+    const resolvedMember = resolveLocalRef(member, schema);
+    return resolvedMember ? propertyLinesOf(resolvedMember) : undefined;
+  });
+  if (memberLines.some((memberLine) => memberLine === undefined)) return '';
+
+  const options = memberLines.map(
+    (memberLine, index) => `- Option ${index + 1}:\n${(memberLine ?? []).map((line) => `  ${line}`).join('\n')}`,
+  );
+  return `\n\n**Returns** one of:\n${options.join('\n')}`;
+}
+
+function propertyLinesOf(schema: Record<string, unknown>): string[] | undefined {
   const properties = schema['properties'] as Record<string, Record<string, unknown>> | undefined;
-  if (!properties || Object.keys(properties).length === 0) {
-    return `\n\n**Returns:** \`${schemaTypeOf(schema)}\``;
-  }
+  if (!properties || Object.keys(properties).length === 0) return undefined;
 
   const required = new Set(Array.isArray(schema['required']) ? (schema['required'] as string[]) : []);
-  const lines = Object.entries(properties).map(([key, prop]) => {
+  return Object.entries(properties).map(([key, prop]) => {
     const desc = typeof prop['description'] === 'string' ? ` — ${prop['description']}` : '';
     return `- \`${key}\`: ${schemaTypeOf(prop)} (${required.has(key) ? 'required' : 'optional'})${desc}`;
   });
-  return `\n\n**Returns:**\n${lines.join('\n')}`;
+}
+
+function resolveLocalRef(
+  schema: Record<string, unknown>,
+  root: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const ref = schema['$ref'];
+  if (typeof ref !== 'string') return schema;
+  const definitionsPrefix = '#/$defs/';
+  if (!ref.startsWith(definitionsPrefix)) return undefined;
+  const definitions = root['$defs'] as Record<string, Record<string, unknown>> | undefined;
+  return definitions?.[ref.slice(definitionsPrefix.length)];
 }

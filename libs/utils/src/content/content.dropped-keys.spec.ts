@@ -37,9 +37,16 @@ describe('findDroppedKeys', () => {
     expect(findDroppedKeys({ id: 1, toString: 'shadow' }, { id: 1 })).toEqual(['toString']);
   });
 
-  it('stops where the shapes differ instead of comparing unrelated values', () => {
-    expect(findDroppedKeys({ at: { seconds: 1 } }, { at: '1970-01-01T00:00:01.000Z' })).toEqual([]);
+  it('counts every key of an object that parsing replaced with a non-object as dropped', () => {
+    expect(findDroppedKeys({ payload: { secret: 'x', nested: { pin: 1 } } }, { payload: '[object Object]' })).toEqual([
+      'payload.nested',
+      'payload.secret',
+    ]);
+    expect(findDroppedKeys([{ id: 1 }], { 0: { id: 1 } })).toEqual(['[].id']);
+  });
+
+  it('finds nothing to drop in a primitive answer', () => {
     expect(findDroppedKeys('text', { value: 'text' })).toEqual([]);
-    expect(findDroppedKeys([{ id: 1 }], { 0: { id: 1 } })).toEqual([]);
+    expect(findDroppedKeys(['a', 'b'], 'a,b')).toEqual([]);
   });
 });

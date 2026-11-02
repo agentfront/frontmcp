@@ -196,6 +196,61 @@ describe('output-policy', () => {
       const out = formatOutputSchemaForDescription({ type: 'array', items: { type: 'number' } }, 'summary');
       expect(out).toBe('\n\n**Returns:** `number[]`');
     });
+
+    it('renders each member of an object union', () => {
+      const schema = {
+        type: 'object',
+        anyOf: [
+          { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+          { type: 'object', properties: { error: { type: 'string' } } },
+        ],
+      };
+
+      const out = formatOutputSchemaForDescription(schema, 'summary');
+
+      expect(out).toBe(
+        '\n\n**Returns** one of:\n- Option 1:\n  - `id`: string (required)\n- Option 2:\n  - `error`: string (optional)',
+      );
+    });
+
+    it('follows $ref members of a oneOf union into the root $defs', () => {
+      const schema = {
+        type: 'object',
+        oneOf: [{ $ref: '#/$defs/Invoice' }, { $ref: '#/$defs/Refund' }],
+        $defs: {
+          Invoice: { type: 'object', properties: { total: { type: 'number' } }, required: ['total'] },
+          Refund: { type: 'object', properties: { reason: { type: 'string' } } },
+        },
+      };
+
+      const out = formatOutputSchemaForDescription(schema, 'summary');
+
+      expect(out).toContain('- Option 1:\n  - `total`: number (required)');
+      expect(out).toContain('- Option 2:\n  - `reason`: string (optional)');
+    });
+
+    it('follows a root $ref into the root $defs', () => {
+      const schema = {
+        $ref: '#/$defs/Invoice',
+        $defs: { Invoice: { type: 'object', properties: { total: { type: 'number' } }, required: ['total'] } },
+      };
+
+      expect(formatOutputSchemaForDescription(schema, 'summary')).toBe(
+        '\n\n**Returns:**\n- `total`: number (required)',
+      );
+    });
+
+    it('leaves the summary out when a union member cannot be summarized', () => {
+      const schema = {
+        type: 'object',
+        anyOf: [
+          { type: 'object', properties: { id: { type: 'string' } } },
+          { $ref: 'https://example.com/remote.json' },
+        ],
+      };
+
+      expect(formatOutputSchemaForDescription(schema, 'summary')).toBe('');
+    });
   });
 
   describe('formatOutputSchemaForDescription — jsonSchema', () => {
