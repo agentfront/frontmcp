@@ -187,7 +187,7 @@ class MyServer {}
 One hook can widen its own reach instead, with its `appliesTo` option (see `create-plugin-hooks`, "HookOptions"):
 
 - `'uncovered-apps'`: also the entries of the apps that have no instance of the same hook, for gates an entry's metadata asks for (approval, feature flags).
-- `'all-apps'`: the entries of every app, like a `scope: 'server'` plugin's hooks, while the plugin's other hooks keep to its app. Use it for a single hook that guards or watches every app, such as a setup gate.
+- `'all-apps'`: the entries of every app, like a `scope: 'server'` plugin's hooks, while the plugin's other hooks keep to its app. Use it for a single hook that guards or watches every app, such as a setup gate. It reads and can change every app's calls, so treat it like a server-level plugin.
 
 Either way, the hooks reach only the apps that share a scope with the installing app: a standalone app, or each app of a `splitByApp` server, is a scope of its own. Install the plugin on the server (`@FrontMcp({ plugins })`) to reach every scope.
 

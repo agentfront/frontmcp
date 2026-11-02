@@ -7,6 +7,8 @@ import 'reflect-metadata';
 import { type GetPromptResult, type ReadResourceResult } from '@frontmcp/protocol';
 
 import {
+  Agent,
+  AgentContext,
   App,
   DynamicPlugin,
   FlowHooksOf,
@@ -175,6 +177,100 @@ describe('the boot check of hook constraints', () => {
     class CyclicApp {}
 
     await expect(serve([CyclicApp])).rejects.toThrow(HookOrderCycleError);
+  });
+
+  it("refuses to start when two apps' own hooks form a cycle, since a call naming no known tool runs both", async () => {
+    @App({ id: 'audited', name: 'Audited', tools: [ReportTool], plugins: [AuditPlugin] })
+    class AuditedApp {}
+    @App({ id: 'locked', name: 'Locked', plugins: [LedgerLockPlugin] })
+    class LockedApp {}
+
+    await expect(serve([AuditedApp, LockedApp])).rejects.toThrow(HookOrderCycleError);
+  });
+
+  it('starts a server whose entry classes name each other, since no run sorts two entry classes together', async () => {
+    @Tool({ name: 'first_entry', inputSchema: {} })
+    class FirstEntryTool extends ToolContext {
+      @ToolHook.Will('execute', { before: ['SecondEntryTool'] })
+      note() {
+        runs.push('first-entry');
+      }
+
+      async execute() {
+        return 'first';
+      }
+    }
+
+    @Tool({ name: 'second_entry', inputSchema: {} })
+    class SecondEntryTool extends ToolContext {
+      @ToolHook.Will('execute', { before: ['FirstEntryTool'] })
+      note() {
+        runs.push('second-entry');
+      }
+
+      async execute() {
+        return 'second';
+      }
+    }
+
+    @App({ id: 'entries', name: 'Entries', tools: [FirstEntryTool, SecondEntryTool] })
+    class EntriesApp {}
+
+    const server = await serve([EntriesApp]);
+    runs.length = 0;
+    await server.callTool('first_entry', {});
+    await server.dispose();
+
+    expect(runs).toEqual(['first-entry']);
+  });
+
+  describe('of an agent that inherits the plugins of its app', () => {
+    const answering = { completion: async () => ({ content: 'done', finishReason: 'stop' as const }) };
+
+    @Plugin({ name: 'deck-log' })
+    class DeckLogPlugin {
+      @ToolHook.Will('execute', { after: ['setup-gate'] })
+      log() {
+        runs.push('deck-log');
+      }
+    }
+
+    @Plugin({ name: 'deck-lock' })
+    class DeckLockPlugin {
+      @ToolHook.Will('execute', { before: ['setup-gate'], after: ['setup-gate'] })
+      lock() {
+        runs.push('deck-lock');
+      }
+    }
+
+    function deckApp(plugin: typeof DeckLogPlugin | typeof DeckLockPlugin) {
+      @Agent({
+        name: 'deckhand',
+        inputSchema: {},
+        llm: { adapter: answering },
+        tools: [ReportTool],
+        plugins: [plugin],
+        execution: { inheritPlugins: true },
+      })
+      class DeckhandAgent extends AgentContext {}
+
+      @App({ id: 'deck', name: 'Deck', plugins: [SetupGatePlugin], agents: [DeckhandAgent] })
+      class DeckApp {}
+      return DeckApp;
+    }
+
+    it('matches the targets of its own hooks against the hooks it inherits', async () => {
+      warnings.length = 0;
+
+      const server = await serve([deckApp(DeckLogPlugin)]);
+      await server.dispose();
+
+      expect(warnings.filter((message) => message.includes("names 'setup-gate'"))).toEqual([]);
+    });
+
+    it('refuses to start when its own hooks and the ones it inherits form a cycle', async () => {
+      await expect(serve([deckApp(DeckLockPlugin)])).rejects.toThrow(HookOrderCycleError);
+    });
   });
 
   it('warns once at boot about a target no hook of the stage matches', async () => {

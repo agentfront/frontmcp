@@ -37,7 +37,7 @@ export const HookPhase = {
  * - `'all-apps'`: the entries of every app in the scope, as a server-level plugin's hook, whether or not
  *   their app has an instance of the same hook (then both run). Unlike `@Plugin({ scope: 'server' })`, it
  *   applies to this hook alone, and it reaches the apps of the scope it is registered in only: a standalone
- *   app, or each app under `splitByApp`, is a scope of its own.
+ *   app, or each app under `splitByApp`, is a scope of its own. It reads and can change every such app's calls.
  */
 export type HookAppliesTo = 'own-app' | 'uncovered-apps' | 'all-apps';
 

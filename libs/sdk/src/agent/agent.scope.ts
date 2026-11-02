@@ -19,7 +19,7 @@ import {
 } from '../common';
 import { FlowExitedWithoutOutputError } from '../errors';
 import FlowRegistry from '../flows/flow.registry';
-import { checkHookOrder } from '../hooks/hook-order';
+import { checkHookOrder, hookRunsOf } from '../hooks/hook-order';
 import HookRegistry from '../hooks/hook.registry';
 import PluginRegistry from '../plugin/plugin.registry';
 import GetPromptFlow from '../prompt/flows/get-prompt.flow';
@@ -242,10 +242,7 @@ export class AgentScope {
     this.agentAgents = new AgentRegistry(this.agentProviders, this.metadata.agents ?? [], this.agentOwner);
     await this.agentAgents.ready;
 
-    checkHookOrder(
-      this.agentHooks.getHooks().map((hook) => hook.metadata),
-      (message) => this.logger.warn(message),
-    );
+    checkHookOrder(hookRunsOf(this.agentHooks), (message) => this.logger.warn(message));
 
     this.logger.info(
       `AgentScope initialized with ${toolTypes.length} tool(s), ${this.metadata.plugins?.length ?? 0} plugin(s)`,

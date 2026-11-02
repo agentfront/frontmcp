@@ -4,6 +4,8 @@
  */
 import 'reflect-metadata';
 
+import { AsyncLocalStorage } from '@frontmcp/utils';
+
 import { FlowControl } from '../../common';
 import {
   addHookObserver,
@@ -105,6 +107,48 @@ describe('runObservedHook', () => {
       ),
     ).rejects.toBe(refused);
     expect(reported).not.toHaveBeenCalled();
+  });
+
+  it("passes the hook's own failure on unchanged, and reports only what the observer threw in its place", async () => {
+    const hookFailure = new Error('ledger locked');
+    const wrapped = new Error('wrapped by the observer');
+    const rethrowingAnother: HookObserver = async (_hook, run) => {
+      await run().catch(() => {
+        throw wrapped;
+      });
+    };
+    const reported: unknown[] = [];
+
+    await expect(
+      runObservedHook(
+        [rethrowingAnother, wrapping('inner', [])],
+        hook,
+        async () => {
+          throw hookFailure;
+        },
+        (error) => reported.push(error),
+      ),
+    ).rejects.toBe(hookFailure);
+    expect(reported).toEqual([wrapped]);
+  });
+
+  it('runs the hook once, in the request context, when an observer calls run after an await or after it settled', async () => {
+    const request = new AsyncLocalStorage<string>();
+    const seen: Array<string | undefined> = [];
+    const late: HookObserver = async (_hook, run) => {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      await run();
+    };
+    const afterSettling: HookObserver = async (_hook, run) => {
+      setTimeout(() => void run(), 1);
+    };
+
+    await request.run('request-1', () =>
+      runObservedHook([late, afterSettling], hook, async () => void seen.push(request.getStore())),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    expect(seen).toEqual(['request-1']);
   });
 
   it('runs the hook once when an observer never calls run, or calls it twice', async () => {

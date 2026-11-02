@@ -121,6 +121,37 @@ describe('before / after within a stage', () => {
     ).toEqual(['TenantProvider.run', 'audit.run', 'feature-gate.run', 'setup-gate.run']);
   });
 
+  it('moves the hook that declares before, not the hook it names, past the hooks of the bands between them', () => {
+    expect(
+      runOrder(
+        { target: new TenantProvider(), priority: HookPhase.resolve },
+        { target: new SetupGatePlugin(), pluginName: 'setup-gate', priority: HookPhase.guard },
+        { target: new AuditPlugin(), pluginName: 'audit', priority: HookPhase.observe, before: ['TenantProvider'] },
+      ),
+    ).toEqual(['audit.run', 'TenantProvider.run', 'setup-gate.run']);
+  });
+
+  it('moves the hook that declares after, not the hook it names, past the hooks of the bands between them', () => {
+    expect(
+      runOrder(
+        { target: new AuditPlugin(), pluginName: 'audit', priority: HookPhase.resolve, after: ['TenantProvider'] },
+        { target: new SetupGatePlugin(), pluginName: 'setup-gate', priority: HookPhase.guard },
+        { target: new TenantProvider(), priority: HookPhase.shape },
+      ),
+    ).toEqual(['setup-gate.run', 'TenantProvider.run', 'audit.run']);
+  });
+
+  it('moves a hook before a hook that is itself moved by before', () => {
+    expect(
+      runOrder(
+        { target: new TenantProvider(), priority: HookPhase.resolve },
+        { target: new SetupGatePlugin(), pluginName: 'setup-gate', priority: HookPhase.guard },
+        { target: new AuditPlugin(), pluginName: 'audit', priority: HookPhase.observe, before: ['TenantProvider'] },
+        { target: new FeatureGatePlugin(), pluginName: 'feature-gate', priority: HookPhase.shape, before: ['audit'] },
+      ),
+    ).toEqual(['feature-gate.run', 'audit.run', 'TenantProvider.run', 'setup-gate.run']);
+  });
+
   it('ignores a constraint that names the hook itself, or another instance of the same hook', () => {
     expect(
       runOrder(
@@ -179,7 +210,7 @@ describe('checkHookOrder', () => {
       hookOf({ target: new FeatureGatePlugin(), pluginName: 'feature-gate', after: ['setup-gate'] }),
     ];
 
-    expect(() => checkHookOrder(hooks, () => undefined)).toThrow(HookOrderCycleError);
+    expect(() => checkHookOrder([hooks], () => undefined)).toThrow(HookOrderCycleError);
   });
 
   it('relates only the hooks of the same flow, stage and type', () => {
@@ -189,7 +220,7 @@ describe('checkHookOrder', () => {
     ];
     const warnings: string[] = [];
 
-    checkHookOrder(hooks, (message) => warnings.push(message));
+    checkHookOrder([hooks], (message) => warnings.push(message));
 
     expect(warnings).toEqual([
       "Hook setup-gate.run (will 'execute' of 'tools:call-tool') names 'feature-gate' in after, " +
@@ -210,7 +241,7 @@ describe('checkHookOrder', () => {
     ];
     const warnings: string[] = [];
 
-    checkHookOrder(hooks, (message) => warnings.push(message));
+    checkHookOrder([hooks], (message) => warnings.push(message));
 
     expect(warnings).toEqual([
       "Hook feature-gate.run (will 'execute' of 'tools:call-tool') names 'cache' in before and 'tenant' in after, " +
@@ -226,7 +257,7 @@ describe('checkHookOrder', () => {
     ];
     const warn = jest.fn();
 
-    checkHookOrder(hooks, warn);
+    checkHookOrder([hooks], warn);
 
     expect(warn).not.toHaveBeenCalled();
   });
