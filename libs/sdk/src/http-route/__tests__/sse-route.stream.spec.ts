@@ -13,7 +13,10 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   return { promise, resolve };
 }
 
-function createStream(produce: () => Promise<unknown>, options: { onError?: (error: unknown) => void } = {}) {
+function createStream(
+  produce: () => Promise<unknown>,
+  options: { onError?: (error: unknown) => void; authorized?: () => boolean } = {},
+) {
   let publish: () => void = () => undefined;
   const unsubscribe = jest.fn();
   const onClose = jest.fn();
@@ -27,6 +30,7 @@ function createStream(produce: () => Promise<unknown>, options: { onError?: (err
     heartbeatMs: 15_000,
     onError: options.onError ?? jest.fn(),
     onClose,
+    authorized: options.authorized,
   });
   return { stream, publish: () => publish(), unsubscribe, onClose };
 }
@@ -140,6 +144,33 @@ describe('SseRouteStream', () => {
     expect(unsubscribe).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(produce).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends, instead of sending the next view, once the reader is no longer authorized', async () => {
+    let authorized = true;
+    const produce = jest.fn(async () => ({ count: 1 }));
+    const { stream, publish, unsubscribe } = createStream(produce, { authorized: () => authorized });
+    await stream.next();
+
+    authorized = false;
+    publish();
+    await jest.advanceTimersByTimeAsync(50);
+
+    expect(produce).toHaveBeenCalledTimes(1);
+    expect(await stream.next()).toEqual({ value: undefined, done: true });
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends at the next heartbeat once the reader is no longer authorized', async () => {
+    let authorized = true;
+    const { stream, onClose } = createStream(async () => ({ count: 1 }), { authorized: () => authorized });
+    await stream.next();
+
+    authorized = false;
+    await jest.advanceTimersByTimeAsync(15_000);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(await stream.next()).toEqual({ value: undefined, done: true });
   });
 
   it('is its own async iterator', () => {

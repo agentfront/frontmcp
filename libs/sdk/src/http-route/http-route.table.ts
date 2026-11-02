@@ -154,6 +154,13 @@ export function attachHttpRoutes(scope: Scope, server: object): void {
     }
     const sharesMcpPath = method === 'GET' && withoutTrailingSlash(path) === mcpPath;
     if (!sharesMcpPath) assertNotReserved(method, path, reserved);
+    if (sharesMcpPath && metadata.sse) {
+      throw new InvalidHttpRouteError(
+        method,
+        path,
+        'an SSE route cannot be on the MCP path: an EventSource asks for text/event-stream, which the MCP endpoint serves there',
+      );
+    }
     const key = `${method} ${withoutTrailingSlash(path)}`;
     if (served.has(key)) {
       throw new InvalidHttpRouteError(method, path, 'another route already serves this method and path');

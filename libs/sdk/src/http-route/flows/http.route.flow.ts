@@ -128,8 +128,7 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
   @Stage('authenticatePerson')
   async authenticatePerson() {
     if (this.state.required.route.auth !== 'people') return;
-    const cookie = getCookie(this.httpRequest.headers['cookie'], PEOPLE_SESSION_COOKIE);
-    const person = this.scope.httpRouteTable?.people?.verifySession(cookie);
+    const person = this.verifyPerson();
     if (!person) throw new PersonNotSignedInError();
     this.state.set('person', person);
   }
@@ -150,6 +149,11 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
     this.respond(route.sse ? this.openStream(route, route.sse, context) : toHttpOutput(await context.handle()));
   }
 
+  private verifyPerson(): PeopleSession | undefined {
+    const cookie = getCookie(this.httpRequest.headers['cookie'], PEOPLE_SESSION_COOKIE);
+    return this.scope.httpRouteTable?.people?.verifySession(cookie);
+  }
+
   private openStream(
     route: HttpRouteEntry,
     sse: Required<HttpRouteSseOptions>,
@@ -167,6 +171,7 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
       onError: (error) =>
         this.scope.logger.warn(`SSE route ${route.method} ${route.path} failed to make its view`, error),
       onClose: () => table?.untrack(stream),
+      authorized: route.auth === 'people' ? () => this.verifyPerson() !== undefined : undefined,
     });
     table?.track(stream);
     return {

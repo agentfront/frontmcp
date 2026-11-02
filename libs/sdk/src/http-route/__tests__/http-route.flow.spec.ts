@@ -29,6 +29,7 @@ import { PublicMcpError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { resourceStore } from '../../resource/materialized';
 import { type Scope } from '../../scope/scope.instance';
+import { createServerFetchHandler } from '../../transport/web-fetch-handler';
 
 @Provider({ name: 'Counter', scope: ProviderScope.GLOBAL })
 class Counter {
@@ -113,6 +114,13 @@ class NoteEvents extends HttpRouteContext {
   }
 }
 
+@HttpRoute({ method: 'GET', path: '/notes/mine', sse: { store: topics, topics: ['notes'], coalesceMs: 5 } })
+class MyNoteEvents extends HttpRouteContext {
+  async handle() {
+    return (await notes.get()).value;
+  }
+}
+
 @HttpRoute({ method: 'GET', path: '/', auth: 'public' })
 class HomeRoute extends HttpRouteContext {
   handle() {
@@ -132,7 +140,17 @@ class FailingRoute extends HttpRouteContext {
   name: 'web',
   providers: [Counter],
   tools: [CountTool, SignInCodeTool],
-  routes: [CountPage, HelloRoute, PageRoute, AddNoteRoute, ListNotesRoute, NoteEvents, HomeRoute, FailingRoute],
+  routes: [
+    CountPage,
+    HelloRoute,
+    PageRoute,
+    AddNoteRoute,
+    ListNotesRoute,
+    NoteEvents,
+    MyNoteEvents,
+    HomeRoute,
+    FailingRoute,
+  ],
 })
 class WebApp {}
 
@@ -298,6 +316,24 @@ describe.each([
       expect(login.headers.get('set-cookie')).toBeNull();
     });
 
+    it('signs in one of two requests that spend the same code at once', async () => {
+      const issued = await harness.send('/_frontmcp/people/code', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const { code } = (await issued.json()) as { code: string };
+      const spend = () =>
+        harness.send('/_frontmcp/people/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: harness.origin },
+          body: `code=${code}`,
+        });
+
+      const statuses = (await Promise.all([spend(), spend()])).map((response) => response.status).sort();
+
+      expect(statuses).toEqual([200, 401]);
+    });
+
     it('refuses a wrong token', async () => {
       const response = await harness.send('/_frontmcp/people/code', {
         method: 'POST',
@@ -434,6 +470,19 @@ describe.each([
       await waitFor(() => unsubscribed.mock.calls.length === 1);
       expect(unsubscribed).toHaveBeenCalledWith('notes');
     });
+
+    it('ends a signed-in stream once the session ends', async () => {
+      const cookie = await signIn(harness, token);
+      const response = await harness.send('/notes/mine', { headers: { Cookie: cookie } });
+      const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+      await readEvent(reader);
+
+      const people = (harness.instance.getScopes()[0] as Scope).providers.get(LoopbackTokenAuth);
+      people.endSession(cookie.slice(cookie.indexOf('=') + 1));
+      await notes.update((current) => [...current, 'after sign-out']);
+
+      expect(await readEvent(reader)).toBe('');
+    });
   });
 });
 
@@ -530,6 +579,23 @@ describe('bad sign-in codes', () => {
   });
 });
 
+describe('bad sign-in tokens with a new X-Forwarded-For each time, and no trusted proxy', () => {
+  it('lock the peer out all the same', async () => {
+    const harness = await startExpress(CONFIG);
+    const post = (attempt: number) =>
+      harness.send('/_frontmcp/people/code', {
+        method: 'POST',
+        headers: { Authorization: `Bearer wrong-${attempt}`, 'X-Forwarded-For': `198.51.100.${attempt}` },
+      });
+
+    const statuses: number[] = [];
+    for (let attempt = 0; attempt < 5; attempt++) statuses.push((await post(attempt)).status);
+
+    expect(statuses).toEqual([401, 401, 401, 401, 429]);
+    await harness.instance.shutdown();
+  });
+});
+
 describe('an SSE route on shutdown', () => {
   it('ends the stream and stops listening', async () => {
     const harness = await startExpress(CONFIG);
@@ -547,6 +613,37 @@ describe('an SSE route on shutdown', () => {
   });
 });
 
+describe('an SSE route whose client leaves before the stream opens', () => {
+  let reachedHandle = false;
+  let release: () => void = () => undefined;
+  const clientLeft = new Promise<void>((resolve) => (release = resolve));
+
+  @Plugin({ name: 'hold-stream' })
+  class HoldStreamPlugin {
+    @RouteHook.Will('handle')
+    async holdUntilTheClientLeaves(ctx: { rawInput: { request: { path: string } } }) {
+      if (ctx.rawInput.request.path !== '/notes/events') return;
+      reachedHandle = true;
+      await clientLeft;
+    }
+  }
+
+  it('stops listening on the Express host', async () => {
+    const harness = await startExpress({ ...CONFIG, plugins: [HoldStreamPlugin] });
+    unsubscribed.mockClear();
+    const request = http.get(`${harness.origin}/notes/events`);
+    request.on('error', () => undefined);
+    await waitFor(() => reachedHandle);
+
+    request.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    release();
+
+    await waitFor(() => unsubscribed.mock.calls.length === 1);
+    await harness.instance.shutdown();
+  });
+});
+
 describe('the sign-in token', () => {
   it('is printed once for a server of several scopes', async () => {
     @App({ id: 'side', name: 'side', standalone: true, routes: [HelloRoute] })
@@ -557,6 +654,46 @@ describe('the sign-in token', () => {
 
     expect(printed.slice(before).filter((entry) => TOKEN_LINE.test(entry))).toHaveLength(1);
     await harness.instance.shutdown();
+  });
+});
+
+describe('a path that routes of two scopes serve', () => {
+  @HttpRoute({ method: 'GET', path: '/which', auth: 'public' })
+  class FirstWhich extends HttpRouteContext {
+    handle() {
+      return 'first';
+    }
+  }
+
+  @HttpRoute({ method: 'GET', path: '/which', auth: 'public' })
+  class SecondWhich extends HttpRouteContext {
+    handle() {
+      return 'second';
+    }
+  }
+
+  @App({ id: 'a', name: 'a', routes: [FirstWhich] })
+  class FirstApp {}
+
+  @App({ id: 'longer', name: 'longer', routes: [SecondWhich] })
+  class SecondApp {}
+
+  const config: FrontMcpConfigInput = { ...CONFIG, splitByApp: true, apps: [FirstApp, SecondApp] };
+
+  it('is served by the first scope on the Express host', async () => {
+    const harness = await startExpress(config);
+
+    expect(await (await harness.send('/which')).text()).toBe('first');
+    await harness.instance.shutdown();
+  });
+
+  it('is served by the first scope on the fetch handler', async () => {
+    const instance = await FrontMcpInstance.createForGraph({ ...config, logging: { level: LogLevel.Off } });
+    const scopes = instance.getScopes() as Scope[];
+    const handler = createServerFetchHandler(scopes[0], scopes);
+
+    expect(await (await handler(new Request('http://localhost/which'))).text()).toBe('first');
+    await instance.shutdown();
   });
 });
 

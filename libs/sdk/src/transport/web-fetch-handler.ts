@@ -442,6 +442,8 @@ export function createServerFetchHandler(
     return { scope, basePath, handler: buildWebFetchHandler(scope, scopeOptions, endpointPaths) };
   });
   const primaryRoute = handlers.find((route) => route.scope === primary) ?? handlers[handlers.length - 1];
+  // In the order the Express host mounts the scopes' flows, so a path two scopes' routes serve goes to the same one.
+  const inScopeOrder = scopes.flatMap((scope) => handlers.filter((route) => route.scope === scope));
   const isUnder = (path: string, basePath: string) =>
     basePath !== '' && (path === basePath || path.startsWith(`${basePath}/`));
 
@@ -458,7 +460,7 @@ export function createServerFetchHandler(
     const url = new URL(request.url);
     const path = scopePathOf(url.pathname);
     const route =
-      handlers.find(({ scope }) => claimedByHttpRoute(scope, request, url)) ??
+      inScopeOrder.find(({ scope }) => claimedByHttpRoute(scope, request, url)) ??
       handlers.find(({ basePath }) => isUnder(path, basePath)) ??
       handlers.find(({ basePath }) => basePath === '') ??
       primaryRoute;

@@ -14,6 +14,7 @@ describe('isSameOriginRequest', () => {
     ],
     ['Sec-Fetch-Site: same-origin', { host: 'localhost:3000', 'sec-fetch-site': 'same-origin' }],
     ['Sec-Fetch-Site: none (typed in the address bar)', { host: 'localhost:3000', 'sec-fetch-site': 'none' }],
+    ['the IPv6 loopback spelling on the same port', { host: 'localhost:3000', origin: 'http://[::1]:3000' }],
   ])('allows %s', (_case, headers) => {
     expect(isSameOriginRequest(headers)).toBe(true);
   });
@@ -30,6 +31,11 @@ describe('isSameOriginRequest', () => {
       { host: 'localhost:3000', origin: 'http://localhost:3000', 'sec-fetch-site': 'cross-site' },
     ],
     ['a loopback Origin on a routable host', { host: 'app.example.com', origin: 'http://localhost' }],
+    ['a sibling subdomain', { host: 'example.com', origin: 'https://app.example.com' }],
+    [
+      'the http page of an https host',
+      { host: 'example.com', origin: 'http://example.com', 'sec-fetch-site': 'cross-site' },
+    ],
   ])('refuses %s', (_case, headers) => {
     expect(isSameOriginRequest(headers)).toBe(false);
   });
@@ -44,6 +50,17 @@ describe('isSameOriginRequest', () => {
     const headers = { host: 'api.example.com', 'x-forwarded-host': 'evil.example', origin: 'https://evil.example' };
 
     expect(isSameOriginRequest(headers)).toBe(false);
+  });
+
+  it('refuses a forwarded host a cross-site page set past a trusted proxy, from a browser sending Fetch Metadata', () => {
+    const headers = {
+      host: '10.0.0.5:3000',
+      'x-forwarded-host': 'evil.example, app.example.com',
+      origin: 'https://evil.example',
+      'sec-fetch-site': 'cross-site',
+    };
+
+    expect(isSameOriginRequest(headers, [], true)).toBe(false);
   });
 
   it('allows an Origin the server lists, from another site', () => {

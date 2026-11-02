@@ -124,6 +124,12 @@ describe('the routes of a server', () => {
     await expect(boot([routeClass(metadata)])).rejects.toThrow(ReservedRouteCollisionError);
   });
 
+  it('refuse an SSE route on the MCP path, where an EventSource reaches the MCP event stream', async () => {
+    const sse = { store: { subscribe: () => () => undefined }, topics: ['t'] };
+
+    await expect(boot([routeClass({ method: 'GET', path: '/', sse })])).rejects.toThrow(InvalidHttpRouteError);
+  });
+
   it('build no route table when nothing declares a route', async () => {
     const instance = await boot([]);
 

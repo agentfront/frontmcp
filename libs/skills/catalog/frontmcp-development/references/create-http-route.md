@@ -129,7 +129,8 @@ the route calls `handle()` again and sends the result as a `data:` event (an obj
 Publishes within `coalesceMs` send one view. A reader that falls behind gets the latest view, not a backlog, so make
 each view the whole current state. `undefined` sends nothing. A `: keep-alive` comment goes out after `heartbeatMs`
 without a view. The stream ends, and stops listening to the store, when the client disconnects or the server shuts
-down. See `create-resource` (`materialized-resource`) for the store.
+down, and on a people route when the person's session expires or ends (checked before each view and heartbeat). See
+`create-resource` (`materialized-resource`) for the store.
 
 ## `@HttpRoute` Options
 
@@ -151,8 +152,10 @@ example `@HttpRoute invalid metadata for "path": path must start with "/" and ho
 A route on the paths of the MCP endpoint fails startup with `ReservedRouteCollisionError`: `<mcp>/sse`,
 `<mcp>/message`, `<mcp>/server-card`, `/oauth/*`, `/.well-known/*`, `/health`, `/metrics` and the health probes, and
 any method but `GET` on the MCP path itself. A `GET` route on the MCP path (`/` by default) serves page loads there: a
-`GET` that asks for `text/event-stream` or carries `Mcp-Session-Id` still reaches the MCP endpoint. Two routes on one
-method and path fail startup with `InvalidHttpRouteError`.
+`GET` that asks for `text/event-stream` or carries `Mcp-Session-Id` still reaches the MCP endpoint, so an SSE route
+there, which an `EventSource` could never reach, fails startup with `InvalidHttpRouteError`. Two routes of one scope on
+one method and path fail startup with `InvalidHttpRouteError`; when routes of two scopes (`splitByApp`, a standalone
+app) serve one path, the first scope's serves it on every adapter.
 
 ## People Auth (`'loopback-token'`)
 
@@ -183,6 +186,10 @@ An invalid value fails startup with `InvalidPeopleAuthOptionsError` (`http.auth.
 - The token, codes and sessions are kept as SHA-256 digests and compared in constant time.
 - Sessions live in the server's memory: a restart signs everyone out and prints a new token. All the scopes of one
   server share one token and one set of sessions.
+- Cookies are not isolated by port: another server on `localhost` receives `frontmcp_people`, and two FrontMCP servers
+  on `localhost` sign each other out unless their `cookiePath`s differ.
+- The lockout is keyed by the client's address (`X-Forwarded-For` only behind `FRONTMCP_TRUST_PROXY`), so clients that
+  share one address share a lockout.
 
 | Refusal                                     | Status | Code                   |
 | ------------------------------------------- | ------ | ---------------------- |
@@ -196,11 +203,19 @@ A `POST`, `PUT`, `PATCH` or `DELETE` from another site is refused with `403`
 (`{ "error": "Cross-origin requests may not change anything here." }`, `CROSS_ORIGIN_REQUEST`), the sign-in post
 included, which makes signing in CSRF-safe. The rules are the loopback Origin rules of the MCP endpoint:
 
-- an `Origin` is accepted when its host is the request's `Host` (or `X-Forwarded-Host` when `FRONTMCP_TRUST_PROXY` is set), another loopback spelling of
-  the same port (`localhost` and `127.0.0.1`), or an origin the server lists in `http.cors.origin` (a string or an
-  array) or `http.security.dnsRebindingProtection.allowedOrigins`. `cors.origin: true` or `'*'` lists none;
+- an `Origin` the server lists in `http.cors.origin` (a string or an array) or
+  `http.security.dnsRebindingProtection.allowedOrigins` is accepted, and so is another loopback spelling of the same
+  port (`localhost`, `127.0.0.1`, `[::1]`). `cors.origin: true` or `'*'` lists none;
+- an `Origin` whose host is the request's `Host` (or `X-Forwarded-Host` when `FRONTMCP_TRUST_PROXY` is set) is accepted
+  unless `Sec-Fetch-Site` says something other than `same-origin` or `none`; any other `Origin`, `null` included, is
+  refused;
 - without an `Origin`, a `Sec-Fetch-Site` other than `same-origin` or `none` is refused;
 - a request with neither header (a CLI, an agent) is allowed.
+
+The check compares the `Origin` with the request's own `Host`, which a page on a DNS-rebound name sets to that name.
+Host validation (`http.security.dnsRebindingProtection`) is what refuses such a host: it is on by default on a loopback
+Node server, and `createFetchHandler()` applies it once `allowedHosts` is set, so set it when a fetch handler listens on
+loopback. The session cookie is host-only, so a rebound page never carries it to a people route.
 
 ## Hooks
 
