@@ -41,3 +41,11 @@ export class DropExtra extends ToolContext {
     return 1;
   }
 }
+
+// @ts-expect-error output.budget.lists accepts 'keep-newest' | 'keep-oldest' only
+@Tool({ name: 'newest_first', inputSchema: {}, output: { budget: { maxBytes: 4096, lists: 'newest' } } })
+export class NewestFirst extends ToolContext {
+  async execute() {
+    return 1;
+  }
+}

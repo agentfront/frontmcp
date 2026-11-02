@@ -211,8 +211,8 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     // initialize-request.handler.ts): dynamic skill registrations after boot are
     // reflected, and the skill catalog and hints only name skills the caller may
     // see. No caller exists yet here, so the McpServer seed carries none.
-    const composeInstructions = (caller?: { authInfo?: unknown }): Promise<string> =>
-      composeCallerInstructions(this.scope, { ctx: caller, skillUriHints: true });
+    const composeInstructions = (caller?: { authInfo?: unknown }, clientName?: string): Promise<string> =>
+      composeCallerInstructions(this.scope, { ctx: caller, clientName, skillUriHints: true });
     const instructions = '';
 
     const mergedCapabilities = mergeExperimental([

@@ -14,6 +14,7 @@ import {
 } from '../schemas';
 import {
   authOptionsSchema,
+  clientProfilesOptionsSchema,
   elicitationOptionsSchema,
   extAppsOptionsSchema,
   healthOptionsSchema,
@@ -33,6 +34,7 @@ import {
   transportOptionsSchema,
   type AuthOptions,
   type AuthOptionsInput,
+  type ClientProfilesOptionsInput,
   type ElicitationOptionsInput,
   type ExtAppsOptionsInput,
   type HealthOptionsInput,
@@ -335,9 +337,19 @@ export interface FrontMcpBaseMetadata {
    *   `outputSchema` does not declare — `'strip'` / `'warn'` / `'keep'` / `'fail'`. Default
    *   `'warn'` when `NODE_ENV` is `'development'`, otherwise `'strip'`.
    *
+   * - `budget`: the most bytes a tool answer or a resource read may take as JSON (`maxBytes`),
+   *   and which end of a list to keep (`lists`). Off unless set.
+   *
    * @default { allowNonFinite: false, schemaMode: 'definition' }
    */
   output?: OutputPolicy;
+
+  /**
+   * Per-client answer shaping, keyed by a glob of the `clientInfo.name` a client sends at
+   * `initialize`: whether answers carry text, `structuredContent` or both, the resource annotations
+   * and the skills instructions it receives. See {@link ClientProfilesOptionsInput}.
+   */
+  clients?: ClientProfilesOptionsInput;
 
   /**
    * Jobs and workflows configuration.
@@ -649,6 +661,7 @@ export const frontMcpBaseSchema = z.object({
    * numeric output throws `InvalidOutputError`.
    */
   output: outputPolicySchema.optional(),
+  clients: clientProfilesOptionsSchema.optional(),
   jobs: z
     .object({
       enabled: z.boolean(),

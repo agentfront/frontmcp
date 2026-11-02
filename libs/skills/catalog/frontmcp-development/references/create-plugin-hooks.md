@@ -324,7 +324,7 @@ The entry flows also name their entry:
 
 - `sessionId`: the session the server verified for the request; `undefined` for a request without one (the stateless transports, MCP 2026-07-28, an `mcp-session-id` the server did not accept).
 - `clientInfo`: the client's `name` and `version`, sent with the request (MCP 2026-07-28 `_meta`) or at its session's `initialize`.
-- `metadata`: the request's `userAgent`, `contentType`, `accept`, `clientIp` and `customHeaders` (its `x-frontmcp-*` headers).
+- `metadata`: the request's `userAgent`, `contentType`, `accept`, `clientIp` and `customHeaders` (its `x-frontmcp-*` headers, and those `http.forwardHeaders` keeps).
 - `protocol`: the transport the session was opened over (`'streamable-http'`, `'legacy-sse'`, ...), when the session records it; an anonymous session (`auth.mode: 'public'`) does not.
 
 The flow has no `elapsed` or `tryGet`, and its `input`, `scope` and `tryGetContext()` are protected: read the request through `ctx.request`. In `tools:call-tool`, the tool entry is `ctx.state.tool` (set by `findTool`) and the tool instance `ctx.state.toolContext` (set from `createToolCallContext` on); to rewrite the call's name or arguments, set `ctx.state.input`. The state accepts only the keys the flow declares: `ctx.state.set('startedAt', Date.now())` does not compile.

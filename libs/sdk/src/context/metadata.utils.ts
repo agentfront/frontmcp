@@ -18,6 +18,12 @@ export interface ClientIpOptions {
   trustedProxyDepth?: number;
 }
 
+/** How request headers become a context's metadata. */
+export interface MetadataOptions extends ClientIpOptions {
+  /** Whether to keep a header besides `x-frontmcp-*` in `customHeaders` (`http.forwardHeaders`). */
+  forwardsHeader?: (name: string) => boolean;
+}
+
 /**
  * The proxy trust `throttle.ipFilter` gives a context's client address. `trustProxy: true` reads it
  * from `X-Forwarded-For`, counting back `trustedProxyDepth` hops, as `FRONTMCP_TRUST_PROXY` does;
@@ -145,15 +151,16 @@ function headerValues(header: unknown): string[] {
  * Extract request metadata from headers.
  *
  * @param headers - HTTP headers object
- * @param options - Socket peer address and proxy-trust overrides
+ * @param options - Socket peer address, proxy-trust overrides and the `http.forwardHeaders` matcher
  * @returns Extracted metadata including user-agent, content-type, client IP, and custom headers
  */
-export function extractMetadata(headers: Record<string, unknown>, options?: ClientIpOptions): RequestMetadata {
+export function extractMetadata(headers: Record<string, unknown>, options?: MetadataOptions): RequestMetadata {
   const customHeaders: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase().startsWith('x-frontmcp-') && typeof value === 'string') {
-      customHeaders[key.toLowerCase()] = value;
+    const lowerKey = key.toLowerCase();
+    if (typeof value === 'string' && keepsCustomHeader(lowerKey, options)) {
+      customHeaders[lowerKey] = value;
     }
   }
 
@@ -166,6 +173,10 @@ export function extractMetadata(headers: Record<string, unknown>, options?: Clie
   };
 }
 
+function keepsCustomHeader(lowerKey: string, options: MetadataOptions | undefined): boolean {
+  return lowerKey.startsWith('x-frontmcp-') || options?.forwardsHeader?.(lowerKey) === true;
+}
+
 /** Metadata a caller hands an in-process call (`DirectCallOptions.metadata`). */
 export interface InProcessRequestMetadata {
   userAgent?: string;
@@ -175,23 +186,27 @@ export interface InProcessRequestMetadata {
 
 /**
  * The request metadata and trace context for an in-process call (#709), read the way HTTP
- * headers are: only `x-frontmcp-*` custom headers are kept, the client IP must be an IP address,
- * and an `x-frontmcp-trace-id` header continues that trace.
+ * headers are: only `x-frontmcp-*` custom headers and those `http.forwardHeaders` names are kept,
+ * the client IP must be an IP address, and an `x-frontmcp-trace-id` header continues that trace.
  *
  * @param input - The metadata the caller passed with the call
+ * @param options - The `http.forwardHeaders` matcher
  * @returns Metadata and trace context for the call's request context
  */
-export function inProcessRequestContext(input: InProcessRequestMetadata): {
+export function inProcessRequestContext(
+  input: InProcessRequestMetadata,
+  options: Pick<MetadataOptions, 'forwardsHeader'> = {},
+): {
   metadata: RequestMetadata;
   traceContext: TraceContext;
 } {
   const headers: Record<string, unknown> = { 'user-agent': input.userAgent };
   for (const [key, value] of Object.entries(input.customHeaders ?? {})) {
     const lowerKey = key.toLowerCase();
-    if (lowerKey.startsWith('x-frontmcp-')) headers[lowerKey] = value;
+    if (keepsCustomHeader(lowerKey, options)) headers[lowerKey] = value;
   }
   return {
-    metadata: extractMetadata(headers, { peerAddress: input.clientIp, trustProxy: false }),
+    metadata: extractMetadata(headers, { ...options, peerAddress: input.clientIp, trustProxy: false }),
     traceContext: parseTraceContext(headers),
   };
 }

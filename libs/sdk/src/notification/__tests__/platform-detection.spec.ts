@@ -48,6 +48,24 @@ describe('detectAIPlatform', () => {
     });
   });
 
+  describe('coding agent detection', () => {
+    const testCases: Array<{ name: string; expected: AIPlatformType }> = [
+      { name: 'claude-code', expected: 'claude-code' },
+      { name: 'Claude Code', expected: 'claude-code' },
+      { name: 'codex-mcp-client', expected: 'codex' },
+      { name: 'Codex', expected: 'codex' },
+    ];
+
+    test.each(testCases)('should detect "$name" as $expected', ({ name, expected }) => {
+      expect(detectAIPlatform({ name, version: '1.0.0' })).toBe(expected);
+    });
+
+    it('detects them from a user agent too', () => {
+      expect(detectPlatformFromUserAgent('claude-code/2.0.14')).toBe('claude-code');
+      expect(detectPlatformFromUserAgent('codex-mcp-client/0.50.0')).toBe('codex');
+    });
+  });
+
   describe('Gemini platform detection', () => {
     const testCases: Array<{ name: string; expected: AIPlatformType }> = [
       { name: 'Gemini', expected: 'gemini' },
