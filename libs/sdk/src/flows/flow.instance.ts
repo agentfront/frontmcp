@@ -303,7 +303,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     if (this.method && request.method !== this.method) return false;
     await this.loadFlowClass();
 
-    const canActivate = this.metadata.middleware?.canActivate ?? [];
+    const canActivate = [...(this.metadata.middleware?.canActivate ?? [])];
     if ((this.FlowClass as any)['canActivate']) {
       canActivate.push((this.FlowClass as any)['canActivate']);
     }

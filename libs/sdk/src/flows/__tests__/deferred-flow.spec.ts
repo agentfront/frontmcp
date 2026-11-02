@@ -36,6 +36,13 @@ declare global {
       typeof outputSchema,
       typeof stateSchema
     >;
+    'test:deferred-guarded': FlowRunOptions<
+      GuardedFlow,
+      typeof plan,
+      typeof inputSchema,
+      typeof outputSchema,
+      typeof stateSchema
+    >;
   }
 }
 
@@ -46,6 +53,26 @@ class GreetFlow extends FlowBase<typeof name> {
   @GreetHook.Stage('greet')
   async greet() {
     this.respond({ message: `Hello, ${this.input.name}` });
+  }
+}
+
+const routeGuard = jest.fn(async () => true);
+const classGuard = jest.fn(async () => true);
+
+@Flow({
+  name: 'test:deferred-guarded',
+  plan,
+  inputSchema,
+  outputSchema,
+  access: 'public',
+  middleware: { path: '/guarded', canActivate: [routeGuard] },
+})
+class GuardedFlow extends FlowBase<'test:deferred-guarded'> {
+  static canActivate = classGuard;
+
+  @(FlowHooksOf('test:deferred-guarded').Stage('greet'))
+  async greet() {
+    this.respond({ message: 'guarded' });
   }
 }
 
@@ -69,6 +96,8 @@ describe('deferredFlow', () => {
 
   beforeEach(async () => {
     hooked.length = 0;
+    routeGuard.mockClear();
+    classGuard.mockClear();
     load = jest.fn(async () => GreetFlow);
     const frontMcp = await FrontMcpInstance.createForGraph({
       info: { name: 'deferred-flow', version: '1.0.0' },
@@ -105,6 +134,18 @@ describe('deferredFlow', () => {
     await scope.findHttpFlowName(request('GET', '/greet'));
 
     expect(load).not.toHaveBeenCalled();
+  });
+
+  it('runs each guard of the class it loads once per request', async () => {
+    await scope.registryFlows(
+      deferredFlow({ name: 'test:deferred-guarded', middleware: { path: '/guarded' } }, async () => GuardedFlow),
+    );
+
+    await scope.findHttpFlowName(request('GET', '/guarded'));
+    await scope.findHttpFlowName(request('GET', '/guarded'));
+
+    expect(routeGuard).toHaveBeenCalledTimes(2);
+    expect(classGuard).toHaveBeenCalledTimes(2);
   });
 
   it('loads its class to answer a request to its route', async () => {
