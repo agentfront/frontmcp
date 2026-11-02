@@ -2396,6 +2396,11 @@
           "name": "result-handles-plugin",
           "description": "Fold large tool answers into a preview, a shape and a handle, and let the model read slices with result_query",
           "examples": []
+        },
+        {
+          "name": "offload-cpu-work",
+          "description": "Run CPU-heavy work in a worker-thread pool with this.offload() and @Resource({ worker true }), so the server keeps answering",
+          "examples": []
         }
       ]
     },

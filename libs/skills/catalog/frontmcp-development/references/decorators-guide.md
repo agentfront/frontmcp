@@ -87,6 +87,7 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
 | `jobs?`         | Background jobs/workflows system (`{ enabled, store? }`)                                                                                                                                                                                                                                                                 |
 | `throttle?`     | Server-level guard config (see note below)                                                                                                                                                                                                                                                                               |
 | `pagination?`   | List operation pagination (`tools/list` endpoint)                                                                                                                                                                                                                                                                        |
+| `offload?`      | Worker-thread pool behind `this.offload()` and `worker: true` resources (Node only): `maxWorkers`, `idleTimeoutMs`, `budgetMs` (30000), `env` (`['NODE_ENV']`) — see `offload-cpu-work`                                                                                                                                  |
 | `fetch?`        | What `this.fetch()` adds upstream: `forwardCallerTokenTo` / `forwardCustomHeadersTo` origin allow-lists (default: none), `autoInjectTracingHeaders`, `requestTimeout`                                                                                                                                                    |
 | `ui?`           | UI rendering config (CDN overrides for widget imports)                                                                                                                                                                                                                                                                   |
 | `extApps?`      | MCP Apps widget requests on a session: `ui/open-link`, `ui/request-display-mode`, `ui/update-model-context`, `notifications/message` (or the earlier `ui/openLink`, `ui/setDisplayMode`, `ui/updateModelContext`, `ui/log`). `ui/callServerTool` returns the tool's data, no page; a no-result method, `result: {}`      |
@@ -258,14 +259,15 @@ class CodeReviewPrompt extends PromptContext {
 
 **Key fields:**
 
-| Field          | Description                                  |
-| -------------- | -------------------------------------------- |
-| `name`         | Resource name (used in MCP protocol)         |
-| `title?`       | Human-readable display title for UIs         |
-| `uri`          | Fixed URI (e.g., `config://app/settings`)    |
-| `description?` | What this resource provides                  |
-| `mimeType?`    | Content MIME type (e.g., `application/json`) |
-| `icons?`       | Array of Icon objects for UI representation  |
+| Field          | Description                                                                            |
+| -------------- | -------------------------------------------------------------------------------------- |
+| `name`         | Resource name (used in MCP protocol)                                                   |
+| `title?`       | Human-readable display title for UIs                                                   |
+| `uri`          | Fixed URI (e.g., `config://app/settings`)                                              |
+| `description?` | What this resource provides                                                            |
+| `mimeType?`    | Content MIME type (e.g., `application/json`)                                           |
+| `icons?`       | Array of Icon objects for UI representation                                            |
+| `worker?`      | `true` or `{ budgetMs }`: read in a worker thread (Node only) — see `offload-cpu-work` |
 
 ```typescript
 import { Resource, ResourceContext } from '@frontmcp/sdk';

@@ -78,7 +78,7 @@ export abstract class ToolContext<
    * execution timeout passes. Pass it to `fetch` and other cancellable work so
    * a timed-out call stops instead of running on.
    */
-  readonly signal?: AbortSignal;
+  declare readonly signal?: AbortSignal;
 
   constructor(args: ToolCtorArgs<In>) {
     const { metadata, input, providers, logger, progressToken, signal } = args;
@@ -86,13 +86,13 @@ export abstract class ToolContext<
       providers,
       logger: logger.child(`tool:${metadata.id ?? metadata.name}`),
       authInfo: args.authInfo,
+      signal,
     });
     this.toolName = metadata.name;
     this.toolId = metadata.id ?? metadata.name;
     this.metadata = metadata;
     this._input = input;
     this._progressToken = progressToken;
-    this.signal = signal;
   }
 
   /** @internal The request's progress token, for flows the call is handed on to (the agent tool). */

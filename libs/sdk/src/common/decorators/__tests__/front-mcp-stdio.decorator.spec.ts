@@ -8,6 +8,8 @@
  */
 import 'reflect-metadata';
 
+import { InvalidDecoratorMetadataError } from '../../../errors/decorator.errors';
+import { OFFLOAD_WORKER_MARKER } from '../../../offload/offload-worker.globals';
 import { FrontMcp } from '../front-mcp.decorator';
 
 const runStdioMock = jest.fn().mockResolvedValue(undefined);
@@ -94,6 +96,30 @@ describe('FrontMcp decorator — stdio auto-serve (FRONTMCP_STDIO)', () => {
 
     expect(runStdioMock).not.toHaveBeenCalled();
     expect(bootstrapMock).not.toHaveBeenCalled();
+  });
+
+  it('records the metadata but serves nothing in a worker thread of the offload pool', async () => {
+    process.env[STDIO] = '1';
+    Reflect.set(globalThis, OFFLOAD_WORKER_MARKER, true);
+    try {
+      @FrontMcp(config as never)
+      class S {}
+      void S;
+      await serverLoaded();
+    } finally {
+      Reflect.deleteProperty(globalThis, OFFLOAD_WORKER_MARKER);
+    }
+
+    expect(runStdioMock).not.toHaveBeenCalled();
+    expect(bootstrapMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses an invalid offload option with InvalidDecoratorMetadataError', () => {
+    const decorate = () => FrontMcp({ ...config, offload: { maxWorkers: 0, budgetMs: 1.5 } } as never)(class S {});
+
+    expect(decorate).toThrow(InvalidDecoratorMetadataError);
+    expect(decorate).toThrow(/offload\.maxWorkers must be at least 1/);
+    expect(decorate).toThrow(/offload\.budgetMs must be a whole number of milliseconds/);
   });
 
   describe('when the server fails to start', () => {

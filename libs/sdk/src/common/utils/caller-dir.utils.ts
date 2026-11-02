@@ -43,6 +43,51 @@ export function captureCallerDir(skipBasenames: readonly string[] = []): string 
   return parseCallerDir(new Error().stack, skipBasenames);
 }
 
+/** The file the runtime loaded for the first user-code frame on the stack (no source maps applied), or undefined. */
+export function captureCallerFile(skipBasenames: readonly string[] = []): string | undefined {
+  return firstCallerFile(callSiteFiles(), skipBasenames);
+}
+
+/** @internal The first of the stack's files (innermost first) outside this module, node internals and node_modules. */
+export function firstCallerFile(files: readonly string[], skipBasenames: readonly string[] = []): string | undefined {
+  const ownFile = files[0];
+  const file = files.find(
+    (candidate, index) =>
+      index > 0 &&
+      candidate !== ownFile &&
+      !candidate.startsWith('node:') &&
+      !candidate.includes('node_modules') &&
+      !skipBasenames.includes(basename(candidate)),
+  );
+  return file === undefined ? undefined : fileUrlToPath(file);
+}
+
+function callSiteFiles(): string[] {
+  const prepareStackTrace = Error.prepareStackTrace;
+  try {
+    Error.prepareStackTrace = (_error, sites) => sites;
+  } catch {
+    return [];
+  }
+  try {
+    const sites: unknown = new Error().stack;
+    if (!Array.isArray(sites)) return [];
+    return sites.map((site: NodeJS.CallSite) => site.getFileName() ?? '').filter((file) => file.length > 0);
+  } finally {
+    Error.prepareStackTrace = prepareStackTrace;
+  }
+}
+
+function fileUrlToPath(file: string): string {
+  if (!file.startsWith('file://')) return file;
+  try {
+    const { fileURLToPath } = require('node:url') as typeof import('node:url');
+    return fileURLToPath(file);
+  } catch {
+    return file.replace(/^file:\/\//, '');
+  }
+}
+
 /**
  * Pure parser for a V8-format stack string: returns the directory of the first
  * frame that is NOT framework code (per {@link ALWAYS_SKIP}) and not one of

@@ -34,6 +34,7 @@ import {
 import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
+import { readInWorker } from '../../offload/read-in-worker';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { assertEntryEnabled } from '../../surface';
 import { isUIResourceUri } from '../../tool/ui/ui-shared';
@@ -412,7 +413,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     }
 
     const resourceContext = this.state.resourceContext;
-    const { input, params } = this.state.required;
+    const { input, params, resource } = this.state.required;
 
     if (!resourceContext) {
       this.logger.warn('execute: resourceContext not found, skipping execution');
@@ -422,8 +423,11 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
 
     try {
       // What the resource does for the caller (a skill:// listing, say) is judged for this call's surface.
+      const worker = resource.metadata.worker;
       resourceContext.output = await runOnSurface(callSurfaceOf(this.input.ctx), async () =>
-        resourceContext.execute(input.uri, params),
+        worker
+          ? readInWorker(resourceContext, resource.record.provide, worker, input.uri, params)
+          : resourceContext.execute(input.uri, params),
       );
       this.logger.verbose('execute:done');
     } catch (error) {

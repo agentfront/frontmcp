@@ -3,9 +3,9 @@
  * call-site capture helper used by the `@Skill` / `@FrontMcp` / `@App` decorator
  * factories to anchor relative file paths to the user's defining module.
  */
-import { dirname } from '@frontmcp/utils';
+import { dirname, pathToFileURL } from '@frontmcp/utils';
 
-import { captureCallerDir, parseCallerDir } from '../caller-dir.utils';
+import { captureCallerDir, captureCallerFile, firstCallerFile, parseCallerDir } from '../caller-dir.utils';
 
 describe('parseCallerDir (pure stack parser)', () => {
   it('always self-skips caller-dir.utils.ts; first non-skipped frame wins', () => {
@@ -138,5 +138,44 @@ describe('parseCallerDir in a browser (#681)', () => {
 
       expect(parseInBrowser(stack)).toBeUndefined();
     });
+  });
+});
+
+describe('captureCallerFile', () => {
+  it('names the file of the code that called it', () => {
+    expect(captureCallerFile()).toBe(__filename);
+  });
+
+  it('is undefined when the runtime refuses call sites', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+    Object.defineProperty(Error, 'prepareStackTrace', {
+      configurable: true,
+      get: () => undefined,
+      set: () => {
+        throw new TypeError('frozen');
+      },
+    });
+    try {
+      expect(captureCallerFile()).toBeUndefined();
+    } finally {
+      if (descriptor) Object.defineProperty(Error, 'prepareStackTrace', descriptor);
+      else Reflect.deleteProperty(Error, 'prepareStackTrace');
+    }
+  });
+
+  it('skips its own module (one bundle holding the decorator too), node internals, node_modules and skipped basenames', () => {
+    const bundle = '/srv/node_modules/@frontmcp/sdk/index.js';
+    const files = [
+      '/srv/app/dist/sdk-bundle.js',
+      '/srv/app/dist/sdk-bundle.js',
+      'node:internal/modules/cjs/loader',
+      bundle,
+      '/srv/app/dist/resource.decorator.js',
+      pathToFileURL('/srv/app/dist/reports.resource.js').href,
+    ];
+
+    expect(firstCallerFile(files, ['resource.decorator.js'])).toBe('/srv/app/dist/reports.resource.js');
+    expect(firstCallerFile(files.slice(0, 5), ['resource.decorator.js'])).toBeUndefined();
+    expect(firstCallerFile([])).toBeUndefined();
   });
 });
