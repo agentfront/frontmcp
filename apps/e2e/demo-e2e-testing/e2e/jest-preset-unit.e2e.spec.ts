@@ -5,6 +5,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 
 const root = join(__dirname, '../../../..');
 const fixtureDir = join(__dirname, '../fixture/ts-jest-cjs');
@@ -17,8 +18,7 @@ function runFixtureJest(config: string): { status: number | null; output: string
     encoding: 'utf8',
     timeout: 110_000,
   });
-  // eslint-disable-next-line no-control-regex
-  return { status: result.status, output: `${result.stdout}${result.stderr}`.replace(/\x1b\[[0-9;]*m/g, '') };
+  return { status: result.status, output: stripVTControlCharacters(`${result.stdout}${result.stderr}`) };
 }
 
 describe('@frontmcp/testing/jest-preset-unit in a ts-jest CommonJS project', () => {
