@@ -14,6 +14,7 @@ import {
 } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import {
   App,
+  FlowControl,
   FlowHooksOf,
   LogLevel,
   LogTransport,
@@ -77,6 +78,11 @@ class LedgerFinallyPlugin {
     ctx.fail(new PublicMcpError('gate closed'));
   }
 
+  @ToolHook.Will('execute', { filter: calling('post_aborted') })
+  abortExecute() {
+    FlowControl.abort('maintenance window');
+  }
+
   @ToolHook.Will('execute', { filter: calling('post_cached') })
   answerFromCache(ctx: CallToolFlow) {
     ctx.respond({ content: [{ type: 'text', text: 'from cache' }] });
@@ -131,6 +137,7 @@ class LedgerFinallyPlugin {
     postingTool('post_cached'),
     postingTool('post_wrapped'),
     postingTool('post_did_broke'),
+    postingTool('post_aborted'),
   ],
 })
 class LedgerApp {}
@@ -229,6 +236,15 @@ describe('Finally hooks', () => {
       'Finally p100 execute: gate closed',
       'Did finalize',
       'Finally finalize: gate closed',
+    ]);
+  });
+
+  it('read an abort as the failure, like a fail()', async () => {
+    const call = await callTool(server, 'post_aborted');
+
+    expect(call.trace.slice(0, 2)).toEqual([
+      'Finally p0 execute: Flow aborted: maintenance window',
+      'Finally p100 execute: Flow aborted: maintenance window',
     ]);
   });
 
