@@ -6,6 +6,7 @@ import {
 } from '../../common';
 import { resolveDefaultSqlitePath } from '../../common/types/options/sqlite/resolve';
 import { JobRunnerBootError } from '../../errors';
+import { JOB_WORKER_FLAG } from '../../front-mcp/detached-job.flag';
 import { markDirectOnly } from '../../front-mcp/direct-only.flag';
 import { type JobExecutionManager } from '../execution/job-execution.manager';
 import { toJobError } from '../job-attempt';
@@ -13,7 +14,6 @@ import { jobExecutionManagerOf } from '../job-run-access';
 import { resolveJobsStore, type JobsConfig } from '../job-scope.helper';
 import { createJobStateStore } from '../store/job-state-store.factory';
 import { FINISHED_JOB_STATES } from '../store/job-state.interface';
-import { JOB_WORKER_FLAG } from './detached-job.flag';
 
 /** The server a detached runner boots: its scopes, and its shutdown. */
 export interface DetachedJobHost {

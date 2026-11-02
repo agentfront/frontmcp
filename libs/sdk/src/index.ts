@@ -208,7 +208,7 @@ export type {
   JobRunProgress,
   JobDefinitionStore,
 } from './job';
-export { JOB_WORKER_MARKER } from './job/runner/job-runner';
+export { JOB_WORKER_MARKER } from './front-mcp/detached-job.flag';
 
 // Job-management tool classes (issue #408 — opt-in manual registration via
 // @App({ tools: [...] }) when finer-grained control than auto-registration

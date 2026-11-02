@@ -1,3 +1,6 @@
+/** The `spawnOwned` marker of detached job runners, for `reapOrphans(JOB_WORKER_MARKER)`. */
+export const JOB_WORKER_MARKER = 'frontmcp-job';
+
 /** Set in a detached runner's environment to the run it is started for. */
 export const RUN_JOB_ENV_VAR = 'FRONTMCP_RUN_JOB_ID';
 

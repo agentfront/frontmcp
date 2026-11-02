@@ -260,6 +260,19 @@ describe('a detached run', () => {
     }
   });
 
+  it('keeps the outcome another process wrote: its attempt ending later does not overwrite it', async () => {
+    closeGate();
+    const server = await open();
+    const { handle } = await startDetached(server, 'count_job', { to: 1 });
+    await waitFor(async () => (await stateOf(server, handle.runId))?.state === 'running', 'the run to start');
+
+    await storeOf(server).updateRun(handle.runId, { state: 'interrupted', completedAt: Date.now() });
+    openGate();
+
+    expect(await workers[0]).toBe(0);
+    expect((await stateOf(server, handle.runId))?.state).toBe('interrupted');
+  });
+
   it('fails with JOB_RUNNER_BOOT_FAILED, once, when its process cannot start', async () => {
     const server = await open();
     const scope = scopeOf(server);
@@ -415,6 +428,17 @@ describe('reconcile on boot', () => {
       () => completions.some((event) => event.status === 'success' && event.jobName === 'wait_job'),
       'the watching server to publish the outcome',
     );
+  });
+
+  it('keeps a runner on this host alive while its pid runs, though its heartbeat lapsed (a busy event loop)', async () => {
+    const first = await open();
+    const busy = { kind: 'detached' as const, id: 'no-heartbeat', pid: process.pid, hostname: os.hostname() };
+    await storeOf(first).createRun(orphan('busy-1', scopeOf(first).id, { runner: busy }));
+
+    await managerOf(first).reconcile();
+
+    expect((await stateOf(first, 'busy-1'))?.state).toBe('running');
+    expect(events).toEqual([]);
   });
 
   it('leaves the inline runs of a live server and the runs of an older release alone', async () => {

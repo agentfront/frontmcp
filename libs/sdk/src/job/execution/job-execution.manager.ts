@@ -485,12 +485,11 @@ export class JobExecutionManager {
   }
 
   /**
-   * Whether a runner is gone: its pid no longer runs on this host, or the store's TTL dropped its heartbeat. A
-   * runner on another host, on a store that keeps no heartbeats, counts as alive.
+   * Whether a runner is gone. On this host its pid decides: a runner whose event loop is busy misses heartbeats
+   * but is alive. On another host the store's TTL does, and without heartbeats in the store it counts as alive.
    */
   private async runnerGone(runner: JobRunnerInfo): Promise<boolean> {
-    const local = runner.hostname !== undefined && runner.hostname === getHostname();
-    if (local && !isAlive(runner.pid)) return true;
+    if (runner.hostname !== undefined && runner.hostname === getHostname()) return !isAlive(runner.pid);
     if (!this.stateStore.isRunnerAlive) return false;
     return !(await this.stateStore.isRunnerAlive(runner.id));
   }
@@ -692,13 +691,18 @@ export class JobExecutionManager {
     await this.notify({ type: 'job:status', runId, state, jobName: job.name, ...attempt });
   }
 
-  /** Write how an attempt ended, answering the state written; a cancel written to the store wins over it. */
+  /**
+   * Write how an attempt ended, answering the state written; a cancel written to the store wins over it, and a
+   * run another process already ended (its runner taken for gone) keeps that end.
+   */
   private async writeOutcome(runId: string, outcome: JobAttemptOutcome): Promise<JobExecutionState | undefined> {
     if (await this.cancelRequested(runId)) {
       if (outcome.state === 'retrying') return undefined;
       await this.write(runId, { ...cancelledUpdate(new JobCancelledError(runId)), attempt: outcome.attempt });
       return 'cancelled';
     }
+    const current = await this.stateStore.getRun(runId);
+    if (current && FINISHED_JOB_STATES.has(current.state)) return undefined;
     switch (outcome.state) {
       case 'completed':
         await this.write(runId, {

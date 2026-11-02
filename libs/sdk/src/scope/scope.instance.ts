@@ -47,6 +47,7 @@ import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors'
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
 import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
+import { isJobWorker } from '../front-mcp/detached-job.flag';
 import { isDirectOnly } from '../front-mcp/direct-only.flag';
 import type { HaManager } from '../ha';
 import type { HealthService } from '../health';
@@ -57,7 +58,6 @@ import { type JobExecutionManager } from '../job/execution/job-execution.manager
 import type { JobsConfig } from '../job/job-scope.helper';
 import type JobRegistry from '../job/job.registry';
 import { normalizeJob } from '../job/job.utils';
-import { isJobWorker } from '../job/runner/detached-job.flag';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';

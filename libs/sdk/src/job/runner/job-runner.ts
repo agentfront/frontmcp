@@ -2,13 +2,10 @@ import { getRuntimeContext, spawnOwned } from '@frontmcp/utils';
 
 import { type JobPermission, type JobRunner } from '../../common/metadata/job.metadata';
 import { JobRunnerUnavailableError } from '../../errors';
+import { JOB_WORKER_MARKER, RUN_JOB_ENV_VAR } from '../../front-mcp/detached-job.flag';
 import { RUN_TASK_ENV_VAR } from '../../task/helpers/cli-task-runner';
-import { RUN_JOB_ENV_VAR } from './detached-job.flag';
 
-export { detachedJobRunId, RUN_JOB_ENV_VAR } from './detached-job.flag';
-
-/** The `spawnOwned` marker of detached job runners, for `reapOrphans(JOB_WORKER_MARKER)`. */
-export const JOB_WORKER_MARKER = 'frontmcp-job';
+export { detachedJobRunId, JOB_WORKER_MARKER, RUN_JOB_ENV_VAR } from '../../front-mcp/detached-job.flag';
 
 const OWNER_ARG_PREFIX = '--frontmcp-owner=';
 
