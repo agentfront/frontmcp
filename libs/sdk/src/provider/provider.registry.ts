@@ -49,6 +49,7 @@ import {
   shutdownProviders,
   type LifecycleEntry,
   type LifecycleLogger,
+  type SharedLifecycle,
 } from './provider.lifecycle';
 import { type ProviderViews } from './provider.types';
 import { normalizeProvider, providerDiscoveryDeps, providerInvocationTokens } from './provider.utils';
@@ -133,8 +134,8 @@ export default class ProviderRegistry
   private readonly lifecycleEntries: LifecycleEntry[] = [];
   /** Every GLOBAL instance with a lifecycle hook this registry holds, one another registry also holds included. */
   private readonly heldEntries: LifecycleEntry[] = [];
-  /** How many registries of this tree hold each instance: the first runs its bootstrap and ready hooks, the last its shutdown. */
-  private readonly lifecycleHolders: WeakMap<object, number>;
+  /** Each instance's shared lifecycle in this tree: the first holder bootstraps and readies it, the last shuts it down. */
+  private readonly sharedLifecycles: WeakMap<object, SharedLifecycle>;
   private readonly shutdownHookTimeoutMs: number;
   private readyHooksRun?: Promise<void>;
   private shutdownHooksRun?: Promise<void>;
@@ -154,7 +155,7 @@ export default class ProviderRegistry
       !configured && parentProviders
         ? parentProviders.sessionCacheEnabled
         : shouldCacheProviders(options?.distributedMode, options?.providerCaching);
-    this.lifecycleHolders = parentProviders?.lifecycleHolders ?? new WeakMap();
+    this.sharedLifecycles = parentProviders?.sharedLifecycles ?? new WeakMap();
     this.shutdownHookTimeoutMs =
       options?.shutdownHookTimeoutMs ?? parentProviders?.shutdownHookTimeoutMs ?? DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS;
 
@@ -340,13 +341,13 @@ export default class ProviderRegistry
   private async bootstrapBuilt(token: Token): Promise<void> {
     const instance = lifecycleHooksOf(this.instances.get(token));
     if (!instance || this.heldEntries.some((held) => held.instance === instance)) return;
-    const holders = this.lifecycleHolders.get(instance) ?? 0;
-    this.lifecycleHolders.set(instance, holders + 1);
     const entry = { token, instance };
-    if (holders === 0) {
-      await bootstrapProvider(entry);
-      this.lifecycleEntries.push(entry);
-    }
+    const shared = this.sharedLifecycles.get(instance);
+    const lifecycle = shared ?? { holders: 0, bootstrapped: bootstrapProvider(entry) };
+    if (!shared) this.sharedLifecycles.set(instance, lifecycle);
+    lifecycle.holders++;
+    await lifecycle.bootstrapped;
+    if (!shared) this.lifecycleEntries.push(entry);
     this.heldEntries.push(entry);
   }
 
@@ -375,9 +376,10 @@ export default class ProviderRegistry
 
   /** Release this registry's hold on `instance`; true when no other registry of the tree still holds it. */
   private releaseLifecycleHold(instance: object): boolean {
-    const holders = (this.lifecycleHolders.get(instance) ?? 1) - 1;
-    this.lifecycleHolders.set(instance, holders);
-    return holders === 0;
+    const lifecycle = this.sharedLifecycles.get(instance);
+    if (!lifecycle) return true;
+    lifecycle.holders--;
+    return lifecycle.holders === 0;
   }
 
   /* -------------------- Views & session stores -------------------- */

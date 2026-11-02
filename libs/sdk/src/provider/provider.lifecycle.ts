@@ -14,6 +14,12 @@ export interface LifecycleEntry {
   instance: LifecycleHooks;
 }
 
+/** An instance the registries of one tree share: how many hold it, and its single `onBootstrap()` run. */
+export interface SharedLifecycle {
+  holders: number;
+  bootstrapped: Promise<void>;
+}
+
 const HOOK_NAMES = ['onBootstrap', 'onReady', 'onShutdown'] as const;
 
 /** The instance, when it declares at least one lifecycle hook. */
