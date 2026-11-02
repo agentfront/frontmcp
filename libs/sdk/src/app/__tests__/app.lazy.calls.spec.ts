@@ -1,11 +1,14 @@
 /** A call to a lazy app's entry imports and initializes the app once, then runs through the normal flow. */
 import 'reflect-metadata';
 
+import { z } from '@frontmcp/lazy-zod';
+
 import {
   App,
   FlowHooksOf,
   LogLevel,
   Plugin,
+  Provider,
   Skill,
   Tool,
   ToolContext,
@@ -124,6 +127,27 @@ describe('calls to a lazy app', () => {
       Array.from({ length: 5 }, (_, index) => expect.stringContaining(`R-c${index}`)),
     );
     expect(billingAudit).toHaveLength(5);
+  });
+
+  it("imports the app for another app's this.callTool(), and runs that call with the app's hooks", async () => {
+    @Tool({ name: 'relay', description: 'Charge through billing', inputSchema: {} })
+    class RelayTool extends ToolContext {
+      async execute() {
+        return this.callTool('charge', { customer: 'relay', cents: 5 });
+      }
+    }
+
+    @App({ id: 'core', name: 'Core', tools: [RelayTool] })
+    class RelayCoreApp {}
+
+    const lazy = billingImport();
+    const client = await open(lazy, { apps: [RelayCoreApp, { id: 'billing', name: 'Billing', lazy }] });
+
+    const result = await client.callTool('relay', {});
+
+    expect(textOf(result)).toContain('R-relay');
+    expect(billingAudit).toEqual(['call']);
+    expect(lazy).toHaveBeenCalledTimes(1);
   });
 
   it('resolves an alias of a lazy tool to the loaded tool', async () => {
@@ -250,6 +274,135 @@ describe('calls to a lazy app', () => {
     expect(capturedLogs.map(({ message }) => message)).toContainEqual(
       expect.stringMatching(/App "billing" could not be loaded \(restart the server.*cannot be lazy: it has skills/),
     );
+  });
+
+  it('retries a failure after the app registered hooks, with its hooks and providers undone', async () => {
+    const lifecycle: string[] = [];
+    let refusals = 1;
+
+    @Provider({ name: 'flaky-connection' })
+    class FlakyConnection {
+      constructor() {
+        if (refusals-- > 0) throw new Error('connection refused');
+      }
+    }
+
+    @Plugin({ name: 'flaky', providers: [FlakyConnection] })
+    class FlakyPlugin {}
+
+    @Provider({ name: 'ledger-connection' })
+    class LedgerConnection {
+      onBootstrap() {
+        lifecycle.push('bootstrap');
+      }
+      onShutdown() {
+        lifecycle.push('shutdown');
+      }
+    }
+
+    @Tool({ name: 'charge', description: 'Charge a customer', inputSchema: { customer: z.string() } })
+    class GuardedChargeTool extends ToolContext {
+      @(FlowHooksOf('tools:call-tool').Will('execute'))
+      static guard() {
+        billingAudit.push('class hook');
+      }
+
+      async execute({ customer }: { customer: string }) {
+        return `R-${customer}`;
+      }
+    }
+
+    @App({
+      id: 'billing',
+      name: 'Billing',
+      providers: [LedgerConnection],
+      tools: [GuardedChargeTool],
+      plugins: [BillingAuditPlugin, FlakyPlugin],
+    })
+    class FlakyBillingApp {}
+
+    const lazy = billingImport({ FlakyBillingApp });
+    const client = await open(lazy);
+
+    const failed = await client.callTool('charge', { customer: 'acme', cents: 1 });
+    const retried = await client.callTool('charge', { customer: 'acme', cents: 1 });
+
+    expect(textOf(failed)).toContain('Call it again');
+    expect(textOf(retried)).toContain('R-acme');
+    expect(lazy).toHaveBeenCalledTimes(2);
+    expect(billingAudit.sort()).toEqual(['call', 'class hook']);
+    expect(lifecycle).toEqual(['bootstrap', 'shutdown', 'bootstrap']);
+  });
+
+  it('leaves none of the hooks of an app it refused registered', async () => {
+    const listed: string[] = [];
+
+    @Plugin({ name: 'list-filter' })
+    class ListFilterPlugin {
+      @(FlowHooksOf('tools:list-tools').Did('resolveConflicts'))
+      filter() {
+        listed.push('filtered');
+      }
+
+      @(FlowHooksOf('tools:call-tool').Will('parseInput'))
+      parse() {
+        listed.push('parsed');
+      }
+    }
+
+    @App({ id: 'billing', name: 'Billing', plugins: [ListFilterPlugin], tools: [billingEntries.ChargeTool] })
+    class ListFilteringBillingApp {}
+
+    const lazy = billingImport({ ListFilteringBillingApp });
+    const client = await open(lazy);
+
+    const refused = await client.callTool('charge', { customer: 'acme', cents: 1 });
+    listed.length = 0;
+    await client.listTools();
+    const again = await client.callTool('charge', { customer: 'acme', cents: 1 });
+
+    expect(textOf(refused)).toContain('restart the server');
+    expect(textOf(again)).toContain('LAZY_APP_LOAD_FAILED');
+    expect(listed).toEqual([]);
+    expect(lazy).toHaveBeenCalledTimes(1);
+    expect(capturedLogs.map(({ message }) => message)).toContainEqual(
+      expect.stringMatching(/cannot be lazy: the hook list-filter\.filter is on tools:list-tools/),
+    );
+  });
+
+  it('does not start an app whose import resolves after the server shut down', async () => {
+    const lifecycle: string[] = [];
+
+    @Provider({ name: 'late-connection' })
+    class LateConnection {
+      onBootstrap() {
+        lifecycle.push('bootstrap');
+      }
+      onReady() {
+        lifecycle.push('ready');
+      }
+    }
+
+    @App({ id: 'billing', name: 'Billing', providers: [LateConnection], tools: [billingEntries.ChargeTool] })
+    class LateBillingApp {}
+
+    let finishImport: () => void = () => undefined;
+    const imported = new Promise<void>((resolve) => (finishImport = resolve));
+    const lazy = jest.fn(async () => {
+      await imported;
+      return { LateBillingApp };
+    });
+    const client = await connect(lazyServer(lazy, { manifest }));
+    const call = client.callTool('charge', { customer: 'acme', cents: 1 }).catch((error: unknown) => error);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    await client.close();
+    finishImport();
+    await call;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(lazy).toHaveBeenCalledTimes(1);
+    expect(lifecycle).toEqual([]);
   });
 
   it('imports the app for a completion of its prompt', async () => {

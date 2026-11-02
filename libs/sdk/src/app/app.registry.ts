@@ -36,8 +36,8 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
     const defs = new Map<Token, AppRecord>();
     const graph = new Map<Token, Set<Token>>();
     const configuredAppIds = new Set<string>();
-    for (const raw of list) {
-      const rec = normalizeApp(raw);
+    const records = list.map((raw) => normalizeApp(raw));
+    for (const rec of records) {
       if ((rec.kind === AppKind.REMOTE_VALUE && !rec.useValue) || rec.kind === AppKind.LAZY_IMPORT) {
         const appId = appIdOf(rec.metadata);
         if (configuredAppIds.has(appId)) throw new DuplicateAppIdError(appId);
@@ -47,6 +47,14 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
       tokens.add(provide);
       defs.set(provide, rec);
       graph.set(provide, new Set());
+    }
+    // A lazy app owns its hooks and manifest entries by its id, so no other app may share it
+    for (const rec of records) {
+      if (rec.kind !== AppKind.LAZY_IMPORT) continue;
+      const appId = appIdOf(rec.metadata);
+      if (records.some((other) => other !== rec && appIdOf(other.metadata) === appId)) {
+        throw new DuplicateAppIdError(appId);
+      }
     }
     return { tokens, defs, graph };
   }

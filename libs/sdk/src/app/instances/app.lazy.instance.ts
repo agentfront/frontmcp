@@ -2,6 +2,7 @@ import { getMetadata, isClass, type Type } from '@frontmcp/di';
 import type { GetPromptResult, ReadResourceResult } from '@frontmcp/protocol';
 import { isProduction } from '@frontmcp/utils';
 
+import type AdapterRegistry from '../../adapter/adapter.registry';
 import {
   AppEntry,
   FrontMcpLocalAppTokens,
@@ -16,6 +17,7 @@ import {
   type AppRecord,
   type AppType,
   type EntryOwnerRef,
+  type HookEntry,
   type LazyAppRecordMetadata,
   type ListChangedKind,
   type LocalAppMetadata,
@@ -29,8 +31,11 @@ import {
   type ToolEntry,
   type ToolMetadata,
 } from '../../common';
+import { dutyMetadataOf } from '../../common/metadata/duty.metadata';
 import { LazyAppConfigurationError, LazyAppLoadError } from '../../errors/lazy-app.errors';
+import { UnenforcedMetadataError } from '../../errors/plugin.errors';
 import { isManifestMode } from '../../front-mcp/manifest-mode.flag';
+import { hookClassOf } from '../../hooks/hook.registry';
 import { manifestPromptOf, manifestResourceOf, manifestToolOf, ownersOf } from '../../manifest/build-server-manifest';
 import {
   SERVER_MANIFEST_FILE,
@@ -49,7 +54,7 @@ import { keepingListsUnchanged } from '../../surface/unchanged-lists';
 import { ToolInstance } from '../../tool/tool.instance';
 import ToolRegistry from '../../tool/tool.registry';
 import { appIdOf, normalizeApp } from '../app.utils';
-import { whyListedAppCannotBeLazy, whyLoadedAppCannotBeLazy } from '../lazy/lazy-app.rules';
+import { whyAppCannotBeLazy, whyListedAppCannotBeLazy, whyLoadedAppCannotBeLazy } from '../lazy/lazy-app.rules';
 import {
   changedLists,
   listedAppOf,
@@ -134,7 +139,10 @@ export class AppLazyInstance extends AppEntry<LazyAppRecordMetadata> implements 
     return this.scopeProviders.getActiveScope();
   }
 
-  /** Import and initialize the app, once, however many callers wait; a failed import is retried by the next call. */
+  /**
+   * Import and initialize the app, once, however many callers wait. A failure the app's code must fix is answered
+   * until the server restarts; any other is retried by the next call.
+   */
   load(): Promise<void> {
     if (this.loaded) return Promise.resolve();
     if (this.failure) return Promise.reject(this.failure);
@@ -146,7 +154,7 @@ export class AppLazyInstance extends AppEntry<LazyAppRecordMetadata> implements 
 
   private async importApp(): Promise<void> {
     const scope = this.scope;
-    const hooksBefore = scope.hooks.getHooks().length;
+    const hooksBefore = new Set(scope.hooks.getHooks());
     let app: AppLocalInstance | undefined;
     try {
       const record = normalizeApp(appClassOf(await this.metadata.lazy(), this.id));
@@ -157,21 +165,25 @@ export class AppLazyInstance extends AppEntry<LazyAppRecordMetadata> implements 
             "Give the lazy app the @App's id, or import the app it names.",
         );
       }
+      const reasons = whyAppCannotBeLazy(imported);
+      if (reasons.length > 0) throw cannotBeLazy(this.id, reasons);
+      this.assertServing();
       app = new AppLocalInstance(record, this.scopeProviders);
       await app.ready;
-      this.assertCanBeLazy(imported, app);
+      this.assertCanBeLazy(app, hooksBefore);
       const recorded = recordedListsOfApp(app);
       if (!isManifestMode(scope.metadata)) this.applySwitch(app);
       if (this.listed) {
         await scope.checkLateApp(app);
         await app.providers.runReadyHooks(scope.logger);
       }
+      this.assertServing();
       this.useLoaded(app, imported, recorded);
     } catch (error) {
-      app?.providers.dispose();
-      this.retryable = scope.hooks.getHooks().length === hooksBefore;
+      if (app) await this.discard(app, hooksBefore);
+      this.retryable = !(error instanceof LazyAppConfigurationError || error instanceof UnenforcedMetadataError);
       if (!this.retryable) this.failure = error;
-      if (this.listed) {
+      if (this.listed && !scope.isDisposed) {
         const next = this.retryable ? 'the next call imports it again' : 'restart the server once it is fixed';
         scope.logger.error(`App "${this.id}" could not be loaded (${next}): ${messageOf(error)}`);
       }
@@ -179,15 +191,48 @@ export class AppLazyInstance extends AppEntry<LazyAppRecordMetadata> implements 
     }
   }
 
-  private assertCanBeLazy(imported: LocalAppMetadata, app: AppLocalInstance): void {
-    const reasons = whyLoadedAppCannotBeLazy(imported, {
+  /** An import that resolves after the server began shutting down does not start the app. */
+  private assertServing(): void {
+    if (this.scope.isDisposed) throw new LazyAppLoadError(this.metadata.name, false);
+  }
+
+  private assertCanBeLazy(app: AppLocalInstance, hooksBefore: ReadonlySet<HookEntry>): void {
+    const duties = [...app.providers.getAllSingletons().values()].flatMap((value) => dutyMetadataOf(value)?.name ?? []);
+    const reasons = whyLoadedAppCannotBeLazy({
       tools: app.tools.listAllInstances(),
       resources: app.resources.listAllInstances(),
       prompts: app.prompts.listAllInstances(),
       skills: app.skills.getSkills(true),
       agents: app.agents.listAllInstances(),
+      hooks: this.hooksRegisteredBy(app, hooksBefore).filter((hook) => hook.metadata.owner),
+      duties,
     });
     if (reasons.length > 0) throw cannotBeLazy(this.id, reasons);
+  }
+
+  /** The hooks `app`'s initialization registered: those the app owns, and those its entries' classes declare. */
+  private hooksRegisteredBy(app: AppLocalInstance, hooksBefore: ReadonlySet<HookEntry>): HookEntry[] {
+    const registries = [app.tools, app.resources, app.prompts] as Array<
+      { listAllInstances(): ReadonlyArray<{ record: { provide: unknown } }> } | undefined
+    >;
+    const entryClasses = new Set(
+      registries.flatMap((registry) => registry?.listAllInstances().map((entry) => entry.record.provide) ?? []),
+    );
+    return this.scope.hooks.getHooks().filter((hook) => {
+      if (hooksBefore.has(hook)) return false;
+      const owner = hook.metadata.owner;
+      return owner ? owner.kind === 'app' && owner.id === this.id : entryClasses.has(hookClassOf(hook));
+    });
+  }
+
+  /** Undo a failed load: its hooks are unregistered and its providers shut down, so a retry starts clean. */
+  private async discard(app: AppLocalInstance, hooksBefore: ReadonlySet<HookEntry>): Promise<void> {
+    const scope = this.scope;
+    scope.hooks.removeHooks(this.hooksRegisteredBy(app, hooksBefore));
+    const providers = app.providers as ProviderRegistry | undefined;
+    await providers?.runShutdownHooks(scope.logger);
+    providers?.dispose();
+    (app.adapters as AdapterRegistry | undefined)?.dispose();
   }
 
   /**
@@ -408,8 +453,8 @@ function cannotBeLazy(appId: string, reasons: readonly string[]): LazyAppConfigu
   return new LazyAppConfigurationError(
     `App "${appId}" cannot be lazy: ${reasons.join('; ')}. A lazy app's tools, resources and prompts are listed ` +
       `from ${SERVER_MANIFEST_FILE} before its code is imported, so nothing in them may need that code to be listed, ` +
-      'and nothing only startup sets up. Remove `lazy` to import the app at startup, or move these to an app that ' +
-      'is not lazy.',
+      'its hooks may run only for its own calls, and nothing only startup sets up. Remove `lazy` to import the app ' +
+      'at startup, or move these to an app that is not lazy.',
   );
 }
 

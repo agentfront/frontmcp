@@ -8,9 +8,12 @@ import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
 import {
   App,
+  Duty,
+  FlowHooksOf,
   Job,
   JobContext,
   LogLevel,
+  Plugin,
   Skill,
   Tool,
   ToolContext,
@@ -18,11 +21,11 @@ import {
   type LocalAppMetadata,
 } from '../../common';
 import { connect } from '../../direct/connect';
-import { LazyAppConfigurationError } from '../../errors';
+import { DuplicateAppIdError, LazyAppConfigurationError } from '../../errors';
 import { buildManifest } from '../../manifest/build-manifest';
 import { SERVER_MANIFEST_FILE, type ServerManifest } from '../../manifest/server-manifest.schema';
 import { normalizeApp } from '../app.utils';
-import { BillingApp, billingImport, capturedLogs, lazyServer } from './lazy-app.fixtures';
+import { BillingApp, billingImport, capturedLogs, CoreApp, lazyServer } from './lazy-app.fixtures';
 
 async function boot(config: FrontMcpConfigInput) {
   const client = await connect(config);
@@ -227,6 +230,52 @@ class LiveTool extends ToolContext {
   }
 }
 
+@Plugin({ name: 'every-app-gate', scope: 'server' })
+class EveryAppGatePlugin {
+  @(FlowHooksOf('tools:call-tool').Will('execute'))
+  gate() {
+    // a guard for every app's calls
+  }
+}
+
+@Plugin({ name: 'wrapper', plugins: [EveryAppGatePlugin] })
+class WrapperPlugin {}
+
+@Plugin({ name: 'list-filter' })
+class ListFilterPlugin {
+  @(FlowHooksOf('tools:list-tools').Did('resolveConflicts'))
+  filter() {
+    // hides tools from every app's list
+  }
+}
+
+@Plugin({ name: 'setup-gate' })
+class SetupGatePlugin {
+  @(FlowHooksOf('tools:call-tool').Will('execute', { appliesTo: 'all-apps' }))
+  gate() {
+    // a setup gate for every app
+  }
+}
+
+@Duty({ every: 60_000, scope: 'machine' })
+class SweepDuty {
+  async run() {
+    // runs once the server serves
+  }
+}
+
+const READ_BY_PLUGINS: Record<string, unknown> = {
+  featureFlag: 'beta-billing',
+  codecall: { enabledInCodeCall: false },
+};
+
+@Tool({ name: 'flagged', inputSchema: {}, ...READ_BY_PLUGINS })
+class FlaggedTool extends ToolContext {
+  async execute() {
+    return 'ok';
+  }
+}
+
 describe('an app that cannot be lazy', () => {
   it.each<[string, Partial<LocalAppMetadata>, RegExp]>([
     ['skills', { skills: [RefundsSkill] }, /skills/],
@@ -235,6 +284,16 @@ describe('an app that cannot be lazy', () => {
     ['a standalone scope', { standalone: true }, /standalone/],
     ['an entry with authorities', { tools: [GatedTool] }, /tool "gated".*authorities/],
     ['an entry with its own enabled source', { tools: [LiveTool] }, /tool "live".*enabled/],
+    ['a server-scoped plugin', { plugins: [EveryAppGatePlugin] }, /plugin "every-app-gate" has scope 'server'/],
+    ['a nested server-scoped plugin', { plugins: [WrapperPlugin] }, /plugin "every-app-gate" has scope 'server'/],
+    ['a hook on a list flow', { plugins: [ListFilterPlugin] }, /hook list-filter\.filter is on tools:list-tools/],
+    ['a hook for all apps', { plugins: [SetupGatePlugin] }, /hook setup-gate\.gate applies to all apps/],
+    ['a duty', { providers: [SweepDuty] }, /duties \("SweepDuty"\)/],
+    [
+      'an entry with metadata a plugin reads from its placeholder',
+      { tools: [FlaggedTool] },
+      /tool "flagged" declares 'featureFlag'.*tool "flagged" declares 'codecall'/,
+    ],
   ])('fails startup when it declares %s', async (_what, extra, message) => {
     @App({ id: 'billing', name: 'Billing', ...extra })
     class UnsupportedApp {}
@@ -258,6 +317,13 @@ describe('an app that cannot be lazy', () => {
     await expect(connect(lazyServer(billingImport({ default: PaymentsApp })))).rejects.toThrow(
       /App "billing".*imported app "payments"/,
     );
+  });
+
+  it('fails startup when another app has its id', async () => {
+    const lazyCore = { id: 'core', name: 'Core', lazy: billingImport({ default: CoreApp }) };
+    const config = { ...lazyServer(billingImport()), apps: [CoreApp, lazyCore] } as FrontMcpConfigInput;
+
+    await expect(connect(config)).rejects.toThrow(DuplicateAppIdError);
   });
 
   it('accepts a module whose default export is the app', async () => {

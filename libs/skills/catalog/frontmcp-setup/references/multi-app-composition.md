@@ -222,8 +222,10 @@ How it behaves:
 now on.` with the remedy to run `frontmcp build` again, and clients get `list_changed` for each list that changed. When they match, loading sends no `list_changed`.
 - **A failed import**: the call is answered `LAZY_APP_LOAD_FAILED` (`LazyAppLoadError`, `App "Billing" could not be
 loaded`, with a remedy), the server keeps serving, and the next call imports the app again; the log has the cause.
-  A failure after the app began initializing (its hooks are registered) is not retried: the remedy says to fix it and
-  restart.
+  What the failed attempt set up is undone first: the hooks it registered are removed and its providers get
+  `onShutdown()`. A failure the app's code must fix (`LazyAppConfigurationError`, such as `cannot be lazy`, or
+  `UnenforcedMetadataError`) is not retried: every call gets it, with the remedy to fix the app and restart. An import
+  that finishes after the server began shutting down does not start the app.
 - **Where the manifest comes from**: `@FrontMcp({ manifest })`, a path (relative to the file that declares the
   server) or the manifest object itself (what a Worker or browser build imports); else `frontmcp.manifest.json` next
   to the entry script, where `frontmcp build` writes it. With none, development (`NODE_ENV` other than `production`)
@@ -232,11 +234,20 @@ startup. ...` once; production does not start: `App "billing" is lazy, and no fr
 (looked for <path>). ...`, with the remedy to run `frontmcp build` and ship the manifest next to the server's entry,
   or pass `@FrontMcp({ manifest })`. A manifest that does not list the app counts as none. `frontmcp build` imports lazy apps
   to write the manifest.
-- **What a lazy app cannot have**: skills, agents, jobs, workflows, channels, its own `auth`, `standalone`, app `ui`
-  defaults, widget tools, entries with `authorities`, and entries with an `enabled` source of their own (give the lazy
-  app the switch instead). Their lists need the app's code, or startup sets them up. A lazy app that has one fails with
+- **What a lazy app cannot have**: skills, agents, jobs, workflows, channels, duties (`@Duty` providers start with the
+  server), its own `auth`, `standalone`, app `ui` defaults, widget tools, entries with `authorities`, entries with an
+  `enabled` source of their own (give the lazy app the switch instead), and entries with `featureFlag` or `codecall`
+  metadata (the feature-flag and CodeCall plugins read them from the lists and CodeCall's policy, where a placeholder
+  carries only the manifest's fields). Nor hooks that run for more than its own calls: a plugin with
+  `scope: 'server'`, a hook with `appliesTo: 'all-apps'`, or a hook on any flow but `tools:call-tool`,
+  `resources:read-resource`, `prompts:get-prompt` and `completion:complete` (a list hook, say), since until the app is
+  imported they would guard and shape nothing. A lazy app that has one fails with
   `LazyAppConfigurationError: App "billing" cannot be lazy: <what>. ...` when it loads (at startup in development, in
-  `frontmcp build`), or at startup when the manifest lists one for it.
+  `frontmcp build`), or at startup when the manifest lists one for it. Its `id` must be no other app's
+  (`DuplicateAppIdError`).
+- **Before the first call**, code that reads a lazy app's entries outside their own calls (a list hook, a plugin's
+  own tools, CodeCall's `includeTools` filter) sees only the fields the manifest records; give such a filter the
+  entry's name, app, tags or annotations rather than other metadata.
 
 ## Scope Isolation
 
@@ -478,7 +489,8 @@ export default class Server {}
 ### Lazy Apps
 
 - [ ] `frontmcp build` wrote `frontmcp.manifest.json`, and it ships next to the server's entry (or `@FrontMcp({ manifest })` names it)
-- [ ] Each lazy app's `id` (or `name`) is the id of the `@App` its import loads
+- [ ] Each lazy app's `id` (or `name`) is the id of the `@App` its import loads, and no other app's
+- [ ] Plugins that guard or filter every app (`scope: 'server'`, list hooks, `appliesTo: 'all-apps'`) are installed on the server or an app that is not lazy
 - [ ] The server logs no `does not match frontmcp.manifest.json` warning after a lazy app's first call
 
 ### Remote Apps
@@ -499,7 +511,7 @@ export default class Server {}
 | `App "x" is lazy, and no frontmcp.manifest.json ...` | A production server with a lazy app found no manifest that lists it        | Run `frontmcp build` and ship the manifest next to the entry, or pass `@FrontMcp({ manifest })`          |
 | `App "x" cannot be lazy: ...`                        | The app has something its lists need its code for, or that startup sets up | Remove `lazy` to import it at startup, or move what the message names to an app that is not lazy         |
 | `App "x" does not match frontmcp.manifest.json`      | The app changed since the manifest was built                               | Run `frontmcp build` again; until then the app's own entries are listed once it loads                    |
-| `LAZY_APP_LOAD_FAILED` on a call                     | The app's import or initialization failed                                  | Read the cause in the server log; an import failure is retried on the next call                          |
+| `LAZY_APP_LOAD_FAILED` on a call                     | The app's import or initialization failed                                  | Read the cause in the server log; a failure other than a configuration error is retried on the next call |
 
 ## Examples
 
