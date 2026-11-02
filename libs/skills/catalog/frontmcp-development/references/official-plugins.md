@@ -1177,7 +1177,8 @@ void registerWebMcpTools(resolveDocumentModelContext(), tools, (modelContext) =>
 
 Folds a tool answer over `thresholdBytes` (16 KB by default) into `{ preview, shape, handle }` and adds the
 `result_query` tool, which reads slices of the rest by path, range or page, and fields. A handle is a random UUID bound
-to the call's session and authenticated caller; another session or caller gets `RESULT_HANDLE_NOT_FOUND`. It runs on
+to the call's session and authenticated caller; another session or caller gets `RESULT_HANDLE_NOT_FOUND`, and the
+store keeps each answer encrypted under keys derived from its handle and owner. It runs on
 the `fitAnswer` stage, before `output.budget`. A tool with an output schema folds only when the schema admits the
 folded form (`z.union([schema, foldedAnswerSchema])`).
 

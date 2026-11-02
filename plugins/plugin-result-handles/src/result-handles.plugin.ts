@@ -12,7 +12,7 @@ import {
 
 import { jsonBytes, previewOf, shapeOf, type FoldedAnswer } from './folded-answer';
 import { createResultHandleStore } from './result-handle-store.factory';
-import { resultOwnerOf } from './result-handle.store';
+import { addFoldingStore, resultOwnerOf } from './result-handle.store';
 import {
   parseResultHandlesOptions,
   RESULT_HANDLE_META_KEY,
@@ -124,6 +124,7 @@ export default class ResultHandlesPlugin extends DynamicPlugin<
       );
       return;
     }
+    addFoldingStore(toolContext.scope, store);
     const { ttlSeconds } = this.options;
     const note =
       `This answer is ${bytes} bytes, so it was folded: preview is its start and shape its structure. ` +

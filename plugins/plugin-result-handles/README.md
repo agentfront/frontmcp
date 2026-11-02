@@ -17,7 +17,8 @@ Requires Node.js 24 or later. Keep `@frontmcp/sdk` on the same version as this p
 
 ## Usage
 
-Register the plugin on the app whose answers it should fold, or on `@FrontMcp({ plugins })` for every app:
+Register the plugin on the app whose answers it should fold, or on `@FrontMcp({ plugins })` for every app. On several
+apps, the server lists one `result_query`, and it reads the handles of every app's copy:
 
 ```ts
 import ResultHandlesPlugin from '@frontmcp/plugin-result-handles';
@@ -118,13 +119,18 @@ It answers `{ path, value, total?, offset?, nextOffset? }`: `total` is the lengt
 | `RESULT_HANDLE_NOT_FOUND` | The handle expired, was never issued, or belongs to another session or caller.              |
 | `RESULT_PATH_NOT_FOUND`   | The path isn't a dot path or a JSON pointer, or names nothing in the answer.                |
 | `RESULT_SLICE_TOO_LARGE`  | The slice is larger than `thresholdBytes`: read fewer items, fewer fields or a deeper path. |
-| `INVALID_INPUT`           | Both `page` and `offset` were given.                                                        |
+| `INVALID_INPUT`           | Both `page` and `offset` were given, or an argument is out of range.                        |
 
 ## Who can read a handle
 
 A handle is a random UUID, never derived from the answer. It's bound to the call's verified session and, unless the
 caller is anonymous, to its authenticated subject. A different session or a different caller gets
 `RESULT_HANDLE_NOT_FOUND`, the same answer as for a handle that never existed, and never the data.
+
+The store never sees the handle. Each answer is encrypted with AES-256-GCM, and both its encryption key and its
+storage key are derived (HKDF-SHA256) from the handle, the session and the subject. The storage holds nothing readable
+without the handle, and a lookup by another session or caller finds no record at all, as for an unknown or expired
+handle.
 
 ## Options
 
@@ -150,8 +156,9 @@ ResultHandlesPlugin.init({ storage: { type: 'sqlite', sqlite: { path: '/var/lib/
 
 SQLite needs `@frontmcp/storage-sqlite`.
 
-Each folded answer is kept, as the tool returned it and unencrypted, until its TTL runs out. With memory storage,
-`storage: { type: 'memory', memory: { maxEntries: 1000 } }` caps how many are held at once, dropping the oldest.
+Each folded answer is kept, encrypted, until its TTL runs out. A memory store holds 1000 answers at most
+(`DEFAULT_MEMORY_MAX_ENTRIES`) and drops the oldest past that; set `storage.memory.maxEntries` to change it, or to `0`
+for no limit.
 
 ## Docs
 

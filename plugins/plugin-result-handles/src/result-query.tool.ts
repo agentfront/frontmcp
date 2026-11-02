@@ -2,12 +2,14 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { jsonBytes } from './folded-answer';
-import { resultOwnerOf } from './result-handle.store';
+import { foldingStoresOf, resultOwnerOf } from './result-handle.store';
 import { ResultHandleNotFoundError, ResultSliceTooLargeError } from './result-handles.errors';
 import { ResultHandlesConfigToken, ResultHandleStoreToken } from './result-handles.symbols';
 import { DEFAULT_CHAR_LIMIT, DEFAULT_ITEM_LIMIT, queryResult, type ResultSlice } from './result-query';
 
 export const RESULT_QUERY_TOOL_NAME = 'result_query';
+
+const MAX_LIMIT = 100_000;
 
 export const resultQueryInputSchema = {
   handle: z.string().min(1).max(100).describe('The handle of a folded answer'),
@@ -23,10 +25,16 @@ export const resultQueryInputSchema = {
     .number()
     .int()
     .min(1)
-    .max(100_000)
+    .max(MAX_LIMIT)
     .optional()
     .describe(`How many list items (${DEFAULT_ITEM_LIMIT} by default) or characters (${DEFAULT_CHAR_LIMIT}) to read`),
-  page: z.number().int().min(1).optional().describe('A page of limit items, from 1, in place of offset'),
+  page: z
+    .number()
+    .int()
+    .min(1)
+    .max(Math.floor(Number.MAX_SAFE_INTEGER / MAX_LIMIT))
+    .optional()
+    .describe('A page of limit items, from 1, in place of offset'),
   fields: z
     .array(z.string().min(1))
     .max(100)
@@ -64,8 +72,13 @@ type ResultQueryInput = {
 })
 export default class ResultQueryTool extends ToolContext {
   async execute({ handle, ...query }: ResultQueryInput): Promise<ResultSlice> {
-    const stored = await this.get(ResultHandleStoreToken).read(handle, resultOwnerOf(this));
-    if (!stored) throw new ResultHandleNotFoundError(handle);
+    const owner = resultOwnerOf(this);
+    let stored: { value: unknown } | undefined;
+    for (const store of new Set([this.get(ResultHandleStoreToken), ...foldingStoresOf(this.scope)])) {
+      stored = await store.read(handle, owner);
+      if (stored) break;
+    }
+    if (!stored) throw new ResultHandleNotFoundError();
     const slice = queryResult(stored.value, query);
     const { thresholdBytes } = this.get(ResultHandlesConfigToken);
     const bytes = jsonBytes(slice.value);

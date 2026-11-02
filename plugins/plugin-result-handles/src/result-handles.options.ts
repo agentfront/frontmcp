@@ -10,6 +10,9 @@ export const RESULT_HANDLE_META_KEY = 'frontmcp/result-handle';
 /** The smallest `thresholdBytes`: a folded answer takes about this much itself. */
 export const MIN_THRESHOLD_BYTES = 1024;
 
+/** How many answers a memory store holds at once, dropping the oldest, unless `storage.memory.maxEntries` is set. */
+export const DEFAULT_MEMORY_MAX_ENTRIES = 1000;
+
 /** What a fold policy knows about an answer over the threshold. */
 export interface FoldContext {
   /** The answer's size: UTF-8 bytes of its JSON. */
@@ -32,7 +35,7 @@ export interface ResultHandlesPluginOptionsInput {
   preview?: { items?: number; chars?: number };
   /** Which answers over the threshold fold (every one by default). */
   foldPolicy?: FoldPolicy;
-  /** Where folded answers are kept, through `createStorage()` from `@frontmcp/utils` ({ type: 'auto' }). */
+  /** Where folded answers are kept, through `createStorage()` from `@frontmcp/utils` ({ type: 'auto' }, 1000 at most in memory). */
   storage?: StorageConfig;
   /** The key prefix of folded answers in the storage ('result-handles'). */
   namespace?: string;
@@ -79,7 +82,8 @@ const resultHandlesOptionsSchema = z
       .custom<StorageConfig>((value) => typeof value === 'object' && value !== null && !Array.isArray(value), {
         message: 'must be a storage config, such as { type: "redis", redis: { url } }',
       })
-      .default({ type: 'auto' }),
+      .default({ type: 'auto' })
+      .transform((storage) => ({ ...storage, memory: { maxEntries: DEFAULT_MEMORY_MAX_ENTRIES, ...storage.memory } })),
     namespace: z.string().min(1, { message: 'must not be empty' }).default('result-handles'),
   })
   .strict();

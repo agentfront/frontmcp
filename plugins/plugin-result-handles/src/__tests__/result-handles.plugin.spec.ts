@@ -372,6 +372,20 @@ describe('ResultHandlesPlugin', () => {
       expect(textAt(result, 0)).toContain('Read fewer items, fewer fields or a deeper path');
     });
 
+    it('refuses a page past any list as invalid input', async () => {
+      const client = await open();
+      const handle = await foldedHandle(client);
+
+      const result = await call(client, 'result_query', {
+        handle,
+        path: 'rows',
+        page: Number.MAX_SAFE_INTEGER,
+        limit: 100_000,
+      });
+      expect(result.isError).toBe(true);
+      expect(result._meta?.['code']).toBe('INVALID_INPUT');
+    });
+
     it('answers a path with no value with RESULT_PATH_NOT_FOUND', async () => {
       const client = await open();
       const handle = await foldedHandle(client);
@@ -390,6 +404,7 @@ describe('ResultHandlesPlugin', () => {
       expect(result.isError).toBe(true);
       expect(result._meta?.['code']).toBe('RESULT_HANDLE_NOT_FOUND');
       expect(JSON.stringify(result)).not.toContain('Body of row');
+      expect(JSON.stringify(result)).not.toContain(handle);
     });
 
     it('answers another caller in the same session with "not found"', async () => {
@@ -413,6 +428,36 @@ describe('ResultHandlesPlugin', () => {
       const result = await call(client, 'result_query', { handle, path: 'total' });
       expect(result._meta?.['code']).toBe('RESULT_HANDLE_NOT_FOUND');
       expect(textAt(result, 0)).toContain('Call the tool again for a new handle');
+    });
+  });
+
+  describe('on two apps', () => {
+    @Tool({ name: 'ledger_rows', inputSchema: { count: z.number() } })
+    class LedgerRowsTool extends ExportRowsTool {}
+
+    @Tool({ name: 'archive_rows', inputSchema: { count: z.number() } })
+    class ArchiveRowsTool extends ExportRowsTool {}
+
+    const plugins = () => [ResultHandlesPlugin.init({ thresholdBytes: 4096, storage: { type: 'memory' } })];
+
+    @App({ id: 'ledger', name: 'Ledger', tools: [LedgerRowsTool], plugins: plugins() })
+    class LedgerApp {}
+
+    @App({ id: 'archive', name: 'Archive', tools: [ArchiveRowsTool], plugins: plugins() })
+    class ArchiveApp {}
+
+    it('lists one result_query, which reads the answers either app folded', async () => {
+      const client = await connect({ ...serverConfig, apps: [LedgerApp, ArchiveApp] });
+      clients.push(client);
+
+      const tools = (await client.listTools()) as unknown as Array<{ name: string }>;
+      expect(tools.map((listed) => listed.name).sort()).toEqual(['archive_rows', 'ledger_rows', 'result_query']);
+      for (const toolName of ['ledger_rows', 'archive_rows']) {
+        const folded = await call(client, toolName, { count: 200 });
+        const { handle } = folded.structuredContent as unknown as FoldedAnswer;
+        const slice = await call(client, 'result_query', { handle, path: 'rows[150].id' });
+        expect(slice.structuredContent).toEqual({ path: 'rows[150].id', value: 150 });
+      }
     });
   });
 

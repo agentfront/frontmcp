@@ -1,5 +1,5 @@
 import { ResultHandlesConfigurationError } from '../result-handles.errors';
-import { parseResultHandlesOptions } from '../result-handles.options';
+import { DEFAULT_MEMORY_MAX_ENTRIES, MIN_THRESHOLD_BYTES, parseResultHandlesOptions } from '../result-handles.options';
 import ResultHandlesPlugin from '../result-handles.plugin';
 
 describe('parseResultHandlesOptions', () => {
@@ -9,7 +9,7 @@ describe('parseResultHandlesOptions', () => {
       thresholdBytes: 16 * 1024,
       ttlSeconds: 600,
       preview: { items: 5, chars: 500 },
-      storage: { type: 'auto' },
+      storage: { type: 'auto', memory: { maxEntries: 1000 } },
       namespace: 'result-handles',
     });
     expect(options.foldPolicy('any_tool', {}, { bytes: 1, fullName: 'app:any_tool', request: {} as never })).toBe(true);
@@ -30,13 +30,21 @@ describe('parseResultHandlesOptions', () => {
       ttlSeconds: 30,
       preview: { items: 2, chars: 500 },
       foldPolicy,
-      storage: { type: 'memory' },
+      storage: { type: 'memory', memory: { maxEntries: 1000 } },
       namespace: 'answers',
     });
   });
 
+  it('caps the memory store at 1000 answers unless told otherwise', () => {
+    expect(DEFAULT_MEMORY_MAX_ENTRIES).toBe(1000);
+    const unlimited = parseResultHandlesOptions({ storage: { type: 'memory', memory: { maxEntries: 0 } } });
+    expect(unlimited.storage).toEqual({ type: 'memory', memory: { maxEntries: 0 } });
+    const swept = parseResultHandlesOptions({ storage: { type: 'auto', memory: { sweepIntervalSeconds: 5 } } });
+    expect(swept.storage).toEqual({ type: 'auto', memory: { maxEntries: 1000, sweepIntervalSeconds: 5 } });
+  });
+
   it.each([
-    [{ thresholdBytes: 100 }, 'thresholdBytes: must be a whole number of at least 1024'],
+    [{ thresholdBytes: MIN_THRESHOLD_BYTES - 1 }, 'thresholdBytes: must be a whole number of at least 1024'],
     [{ thresholdBytes: 2048.5 }, 'thresholdBytes: must be a whole number of at least 1024'],
     [{ ttlSeconds: 0 }, 'ttlSeconds: must be a whole number of seconds, at least 1'],
     [{ preview: { items: 0 } }, 'preview.items: must be a whole number, at least 1'],

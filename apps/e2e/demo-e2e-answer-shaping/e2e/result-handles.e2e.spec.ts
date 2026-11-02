@@ -59,6 +59,16 @@ test.describe('Result handles E2E', () => {
     expect(note.raw.structuredContent).toMatchObject({ value: 'Order 7 note' });
   });
 
+  test("the one listed result_query reads the handles of another app's copy of the plugin", async ({ mcp }) => {
+    const tools = await mcp.tools.list();
+    expect(tools.filter((tool) => tool.name === 'result_query')).toHaveLength(1);
+
+    const folded = await mcp.tools.call('export-archive', { count: 500 });
+    const { handle } = folded.raw.structuredContent as unknown as FoldedAnswer;
+    const slice = await mcp.tools.call('result_query', { handle, path: '/orders/250/id' });
+    expect(slice.raw.structuredContent).toEqual({ path: '/orders/250/id', value: 250 });
+  });
+
   test('another session gets "not found", never the data', async ({ mcp, server }) => {
     const folded = await mcp.tools.call('export-orders', { count: 500 });
     const { handle } = folded.raw.structuredContent as unknown as FoldedAnswer;
@@ -69,6 +79,7 @@ test.describe('Result handles E2E', () => {
       expect(result.isError).toBe(true);
       expect(result.raw._meta?.['code']).toBe('RESULT_HANDLE_NOT_FOUND');
       expect(JSON.stringify(result.raw)).not.toContain('Order 0 note');
+      expect(JSON.stringify(result.raw)).not.toContain(handle);
     } finally {
       await other.disconnect();
     }

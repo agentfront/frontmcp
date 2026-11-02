@@ -7,7 +7,8 @@ description: Fold large tool answers into a preview, a shape and a handle, and l
 
 `@frontmcp/plugin-result-handles` keeps a tool answer that is too large to send whole on the server. The client gets
 `{ preview, shape, handle }` in its place, and the model reads the parts it needs with the `result_query` tool. A
-handle works only for the session and the caller it was issued to, until its TTL runs out.
+handle works only for the session and the caller it was issued to, until its TTL runs out. The store keeps the answer
+encrypted, under keys derived from the handle and its owner, so it holds nothing readable without the handle.
 
 ## When to Use This Skill
 
@@ -63,8 +64,9 @@ class OrdersApp {}
 ```
 
 On an app, the plugin folds that app's tools; on `@FrontMcp({ plugins })`, every app's. It adds the `result_query`
-tool. `storage` goes to `createStorage()` from `@frontmcp/utils`; `{ type: 'sqlite', sqlite: { path } }` needs
-`@frontmcp/storage-sqlite`.
+tool; on several apps the server lists one, and it reads the handles of every app's copy. `storage` goes to
+`createStorage()` from `@frontmcp/utils`; `{ type: 'sqlite', sqlite: { path } }` needs `@frontmcp/storage-sqlite`. A
+memory store holds 1000 answers at most and drops the oldest (`storage.memory.maxEntries`, `0` for no limit).
 
 ### Step 2: Let tools with an output schema fold
 
@@ -171,7 +173,7 @@ It answers `{ path, value, total?, offset?, nextOffset? }`.
 | Warning: "does not admit the folded form" | The tool's output schema rejects `{ preview, shape, handle }`                                      | Add `foldedAnswerSchema` to the schema as a union member                         |
 | A large answer is not folded              | Not text only, an error result, a widget answer, an in-process call, or a stateless anonymous call | Fold only applies to a client's text answer with a session or a signed-in caller |
 | Warning: "Could not keep the answer"      | The store failed to save it (Redis down, say); the answer was sent whole                           | Check the `storage` connection                                                   |
-| `RESULT_HANDLE_NOT_FOUND`                 | Expired, another session or caller, or another instance with memory storage                        | Call the tool again; use a shared store across instances                         |
+| `RESULT_HANDLE_NOT_FOUND`                 | Expired, another session or caller, another instance or a full memory store                        | Call the tool again; use a shared store across instances                         |
 | `RESULT_SLICE_TOO_LARGE`                  | The slice is over `thresholdBytes`                                                                 | Read fewer items, fewer `fields`, or a deeper `path`                             |
 | `RESULT_PATH_NOT_FOUND`                   | The path is malformed or names nothing                                                             | Follow the keys the `shape` lists                                                |
 

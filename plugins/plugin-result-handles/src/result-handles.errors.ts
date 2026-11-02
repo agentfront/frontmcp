@@ -4,9 +4,9 @@ import { InternalMcpError, PublicMcpError } from '@frontmcp/sdk';
 export class ResultHandleNotFoundError extends PublicMcpError {
   override readonly name = 'ResultHandleNotFoundError';
 
-  constructor(handle: string) {
+  constructor() {
     super(
-      `No result for handle "${handle}": it expired, or it belongs to another session or caller.`,
+      'No result for this handle: it expired, or it belongs to another session or caller.',
       'RESULT_HANDLE_NOT_FOUND',
       404,
       undefined,

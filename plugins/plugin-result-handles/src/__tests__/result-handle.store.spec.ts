@@ -1,7 +1,7 @@
 import { createMemoryStorage } from '@frontmcp/utils';
 
 import { createResultHandleStore } from '../result-handle-store.factory';
-import { ResultHandleStore, type ResultOwner } from '../result-handle.store';
+import { addFoldingStore, foldingStoresOf, ResultHandleStore, type ResultOwner } from '../result-handle.store';
 
 const alice = { session: 'session-1', caller: 'alice' };
 const answer = { rows: [1, 2, 3] };
@@ -65,17 +65,58 @@ describe('ResultHandleStore', () => {
     expect(await store.read(handle, alice)).toBeUndefined();
   });
 
-  it('reads nothing from a key that does not hold a stored answer', async () => {
+  async function rootStore() {
     const root = createMemoryStorage();
     await root.connect();
-    const storage = root.namespace('result-handles');
-    const store = new ResultHandleStore(storage, 60);
-    const handle = '3f1c2a4e-9b7d-4c1e-8f2a-1b2c3d4e5f60';
+    return { root, store: new ResultHandleStore(root.namespace('result-handles'), 60) };
+  }
 
-    await storage.set(handle, 'not json');
+  it('keeps an answer encrypted, under a key that is not its handle', async () => {
+    const { root, store } = await rootStore();
+    const handle = await saved(store, alice);
+
+    const keys = await root.keys('*');
+    expect(keys).toHaveLength(1);
+    expect(keys[0]).not.toContain(handle);
+    const stored = (await root.get(keys[0])) ?? '';
+    expect(stored).not.toContain('rows');
+    expect(stored).not.toContain('alice');
+    expect(stored).not.toContain('session-1');
+  });
+
+  it("keeps each owner's answer under its own key, so another owner looks up a key that holds nothing", async () => {
+    const { root, store } = await rootStore();
+    const get = jest.spyOn(root.root, 'get');
+    const handle = await saved(store, alice);
+
+    await store.read(handle, alice);
+    await store.read(handle, { session: 'session-2', caller: 'alice' });
+    const [ownKey, otherKey] = get.mock.calls.map(([key]) => key);
+    expect(otherKey).not.toBe(ownKey);
+    expect(await get.mock.results[1].value).toBeNull();
+  });
+
+  it('reads nothing from a record it cannot decrypt', async () => {
+    const { root, store } = await rootStore();
+    const handle = await saved(store, alice);
+    const [key] = await root.keys('*');
+    const blob = JSON.parse((await root.get(key)) ?? '{}') as Record<string, string>;
+
+    await root.set(key, JSON.stringify({ ...blob, tag: 'A'.repeat(22) }));
     expect(await store.read(handle, alice)).toBeUndefined();
-    await storage.set(handle, JSON.stringify({ owner: 'alice', value: 1 }));
+    await root.set(key, 'not json');
     expect(await store.read(handle, alice)).toBeUndefined();
+  });
+
+  it('lists, once each, the stores that folded an answer in a scope', async () => {
+    const scope = {};
+    const store = await memoryStore();
+
+    expect([...foldingStoresOf(scope)]).toEqual([]);
+    addFoldingStore(scope, store);
+    addFoldingStore(scope, store);
+    expect([...foldingStoresOf(scope)]).toEqual([store]);
+    expect([...foldingStoresOf({})]).toEqual([]);
   });
 
   it('disconnects its storage at shutdown', async () => {
