@@ -47,7 +47,6 @@ function pausable(storage: DutyLeaseStorage) {
   const through = <T>(operation: () => Promise<T>): Promise<T> => (gate ? gate.then(operation) : operation());
   const view: DutyLeaseStorage = {
     set: (key, value, options) => through(() => storage.set(key, value, options)),
-    get: (key) => through(() => storage.get(key)),
     ttl: (key) => through(() => storage.ttl(key)),
     expireIfEquals: (key, value, ttlSeconds) => through(() => storage.expireIfEquals(key, value, ttlSeconds)),
     deleteIfEquals: (key, value) => through(() => storage.deleteIfEquals(key, value)),
@@ -62,6 +61,30 @@ function pausable(storage: DutyLeaseStorage) {
       open();
     },
   };
+}
+
+/** A view of the store that fails every operation while cut, as an unreachable Redis or a locked file would. */
+function cuttable(storage: DutyLeaseStorage) {
+  let cut = false;
+  const through = <T>(operation: () => Promise<T>): Promise<T> =>
+    cut ? Promise.reject(new Error('connection lost')) : operation();
+  const view: DutyLeaseStorage = {
+    set: (key, value, options) => through(() => storage.set(key, value, options)),
+    ttl: (key) => through(() => storage.ttl(key)),
+    expireIfEquals: (key, value, ttlSeconds) => through(() => storage.expireIfEquals(key, value, ttlSeconds)),
+    deleteIfEquals: (key, value) => through(() => storage.deleteIfEquals(key, value)),
+  };
+  return { storage: view, cut: () => (cut = true) };
+}
+
+function untilAborted(onAbort: () => void = () => undefined) {
+  return ({ signal }: DutyRunContext) =>
+    new Promise<void>((resolve) =>
+      signal.addEventListener('abort', () => {
+        onAbort();
+        resolve();
+      }),
+    );
 }
 
 function delay(ms: number): Promise<void> {
@@ -104,7 +127,9 @@ describe('DutyRunner', () => {
     expect(first.runs).toEqual([0, 1_000, 2_000, 3_000, 4_000, 5_000, 6_000, 7_000, 8_000, 9_000, 10_000]);
     expect(second.runs).toEqual([]);
     expect(first.logger.info).toHaveBeenCalledWith('Duty "sweep" runs in this process every 1000 ms');
-    expect(second.logger.info).not.toHaveBeenCalled();
+    expect(second.logger.info.mock.calls).toEqual([
+      ['Duty "sweep" already runs elsewhere (lease "demo:sweep"); this one takes it over if that one stops'],
+    ]);
   });
 
   it('skips a run that would overlap the one still running, instead of stacking it', async () => {
@@ -186,7 +211,9 @@ describe('DutyRunner', () => {
     await jest.advanceTimersByTimeAsync(10_000);
 
     expect(first.runs).toEqual([0]);
-    expect(first.logger.warn).toHaveBeenCalledWith('Duty "sweep" lost its lease; another process runs it now');
+    expect(first.logger.warn).toHaveBeenCalledWith(
+      'Duty "sweep" could not renew its lease within 3000 ms; it stops here until it gets the lease again',
+    );
     expect(second.runs).toHaveLength(14);
   });
 
@@ -265,6 +292,69 @@ describe('DutyRunner', () => {
     await jest.advanceTimersByTimeAsync(3 * EVERY_MS);
 
     expect(holder.runs).toEqual([1_000, 2_000, 3_000]);
+  });
+
+  it('aborts the run in flight once it could not renew for a whole lease, before another process can take over', async () => {
+    let abortedAt: number | undefined;
+    const unreachable = cuttable(storage);
+    const holder = probe(
+      unreachable.storage,
+      untilAborted(() => (abortedAt = elapsed())),
+    );
+    const other = probe(storage);
+    await start(holder, other);
+
+    await jest.advanceTimersByTimeAsync(500);
+    unreachable.cut();
+    await jest.advanceTimersByTimeAsync(3 * LEASE_MS);
+
+    expect(abortedAt).toBe(LEASE_MS);
+    expect(other.runs[0]).toBeGreaterThanOrEqual(LEASE_MS);
+    expect(holder.logger.warn).toHaveBeenCalledWith(
+      'Duty "sweep" could not renew its lease within 3000 ms; it stops here until it gets the lease again',
+    );
+  });
+
+  it('keeps its lease while the run it aborted at stop() winds down, so no other process runs meanwhile', async () => {
+    let endedAt: number | undefined;
+    const slowToStop = probe(
+      storage,
+      ({ signal }) =>
+        new Promise<void>((resolve) =>
+          signal.addEventListener('abort', () =>
+            setTimeout(() => {
+              endedAt = elapsed();
+              resolve();
+            }, 2 * LEASE_MS),
+          ),
+        ),
+    );
+    const next = probe(storage);
+    await start(slowToStop, next);
+
+    await jest.advanceTimersByTimeAsync(500);
+    const stopping = slowToStop.runner.stop();
+    await jest.advanceTimersByTimeAsync(3 * LEASE_MS);
+    await stopping;
+
+    expect(endedAt).toBe(500 + 2 * LEASE_MS);
+    expect(next.runs.length).toBeGreaterThan(0);
+    expect(next.runs[0]).toBeGreaterThanOrEqual(500 + 2 * LEASE_MS);
+  });
+
+  it('waits out the interval on a takeover even when it is longer than a timer can wait at once', async () => {
+    const longestEveryMs = 2_147_483_647;
+    const first = probe(storage, () => undefined, longestEveryMs);
+    const second = probe(storage, () => undefined, longestEveryMs);
+    await start(first);
+
+    await jest.advanceTimersByTimeAsync(100);
+    await first.runner.stop();
+    await start(second);
+    await jest.advanceTimersByTimeAsync(10_000);
+
+    expect(first.runs).toEqual([0]);
+    expect(second.runs).toEqual([]);
   });
 
   it('releases a lease that its first check got after stop() was called', async () => {
