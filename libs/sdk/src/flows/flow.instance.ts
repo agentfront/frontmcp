@@ -118,16 +118,18 @@ function failureOf(control: FlowControl): unknown {
 const stageBasesByGroup = new WeakMap<readonly string[], string[]>();
 
 /** The base stages a plan group runs, in order: a typed key runs with its base, and a repeated base runs once. */
-function stageBasesOf(group: readonly string[]): string[] {
+export function stageBasesOf(group: readonly string[]): string[] {
   let bases = stageBasesByGroup.get(group);
   if (!bases) {
     const seen = new Set<string>();
     bases = [];
     for (const rawKey of group) {
       const { base, type } = parseTypedKey(rawKey);
-      if (type || seen.has(base)) continue;
-      seen.add(base);
-      bases.push(base);
+      // A stage named `finallyCheck` predates Finally hooks: it is `check`'s hook key only when the group lists `check`
+      const stage = type === 'finally' && !group.includes(base) ? rawKey : base;
+      if ((type && stage === base) || seen.has(stage)) continue;
+      seen.add(stage);
+      bases.push(stage);
     }
     stageBasesByGroup.set(group, bases);
   }
