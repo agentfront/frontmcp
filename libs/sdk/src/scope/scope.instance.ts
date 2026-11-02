@@ -61,6 +61,7 @@ import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
 import { NotificationService } from '../notification';
+import { OffloadService } from '../offload/offload.service';
 import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
 import PromptRegistry from '../prompt/prompt.registry';
@@ -87,6 +88,7 @@ import type { SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import type { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
+import { devEventsObservabilityConfig } from './dev-events-observability';
 import { registerServerEntries } from './server-entries.helper';
 import { reportStartup } from './startup-report.helper';
 
@@ -323,6 +325,7 @@ export class Scope extends ScopeEntry {
     }
     if (httpServing) {
       this.transportService = new httpServing.TransportService(this, effectivePersistence, transportBus);
+      httpServing.loadStreamableHttpTransportOnStart(this);
     }
     warnIfRequestStateKeyNotShared({ logger: this.logger, metadata: this.metadata });
     warnIfSessionModeIgnored({ logger: this.logger, transport: transportConfig, session: this.metadata.session });
@@ -612,9 +615,16 @@ export class Scope extends ScopeEntry {
     // These call providers.getRegistries('AppRegistry') during initialize(),
     // so AppRegistry must be fully ready before they start.
     const serverPlugins = [...(this.metadata.plugins ?? [])];
+    const appPlugins = this.scopeApps
+      .getApps()
+      .flatMap((app) => ('plugins' in app.metadata ? (app.metadata.plugins ?? []) : []));
 
-    // Auto-load ObservabilityPlugin when observability config is present.
-    const observabilityConfig = this.metadata.observability;
+    // Auto-load ObservabilityPlugin when observability config is present, or for frontmcp dev's events.
+    const impliedObservability =
+      this.metadata.observability === undefined
+        ? devEventsObservabilityConfig([...serverPlugins, ...appPlugins])
+        : undefined;
+    const observabilityConfig = this.metadata.observability ?? impliedObservability;
     if (observabilityConfig) {
       const { observabilityPlugins } = await import('./observability-scope.helper.js');
       serverPlugins.push(
@@ -622,6 +632,7 @@ export class Scope extends ScopeEntry {
           config: observabilityConfig,
           logger: this.logger,
           globalProviders: this.globalProviders,
+          implied: impliedObservability !== undefined,
         }),
       );
     }
@@ -745,10 +756,7 @@ export class Scope extends ScopeEntry {
 
     // A plugin that registers skills at runtime (`@Plugin({ dynamicSkills: true })`) serves skills from
     // startup, before its first skill exists, so it gets the skill session manager and tool guard too.
-    const dynamicSkills = pluginsRegisterDynamicSkills([
-      ...serverPlugins,
-      ...this.scopeApps.getApps().flatMap((app) => ('plugins' in app.metadata ? (app.metadata.plugins ?? []) : [])),
-    ]);
+    const dynamicSkills = pluginsRegisterDynamicSkills([...serverPlugins, ...appPlugins]);
 
     // Initialize skill session manager if skills are available, or a plugin registers them at runtime
     if (this.scopeSkills.hasAny() || dynamicSkills) {
@@ -1370,6 +1378,12 @@ export class Scope extends ScopeEntry {
       },
       // FrontMcpContextProvider is a factory that retrieves from AsyncLocalStorage
       FrontMcpContextProvider,
+      {
+        scope: ProviderScope.GLOBAL,
+        name: 'OffloadService',
+        provide: OffloadService,
+        useValue: new OffloadService(this.metadata.offload, this.logger),
+      },
     ];
   }
 

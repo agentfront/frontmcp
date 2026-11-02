@@ -1,4 +1,4 @@
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
 import { WorkflowKind } from '../../common/records/workflow.record';

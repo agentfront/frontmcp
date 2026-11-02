@@ -123,6 +123,16 @@ export {
   ElicitationSubscriptionError,
 } from './elicitation.error';
 
+// Export worker offload errors
+export {
+  OffloadBudgetExceededError,
+  OffloadAbortedError,
+  OffloadUnsupportedRuntimeError,
+  InvalidOffloadCallError,
+  OffloadNotCloneableError,
+  OffloadWorkerError,
+} from './offload.errors';
+
 // Export MRTR signals (protocol 2026-07-28)
 export {
   InputRequiredSignal,
@@ -205,6 +215,9 @@ export {
 
 // Export decorator errors
 export { InvalidDecoratorMetadataError, HookTargetNotDefinedError } from './decorator.errors';
+
+// Export duty errors
+export { DutyNameConflictError, UnsafeDutyStoreError } from './duty.errors';
 
 // Export transport errors
 export {

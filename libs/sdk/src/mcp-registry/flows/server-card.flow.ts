@@ -1,6 +1,6 @@
 /** GET <entryPath>/server-card: the SEP-2127 server card of the server's own streamable-HTTP endpoint. */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { sha256Base64url } from '@frontmcp/utils';
 
 import {

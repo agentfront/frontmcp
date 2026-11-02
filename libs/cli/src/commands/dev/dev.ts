@@ -12,9 +12,12 @@ import { c } from '../../core/colors';
 import { loadDevEnv } from '../../shared/env';
 import { resolveEntry } from '../../shared/fs';
 import { projectToolCommand, spawnTool, type ToolCommand } from '../../shared/tool-command';
+import { startEventsFile, turnDevEventsOff } from './dev-events-file';
 import { findNextFreePort, isPortFree, lookupPortOwner } from './port';
 
 const DEFAULT_DEV_PORT = 3000;
+
+const DEFAULT_EVENTS_FILE = path.join('.frontmcp', 'dev-events.jsonl');
 
 /** How long children get to exit after a shutdown signal before `SIGKILL`. */
 const SHUTDOWN_GRACE_MS = 2000;
@@ -115,6 +118,8 @@ export interface DevLaunch {
   port: number;
   /** `transport.http.path`, exported to the child as `FRONTMCP_HTTP_ENTRY_PATH`. */
   configHttpPath?: string;
+  /** The absolute path of the dev events file; unset with `--no-events`. */
+  eventsFile?: string;
   childEnv: NodeJS.ProcessEnv;
   resolved: ResolvedFrontMcpConfig;
 }
@@ -133,6 +138,8 @@ export interface ResolveDevLaunchOptions {
   listens?: boolean;
   /** Where notices (port, `.env`) go; `--stdio` keeps stdout for JSON-RPC. */
   log?: (msg: string) => void;
+  /** The child sends its dev events over IPC and this process writes the file (`--stdio --serve`). */
+  eventsOverIpc?: boolean;
 }
 
 /**
@@ -151,7 +158,7 @@ export async function resolveDevLaunch(opts: ParsedArgs, options: ResolveDevLaun
   });
   const cwd = enterConfigRoot(resolved, invocationCwd);
   // Paths typed on the command line keep meaning what the user typed.
-  const args = cwd === invocationCwd ? opts : absolutizePathOptions(opts, ['entry'], invocationCwd);
+  const args = cwd === invocationCwd ? opts : absolutizePathOptions(opts, ['entry', 'eventsFile'], invocationCwd);
   const cfg = resolved.config;
 
   const cliEntry = typeof args.entry === 'string' ? args.entry : undefined;
@@ -215,12 +222,18 @@ export async function resolveDevLaunch(opts: ParsedArgs, options: ResolveDevLaun
     },
   });
 
+  // The server records call timings, failures and stalls in the events file, or sends them to us over IPC.
+  const eventsFile = args.noEvents ? undefined : path.resolve(cwd, args.eventsFile ?? DEFAULT_EVENTS_FILE);
+  childEnv['FRONTMCP_DEV_EVENTS_FILE'] = eventsFile && !options.eventsOverIpc ? eventsFile : '';
+  childEnv['FRONTMCP_DEV_EVENTS_IPC'] = eventsFile && options.eventsOverIpc ? '1' : '';
+
   return {
     cwd,
     ...(cwd === invocationCwd ? {} : { movedFrom: invocationCwd }),
     entry,
     port,
     configHttpPath,
+    ...(eventsFile ? { eventsFile } : {}),
     childEnv,
     resolved,
   };
@@ -237,7 +250,7 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
     return runDevBridge(opts);
   }
 
-  const { cwd, movedFrom, entry, port, configHttpPath, childEnv, resolved } = await resolveDevLaunch(opts);
+  const { cwd, movedFrom, entry, port, configHttpPath, eventsFile, childEnv, resolved } = await resolveDevLaunch(opts);
 
   if (movedFrom) {
     console.log(`${c('gray', '[dev]')} project root: ${cwd} (frontmcp.config found above ${movedFrom})`);
@@ -249,6 +262,13 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   console.log(`${c('cyan', '[dev]')} listening on port: ${port}`);
   if (configHttpPath) {
     console.log(`${c('gray', '[dev]')} MCP endpoint path: ${configHttpPath}`);
+  }
+  if (eventsFile) {
+    if (await startEventsFile(eventsFile, (message) => console.warn(`${c('yellow', '[dev]')} ${message}`))) {
+      console.log(`${c('gray', '[dev]')} events: ${path.relative(cwd, eventsFile)}`);
+    } else {
+      turnDevEventsOff(childEnv);
+    }
   }
   console.log(
     `${c('gray', '[dev]')} starting ${c('bold', 'tsx --watch')} and ${c(

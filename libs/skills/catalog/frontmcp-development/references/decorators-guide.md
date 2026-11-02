@@ -23,6 +23,7 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
        +-- @Adapter        (external source adapter)
        +-- @Job            (long-running job)
        +-- @Workflow       (multi-step workflow)
+       +-- @Duty           (recurring work in one process, a provider)
        +-- @Flow           (custom flow)
        +-- @Hook (@Will, @Did, @Stage, @Around, @Finally)
 ```
@@ -87,6 +88,7 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
 | `jobs?`         | Background jobs/workflows system (`{ enabled, store? }`)                                                                                                                                                                                                                                                                 |
 | `throttle?`     | Server-level guard config (see note below)                                                                                                                                                                                                                                                                               |
 | `pagination?`   | List operation pagination (`tools/list` endpoint)                                                                                                                                                                                                                                                                        |
+| `offload?`      | Worker-thread pool behind `this.offload()` and `worker: true` resources (Node only): `maxWorkers`, `idleTimeoutMs`, `budgetMs` (30000), `env` (`['NODE_ENV']`) — see `offload-cpu-work`                                                                                                                                  |
 | `fetch?`        | What `this.fetch()` adds upstream: `forwardCallerTokenTo` / `forwardCustomHeadersTo` origin allow-lists (default: none), `autoInjectTracingHeaders`, `requestTimeout`                                                                                                                                                    |
 | `ui?`           | UI rendering config (CDN overrides for widget imports)                                                                                                                                                                                                                                                                   |
 | `extApps?`      | MCP Apps widget requests on a session: `ui/open-link`, `ui/request-display-mode`, `ui/update-model-context`, `notifications/message` (or the earlier `ui/openLink`, `ui/setDisplayMode`, `ui/updateModelContext`, `ui/log`). `ui/callServerTool` returns the tool's data, no page; a no-result method, `result: {}`      |
@@ -258,14 +260,15 @@ class CodeReviewPrompt extends PromptContext {
 
 **Key fields:**
 
-| Field          | Description                                  |
-| -------------- | -------------------------------------------- |
-| `name`         | Resource name (used in MCP protocol)         |
-| `title?`       | Human-readable display title for UIs         |
-| `uri`          | Fixed URI (e.g., `config://app/settings`)    |
-| `description?` | What this resource provides                  |
-| `mimeType?`    | Content MIME type (e.g., `application/json`) |
-| `icons?`       | Array of Icon objects for UI representation  |
+| Field          | Description                                                                            |
+| -------------- | -------------------------------------------------------------------------------------- |
+| `name`         | Resource name (used in MCP protocol)                                                   |
+| `title?`       | Human-readable display title for UIs                                                   |
+| `uri`          | Fixed URI (e.g., `config://app/settings`)                                              |
+| `description?` | What this resource provides                                                            |
+| `mimeType?`    | Content MIME type (e.g., `application/json`)                                           |
+| `icons?`       | Array of Icon objects for UI representation                                            |
+| `worker?`      | `true` or `{ budgetMs }`: read in a worker thread (Node only) — see `offload-cpu-work` |
 
 ```typescript
 import { Resource, ResourceContext } from '@frontmcp/sdk';
@@ -555,9 +558,10 @@ class ApprovalFlow {}
 
 ## 13. @Job
 
-**Purpose:** Declares a long-running or scheduled background job.
+**Purpose:** Declares a long-running background job.
 
-**When to use:** When you need recurring tasks (cron), background processing, or deferred work.
+**When to use:** When you need background processing or deferred work with retries and progress. A job has no
+schedule: for recurring work, use `@Duty`.
 
 **Key fields:**
 
@@ -717,6 +721,39 @@ A hook declared on a `@Tool`, `@Resource` or `@Prompt` class runs only for that 
 
 ---
 
+## 16. @Duty
+
+**Purpose:** Marks a provider class whose `run()` the server calls every `every`, in one process of the machine or
+project: the one that holds the duty's lease. Another process takes it over when the holder dies.
+
+**When to use:** When recurring work must not run in every copy of the server (see `create-duty`).
+
+**Key fields:**
+
+| Field      | Description                                                                               |
+| ---------- | ----------------------------------------------------------------------------------------- |
+| `name?`    | Lease name in the server; defaults to the class name                                      |
+| `every`    | Milliseconds, or a duration: `'500ms'`, `'30s'`, `'5m'`, `'1h'`, `'1d'`                   |
+| `scope`    | `'machine'` (one holder per machine) or `'workspace'` (one per project root)              |
+| `leaseMs?` | How soon another process takes over from a dead holder; default three intervals, 3 s–60 s |
+
+```typescript
+import { Duty, type DutyRunContext } from '@frontmcp/sdk';
+
+@Duty({ name: 'prune-cache', every: '10m', scope: 'machine' })
+class PruneCacheDuty {
+  constructor(private readonly cache: CacheStore) {}
+
+  async run({ signal }: DutyRunContext) {
+    await this.cache.pruneExpired({ signal });
+  }
+}
+
+// Register it like a provider: @App({ providers: [CacheStore, PruneCacheDuty] })
+```
+
+---
+
 ## Quick Reference Table
 
 | Decorator                            | Extends           | Registered In                   | Purpose                  |
@@ -735,6 +772,7 @@ A hook declared on a `@Tool`, `@Resource` or `@Prompt` class runs only for that 
 | `@Flow`                              | -                 | `@App`                          | Custom flow              |
 | `@Job`                               | `JobContext`      | `@App.jobs`                     | Background task          |
 | `@Workflow`                          | -                 | `@App.workflows`                | Multi-step orchestration |
+| `@Duty`                              | -                 | `@App.providers`                | Recurring work           |
 | `@Will/@Did/@Stage/@Around/@Finally` | -                 | Plugin, provider or entry class | Flow stage hooks         |
 
 ---
@@ -746,7 +784,8 @@ A hook declared on a `@Tool`, `@Resource` or `@Prompt` class runs only for that 
 | Grouping tools into modules | Place tools inside `@App({ tools: [...] })`                                                                                                                                 | Register tools directly in `@FrontMcp({ tools: [...] })` for large servers                                                                    | Apps provide logical grouping, scoped providers, and isolation; standalone tools in `@FrontMcp` are only appropriate for small servers or global utilities |
 | Exposing data to the LLM    | Use `@Resource` for fixed URIs, `@ResourceTemplate` for parameterized URIs                                                                                                  | Using `@Tool` to return static data that never changes                                                                                        | Resources are the MCP-standard way to expose readable data; tools are for actions with side effects or dynamic computation                                 |
 | Cross-cutting concerns      | Create a `@Plugin` with providers and context extensions                                                                                                                    | Adding logging/caching logic directly inside every tool's `execute()` method                                                                  | Plugins centralize shared behavior, reduce duplication, and can be reused across servers                                                                   |
-| Background processing       | Use `@Job` with a cron schedule for recurring work                                                                                                                          | Using `setTimeout` or manual polling inside a tool                                                                                            | Jobs integrate with the scheduler, support persistence, and are visible in server diagnostics                                                              |
+| Background processing       | Use `@Job` for work a client starts, with retries and progress                                                                                                              | Using `setTimeout` or manual polling inside a tool                                                                                            | Jobs track attempts and progress, and are visible in server diagnostics                                                                                    |
+| Recurring work              | Use a `@Duty({ every, scope })` provider                                                                                                                                    | `setInterval()` in a provider, which every copy of the server runs                                                                            | A duty runs in one process of the machine or project, and another takes over when it exits                                                                 |
 | Multi-step orchestration    | Use `@Workflow` with ordered steps referencing `@Job` classes                                                                                                               | Chaining multiple tool calls manually from the LLM                                                                                            | Workflows provide built-in ordering, error handling, and rollback semantics                                                                                |
 | Injecting services          | Decorate a service class with `@Provider({ name, scope })` and inject it via `this.get(MyClass)`, or use `AsyncProvider({ provide, useFactory })` for token-based factories | Passing `useFactory`/`useClass` directly to `@Provider` (the schema is strict and rejects them), or importing singletons / using global state | DI providers support testability, lifecycle management, and per-scope isolation                                                                            |
 

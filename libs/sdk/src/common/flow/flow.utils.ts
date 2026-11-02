@@ -1,7 +1,7 @@
 // file: libs/sdk/src/common/flow/flow.utils.ts
 // Shared utilities for list flows (tools/list, resources/list, etc.)
 
-import { z, type ZodType } from '@frontmcp/lazy-zod';
+import { internalZ as z, type ZodType } from '@frontmcp/lazy-zod';
 
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 

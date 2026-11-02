@@ -7,7 +7,7 @@
  * @module elicitation/flows/elicitation-result.flow
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
 import { ElicitationStoreNotInitializedError, InvalidInputError } from '../../errors';

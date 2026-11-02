@@ -180,6 +180,7 @@ export { createContainer } from './provider/create-container';
 export type { CreateContainerOptions, FrontMcpContainer } from './provider/create-container';
 export { sqliteStorageProvider, SqliteStorageToken } from './storage/sqlite-storage.provider';
 export type { SqliteStorageProviderOptions } from './storage/sqlite-storage.provider';
+export type { OffloadCallOptions, OffloadFunction, OffloadModuleRef } from './offload/offload.types';
 
 // Job exports - saved, discoverable, triggerable executions
 export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './job';

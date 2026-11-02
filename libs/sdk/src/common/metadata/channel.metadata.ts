@@ -1,4 +1,4 @@
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils';
 
 import { type ToolType } from '../interfaces/tool.interface';

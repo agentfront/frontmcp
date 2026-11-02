@@ -9,6 +9,7 @@ import {
   setServerlessHandlerError,
   setServerlessHandlerPromise,
 } from '../../front-mcp/serverless-handler';
+import { isOffloadWorker } from '../../offload/offload-worker.globals';
 import { frontMcpMetadataSchema, type FrontMcpMetadata } from '../metadata';
 import { FrontMcpTokens } from '../tokens';
 import { captureCallerDir } from '../utils/caller-dir.utils';
@@ -74,7 +75,7 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       if (formatted.providers) {
         throw new InvalidDecoratorMetadataError('FrontMcp', 'providers', JSON.stringify(formatted.providers, null, 2));
       }
-      for (const field of ['skillsConfig', 'http', 'output', 'clients'] as const) {
+      for (const field of ['skillsConfig', 'http', 'output', 'clients', 'offload'] as const) {
         if (formatted[field]) {
           throw new InvalidDecoratorMetadataError('FrontMcp', field, JSON.stringify(formatted[field], null, 2));
         }
@@ -122,8 +123,8 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       return;
     }
 
-    if (isSchemaExtract) {
-      // Schema extraction mode — metadata already stored above, skip bootstrap
+    if (isSchemaExtract || isOffloadWorker()) {
+      // Schema extraction mode, or a worker importing this module for offloaded work: metadata only, no bootstrap
     } else if (isStdio) {
       // Stdio mode (FRONTMCP_STDIO=1): serve over stdin/stdout instead of HTTP.
       // The `--stdio` runner (`node dist/main.js --stdio`) — or the user, before

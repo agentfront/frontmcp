@@ -10,7 +10,7 @@
  * @module task/flows/tasks-cancel.flow
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { CancelTaskRequestSchema, CancelTaskResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';

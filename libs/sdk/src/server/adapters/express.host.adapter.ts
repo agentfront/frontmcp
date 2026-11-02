@@ -32,6 +32,7 @@ import {
   listenOwnerOnly,
 } from '../security/unix-socket-guard';
 import { HostServerAdapter } from './base.host.adapter';
+import { utf8JsonParser } from './utf8-json.parser';
 
 const SERVER_DRAIN_MS = 5_000;
 
@@ -169,6 +170,7 @@ export class ExpressHostAdapter extends HostServerAdapter {
     const isJson = (req: http.IncomingMessage): boolean =>
       headerContains(req, 'application/json') && !isUrlencoded(req);
     this.app.use(express.urlencoded({ extended: true, limit: formLimit, type: isUrlencoded }));
+    this.app.use(utf8JsonParser(jsonLimit));
     this.app.use(express.json({ limit: jsonLimit, type: isJson }));
 
     // Translate body-parser's `entity.too.large` (raised when a request body

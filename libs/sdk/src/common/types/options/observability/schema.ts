@@ -1,4 +1,4 @@
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 /**
  * Zod schema for observability configuration.
@@ -14,6 +14,8 @@ export const observabilityOptionsSchema = z
       tracing: z.union([z.boolean(), z.looseObject({})]).optional(),
       logging: z.union([z.boolean(), z.looseObject({})]).optional(),
       requestLogs: z.union([z.boolean(), z.looseObject({})]).optional(),
+      stalls: z.union([z.boolean(), z.looseObject({})]).optional(),
+      devEvents: z.union([z.boolean(), z.looseObject({})]).optional(),
     }),
   ])
   .optional();

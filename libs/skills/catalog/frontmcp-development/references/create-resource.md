@@ -44,6 +44,7 @@ The `@Resource` decorator accepts:
 - `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
 - `from` (optional) -- a resource store key, `resourceStore().key(name)`, whose value the resource serves; FrontMCP sends `notifications/resources/updated` to its subscribers whenever the value's revision changes, from a write in any process that shares the store. See [Materialized Resources](#materialized-resources). Only on `@Resource`: a `@ResourceTemplate` with `from` fails at the decorator.
 - `enabled` (optional) -- `true`/`false`, or an `EnabledSource` such as `fileSignal('./features.json', 'reports')` that turns the resource on and off while sessions are live. Off: left out of `resources/list`, and `resources/read` and `resources/subscribe` answer `FEATURE_OFF` (403, `data.status` and the source's `data.remedy`); a change sends `notifications/resources/list_changed`. See [`enabled`](../../create-tool/references/availability.md#enabled--turned-on-and-off-while-sessions-are-live).
+- `worker` (optional, Node only) -- `true` or `{ budgetMs }`: `execute()` runs in a worker thread of the server's offload pool, so a CPU-heavy read does not block other calls. The worker has no DI container, scope or request context (`this.get()`, `this.scope`, `this.auth` throw there), and the output crosses back by structured clone. Past `budgetMs` (default `offload.budgetMs`, 30000) the read is refused with `OffloadBudgetExceededError`. See [`offload-cpu-work`](./offload-cpu-work.md).
 
 ### Class-Based Pattern
 
@@ -110,12 +111,14 @@ Each content item has a `uri`, optional `mimeType`, and either `text` (string da
 - `this.respond(value)` -- end `execute()` with `value` as its result, normalized like a returned one (up to 1.9.2 it failed with "Resource output not found")
 - `this.mark(stage)` -- set active execution stage for debugging/tracking
 - `this.fetch(input, init?)` -- HTTP fetch with context propagation
+- `this.offload(moduleRef, args, options?)` -- run an exported function of another module in a worker thread and resolve with its result (Node only; see [`offload-cpu-work`](./offload-cpu-work.md))
 
 **Properties:**
 
 - `this.metadata` -- resource metadata from the decorator
 - `this.scope` -- the current scope instance
 - `this.context` -- the execution context
+- `this.signal` -- aborts when the client cancels the read (`notifications/cancelled`, a closed connection)
 
 ### Simplified Return Values
 

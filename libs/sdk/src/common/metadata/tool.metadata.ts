@@ -6,7 +6,7 @@ import {
   type RateLimitConfig,
   type TimeoutConfig,
 } from '@frontmcp/guard';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import {
   AudioContentSchema,
   EmbeddedResourceSchema,

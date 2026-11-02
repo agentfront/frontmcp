@@ -1,7 +1,7 @@
 // file: libs/sdk/src/resource/flows/read-resource.flow.ts
 
 import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { ReadResourceRequestSchema, ReadResourceResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import { randomBytes } from '@frontmcp/utils';
 
@@ -414,7 +414,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     }
 
     const resourceContext = this.state.resourceContext;
-    const { input, params } = this.state.required;
+    const { input, params, resource } = this.state.required;
 
     if (!resourceContext) {
       this.logger.warn('execute: resourceContext not found, skipping execution');
@@ -424,8 +424,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
 
     try {
       // What the resource does for the caller (a skill:// listing, say) is judged for this call's surface.
+      const worker = resource.metadata.worker;
       resourceContext.output = await runOnSurface(callSurfaceOf(this.input.ctx), async () =>
-        resourceContext.execute(input.uri, params),
+        worker
+          ? import('../../offload/read-in-worker.js').then(({ readInWorker }) =>
+              readInWorker(resourceContext, resource.record.provide, worker, input.uri, params),
+            )
+          : resourceContext.execute(input.uri, params),
       );
       this.logger.verbose('execute:done');
     } catch (error) {

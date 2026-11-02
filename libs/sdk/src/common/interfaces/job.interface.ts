@@ -39,7 +39,7 @@ export abstract class JobContext<
    * the `WorkflowJobTimeoutError` as its reason; undefined outside a workflow step. The attempt is not
    * stopped for the job: pass the signal to `fetch` and other cancellable work, or check it.
    */
-  readonly signal?: AbortSignal;
+  declare readonly signal?: AbortSignal;
 
   constructor(args: JobCtorArgs<In>) {
     const { metadata, input, providers, logger, attempt, signal } = args;
@@ -47,13 +47,13 @@ export abstract class JobContext<
       providers,
       logger: logger.child(`job:${metadata.id ?? metadata.name}`),
       authInfo: args.authInfo,
+      signal,
     });
     this.jobName = metadata.name;
     this.jobId = metadata.id ?? metadata.name;
     this.metadata = metadata;
     this._input = input;
     this._attempt = attempt;
-    this.signal = signal;
   }
 
   abstract execute(input: In): Promise<Out>;
