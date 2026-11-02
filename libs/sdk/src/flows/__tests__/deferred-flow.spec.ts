@@ -19,6 +19,7 @@ import {
 } from '../../common';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import type { Scope } from '../../scope/scope.instance';
+import { runMatchingHttpFlowWeb } from '../../transport/web-fetch-handler';
 import { deferredFlow } from '../deferred-flow';
 
 const name = 'test:deferred-greet' as const;
@@ -152,5 +153,35 @@ describe('deferredFlow', () => {
     await expect(scope.findHttpFlowName(request('POST', '/greet'))).resolves.toBe(name);
 
     expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  describe('when its class fails to load', () => {
+    const failingName = 'test:deferred-guarded' as const;
+    const failedLoad = async (): Promise<FlowType> => {
+      throw new Error('flow module failed to load');
+    };
+    const failing = () => deferredFlow({ name: failingName, middleware: { path: '/failing' } }, failedLoad);
+
+    it('answers a Web request to its route with a 500', async () => {
+      await scope.registryFlows(failing());
+
+      const response = await runMatchingHttpFlowWeb(scope, new Request('http://localhost/failing'));
+
+      expect(response?.status).toBe(500);
+    });
+
+    it('answers a request its middleware receives with a 500', async () => {
+      const server = scope.providers.getActiveServer();
+      const register = jest.spyOn(server, 'registerMiddleware');
+      await scope.registryFlows(failing());
+      const handler = register.mock.calls.find(([path]) => path === '/failing')?.[1];
+      const response = { setHeader: jest.fn(), status: jest.fn().mockReturnThis(), end: jest.fn() };
+      const next = jest.fn();
+
+      await handler?.(request('GET', '/failing'), response as never, next);
+
+      expect(response.status).toHaveBeenCalledWith(500);
+      expect(next).not.toHaveBeenCalled();
+    });
   });
 });

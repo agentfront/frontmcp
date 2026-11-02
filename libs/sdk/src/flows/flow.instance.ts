@@ -301,7 +301,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
   async canActivate(request: ServerRequest): Promise<boolean> {
     if (this.method && request.method !== this.method) return false;
-    await this.loadFlowClass();
+    try {
+      await this.loadFlowClass();
+    } catch {
+      // The route is the flow's: its run throws the same error, which the adapter answers with a 500
+      return true;
+    }
 
     const canActivate = [...(this.metadata.middleware?.canActivate ?? [])];
     if ((this.FlowClass as any)['canActivate']) {
