@@ -7,8 +7,9 @@
  * TODO: Re-implement against new @frontmcp/uipack API after redesign
  */
 
-// Stub types
-export type AIPlatformType = 'openai' | 'claude' | 'gemini' | 'cursor' | 'continue' | 'cody' | 'unknown';
+import type { AIPlatformType } from '../../common/types/auth/session.types';
+
+export type { AIPlatformType };
 
 export interface UIMetadata {
   [key: string]: unknown;

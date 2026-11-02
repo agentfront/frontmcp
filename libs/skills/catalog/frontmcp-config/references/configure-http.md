@@ -478,7 +478,7 @@ class WhoAmITool extends ToolContext {
 ```
 
 - `authorization`, `cookie`, `proxy-*` and hop-by-hop headers (`connection`, `keep-alive`, `te`, `trailer`, `transfer-encoding`, `upgrade`) are never kept. A name or glob that matches one (`'authorization'`, `'proxy-*'`, `'*'`) stops `@FrontMcp` at startup with `InvalidDecoratorMetadataError` (`@FrontMcp invalid metadata for "http"`), naming the header. Read the caller's identity from `this.auth` instead.
-- Direct calls get the same treatment: `DirectCallOptions.metadata.customHeaders` keeps `x-frontmcp-*` and the `forwardHeaders` names.
+- A direct call to a `FrontMcpInstance.createDirect()` server built from the same config keeps the same headers from `DirectCallOptions.metadata.customHeaders`. `create()` takes no `http` option, so its calls keep `x-frontmcp-*` only.
 - The debug request log still redacts credential-looking headers (`x-acme-api-key`, `x-acme-token`).
 - `this.fetch()` sends the kept headers upstream only to the origins `fetch.forwardCustomHeadersTo` lists; other origins get none of them.
 

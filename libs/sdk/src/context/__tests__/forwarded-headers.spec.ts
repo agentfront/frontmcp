@@ -3,6 +3,7 @@
  * `customHeaders`, over HTTP and for in-process calls, and never a refused one.
  */
 import { createHeaderForwarder } from '../../common/utils/forward-headers.utils';
+import type { FrontMcpContext } from '../frontmcp-context';
 import { FrontMcpContextStorage } from '../frontmcp-context-storage';
 import { extractMetadata, inProcessRequestContext } from '../metadata.utils';
 
@@ -51,5 +52,47 @@ describe('forwarded headers', () => {
     );
     expect(customHeaders).toEqual({ 'x-frontmcp-trace': 'kept', 'x-acme-tenant': 'blue', 'x-acme-region': 'eu' });
     expect(storage.forwardsHeader?.('x-acme-tenant')).toBe(true);
+  });
+});
+
+describe('forwarded headers sent upstream by this.fetch()', () => {
+  const originalFetch = global.fetch;
+  let fetchMock: jest.Mock;
+
+  function contextWithForwardedHeader(): FrontMcpContext {
+    const storage = new FrontMcpContextStorage().configure(
+      { forwardCustomHeadersTo: ['https://api.internal.example'] },
+      { forwardsHeader: createHeaderForwarder(['x-acme-*']) },
+    );
+    let context: FrontMcpContext | undefined;
+    storage.runFromHeaders(headers, { sessionId: 's', scopeId: 'root' }, () => {
+      context = storage.getStore();
+    });
+    if (!context) throw new Error('expected a request context');
+    return context;
+  }
+
+  function sentHeader(name: string): string | null {
+    const [, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit];
+    return new Headers(init.headers).get(name);
+  }
+
+  beforeEach(() => {
+    fetchMock = jest.fn().mockResolvedValue(new Response('{}'));
+    global.fetch = fetchMock;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('reach an origin fetch.forwardCustomHeadersTo lists', async () => {
+    await contextWithForwardedHeader().fetch('https://api.internal.example/v1/tenant');
+    expect(sentHeader('x-acme-tenant')).toBe('blue');
+  });
+
+  it('never reach another origin', async () => {
+    await contextWithForwardedHeader().fetch('https://third-party.example/v1/forecast');
+    expect(sentHeader('x-acme-tenant')).toBeNull();
   });
 });

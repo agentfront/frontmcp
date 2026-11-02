@@ -7,7 +7,19 @@ import 'reflect-metadata';
 import { z } from '@frontmcp/lazy-zod';
 import type { CallToolResult } from '@frontmcp/protocol';
 
-import { App, LogLevel, Resource, ResourceContext, Skill, SkillContext, Tool, ToolContext } from '../../common';
+import {
+  App,
+  FlowHooksOf,
+  LogLevel,
+  Plugin,
+  Resource,
+  ResourceContext,
+  Skill,
+  SkillContext,
+  Tool,
+  ToolContext,
+  type FlowCtxOf,
+} from '../../common';
 import { connect } from '../../direct';
 import type { DirectClient } from '../../direct/client.types';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
@@ -248,5 +260,37 @@ describe('answer shaping through the flows', () => {
         { name: ANSWER_COUNTERS.duplicatedBytes, by: bytesOf(result.structuredContent), attributes: labels },
       ]);
     });
+  });
+});
+
+const ToolHook = FlowHooksOf('tools:call-tool');
+
+/** Replaces the budget with a fold of its own, as a result-handles plugin would. */
+@Plugin({ name: 'fold-answers' })
+class FoldAnswersPlugin {
+  @ToolHook.Around('fitAnswer')
+  async foldAnswer(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const folded = { content: [{ type: 'text' as const, text: 'folded' }], structuredContent: { folded: true } };
+    flowCtx.state.set('output', folded);
+    flowCtx.respond(folded);
+  }
+}
+
+@App({ id: 'folded', name: 'Folded', tools: [RawEventsTool], plugins: [FoldAnswersPlugin] })
+class FoldedApp {}
+
+describe('a plugin that replaces the fitAnswer stage', () => {
+  it('answers in place of the budget', async () => {
+    const client = await connect(
+      { ...serverConfig, info: { name: 'folded-answers', version: '1.0.0' }, apps: [FoldedApp] },
+      { clientInfo: { name: 'acme-agent', version: '1.0.0' } },
+    );
+    try {
+      const result = (await client.callTool('raw_events', { count: 1000 })) as CallToolResult;
+      expect(result.structuredContent).toEqual({ folded: true });
+      expect(result._meta?.[BUDGET_META_KEY]).toBeUndefined();
+    } finally {
+      await client.close();
+    }
   });
 });
