@@ -241,9 +241,10 @@ export class SqliteKvStore {
     if (!row) return -2;
     if (row.expires_at === null) return -1;
 
-    const remaining = row.expires_at - Date.now();
+    const now = Date.now();
+    const remaining = row.expires_at - now;
     if (remaining <= 0) {
-      stmts.del.run(key);
+      stmts.delExpired.run(key, now);
       return -2;
     }
 
