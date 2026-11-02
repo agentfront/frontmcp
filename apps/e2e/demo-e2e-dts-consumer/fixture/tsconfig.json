@@ -32,6 +32,7 @@
     "hook-ordering-must-fail.ts",
     "live-surface-must-compile.ts",
     "materialized-resources-must-compile.ts",
-    "duties-must-compile.ts"
+    "duties-must-compile.ts",
+    "http-routes-must-compile.ts"
   ]
 }

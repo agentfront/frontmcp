@@ -7,6 +7,13 @@ export class InvalidHttpRouteError extends InternalMcpError {
   }
 }
 
+/** Thrown at boot for an `http.auth.people` the server cannot use. */
+export class InvalidPeopleAuthOptionsError extends InternalMcpError {
+  constructor(problems: readonly string[]) {
+    super(`http.auth.people: ${problems.join('; ')}`, 'INVALID_PEOPLE_AUTH_OPTIONS');
+  }
+}
+
 /** A route with people auth was called without a signed-in session. */
 export class PersonNotSignedInError extends PublicMcpError {
   readonly mcpErrorCode = MCP_ERROR_CODES.UNAUTHORIZED;

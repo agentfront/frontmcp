@@ -31,11 +31,11 @@ function signedIn(auth: LoopbackTokenAuth, client = 'client-a'): string {
 
 describe('peopleAuthOptionsSchema', () => {
   it("expands 'loopback-token' to the defaults", () => {
-    expect(peopleAuthOptionsSchema.parse('loopback-token')).toEqual(DEFAULTS);
+    expect(peopleAuthOptionsSchema().parse('loopback-token')).toEqual(DEFAULTS);
   });
 
   it('keeps the settings an object gives and fills in the rest', () => {
-    expect(peopleAuthOptionsSchema.parse({ mode: 'loopback-token', codeTtlMs: 30_000, cookiePath: '/app' })).toEqual({
+    expect(peopleAuthOptionsSchema().parse({ mode: 'loopback-token', codeTtlMs: 30_000, cookiePath: '/app' })).toEqual({
       ...DEFAULTS,
       codeTtlMs: 30_000,
       cookiePath: '/app',
@@ -49,7 +49,7 @@ describe('peopleAuthOptionsSchema', () => {
     ['a session TTL of zero', { mode: 'loopback-token', sessionTtlMs: 0 }],
     ['a cookie path that is not absolute', { mode: 'loopback-token', cookiePath: 'app' }],
   ])('refuses %s', (_case, value) => {
-    expect(peopleAuthOptionsSchema.safeParse(value).success).toBe(false);
+    expect(peopleAuthOptionsSchema().safeParse(value).success).toBe(false);
   });
 });
 

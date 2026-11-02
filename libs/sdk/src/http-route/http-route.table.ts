@@ -14,7 +14,7 @@ import {
   type HttpRouteSseOptions,
   type ProviderRegistryInterface,
 } from '../common';
-import { InvalidHttpRouteError } from '../errors';
+import { InvalidHttpRouteError, InvalidPeopleAuthOptionsError } from '../errors';
 import { matchRoutePath } from '../flows/flow.http-path';
 import type ProviderRegistry from '../provider/provider.registry';
 import { assertNotReserved, computeReservedPaths } from '../server/custom-routes.helper';
@@ -106,7 +106,9 @@ function printSignInToken(token: string): void {
 function peopleAuthFor(server: object, option: PeopleAuthOption, scopeProviders: ProviderRegistry): LoopbackTokenAuth {
   let auth = peopleAuthByServer.get(server);
   if (!auth) {
-    auth = new LoopbackTokenAuth(peopleAuthOptionsSchema.parse(option));
+    const parsed = peopleAuthOptionsSchema().safeParse(option);
+    if (!parsed.success) throw new InvalidPeopleAuthOptionsError(parsed.error.issues.map((issue) => issue.message));
+    auth = new LoopbackTokenAuth(parsed.data);
     peopleAuthByServer.set(server, auth);
     const token = auth.takeToken();
     if (token) printSignInToken(token);

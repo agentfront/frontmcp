@@ -3,7 +3,7 @@ import 'reflect-metadata';
 
 import { App, HttpRoute, LogLevel, type FrontMcpConfigInput, type HttpRouteMetadata } from '../../common';
 import { HttpRouteContext } from '../../common/interfaces/http-route.interface';
-import { InvalidDecoratorMetadataError, InvalidHttpRouteError } from '../../errors';
+import { InvalidDecoratorMetadataError, InvalidHttpRouteError, InvalidPeopleAuthOptionsError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { ReservedRouteCollisionError } from '../../server/custom-routes.helper';
 
@@ -75,6 +75,12 @@ describe('the routes of a server', () => {
     await expect(boot([routeClass({ method: 'GET', path: '/x', auth: 'people' })])).rejects.toThrow(
       InvalidHttpRouteError,
     );
+  });
+
+  it('refuse an http.auth.people the server cannot use', async () => {
+    await expect(
+      boot([], { http: { auth: { people: { mode: 'loopback-token', codeTtlMs: 3_600_000 } } } }),
+    ).rejects.toThrow(InvalidPeopleAuthOptionsError);
   });
 
   it('are public by default when http.auth.people is not set', async () => {

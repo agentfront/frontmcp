@@ -223,6 +223,7 @@ export { DutyNameConflictError, UnsafeDutyStoreError } from './duty.errors';
 export {
   CrossOriginRequestError,
   InvalidHttpRouteError,
+  InvalidPeopleAuthOptionsError,
   PersonNotSignedInError,
   SignInLockedError,
   SignInRefusedError,

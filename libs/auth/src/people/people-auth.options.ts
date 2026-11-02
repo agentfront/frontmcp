@@ -29,35 +29,45 @@ function milliseconds(field: string) {
     .positive(`${field} must be greater than 0`);
 }
 
-const loopbackTokenSchema = z
-  .object({
-    mode: z.literal('loopback-token'),
-    codeTtlMs: milliseconds('codeTtlMs')
-      .max(10 * MINUTE_MS, 'codeTtlMs must be at most 600000 (10 minutes): a sign-in code is for one hand-off')
-      .optional(),
-    sessionTtlMs: milliseconds('sessionTtlMs').optional(),
-    maxFailedAttempts: z
-      .number({ message: 'maxFailedAttempts must be a number' })
-      .int('maxFailedAttempts must be a whole number')
-      .positive('maxFailedAttempts must be greater than 0')
-      .optional(),
-    lockoutMs: milliseconds('lockoutMs').optional(),
-    cookiePath: z.string().startsWith('/', 'cookiePath must start with "/"').optional(),
-  })
-  .strict();
+function createPeopleAuthOptionsSchema() {
+  const loopbackToken = z
+    .object({
+      mode: z.literal('loopback-token'),
+      codeTtlMs: milliseconds('codeTtlMs')
+        .max(10 * MINUTE_MS, 'codeTtlMs must be at most 600000 (10 minutes): a sign-in code is for one hand-off')
+        .optional(),
+      sessionTtlMs: milliseconds('sessionTtlMs').optional(),
+      maxFailedAttempts: z
+        .number({ message: 'maxFailedAttempts must be a number' })
+        .int('maxFailedAttempts must be a whole number')
+        .positive('maxFailedAttempts must be greater than 0')
+        .optional(),
+      lockoutMs: milliseconds('lockoutMs').optional(),
+      cookiePath: z.string().startsWith('/', 'cookiePath must start with "/"').optional(),
+    })
+    .strict();
 
-export const peopleAuthOptionsSchema = z
-  .union([z.literal('loopback-token'), loopbackTokenSchema], {
-    message: "http.auth.people must be 'loopback-token' or { mode: 'loopback-token', ... }",
-  })
-  .transform((value): PeopleAuthOptions => {
-    const settings: Partial<LoopbackTokenPeopleAuthOptions> = typeof value === 'string' ? {} : value;
-    return {
-      mode: 'loopback-token',
-      codeTtlMs: settings.codeTtlMs ?? MINUTE_MS,
-      sessionTtlMs: settings.sessionTtlMs ?? 12 * 60 * MINUTE_MS,
-      maxFailedAttempts: settings.maxFailedAttempts ?? 5,
-      lockoutMs: settings.lockoutMs ?? MINUTE_MS,
-      cookiePath: settings.cookiePath ?? '/',
-    };
-  });
+  return z
+    .union([z.literal('loopback-token'), loopbackToken], {
+      message: "http.auth.people must be 'loopback-token' or { mode: 'loopback-token', ... }",
+    })
+    .transform((value): PeopleAuthOptions => {
+      const settings: Partial<LoopbackTokenPeopleAuthOptions> = typeof value === 'string' ? {} : value;
+      return {
+        mode: 'loopback-token',
+        codeTtlMs: settings.codeTtlMs ?? MINUTE_MS,
+        sessionTtlMs: settings.sessionTtlMs ?? 12 * 60 * MINUTE_MS,
+        maxFailedAttempts: settings.maxFailedAttempts ?? 5,
+        lockoutMs: settings.lockoutMs ?? MINUTE_MS,
+        cookiePath: settings.cookiePath ?? '/',
+      };
+    });
+}
+
+let schema: ReturnType<typeof createPeopleAuthOptionsSchema> | undefined;
+
+/** The schema of `http.auth.people`, built on first use so a server without people auth never builds it. */
+export function peopleAuthOptionsSchema(): ReturnType<typeof createPeopleAuthOptionsSchema> {
+  schema ??= createPeopleAuthOptionsSchema();
+  return schema;
+}
