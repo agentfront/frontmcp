@@ -78,6 +78,17 @@ posixOnly('FrontMcpInstance.runShared', () => {
     expect(attachSharedSession).not.toHaveBeenCalled();
   });
 
+  it('refuses a checkout that is not a folder, which the server would take as removed at once', async () => {
+    const file = path.join(home, 'file');
+    fs.writeFileSync(file, '');
+    for (const checkout of [path.join(home, 'missing'), file]) {
+      await expect(FrontMcpInstance.runShared(config, { key: 'run', checkout })).rejects.toThrow(
+        new InvalidSharedServerOptionsError(`checkout: ${checkout} is not a folder`),
+      );
+    }
+    expect(attachSharedSession).not.toHaveBeenCalled();
+  });
+
   it('serves the key in the process a session started, which keeps the key out of its own children', async () => {
     process.env[SHARED_SERVE_ENV] = 'run';
     process.env[SHARED_START_LOCK_ENV] = 'the-launcher';
@@ -109,6 +120,7 @@ posixOnly('FrontMcpInstance.runShared', () => {
       replaceOlder: true,
       idleTimeoutMs: 600_000,
       checkout: path.dirname(process.argv[1] ?? ''),
+      name: 'run-shared-spec',
       version: '1.0.0',
       input: process.stdin,
       output: process.stdout,

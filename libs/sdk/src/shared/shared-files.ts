@@ -22,8 +22,9 @@ export interface SharedServerFiles {
   lockFile: string;
 }
 
-/** What a shared server writes once it listens: where it is, and the secret its proof key and token derive from. */
+/** What a shared server writes once it listens: its `info.name`, where it is, and the secret its keys derive from. */
 export interface SharedServerRecord {
+  name: string;
   transport: 'unix' | 'http';
   port?: number;
   path: string;
@@ -33,6 +34,7 @@ export interface SharedServerRecord {
 
 const serverRecordSchema = z
   .object({
+    name: z.string(),
     transport: z.enum(['unix', 'http']),
     port: z.number().int().min(1).max(65_535).optional(),
     path: z.string().startsWith('/'),

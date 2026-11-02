@@ -15,7 +15,14 @@ import {
 
 const posixOnly = process.platform === 'win32' ? describe.skip : describe;
 
-const record: SharedServerRecord = { transport: 'http', port: 4123, path: '/', pid: 4242, secret: 's'.repeat(43) };
+const record: SharedServerRecord = {
+  name: 'files-spec',
+  transport: 'http',
+  port: 4123,
+  path: '/',
+  pid: 4242,
+  secret: 's'.repeat(43),
+};
 
 posixOnly('shared server files', () => {
   let home: string;

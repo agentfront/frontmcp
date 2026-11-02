@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -12,6 +13,7 @@ import { attachSharedSession, SharedServerLostError, towardsServer } from '../sh
 import { SHARED_STATE_HEADER } from '../shared-endpoint';
 import { prepareSharedDirectory, sharedServerFiles, writeServerRecord } from '../shared-files';
 import { parseSharedServerOptions } from '../shared-server.options';
+import { unixSocketFetch } from '../unix-socket-fetch';
 
 function failing(error: unknown): typeof fetch {
   return async () => {
@@ -90,17 +92,36 @@ posixOnly('attachSharedSession against a server that keeps refusing its token', 
     fs.rmSync(home, { recursive: true, force: true });
   });
 
+  it('takes a request written to a socket whose server died before reading it as one that may have reached it', async () => {
+    const socketPath = path.join(home, 'dying.sock');
+    const dying = net.createServer((socket) => socket.destroy());
+    await new Promise<void>((resolve) => dying.listen(socketPath, resolve));
+    try {
+      const outcome = await towardsServer(unixSocketFetch(socketPath))('http://localhost/', {
+        method: 'POST',
+        body: '{}',
+      }).catch((error: unknown) => error);
+      expect(outcome).toBeInstanceOf(SharedServerLostError);
+      expect((outcome as SharedServerLostError).reached).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => dying.close(() => resolve()));
+    }
+    const gone = await towardsServer(unixSocketFetch(socketPath))('http://localhost/').catch((error: unknown) => error);
+    expect((gone as SharedServerLostError).reached).toBe(false);
+  });
+
   it('sends a request no server took again a few times, then answers it instead of looping', async () => {
     const secret = createSharedServerSecret();
     const files = sharedServerFiles('spec');
     await prepareSharedDirectory(files);
     stub = await startIdentityStub({ secret, behavior: 'prove', status: 401 });
-    await writeServerRecord(files, { transport: 'http', port: stub.port, path: '/mcp', pid: 1, secret });
+    await writeServerRecord(files, { name: 'spec', transport: 'http', port: stub.port, path: '/mcp', pid: 1, secret });
     const stderr = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const input = new PassThrough();
     const output = new PassThrough();
     const session = attachSharedSession({
       ...parseSharedServerOptions({ key: 'spec', transport: 'http', idleTimeoutMs: false, checkout: false }),
+      name: 'spec',
       version: '1.0.0',
       input,
       output,

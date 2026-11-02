@@ -181,6 +181,7 @@ async function startSharedServer(
     await instance.start();
     if (!(await startLock.held())) throw new SharedServerStartError(options.key, ANOTHER_START);
     await writeServerRecord(files, {
+      name: config.info.name,
       transport: options.transport,
       ...(port === undefined ? {} : { port }),
       path: scope.fullPath || '/',

@@ -1,4 +1,4 @@
-import { getEnv } from '@frontmcp/utils';
+import { getEnv, stat } from '@frontmcp/utils';
 
 import type { FrontMcpConfigInput, FrontMcpConfigType } from '../common';
 import { InvalidSharedServerOptionsError } from '../errors/shared-server.errors';
@@ -10,6 +10,14 @@ import { runEmbeddedServer } from './shared-embedded';
 import { isSharedVersion, MAX_SHARED_VERSION_LENGTH } from './shared-endpoint';
 import { serveShared, type SharedServerInstance } from './shared-serve';
 import { parseSharedServerOptions } from './shared-server.options';
+
+async function isFolder(folder: string): Promise<boolean> {
+  try {
+    return (await stat(folder)).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 /**
  * A process a session started serves the key; any other attaches its stdio to the key's server, or runs the server
@@ -27,6 +35,9 @@ export async function runShared(
       `info.version: a shared server states its version, which must be 1 to ${MAX_SHARED_VERSION_LENGTH} printable ASCII characters`,
     );
   }
+  if (options.checkout !== false && !(await isFolder(options.checkout))) {
+    throw new InvalidSharedServerOptionsError(`checkout: ${options.checkout} is not a folder`);
+  }
   if (getEnv(SHARED_SERVE_ENV) === options.key) {
     const startLockHolder = getEnv(SHARED_START_LOCK_ENV);
     delete process.env[SHARED_SERVE_ENV];
@@ -38,6 +49,7 @@ export async function runShared(
   redirectConsoleToStderr();
   const session = attachSharedSession({
     ...options,
+    name: config.info.name,
     version,
     input: process.stdin,
     output: process.stdout,

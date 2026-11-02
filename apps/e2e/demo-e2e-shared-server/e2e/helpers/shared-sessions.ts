@@ -8,6 +8,7 @@ export const ATTACH_TIMEOUT_MS = 90_000;
 const projectRoot = path.join(__dirname, '..', '..');
 
 export interface ServerRecord {
+  name: string;
   transport: 'unix' | 'http';
   port?: number;
   path: string;

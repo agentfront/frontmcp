@@ -1,8 +1,8 @@
 /**
  * E2E: a shared local server is upgraded, refused, bypassed and retired with live stdio sessions. A session of a newer
  * version replaces the older server and the sessions on it move to the new one; a session that may not replace an
- * older server, or that finds its server wedged, runs the server in its own process; the server exits once its
- * checkout is removed or it is idle.
+ * older server, that finds its key taken by another server, or that finds its server wedged, runs the server in its
+ * own process; the server exits once its checkout is removed or it is idle.
  */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -68,6 +68,22 @@ describe('running a shared local server', () => {
     expect(refusing.stderrLines.filter((line) => line.includes('in this process'))).toEqual([
       '[frontmcp shared] warn running the shared server "e2e" in this process: the shared server runs version 1.0.0, ' +
         "older than this session's 2.0.0, and replaceOlder is off",
+    ]);
+  }, 240_000);
+
+  it('never attaches to, nor replaces, the server of another info.name that took its key', async () => {
+    const first = shared.start('unix', { SHARED_APP_VERSION: '1.0.0' });
+    const firstServer = await serverPidOf(first);
+
+    const other = shared.start('unix', { SHARED_APP_NAME: 'another-e2e', SHARED_APP_VERSION: '2.0.0' });
+    expect(await serverPidOf(other)).toBe(other.pid);
+
+    expect(running(firstServer)).toBe(true);
+    expect(await callServerPid(first, 3)).toBe(firstServer);
+    expect(shared.readRecord().pid).toBe(firstServer);
+    expect(other.stderrLines.filter((line) => line.includes('in this process'))).toEqual([
+      '[frontmcp shared] warn running the shared server "e2e" in this process: its key is taken by a server of ' +
+        'another info.name; give each server a key of its own',
     ]);
   }, 240_000);
 

@@ -1,5 +1,5 @@
 import { deriveSharedServerKeys } from '@frontmcp/auth';
-import { getSpawnFn, type BridgeLogger } from '@frontmcp/utils';
+import { getSpawnFn, randomBytes, type BridgeLogger } from '@frontmcp/utils';
 
 import { SharedServerStartError } from '../errors/shared-server.errors';
 import {
@@ -50,6 +50,8 @@ export interface EnsureSharedServerOptions {
   key: string;
   transport: SharedServerTransport;
   files: SharedServerFiles;
+  /** The session's own `info.name`: it attaches to, or replaces, only a server of that name. */
+  name: string;
   /** The session's own version: it never attaches to an older server. */
   version: string;
   /** Whether it drains an older server and starts its own, instead of running the server itself. */
@@ -62,9 +64,10 @@ export interface EnsureSharedServerOptions {
   logger: Pick<BridgeLogger, 'warn'>;
 }
 
-/** A server that proved its identity, with the keys of its record. */
+/** A server that proved its identity, with the name and keys of its record. */
 interface FoundServer {
   server: AttachedSharedServer;
+  name: string;
   proofKey: Uint8Array;
 }
 
@@ -88,7 +91,8 @@ async function findRunning(
   if (identified.outcome === 'verified') {
     const send = record.transport === 'http' ? fetchAfterIdentity(endpoint, proofKey) : endpoint.fetch;
     const url = `${endpoint.baseUrl}${record.path}`;
-    return { proofKey, server: { url, token, pid: record.pid, version: identified.version, endpoint, fetch: send } };
+    const server = { url, token, pid: record.pid, version: identified.version, endpoint, fetch: send };
+    return { server, name: record.name, proofKey };
   }
   if (identified.outcome === 'refused' && !refused.has(endpoint.id)) {
     refused.add(endpoint.id);
@@ -101,6 +105,9 @@ async function findRunning(
 
 /** Whether the session attaches to `found`, replaces it, or runs the server itself, and why. */
 function skewOf(found: FoundServer, options: EnsureSharedServerOptions): { embedded: string } | 'attach' | 'replace' {
+  if (found.name !== options.name) {
+    return { embedded: 'its key is taken by a server of another info.name; give each server a key of its own' };
+  }
   const { version } = found.server;
   const order = compareSharedVersions(version, options.version);
   if (order === undefined) {
@@ -140,8 +147,8 @@ export async function ensureSharedServer(options: EnsureSharedServerOptions): Pr
         if (draining?.server.endpoint.id !== found.server.endpoint.id) {
           if (await requestSharedServerDrain(found.server, options.version)) draining = found;
         }
-      } else if (holding && !(draining && (await stillServes(draining, remaining())))) {
-        spawned ??= options.spawnServer(handle.lock.holder);
+      } else if (holding && !spawned && !(await endpointHeld(options, draining, remaining()))) {
+        spawned = options.spawnServer(handle.lock.holder);
       }
       if (spawned?.exitReason) {
         if (holding) throw new SharedServerStartError(key, spawned.exitReason);
@@ -158,10 +165,22 @@ export async function ensureSharedServer(options: EnsureSharedServerOptions): Pr
   }
 }
 
-/** Whether a server that agreed to drain still holds its endpoint, which the next server may need. */
-async function stillServes(drained: FoundServer, timeoutMs: number): Promise<boolean> {
-  const { outcome } = await identifySharedServer(drained.server.endpoint, drained.proofKey, timeoutMs);
-  return outcome === 'verified' || outcome === 'exiting';
+/**
+ * Whether a server still holds the endpoint the next one may need: one that agreed to drain, or, on the socket, one
+ * that says it is exiting, as it does until its requests in flight finished, after it removed its record.
+ */
+async function endpointHeld(
+  options: EnsureSharedServerOptions,
+  drained: FoundServer | undefined,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (drained) {
+    const { outcome } = await identifySharedServer(drained.server.endpoint, drained.proofKey, timeoutMs);
+    return outcome === 'verified' || outcome === 'exiting';
+  }
+  if (options.transport !== 'unix') return false;
+  const { outcome } = await identifySharedServer(unixEndpoint(options.files.socketPath), randomBytes(32), timeoutMs);
+  return outcome === 'exiting';
 }
 
 /** Run this process's entry again, detached, as the key's server: it outlives the session that started it. */

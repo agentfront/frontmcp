@@ -7,13 +7,23 @@ import { base64urlEncode, randomBytes } from '@frontmcp/utils';
 import {
   httpEndpoint,
   SHARED_DRAIN_PATH,
+  SHARED_EXITING,
   SHARED_IDENTIFY_PATH,
+  SHARED_STATE_HEADER,
   unixEndpoint,
   type SharedEndpoint,
 } from '../../shared/shared-endpoint';
 
-/** How the stub answers an identity challenge: as the real server would, or as one of the ways a squatter might. */
-export type StubBehavior = 'prove' | 'garbage' | 'replay' | 'stale' | 'other-endpoint' | 'other-version' | 'error';
+/** How the stub answers an identity challenge: as the real server would, as one exiting, or as a squatter might. */
+export type StubBehavior =
+  | 'prove'
+  | 'exiting'
+  | 'garbage'
+  | 'replay'
+  | 'stale'
+  | 'other-endpoint'
+  | 'other-version'
+  | 'error';
 
 export interface StubRequest {
   method: string;
@@ -41,6 +51,8 @@ export async function startIdentityStub(options: {
   drain?: { status: number; close: boolean };
   /** The status it answers any other request with. @default 204 */
   status?: number;
+  /** Answer the first request other than a challenge or a drain as a server asked to exit right then, and stop. */
+  exitOnRequest?: boolean;
 }): Promise<IdentityStub> {
   const version = options.version ?? '1.0.0';
   const drain = options.drain ?? { status: 202, close: true };
@@ -59,8 +71,19 @@ export async function startIdentityStub(options: {
         if (drain.status === 202 && drain.close) setImmediate(() => void close());
         return;
       }
+      if (req.url !== SHARED_IDENTIFY_PATH && options.exitOnRequest) {
+        res.writeHead(503, { [SHARED_STATE_HEADER]: SHARED_EXITING });
+        res.end();
+        setImmediate(() => void close());
+        return;
+      }
       if (req.url !== SHARED_IDENTIFY_PATH) {
         res.statusCode = options.status ?? 204;
+        res.end();
+        return;
+      }
+      if (options.behavior === 'exiting') {
+        res.writeHead(503, { [SHARED_STATE_HEADER]: SHARED_EXITING });
         res.end();
         return;
       }
@@ -80,6 +103,7 @@ export async function startIdentityStub(options: {
     const statement = { endpoint: endpointId, nonce, version };
     switch (behavior) {
       case 'prove':
+      case 'exiting':
         return proveSharedServerIdentity(proofKey, statement);
       case 'garbage':
         return base64urlEncode(randomBytes(32));

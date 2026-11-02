@@ -244,6 +244,17 @@ export function fileExistsSync(p: string): boolean {
   return getFs().existsSync(p);
 }
 
+/** Whether `p` is known to be missing: a check that fails another way (no access, a timeout) can't tell. */
+export function isMissingSync(p: string): boolean {
+  try {
+    getFs().statSync(p);
+    return false;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'ENOENT' || code === 'ENOTDIR';
+  }
+}
+
 /**
  * Read and parse a JSON file.
  *

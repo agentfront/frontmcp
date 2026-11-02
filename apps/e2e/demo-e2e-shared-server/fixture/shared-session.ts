@@ -1,6 +1,6 @@
 /**
  * A stdio session of a shared local server: it attaches to the server of key `e2e`, starting it when none runs. Its
- * version, attach budget, upgrade policy, idle time and checkout come from the environment.
+ * name, version, attach budget, upgrade policy, idle time and checkout come from the environment.
  */
 import 'reflect-metadata';
 
@@ -29,7 +29,7 @@ const SlowBoot = Symbol('SlowBoot');
 
 FrontMcpInstance.runShared(
   {
-    info: { name: 'shared-e2e', version: env['SHARED_APP_VERSION'] ?? '1.0.0' },
+    info: { name: env['SHARED_APP_NAME'] ?? 'shared-e2e', version: env['SHARED_APP_VERSION'] ?? '1.0.0' },
     apps: process.env['SHARED_PUBLIC_APP'] ? [SharedApp, PublicApp] : [SharedApp],
     providers: bootDelayMs
       ? [

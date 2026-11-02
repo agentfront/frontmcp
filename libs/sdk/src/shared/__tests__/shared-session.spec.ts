@@ -74,6 +74,7 @@ function sessionOptions(
 ): AttachSharedSessionOptions {
   return {
     ...sharedOptions(transport),
+    name: 'shared-spec',
     version: '1.0.0',
     input,
     output,

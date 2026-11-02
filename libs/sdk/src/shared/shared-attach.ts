@@ -27,7 +27,7 @@ import { openStartLockStorage, SharedStartLock } from './start-lock';
 const BUFFER_SIZE = 16;
 /** How long past its attach budget a session waits for a server, its own included, before it gives up. */
 const RELOAD_MARGIN_MS = 30_000;
-/** How many times a request no server took is sent again, to the next server. */
+/** How many times a request no server took, or a replayed `initialize` a server dropped, is sent to the next server. */
 const MAX_RESENDS = 3;
 /** Errors of a request that never reached a server: nothing listened where it was sent. */
 const NOT_SENT_CODES = new Set(['ECONNREFUSED', 'ENOENT']);
@@ -35,6 +35,8 @@ const NOT_SENT_CODES = new Set(['ECONNREFUSED', 'ENOENT']);
 export interface AttachSharedSessionOptions extends ResolvedSharedServerOptions {
   input: Readable;
   output: Writable;
+  /** The session's own `info.name`: it attaches only to a server of that name. */
+  name: string;
   /** The session's own version, `info.version`: it never attaches to an older server. */
   version: string;
   /** Run the server in this process, when the session can't, or may not, attach to the key's server. */
@@ -117,6 +119,7 @@ async function connect(options: AttachSharedSessionOptions, logger: BridgeLogger
       transport: options.transport,
       files,
       logger,
+      name: options.name,
       version: options.version,
       replaceOlder: options.replaceOlder,
       budgetMs: options.attachBudgetMs,
@@ -208,30 +211,35 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     return embedded;
   }
 
+  /** Reach a server and replay the client's `initialize` on it; one that goes away during the replay is replaced. */
   async function reach(): Promise<void> {
-    const server = await serverToReach();
-    if (stopping) {
-      await embedded?.close();
-      return;
-    }
-    const next = createHttpUpstream({
-      url: server.url,
-      headers: server.headers,
-      fetch: towardsServer(server.fetch),
-      log,
-      onFrame: (frame) => fsm.relayUpstream(frame),
-    });
-    if (clientInitialize) {
+    for (let replays = 0; ; replays++) {
+      const server = await serverToReach();
+      if (stopping) {
+        await embedded?.close();
+        return;
+      }
+      const next = createHttpUpstream({
+        url: server.url,
+        headers: server.headers,
+        fetch: towardsServer(server.fetch),
+        log,
+        onFrame: (frame) => fsm.relayUpstream(frame),
+      });
       try {
-        const result = await next.reinitialize(clientInitialize, clientInitialized);
-        for (const notification of listChangedNotifications(result)) await framer.write(notification);
+        if (clientInitialize) {
+          const result = await next.reinitialize(clientInitialize, clientInitialized);
+          for (const notification of listChangedNotifications(result)) await framer.write(notification);
+        }
       } catch (error) {
         await next.close();
+        if (error instanceof SharedServerLostError && replays < MAX_RESENDS) continue;
         throw error;
       }
+      upstream = next;
+      fsm.onChildReady();
+      return;
     }
-    upstream = next;
-    fsm.onChildReady();
   }
 
   framer.start();

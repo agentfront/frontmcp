@@ -6,10 +6,14 @@
 import 'reflect-metadata';
 
 import * as fs from 'node:fs';
+import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { PassThrough } from 'node:stream';
 
+import { createSharedServerSecret } from '@frontmcp/auth';
+
+import { startIdentityStub, type IdentityStub } from '../../__test-utils__/helpers/shared-server-stub';
 import {
   callTool,
   clientOf,
@@ -21,7 +25,7 @@ import { App, FlowHooksOf, LogLevel, Tool, ToolContext, type FrontMcpConfigInput
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { attachSharedSession, type AttachSharedSessionOptions, type SharedSession } from '../shared-attach';
 import { runEmbeddedServer } from '../shared-embedded';
-import { readServerRecord, sharedServerFiles } from '../shared-files';
+import { readServerRecord, sharedServerFiles, writeServerRecord } from '../shared-files';
 import { serveShared, type SharedServerHandle } from '../shared-serve';
 import { parseSharedServerOptions } from '../shared-server.options';
 
@@ -75,6 +79,7 @@ posixOnly('a shared session across servers', () => {
   let previousHome: string | undefined;
   let servers: SharedServerHandle[];
   let sessions: SharedSession[];
+  let stubs: IdentityStub[];
   let stderr: jest.SpyInstance;
 
   beforeEach(() => {
@@ -83,12 +88,14 @@ posixOnly('a shared session across servers', () => {
     process.env['FRONTMCP_HOME'] = home;
     servers = [];
     sessions = [];
+    stubs = [];
     stderr = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
   });
 
   afterEach(async () => {
     for (const session of sessions) await session.stop();
     for (const server of servers) await server.close();
+    for (const stub of stubs) await stub.close();
     stderr.mockRestore();
     if (previousHome === undefined) delete process.env['FRONTMCP_HOME'];
     else process.env['FRONTMCP_HOME'] = previousHome;
@@ -116,6 +123,7 @@ posixOnly('a shared session across servers', () => {
     const options = parseSharedServerOptions({ key: 'spec', transport, idleTimeoutMs: false, checkout: false });
     const session = attachSharedSession({
       ...options,
+      name: 'reconnect-spec',
       version: '1.0.0',
       input,
       output,
@@ -189,6 +197,38 @@ posixOnly('a shared session across servers', () => {
     });
   });
 
+  it('reaches the server after the next when the next one exits as it replays initialize', async () => {
+    const first = await serve('unix', configOf('first'));
+    const files = sharedServerFiles('spec');
+    let started = 0;
+    const { client } = attach('unix', {
+      spawnServer: (holder) => {
+        started++;
+        if (started > 1) {
+          void serve('unix', configOf('second'), jest.fn(), holder);
+          return { exitReason: undefined };
+        }
+        const secret = createSharedServerSecret();
+        void startIdentityStub({ secret, behavior: 'prove', socketPath: files.socketPath, exitOnRequest: true }).then(
+          async (stub) => {
+            stubs.push(stub);
+            await writeServerRecord(files, { name: 'reconnect-spec', transport: 'unix', path: '/', pid: 1, secret });
+          },
+        );
+        return { exitReason: undefined };
+      },
+    });
+    expect((await client.request(initialize)).result).toBeDefined();
+    client.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    expect(await whoami(client, 2)).toBe('first');
+
+    await first.close();
+    servers.splice(servers.indexOf(first), 1);
+
+    expect(await whoami(client, 3)).toBe('second');
+    expect(started).toBe(2);
+  });
+
   it('attaches to a newer server, which a session of an older version never makes exit', async () => {
     const newerExit = jest.fn();
     await serve('unix', configOf('newer', '2.0.0'), newerExit);
@@ -216,7 +256,8 @@ posixOnly('a shared session across servers', () => {
     ]);
   });
 
-  it('runs the server itself once its attach budget runs out, announced once', async () => {
+  it('runs the server itself, with no listener, once its attach budget runs out, announced once', async () => {
+    const listen = jest.spyOn(net.Server.prototype, 'listen');
     const started = Date.now();
     const { session, client } = attach('http', {
       attachBudgetMs: 300,
@@ -227,6 +268,8 @@ posixOnly('a shared session across servers', () => {
     await session.attached;
     expect(Date.now() - started).toBeLessThan(5_000);
     expect(await whoami(client, 2)).toBe('embedded');
+    expect(listen).not.toHaveBeenCalled();
+    listen.mockRestore();
     expect(stderrLines().filter((line) => line.includes('in this process'))).toEqual([
       '[frontmcp shared] warn running the shared server "spec" in this process: The shared server "spec" did not ' +
         'start: no server proved its identity within 300 ms\n',

@@ -20,6 +20,8 @@ import { SharedStartLock } from '../start-lock';
 
 const posixOnly = process.platform === 'win32' ? describe.skip : describe;
 
+const SERVER_NAME = 'notes-server';
+
 posixOnly('ensureSharedServer', () => {
   let home: string;
   let previousHome: string | undefined;
@@ -50,10 +52,11 @@ posixOnly('ensureSharedServer', () => {
     secret: string,
     pid: number,
     stubOptions: Partial<Parameters<typeof startIdentityStub>[0]> = {},
+    name = SERVER_NAME,
   ): Promise<IdentityStub> {
     const stub = await startIdentityStub({ secret, behavior: 'prove', ...stubOptions });
     stubs.push(stub);
-    await writeServerRecord(files, { transport: 'http', port: stub.port, path: '/mcp', pid, secret });
+    await writeServerRecord(files, { name, transport: 'http', port: stub.port, path: '/mcp', pid, secret });
     return stub;
   }
 
@@ -66,6 +69,7 @@ posixOnly('ensureSharedServer', () => {
   function options(overrides: Partial<EnsureSharedServerOptions> = {}): EnsureSharedServerOptions {
     return {
       key: 'notes',
+      name: SERVER_NAME,
       transport: 'http',
       files,
       openLock: async () => ({ lock: new SharedStartLock(lockStore, 'notes'), close: async () => undefined }),
@@ -117,6 +121,7 @@ posixOnly('ensureSharedServer', () => {
     const squatter = await startIdentityStub({ secret: createSharedServerSecret(), behavior: 'replay' });
     stubs.push(squatter);
     await writeServerRecord(files, {
+      name: SERVER_NAME,
       transport: 'http',
       port: squatter.port,
       path: '/',
@@ -181,13 +186,40 @@ posixOnly('ensureSharedServer', () => {
     const secret = createSharedServerSecret();
     const stub = await startIdentityStub({ secret, behavior: 'prove', socketPath: files.socketPath });
     stubs.push(stub);
-    await writeServerRecord(files, { transport: 'unix', path: '/', pid: 6, secret });
+    await writeServerRecord(files, { name: SERVER_NAME, transport: 'unix', path: '/', pid: 6, secret });
 
     const attached = await attach({ transport: 'unix' });
     expect(attached.url).toBe('http://localhost/');
     const answered = await attached.fetch(attached.url, { method: 'POST', body: '{}' });
     await answered.body?.cancel();
     expect(stub.requests.map(({ path: requested }) => requested)).toEqual([SHARED_IDENTIFY_PATH, '/']);
+  });
+
+  it('does not start its server on the socket while a server that is exiting still holds it', async () => {
+    const exiting = await startIdentityStub({
+      secret: createSharedServerSecret(),
+      behavior: 'exiting',
+      socketPath: files.socketPath,
+    });
+    stubs.push(exiting);
+    let socketHeld = true;
+    const secret = createSharedServerSecret();
+    const spawnServer = jest.fn((): SpawnedServer => {
+      if (socketHeld) return { exitReason: 'it exited with code 1' };
+      void startIdentityStub({ secret, behavior: 'prove', socketPath: files.socketPath }).then(async (stub) => {
+        stubs.push(stub);
+        await writeServerRecord(files, { name: SERVER_NAME, transport: 'unix', path: '/', pid: 25, secret });
+      });
+      return { exitReason: undefined };
+    });
+
+    const ensuring = ensureSharedServer(options({ transport: 'unix', spawnServer }));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await exiting.close();
+    socketHeld = false;
+
+    await expect(ensuring).resolves.toMatchObject({ server: { pid: 25 } });
+    expect(spawnServer).toHaveBeenCalledTimes(1);
   });
 
   it('ignores a record of the other transport', async () => {
@@ -233,6 +265,7 @@ posixOnly('ensureSharedServer', () => {
     try {
       const { port } = wedged.address() as net.AddressInfo;
       await writeServerRecord(files, {
+        name: SERVER_NAME,
         transport: 'http',
         port,
         path: '/',
@@ -307,6 +340,7 @@ posixOnly('ensureSharedServer', () => {
       const ensuring = ensureSharedServer(options({ spawnServer, budgetMs: 2_000 }));
       await new Promise((resolve) => setTimeout(resolve, 300));
       await writeServerRecord(files, {
+        name: SERVER_NAME,
         transport: 'http',
         port: 1,
         path: '/',
@@ -332,6 +366,35 @@ posixOnly('ensureSharedServer', () => {
       await older.close();
       await startRecordedServer(createSharedServerSecret(), 19, { version: '1.0.0' });
       await expect(ensuring).resolves.toMatchObject({ server: { pid: 19 } });
+    });
+
+    it.each([
+      ['the same version', '1.0.0'],
+      ['an older version', '0.9.0'],
+    ])('never attaches to, nor drains, a server of another info.name that took its key, at %s', async (_, version) => {
+      const other = await startRecordedServer(createSharedServerSecret(), 22, { version }, 'another-server');
+      const openLock = jest.fn();
+
+      await expect(ensureSharedServer(options({ openLock }))).resolves.toEqual({
+        embedded: 'its key is taken by a server of another info.name; give each server a key of its own',
+      });
+      expect(openLock).not.toHaveBeenCalled();
+      expect(other.requests.every(({ path: requested }) => requested === SHARED_IDENTIFY_PATH)).toBe(true);
+    });
+
+    it('starts its own server when the server of another info.name that took its key is gone', async () => {
+      const stale = await startRecordedServer(createSharedServerSecret(), 23, {}, 'another-server');
+      await stale.close();
+      const secret = createSharedServerSecret();
+
+      const attached = await attach({
+        spawnServer: () => {
+          void startRecordedServer(secret, 24);
+          return { exitReason: undefined };
+        },
+      });
+
+      expect(attached).toMatchObject({ pid: 24 });
     });
 
     it('keeps asking until its attach budget runs out when the older server refuses to drain', async () => {
