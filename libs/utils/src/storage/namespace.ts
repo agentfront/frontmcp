@@ -231,6 +231,10 @@ export class NamespacedStorageImpl implements NamespacedStorage {
     return this.adapter.subscribe(prefixedChannel, wrappedHandler);
   }
 
+  onPubSubReconnect(listener: () => void): () => void {
+    return this.adapter.onPubSubReconnect?.(listener) ?? (() => undefined);
+  }
+
   supportsPubSub(): boolean {
     return this.adapter.supportsPubSub();
   }

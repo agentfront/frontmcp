@@ -83,6 +83,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   private connecting?: Promise<void>;
   private readonly keyPrefix: string;
   private readonly subscriptionHandlers = new Map<string, Set<MessageHandler>>();
+  private readonly reconnectListeners = new Set<() => void>();
   private readonly connectionUrl?: string;
   /** The connection options of a URL this adapter reads itself; undefined for one only ioredis reads. */
   private readonly urlOptions?: RedisOptions;
@@ -464,6 +465,13 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
     };
   }
 
+  onPubSubReconnect(listener: () => void): () => void {
+    this.reconnectListeners.add(listener);
+    return () => {
+      this.reconnectListeners.delete(listener);
+    };
+  }
+
   // ============================================
   // Internal Helpers
   // ============================================
@@ -532,6 +540,20 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
           }
         }
       }
+    });
+
+    let readyBefore = false;
+    subscriber.on('ready', () => {
+      if (readyBefore) {
+        for (const listener of [...this.reconnectListeners]) {
+          try {
+            listener();
+          } catch {
+            // A listener's failure must not reach ioredis's event loop
+          }
+        }
+      }
+      readyBefore = true;
     });
 
     this.subscriber = subscriber;

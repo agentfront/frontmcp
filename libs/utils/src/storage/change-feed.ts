@@ -3,7 +3,8 @@
  * other processes that share the storage. A change carries no payload: a listener reads the current state.
  *
  * The backend follows what the storage can do:
- * - `pubsub` (Redis, Upstash, memory): a publish is a message on the topic's channel;
+ * - `pubsub` (Redis, Upstash, memory): a publish is a message on the topic's channel; when a lost Redis connection
+ *   comes back, every followed topic is told, since its messages were missed meanwhile;
  * - `poll` (SQLite): a publish increments the topic's counter, and each process polls `PRAGMA data_version`,
  *   reading the counters of its topics only when another process wrote the file;
  * - `local` (no pub/sub and no data version): this process only.
@@ -25,7 +26,10 @@ export interface ChangeFeed {
   readonly kind: ChangeFeedKind;
   /** Tell the topic's listeners, here and in the other processes, that it changed. */
   publish(topic: string): Promise<void>;
-  /** Call `listener` when `topic` changes; returns the function that stops it. */
+  /**
+   * Call `listener` when `topic` changes, and when it may have changed unheard (after a pub/sub reconnect); returns
+   * the function that stops it.
+   */
   subscribe(topic: string, listener: () => void): () => void;
   /** Stop every listener and the polling; the storage stays connected. */
   close(): Promise<void>;
@@ -113,12 +117,21 @@ class LocalChangeFeed extends TopicFeed {
 class PubSubChangeFeed extends TopicFeed {
   readonly kind = 'pubsub';
   private readonly channels = new Map<string, Promise<Unsubscribe | undefined>>();
+  private readonly stopReconnectListener?: () => void;
 
   constructor(
     private readonly storage: NamespacedStorage,
     options: ChangeFeedOptions,
   ) {
     super(options);
+    this.stopReconnectListener = storage.onPubSubReconnect?.(() => {
+      for (const topic of this.channels.keys()) this.changed(topic);
+    });
+  }
+
+  override async close(): Promise<void> {
+    this.stopReconnectListener?.();
+    await super.close();
   }
 
   async publish(topic: string): Promise<void> {
@@ -227,7 +240,7 @@ class PollingChangeFeed extends TopicFeed {
       }
       this.failing = false;
     } catch (error) {
-      if (!this.failing) this.options.onError?.(error);
+      if (!this.failing && !this.closed) this.options.onError?.(error);
       this.failing = true;
     } finally {
       this.polling = false;

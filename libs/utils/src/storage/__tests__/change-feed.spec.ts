@@ -112,6 +112,32 @@ describe('createChangeFeed()', () => {
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'connection closed' }));
     });
 
+    it('tells the listeners of every followed topic once the pub/sub connection is back, since messages were missed', async () => {
+      const reconnectListeners = new Set<() => void>();
+      const adapter = {
+        supportsPubSub: () => true,
+        subscribe: jest.fn(async () => async () => undefined),
+        onPubSubReconnect: (listener: () => void) => {
+          reconnectListeners.add(listener);
+          return () => reconnectListeners.delete(listener);
+        },
+      } as unknown as StorageAdapter;
+      const feed = open(createRootStorage(adapter));
+      const board = jest.fn();
+      const left = jest.fn();
+      feed.subscribe('board', board);
+      feed.subscribe('left', left)();
+      await jest.advanceTimersByTimeAsync(0);
+
+      for (const listener of reconnectListeners) listener();
+      await jest.advanceTimersByTimeAsync(COALESCE_MS);
+
+      expect(board).toHaveBeenCalledTimes(1);
+      expect(left).not.toHaveBeenCalled();
+      await feed.close();
+      expect(reconnectListeners.size).toBe(0);
+    });
+
     it('reports a channel it could not subscribe to', async () => {
       const onError = jest.fn();
       const adapter = {
@@ -246,6 +272,26 @@ describe('createChangeFeed()', () => {
       expect(dataVersion).toHaveBeenCalledTimes(1);
       expect(jest.getTimerCount()).toBe(0);
       await storage.disconnect();
+    });
+
+    it('does not report the poll that closing the feed and the storage cut short', async () => {
+      const { storage } = pollingStorage();
+      await storage.connect();
+      const onError = jest.fn();
+      const feed = open(storage, onError);
+      let wrote: () => void = () => undefined;
+      jest
+        .spyOn(storage.root as Required<StorageAdapter>, 'dataVersion')
+        .mockImplementationOnce(() => new Promise<number>((resolve) => (wrote = () => resolve(2))));
+      feed.subscribe('board', jest.fn());
+      await jest.advanceTimersByTimeAsync(POLL_MS);
+
+      await feed.close();
+      await storage.disconnect();
+      wrote();
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(onError).not.toHaveBeenCalled();
     });
 
     it('reports a failing poll once until a poll succeeds again', async () => {

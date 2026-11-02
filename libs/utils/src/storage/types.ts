@@ -327,6 +327,14 @@ export interface StorageAdapter {
   subscribe(channel: string, handler: MessageHandler): Promise<Unsubscribe>;
 
   /**
+   * Call `listener` each time the pub/sub connection is back after it was lost. The messages published while it
+   * was down were missed, so a subscriber that must not miss a change re-reads the state. Only Redis has it.
+   *
+   * @returns The function that stops calling `listener`
+   */
+  onPubSubReconnect?(listener: () => void): () => void;
+
+  /**
    * Check if this adapter supports pub/sub.
    *
    * @returns true if publish/subscribe are supported
