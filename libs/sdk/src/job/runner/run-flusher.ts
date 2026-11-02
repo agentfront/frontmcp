@@ -1,8 +1,11 @@
 import { type JobStateStore } from '../store/job-state.interface';
 
-/** How often a runner renews its heartbeat, and how long the store keeps it without a renewal. */
+/**
+ * How often a runner renews its heartbeat, and how long the store keeps it without a renewal: long enough that a job
+ * blocking its runner's event loop is not taken for gone by a server on another host, which would end its run.
+ */
 export const RUNNER_HEARTBEAT_MS = 1_000;
-export const RUNNER_HEARTBEAT_TTL_SECONDS = 5;
+export const RUNNER_HEARTBEAT_TTL_SECONDS = 30;
 
 /**
  * Keeps the last value pushed and writes it every `everyMs` at most: never two writes at once, nothing
