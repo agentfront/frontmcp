@@ -175,6 +175,21 @@ describe('frontmcp skills export --from-entry', () => {
     expect(await fileExists(path.join(project, '.claude/skills/hand-made/SKILL.md'))).toBe(true);
   });
 
+  it('keeps the earlier copy of a skill it skips', async () => {
+    await run({ providers: ['claude'] });
+    mockExtract.mockResolvedValue(
+      schema({
+        skills: [
+          { name: 'greeting', description: 'Greet users', tools: [] },
+          { name: 'inline', description: 'Own', tools: [], hash: 'b2' },
+        ],
+      }),
+    );
+
+    expect(await run({ providers: ['claude'] })).toBe(1);
+    expect(await fileExists(path.join(project, '.claude/skills/greeting/SKILL.md'))).toBe(true);
+  });
+
   it('exports one skill by name, and leaves the other copies alone', async () => {
     expect(await run({ all: false, name: 'inline', providers: ['claude'], outDir: 'out' })).toBe(0);
 

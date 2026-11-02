@@ -2,7 +2,6 @@
  * `frontmcp skills export --from-entry --provider claude,codex` writes a server's own `@Skill` entries to each
  * agent's skills folder from one source, and `--check` fails once a copy drifts from it.
  */
-import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -24,12 +23,12 @@ function exportSkills(cwd: string, ...extra: string[]) {
 describe('frontmcp skills export --from-entry', () => {
   let outDir: string;
 
-  beforeAll(() => {
-    outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-skills-export-'));
+  beforeAll(async () => {
+    outDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-skills-export-'));
   });
 
-  afterAll(() => {
-    fs.rmSync(outDir, { recursive: true, force: true });
+  afterAll(async () => {
+    await rm(outDir, { recursive: true, force: true });
   });
 
   it("writes every @Skill of the fixture to both providers' folders, with its tools generated from the server", async () => {

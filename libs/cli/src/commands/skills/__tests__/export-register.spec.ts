@@ -1,8 +1,9 @@
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
 import { Command } from 'commander';
+
+import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
 import { registerSkillsCommands } from '../register';
 
@@ -17,8 +18,8 @@ describe('frontmcp skills export --from-entry options', () => {
   let dir: string;
   const cwd = process.cwd();
 
-  beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-export-register-'));
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'skills-export-register-'));
     process.chdir(dir);
     mockExportFromEntry.mockClear();
     mockExportSkills.mockClear();
@@ -27,10 +28,10 @@ describe('frontmcp skills export --from-entry options', () => {
       throw new Error(`process.exit(${code})`);
     }) as never);
   });
-  afterEach(() => {
+  afterEach(async () => {
     process.chdir(cwd);
     jest.restoreAllMocks();
-    fs.rmSync(dir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
   });
 
   async function run(...args: string[]): Promise<void> {
@@ -59,7 +60,7 @@ describe('frontmcp skills export --from-entry options', () => {
   });
 
   it('takes the provider from skills.provider in frontmcp.config', async () => {
-    fs.writeFileSync(
+    await writeFile(
       path.join(dir, 'frontmcp.config.json'),
       JSON.stringify({ name: 'demo', deployments: [{ target: 'node' }], skills: { provider: 'codex' } }),
     );
