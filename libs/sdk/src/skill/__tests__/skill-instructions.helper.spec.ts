@@ -1,8 +1,11 @@
+import type { SkillEntry } from '../../common';
 import {
   buildChannelInstructions,
   buildSkillsCatalogSummary,
+  composeCallerInstructions,
   composeInitializeInstructions,
   type InjectInstructionsPolicy,
+  type InstructionsScope,
 } from '../skill-instructions.helper';
 import type { SkillRegistryInterface } from '../skill.registry';
 
@@ -22,7 +25,7 @@ function asEntry(skill: FakeSkill) {
 
 function makeRegistry(fakeSkills: FakeSkill[]): SkillRegistryInterface {
   const skills = fakeSkills.map(asEntry);
-  // Only `getSkills` is exercised by the helper; everything else can throw.
+  // Only `getSkills` and `getExternalProvider` are exercised by the helper; everything else can throw.
   const registry: Partial<SkillRegistryInterface> = {
     getSkills: ((opts?: unknown) => {
       const o = (opts ?? {}) as { visibility?: string };
@@ -33,6 +36,7 @@ function makeRegistry(fakeSkills: FakeSkill[]): SkillRegistryInterface {
         return v === o.visibility;
       }) as never;
     }) as SkillRegistryInterface['getSkills'],
+    getExternalProvider: () => undefined,
   };
   return registry as SkillRegistryInterface;
 }
@@ -53,6 +57,7 @@ function makeMutableRegistry(initial: FakeSkill[]): {
         return v === o.visibility;
       }) as never;
     }) as SkillRegistryInterface['getSkills'],
+    getExternalProvider: () => undefined,
   };
   return {
     registry: registry as SkillRegistryInterface,
@@ -206,7 +211,7 @@ describe('skill-instructions.helper', () => {
     const registry = makeRegistry([{ metadata: { name: 'demo', description: 'A demo skill' } }]);
 
     it('forwards mcpResources so a server without skill:// resources never advertises them', () => {
-      const out = composeInitializeInstructions({ skillRegistry: registry, mcpResources: false });
+      const out = composeInitializeInstructions({ skillRegistry: registry, mcpResources: false, policy: 'append' });
       expect(out).toContain('- **demo**: A demo skill');
       expect(out).toContain('skills/load');
       expect(out).not.toContain('skill://');
@@ -268,11 +273,12 @@ describe('skill-instructions.helper', () => {
       expect(out).not.toContain('demo');
     });
 
-    it("'append' (default) joins user, channel, then skill catalog", () => {
+    it("'append' joins user, channel, then skill catalog", () => {
       const out = composeInitializeInstructions({
         userInstructions: 'User.',
         channelInstructions: 'Channel.',
         skillRegistry: registry,
+        policy: 'append',
       });
       const userIdx = out.indexOf('User.');
       const channelIdx = out.indexOf('Channel.');
@@ -300,6 +306,7 @@ describe('skill-instructions.helper', () => {
         userInstructions: '',
         channelInstructions: '',
         skillRegistry: registry,
+        policy: 'append',
       });
       expect(out).not.toMatch(/---\n\n---/);
       expect(out).toContain('Available skills');
@@ -314,18 +321,18 @@ describe('skill-instructions.helper', () => {
       const { registry: dyn, add } = makeMutableRegistry([
         { metadata: { name: 'first_skill', description: 'present at boot' } },
       ]);
-      const before = composeInitializeInstructions({ skillRegistry: dyn });
+      const before = composeInitializeInstructions({ skillRegistry: dyn, policy: 'append' });
       expect(before).toContain('first_skill');
       expect(before).not.toContain('second_skill');
 
       add({ metadata: { name: 'second_skill', description: 'registered later' } });
 
-      const after = composeInitializeInstructions({ skillRegistry: dyn });
+      const after = composeInitializeInstructions({ skillRegistry: dyn, policy: 'append' });
       expect(after).toContain('first_skill');
       expect(after).toContain('second_skill');
     });
 
-    it.each(['off', 'append', 'prepend', 'replace'] satisfies InjectInstructionsPolicy[])(
+    it.each(['off', 'compact', 'append', 'prepend', 'replace'] satisfies InjectInstructionsPolicy[])(
       "policy '%s' never inserts trailing separator",
       (policy) => {
         const out = composeInitializeInstructions({
@@ -337,6 +344,94 @@ describe('skill-instructions.helper', () => {
         expect(out.endsWith('---')).toBe(false);
       },
     );
+  });
+
+  describe("'compact' policy", () => {
+    const resourceLine = (skills: string) =>
+      `This server has ${skills}: the \`skill://index.json\` resource lists each skill's \`SKILL.md\` URI.`;
+    const twoSkills = makeRegistry([
+      { metadata: { name: 'review_pr', description: 'Review a pull request' } },
+      { metadata: { name: 'deploy', description: 'Deploy to production' } },
+    ]);
+
+    it('is the default: one line with the skill count, naming no skill', () => {
+      expect(composeInitializeInstructions({ skillRegistry: twoSkills })).toBe(resourceLine('2 skills'));
+    });
+
+    it('counts a single skill in the singular', () => {
+      const registry = makeRegistry([{ metadata: { name: 'demo', description: 'A demo skill' } }]);
+      expect(composeInitializeInstructions({ skillRegistry: registry, policy: 'compact' })).toBe(
+        resourceLine('1 skill'),
+      );
+    });
+
+    it('points at the skills/* methods when mcpResources is disabled', () => {
+      const out = composeInitializeInstructions({ skillRegistry: twoSkills, mcpResources: false });
+      expect(out).toBe(
+        'This server has 2 skills: find one with the `skills/search` request and load it with `skills/load`.',
+      );
+    });
+
+    it('follows the server instructions and channel hints', () => {
+      const out = composeInitializeInstructions({
+        userInstructions: 'User.',
+        channelInstructions: 'Channel.',
+        skillRegistry: twoSkills,
+      });
+      expect(out).toBe(`User.\n\n---\n\nChannel.\n\n---\n\n${resourceLine('2 skills')}`);
+    });
+
+    it('adds no line when no skill is MCP-visible', () => {
+      const httpOnly = makeRegistry([
+        { metadata: { name: 'http_only', description: 'HTTP only', visibility: 'http' } },
+      ]);
+      expect(composeInitializeInstructions({ userInstructions: 'User.', skillRegistry: httpOnly })).toBe('User.');
+    });
+
+    it('adds no line without a skill registry', () => {
+      expect(composeInitializeInstructions({ userInstructions: 'User.' })).toBe('User.');
+    });
+
+    it.each([
+      ['beside registered skills', twoSkills],
+      ['on its own', makeRegistry([])],
+    ])('counts no skill when a read-only external provider serves skills %s', (_case, registry) => {
+      const withProvider = { ...registry, getExternalProvider: () => ({ isReadOnly: () => true }) };
+      expect(composeInitializeInstructions({ skillRegistry: withProvider as SkillRegistryInterface })).toBe(
+        resourceLine('skills'),
+      );
+    });
+
+    it('keeps the count beside a persistent external provider, which serves the local skills', () => {
+      const withProvider = { ...twoSkills, getExternalProvider: () => ({ isReadOnly: () => false }) };
+      expect(composeInitializeInstructions({ skillRegistry: withProvider as SkillRegistryInterface })).toBe(
+        resourceLine('2 skills'),
+      );
+    });
+
+    it('counts only the skills the skills:filter flow keeps for the caller', async () => {
+      const scope = {
+        metadata: {},
+        skills: twoSkills,
+        logger: { warn: jest.fn() },
+        runFlowForOutput: async (_flow: string, input: { skills: SkillEntry[] }) => ({
+          skills: input.skills.filter((skill) => skill.metadata.name === 'deploy'),
+        }),
+      } as unknown as InstructionsScope;
+
+      expect(await composeCallerInstructions(scope)).toBe(resourceLine('1 skill'));
+    });
+
+    it('adds no line when the caller may see no skill', async () => {
+      const scope = {
+        metadata: { instructions: 'Server prompt.' },
+        skills: twoSkills,
+        logger: { warn: jest.fn() },
+        runFlowForOutput: async () => ({ skills: [] }),
+      } as unknown as InstructionsScope;
+
+      expect(await composeCallerInstructions(scope)).toBe('Server prompt.');
+    });
   });
 
   describe('buildChannelInstructions', () => {

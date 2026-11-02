@@ -162,7 +162,7 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] Audit chain verifier (`verifyChain`) runs in CI on the latest tail
 - [ ] Single-writer constraint respected (v1.2.0): writes routed to a single elected leader pod
 - [ ] `instructions` is set or `skillsConfig.injectInstructions` tuned for clients
-- [ ] Auto-injected skill catalog summary stays within the 16 KB ceiling (review on each catalog change)
+- [ ] With `injectInstructions: 'append'`, `'prepend'` or `'replace'`, the skill catalog summary stays within the 16 KB ceiling (the default `'compact'` sends one line)
 
 ## ExtApps / Widgets (if enabled)
 

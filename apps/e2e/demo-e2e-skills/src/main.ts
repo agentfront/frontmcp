@@ -9,6 +9,7 @@ const port = parseInt(process.env['PORT'] ?? '3107', 10);
 // the long-standing public-mode server (no authorities) so all existing skills
 // e2es behave exactly as before.
 const authoritiesMode = process.env['AUTHORITIES_MODE'] === '1';
+const resourceAnnotations = process.env['SKILLS_RESOURCE_ANNOTATIONS'] === 'full' ? 'full' : undefined;
 
 if (authoritiesMode) {
   const idpProviderUrl = process.env['IDP_PROVIDER_URL'] || 'https://sample-app.frontegg.com';
@@ -65,6 +66,7 @@ if (authoritiesMode) {
       enabled: true,
       auth: 'public', // Single auth config for all HTTP endpoints
       mcpResources: true, // Enable SEP-2640 skill:// MCP resource templates
+      resourceAnnotations,
     },
   })
   class Server {}

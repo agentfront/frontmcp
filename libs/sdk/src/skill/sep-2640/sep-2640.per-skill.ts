@@ -13,7 +13,7 @@
  * To satisfy that, we additionally register one **concrete** `Resource` per
  * MCP-visible skill, at scope startup and whenever skills are added or removed.
  * These show up in `resources/list` with frontmatter-derived metadata plus
- * `audience`/`priority` annotations.
+ * the annotations `skillsConfig.resourceAnnotations` selects.
  *
  * When the skill served at a path is replaced, the resource takes the new
  * skill's description and policy metadata, so `resources/list` gates it by
@@ -30,6 +30,7 @@ import {
   type ResourceMetadata,
   type ScopeEntry,
   type SkillEntry,
+  type SkillResourceAnnotations,
 } from '../../common';
 import { ResourceKind } from '../../common/records/resource.record';
 import type ResourceRegistry from '../../resource/resource.registry';
@@ -63,9 +64,9 @@ function skillExtensionMetadata(skill: SkillEntry): Record<string, unknown> {
  *   - `name` = skill's frontmatter name
  *   - `description` = skill's frontmatter description (what a `build()` override returns, once loaded)
  *   - `mimeType` = `text/markdown`
- *   - `annotations.audience` = `["assistant"]`
- *   - `annotations.priority` = 0.8 (the SEP-recommended SKILL.md priority)
- *   - `annotations.lastModified` (when supplied — populated for file-backed skills)
+ *   - `annotations.audience` = `["assistant"]`, unless `resourceAnnotations` is `'off'`
+ *   - `annotations.priority` = 0.8 (the SEP-recommended SKILL.md priority), only when `resourceAnnotations` is `'full'`
+ *   - `annotations.lastModified` (when supplied — populated for file-backed skills), unless `resourceAnnotations` is `'off'`
  *   - `_meta.io.modelcontextprotocol.skills/path` = the skill's `<skill-path>`
  *
  * The function is bound to the scope so `resources/read` invocation
@@ -74,19 +75,12 @@ function skillExtensionMetadata(skill: SkillEntry): Record<string, unknown> {
 export function buildPerSkillResourceRecord(
   scope: ScopeEntry,
   skill: SkillEntry,
-  opts: { lastModified?: string } = {},
+  opts: { lastModified?: string; resourceAnnotations?: SkillResourceAnnotations } = {},
 ): ResourceFunctionRecord {
   const skillPathSegments = skill.getSkillPathSegments();
   const skillPath = skillPathSegments.join('/');
   const uri = buildSkillUri(skillPathSegments, 'SKILL.md');
-
-  const annotations: ResourceMetadata['annotations'] = {
-    audience: ['assistant'],
-    priority: SKILL_MD_PRIORITY,
-  };
-  if (opts.lastModified) {
-    annotations.lastModified = opts.lastModified;
-  }
+  const annotations = skillMdAnnotations(opts.resourceAnnotations ?? 'no-priority', opts.lastModified);
 
   const meta: Record<string, unknown> = {
     [`${SEP_2640_META_NAMESPACE}path`]: skillPath,
@@ -98,7 +92,7 @@ export function buildPerSkillResourceRecord(
     name: skill.metadata.name,
     description: skill.getDescription(),
     mimeType: SKILL_MD_MIME_TYPE,
-    annotations,
+    ...(annotations && { annotations }),
     _meta: meta,
     // The skill's own `availableWhen`, so `resources/list` and `resources/read` offer its SKILL.md
     // on the surfaces that offer the skill, and answer others as for an unknown resource.
@@ -129,10 +123,22 @@ export function buildPerSkillResourceRecord(
   };
 }
 
+function skillMdAnnotations(
+  policy: SkillResourceAnnotations,
+  lastModified: string | undefined,
+): ResourceMetadata['annotations'] {
+  if (policy === 'off') return undefined;
+  return {
+    audience: ['assistant'],
+    ...(policy === 'full' && { priority: SKILL_MD_PRIORITY }),
+    ...(lastModified && { lastModified }),
+  };
+}
+
 /**
  * Register one concrete `Resource` per MCP-visible skill so
  * `resources/list` returns SEP-conformant entries (frontmatter-derived
- * `name`/`description`, audience/priority annotations).
+ * `name`/`description`, and the annotations `resourceAnnotations` selects).
  *
  * This is in addition to — not a replacement for — the SKILL.md template
  * (`Sep2640SkillMdResource`). Hosts may discover skills either via
@@ -147,13 +153,14 @@ export async function registerPerSkillResources(options: {
   resourceRegistry: ResourceRegistry;
   logger: FrontMcpLogger;
   resolveLastModified?: (skill: SkillEntry) => Promise<string | undefined>;
+  resourceAnnotations?: SkillResourceAnnotations;
 }): Promise<void> {
-  const { scope, skillRegistry, resourceRegistry, logger, resolveLastModified } = options;
+  const { scope, skillRegistry, resourceRegistry, logger, resolveLastModified, resourceAnnotations } = options;
   const registered = new Map<string, PerSkillResource>();
 
   const register = (skill: SkillEntry): Promise<void> => {
     try {
-      const record = buildPerSkillResourceRecord(scope, skill);
+      const record = buildPerSkillResourceRecord(scope, skill, { resourceAnnotations });
       // The resource registry's dynamic-register path accepts a normalised
       // record directly.
       resourceRegistry.registerDynamicResource(record);
@@ -163,7 +170,7 @@ export async function registerPerSkillResources(options: {
         extensionKeys: Object.keys(skillExtensionMetadata(skill)),
       });
       logger.verbose(`Registered SEP-2640 per-skill resource: ${record.metadata.uri}`);
-      return resolveLastModified
+      return resolveLastModified && record.metadata.annotations
         ? addLastModified(record.metadata, skill, resolveLastModified, logger)
         : Promise.resolve();
     } catch (err) {
