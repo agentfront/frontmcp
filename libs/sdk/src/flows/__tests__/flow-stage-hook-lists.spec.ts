@@ -248,4 +248,23 @@ describe('describeHookOrder', () => {
       '  execute: around WrapPlugin.wrap (-1) [ stage MyFlow.execute (0) ]',
     ]);
   });
+
+  it('nests the Around hooks lowest priority outermost, around the steps only', () => {
+    class InnerPlugin {}
+    const base = { execute: [step({ method: 'execute' })] };
+    const resolved = {
+      willExecute: [step({ type: 'will', method: 'gate', target: InnerPlugin })],
+      aroundExecute: [
+        step({ type: 'around', method: 'outer', target: WrapPlugin, priority: -10 }),
+        step({ type: 'around', method: 'inner', target: InnerPlugin, priority: 10 }),
+      ],
+      execute: [...base.execute, step({ method: 'extra', target: new InnerPlugin() as HookMetadata['target'] })],
+      didExecute: [step({ type: 'did', method: 'audit', target: WrapPlugin })],
+      finallyExecute: [step({ type: 'finally', method: 'close', target: WrapPlugin })],
+    };
+
+    expect(describeHookOrder(['execute'], base, resolved, 'MyFlow')).toEqual([
+      '  execute: will InnerPlugin.gate (0) → around WrapPlugin.outer (-10) [ around InnerPlugin.inner (10) [ stage MyFlow.execute (0) → stage InnerPlugin.extra (0) ] ] → did WrapPlugin.audit (0) → finally WrapPlugin.close (0)',
+    ]);
+  });
 });

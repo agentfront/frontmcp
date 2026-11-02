@@ -13,6 +13,9 @@ const outputSchema = z.object({ ran: z.array(z.string()) });
 })
 export default class GateOrderTool extends ToolContext {
   async execute(): Promise<z.infer<typeof outputSchema>> {
-    return { ran: gateLog.take() };
+    const ran = gateLog.take();
+    // The spec waits for this line: the call logged everything before it, its hook order included.
+    this.logger.info(`gate-order answered: ${ran.join(', ')}`);
+    return { ran };
   }
 }
