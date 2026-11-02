@@ -2095,6 +2095,18 @@
               ]
             },
             {
+              "name": "materialized-resource",
+              "description": "A resource serving a stored value that another process updates, with live updates.",
+              "level": "intermediate",
+              "tags": ["development", "resource", "materialized", "subscribe", "sqlite"],
+              "features": [
+                "Declaring a `resourceStore()` on SQLite once, in a module the server and the writers import",
+                "Serving a key with `@Resource({ from })` and `MaterializedResourceContext`",
+                "Writing atomically with `set()` and `update()` from a tool and from another process",
+                "Subscribers get `notifications/resources/updated` after a revision change, and read the latest value"
+              ]
+            },
+            {
               "name": "parameterized-template",
               "description": "A resource template with typed URI parameters and argument autocompletion.",
               "level": "intermediate",
@@ -2104,18 +2116,6 @@
                 "Typing the `ResourceContext` generic parameter for compile-time parameter checking",
                 "Implementing a convention-based completer (`userIdCompleter`) for argument autocompletion",
                 "Accessing DI providers via `this.get()` in both `execute()` and completer methods"
-              ]
-            },
-            {
-              "name": "materialized-resource",
-              "description": "A resource serving a stored value that another process updates, with live updates.",
-              "level": "intermediate",
-              "tags": ["development", "resource", "materialized", "subscribe", "sqlite"],
-              "features": [
-                "Declaring a `resourceStore()` on SQLite once, in a module the server and the writers import",
-                "Serving a key with `@Resource({ from })` and `MaterializedResourceContext`",
-                "Writing atomically with `set()` and `update()` from a tool and from another process",
-                "Subscribers get `notifications/resources/updated` on every revision change"
               ]
             }
           ]
