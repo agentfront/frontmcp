@@ -23,7 +23,7 @@ Checklist for deploying FrontMCP as a long-running local MCP server managed by t
 - [ ] Socket file is cleaned up on shutdown (no stale `.sock` files)
 - [ ] Stdio transport works as fallback: `frontmcp socket ./src/main.ts`
 - [ ] Socket permissions are restrictive: FrontMCP creates the socket `0600` (only the owning user can connect) and fails startup if it cannot
-- [ ] The socket directory belongs to you (or root) and is writable only by its owner (or is sticky, like `/tmp`); startup refuses any other with `UnsafeSocketDirectoryError`
+- [ ] The socket directory and every directory above it belong to you (or root) and are writable only by their owner (or are sticky, like `/tmp`); startup refuses any other with `UnsafeSocketDirectoryError`
 - [ ] A second daemon on the same socket path fails with `SocketInUseError` and the first keeps serving
 
 ## Service Registration

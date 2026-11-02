@@ -985,6 +985,11 @@ describe('generateCliEntry', () => {
       expect(source).toContain('fs.chmodSync(socketDir, 0o700)');
     });
 
+    it('takes group and other write away from FRONTMCP_HOME, which could otherwise replace the sockets directory', () => {
+      const source = generateCliEntry(makeOptions());
+      expect(source).toContain('if (homeMode & 0o022) fs.chmodSync(FRONTMCP_HOME, homeMode & ~0o022)');
+    });
+
     it('removes a leftover socket only once no daemon is running', () => {
       const source = generateCliEntry(makeOptions());
       const runningCheck = source.indexOf("console.log('Daemon already running");

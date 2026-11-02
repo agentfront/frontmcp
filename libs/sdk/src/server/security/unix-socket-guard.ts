@@ -1,4 +1,5 @@
 // A socket server has no Host or Origin to check: the socket file's permissions are its only boundary.
+import cluster from 'node:cluster';
 import type * as http from 'node:http';
 import * as net from 'node:net';
 import * as path from 'node:path';
@@ -16,6 +17,7 @@ const OWNER_ONLY_MODE = 0o600;
 // Clears group and other bits only: the umask is process-wide, so a directory created meanwhile stays usable.
 const OWNER_ONLY_UMASK = 0o077;
 const GROUP_OR_OTHER_WRITE = 0o022;
+const GROUP_OR_OTHER_ACCESS = 0o077;
 const STICKY_BIT = 0o1000;
 const ROOT_UID = 0;
 
@@ -28,12 +30,33 @@ function errorCode(error: unknown): string | undefined {
   return (error as NodeJS.ErrnoException | undefined)?.code;
 }
 
-/** Refuse a directory another user owns (the sticky bit does not bind its owner) or can write without the sticky bit. */
+/** Refuse a socket another user could replace through its directory or any above it, or reach before it is 0600. */
 export async function assertSafeSocketDirectory(socketPath: string): Promise<void> {
-  const directory = path.dirname(path.resolve(socketPath));
-  const { mode, uid } = await stat(directory);
-  if (uid !== ROOT_UID && uid !== process.getuid?.()) throw new UnsafeSocketDirectoryError(directory, mode, uid);
-  if (mode & GROUP_OR_OTHER_WRITE && !(mode & STICKY_BIT)) throw new UnsafeSocketDirectoryError(directory, mode);
+  const socketDirectory = path.dirname(path.resolve(socketPath));
+  for (let directory = socketDirectory; ; directory = path.dirname(directory)) {
+    const { mode, uid } = await stat(directory);
+    if (uid !== ROOT_UID && uid !== process.getuid?.()) throw new UnsafeSocketDirectoryError(directory, mode, uid);
+    if (mode & GROUP_OR_OTHER_WRITE && !(mode & STICKY_BIT)) throw new UnsafeSocketDirectoryError(directory, mode);
+    if (path.dirname(directory) === directory) break;
+  }
+  if (canBindOwnerOnly()) return;
+  const { mode } = await stat(socketDirectory);
+  if (mode & GROUP_OR_OTHER_ACCESS) {
+    throw new SocketPermissionError(
+      socketPath,
+      `the umask cannot be set here (a worker thread, or a cluster worker whose primary binds the socket), so its ` +
+        `directory ${socketDirectory} must be owner-only (0700), not 0${(mode & 0o777).toString(8)}`,
+    );
+  }
+}
+
+/** Whether this thread binds the socket under the umask it sets: a worker thread cannot set it, and a cluster primary binds a worker's socket. */
+function canBindOwnerOnly(): boolean {
+  if (cluster.isWorker) return false;
+  const previousUmask = setUmask(OWNER_ONLY_UMASK);
+  if (previousUmask === undefined) return false;
+  setUmask(previousUmask);
+  return true;
 }
 
 function probe(socketPath: string): Promise<'live' | 'stale' | 'gone'> {

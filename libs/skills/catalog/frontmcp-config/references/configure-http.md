@@ -486,12 +486,16 @@ Windows named pipes are not checked):
 - The socket is created **owner-only (`0600`)** — the umask is tightened around `listen`, so it is
   never reachable by others, even briefly. Only the user running the server can connect; the group
   can no longer connect (it was `0660`). If the mode cannot be set, startup fails with
-  `SocketPermissionError`.
-- The directory must belong to you (or root), and must not be writable by the group or others
-  unless it has the sticky bit (as `/tmp` does). The sticky bit does not bind a directory's owner, so
-  a sticky directory another user owns is refused too. Otherwise startup fails with
-  `UnsafeSocketDirectoryError`, which names the directory and its mode. `frontmcp socket` and
-  `frontmcp start --socket` create `~/.frontmcp/sockets` as `0700`. Prefer it (or another directory
+  `SocketPermissionError`. Where the umask cannot be set (a worker thread, or a cluster worker,
+  whose socket the primary binds), the socket's directory must be owner-only (`0700`) instead, or
+  startup fails with `SocketPermissionError` before binding.
+- The directory, and every directory above it, must belong to you (or root), and must not be
+  writable by the group or others unless it has the sticky bit (as `/tmp` does): otherwise another
+  user could rename it and put their own socket at the path. The sticky bit does not bind a
+  directory's owner, so a sticky directory another user owns is refused too. Otherwise startup fails
+  with `UnsafeSocketDirectoryError`, which names the directory and its mode. `frontmcp socket` and
+  `frontmcp start --socket` create `~/.frontmcp/sockets` as `0700` and take group and other write
+  away from `~/.frontmcp`. Prefer it (or another directory
   only you can write to) over `/tmp`: while your server is down, another user can create a socket at
   a predictable `/tmp` path and your clients connect to theirs.
 - A socket a crashed server left behind is removed and replaced. A live socket (a server answers on
@@ -558,20 +562,20 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 
 ## Troubleshooting
 
-| Problem                                               | Cause                                                                                                                | Solution                                                                                                 |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `EADDRINUSE` on startup                               | Another process is already using the configured port                                                                 | Change the port, stop the other process, or use `port: 0` for a random available port                    |
-| CORS errors in the browser console                    | Origin not included in the `cors.origin` list or `credentials: true` with wildcard origin                            | Add the frontend origin to the `origin` array and ensure credentials and origin settings are compatible  |
-| Unix socket file not created                          | Missing write permissions on the target directory                                                                    | Check directory permissions; a stale `.sock` file from a crashed run is replaced automatically           |
-| `UnsafeSocketDirectoryError` at startup               | The socket's directory belongs to another user, or is writable by the group or others and has no sticky bit          | Use a directory only you can write to (`chmod 700 <dir>`), such as `~/.frontmcp/sockets`                 |
-| `SocketInUseError` / `SocketPathConflictError`        | A server already listens on the socket, or the path holds a regular file or another user's socket                    | Stop the other server or pick another `socketPath`; FrontMCP never removes these itself                  |
-| `403 Invalid Origin header` from a browser app        | A loopback server refuses an `Origin` that is not its own and not in `cors.origin`                                   | Add the app's origin to `cors.origin` (or set `dnsRebindingProtection.allowedOrigins`)                   |
-| Routes return 404 after setting `entryPath`           | Client is still requesting the root path without the prefix                                                          | Update client base URL to include the entry path (e.g., `http://localhost:3000/api/mcp`)                 |
-| Server binds but external clients cannot connect      | The default bind address is `127.0.0.1`, which a published container port cannot reach                               | Set `FRONTMCP_BIND_ADDRESS=all` in the container (or `http.security.bindAddress: 'all'` in the config)   |
-| `413 Payload Too Large` with JSON-RPC envelope        | Request body exceeded `bodyLimit` (default `'4mb'`)                                                                  | Raise `http.bodyLimit` to fit the payload, or move large blobs to a separate upload endpoint             |
-| Server throws at startup mentioning a "reserved" path | A custom `http.routes` path collides with the MCP entry path, `/oauth/*`, `/.well-known/*`, `/health`, or `/metrics` | Rename the custom route to a non-reserved path                                                           |
-| Custom route returns JSON when HTML/bytes expected    | The Express adapter defaults responses to `application/json`                                                         | Set `res.setHeader('Content-Type', ...)` (or `res.type(...)`) in the handler before sending the body     |
-| Custom `auth: true` route always returns `401`        | Auth mode has no anonymous fallback and the request carries no valid bearer token                                    | Send a valid `Authorization: Bearer <jwt>`, or use `auth` mode `public`/transparent-anon for open routes |
+| Problem                                               | Cause                                                                                                                         | Solution                                                                                                 |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `EADDRINUSE` on startup                               | Another process is already using the configured port                                                                          | Change the port, stop the other process, or use `port: 0` for a random available port                    |
+| CORS errors in the browser console                    | Origin not included in the `cors.origin` list or `credentials: true` with wildcard origin                                     | Add the frontend origin to the `origin` array and ensure credentials and origin settings are compatible  |
+| Unix socket file not created                          | Missing write permissions on the target directory                                                                             | Check directory permissions; a stale `.sock` file from a crashed run is replaced automatically           |
+| `UnsafeSocketDirectoryError` at startup               | The socket's directory, or one above it, belongs to another user, or is writable by the group or others and has no sticky bit | Use a directory only you can write to (`chmod 700 <dir>`), such as `~/.frontmcp/sockets`                 |
+| `SocketInUseError` / `SocketPathConflictError`        | A server already listens on the socket, or the path holds a regular file or another user's socket                             | Stop the other server or pick another `socketPath`; FrontMCP never removes these itself                  |
+| `403 Invalid Origin header` from a browser app        | A loopback server refuses an `Origin` that is not its own and not in `cors.origin`                                            | Add the app's origin to `cors.origin` (or set `dnsRebindingProtection.allowedOrigins`)                   |
+| Routes return 404 after setting `entryPath`           | Client is still requesting the root path without the prefix                                                                   | Update client base URL to include the entry path (e.g., `http://localhost:3000/api/mcp`)                 |
+| Server binds but external clients cannot connect      | The default bind address is `127.0.0.1`, which a published container port cannot reach                                        | Set `FRONTMCP_BIND_ADDRESS=all` in the container (or `http.security.bindAddress: 'all'` in the config)   |
+| `413 Payload Too Large` with JSON-RPC envelope        | Request body exceeded `bodyLimit` (default `'4mb'`)                                                                           | Raise `http.bodyLimit` to fit the payload, or move large blobs to a separate upload endpoint             |
+| Server throws at startup mentioning a "reserved" path | A custom `http.routes` path collides with the MCP entry path, `/oauth/*`, `/.well-known/*`, `/health`, or `/metrics`          | Rename the custom route to a non-reserved path                                                           |
+| Custom route returns JSON when HTML/bytes expected    | The Express adapter defaults responses to `application/json`                                                                  | Set `res.setHeader('Content-Type', ...)` (or `res.type(...)`) in the handler before sending the body     |
+| Custom `auth: true` route always returns `401`        | Auth mode has no anonymous fallback and the request carries no valid bearer token                                             | Send a valid `Authorization: Bearer <jwt>`, or use `auth` mode `public`/transparent-anon for open routes |
 
 ## Examples
 

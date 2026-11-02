@@ -96,6 +96,19 @@ describe('pm sockets directory', () => {
     expect(fs.statSync(paths.PM_DIRS.sockets).mode & 0o777).toBe(0o700);
   });
 
+  posixIt(
+    'takes group and other write away from ~/.frontmcp, which could otherwise replace the sockets directory',
+    () => {
+      const paths = pathsUnder(home);
+      fs.mkdirSync(paths.PM_DIRS.root, { recursive: true });
+      fs.chmodSync(paths.PM_DIRS.root, 0o775);
+
+      paths.ensureSocketsDir();
+
+      expect(fs.statSync(paths.PM_DIRS.root).mode & 0o777).toBe(0o755);
+    },
+  );
+
   posixIt('tightens a sockets directory an earlier version created with the default mode', () => {
     const paths = pathsUnder(home);
     fs.mkdirSync(paths.PM_DIRS.sockets, { recursive: true, mode: 0o775 });
