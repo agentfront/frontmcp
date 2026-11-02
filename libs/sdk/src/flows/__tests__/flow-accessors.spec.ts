@@ -320,6 +320,18 @@ describe('flow accessors outside a request', () => {
     expect(broadcastNotification).toHaveBeenCalledWith(`notifications/${kind}/list_changed`);
   });
 
+  it.each(['request', 'notify', 'error'] as const)(
+    'a flow that assigns its own %s keeps that value instead of throwing',
+    (accessor) => {
+      const flow = bareFlow();
+      const ownValue = { set: 'by the flow' };
+
+      expect(Reflect.set(flow, accessor, ownValue)).toBe(true);
+      expect(Reflect.get(flow, accessor)).toBe(ownValue);
+      expect(Reflect.get(bareFlow(), accessor)).not.toBe(ownValue);
+    },
+  );
+
   it('error is state.flowError', () => {
     const flow = bareFlow();
     expect(flow.error).toBeUndefined();

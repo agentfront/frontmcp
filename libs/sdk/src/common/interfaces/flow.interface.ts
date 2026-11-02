@@ -41,6 +41,11 @@ export interface FlowNotifier {
   listChanged(kind: ListChangedKind): void;
 }
 
+// A flow subclass that already assigns one of these names keeps its own value.
+function shadowWithOwnValue(target: object, key: 'request' | 'notify' | 'error', value: unknown): void {
+  Object.defineProperty(target, key, { value, writable: true, configurable: true, enumerable: true });
+}
+
 function setStackTraceLimit(limit: number): void {
   try {
     Error.stackTraceLimit = limit;
@@ -156,6 +161,10 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
     };
   }
 
+  set request(value: FlowRequestInfo) {
+    shadowWithOwnValue(this, 'request', value);
+  }
+
   /** Notifications the run sends to the connected clients. */
   get notify(): FlowNotifier {
     return {
@@ -163,10 +172,18 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
     };
   }
 
+  set notify(value: FlowNotifier) {
+    shadowWithOwnValue(this, 'notify', value);
+  }
+
   /** The first failure of the run (`state.flowError`), for the stages and `Finally` hooks after it. */
   get error(): Error | undefined {
     const flowError: unknown = this.state.get('flowError' as never);
     return flowError instanceof Error ? flowError : undefined;
+  }
+
+  set error(value: Error | undefined) {
+    shadowWithOwnValue(this, 'error', value);
   }
 
   respond(output: FlowOutputOf<N>) {
