@@ -41,13 +41,19 @@ test.describe('Tool aliases E2E', () => {
 
 describe('Tool alias collision E2E', () => {
   it('fails startup when two tools claim one alias', async () => {
-    const started = TestServer.start({
+    const outcome = await TestServer.start({
       command: 'npx tsx apps/e2e/demo-e2e-multiapp/src/alias-collision.main.ts',
       project: 'demo-e2e-multiapp',
       startupTimeout: 60000,
-    });
+    }).then(
+      async (server) => {
+        await server.stop();
+        return 'started';
+      },
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
 
-    await expect(started).rejects.toThrow(
+    expect(outcome).toMatch(
       /alias "review\.list" is declared by both "review:review_list" and "archive:archived_reviews"/,
     );
   });

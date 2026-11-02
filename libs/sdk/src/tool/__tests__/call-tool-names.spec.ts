@@ -302,8 +302,12 @@ describe('tool alias conflicts', () => {
   });
 
   it('rejects an empty alias where the tool is declared', () => {
-    expect(() => Tool({ name: 'blank', aliases: [''], inputSchema: {} })(class extends ToolContext {})).toThrow(
-      /alias/i,
-    );
+    class BlankAliasTool extends ToolContext {
+      async execute() {
+        return {};
+      }
+    }
+
+    expect(() => Tool({ name: 'blank', aliases: [''], inputSchema: {} })(BlankAliasTool)).toThrow(/alias/i);
   });
 });
