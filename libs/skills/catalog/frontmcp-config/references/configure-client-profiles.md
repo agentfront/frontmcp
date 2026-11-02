@@ -55,7 +55,9 @@ Each key is a glob of `clientInfo.name` (`*` any characters, `?` one), matched w
 ## How it applies
 
 - `tools/call`: the `shapeAnswer` stage of `tools:call-tool` applies `structured`, after the answer budget (`fitAnswer`) and before the answer-cost counters (`meterAnswer`). A plugin can hook it. Answers with a UI widget, and answers a tool gets from `this.callTool()`, are left alone.
-- The client name comes from the request (MCP 2026-07-28 clients send `clientInfo` with each request), else from the session's `initialize`. A client that sends no name matches no profile.
+- The client name comes from the request (MCP 2026-07-28 clients send `clientInfo` with each request), else from the session's `initialize`. A client that sends no name, or a name over 256 characters, matches no profile.
+- A profile only reshapes what the client already may see; it never lists a tool, resource or skill the caller could not see without it.
+- Since list results now differ per client, a server with `clients` profiles marks every 2026-07-28 cacheable result `cacheScope: 'private'`, so a shared cache never serves one client's `tools/list` to another.
 - Invalid profiles stop `@FrontMcp` at startup with `InvalidDecoratorMetadataError` (`@FrontMcp invalid metadata for "clients"`): an unknown field (`structure:`), an unknown value, or an empty key.
 
 ## Measuring the duplicate

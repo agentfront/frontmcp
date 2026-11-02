@@ -487,7 +487,6 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     }
 
     // Respond with the properly formatted MCP result; 'fitAnswer' may replace it
-    this.state.set('output', parseResult.data);
     this.respond(parseResult.data);
     this.logger.verbose('finalize:done');
   }
@@ -502,8 +501,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     const appOutput = (app?.metadata as { output?: OutputPolicy } | undefined)?.output;
     const budget = resolveOutputBudget(undefined, appOutput, this.scope.metadata.output);
     const fitted = budget && fitResourceAnswer(output, budget);
-    if (!fitted) return;
-    this.state.set('output', fitted);
-    this.respond(fitted);
+    if (fitted) this.respond(fitted);
+  }
+
+  /** Answer the read. Each answer, a stage's or a hook's, becomes `state.output`, which `fitAnswer` fits. */
+  override respond(output: z.infer<typeof outputSchema>): never {
+    const answer = outputSchema.parse(output);
+    this.state.set('output', answer);
+    throw FlowControl.respond(answer);
   }
 }

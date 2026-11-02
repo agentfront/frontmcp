@@ -1,8 +1,9 @@
 // file: libs/sdk/src/answer/answer-budget.ts
 
+import { z } from '@frontmcp/lazy-zod';
 import type { CallToolResult, ReadResourceResult } from '@frontmcp/protocol';
 
-import type { BudgetListPolicy, OutputBudget } from '../common/metadata/output-policy';
+import { withUndeclaredKeysAllowed, type BudgetListPolicy, type OutputBudget } from '../common/metadata/output-policy';
 
 /** The `_meta` key of the note on what a budget left out of an answer. */
 export const BUDGET_META_KEY = 'frontmcp/budget';
@@ -39,6 +40,7 @@ interface FitContext {
 }
 
 const NOTED_OMISSIONS = 5;
+const listedSchemaParsers = new WeakMap<object, z.ZodType | Error>();
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 const encoder = new TextEncoder();
 
@@ -274,4 +276,36 @@ export function fitResourceAnswer(result: ReadResourceResult, budget: OutputBudg
     contents: [...contents, { uri: noteUri, mimeType: 'text/plain', text: describeBudgetNote(note) }],
     _meta: { ...result._meta, [BUDGET_META_KEY]: note },
   };
+}
+
+function parserOf(outputSchema: Record<string, unknown>): z.ZodType | Error {
+  const known = listedSchemaParsers.get(outputSchema);
+  if (known) return known;
+  let parser: z.ZodType | Error;
+  try {
+    parser = z.fromJSONSchema(
+      withUndeclaredKeysAllowed(outputSchema) as Parameters<typeof z.fromJSONSchema>[0],
+      { defaultTarget: 'draft-2020-12' } as Parameters<typeof z.fromJSONSchema>[1],
+    );
+  } catch (error) {
+    parser = error instanceof Error ? error : new Error(String(error));
+  }
+  listedSchemaParsers.set(outputSchema, parser);
+  return parser;
+}
+
+/**
+ * Why a fitted `structuredContent` no longer matches the `outputSchema` a client validates it
+ * against (a cut below `minItems`, a shortened tuple or pattern), or `undefined` when it matches.
+ */
+export function outputSchemaMismatch(
+  outputSchema: Record<string, unknown>,
+  structuredContent: unknown,
+): string | undefined {
+  const parser = parserOf(outputSchema);
+  if (parser instanceof Error) return `the schema could not be checked: ${parser.message}`;
+  const parsed = parser.safeParse(structuredContent);
+  if (parsed.success) return undefined;
+  const [issue] = parsed.error.issues;
+  return `${['$', ...issue.path.map(String)].join('.')}: ${issue.message}`;
 }

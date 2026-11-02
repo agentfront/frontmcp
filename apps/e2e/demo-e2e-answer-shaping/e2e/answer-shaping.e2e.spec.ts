@@ -53,6 +53,14 @@ test.describe('Answer shaping E2E', () => {
       expect(result.raw._meta?.['frontmcp/budget']).toBeUndefined();
     });
 
+    test('sends an answer whole when cutting it would break its outputSchema', async ({ mcp }) => {
+      await mcp.tools.list();
+      const result = await mcp.tools.call('recent-report', {});
+      expect(result).toBeSuccessful();
+      expect((result.raw.structuredContent as { rows: unknown[] }).rows).toHaveLength(1000);
+      expect(result.raw._meta?.['frontmcp/budget']).toBeUndefined();
+    });
+
     test('fits a resource read to the budget', async ({ mcp }) => {
       const read = await mcp.resources.read('reports://log');
       const [log, note] = read.raw.contents as Array<{ uri: string; mimeType?: string; text: string }>;
@@ -159,7 +167,7 @@ describe('http.forwardHeaders at boot', () => {
       expect(run.status).not.toBe(0);
       expect(output.match(/InvalidDecoratorMetadataError: @FrontMcp invalid metadata for "http"/)?.[0]).toBeDefined();
       expect(
-        output.match(/FrontMCP never forwards authorization, cookie, proxy-\* or hop-by-hop headers/)?.[0],
+        output.match(/FrontMCP never forwards authorization, cookie, proxy-\*, hop-by-hop or client-address/)?.[0],
       ).toBeDefined();
     } finally {
       closeSync(outputFd);

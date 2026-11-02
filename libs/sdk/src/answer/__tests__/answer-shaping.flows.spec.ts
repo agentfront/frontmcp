@@ -52,6 +52,17 @@ class ListEventsTool extends ToolContext {
   }
 }
 
+@Tool({
+  name: 'recent_events',
+  inputSchema: { count: z.number() },
+  outputSchema: { events: z.array(z.object({ id: z.number(), message: z.string() })).min(200) },
+})
+class RecentEventsTool extends ToolContext {
+  async execute({ count }: { count: number }) {
+    return { events: events(count) };
+  }
+}
+
 @Tool({ name: 'raw_events', inputSchema: { count: z.number() } })
 class RawEventsTool extends ToolContext {
   async execute({ count }: { count: number }) {
@@ -94,7 +105,7 @@ class TriageSkill extends SkillContext {}
 @App({
   id: 'events',
   name: 'Events',
-  tools: [ListEventsTool, RawEventsTool, AllEventsTool, CountEventsTool],
+  tools: [ListEventsTool, RecentEventsTool, RawEventsTool, AllEventsTool, CountEventsTool],
   resources: [EventLogResource, RankedResource],
   skills: [TriageSkill],
 })
@@ -146,6 +157,14 @@ describe('answer shaping through the flows', () => {
         maxBytes: 20_000,
         omitted: [{ path: '$.events', of: 1000 }],
       });
+    });
+
+    it('leaves an answer whole when cutting it would break the outputSchema a client validates', async () => {
+      const client = await open('acme-agent');
+      await client.listTools();
+      const result = (await client.callTool('recent_events', { count: 1000 })) as CallToolResult;
+      expect((result.structuredContent as { events: unknown[] }).events).toHaveLength(1000);
+      expect(result._meta?.[BUDGET_META_KEY]).toBeUndefined();
     });
 
     it('leaves a tool whose output.budget is false alone', async () => {
@@ -289,6 +308,43 @@ describe('a plugin that replaces the fitAnswer stage', () => {
       const result = (await client.callTool('raw_events', { count: 1000 })) as CallToolResult;
       expect(result.structuredContent).toEqual({ folded: true });
       expect(result._meta?.[BUDGET_META_KEY]).toBeUndefined();
+    } finally {
+      await client.close();
+    }
+  });
+});
+
+@Tool({ name: 'secret_note', inputSchema: {} })
+class SecretNoteTool extends ToolContext {
+  async execute() {
+    return { note: 'hunter2' };
+  }
+}
+
+/** Redacts each answer after finalize builds it, as an audit plugin would. */
+@Plugin({ name: 'redact-answers' })
+class RedactAnswersPlugin {
+  @ToolHook.Around('finalize')
+  async redactAnswer(flowCtx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<void>) {
+    await next();
+    const redacted = { note: '[redacted]' };
+    flowCtx.respond({ content: [{ type: 'text', text: JSON.stringify(redacted) }], structuredContent: redacted });
+  }
+}
+
+@App({ id: 'redacted', name: 'Redacted', tools: [SecretNoteTool], plugins: [RedactAnswersPlugin] })
+class RedactedApp {}
+
+describe('a plugin that replaces the answer around finalize', () => {
+  it('keeps its answer through the stages after finalize', async () => {
+    const client = await connect(
+      { ...serverConfig, info: { name: 'redacted-answers', version: '1.0.0' }, apps: [RedactedApp] },
+      { clientInfo: { name: 'text-agent', version: '1.0.0' } },
+    );
+    try {
+      const result = (await client.callTool('secret_note', {})) as CallToolResult;
+      expect(result.content).toEqual([{ type: 'text', text: '{"note":"[redacted]"}' }]);
+      expect(result.structuredContent).toBeUndefined();
     } finally {
       await client.close();
     }

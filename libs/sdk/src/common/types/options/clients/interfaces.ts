@@ -11,7 +11,7 @@
 export type StructuredAnswerMode = 'both' | 'only' | 'text';
 
 /**
- * Resource annotations a client receives in `resources/list` and `resources/templates/list`.
+ * Resource annotations a client receives in `resources/list`.
  *
  * - `'full'`: every annotation, including `priority: 0.8` on each skill's `SKILL.md`
  *   (as `skillsConfig.resourceAnnotations: 'full'`).

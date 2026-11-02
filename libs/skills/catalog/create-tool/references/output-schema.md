@@ -226,7 +226,7 @@ class GetInvoiceTool extends ToolContext {
 - The budget never cuts inside JSON, so the answer stays valid JSON. It leaves out whole list items: with `lists: 'keep-newest'` (default) it keeps a list's last items, as in a log kept in time order; with `'keep-oldest'` its first items. It then cuts the end of long strings. Larger values shrink first. An answer made only of numbers, booleans and keys stays as it is.
 - Plain text is cut at its end. Images, audio and embedded resources are left alone; so are HTML resource contents (`ui://` widgets) and blobs.
 - What was left out is noted twice: in `_meta['frontmcp/budget']` (`{ maxBytes, lists, omitted: [{ path: '$.rows', items: 880, of: 1000 }, { path: '$.body', chars: 4000 }] }`, plus `uri` for a resource) and in a last text content the model reads: `This answer was shortened to fit its 65536-byte budget: left out the first 880 of 1000 items of $.rows.`
-- Dropping items can break a schema's own limits (`.min(10)`), since the budget runs after the answer is validated.
+- A cut never breaks the `outputSchema` a client validates `structuredContent` against: when it would (fewer items than `.min(10)`, a shortened tuple or a pattern), the answer is sent whole and the server logs a warning once per tool. Loosen the schema, or raise or turn off that tool's budget.
 - An answer a tool, agent or job gets from `this.callTool()` is never cut; only answers sent to a client are.
 - The budget runs in the `fitAnswer` stage of `tools:call-tool` and `resources:read-resource`, after `finalize`. A plugin can wrap or replace it (`Around('fitAnswer')`) and read or set `state.output`. `BUDGET_META_KEY`, `fitToolAnswer()` and `fitResourceAnswer()` are exported for that.
 
