@@ -7,10 +7,11 @@ import {
   formatOutputSchemaForDescription,
   resolveOutputSchemaMode,
   resolveSchemaDescriptionFormat,
+  resolveUndeclaredKeysPolicy,
   ToolEntry,
+  withUndeclaredKeysAllowed,
   type FlowPlan,
   type FlowRunOptions,
-  type OutputPolicy,
 } from '../../common';
 
 import 'reflect-metadata';
@@ -27,6 +28,7 @@ import { DEFAULT_TOOL_PAGINATION, type ToolPaginationOptions } from '../../commo
 import { InternalMcpError, InvalidInputError, InvalidMethodError } from '../../errors';
 import { type Scope } from '../../scope/scope.instance';
 import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
+import { toolOutputPolicies } from '../tool-output-policy';
 import { buildStaticWidgetUri, hasUIConfig } from '../ui/ui-shared';
 
 const inputSchema = z.object({
@@ -475,12 +477,6 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
       // All platforms now use ui/* keys per the MCP Apps specification
 
-      // Resolve the output-schema exposure policy once (per-tool: Tool > App > server).
-      const serverOutput = (this.scope.metadata as { output?: OutputPolicy }).output;
-      const appOutputById = new Map<string, OutputPolicy | undefined>(
-        this.scope.apps.getApps().map((app) => [app.id, (app.metadata as { output?: OutputPolicy }).output]),
-      );
-
       const uiRenderer = resolved.some(({ tool }) => hasUIConfig(tool.metadata))
         ? await this.loadToolUIRenderer()
         : undefined;
@@ -511,21 +507,24 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         // Expose the output schema per the resolved mode (Tool > App > server; default
         // 'definition'). 'definition'/'both' advertise it as item.outputSchema;
         // 'description'/'both' fold a readable rendering into the description; 'none' skips it.
-        const toolOutput = (tool.metadata as { output?: OutputPolicy }).output;
-        const appOutput = appOutputById.get(tool.owner.id);
-        const schemaMode = resolveOutputSchemaMode(toolOutput, appOutput, serverOutput);
+        const outputPolicies = toolOutputPolicies(tool, this.scope);
+        const schemaMode = resolveOutputSchemaMode(...outputPolicies);
 
         if (schemaMode === 'definition' || schemaMode === 'both') {
           // getRawOutputSchema() returns the explicit rawOutputSchema (OpenAPI / remote
-          // passthrough) or a JSON Schema derived from the declared Zod-shape / z.object()
-          // outputSchema (elicitation-extended when elicitation is enabled).
+          // passthrough) or a JSON Schema derived from the declared Zod-shape, z.object() or
+          // union-of-objects outputSchema (elicitation-extended when elicitation is enabled).
           const rawOutput = tool.getRawOutputSchema();
           if (rawOutput) {
             // MCP spec requires outputSchema to have type: 'object' at the top level.
             // Strip non-compliant schemas to prevent a single tool from breaking the entire tools/list response.
             const schema = rawOutput as Record<string, unknown>;
             if (schema['type'] === 'object') {
-              item.outputSchema = schema as typeof item.outputSchema;
+              // An answer that keeps undeclared keys must still validate against the listed schema
+              const keepsUndeclaredKeys = resolveUndeclaredKeysPolicy(...outputPolicies) === 'keep';
+              item.outputSchema = (
+                keepsUndeclaredKeys ? withUndeclaredKeysAllowed(schema) : schema
+              ) as typeof item.outputSchema;
             } else {
               this.logger.warn(
                 `parseTools: tool "${finalName}" has outputSchema without type: 'object' — stripping to maintain MCP compliance`,
@@ -538,7 +537,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           // Use the clean (non-elicitation-extended) schema for the human-readable description.
           const outputJsonSchema = tool.getOutputJsonSchema();
           if (outputJsonSchema) {
-            const format = resolveSchemaDescriptionFormat(toolOutput, appOutput, serverOutput);
+            const format = resolveSchemaDescriptionFormat(...outputPolicies);
             item.description = (item.description ?? '') + formatOutputSchemaForDescription(outputJsonSchema, format);
           }
         }

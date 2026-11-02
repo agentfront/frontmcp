@@ -1,1 +1,1 @@
-export { sanitizeToJson, inferMimeType, findNonFiniteNumber } from './content';
+export { sanitizeToJson, inferMimeType, findNonFiniteNumber, findDroppedKeys } from './content';

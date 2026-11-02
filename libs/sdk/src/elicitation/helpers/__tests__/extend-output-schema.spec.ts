@@ -106,6 +106,27 @@ describe('extendOutputSchemaForElicitation', () => {
     });
   });
 
+  describe('with original schema whose references point into its $defs', () => {
+    const registeredUnion: Record<string, unknown> = {
+      type: 'object',
+      anyOf: [{ $ref: '#/$defs/Document' }, { $ref: '#/$defs/Person' }],
+      $defs: {
+        Document: { type: 'object', properties: { title: { type: 'string' } } },
+        Person: { type: 'object', properties: { name: { type: 'string' } } },
+      },
+    };
+
+    it('keeps $defs at the root, where the references resolve from', () => {
+      const extended = extendOutputSchemaForElicitation(registeredUnion);
+
+      expect(extended['$defs']).toEqual(registeredUnion['$defs']);
+      expect(extended['oneOf']).toEqual([
+        { type: 'object', anyOf: registeredUnion['anyOf'] },
+        ELICITATION_FALLBACK_JSON_SCHEMA,
+      ]);
+    });
+  });
+
   describe('MCP SDK ToolSchema compatibility', () => {
     function buildToolDescriptor(outputSchema: Record<string, unknown>) {
       return {

@@ -38,7 +38,7 @@ export {
 } from './path';
 
 // Content utilities
-export { sanitizeToJson, inferMimeType, findNonFiniteNumber } from './content';
+export { sanitizeToJson, inferMimeType, findNonFiniteNumber, findDroppedKeys } from './content';
 
 // HTTP utilities
 export { validateBaseUrl, buildSetCookie, parseCookies, getCookie, isLocalhost, isSecureRequest } from './http';

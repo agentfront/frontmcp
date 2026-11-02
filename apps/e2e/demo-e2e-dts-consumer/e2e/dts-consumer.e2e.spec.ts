@@ -31,6 +31,7 @@ const fixtureFiles = [
   'hooks-must-fail.ts',
   'host-must-compile.ts',
   'skills-must-compile.ts',
+  'output-schemas-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -105,6 +106,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types this.scope.skills.setExternalProvider() and skillsConfig.externalProvider', () => {
     expect(describeEach(inFixtureFile('skills-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types a z.union() or z.discriminatedUnion() outputSchema with no cast, and output.undeclaredKeys', () => {
+    expect(describeEach(inFixtureFile('output-schemas-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

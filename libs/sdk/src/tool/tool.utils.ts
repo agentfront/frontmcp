@@ -1,6 +1,6 @@
 // file: libs/sdk/src/tool/tool.utils.ts
 import { depsOfClass, depsOfFunc, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
-import { z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from '@frontmcp/lazy-zod';
+import { hasTransform, z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from '@frontmcp/lazy-zod';
 import {
   type AudioContent,
   type ContentBlock,
@@ -9,12 +9,14 @@ import {
   type ResourceLink,
   type TextContent,
 } from '@frontmcp/protocol';
+import { findDroppedKeys } from '@frontmcp/utils';
 
 import {
   extendedToolMetadata,
   FrontMcpToolTokens,
   ToolKind,
   type AgentToolDefinition,
+  type OutputParseOptions,
   type ParsedToolResult,
   type ToolContext,
   type ToolEntry,
@@ -143,7 +145,11 @@ function isCallToolResult(value: unknown): value is ParsedToolResult {
   return true;
 }
 
-export function buildParsedToolResult(descriptor: any, raw: unknown): ParsedToolResult {
+export function buildParsedToolResult(
+  descriptor: any,
+  raw: unknown,
+  options: OutputParseOptions = {},
+): ParsedToolResult {
   // If raw is already a valid CallToolResult (e.g., from remote tools), return it as-is
   // This prevents double-wrapping of MCP-formatted responses
   if (isCallToolResult(raw)) {
@@ -169,7 +175,7 @@ export function buildParsedToolResult(descriptor: any, raw: unknown): ParsedTool
     // Parse all items first
     descriptor.forEach((singleDescriptor: any, idx: number) => {
       const value = values[idx];
-      const { blocks, parsedValue, isPrimitive } = parseSingleValue(singleDescriptor, value);
+      const { blocks, parsedValue, isPrimitive } = parseSingleValue(singleDescriptor, value, options);
       parsedItems.push({ blocks, parsedValue, isPrimitive });
       content.push(...blocks);
     });
@@ -206,7 +212,7 @@ export function buildParsedToolResult(descriptor: any, raw: unknown): ParsedTool
       });
     }
   } else {
-    const { blocks, parsedValue, isPrimitive } = parseSingleValue(descriptor, raw);
+    const { blocks, parsedValue, isPrimitive } = parseSingleValue(descriptor, raw, options);
     content.push(...blocks);
 
     // Single item: wrap primitives in {content: value}, use objects directly
@@ -244,6 +250,7 @@ export function buildParsedToolResult(descriptor: any, raw: unknown): ParsedTool
 function parseSingleValue(
   descriptor: any,
   value: unknown,
+  options: OutputParseOptions,
 ): { blocks: ContentBlock[]; parsedValue?: any; isPrimitive: boolean } {
   // Literal primitives + special content types
   if (typeof descriptor === 'string') {
@@ -373,9 +380,9 @@ function parseSingleValue(
   let parsedValue: any;
 
   if (descriptor instanceof z.ZodType) {
-    parsedValue = toStructuredContent(parseAgainstOutputSchema(descriptor, value));
+    parsedValue = toStructuredContent(parseAgainstOutputSchema(descriptor, value, options));
   } else if (isZodRawShape(descriptor)) {
-    parsedValue = toStructuredContent(parseAgainstOutputSchema(z.object(descriptor), value));
+    parsedValue = toStructuredContent(parseAgainstOutputSchema(z.object(descriptor), value, options));
   } else {
     parsedValue = toStructuredContent(value);
   }
@@ -388,9 +395,46 @@ function parseSingleValue(
 }
 
 /**
- * The value an output schema accepts, or an InvalidOutputError naming the first mismatch.
+ * The value an output schema accepts, with undeclared keys handled per `options.undeclaredKeys`,
+ * or an InvalidOutputError naming the first mismatch or the undeclared keys `'fail'` refuses.
+ * A schema with a transform is always stripped: its output cannot be compared with the answer key by key.
  */
-function parseAgainstOutputSchema(schema: z.ZodType, value: unknown): unknown {
+function parseAgainstOutputSchema(schema: z.ZodType, value: unknown, options: OutputParseOptions = {}): unknown {
+  const declared = parseDeclaredOutput(schema, value);
+  const policy = options.undeclaredKeys ?? 'strip';
+  if (policy === 'strip' || hasTransform(schema)) return declared;
+  const undeclaredKeys = findDroppedKeys(value, declared);
+  if (undeclaredKeys.length === 0) return declared;
+  switch (policy) {
+    case 'keep':
+      return withUndeclaredKeys(value, declared);
+    case 'fail':
+      throw new InvalidOutputError({ reason: 'undeclared keys', value: undeclaredKeys.join(', ') });
+    case 'warn':
+      options.onUndeclaredKeys?.(undeclaredKeys);
+      return declared;
+  }
+}
+
+/** `declared` with the keys of `original` its schema dropped put back, at every level. */
+function withUndeclaredKeys(original: unknown, declared: unknown): unknown {
+  if (Array.isArray(original) && Array.isArray(declared)) {
+    return declared.map((item, index) => withUndeclaredKeys(original[index], item));
+  }
+  if (!isRecord(original) || !isRecord(declared)) return declared;
+  const declaredEntries = Object.entries(declared).map(([key, item]) => [key, withUndeclaredKeys(original[key], item)]);
+  const undeclaredEntries = Object.entries(original).filter(
+    ([key, item]) => item !== undefined && !Object.prototype.hasOwnProperty.call(declared, key),
+  );
+  return Object.fromEntries([...declaredEntries, ...undeclaredEntries]);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** The value an output schema accepts, undeclared keys stripped, or an InvalidOutputError naming the first mismatch. */
+function parseDeclaredOutput(schema: z.ZodType, value: unknown): unknown {
   const parseResult = schema.safeParse(value);
   if (parseResult.success) {
     return parseResult.data;

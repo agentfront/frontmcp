@@ -26,6 +26,7 @@ import {
   FlowHooksOf,
   GLOBAL_RATE_LIMIT_CHECKED,
   isOrchestratedMode,
+  resolveUndeclaredKeysPolicy,
   ToolContext,
   ToolEntry,
   type FlowPlan,
@@ -71,6 +72,7 @@ import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
+import { toolOutputPolicies } from '../tool-output-policy';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
 import { evaluateToolCredentialGate } from './tool-credentials.gate';
@@ -173,6 +175,8 @@ const stateSchema = z.object({
     .optional(),
 });
 
+type CallToolEntry = z.infer<typeof stateSchema>['tool'];
+
 const plan = {
   pre: [
     'parseInput',
@@ -221,6 +225,12 @@ const { Stage } = FlowHooksOf<'tools:call-tool'>(name);
 
 /** Tools `resolveHookOwnerId` found, reused by the same run's `findTool`. */
 const resolvedTools = new ResolvedEntries<ToolEntry>();
+
+/** The undeclared key paths already reported per tool, so the 'warn' policy names each one once. */
+const reportedUndeclaredKeyPaths = new WeakMap<CallToolEntry, Set<string>>();
+
+/** Answers keyed by ids yield new key paths forever, so a tool stops reporting after this many. */
+const MAX_REPORTED_UNDECLARED_KEY_PATHS = 100;
 
 @Flow({
   name,
@@ -1541,7 +1551,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     // Parse and construct the MCP-compliant output using safeParseOutput
-    const parseResult = tool.safeParseOutput(rawOutput);
+    const undeclaredKeys = resolveUndeclaredKeysPolicy(...toolOutputPolicies(tool, this.scope));
+    const parseResult = tool.safeParseOutput(rawOutput, {
+      // A call that renders the tool's UI sends declared keys only, whatever the policy
+      undeclaredKeys: uiResult && undeclaredKeys === 'keep' ? 'strip' : undeclaredKeys,
+      onUndeclaredKeys: (keyPaths) => this.warnUndeclaredKeysOnce(tool, keyPaths),
+    });
 
     if (!parseResult.success) {
       this.logger.error('finalize: output validation failed', {
@@ -1629,6 +1644,19 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Respond with the properly formatted MCP result
     this.respond(result);
     this.logger.verbose('finalize:done');
+  }
+
+  private warnUndeclaredKeysOnce(tool: CallToolEntry, keyPaths: string[]): void {
+    const reportedKeyPaths = reportedUndeclaredKeyPaths.get(tool) ?? new Set<string>();
+    reportedUndeclaredKeyPaths.set(tool, reportedKeyPaths);
+    const roomLeft = MAX_REPORTED_UNDECLARED_KEY_PATHS - reportedKeyPaths.size;
+    const newKeyPaths = keyPaths.filter((keyPath) => !reportedKeyPaths.has(keyPath)).slice(0, roomLeft);
+    if (newKeyPaths.length === 0) return;
+    newKeyPaths.forEach((keyPath) => reportedKeyPaths.add(keyPath));
+    this.logger.warn(
+      `Tool "${tool.metadata.name}" answered with keys its outputSchema does not declare, so they were stripped: ` +
+        `${newKeyPaths.join(', ')}. Declare them, or set output.undeclaredKeys to 'strip', 'keep' or 'fail'.`,
+    );
   }
 }
 

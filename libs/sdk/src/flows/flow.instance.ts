@@ -88,12 +88,14 @@ function stageKeysOf(stage: string): StageKeys {
   return keys;
 }
 
-function parseTypedKey(k: string): { base: string; type?: 'will' | 'did' | 'around' } {
+export function parseTypedKey(k: string): { base: string; type?: 'will' | 'did' | 'around' | 'finally' } {
   const lc = k.toLowerCase();
   if (lc.startsWith('will') && k.length > 4) return { base: k.slice(4, 5).toLowerCase() + k.slice(5), type: 'will' };
   if (lc.startsWith('did') && k.length > 3) return { base: k.slice(3, 4).toLowerCase() + k.slice(4), type: 'did' };
   if (lc.startsWith('around') && k.length > 6)
     return { base: k.slice(6, 7).toLowerCase() + k.slice(7), type: 'around' };
+  if (lc.startsWith('finally') && k.length > 7)
+    return { base: k.slice(7, 8).toLowerCase() + k.slice(8), type: 'finally' };
   return { base: k };
 }
 
