@@ -126,6 +126,16 @@ export async function writeFile(p: string, content: string, options?: { mode?: n
 }
 
 /**
+ * Add content to the end of a file, creating it when it does not exist.
+ *
+ * **Node.js only** - throws an error if called in browser.
+ */
+export async function appendFile(p: string, content: string): Promise<void> {
+  const fsp = getFsp();
+  await fsp.appendFile(p, content, { encoding: 'utf8' });
+}
+
+/**
  * Create a directory with optional mode (permissions).
  *
  * **Node.js only** - throws an error if called in browser.

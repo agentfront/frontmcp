@@ -4,6 +4,7 @@ export {
   readFileSync,
   readFileBuffer,
   writeFile,
+  appendFile,
   mkdir,
   rename,
   unlink,

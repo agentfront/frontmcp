@@ -84,6 +84,7 @@ import type { SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import type { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
+import { devEventsObservabilityConfig } from './dev-events-observability';
 import { registerServerEntries } from './server-entries.helper';
 import { reportStartup } from './startup-report.helper';
 
@@ -609,8 +610,9 @@ export class Scope extends ScopeEntry {
     // so AppRegistry must be fully ready before they start.
     const serverPlugins = [...(this.metadata.plugins ?? [])];
 
-    // Auto-load ObservabilityPlugin when observability config is present.
-    const observabilityConfig = this.metadata.observability;
+    // Auto-load ObservabilityPlugin when observability config is present, or for frontmcp dev's events.
+    const impliedObservability = this.metadata.observability === undefined ? devEventsObservabilityConfig() : undefined;
+    const observabilityConfig = this.metadata.observability ?? impliedObservability;
     if (observabilityConfig) {
       const { observabilityPlugins } = await import('./observability-scope.helper.js');
       serverPlugins.push(
@@ -618,6 +620,7 @@ export class Scope extends ScopeEntry {
           config: observabilityConfig,
           logger: this.logger,
           globalProviders: this.globalProviders,
+          implied: impliedObservability !== undefined,
         }),
       );
     }

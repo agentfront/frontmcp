@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import {
   access,
+  appendFile,
   chmod,
   copyFile,
   cp,
@@ -284,6 +285,17 @@ describe('FS Utils', () => {
 
       const content = await fs.promises.readFile(filePath, 'utf8');
       expect(content).toBe('updated');
+    });
+  });
+
+  describe('appendFile', () => {
+    it('creates the file, then adds to its end', async () => {
+      const filePath = path.join(tempDir, 'append-test.jsonl');
+
+      await appendFile(filePath, 'first\n');
+      await appendFile(filePath, 'second\n');
+
+      expect(await fs.promises.readFile(filePath, 'utf8')).toBe('first\nsecond\n');
     });
   });
 

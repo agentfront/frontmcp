@@ -200,6 +200,26 @@ describe('createPipeUpstream', () => {
     await upstream.close();
   });
 
+  it('hands the dev events the server sends to onDevEvents, not to the client', async () => {
+    const child = new FakeIpcChild();
+    const frames: JsonRpcFrame[] = [];
+    const devEvents: unknown[][] = [];
+    const upstream = createPipeUpstream({
+      child: child as unknown as ChildProcess,
+      log: silentLog(),
+      onFrame: (f) => void frames.push(f),
+      onDevEvents: (events) => void devEvents.push(events),
+    });
+    const events = [{ type: 'call', method: 'tools/call', entry: 'hello:hello', outcome: 'ok' }];
+
+    child.emit('message', { __frontmcp: 'dev-events', events });
+    child.emit('message', { __frontmcp: 'dev-events', events: 'not a list' });
+
+    expect(devEvents).toEqual([events]);
+    expect(frames).toEqual([]);
+    await upstream.close();
+  });
+
   it('replays the handshake and keeps its response from the client', async () => {
     const child = new FakeIpcChild();
     const frames: JsonRpcFrame[] = [];

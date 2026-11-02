@@ -28,6 +28,14 @@ describe('toParsedArgs', () => {
     expect(result.maxRestarts).toBe(3);
   });
 
+  it('maps the dev events flags: --events-file, and --no-events as events: false', () => {
+    expect(toParsedArgs('dev', [], { eventsFile: 'logs/events.jsonl', events: true })).toMatchObject({
+      eventsFile: 'logs/events.jsonl',
+    });
+    expect(toParsedArgs('dev', [], { events: false }).noEvents).toBe(true);
+    expect(toParsedArgs('dev', [], { events: true }).noEvents).toBeUndefined();
+  });
+
   it('should map build command with target/outDir/js', () => {
     const result = toParsedArgs('build', [], {
       target: 'cli',
