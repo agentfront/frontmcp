@@ -29,7 +29,7 @@ interface RunInFlight {
  * took the lease over never runs again.
  */
 export class DutyRunner {
-  private readonly holder = randomUUID();
+  private readonly holder: string;
   private readonly leaseSeconds: number;
   private readonly ranKey: string;
   private holding = false;
@@ -42,6 +42,7 @@ export class DutyRunner {
   private inFlight?: RunInFlight;
 
   constructor(private readonly options: DutyRunnerOptions) {
+    this.holder = randomUUID();
     this.leaseSeconds = Math.ceil(options.leaseMs / 1_000);
     this.ranKey = `${options.key}:ran`;
   }
