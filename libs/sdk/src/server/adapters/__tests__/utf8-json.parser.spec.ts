@@ -120,6 +120,28 @@ describe('utf8JsonParser', () => {
     }
   });
 
+  it('leaves alone a body an earlier middleware read, as express.json() does', async () => {
+    const readEarlier: express.RequestHandler = (req, _res, next) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        req.body = Buffer.concat(chunks);
+        next();
+      });
+    };
+    const earlier = await listen([readEarlier, utf8JsonParser('1kb'), express.json({ limit: '1kb' })]);
+    const stockEarlier = await listen([readEarlier, express.json({ limit: '1kb' })]);
+    try {
+      const body = Buffer.from('{"a":1}');
+      const expected = await post(stockEarlier.url, 'application/json', body, false);
+      expect(expected).toEqual({ status: 200, parsed: { type: 'Buffer', data: [...body] } });
+      expect(await post(earlier.url, 'application/json', body, false)).toEqual(expected);
+    } finally {
+      for (const { server } of [earlier, stockEarlier])
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('leaves a body in another charset to express.json()', async () => {
     const body = Buffer.from('{"a":"café"}', 'utf16le');
     expect(await post(utf8.url, 'application/json; charset=utf-16le', body, false)).toEqual({

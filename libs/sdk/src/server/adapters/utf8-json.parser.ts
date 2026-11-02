@@ -14,7 +14,7 @@ export function utf8JsonParser(limit: number | string): express.RequestHandler {
   return (req, res, next) => {
     const unparsedBody: unknown = req.body;
     readBody(req, res, (readError?: unknown) => {
-      if (readError || !Buffer.isBuffer(req.body)) {
+      if (readError || req.body === unparsedBody || !Buffer.isBuffer(req.body)) {
         next(readError);
         return;
       }
