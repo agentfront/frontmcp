@@ -218,17 +218,19 @@ export function buildSkillsCatalogSummary(
   return lines.join('\n');
 }
 
-/**
- * The `'compact'` line: how many skills there are and where to read them. Empty when there are none.
- */
+/** The `'compact'` line: how many skills there are and where to read them. Empty when there are none. */
 function buildCompactSkillsLine(
   skillRegistry: SkillRegistryInterface | undefined,
   options: SkillsCatalogSummaryOptions,
 ): string {
   const count = listedSkills(skillRegistry, options).length;
-  if (count === 0) return '';
+  // A read-only external provider serves skills the registry does not hold, so none can be counted.
+  const servesExternalSkills = skillRegistry?.getExternalProvider()?.isReadOnly() === true;
+  if (count === 0 && !servesExternalSkills) return '';
+  let skills = count === 1 ? '1 skill' : `${count} skills`;
+  if (servesExternalSkills) skills = 'skills';
   const pointers = options.mcpResources === false ? METHOD_POINTERS : RESOURCE_POINTERS;
-  return `This server has ${count === 1 ? '1 skill' : `${count} skills`}: ${pointers.compact}`;
+  return `This server has ${skills}: ${pointers.compact}`;
 }
 
 /**

@@ -131,6 +131,7 @@ describe('skillsConfigOptionsSchema', () => {
         FrontMcp({
           info: { name: 'invalid-skills-config', version: '1.0.0' },
           apps: [],
+          serve: false,
           skillsConfig: { [option]: value },
         } as never)(class InvalidSkillsConfigServer {});
 

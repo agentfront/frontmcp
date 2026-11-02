@@ -65,7 +65,7 @@ The new top-level `instructions?: string` field on `@FrontMcp` is forwarded verb
 | Mode      | Behavior                                                                                                                                                                                        |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `compact` | Server `instructions`, then channel hints, then one line with the number of skills and where to read them, joined by `\n\n---\n\n`. No line when the caller sees no skill. **(Default.)**       |
-| `off`     | Nothing about skills is added. Server `instructions` and channel hints are still surfaced.                                                                                                      |
+| `off`     | No skills line or catalog. Server `instructions`, channel hints and the `sep2640InInstructions` hints are still surfaced.                                                                       |
 | `append`  | Server `instructions`, then channel hints, then the catalog summary (every skill's name and description). The default up to 1.10.15.                                                            |
 | `prepend` | Catalog summary first, then channel hints, then server `instructions`.                                                                                                                          |
 | `replace` | Surface ONLY the server `instructions`; the catalog AND channel hints are dropped. When `instructions` is empty/undefined this falls back to `'append'` so a misconfig doesn't drop everything. |
@@ -81,6 +81,8 @@ With `mcpResources: false` it points at the `skills/*` methods instead:
 ```text
 This server has 3 skills: find one with the `skills/search` request and load it with `skills/load`.
 ```
+
+With a read-only `externalProvider` the line names no number (`This server has skills: …`): the provider's skills are listed by `skill://index.json` and found by `skills/search`, not held by the registry, so they can't be counted. The line is sent even when the server declares no skill itself.
 
 **Default change (1.10.16):** up to 1.10.15 the default was `'append'`, which lists every skill's name and description (up to 16 KB). Some clients copy the server's instructions into every tool's description, so a large catalog was repeated once per tool. Set `injectInstructions: 'append'` to get the full catalog back.
 

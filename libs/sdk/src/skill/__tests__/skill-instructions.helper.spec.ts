@@ -25,7 +25,7 @@ function asEntry(skill: FakeSkill) {
 
 function makeRegistry(fakeSkills: FakeSkill[]): SkillRegistryInterface {
   const skills = fakeSkills.map(asEntry);
-  // Only `getSkills` is exercised by the helper; everything else can throw.
+  // Only `getSkills` and `getExternalProvider` are exercised by the helper; everything else can throw.
   const registry: Partial<SkillRegistryInterface> = {
     getSkills: ((opts?: unknown) => {
       const o = (opts ?? {}) as { visibility?: string };
@@ -36,6 +36,7 @@ function makeRegistry(fakeSkills: FakeSkill[]): SkillRegistryInterface {
         return v === o.visibility;
       }) as never;
     }) as SkillRegistryInterface['getSkills'],
+    getExternalProvider: () => undefined,
   };
   return registry as SkillRegistryInterface;
 }
@@ -56,6 +57,7 @@ function makeMutableRegistry(initial: FakeSkill[]): {
         return v === o.visibility;
       }) as never;
     }) as SkillRegistryInterface['getSkills'],
+    getExternalProvider: () => undefined,
   };
   return {
     registry: registry as SkillRegistryInterface,
@@ -388,6 +390,23 @@ describe('skill-instructions.helper', () => {
 
     it('adds no line without a skill registry', () => {
       expect(composeInitializeInstructions({ userInstructions: 'User.' })).toBe('User.');
+    });
+
+    it.each([
+      ['beside registered skills', twoSkills],
+      ['on its own', makeRegistry([])],
+    ])('counts no skill when a read-only external provider serves skills %s', (_case, registry) => {
+      const withProvider = { ...registry, getExternalProvider: () => ({ isReadOnly: () => true }) };
+      expect(composeInitializeInstructions({ skillRegistry: withProvider as SkillRegistryInterface })).toBe(
+        resourceLine('skills'),
+      );
+    });
+
+    it('keeps the count beside a persistent external provider, which serves the local skills', () => {
+      const withProvider = { ...twoSkills, getExternalProvider: () => ({ isReadOnly: () => false }) };
+      expect(composeInitializeInstructions({ skillRegistry: withProvider as SkillRegistryInterface })).toBe(
+        resourceLine('2 skills'),
+      );
     });
 
     it('counts only the skills the skills:filter flow keeps for the caller', async () => {

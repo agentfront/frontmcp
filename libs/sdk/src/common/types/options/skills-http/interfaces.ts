@@ -78,12 +78,7 @@ import type { ExternalSkillProviderBase } from '../../../../skill/providers/exte
  */
 export type SkillsConfigAuthMode = 'inherit' | 'public' | 'api-key' | 'bearer';
 
-/**
- * Which annotations each `skill://<skillPath>/SKILL.md` resource carries in `resources/list`.
- * - 'no-priority': `audience: ['assistant']` and `lastModified` (when known), no numeric annotation
- * - 'full': also `priority: 0.8`, the SEP-2640 recommendation
- * - 'off': no annotations
- */
+/** Which annotations each `SKILL.md` resource carries in `resources/list`; see `SkillsConfigOptions.resourceAnnotations`. */
 export type SkillResourceAnnotations = 'full' | 'no-priority' | 'off';
 
 /**
@@ -388,7 +383,8 @@ export interface SkillsConfigOptions {
    *   with the number of skills the caller may see and where to read them
    *   (`skill://index.json`, or the `skills/search` and `skills/load`
    *   methods when `mcpResources` is false). No line when the caller sees no
-   *   skill. Some clients copy the instructions into every tool description,
+   *   skill; no count when a read-only `externalProvider` serves skills.
+   *   Some clients copy the instructions into every tool description,
    *   so the full catalog can cost many tokens per tool.
    * - `'append'`: `instructions` is sent as-is, followed by a
    *   `\n\n---\n\n` separator and the per-skill summary (`**Name**: …`
