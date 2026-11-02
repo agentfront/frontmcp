@@ -689,6 +689,147 @@ describe('ExpressHostAdapter — derived host allow-list scope', () => {
   });
 });
 
+/**
+ * Proposal 1.7: a loopback server checks `Origin` too. A page on another site can POST to
+ * 127.0.0.1 without any rebinding (the Host is a loopback name), and only its `Origin` tells it apart.
+ */
+describe('ExpressHostAdapter — derived Origin check on a loopback bind', () => {
+  type HostValidation = (req: never, res: never, next: () => void) => void;
+
+  function check(
+    adapter: ExpressHostAdapter,
+    headers: Record<string, string>,
+  ): 'allowed' | { status: number; body: unknown } {
+    const validate = (adapter as unknown as { hostValidation?: HostValidation }).hostValidation;
+    if (!validate) return 'allowed';
+    let outcome: 'allowed' | { status: number; body: unknown } = 'allowed';
+    const res = { status: (status: number) => ({ json: (body: unknown) => (outcome = { status, body }) }) };
+    validate({ headers } as never, res as never, () => undefined);
+    return outcome;
+  }
+
+  function listening(adapter: ExpressHostAdapter, port: number, bindAddress: string): ExpressHostAdapter {
+    (adapter as unknown as { enableDerivedHostValidation(p: number, b?: string): void }).enableDerivedHostValidation(
+      port,
+      bindAddress,
+    );
+    return adapter;
+  }
+
+  const host = 'localhost:3000';
+
+  it('refuses a request from another origin with the response an explicit allowedOrigins gives', () => {
+    const derived = listening(new ExpressHostAdapter(), 3000, '127.0.0.1');
+    const explicit = new ExpressHostAdapter({
+      security: { dnsRebindingProtection: { allowedOrigins: ['https://app.example.com'] } },
+    });
+
+    const refused = check(derived, { host, origin: 'https://evil.example' });
+
+    expect(refused).toEqual({ status: 403, body: { error: 'Forbidden', message: 'Invalid Origin header' } });
+    expect(check(explicit, { host, origin: 'https://evil.example' })).toEqual(refused);
+  });
+
+  it('allows a request with no Origin, and one from the server itself', () => {
+    const adapter = listening(new ExpressHostAdapter(), 3000, '127.0.0.1');
+
+    expect(check(adapter, { host })).toBe('allowed');
+    expect(check(adapter, { host, origin: 'http://localhost:3000' })).toBe('allowed');
+    expect(check(adapter, { host, origin: 'http://127.0.0.1:3000' })).toBe('allowed');
+    expect(check(adapter, { host, origin: 'http://[::1]:3000' })).toBe('allowed');
+  });
+
+  it('refuses Origin null and matches the spellings of its own origin', () => {
+    const adapter = listening(new ExpressHostAdapter(), 3000, '127.0.0.1');
+
+    expect(check(adapter, { host, origin: 'null' })).toMatchObject({ status: 403 });
+    expect(check(adapter, { host, origin: 'HTTP://LOCALHOST:3000' })).toBe('allowed');
+    expect(check(adapter, { host, origin: 'http://[0:0:0:0:0:0:0:1]:3000' })).toBe('allowed');
+    expect(check(adapter, { host, origin: 'https://127.0.0.1:3000' })).toBe('allowed');
+    expect(check(adapter, { host, origin: 'http://127.0.0.2:3000' })).toMatchObject({ status: 403 });
+  });
+
+  it('matches a default port only for its own scheme', () => {
+    const adapter = listening(new ExpressHostAdapter(), 80, '127.0.0.1');
+
+    expect(check(adapter, { host: 'localhost', origin: 'http://localhost' })).toBe('allowed');
+    expect(check(adapter, { host: 'localhost', origin: 'https://localhost' })).toMatchObject({ status: 403 });
+  });
+
+  it('refuses a loopback page served on another port', () => {
+    const adapter = listening(new ExpressHostAdapter(), 3000, '127.0.0.1');
+
+    expect(check(adapter, { host, origin: 'http://localhost:8080' })).toMatchObject({ status: 403 });
+  });
+
+  it('allows the origins an explicit CORS list names', () => {
+    const adapter = listening(new ExpressHostAdapter({ cors: { origin: ['https://app.example.com'] } }), 3000, '::1');
+
+    expect(check(adapter, { host, origin: 'https://app.example.com' })).toBe('allowed');
+    expect(check(adapter, { host, origin: 'https://evil.example' })).toMatchObject({ status: 403 });
+  });
+
+  it.each([true, '*', () => undefined])('checks no Origin when CORS admits any origin (%p)', (origin) => {
+    const adapter = listening(new ExpressHostAdapter({ cors: { origin: origin as never } }), 3000, '127.0.0.1');
+
+    expect(check(adapter, { host, origin: 'https://evil.example' })).toBe('allowed');
+  });
+
+  it('lets an explicit allowedOrigins win over the derived list', () => {
+    const adapter = listening(
+      new ExpressHostAdapter({ security: { dnsRebindingProtection: { allowedOrigins: ['https://app.example.com'] } } }),
+      3000,
+      '127.0.0.1',
+    );
+
+    expect(check(adapter, { host, origin: 'https://app.example.com' })).toBe('allowed');
+    expect(check(adapter, { host, origin: 'http://localhost:3000' })).toMatchObject({ status: 403 });
+  });
+
+  it('leaves Origin to the operator when the Host list is explicit', () => {
+    const adapter = listening(
+      new ExpressHostAdapter({ security: { dnsRebindingProtection: { allowedHosts: [host] } } }),
+      3000,
+      '127.0.0.1',
+    );
+
+    expect(check(adapter, { host, origin: 'https://evil.example' })).toBe('allowed');
+  });
+
+  it('checks no Origin on a routable bind', () => {
+    const adapter = listening(
+      new ExpressHostAdapter({ listen: { issuer: 'https://mcp.example.com' } }),
+      3000,
+      '0.0.0.0',
+    );
+
+    expect(check(adapter, { host: 'mcp.example.com', origin: 'https://evil.example' })).toBe('allowed');
+  });
+});
+
+describe('ExpressHostAdapter.start() bind fallback', () => {
+  it('listens on loopback when called without an address', async () => {
+    const opened: http.Server[] = [];
+    const realCreateServer = http.createServer.bind(http);
+    const spy = jest.spyOn(http, 'createServer').mockImplementation(((...args: never[]) => {
+      const created = (realCreateServer as (...a: never[]) => http.Server)(...args);
+      opened.push(created);
+      return created;
+    }) as never);
+    const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const adapter = new ExpressHostAdapter();
+      await adapter.start(0);
+
+      expect((opened[0].address() as import('node:net').AddressInfo).address).toBe('127.0.0.1');
+      await adapter.stop(0);
+    } finally {
+      spy.mockRestore();
+      log.mockRestore();
+    }
+  });
+});
+
 describe('ExpressHostAdapter.stop() (#712)', () => {
   async function startAdapter(): Promise<{ adapter: ExpressHostAdapter; server: http.Server }> {
     const opened: http.Server[] = [];

@@ -7,6 +7,8 @@
  * binds: the names a client can legitimately use to reach *this* process.
  */
 
+import type { CorsOptions } from '../../common/types/options/http/interfaces';
+
 /** Loopback spellings a local client may use, in `Host`-header form. */
 const LOOPBACK_NAMES = ['localhost', '127.0.0.1', '[::1]'];
 
@@ -136,6 +138,53 @@ export function deriveAllowedHosts(input: DeriveAllowedHostsInput): string[] {
   }
 
   return [...hosts];
+}
+
+/** The origins an explicit CORS config admits, or `undefined` when it admits any origin. */
+export function corsAllowedOrigins(cors: CorsOptions | false | undefined): string[] | undefined {
+  const origin = cors === false ? undefined : cors?.origin;
+  if (origin === undefined || origin === false) return [];
+  if (typeof origin === 'string') return origin === '*' ? undefined : [origin];
+  if (Array.isArray(origin)) return origin.includes('*') ? undefined : origin;
+  return undefined;
+}
+
+export interface DeriveAllowedOriginsInput {
+  /** Listening TCP port. */
+  port?: number;
+  /** Configured issuer / public URL; its origin is the server's own. */
+  issuer?: string;
+  /** Origins the CORS config admits. */
+  extraOrigins?: string[];
+}
+
+/**
+ * Derive the `Origin` values a loopback-bound server accepts: its own pages under every loopback
+ * spelling, its issuer, and the origins CORS admits. A request with no `Origin` is never checked.
+ */
+export function deriveAllowedOrigins(input: DeriveAllowedOriginsInput): string[] {
+  const origins = new Set<string>();
+  const port = input.port ? `:${input.port}` : '';
+  for (const scheme of ['http', 'https']) {
+    for (const name of LOOPBACK_NAMES) origins.add(`${scheme}://${name}${port}`);
+  }
+  const issuerOrigin = originFromUrl(input.issuer);
+  if (issuerOrigin) origins.add(issuerOrigin);
+  for (const extra of input.extraOrigins ?? []) {
+    const trimmed = extra.trim();
+    if (trimmed) origins.add(trimmed);
+  }
+  return [...origins];
+}
+
+function originFromUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const { origin } = new URL(url);
+    return origin === 'null' ? undefined : origin;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

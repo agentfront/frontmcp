@@ -5,13 +5,16 @@
  * Verifies the full MCP request lifecycle over Unix domain sockets.
  */
 
-import * as os from 'node:os';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
 import { FrontMcpInstance } from '@frontmcp/sdk';
-import { serverConfig } from '../src/config';
+
 import { notesStore } from '../src/apps/notes/data/notes.store';
+import { serverConfig } from '../src/config';
 import { httpOverSocket, UnixSocketMcpClient } from './helpers/unix-socket-client';
 
 /**
@@ -98,13 +101,10 @@ describe('Unix Socket Transport E2E', () => {
       expect(fs.existsSync(socketPath)).toBe(true);
     });
 
-    it('should set socket file permissions to 0o660', async () => {
+    it('creates the socket owner-only (0600), so the group cannot connect', async () => {
       await startServer();
 
-      const stats = fs.statSync(socketPath);
-      // Extract permission bits (last 9 bits)
-      const perms = stats.mode & 0o777;
-      expect(perms).toBe(0o660);
+      expect(fs.lstatSync(socketPath).mode & 0o777).toBe(0o600);
     });
 
     it('should clean up socket file on close', async () => {
@@ -118,18 +118,45 @@ describe('Unix Socket Transport E2E', () => {
       expect(fs.existsSync(socketPath)).toBe(false);
     });
 
-    it('should handle stale socket file on restart', async () => {
-      // Create a stale socket file
-      fs.writeFileSync(socketPath, '');
-      expect(fs.existsSync(socketPath)).toBe(true);
+    it('replaces a stale socket a crashed server left behind', async () => {
+      const script = `require('net').createServer().listen(${JSON.stringify(socketPath)}, () => process.kill(process.pid, 'SIGKILL'))`;
+      spawnSync(process.execPath, ['-e', script]);
+      expect(fs.lstatSync(socketPath).isSocket()).toBe(true);
 
-      // Starting should clean up the stale file and proceed
       await startServer();
 
-      expect(fs.existsSync(socketPath)).toBe(true);
-      // Verify the server is actually functional
       const response = await httpOverSocket(socketPath, { path: '/health' });
       expect(response.statusCode).toBe(200);
+    });
+
+    it('refuses to remove a regular file at the socket path', async () => {
+      fs.writeFileSync(socketPath, 'not a socket');
+
+      await expect(startServer()).rejects.toThrow(/not a socket/);
+      expect(fs.readFileSync(socketPath, 'utf8')).toBe('not a socket');
+    });
+
+    it('refuses to take over a live socket, and the first server keeps serving', async () => {
+      await startServer();
+
+      await expect(FrontMcpInstance.runUnixSocket({ ...serverConfig, socketPath })).rejects.toThrow(/already in use/);
+
+      const response = await httpOverSocket(socketPath, { path: '/health' });
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('refuses a world-writable directory without the sticky bit', async () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-'));
+      fs.chmodSync(directory, 0o777);
+      const unsafePath = path.join(directory, 's.sock');
+      try {
+        await expect(FrontMcpInstance.runUnixSocket({ ...serverConfig, socketPath: unsafePath })).rejects.toThrow(
+          `${directory} (mode 0777)`,
+        );
+        expect(fs.existsSync(unsafePath)).toBe(false);
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
     });
   });
 

@@ -1,5 +1,4 @@
 import { spawn, type ChildProcess } from 'child_process';
-import * as os from 'os';
 import * as path from 'path';
 
 import { type ParsedArgs } from '../../core/args';
@@ -7,14 +6,8 @@ import { c } from '../../core/colors';
 import { loadDevEnv } from '../../shared/env';
 import { resolveEntry } from '../../shared/fs';
 import { projectToolCommand, spawnTool } from '../../shared/tool-command';
+import { ensureSocketsDir, PM_DIRS } from './paths';
 import { loadShipEnv } from './ship-env';
-
-function ensureDir(dir: string): void {
-  const fs = require('fs');
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
 
 function resolveSocketPath(opts: ParsedArgs, entryPath: string): string {
   if (opts.socket) {
@@ -23,9 +16,8 @@ function resolveSocketPath(opts: ParsedArgs, entryPath: string): string {
 
   // Default: ~/.frontmcp/sockets/{app-name}.sock
   const appName = path.basename(path.dirname(entryPath));
-  const socketsDir = path.join(os.homedir(), '.frontmcp', 'sockets');
-  ensureDir(socketsDir);
-  return path.join(socketsDir, `${appName}.sock`);
+  ensureSocketsDir();
+  return path.join(PM_DIRS.sockets, `${appName}.sock`);
 }
 
 function resolveDbPath(opts: ParsedArgs): string | undefined {

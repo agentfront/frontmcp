@@ -104,7 +104,8 @@ export interface HttpOptionsInterface {
    * Unix socket path for local-only server mode.
    * When set, the server listens on a Unix socket instead of a TCP port.
    * The entire HTTP feature set (streamable HTTP, SSE, elicitation, sessions)
-   * works unchanged over Unix sockets.
+   * works unchanged over Unix sockets. On POSIX the socket is created 0600, in a
+   * directory only the owner can write to (or a sticky one, such as /tmp).
    */
   socketPath?: string;
 
@@ -259,7 +260,10 @@ export interface SecurityOptions {
     enabled?: boolean;
     /** Allowed Host header values (e.g., ['localhost:3001', 'api.example.com']) */
     allowedHosts?: string[];
-    /** Allowed Origin header values (e.g., ['https://app.example.com']) */
+    /**
+     * Allowed Origin header values (e.g., ['https://app.example.com']). A request with no Origin is always allowed.
+     * Unset on a loopback bind: the server's own origins, its issuer and the `cors.origin` list.
+     */
     allowedOrigins?: string[];
   };
 }

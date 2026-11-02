@@ -1823,13 +1823,18 @@ daemonCmd
     var socketDir = pathMod.join(FRONTMCP_HOME, 'sockets');
     fs.mkdirSync(pidDir, { recursive: true });
     fs.mkdirSync(logDir, { recursive: true });
-    fs.mkdirSync(socketDir, { recursive: true });
+    // The server refuses a socket others could replace, through its directory or any above it
+    fs.mkdirSync(socketDir, { recursive: true, mode: 0o700 });
+    var homeMode = fs.statSync(FRONTMCP_HOME).mode & 0o7777;
+    if (homeMode & 0o022) fs.chmodSync(FRONTMCP_HOME, homeMode & ~0o022);
+    if (fs.lstatSync(socketDir).isSymbolicLink()) {
+      console.error('Refusing to use ' + socketDir + ': it is a symlink. Replace it with a directory only you can write to.');
+      process.exit(1);
+    }
+    fs.chmodSync(socketDir, 0o700);
 
     var usePort = !!opts.port;
     var socketPath = pathMod.join(socketDir, ${JSON.stringify(appName)} + '.sock');
-
-    // Clean up stale socket file (only relevant in socket mode)
-    if (!usePort) { try { fs.unlinkSync(socketPath); } catch (_) { /* ok */ } }
 
     // Check if already running
     var pidPath = pathMod.join(pidDir, ${JSON.stringify(appName)} + '.pid');
@@ -1839,6 +1844,9 @@ daemonCmd
       console.log('Daemon already running (PID: ' + existing.pid + ').');
       return;
     } catch (_) { /* not running, proceed */ }
+
+    // Only once no daemon runs: removing the socket of a running one would cut it off
+    if (!usePort) { try { fs.unlinkSync(socketPath); } catch (_) { /* ok */ } }
 
     var env = Object.assign({}, process.env, {
       FRONTMCP_DAEMON_IDLE_TIMEOUT: String(opts.idleTimeout)

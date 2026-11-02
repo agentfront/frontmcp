@@ -134,6 +134,27 @@ treats `host` and `host:80`/`host:443` as equal. A loopback listener is reachabl
 names, so the derived list is exact and is enforced as-is; a routable bind enforces nothing derived
 until you name the public host, and the bound NIC address then joins the list alongside it.
 
+**A loopback bind checks `Origin` too.** A page on another site can POST to `127.0.0.1` without
+any rebinding — the `Host` is then a loopback name, and only the page's `Origin` gives it away. So
+with no `allowedOrigins` configured, a loopback server also derives the origins it accepts:
+`http://` and `https://` on `localhost`, `127.0.0.1` and `[::1]` with the bound port, the issuer's
+origin, and the origins your `cors.origin` list names. A request from any other origin gets the
+same `403 {"error":"Forbidden","message":"Invalid Origin header"}` an explicit list gives. A request
+with **no** `Origin` (CLI and agent clients) is still served. `cors: { origin: true }` (or `'*'`, or
+an origin function) admits every origin, so no `Origin` is checked then. An explicit
+`allowedOrigins` replaces the derived list. An explicit `allowedHosts` (or `FRONTMCP_ALLOWED_HOSTS`)
+replaces the derived protection as a whole, `Origin` included, so set `allowedOrigins` next to it to
+keep checking `Origin`. A routable bind derives no origins. On a loopback server, a page on another
+origin also gets `403` for the server card, which otherwise answers any origin.
+
+```typescript
+// A browser app on another local port talks to a loopback server: name it in CORS.
+http: {
+  port: 3000,
+  cors: { origin: ['http://localhost:5173'] },
+}
+```
+
 **Deployments behind a proxy need one line of config.** A routable bind (`0.0.0.0`, `::`, a specific
 NIC) is reached under a hostname the process cannot know, so a derived list is not enforced there —
 FrontMCP logs a warning and leaves host checking off rather than 403-ing a proxied deployment on a
@@ -169,16 +190,19 @@ To turn it off entirely: `dnsRebindingProtection: { enabled: false }`. It wins o
 turn protection back on.
 
 A request with **no** `Origin` header is allowed through — non-browser clients never send one, and a
-rebound page always does. Rejecting the absent case breaks every CLI client and adds nothing.
+browser sends one on every cross-site `POST`. Rejecting the absent case breaks every CLI client and adds nothing.
 
 ## CORS Configuration
 
 ### No CORS Headers (Default)
 
-When `cors` is not specified, the server sends **no CORS headers**. A cross-origin request still
-reaches the server and is served normally — the browser simply refuses to let the calling page read
-the response. Non-browser clients are unaffected: CORS is a browser rule, **not server-side access
-control**. If you need to keep callers out, use authentication.
+When `cors` is not specified, the server sends **no CORS headers** (except on the public server card,
+`<entryPath>/server-card`, which answers any origin). On a loopback bind, the derived
+`Origin` check ([DNS Rebinding Protection](#dns-rebinding-protection)) refuses a request from another
+site with `403`. Otherwise a cross-origin request reaches the server and is served normally — the
+browser simply refuses to let the calling page read the response. Non-browser clients are
+unaffected: CORS is a browser rule, **not server-side access control**. If you need to keep callers
+out, use authentication.
 
 `cors: {}` and `cors: { origin: false }` behave identically to omitting the option — the middleware
 is installed only when `origin` is set to something other than `false`.
@@ -459,6 +483,29 @@ http: {
 - Use for local daemons, CLI tools, and process manager integrations
 - Combine with `sqlite` for fully local deployments
 
+The socket file is the only boundary a socket server has, so startup is strict about it (POSIX;
+Windows named pipes are not checked):
+
+- The socket is created **owner-only (`0600`)** — the umask is tightened around `listen`, so it is
+  never reachable by others, even briefly. Only the user running the server can connect; the group
+  can no longer connect (it was `0660`). If the mode cannot be set, startup fails with
+  `SocketPermissionError`. Where the umask cannot be set (a worker thread, or a cluster worker,
+  whose socket the primary binds), the socket's directory must be owner-only (`0700`) instead, or
+  startup fails with `SocketPermissionError` before binding.
+- The directory, and every directory above it (along the path as given and along the path its
+  symlinks lead to), must belong to you (or root), and must not be writable by the group or others
+  unless it has the sticky bit (as `/tmp` does): otherwise another user could rename it and put
+  their own socket at the path. The sticky bit does not bind a directory's owner, so a sticky
+  directory another user owns is refused too. Otherwise startup fails with
+  `UnsafeSocketDirectoryError`, which names the directory and its mode. `frontmcp socket` and
+  `frontmcp start --socket` create `~/.frontmcp/sockets` as `0700` and take group and other write
+  away from `~/.frontmcp`. Prefer it (or another directory only you can write to) over `/tmp`:
+  while your server is down, another user can create a socket at a predictable `/tmp` path and your
+  clients connect to theirs.
+- A socket a crashed server left behind is removed and replaced. A live socket (a server answers on
+  it) fails with `SocketInUseError` and that server keeps serving. A path that is not a socket, or a
+  socket another user owns, fails with `SocketPathConflictError` and is left in place.
+
 ## Verification
 
 ```bash
@@ -498,7 +545,7 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 
 ### CORS
 
-- [ ] `cors` is set only if a browser on another origin needs access — omitting it sends no headers
+- [ ] `cors` is set only if a browser on another origin needs access — omitting it sends no headers, and a loopback server refuses that origin
 - [ ] If `credentials: true`, `origin` lists explicit allowed origins (not `true` or `*`)
 - [ ] `maxAge` is set to a reasonable value for production (e.g., `86400` for 24 hours)
 - [ ] Dynamic origin function handles `undefined` origin (non-browser requests)
@@ -519,17 +566,20 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 
 ## Troubleshooting
 
-| Problem                                               | Cause                                                                                                                | Solution                                                                                                 |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `EADDRINUSE` on startup                               | Another process is already using the configured port                                                                 | Change the port, stop the other process, or use `port: 0` for a random available port                    |
-| CORS errors in the browser console                    | Origin not included in the `cors.origin` list or `credentials: true` with wildcard origin                            | Add the frontend origin to the `origin` array and ensure credentials and origin settings are compatible  |
-| Unix socket file not created                          | Missing write permissions on the target directory or stale socket file from a previous run                           | Check directory permissions and remove the stale `.sock` file before restarting                          |
-| Routes return 404 after setting `entryPath`           | Client is still requesting the root path without the prefix                                                          | Update client base URL to include the entry path (e.g., `http://localhost:3000/api/mcp`)                 |
-| Server binds but external clients cannot connect      | The default bind address is `127.0.0.1`, which a published container port cannot reach                               | Set `FRONTMCP_BIND_ADDRESS=all` in the container (or `http.security.bindAddress: 'all'` in the config)   |
-| `413 Payload Too Large` with JSON-RPC envelope        | Request body exceeded `bodyLimit` (default `'4mb'`)                                                                  | Raise `http.bodyLimit` to fit the payload, or move large blobs to a separate upload endpoint             |
-| Server throws at startup mentioning a "reserved" path | A custom `http.routes` path collides with the MCP entry path, `/oauth/*`, `/.well-known/*`, `/health`, or `/metrics` | Rename the custom route to a non-reserved path                                                           |
-| Custom route returns JSON when HTML/bytes expected    | The Express adapter defaults responses to `application/json`                                                         | Set `res.setHeader('Content-Type', ...)` (or `res.type(...)`) in the handler before sending the body     |
-| Custom `auth: true` route always returns `401`        | Auth mode has no anonymous fallback and the request carries no valid bearer token                                    | Send a valid `Authorization: Bearer <jwt>`, or use `auth` mode `public`/transparent-anon for open routes |
+| Problem                                               | Cause                                                                                                                         | Solution                                                                                                 |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `EADDRINUSE` on startup                               | Another process is already using the configured port                                                                          | Change the port, stop the other process, or use `port: 0` for a random available port                    |
+| CORS errors in the browser console                    | Origin not included in the `cors.origin` list or `credentials: true` with wildcard origin                                     | Add the frontend origin to the `origin` array and ensure credentials and origin settings are compatible  |
+| Unix socket file not created                          | Missing write permissions on the target directory                                                                             | Check directory permissions; a stale `.sock` file from a crashed run is replaced automatically           |
+| `UnsafeSocketDirectoryError` at startup               | The socket's directory, or one above it, belongs to another user, or is writable by the group or others and has no sticky bit | Use a directory only you can write to (`chmod 700 <dir>`), such as `~/.frontmcp/sockets`                 |
+| `SocketInUseError` / `SocketPathConflictError`        | A server already listens on the socket, or the path holds a regular file or another user's socket                             | Stop the other server or pick another `socketPath`; FrontMCP never removes these itself                  |
+| `403 Invalid Origin header` from a browser app        | A loopback server refuses an `Origin` that is not its own and not in `cors.origin`                                            | Add the app's origin to `cors.origin` (or set `dnsRebindingProtection.allowedOrigins`)                   |
+| Routes return 404 after setting `entryPath`           | Client is still requesting the root path without the prefix                                                                   | Update client base URL to include the entry path (e.g., `http://localhost:3000/api/mcp`)                 |
+| Server binds but external clients cannot connect      | The default bind address is `127.0.0.1`, which a published container port cannot reach                                        | Set `FRONTMCP_BIND_ADDRESS=all` in the container (or `http.security.bindAddress: 'all'` in the config)   |
+| `413 Payload Too Large` with JSON-RPC envelope        | Request body exceeded `bodyLimit` (default `'4mb'`)                                                                           | Raise `http.bodyLimit` to fit the payload, or move large blobs to a separate upload endpoint             |
+| Server throws at startup mentioning a "reserved" path | A custom `http.routes` path collides with the MCP entry path, `/oauth/*`, `/.well-known/*`, `/health`, or `/metrics`          | Rename the custom route to a non-reserved path                                                           |
+| Custom route returns JSON when HTML/bytes expected    | The Express adapter defaults responses to `application/json`                                                                  | Set `res.setHeader('Content-Type', ...)` (or `res.type(...)`) in the handler before sending the body     |
+| Custom `auth: true` route always returns `401`        | Auth mode has no anonymous fallback and the request carries no valid bearer token                                             | Send a valid `Authorization: Bearer <jwt>`, or use `auth` mode `public`/transparent-anon for open routes |
 
 ## Examples
 

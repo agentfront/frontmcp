@@ -2,6 +2,9 @@ const SHUTDOWN_SIGNALS = ['SIGTERM', 'SIGINT'] as const;
 
 export const DEFAULT_SHUTDOWN_DEADLINE_MS = 10_000;
 
+/** A stdio client waits on the process to exit, so stdio keeps its shorter deadline. */
+export const STDIO_SHUTDOWN_DEADLINE_MS = 5_000;
+
 interface SignalTarget {
   on(signal: string, listener: () => void): unknown;
   removeListener(signal: string, listener: () => void): unknown;

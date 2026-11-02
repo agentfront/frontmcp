@@ -9,7 +9,7 @@ import { getSelfVersion } from '../../core/version';
 import { projectToolCommand, spawnTool } from '../../shared/tool-command';
 import { checkHealth } from './health';
 import { createLogStreams } from './log-utils';
-import { socketFilePath } from './paths';
+import { ensureSocketsDir, socketFilePath } from './paths';
 import { removePidFile, writePidFile } from './pidfile';
 import { type StartOptions } from './types';
 
@@ -40,6 +40,7 @@ export class Supervisor {
   async start(): Promise<void> {
     this.running = true;
     this.restartCount = 0;
+    if (this.resolvedSocketPath && !this.opts.socketPath) ensureSocketsDir();
     await this.spawnChild();
   }
 
