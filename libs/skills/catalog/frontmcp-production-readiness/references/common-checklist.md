@@ -45,7 +45,7 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 ### Input Validation
 
 - [ ] All tool inputs use Zod schemas (never trust raw input)
-- [ ] All tool outputs use `outputSchema` to prevent data leaks
+- [ ] All tool outputs use `outputSchema` to prevent data leaks; `output.undeclaredKeys` is not `'keep'` for a tool whose answers can carry secrets (the default strips undeclared keys)
 - [ ] Path parameters and query params are validated
 - [ ] File paths are sanitized to prevent directory traversal
 - [ ] SQL queries use parameterized statements (never string interpolation)

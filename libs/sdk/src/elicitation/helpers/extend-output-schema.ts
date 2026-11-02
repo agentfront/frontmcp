@@ -70,8 +70,11 @@ export function extendOutputSchemaForElicitation(
 
   // Wrap in oneOf: either original output OR elicitation fallback
   // type: 'object' is required by the MCP spec's ToolSchema for outputSchema
+  // $defs stays at the root, where the original's `#/$defs/...` references resolve from
+  const { $defs: definitions, ...wrappedSchema } = originalSchema;
   return {
     type: 'object',
-    oneOf: [originalSchema, ELICITATION_FALLBACK_JSON_SCHEMA],
+    oneOf: [wrappedSchema, ELICITATION_FALLBACK_JSON_SCHEMA],
+    ...(definitions !== undefined && { $defs: definitions }),
   };
 }

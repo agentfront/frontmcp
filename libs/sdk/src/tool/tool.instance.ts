@@ -8,6 +8,7 @@ import {
   ToolEntry,
   ToolKind,
   type EntryOwnerRef,
+  type OutputParseOptions,
   type ParsedToolResult,
   type SafeTransformResult,
   type ScopeEntry,
@@ -221,16 +222,19 @@ export class ToolInstance<
    *   - image/audio/resource/resource_link → passed through as-is.
    *   - JSON / structured → JSON.stringify for text, and full sanitized JSON in structuredContent.
    */
-  override parseOutput(raw: Out | Partial<Out> | any): ParsedToolResult {
+  override parseOutput(raw: Out | Partial<Out> | any, options?: OutputParseOptions): ParsedToolResult {
     const descriptor = this.outputSchema as any;
 
-    return buildParsedToolResult(descriptor, raw);
+    return buildParsedToolResult(descriptor, raw, options);
   }
 
-  override safeParseOutput(raw: Out | Partial<Out> | any): SafeTransformResult<ParsedToolResult> {
+  override safeParseOutput(
+    raw: Out | Partial<Out> | any,
+    options?: OutputParseOptions,
+  ): SafeTransformResult<ParsedToolResult> {
     const descriptor = this.outputSchema as any;
     try {
-      return { success: true, data: buildParsedToolResult(descriptor, raw) };
+      return { success: true, data: buildParsedToolResult(descriptor, raw, options) };
     } catch (error: any) {
       return { success: false, error };
     }

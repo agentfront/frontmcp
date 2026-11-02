@@ -12,6 +12,32 @@ export function isLazy(value: unknown): boolean {
 }
 
 /**
+ * True when a schema runs a transform anywhere in its tree: `.transform()`, `z.preprocess()`,
+ * `.pipe()` and codecs all parse through a pipe, so what the schema returns can differ in shape
+ * from what it was given.
+ */
+export function hasTransform(schema: unknown): boolean {
+  return containsPipe(schema, new WeakSet<object>());
+}
+
+function containsPipe(value: unknown, seen: WeakSet<object>): boolean {
+  const def = (value as { _zod?: { def?: Record<string, unknown> } } | null | undefined)?._zod?.def;
+  if (!def || seen.has(def)) return false;
+  seen.add(def);
+  if (def['type'] === 'pipe') return true;
+  if (def['type'] === 'lazy') return containsPipe((def['getter'] as () => unknown)(), seen);
+  return Object.values(def).some((child) => nestedSchemas(child).some((nested) => containsPipe(nested, seen)));
+}
+
+/** The schemas a definition field can hold: one schema, a list (options, items) or a shape. */
+function nestedSchemas(field: unknown): unknown[] {
+  if (Array.isArray(field)) return field;
+  const isShape = field !== null && typeof field === 'object' && (field as { _zod?: unknown })._zod === undefined;
+  if (isShape) return Object.values(field);
+  return [field];
+}
+
+/**
  * Materialize a lazy schema and return the underlying real zod schema,
  * recursively materializing any lazy wrappers found in the schema tree
  * (object shapes, array elements, union options, etc.).
