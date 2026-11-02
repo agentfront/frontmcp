@@ -17,8 +17,9 @@ const PACKAGES = ['@frontmcp/plugin-cache', '@frontmcp/plugin-dashboard', '@fron
 const TOP_LEVEL_ENCLAVE = '2.16.0';
 
 function load(project: string, args: string[]): string {
-  const result = spawnSync(process.execPath, args, { cwd: project, encoding: 'utf8' });
-  return result.status === 0 ? 'loaded' : result.stderr;
+  const result = spawnSync(process.execPath, args, { cwd: project, encoding: 'utf8', timeout: 60_000 });
+  if (result.status === 0) return 'loaded';
+  return result.stderr || `exited with ${result.signal ?? result.status}`;
 }
 
 describe(`a fresh npm project with @enclave-vm/ast ${TOP_LEVEL_ENCLAVE} at the top level`, () => {
@@ -34,7 +35,11 @@ describe(`a fresh npm project with @enclave-vm/ast ${TOP_LEVEL_ENCLAVE} at the t
       dependencies[name] = `file:${packPackage(await builtDistDir(distDirs, name), tarballs).tarball}`;
     }
     await writeJSON(path.join(project, 'package.json'), { name: 'enclave-2-16-project', private: true, dependencies });
-    execFileSync('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts'], { cwd: project, stdio: 'pipe' });
+    execFileSync('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts'], {
+      cwd: project,
+      stdio: 'pipe',
+      timeout: 240_000,
+    });
   }, 300_000);
 
   afterAll(async () => {
