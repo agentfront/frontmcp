@@ -10,9 +10,11 @@ import {
   exportedNames,
   loadedSpecifiers,
   readPublishedPackage,
+  sourceDefinitions,
   undeclaredImports,
   workspaceDistDirs,
   type PublishedPackage,
+  type PublishedScript,
 } from './helpers/published-package';
 
 const PACKAGES = ['@frontmcp/plugin-cache', '@frontmcp/plugin-dashboard', '@frontmcp/edge'];
@@ -20,13 +22,15 @@ const PACKAGES = ['@frontmcp/plugin-cache', '@frontmcp/plugin-dashboard', '@fron
 describe('published JavaScript that uses @frontmcp/utils', () => {
   let workDir: string;
   let distDirs: Map<string, string>;
+  let utilsScript: PublishedScript;
   let utilsExports: Set<string>;
 
   beforeAll(async () => {
     workDir = await mkdtemp(path.join(tmpdir(), 'frontmcp-published-imports-'));
     distDirs = await workspaceDistDirs();
     const utilsEsm = path.join(await builtDistDir(distDirs, '@frontmcp/utils'), 'esm', 'index.mjs');
-    utilsExports = exportedNames({ path: 'esm/index.mjs', source: await readFile(utilsEsm) });
+    utilsScript = { path: 'esm/index.mjs', source: await readFile(utilsEsm) };
+    utilsExports = exportedNames(utilsScript);
   });
 
   afterAll(async () => {
@@ -34,10 +38,13 @@ describe('published JavaScript that uses @frontmcp/utils', () => {
   });
 
   describe.each(PACKAGES)('%s', (name) => {
+    let packageRoot: string;
     let published: PublishedPackage;
 
     beforeAll(async () => {
-      published = await readPublishedPackage(await builtDistDir(distDirs, name), workDir);
+      const distDir = await builtDistDir(distDirs, name);
+      packageRoot = path.dirname(distDir);
+      published = await readPublishedPackage(distDir, workDir);
     });
 
     it('declares @frontmcp/utils at its own version', () => {
@@ -51,9 +58,11 @@ describe('published JavaScript that uses @frontmcp/utils', () => {
       expect(importers).toEqual(expect.arrayContaining(['index.js', 'esm/index.mjs']));
     });
 
-    it('defines none of the functions and classes @frontmcp/utils exports', () => {
-      expect(utilsExports.size).toBeGreaterThan(0);
-      expect(published.scripts.flatMap((script) => definitionsNamed(script, utilsExports))).toEqual([]);
+    it('defines none of the functions and classes @frontmcp/utils exports, apart from its own', async () => {
+      const ownNames = await sourceDefinitions(packageRoot);
+      const utilsOnlyNames = new Set([...utilsExports].filter((utilsName) => !ownNames.has(utilsName)));
+      expect(definitionsNamed(utilsScript, utilsOnlyNames).length).toBeGreaterThan(0);
+      expect(published.scripts.flatMap((script) => definitionsNamed(script, utilsOnlyNames))).toEqual([]);
     });
 
     it('imports only packages its package.json declares', () => {

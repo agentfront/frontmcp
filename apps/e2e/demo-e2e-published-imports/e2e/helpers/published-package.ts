@@ -166,13 +166,30 @@ function definedName(node: ts.Node): string | undefined {
   return undefined;
 }
 
-export function definitionsNamed(script: PublishedScript, names: ReadonlySet<string>): string[] {
-  const definitions: string[] = [];
+function definedNames(sourceFile: ts.SourceFile): string[] {
+  const names: string[] = [];
   const visit = (node: ts.Node): void => {
     const name = definedName(node);
-    if (name && names.has(name)) definitions.push(`${script.path}: ${name}`);
+    if (name) names.push(name);
     ts.forEachChild(node, visit);
   };
-  visit(parse(script));
-  return definitions;
+  visit(sourceFile);
+  return names;
+}
+
+export function definitionsNamed(script: PublishedScript, names: ReadonlySet<string>): string[] {
+  return definedNames(parse(script))
+    .filter((name) => names.has(name))
+    .map((name) => `${script.path}: ${name}`);
+}
+
+export async function sourceDefinitions(packageRoot: string): Promise<Set<string>> {
+  const { config } = ts.readConfigFile(path.join(packageRoot, 'tsconfig.lib.json'), ts.sys.readFile);
+  const { fileNames } = ts.parseJsonConfigFileContent(config, ts.sys, packageRoot);
+  const names = new Set<string>();
+  for (const fileName of fileNames) {
+    const sourceFile = ts.createSourceFile(fileName, await readFile(fileName), ts.ScriptTarget.Latest);
+    for (const name of definedNames(sourceFile)) names.add(name);
+  }
+  return names;
 }
