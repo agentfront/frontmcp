@@ -6,10 +6,19 @@
  * are ignored. `refused-answer` answers with a value its output schema refuses (a `finalize` failure, which used
  * to skip every hook after the stage), and `failing-execute` fails in `execute`.
  */
-import { expect, test } from '@frontmcp/testing';
+import { expect, test, type ServerFixture } from '@frontmcp/testing';
 
 interface FinallyLog {
   entries: Array<{ stage: string; outcome: string }>;
+}
+
+/** The server's logs once they contain `text`, or as they are after `timeoutMs`: its output reaches us after the reply. */
+async function logsOnceTheyContain(server: ServerFixture, text: string, timeoutMs = 5000): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  while (!server.getLogs().join('\n').includes(text) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return server.getLogs().join('\n');
 }
 
 test.describe('Finally hooks E2E', () => {
@@ -67,6 +76,6 @@ test.describe('Finally hooks E2E', () => {
 
     await mcp.tools.call('audited-tool', { message: 'logged' });
 
-    expect(server.getLogs().join('\n')).toContain('the recorder store is down');
+    expect(await logsOnceTheyContain(server, 'the recorder store is down')).toContain('the recorder store is down');
   });
 });
