@@ -2,6 +2,13 @@ import { type Command } from 'commander';
 
 import { toParsedArgs } from '../../core/bridge';
 
+function parseList(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
 export function registerDevCommands(program: Command): void {
   program
     .command('dev')
@@ -19,6 +26,11 @@ export function registerDevCommands(program: Command): void {
     .option('--log-file <path>', 'Bridge log file path (default: .frontmcp/dev.log in the project root)')
     .option('--buffer-size <n>', 'Max RPCs buffered during reload', (v) => parseInt(v, 10))
     .option('--reload-deadline-ms <ms>', 'Time to wait for a reload to complete', (v) => parseInt(v, 10))
+    .option(
+      '--events-file <path>',
+      'Dev events file: call timings, failures, stalls (default: .frontmcp/dev-events.jsonl)',
+    )
+    .option('--no-events', 'Write no dev events')
     .action(async (options, cmd: { parent?: { opts?: () => Record<string, unknown> } }) => {
       const { runDev } = await import('./dev.js');
       // Issue #400 — forward the top-level --config flag into the command's
@@ -38,6 +50,11 @@ export function registerDevCommands(program: Command): void {
     .option('-t, --timeout <ms>', 'Set test timeout (default: 60000ms)', parseInt)
     .option('-c, --coverage', 'Collect test coverage')
     .option('--no-env', 'Skip loading .env / .env.local for a hermetic run')
+    .option(
+      '--replay <file>',
+      'Replay a CallRecorderPlugin recording against the project server and report what changed',
+    )
+    .option('--replay-ignore <paths>', 'Comma-separated answer paths or globs the replay does not compare', parseList)
     .action(async (patterns: string[], options, cmd: { parent?: { opts?: () => Record<string, unknown> } }) => {
       const { runTest } = await import('./test.js');
       const topOpts = cmd.parent?.opts?.() ?? {};

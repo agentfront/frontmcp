@@ -171,6 +171,7 @@ export { createContainer } from './provider/create-container';
 export type { CreateContainerOptions, FrontMcpContainer } from './provider/create-container';
 export { sqliteStorageProvider, SqliteStorageToken } from './storage/sqlite-storage.provider';
 export type { SqliteStorageProviderOptions } from './storage/sqlite-storage.provider';
+export type { OffloadCallOptions, OffloadFunction, OffloadModuleRef } from './offload/offload.types';
 
 // Job exports - saved, discoverable, triggerable executions
 export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './job';
@@ -461,6 +462,16 @@ export type {
   ConfigResolutionContext,
   ConfigResolver,
 } from './builtin/config';
+
+// CallRecorderPlugin - records client calls as redacted JSONL for replaySession() (built-in)
+export { CallRecorderPlugin } from './builtin/call-recorder';
+export type {
+  CallRecorderPluginOptions,
+  CallRecorderPluginOptionsInput,
+  CallRecord,
+  CallRecordError,
+  RecordedMethod,
+} from './builtin/call-recorder';
 
 // Config resolver functions
 export {

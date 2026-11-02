@@ -26,6 +26,7 @@ import * as path from 'node:path';
 
 import type { ParsedArgs } from '../../../core/args';
 import { resolveDevLaunch } from '../dev';
+import { createDevEventsWriter, startEventsFile, type DevEventsWriter } from '../dev-events-file';
 import {
   createChildSupervisor,
   resolveChildCommand,
@@ -92,6 +93,7 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
     autoPortWhenUnset: true,
     listens: runtime.mode === 'http',
     log: (msg) => process.stderr.write(`${msg}\n`),
+    eventsOverIpc: runtime.mode === 'pipe',
   });
   // A relative --log-file was made absolute by resolveDevLaunch when the
   // command moved to the project root.
@@ -104,6 +106,11 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
   resolveChildCommand(launch.entry, runtime.mode, () => resolveProjectTsxLoader(launch.cwd));
 
   const log = await createBridgeLogger({ filePath: logFile });
+  let devEvents: DevEventsWriter | undefined;
+  if (launch.eventsFile) {
+    await startEventsFile(launch.eventsFile);
+    if (runtime.mode === 'pipe') devEvents = createDevEventsWriter(launch.eventsFile, log);
+  }
   log.info('bridge-start', {
     entry: launch.entry,
     cwd: launch.cwd,
@@ -135,7 +142,12 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
       log.info('upstream-url', { url });
       return createHttpUpstream({ url, log, onFrame: (frame: JsonRpcFrame) => fsm.relayUpstream(frame) });
     }
-    return createPipeUpstream({ child, log, onFrame: (frame: JsonRpcFrame) => fsm.relayUpstream(frame) });
+    return createPipeUpstream({
+      child,
+      log,
+      onFrame: (frame: JsonRpcFrame) => fsm.relayUpstream(frame),
+      onDevEvents: (events) => devEvents?.write(events),
+    });
   }
 
   // Teardown needs the supervisor + watcher, which are built after the framer.
@@ -301,6 +313,7 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
       log.error('supervisor-stop-error', { error: (err as Error).message });
     }
     framer.stop();
+    await devEvents?.flush();
     await log.close();
     resolveStopped();
   }

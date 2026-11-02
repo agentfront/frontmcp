@@ -18,6 +18,8 @@ import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../context';
 import { workerEnvOf } from '../../context/frontmcp-context-storage';
 import { DependencyNotFoundError, RequestContextNotAvailableError } from '../../errors/mcp.error';
 import { ProviderNotAvailableError } from '../../errors/provider.errors';
+import { OffloadService } from '../../offload/offload.service';
+import type { OffloadCallOptions, OffloadFunction, OffloadModuleRef } from '../../offload/offload.types';
 import { type CallSurface } from '../availability';
 import { type ScopeEntry } from '../entries';
 import { type ToolLookupScope } from '../utils/tool-lookup.utils';
@@ -32,6 +34,7 @@ export type ExecutionContextBaseArgs = {
   providers: ProviderRegistryInterface;
   logger: FrontMcpLogger;
   authInfo: Partial<AuthInfo>;
+  signal?: AbortSignal;
 };
 
 /**
@@ -59,12 +62,19 @@ export abstract class ExecutionContextBase<Out = unknown> {
   /** Cached auth context (built lazily on first access) */
   private _authContext?: FrontMcpAuthContext;
 
+  /**
+   * Aborts when the call is stopped: the request is cancelled, or a timeout of the entry passes. Pass it to `fetch`
+   * and other cancellable work; `offload()` terminates its worker with it. Undefined where the caller gives none.
+   */
+  readonly signal?: AbortSignal;
+
   constructor(args: ExecutionContextBaseArgs) {
-    const { providers, logger, authInfo } = args;
+    const { providers, logger, authInfo, signal } = args;
     this.runId = randomUUID();
     this.providers = providers;
     this.logger = logger;
     this._authInfo = authInfo;
+    this.signal = signal;
   }
 
   /**
@@ -308,6 +318,42 @@ export abstract class ExecutionContextBase<Out = unknown> {
    */
   protected callToolScope(_name: string): Pick<ScopeEntry, 'runFlow'> & Partial<ToolLookupScope> {
     return this.scope;
+  }
+
+  /**
+   * Run an exported function of another module in a worker thread of the server's pool, so CPU-heavy work does not
+   * block the server, and resolve with what it returns (Node only).
+   *
+   * The worker receives only `args`, by structured clone, and the environment variables of `offload.env`: no DI
+   * container, request, session or credentials. The result comes back by structured clone.
+   *
+   * @param moduleRef The module (an absolute path or `file:` URL) and the name of its exported function.
+   * @param args The function's arguments.
+   * @param options `budgetMs` (default `offload.budgetMs`) and the `signal` that stops it (default `this.signal`).
+   * @throws OffloadBudgetExceededError past the budget, OffloadAbortedError when stopped, OffloadNotCloneableError,
+   *   OffloadUnsupportedRuntimeError off Node, InvalidOffloadCallError for a reference it cannot run.
+   *
+   * @example
+   * ```typescript
+   * import type { parseRepo } from './parse-repo';
+   * const tree = await this.offload<typeof parseRepo>({ module: join(__dirname, 'parse-repo.js'), export: 'parseRepo' }, [root]);
+   * ```
+   */
+  async offload<Fn extends OffloadFunction = (...args: unknown[]) => unknown>(
+    moduleRef: OffloadModuleRef,
+    args: Parameters<Fn>,
+    options: OffloadCallOptions = {},
+  ): Promise<Awaited<ReturnType<Fn>>> {
+    const result = await this.get(OffloadService).run(
+      { kind: 'function', moduleRef, args },
+      {
+        label: moduleRef.export ?? 'default',
+        budgetMs: options.budgetMs,
+        signal: options.signal ?? this.signal,
+        logger: this.logger,
+      },
+    );
+    return result as Awaited<ReturnType<Fn>>;
   }
 
   /**

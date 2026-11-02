@@ -5,6 +5,7 @@ import {
   DynamicPlugin,
   FlowHooksOf,
   FRONTMCP_CONTEXT,
+  FRONTMCP_LOGGER,
   HttpHook,
   ListResourcesHook,
   ListResourceTemplatesHook,
@@ -13,6 +14,7 @@ import {
   ProviderScope,
   ResourceHook,
   ToolHook,
+  type FrontMcpLogger,
   type ProviderType,
 } from '@frontmcp/sdk';
 
@@ -31,6 +33,7 @@ import {
 } from '../request-log/request-log.hooks';
 import { REQUEST_LOG_COLLECTOR } from '../request-log/request-log.tokens';
 import type { RequestLogCollectorOptions } from '../request-log/request-log.types';
+import { CallMonitor } from '../stalls/call-monitor';
 import { TelemetryAccessor } from '../telemetry/telemetry.accessor';
 import { TelemetryFactory } from '../telemetry/telemetry.factory';
 import { TELEMETRY_ACCESSOR, TELEMETRY_FACTORY } from '../telemetry/telemetry.tokens';
@@ -102,6 +105,7 @@ import {
   type FlowContextLike,
   type HookObserver,
 } from './observability.hooks';
+import { resolveDevEventsOptions, resolveStallOptions } from './observability.options';
 import type {
   ObservabilityLoggingOptions,
   ObservabilityPluginOptions,
@@ -205,6 +209,8 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     tracing: DEFAULT_TRACING,
     logging: false,
     requestLogs: false,
+    stalls: false,
+    devEvents: false,
   };
 
   options: ObservabilityPluginOptions;
@@ -1049,6 +1055,16 @@ export default class ObservabilityPlugin extends DynamicPlugin<
       });
     }
 
+    if (options.stalls !== false || options.devEvents !== false) {
+      const { stalls, devEvents } = options;
+      providers.push({
+        name: 'observability:call-monitor',
+        provide: CallMonitor,
+        inject: () => [FRONTMCP_LOGGER] as const,
+        useFactory: (logger: FrontMcpLogger) => new CallMonitor(stalls, devEvents, logger.child('CallMonitor')),
+      });
+    }
+
     return providers;
   };
 }
@@ -1058,6 +1074,8 @@ function resolveOptions(input: ObservabilityPluginOptionsInput): ObservabilityPl
     tracing: resolveTracingOptions(input.tracing),
     logging: resolveLoggingOptions(input.logging),
     requestLogs: resolveRequestLogOptions(input.requestLogs),
+    stalls: resolveStallOptions(input.stalls),
+    devEvents: resolveDevEventsOptions(input.devEvents),
   };
 }
 

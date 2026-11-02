@@ -417,6 +417,35 @@ asks each tree to close (`taskkill /T`), forces it (`taskkill /T /F`) when that
 fails or 2 seconds pass, and also stops processes a child that already exited
 left running (found by parent PID).
 
+### Dev events
+
+`frontmcp dev` empties `.frontmcp/dev-events.jsonl` in the project root when it starts, and the server appends one JSON
+line per event to it: the timing and outcome of each `tools/call`, `resources/read` and `prompts/get`, and each
+event-loop stall when `observability.stalls` is on (see `frontmcp-observability`'s `stall-detection` reference). The
+events never hold a call's input or answer.
+
+```jsonl
+{"type":"call","at":"2026-11-02T10:00:00.000Z","method":"tools/call","entry":"reports:export","durationMs":12.4,"outcome":"ok","session":"3fa9c2d41b07"}
+{"type":"call","at":"2026-11-02T10:00:01.000Z","method":"tools/call","entry":"reports:export","durationMs":2.1,"outcome":"error","error":{"type":"PublicMcpError","code":"TICKET_NOT_FOUND"}}
+{"type":"stall","at":"2026-11-02T10:00:02.000Z","stallMs":612,"gcMs":0,"cause":"calls","calls":[{"method":"tools/call","entry":"reports:export","runningMs":610}]}
+```
+
+| Flag                   | Behaviour                                                            |
+| ---------------------- | -------------------------------------------------------------------- |
+| `--events-file <path>` | Write the events to `<path>` instead (relative to where you run it). |
+| `--no-events`          | Write no events.                                                     |
+
+- The events are recorded by `@frontmcp/observability`; install it (`npm i @frontmcp/observability`). Without an
+  `observability` config the server loads it for the events only, with tracing and logging off; a server or app that
+  installs `ObservabilityPlugin` itself gets the events from that plugin instead, with its own options.
+- Under `frontmcp dev --stdio --serve` the server sends the events to the bridge over its IPC channel and the bridge
+  writes the file.
+- Events are queued (1000 at most) and written off the call path: a call never waits for them, events past the bound
+  are dropped, and a failing write is logged once.
+- `@FrontMcp({ observability: { devEvents } })` sets a `file`, extra `sinks` (objects with a `write(events)` method) or
+  `maxQueue`, or turns the events off with `devEvents: false`. Dev events are off outside development: without
+  `frontmcp dev` they need `NODE_ENV=development` and a `file` or sink.
+
 `frontmcp dev` and `frontmcp build` work from any subfolder: they find
 `frontmcp.config.*` by walking up and run from its folder, so `entry`,
 `tsconfig.json` and `.env` resolve from the project root.

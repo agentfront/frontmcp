@@ -12,16 +12,23 @@ const config: Config.InitialOptions = {
   testMatch: ['<rootDir>/e2e/**/*.e2e.spec.ts'],
   testTimeout: 120000,
   maxWorkers: 1,
+  setupFilesAfterEnv: ['<rootDir>/../../../libs/testing/src/setup.ts'],
+  transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
   transform: {
     '^.+\\.[tj]s$': [
       '@swc/jest',
       {
         jsc: {
-          parser: { syntax: 'typescript' },
+          parser: { syntax: 'typescript', decorators: true },
+          transform: { decoratorMetadata: true },
           target: 'es2022',
         },
       },
     ],
+  },
+  moduleNameMapper: {
+    '^@frontmcp/testing$': '<rootDir>/../../../libs/testing/src/index.ts',
+    '^@frontmcp/sdk$': '<rootDir>/../../../libs/sdk/src/index.ts',
   },
   ...e2eCoveragePreset,
   coverageDirectory: '../../../coverage/e2e/demo-e2e-local-runtime',

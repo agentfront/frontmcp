@@ -28,6 +28,14 @@ describe('toParsedArgs', () => {
     expect(result.maxRestarts).toBe(3);
   });
 
+  it('maps the dev events flags: --events-file, and --no-events as events: false', () => {
+    expect(toParsedArgs('dev', [], { eventsFile: 'logs/events.jsonl', events: true })).toMatchObject({
+      eventsFile: 'logs/events.jsonl',
+    });
+    expect(toParsedArgs('dev', [], { events: false }).noEvents).toBe(true);
+    expect(toParsedArgs('dev', [], { events: true }).noEvents).toBeUndefined();
+  });
+
   it('should map build command with target/outDir/js', () => {
     const result = toParsedArgs('build', [], {
       target: 'cli',
@@ -162,5 +170,12 @@ describe('toParsedArgs', () => {
 
     expect(result.buildTarget).toBeUndefined();
     expect('buildTarget' in result).toBe(false);
+  });
+
+  it('should map test --replay and --replay-ignore', () => {
+    const result = toParsedArgs('test', [], { replay: 'calls.jsonl', replayIgnore: ['**.at'] });
+
+    expect(result.replay).toBe('calls.jsonl');
+    expect(result.replayIgnore).toEqual(['**.at']);
   });
 });

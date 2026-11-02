@@ -24,8 +24,8 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_322_000 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_329_000 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_321_639 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_328_515 },
 ];
 
 const VITE_INITIAL_CHUNK_MAX_BYTES = 960_000;
@@ -57,6 +57,7 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   'mcp registry': sdkModule('mcp-registry/flows/'),
   metrics: sdkModule('metrics/'),
   observability: sdkModule('scope/(observability-scope\\.helper|tracer-provider\\.utils)'),
+  'worker offload': sdkModule('offload/(offload-pool|offload-worker\\.source|read-in-worker|worker-resource\\.reader)'),
   'remote and esm entries': sdkModule('remote-mcp/|esm-loader/(?!package-specifier)'),
   skills:
     /^libs\/sdk\/dist\/browser\/skill\/(providers\/|session\/|hooks\/|sep-2640\/(?!sep-2640\.constants)|flows\/(?!filter-skills\.flow)|skill-md-parser)|(^|\/)node_modules\/(js-yaml|vectoriadb)\//,

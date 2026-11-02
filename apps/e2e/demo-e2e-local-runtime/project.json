@@ -8,6 +8,7 @@
     "test": {
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-local-runtime"],
+      "dependsOn": [{ "projects": ["sdk"], "target": "build" }],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-local-runtime/jest.e2e.config.ts",
         "runInBand": true
@@ -16,6 +17,7 @@
     "test:e2e": {
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-local-runtime-e2e"],
+      "dependsOn": [{ "projects": ["sdk"], "target": "build" }],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-local-runtime/jest.e2e.config.ts",
         "runInBand": true
