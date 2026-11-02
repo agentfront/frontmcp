@@ -42,6 +42,12 @@ describe('token utils', () => {
 
     it('should return [ref] for a symbol without a description', () => {
       expect(tokenName(Symbol())).toBe('[ref]');
+      expect(tokenName(Symbol(''))).toBe('[ref]');
+    });
+
+    it('should return the function name for an arrow function token', () => {
+      const makeStore = () => ({});
+      expect(tokenName(makeStore)).toBe('makeStore');
     });
 
     it('should return a string token itself', () => {

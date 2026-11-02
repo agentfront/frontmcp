@@ -1,7 +1,4 @@
-/**
- * @file jest-preset.base.js
- * @description What `@frontmcp/testing/jest-preset` and `@frontmcp/testing/jest-preset-unit` share, so they cannot drift.
- */
+/** What both @frontmcp/testing Jest presets share, so they cannot drift. */
 
 module.exports = {
   testEnvironment: 'node',

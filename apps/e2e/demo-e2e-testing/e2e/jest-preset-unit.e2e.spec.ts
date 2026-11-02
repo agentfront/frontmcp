@@ -1,8 +1,3 @@
-/**
- * A ts-jest CommonJS project that starts from `@frontmcp/testing/jest-preset-unit` boots a server with auth configured
- * in its test process and runs a plugin hook there. The preset compiles `jose`, which Jest's CommonJS runtime cannot
- * load as it ships: the same project without the preset fails with `Unexpected token 'export'`.
- */
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';

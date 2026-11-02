@@ -58,6 +58,9 @@ describe('a provider without a name', () => {
   @Provider({ name: 'named-clock' })
   class NamedClock {}
 
+  @Provider()
+  class WallClock extends NamedClock {}
+
   it.each([
     [
       'a symbol token, from its description',
@@ -74,6 +77,7 @@ describe('a provider without a name', () => {
   it('is named from its class when @Provider() names none', () => {
     expect(normalizeProvider(Clock).metadata.name).toBe('Clock');
     expect(normalizeProvider(Counter).metadata).toMatchObject({ name: 'Counter', scope: ProviderScope.CONTEXT });
+    expect(normalizeProvider(WallClock).metadata.name).toBe('WallClock');
   });
 
   it('keeps the name it is given', () => {

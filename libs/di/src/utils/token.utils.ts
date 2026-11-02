@@ -17,8 +17,8 @@ import { getMetadata, hasAsyncWith } from './metadata.utils.js';
  */
 export const tokenName = (t: Token): string => {
   if (typeof t === 'string') return t;
-  if (typeof t === 'symbol') return t.description ?? '[ref]';
-  return typeof t === 'function' && !!(t as any).prototype ? (t as any).name : ((t as any)?.name ?? '[ref]');
+  if (typeof t === 'symbol') return t.description || '[ref]';
+  return t?.name ?? '[ref]';
 };
 
 /**

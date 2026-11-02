@@ -27,7 +27,8 @@ function collectProviderMetadata(cls: Type): ProviderMetadata {
       [key]: getMetadata(token, cls),
     });
   }, {} as ProviderMetadata);
-  metadata.name ??= tokenName(cls);
+  const ownName: string | undefined = Reflect.getOwnMetadata(FrontMcpProviderTokens.name, cls);
+  metadata.name = ownName ?? tokenName(cls);
   return metadata;
 }
 

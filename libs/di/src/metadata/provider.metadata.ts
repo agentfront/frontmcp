@@ -34,10 +34,7 @@ export interface ProviderMetadata {
    */
   id?: string;
 
-  /**
-   * Human-readable name for the provider, for logs and errors. Without one, the normalizer names it:
-   * `@frontmcp/sdk` after the token (the class name, the symbol's description or the string token).
-   */
+  /** Name shown in logs and errors; `@frontmcp/sdk` names a provider without one after its token. */
   name?: string;
 
   /**
