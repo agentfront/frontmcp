@@ -322,5 +322,23 @@ describe('shared SQLite connections', () => {
         await adapter.disconnect();
       }
     });
+
+    it('pings without blocking the event loop while a commit locks readers out', async () => {
+      const adapter = new SqliteStorageAdapter({ path: dbPath, ttlCleanupIntervalMs: 0, walMode: false });
+      await adapter.connect();
+      const foreign = openForeignConnection(dbPath);
+      try {
+        foreign.exec('BEGIN EXCLUSIVE');
+        setTimeout(() => foreign.exec('COMMIT'), 100);
+        const startedAt = Date.now();
+
+        expect(await adapter.ping()).toBe(true);
+
+        expect(Date.now() - startedAt).toBeLessThan(1000);
+      } finally {
+        foreign.close();
+        await adapter.disconnect();
+      }
+    });
   });
 });

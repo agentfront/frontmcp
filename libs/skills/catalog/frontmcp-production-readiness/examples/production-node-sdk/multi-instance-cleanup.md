@@ -11,7 +11,7 @@ tags:
   - instance
   - cleanup
 features:
-  - 'A provider that starts its timer in `onReady()` and stops it in `onShutdown()`, so each `server.dispose()` cleans up its own'
+  - 'A provider that starts its timer in `onReady()` and stops it in `onShutdown()`, so each `server.dispose()` stops only the timer of its own instance'
   - Ensuring multiple instances coexist without sharing global state
   - Testing that dispose removes all event listeners (no leaks)
   - Verifying one instance still works after another is disposed
@@ -99,7 +99,7 @@ describe('Multi-instance coexistence', () => {
 
 ## What This Demonstrates
 
-- A provider that starts its timer in `onReady()` and stops it in `onShutdown()`, so each `server.dispose()` cleans up its own
+- A provider that starts its timer in `onReady()` and stops it in `onShutdown()`, so each `server.dispose()` stops only the timer of its own instance
 - Ensuring multiple instances coexist without sharing global state
 - Testing that dispose removes all event listeners (no leaks)
 - Verifying one instance still works after another is disposed

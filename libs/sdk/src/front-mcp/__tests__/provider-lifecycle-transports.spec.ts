@@ -229,3 +229,38 @@ describe('A server-level value shared by the scopes of a splitByApp server', () 
     expect(order[2]).toBe('shutdown:connection');
   });
 });
+
+describe('A server whose app fails to bootstrap while another app is still bootstrapping', () => {
+  const order: string[] = [];
+
+  @Provider({ name: 'failing' })
+  class Failing implements OnBootstrap {
+    onBootstrap() {
+      throw new Error('migrations pending');
+    }
+  }
+
+  @Provider({ name: 'slow' })
+  class Slow implements OnBootstrap, OnShutdown {
+    async onBootstrap() {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      order.push('bootstrap:slow');
+    }
+    onShutdown() {
+      order.push('shutdown:slow');
+    }
+  }
+
+  @App({ id: 'slow', name: 'SlowApp', providers: [Slow], tools: [PingTool] })
+  class SlowApp {}
+
+  @App({ id: 'failing', name: 'FailingApp', providers: [Failing], tools: [PingTool] })
+  class FailingApp {}
+
+  it('waits for the other app, then shuts down the provider it bootstrapped before failing', async () => {
+    const failure = FrontMcpInstance.createDirect(lifecycleConfig({ apps: [SlowApp, FailingApp], providers: [] }));
+
+    await expect(failure).rejects.toThrow('Provider "Failing" failed in onBootstrap(): migrations pending');
+    expect(order).toEqual(['bootstrap:slow', 'shutdown:slow']);
+  });
+});
