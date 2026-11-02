@@ -21,9 +21,8 @@ import {
 
 import type { FeatureFlagAdapter } from './adapters/feature-flag-adapter.interface';
 import { StaticFeatureFlagAdapter } from './adapters/static.adapter';
-import { buildFeatureFlagContext } from './feature-flag.context';
 import { FeatureFlagConfigurationError, FeatureFlagDisabledError } from './feature-flag.errors';
-import { FeatureFlagSource, flagKeyOf, isRefEnabled } from './feature-flag.source';
+import { callerFlagContext, FeatureFlagSource, flagKeyOf, isRefEnabled } from './feature-flag.source';
 import { FeatureFlagAccessorToken, FeatureFlagAdapterToken, FeatureFlagConfigToken } from './feature-flag.symbols';
 import type {
   FeatureFlagContext,
@@ -543,7 +542,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    * context-scoped accessor reads, so hooks and `this.featureFlags` agree.
    */
   private currentFlagContext(): FeatureFlagContext {
-    return buildFeatureFlagContext(this.currentContext(), this.options);
+    return callerFlagContext(this.currentContext(), this.options);
   }
 
   /** The request's context, or `undefined` where no context storage is bound (unit tests, non-request paths). */

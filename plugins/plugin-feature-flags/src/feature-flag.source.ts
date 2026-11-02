@@ -2,7 +2,7 @@ import type { EnabledSource, ErrorRemedy, FrontMcpContext } from '@frontmcp/sdk'
 
 import type { FeatureFlagAdapter } from './adapters/feature-flag-adapter.interface';
 import { buildFeatureFlagContext } from './feature-flag.context';
-import type { FeatureFlagPluginOptions, FeatureFlagRef } from './feature-flag.types';
+import type { FeatureFlagContext, FeatureFlagPluginOptions, FeatureFlagRef } from './feature-flag.types';
 
 /** The plugin options a flag source reads: how a gate falls back, and how the caller is described to the adapter. */
 export type FeatureFlagSourceOptions = Pick<
@@ -37,6 +37,47 @@ export function isRefEnabled(
   return gateFallback(ref, gateDefaultValue);
 }
 
+/** The caller as the adapter sees it; anonymous (`{}`) when a resolver throws, as in the plugin's lists and gates. */
+export function callerFlagContext(
+  context: FrontMcpContext | undefined,
+  options: Pick<FeatureFlagPluginOptions, 'userIdResolver' | 'attributesResolver'>,
+): FeatureFlagContext {
+  try {
+    return buildFeatureFlagContext(context, options);
+  } catch {
+    return {};
+  }
+}
+
+interface AdapterFollowers {
+  readonly listeners: Set<() => void>;
+  readonly stop: () => void;
+}
+
+/** One subscription to each adapter, shared by the sources of its flags, so its SDK client gets one listener. */
+const followersByAdapter = new WeakMap<FeatureFlagAdapter, AdapterFollowers>();
+
+function followAdapter(adapter: FeatureFlagAdapter, listener: () => void): () => void {
+  if (!adapter.subscribe) return () => undefined;
+  let followers = followersByAdapter.get(adapter);
+  if (!followers) {
+    const listeners = new Set<() => void>();
+    const stop = adapter.subscribe(() => {
+      for (const follower of [...listeners]) follower();
+    });
+    followers = { listeners, stop };
+    followersByAdapter.set(adapter, followers);
+  }
+  const following = followers;
+  const follower = () => listener();
+  following.listeners.add(follower);
+  return () => {
+    if (!following.listeners.delete(follower) || following.listeners.size > 0) return;
+    followersByAdapter.delete(adapter);
+    following.stop();
+  };
+}
+
 /**
  * One feature flag as an `EnabledSource`: on when the adapter answers the flag is on for the caller, and changing
  * whenever the adapter reports a change (`FeatureFlagAdapter.subscribe`). The plugin's gates ask it, and an entry
@@ -55,10 +96,7 @@ export class FeatureFlagSource implements EnabledSource {
 
   async get(context?: FrontMcpContext): Promise<boolean> {
     try {
-      const answers = await this.adapter.evaluateFlags(
-        [flagKeyOf(this.ref)],
-        buildFeatureFlagContext(context, this.options),
-      );
+      const answers = await this.adapter.evaluateFlags([flagKeyOf(this.ref)], callerFlagContext(context, this.options));
       return isRefEnabled(this.ref, answers, this.options.gateDefaultValue);
     } catch {
       return gateFallback(this.ref, this.options.gateDefaultValue);
@@ -66,7 +104,7 @@ export class FeatureFlagSource implements EnabledSource {
   }
 
   subscribe(listener: () => void): () => void {
-    return this.adapter.subscribe?.(listener) ?? (() => undefined);
+    return followAdapter(this.adapter, listener);
   }
 }
 

@@ -922,7 +922,8 @@ LaunchDarkly (`update`) and Unleash (`changed`) report their SDK's change events
 `custom` adapter reports changes when it implements `subscribe`. The lists already follow the flag on every request.
 
 Each flag is an `EnabledSource` (`FeatureFlagSource`): the gates ask it, with the same fallback as above. Use one as
-an entry's `enabled` with `featureFlagSource(adapter, ref, options?)` and give the plugin the same adapter. Such an
+an entry's `enabled` with `featureFlagSource(adapter, ref, options?)` and give the plugin the same adapter. However
+many entries use an adapter's flags, its SDK client gets one change listener for them. Such an
 entry is filtered and refused by the SDK itself: `FEATURE_OFF` with the remedy `Turn on the feature flag "beta".`
 (where `featureFlag` answers `FEATURE_FLAG_DISABLED`), and a call from a session whose tool list changed since it
 listed answers `STALE_TOOL_LIST` (see `create-tool` → `availability.md`).

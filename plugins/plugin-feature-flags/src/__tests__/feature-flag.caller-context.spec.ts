@@ -97,6 +97,28 @@ describe('FeatureFlagPlugin — caller context (GHSA-gf7p-j3hr-h5h4)', () => {
     expect(adapter.evaluateFlags).toHaveBeenCalledWith(['flag-a'], {});
   });
 
+  it('evaluates the lists and the gate anonymously when a resolver throws, as it always has', async () => {
+    const { plugin, adapter } = createPlugin(caller, {
+      adapter: 'static',
+      flags: {},
+      userIdResolver: () => {
+        throw new Error('no user on this request');
+      },
+    });
+    const listCtx = {
+      state: {
+        tools: [{ tool: { metadata: { name: 'a', featureFlag: 'flag-a' } } }],
+        set: jest.fn(),
+      },
+    } as never;
+
+    await plugin.filterListTools(listCtx);
+    await plugin.gateToolExecution(gateCtx);
+
+    expect(adapter.evaluateFlags).toHaveBeenNthCalledWith(1, ['flag-a'], {});
+    expect(adapter.evaluateFlags).toHaveBeenNthCalledWith(2, ['flag-a'], {});
+  });
+
   describe('buildFeatureFlagContext', () => {
     it('returns an empty context when there is no request context', () => {
       expect(buildFeatureFlagContext(undefined, {})).toEqual({});

@@ -166,7 +166,8 @@ The built-in adapters are exported too: `StaticFeatureFlagAdapter`, `LaunchDarkl
 
 `featureFlagSource(adapter, ref)` is a flag as an SDK `EnabledSource`, for `enabled` on a tool, resource, template
 or prompt. Give the plugin the same adapter. The SDK then filters the lists, refuses the entry with `FEATURE_OFF`
-and the remedy `Turn on the feature flag "beta".`, and sends `list_changed` when the adapter reports a change:
+and the remedy `Turn on the feature flag "beta".`, and sends `list_changed` when the adapter reports a change. The
+sources of one adapter share one listener on its SDK client:
 
 ```ts
 import { FeatureFlagPlugin, featureFlagSource, UnleashFeatureFlagAdapter } from '@frontmcp/plugin-feature-flags';

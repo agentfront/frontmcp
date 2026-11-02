@@ -52,12 +52,49 @@ describe('FeatureFlagSource', () => {
 
   it("follows the adapter's changes, and follows none when the adapter reports none", () => {
     const stop = jest.fn();
-    const subscribe = jest.fn().mockReturnValue(stop);
+    let adapterListener: () => void = () => undefined;
+    const subscribe = jest.fn((listener: () => void) => {
+      adapterListener = listener;
+      return stop;
+    });
     const listener = jest.fn();
 
-    expect(featureFlagSource(adapterAnswering({}, { subscribe }), 'beta').subscribe(listener)).toBe(stop);
-    expect(subscribe).toHaveBeenCalledWith(listener);
+    const unsubscribe = featureFlagSource(adapterAnswering({}, { subscribe }), 'beta').subscribe(listener);
+    adapterListener();
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    expect(stop).toHaveBeenCalledTimes(1);
     expect(() => featureFlagSource(adapterAnswering({}), 'beta').subscribe(listener)()).not.toThrow();
+  });
+
+  it("shares one subscription to the adapter among its flags' sources, so its client gets one listener", () => {
+    const stop = jest.fn();
+    let adapterListener: () => void = () => undefined;
+    const subscribe = jest.fn((listener: () => void) => {
+      adapterListener = listener;
+      return stop;
+    });
+    const adapter = adapterAnswering({}, { subscribe });
+    const listeners = [jest.fn(), jest.fn(), jest.fn()];
+
+    const unsubscribes = ['beta', 'gamma', 'beta'].map((flag, index) =>
+      featureFlagSource(adapter, flag).subscribe(listeners[index]),
+    );
+    adapterListener();
+
+    expect(subscribe).toHaveBeenCalledTimes(1);
+    for (const listener of listeners) expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribes[0]();
+    unsubscribes[1]();
+    expect(stop).not.toHaveBeenCalled();
+    unsubscribes[2]();
+    unsubscribes[2]();
+    expect(stop).toHaveBeenCalledTimes(1);
+
+    featureFlagSource(adapter, 'beta').subscribe(listeners[0]);
+    expect(subscribe).toHaveBeenCalledTimes(2);
   });
 
   it('names its flag in the remedy', () => {
